@@ -8,7 +8,7 @@ use std::{
 use crate::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy};
 use crate::driver::log_events;
 use crate::driver::test_env::{RequiredHostFeaturesFromCmdLine, TestEnvAttribute};
-use crate::driver::test_env_api::HasIcDependencies;
+use crate::driver::test_env_api::{read_dependency_to_string, HasIcDependencies};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use ic_crypto_sha2::Sha256;
@@ -449,7 +449,6 @@ pub struct GroupSpec {
 
 impl GroupSpec {
     pub fn add_meta(mut self, env: &TestEnv, group_base_name: &str) -> Self {
-        use crate::driver::test_env_api::HasDependencies;
         let mut metadata = GroupMetadata {
             user: None,
             job_schedule: None,
@@ -459,7 +458,7 @@ impl GroupSpec {
         // Acquire bazel's volatile status containing key value pairs like USER and CI_JOB_NAME:
         let version_file_path = std::env::var("VERSION_FILE_PATH")
             .expect("Expected the environment variable VERSION_FILE_PATH to be defined!");
-        let version_file = env.read_dependency_to_string(version_file_path).unwrap();
+        let version_file = read_dependency_to_string(version_file_path).unwrap();
         let runtime_args_map = if Path::new(&version_file).exists() {
             let volatile_status = std::fs::read_to_string(&version_file)
                 .unwrap_or_else(|e| {

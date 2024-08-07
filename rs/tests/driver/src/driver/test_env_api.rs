@@ -796,7 +796,7 @@ impl IcNodeSnapshot {
         name: &str,
         arg: Option<Vec<u8>>,
     ) -> Principal {
-        let canister_bytes = self.test_env().load_wasm(name);
+        let canister_bytes = load_wasm(name);
         let effective_canister_id = self.effective_canister_id();
 
         self.with_default_agent(move |agent| async move {
@@ -967,45 +967,17 @@ impl HasRegistryLocalStore for TestEnv {
 
 pub trait HasIcDependencies {
     fn get_farm_url(&self) -> Result<Url>;
-    fn get_elasticsearch_hosts(&self) -> Result<Vec<String>>;
     fn get_initial_replica_version(&self) -> Result<ReplicaVersion>;
-    fn get_ic_os_img_url(&self) -> Result<Url>;
-    fn get_ic_os_img_sha256(&self) -> Result<String>;
-    fn get_malicious_ic_os_img_url(&self) -> Result<Url>;
-    fn get_malicious_ic_os_img_sha256(&self) -> Result<String>;
-    fn get_ic_os_update_img_url(&self) -> Result<Url>;
-    fn get_ic_os_update_img_sha256(&self) -> Result<String>;
-    fn get_ic_os_update_img_test_url(&self) -> Result<Url>;
-    fn get_ic_os_update_img_test_sha256(&self) -> Result<String>;
-    fn get_malicious_ic_os_update_img_url(&self) -> Result<Url>;
-    fn get_malicious_ic_os_update_img_sha256(&self) -> Result<String>;
-    fn get_boundary_node_img_url(&self) -> Result<Url>;
-    fn get_boundary_node_img_sha256(&self) -> Result<String>;
-    fn get_mainnet_ic_os_img_url(&self) -> Result<Url>;
     fn get_mainnet_ic_os_img_sha256(&self) -> Result<String>;
-    fn get_mainnet_ic_os_update_img_url(&self) -> Result<Url>;
     fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String>;
-    fn get_canister_http_test_ca_cert(&self) -> Result<String>;
-    fn get_canister_http_test_ca_key(&self) -> Result<String>;
-    fn get_hostos_update_img_test_url(&self) -> Result<Url>;
-    fn get_hostos_update_img_test_sha256(&self) -> Result<String>;
 }
 
-impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
+impl<T: HasTestEnv> HasIcDependencies for T {
     fn get_farm_url(&self) -> Result<Url> {
         let dep_rel_path = "farm_base_url";
-        let url = self
-            .read_dependency_to_string(dep_rel_path)
+        let url = read_dependency_to_string(dep_rel_path)
             .unwrap_or_else(|_| FarmBaseUrl::read_attribute(&self.test_env()).to_string());
         Ok(Url::parse(&url)?)
-    }
-
-    fn get_elasticsearch_hosts(&self) -> Result<Vec<String>> {
-        let dep_rel_path = "elasticsearch_hosts";
-        let hosts = self
-            .read_dependency_to_string(dep_rel_path)
-            .unwrap_or_else(|_| "elasticsearch.testnet.dfinity.network:443".to_string());
-        parse_elasticsearch_hosts(Some(hosts))
     }
 
     fn get_initial_replica_version(&self) -> Result<ReplicaVersion> {
@@ -1013,136 +985,122 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
         Ok(initial_replica_version.version)
     }
 
-    fn get_ic_os_img_url(&self) -> Result<Url> {
-        let url =
-            self.read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL")?;
-        Ok(Url::parse(&url)?)
-    }
-
-    fn get_ic_os_img_sha256(&self) -> Result<String> {
-        let sha256 =
-            self.read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256")?;
-        bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
-        Ok(sha256)
-    }
-
-    fn get_malicious_ic_os_img_url(&self) -> Result<Url> {
-        let url = self.read_dependency_from_env_to_string(
-            "ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL",
-        )?;
-        Ok(Url::parse(&url)?)
-    }
-
-    fn get_malicious_ic_os_img_sha256(&self) -> Result<String> {
-        let sha256 = self.read_dependency_from_env_to_string(
-            "ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_SHA256",
-        )?;
-        bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
-        Ok(sha256)
-    }
-
-    fn get_ic_os_update_img_url(&self) -> Result<Url> {
-        let url =
-            self.read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL")?;
-        Ok(Url::parse(&url)?)
-    }
-
-    fn get_ic_os_update_img_sha256(&self) -> Result<String> {
-        let sha256 =
-            self.read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_SHA256")?;
-        bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
-        Ok(sha256)
-    }
-
-    fn get_ic_os_update_img_test_url(&self) -> Result<Url> {
-        let url = self
-            .read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
-        Ok(Url::parse(&url)?)
-    }
-
-    fn get_ic_os_update_img_test_sha256(&self) -> Result<String> {
-        let sha256 = self
-            .read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_SHA256")?;
-        bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
-        Ok(sha256)
-    }
-
-    fn get_malicious_ic_os_update_img_url(&self) -> Result<Url> {
-        let url = self.read_dependency_from_env_to_string(
-            "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL",
-        )?;
-        Ok(Url::parse(&url)?)
-    }
-
-    fn get_malicious_ic_os_update_img_sha256(&self) -> Result<String> {
-        let sha256 = self.read_dependency_from_env_to_string(
-            "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_SHA256",
-        )?;
-        bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
-        Ok(sha256)
-    }
-
-    fn get_boundary_node_img_url(&self) -> Result<Url> {
-        let dep_rel_path = "ic-os/boundary-guestos/envs/dev/disk-img.tar.zst.cas-url";
-        let url = self.read_dependency_to_string(dep_rel_path)?;
-        Ok(Url::parse(&url)?)
-    }
-
-    fn get_boundary_node_img_sha256(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/boundary-guestos/envs/dev/disk-img.tar.zst.sha256";
-        let sha256 = self.read_dependency_to_string(dep_rel_path)?;
-        bail_if_sha256_invalid(&sha256, "boundary_node_img_sha256")?;
-        Ok(sha256)
-    }
-
-    fn get_mainnet_ic_os_img_url(&self) -> Result<Url> {
-        let mainnet_version: String =
-            self.read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
-        let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img/disk-img.tar.zst");
-        Ok(Url::parse(&url)?)
-    }
-
     fn get_mainnet_ic_os_img_sha256(&self) -> Result<String> {
         let mainnet_version: String =
-            self.read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+            read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
         fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img"), "disk-img.tar.zst", self.test_env().logger())
-    }
-
-    fn get_mainnet_ic_os_update_img_url(&self) -> Result<Url> {
-        let mainnet_version = self.read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
-        let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img/update-img.tar.zst");
-        Ok(Url::parse(&url)?)
     }
 
     fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String> {
         let mainnet_version: String =
-            self.read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+            read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
         fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst", self.test_env().logger())
     }
+}
 
-    fn get_canister_http_test_ca_cert(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/components/networking/dev-certs/canister_http_test_ca.cert";
-        self.read_dependency_to_string(dep_rel_path)
-    }
-    fn get_canister_http_test_ca_key(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/components/networking/dev-certs/canister_http_test_ca.key";
-        self.read_dependency_to_string(dep_rel_path)
-    }
+pub fn get_elasticsearch_hosts() -> Result<Vec<String>> {
+    let dep_rel_path = "elasticsearch_hosts";
+    let hosts = read_dependency_to_string(dep_rel_path)
+        .unwrap_or_else(|_| "elasticsearch.testnet.dfinity.network:443".to_string());
+    parse_elasticsearch_hosts(Some(hosts))
+}
 
-    fn get_hostos_update_img_test_url(&self) -> Result<Url> {
-        let url = self.read_dependency_from_env_to_string(
-            "ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL",
-        )?;
-        Ok(Url::parse(&url)?)
-    }
+pub fn get_ic_os_img_url() -> Result<Url> {
+    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL")?;
+    Ok(Url::parse(&url)?)
+}
 
-    fn get_hostos_update_img_test_sha256(&self) -> Result<String> {
-        let sha256 = self.read_dependency_from_env_to_string(
-            "ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_SHA256",
-        )?;
-        bail_if_sha256_invalid(&sha256, "hostos_update_img_sha256")?;
-        Ok(sha256)
-    }
+pub fn get_ic_os_img_sha256() -> Result<String> {
+    let sha256 = read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256")?;
+    bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
+    Ok(sha256)
+}
+
+pub fn get_malicious_ic_os_img_url() -> Result<Url> {
+    let url =
+        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_CAS_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+pub fn get_malicious_ic_os_img_sha256() -> Result<String> {
+    let sha256 =
+        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_DISK_IMG_TAR_ZST_SHA256")?;
+    bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
+    Ok(sha256)
+}
+
+pub fn get_ic_os_update_img_url() -> Result<Url> {
+    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+pub fn get_ic_os_update_img_sha256() -> Result<String> {
+    let sha256 = read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_SHA256")?;
+    bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
+    Ok(sha256)
+}
+
+pub fn get_ic_os_update_img_test_url() -> Result<Url> {
+    let url = read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+pub fn get_ic_os_update_img_test_sha256() -> Result<String> {
+    let sha256 =
+        read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_SHA256")?;
+    bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
+    Ok(sha256)
+}
+
+pub fn get_malicious_ic_os_update_img_url() -> Result<Url> {
+    let url =
+        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+pub fn get_malicious_ic_os_update_img_sha256() -> Result<String> {
+    let sha256 =
+        read_dependency_from_env_to_string("ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_SHA256")?;
+    bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
+    Ok(sha256)
+}
+
+pub fn get_boundary_node_img_url() -> Result<Url> {
+    let dep_rel_path = "ic-os/boundary-guestos/envs/dev/disk-img.tar.zst.cas-url";
+    let url = read_dependency_to_string(dep_rel_path)?;
+    Ok(Url::parse(&url)?)
+}
+
+pub fn get_boundary_node_img_sha256() -> Result<String> {
+    let dep_rel_path = "ic-os/boundary-guestos/envs/dev/disk-img.tar.zst.sha256";
+    let sha256 = read_dependency_to_string(dep_rel_path)?;
+    bail_if_sha256_invalid(&sha256, "boundary_node_img_sha256")?;
+    Ok(sha256)
+}
+
+pub fn get_mainnet_ic_os_img_url() -> Result<Url> {
+    let mainnet_version: String = read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+    let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img/disk-img.tar.zst");
+    Ok(Url::parse(&url)?)
+}
+
+pub fn get_mainnet_ic_os_update_img_url() -> Result<Url> {
+    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+    let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img/update-img.tar.zst");
+    Ok(Url::parse(&url)?)
+}
+
+pub fn get_hostos_update_img_test_url() -> Result<Url> {
+    let url =
+        read_dependency_from_env_to_string("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
+    Ok(Url::parse(&url)?)
+}
+
+pub fn get_hostos_update_img_test_sha256() -> Result<String> {
+    let sha256 =
+        read_dependency_from_env_to_string("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_SHA256")?;
+    bail_if_sha256_invalid(&sha256, "hostos_update_img_sha256")?;
+    Ok(sha256)
 }
 
 pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);
@@ -1289,79 +1247,57 @@ impl HasIcName for IcNodeSnapshot {
     }
 }
 
-// TODO(IDX-3174): this doesn't need to be a trait anymore so replace the below methods into regular functions:
-pub trait HasDependencies {
-    fn get_dependency_path<P: AsRef<Path>>(&self, p: P) -> PathBuf {
-        let runfiles = std::env::var("RUNFILES")
-            .expect("Expected environment variable RUNFILES to be defined!");
-        Path::new(&runfiles).join(p)
-    }
+pub fn get_dependency_path<P: AsRef<Path>>(p: P) -> PathBuf {
+    let runfiles =
+        std::env::var("RUNFILES").expect("Expected environment variable RUNFILES to be defined!");
+    Path::new(&runfiles).join(p)
+}
 
-    fn read_dependency_to_string<P: AsRef<Path>>(&self, p: P) -> Result<String> {
-        let dep_path = self.get_dependency_path(p);
-        if dep_path.exists() {
-            let result = fs::read_to_string(&dep_path)
-                .unwrap_or_else(|e| panic!("Couldn't read content of the {dep_path:?} file: {e:?}"))
-                .trim_end()
-                .to_string();
-            Ok(result)
-        } else {
-            Err(anyhow!("Couldn't find dependency {dep_path:?}"))
-        }
-    }
-
-    fn read_dependency_from_env_to_string(&self, v: &str) -> Result<String> {
-        let path_from_env =
-            std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {} not set", v));
-        self.read_dependency_to_string(path_from_env)
+pub fn read_dependency_to_string<P: AsRef<Path>>(p: P) -> Result<String> {
+    let dep_path = get_dependency_path(p);
+    if dep_path.exists() {
+        let result = fs::read_to_string(&dep_path)
+            .unwrap_or_else(|e| panic!("Couldn't read content of the {dep_path:?} file: {e:?}"))
+            .trim_end()
+            .to_string();
+        Ok(result)
+    } else {
+        Err(anyhow!("Couldn't find dependency {dep_path:?}"))
     }
 }
 
-impl<T: HasTestEnv> HasDependencies for T {
-    // TODO(IDX-3174): now that this implementation is empty we should turn the methods of the HasDependencies trait into normal functions.
+pub fn read_dependency_from_env_to_string(v: &str) -> Result<String> {
+    let path_from_env =
+        std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {} not set", v));
+    read_dependency_to_string(path_from_env)
 }
 
-pub trait HasWasm {
-    /// Convenience method that loads a wasm-module from the dependencies
-    /// directory.
-    ///
-    /// # Panics
-    ///
-    /// * if `get_artifacts(p)` panics.
-    /// * if a .wat-module cannot be compiled
-    /// * if a .wasm-module does not start with the expected magic bytes
-    fn load_wasm<P: AsRef<Path>>(&self, p: P) -> Vec<u8>;
-}
+pub fn load_wasm<P: AsRef<Path>>(p: P) -> Vec<u8> {
+    let mut wasm_bytes = std::fs::read(get_dependency_path(&p))
+        .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", p.as_ref()));
 
-impl<T: HasDependencies> HasWasm for T {
-    fn load_wasm<P: AsRef<Path>>(&self, p: P) -> Vec<u8> {
-        let mut wasm_bytes = std::fs::read(self.get_dependency_path(&p))
-            .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", p.as_ref()));
-
-        if p.as_ref().extension().unwrap() == "wat" {
-            wasm_bytes = wat::parse_bytes(&wasm_bytes)
-                .expect("Could not compile wat to wasm")
-                .to_vec();
-        }
-
-        if wasm_bytes.is_empty() {
-            panic!("WASM read from {:?} was empty", p.as_ref());
-        }
-
-        if !(wasm_bytes.starts_with(WASM_MAGIC_BYTES)
-            || wasm_bytes.starts_with(GZIPPED_WASM_MAGIC_BYTES))
-        {
-            let ff: [u8; 4] = wasm_bytes[..4]
-                .try_into()
-                .expect("fewer than 4 bytes in wasm");
-            panic!(
-                "Invalid magic bytes for wasm module: {:?} (first four bytes read as {ff:?})",
-                p.as_ref()
-            );
-        }
-
-        wasm_bytes
+    if p.as_ref().extension().unwrap() == "wat" {
+        wasm_bytes = wat::parse_bytes(&wasm_bytes)
+            .expect("Could not compile wat to wasm")
+            .to_vec();
     }
+
+    if wasm_bytes.is_empty() {
+        panic!("WASM read from {:?} was empty", p.as_ref());
+    }
+
+    if !(wasm_bytes.starts_with(WASM_MAGIC_BYTES)
+        || wasm_bytes.starts_with(GZIPPED_WASM_MAGIC_BYTES))
+    {
+        let ff: [u8; 4] = wasm_bytes[..4]
+            .try_into()
+            .expect("fewer than 4 bytes in wasm");
+        panic!(
+            "Invalid magic bytes for wasm module: {:?} (first four bytes read as {ff:?})",
+            p.as_ref()
+        );
+    }
+    wasm_bytes
 }
 
 pub trait SshSession {
@@ -1810,7 +1746,7 @@ where
     fn vm(&self) -> Box<dyn VmControl> {
         let env = self.test_env();
         let pot_setup = GroupSetup::read_attribute(&env);
-        let farm_base_url = env.get_farm_url().unwrap();
+        let farm_base_url = self.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, env.logger());
 
         let mut vm_name = self.vm_name();
@@ -2127,7 +2063,7 @@ where
     fn create_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
         let env = self.test_env();
         let log = env.logger();
-        let farm_base_url = env.get_farm_url().unwrap();
+        let farm_base_url = self.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
         let group_name = group_setup.infra_group_name;
@@ -2153,7 +2089,7 @@ where
         let env = self.test_env();
         let log = env.logger();
         if InfraProvider::read_attribute(&env) == InfraProvider::Farm {
-            let farm_base_url = env.get_farm_url().unwrap();
+            let farm_base_url = self.get_farm_url().unwrap();
             let farm = Farm::new(farm_base_url, log);
             let group_setup = GroupSetup::read_attribute(&env);
             let group_name = group_setup.infra_group_name;
@@ -2181,7 +2117,7 @@ where
         let env = self.test_env();
         let log = env.logger();
         if InfraProvider::read_attribute(&env) == InfraProvider::Farm {
-            let farm_base_url = env.get_farm_url().unwrap();
+            let farm_base_url = self.get_farm_url().unwrap();
             let farm = Farm::new(farm_base_url, log);
             let group_setup = GroupSetup::read_attribute(&env);
             let group_name = group_setup.infra_group_name;

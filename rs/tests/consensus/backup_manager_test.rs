@@ -129,7 +129,7 @@ pub fn test(env: TestEnv) {
     fs::create_dir_all(&backup_binaries_dir).expect("failure creating backup binaries directory");
 
     // Copy all the binaries needed for the replay of the current version in order to avoid downloading them
-    let testing_dir = env.get_dependency_path("rs/tests");
+    let testing_dir = get_dependency_path("rs/tests");
     let binaries_path = testing_dir.join("backup/binaries");
     copy_file(&binaries_path, &backup_binaries_dir, "ic-replay");
     copy_file(&binaries_path, &backup_binaries_dir, "sandbox_launcher");
@@ -140,8 +140,7 @@ pub fn test(env: TestEnv) {
         log,
         "Download the binaries needed for replay of the mainnet version"
     );
-    let mainnet_version = env
-        .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
+    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt")
         .expect("could not read mainnet version!");
 
     // Download all the binaries needed for the replay of the mainnet version

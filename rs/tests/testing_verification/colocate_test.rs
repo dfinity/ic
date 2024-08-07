@@ -18,7 +18,7 @@ use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::group::{SystemTestGroup, COLOCATE_CONTAINER_NAME};
 use ic_system_test_driver::driver::ic::VmResources;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
-use ic_system_test_driver::driver::test_env_api::{FarmBaseUrl, HasDependencies, SshSession};
+use ic_system_test_driver::driver::test_env_api::{get_dependency_path, FarmBaseUrl, SshSession};
 use ic_system_test_driver::driver::test_setup::GroupSetup;
 use ic_system_test_driver::driver::universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms};
 use slog::{debug, error, info, Logger};
@@ -73,7 +73,9 @@ fn setup(env: TestEnv) {
     let uvm = UniversalVm::new(UVM_NAME.to_string())
         .with_required_host_features(host_features)
         .with_vm_resources(vm_resources)
-        .with_config_img(env.get_dependency_path("rs/tests/colocate_uvm_config_image.zst"));
+        .with_config_img(get_dependency_path(
+            "rs/tests/colocate_uvm_config_image.zst",
+        ));
 
     let uvm = if env::var("COLOCATED_TEST_DRIVER_VM_ENABLE_IPV4").is_ok() {
         uvm.enable_ipv4()
