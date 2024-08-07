@@ -1,0 +1,16 @@
+[Unit]
+Description=IC-Gateway
+After=network-online.target
+Wants=network-online.target
+After=setup-ic-gateway.service
+BindsTo=setup-ic-gateway.service
+
+[Service]
+User=root
+Group=root
+Restart=always
+EnvironmentFile=/run/ic-node/etc/ic-gateway/env
+ExecStart=/usr/sbin/ic-gateway
+
+[Install]
+WantedBy=multi-user.target
