@@ -120,7 +120,7 @@ fn test_manage_dapp_canister_settings_successful() {
                 memory_allocation: Some(0),
                 freezing_threshold: Some(0),
                 reserved_cycles_limit: Some(0),
-                log_visibility: Some(LogVisibilityV2::Controllers as i32),
+                log_visibility: Some(LogVisibility::Controllers as i32),
                 wasm_memory_limit: Some(2_000_000_000),
             },
         )),
