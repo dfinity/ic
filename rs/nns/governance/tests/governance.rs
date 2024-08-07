@@ -5094,6 +5094,11 @@ fn test_neuron_split_fails() {
     assert_eq!(gov.neuron_store.heap_neurons().len(), 1);
     //  There is still only one ledger account.
     driver.assert_num_neuron_accounts_exist(1);
+    // TODO(oggy): check something sensible
+    use ic_nns_governance::governance::tla::TLA_TRACES;
+    let traces = TLA_TRACES.read().unwrap();
+    println!("TLA Traces: {:?}", traces);
+    assert!(traces.is_empty());
 }
 
 #[test]
@@ -5197,9 +5202,11 @@ fn test_neuron_split() {
     let mut expected_neuron_ids = vec![id, child_nid];
     expected_neuron_ids.sort_unstable();
     assert_eq!(neuron_ids, expected_neuron_ids);
-
-    ic_nns_governance::governance::tla::get_state_pairs();
-    assert!(false, "this really shouldn't work");
+    // TODO(oggy): check something sensible
+    use ic_nns_governance::governance::tla::TLA_TRACES;
+    let traces = TLA_TRACES.read().unwrap();
+    println!("TLA Traces: {:?}", traces);
+    assert!(traces.is_empty());
 }
 
 #[test]
