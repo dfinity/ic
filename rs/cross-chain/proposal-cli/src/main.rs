@@ -6,13 +6,13 @@ mod proposal;
 
 use crate::candid::encode_upgrade_args;
 use crate::canister::TargetCanister;
+use crate::dashboard::DashboardClient;
 use crate::git::{GitCommitHash, GitRepository};
 use crate::proposal::{InstallProposalTemplate, ProposalTemplate, UpgradeProposalTemplate};
 use clap::{Parser, Subcommand};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use crate::dashboard::DashboardClient;
 
 /// A fictional versioning CLI
 #[derive(Debug, Parser)] // requires `derive` feature
@@ -88,8 +88,9 @@ async fn main() {
                 args.unwrap_or(canister.default_upgrade_args()),
             );
             let canister_id = ic_repo.parse_canister_id(&canister);
-            let past_proposals = dashboard.list_canister_upgrade_proposals(&canister_id).await;
-            panic!("past proposals: {:?}", past_proposals);
+            let _past_proposals = dashboard
+                .list_canister_upgrade_proposals(&canister_id)
+                .await;
             let compressed_wasm_hash = ic_repo.build_canister_artifact(&canister);
             let output_dir = output_dir.join(canister.to_string()).join(to.to_string());
 

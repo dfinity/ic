@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct CanisterInfo {
@@ -6,7 +7,21 @@ pub struct CanisterInfo {
     pub controllers: Vec<String>,
     pub module_hash: String,
     pub subnet_id: String,
-    pub upgrades: Vec<CanisterUpgradeInfo>,
+    pub upgrades: Option<Vec<CanisterUpgradeInfo>>,
+}
+
+impl CanisterInfo {
+    pub fn list_upgrade_proposals(&self) -> BTreeSet<u64> {
+        self.upgrades
+            .as_ref()
+            .map(|upgrades| {
+                upgrades
+                    .iter()
+                    .map(CanisterUpgradeInfo::proposal_id)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -21,6 +36,9 @@ impl CanisterUpgradeInfo {
     /// which for some reason is returned as a floating point type
     /// by the dashboard API, e.g., 131388.0 instead of 131388.
     pub fn proposal_id(&self) -> u64 {
-        self.proposal_id.as_u64().o
+        self.proposal_id
+            .as_u64()
+            .or_else(|| self.proposal_id.as_f64().map(|f| f as u64))
+            .expect("Failed to parse proposal id into a u64")
     }
 }

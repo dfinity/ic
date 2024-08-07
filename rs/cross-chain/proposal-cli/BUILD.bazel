@@ -23,6 +23,7 @@ MACRO_DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:assert_matches",
+    "@crate_index//:maplit",
 ]
 
 DEV_MACRO_DEPENDENCIES = []

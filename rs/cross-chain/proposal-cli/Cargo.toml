@@ -22,3 +22,4 @@ tokio = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+maplit = "1.0.2"

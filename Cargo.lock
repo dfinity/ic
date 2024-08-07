@@ -9078,6 +9078,7 @@ dependencies = [
  "candid_parser",
  "clap 4.4.6",
  "hex",
+ "maplit",
  "reqwest 0.12.5",
  "serde",
  "serde_json",
