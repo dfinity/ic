@@ -223,7 +223,7 @@ jobs:
         id: python-ci-tests
         shell: bash
         env:
-          ADDITIONAL_FLAGS: '-m "not fails_on_merge_train"'
+          ADDITIONAL_FLAGS: '-m not fails_on_merge_train'
         run: |
           set -xeuo pipefail
           export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
