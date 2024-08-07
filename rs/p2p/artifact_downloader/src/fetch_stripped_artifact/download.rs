@@ -360,9 +360,10 @@ mod tests {
             .block
             .into_inner();
 
-        let ingress_payload = IngressPayload::from(ingress_messages);
-        let mut batch = BatchPayload::default();
-        batch.ingress = ingress_payload;
+        let batch = BatchPayload {
+            ingress: IngressPayload::from(ingress_messages),
+            ..Default::default()
+        };
 
         let block = Block::new(
             ic_types::crypto::crypto_hash(&parent),
