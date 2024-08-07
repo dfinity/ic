@@ -322,8 +322,6 @@ pub struct UpgradeArgs {
     pub accounts_overflow_trim_quantity: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub change_archive_options: Option<ChangeArchiveOptions>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub test_upgrade_with_memory_manager: Option<bool>,
 }
 
 #[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
@@ -376,9 +374,6 @@ pub struct Ledger<Tokens: TokensType> {
     maximum_number_of_accounts: usize,
     #[serde(default = "default_accounts_overflow_trim_quantity")]
     accounts_overflow_trim_quantity: usize,
-
-    #[serde(default, skip_serializing)]
-    upgrade_with_memory_manager: bool,
 }
 
 fn default_maximum_number_of_accounts() -> usize {
@@ -471,7 +466,6 @@ impl<Tokens: TokensType> Ledger<Tokens> {
                 .unwrap_or_else(|| ACCOUNTS_OVERFLOW_TRIM_QUANTITY.try_into().unwrap())
                 .try_into()
                 .unwrap(),
-            upgrade_with_memory_manager: false,
         };
 
         for (account, balance) in initial_balances.into_iter() {
@@ -690,9 +684,6 @@ impl<Tokens: TokensType> Ledger<Tokens> {
                 change_archive_options.apply(archive);
             }
         }
-        if let Some(test_upgrade_with_memory_manager) = args.test_upgrade_with_memory_manager {
-            self.upgrade_with_memory_manager = test_upgrade_with_memory_manager;
-        }
     }
 
     /// Returns the root hash of the certified ledger state.
@@ -876,9 +867,5 @@ impl<Tokens: TokensType> Ledger<Tokens> {
             blocks,
             archived_blocks,
         }
-    }
-
-    pub fn upgrade_with_memory_manager(&self) -> bool {
-        self.upgrade_with_memory_manager
     }
 }

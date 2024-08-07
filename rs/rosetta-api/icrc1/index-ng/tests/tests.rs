@@ -57,7 +57,6 @@ fn upgrade_ledger(
         maximum_number_of_accounts: None,
         accounts_overflow_trim_quantity: None,
         change_archive_options: None,
-        test_upgrade_with_memory_manager: None,
     }));
     env.upgrade_canister(ledger_id, ledger_wasm(), Encode!(&args).unwrap())
         .unwrap()
