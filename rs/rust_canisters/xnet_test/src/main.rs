@@ -5,8 +5,15 @@
 //! ```text
 //! cargo build --target wasm32-unknown-unknown --release
 //! ```
-use candid::{CandidType, Decode, Deserialize, Encode};
-use dfn_core::api;
+use candid::{CandidType, Deserialize, Principal};
+use ic_cdk::{
+    api::{
+        call::{call, call_with_payment},
+        caller, canister_balance, id, time,
+    },
+    setup,
+};
+use ic_cdk_macros::{heartbeat, init, query, update};
 use rand::Rng;
 use rand_pcg::Lcg64Xsh32;
 use std::cell::RefCell;
@@ -92,41 +99,9 @@ impl MessagingState {
     }
 }
 
-/// Calls "msg_reply" with reply being argument encoded as Candid.
-fn candid_reply<T: CandidType>(t: &T) {
-    let msg = candid::Encode!(t).expect("failed to encode reply");
-    api::reply(&msg[..])
-}
-
-/// Encodes `t` as Candid, padded to `PAYLOAD_SIZE`.
-fn candid_encode_padded<T: CandidType>(t: &T) -> Vec<u8> {
-    let msg = candid::Encode!(t, &vec![13u8; 1]).expect("failed to encode message");
-
-    let payload_size = PAYLOAD_SIZE.with(|p| *p.borrow()) as usize;
-    if msg.len() < payload_size {
-        candid::Encode!(t, &vec![13u8; payload_size - msg.len() + 1])
-            .expect("failed to encode message")
-    } else {
-        msg
-    }
-}
-
 /// Returns system time in nanoseconds.
 fn time_nanos() -> u64 {
-    unsafe { api::ic0::time() }
-}
-
-/// Callback for handling replies from "handle_request".
-fn on_reply(_env: *mut ()) {
-    let (reply, _) =
-        candid::Decode!(&api::arg_data()[..], Reply, Vec<u8>).expect("failed to decode response");
-    let elapsed = Duration::from_nanos(time_nanos() - reply.time_nanos);
-    METRICS.with(|m| m.borrow_mut().latency_distribution.observe(elapsed));
-}
-
-/// Callback for handling reject responses from "handle_request".
-fn on_reject(_env: *mut ()) {
-    METRICS.with(|m| m.borrow_mut().reject_responses += 1);
+    time()
 }
 
 /// Returns true if this canister should continue generating traffic.
@@ -135,13 +110,13 @@ fn is_running() -> bool {
 }
 
 /// Canister heartbeat, calls `fanout()` if `RUNNING` is `true`.
-#[export_name = "canister_heartbeat"]
-fn heartbeat() {
+#[heartbeat]
+async fn heartbeat() {
     if !is_running() {
         return;
     }
 
-    fanout();
+    fanout().await;
 }
 
 /// Appends a message to the log, ensuring log size stays below 2000 bytes.
@@ -162,12 +137,9 @@ fn log(message: &str) {
 
 /// Initializes network topology and instructs this canister to start sending
 /// requests to other canisters.
-#[export_name = "canister_update start"]
-fn start() {
-    dfn_core::printer::hook();
-    let (network_topology, rate, payload_size) =
-        candid::Decode!(&api::arg_data()[..], NetworkTopology, u64, u64)
-            .expect("failed to decode subnet canister ids");
+#[update]
+fn start(network_topology: NetworkTopology, rate: u64, payload_size: u64) -> String {
+    setup();
 
     NETWORK_TOPOLOGY.with(move |canisters| {
         *canisters.borrow_mut() = network_topology;
@@ -178,21 +150,21 @@ fn start() {
 
     RUNNING.with(|r| *r.borrow_mut() = true);
 
-    candid_reply(&"started");
+    "started".to_string()
 }
 
 /// Stops traffic.
-#[export_name = "canister_update stop"]
-fn stop() {
+#[update]
+fn stop() -> String {
     RUNNING.with(|r| *r.borrow_mut() = false);
-    candid_reply(&"stopped");
+    "stopped".to_string()
 }
 
 /// Sends `PER_SUBNET_RATE` messages to random canisters on the remote subnets.
 /// Invoked by the canister heartbeat handler as long as `RUNNING` is `true`
 /// (`start()` was and `stop()` was not yet called).
-fn fanout() {
-    let self_id = api::id();
+async fn fanout() {
+    let self_id = id();
 
     let network_topology =
         NETWORK_TOPOLOGY.with(|network_topology| network_topology.borrow().clone());
@@ -202,7 +174,7 @@ fn fanout() {
             continue;
         }
 
-        if canisters.contains(&self_id.get().as_slice().to_vec()) {
+        if canisters.contains(&self_id.as_slice().to_vec()) {
             // Same subnet
             continue;
         }
@@ -213,85 +185,77 @@ fn fanout() {
 
             let seq_no = STATE.with(|s| s.borrow_mut().next_out_seq_no(canister.clone()));
 
-            let msg = candid_encode_padded(&Request {
+            let payload = Request {
                 seq_no,
                 time_nanos: time_nanos(),
-            });
+            };
 
-            let err_code = api::call_raw(
-                api::CanisterId::try_from(canister.clone()).unwrap(),
+            let res = call::<(Request,), (Reply,)>(
+                Principal::try_from(canister.clone()).unwrap(),
                 "handle_request",
-                &msg[..],
-                on_reply,
-                on_reject,
-                None,
-                std::ptr::null_mut(),
-                api::Funds::zero(),
-            );
+                (payload,),
+            )
+            .await;
 
-            if err_code != 0 {
-                log(&format!(
-                    "{} call failed with {}",
-                    time_nanos() / 1_000_000,
-                    err_code
-                ));
-                METRICS.with(|m| m.borrow_mut().call_errors += 1);
-            } else {
-                METRICS.with(move |m| m.borrow_mut().requests_sent += 1);
+            match res {
+                Ok((reply,)) => {
+                    let elapsed = Duration::from_nanos(time_nanos() - reply.time_nanos);
+                    METRICS.with(move |m| m.borrow_mut().requests_sent += 1);
+                    METRICS.with(|m| m.borrow_mut().latency_distribution.observe(elapsed));
+                }
+                Err((err_code, _)) => {
+                    log(&format!(
+                        "{} call failed with {:?}",
+                        time_nanos() / 1_000_000,
+                        err_code
+                    ));
+                    METRICS.with(|m| m.borrow_mut().call_errors += 1);
+                    METRICS.with(|m| m.borrow_mut().reject_responses += 1);
+                }
             }
         }
     }
 }
 
 /// Endpoint that handles requests from canisters located on remote subnets.
-#[export_name = "canister_update handle_request"]
-fn handle_request() {
-    let (req, _) =
-        candid::Decode!(&api::arg_data()[..], Request, Vec<u8>).expect("failed to decode request");
-    let caller = api::caller();
-    let in_seq_no = STATE.with(|s| s.borrow_mut().set_in_seq_no(caller.into_vec(), req.seq_no));
+#[update]
+fn handle_request(req: Request) -> Reply {
+    let caller = caller();
+    let in_seq_no = STATE.with(|s| {
+        s.borrow_mut()
+            .set_in_seq_no(caller.as_slice().to_vec(), req.seq_no)
+    });
 
     if req.seq_no <= in_seq_no {
         METRICS.with(|m| m.borrow_mut().seq_errors += 1);
     }
 
-    let msg = candid_encode_padded(&Reply {
+    Reply {
         time_nanos: req.time_nanos,
-    });
-    api::reply(&msg[..]);
+    }
 }
 
 /// Deposits the cycles this canister has minus 1T according to the given
 /// `DepositCyclesArgs`
-#[export_name = "canister_update return_cycles"]
-fn return_cycles() {
-    let cycle_refund = api::canister_cycle_balance().saturating_sub(1_000_000_000_000);
-    let noop = |_| ();
-    let _ = api::call_raw(
-        api::CanisterId::from_str("aaaaa-aa").unwrap(),
+#[update]
+async fn return_cycles() -> String {
+    let cycle_refund = canister_balance().saturating_sub(1_000_000_000_000);
+    let _ = call_with_payment::<(Vec<u8>,), ()>(
+        Principal::from_str("aaaaa-aa").unwrap(),
         "deposit_cycles",
-        &api::arg_data(),
-        noop,
-        noop,
-        None,
-        std::ptr::null_mut(),
-        api::Funds {
-            cycles: cycle_refund,
-        },
-    );
+        (vec![],),
+        cycle_refund,
+    )
+    .await;
 
-    candid_reply(&"ok");
+    "ok".to_string()
 }
 
 /// Query call that serializes metrics as a candid message.
-#[export_name = "canister_query metrics"]
-fn metrics() {
-    let msg = METRICS
-        .with(|m| candid::Encode!(&*m.borrow()))
-        .expect("failed to encode metrics");
-
-    api::reply(&msg[..]);
+#[query]
+fn metrics() -> Metrics {
+    METRICS.with(|m| m.borrow().clone())
 }
 
-#[export_name = "canister_init"]
+#[init]
 fn main() {}

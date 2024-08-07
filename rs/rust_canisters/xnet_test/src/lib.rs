@@ -1,4 +1,5 @@
 use candid::{CandidType, Deserialize};
+use serde::Serialize;
 use std::time::Duration;
 
 /// Id of a canister is an opaque blob.
@@ -13,7 +14,7 @@ pub type NetworkTopology = Vec<Vec<CanisterId>>;
 /// Metrics observed by this canister.
 ///
 /// This message is used as reply payload for "metrics" query.
-#[derive(Debug, Default, CandidType, Deserialize)]
+#[derive(Default, Clone, CandidType, Serialize, Deserialize, Debug)]
 pub struct Metrics {
     /// Number of requests sent.
     pub requests_sent: usize,
@@ -54,7 +55,7 @@ impl Metrics {
 ///
 /// The latency is measured using IC time, which is not guaranteed to be
 /// particularly accurate.
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(CandidType, Clone, Serialize, Deserialize, Debug)]
 pub struct LatencyDistribution {
     buckets: Vec<(i64, usize)>,
     sum_millis: usize,
