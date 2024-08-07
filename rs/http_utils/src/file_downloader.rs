@@ -8,7 +8,7 @@ use std::fmt;
 use std::fs::{self, File};
 use std::io;
 use std::io::prelude::*;
-use std::io::SeekFrom;
+use std::io::{BufReader, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tar::Archive;
@@ -331,11 +331,16 @@ impl Error for FileDownloadError {}
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
     use ic_test_utilities_in_memory_logger::{assertions::LogEntriesAssert, InMemoryReplicaLogger};
     use mockito::{Mock, ServerGuard};
     use slog::Level;
+    use tar::Builder;
+    use tempfile::tempdir;
     use tempfile::{NamedTempFile, TempPath};
     use tokio::test;
+    use zstd::stream::write::Encoder as ZstdEncoder;
 
     use super::*;
 
@@ -514,5 +519,87 @@ mod tests {
             &Level::Warning,
             "File already exists, but hash check failed",
         );
+    }
+
+    fn create_tar<W: Write>(writer: W) -> io::Result<()> {
+        let mut tar = Builder::new(writer);
+        let mut header = tar::Header::new_gnu();
+        header.set_path("test.txt")?;
+        header.set_size("Hello, world!".as_bytes().len() as u64);
+        header.set_cksum();
+        tar.append(&header, "Hello, world!".as_bytes())?;
+        tar.finish()?;
+        Ok(())
+    }
+
+    #[test]
+    async fn test_is_gz_file() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("test.tar.gz");
+
+        let tar_gz = File::create(&file_path).unwrap();
+        let mut encoder = GzEncoder::new(tar_gz, Compression::default());
+        create_tar(&mut encoder).unwrap();
+        encoder.finish().unwrap();
+
+        let mut file = File::open(&file_path).unwrap();
+        assert!(is_gz_file(&mut file).unwrap());
+    }
+
+    #[test]
+    async fn test_is_zst_file() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("test.tar.zst");
+
+        let tar_zst = File::create(&file_path).unwrap();
+        let mut encoder = ZstdEncoder::new(tar_zst, 0).unwrap();
+        create_tar(&mut encoder).unwrap();
+        encoder.finish().unwrap();
+
+        let mut file = File::open(&file_path).unwrap();
+        assert!(is_zst_file(&mut file).unwrap());
+    }
+
+    #[test]
+    async fn test_extract_tar_into_dir_gz() {
+        let temp_dir = tempdir().unwrap();
+        let tar_path = temp_dir.path().join("test.tar.gz");
+        let extract_dir = temp_dir.path().join("extract");
+
+        let tar_gz = File::create(&tar_path).unwrap();
+        let mut encoder = GzEncoder::new(tar_gz, Compression::default());
+        create_tar(&mut encoder).unwrap();
+        encoder.finish().unwrap();
+
+        extract_tar_into_dir(&tar_path, &extract_dir).unwrap();
+
+        let extracted_file = extract_dir.join("test.txt");
+        let mut file = File::open(extracted_file).unwrap();
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+        assert_eq!(contents, "Hello, world!");
+    }
+
+    #[test]
+    async fn test_extract_tar_into_dir_zst() {
+        let temp_dir = tempdir().unwrap();
+        let tar_path = temp_dir.path().join("test.tar.zst");
+        let extract_dir = temp_dir.path().join("extract");
+
+        // Create a Zstandard compressed tarball
+        let tar_zst = File::create(&tar_path).unwrap();
+        let mut encoder = ZstdEncoder::new(tar_zst, 0).unwrap();
+        create_tar(&mut encoder).unwrap();
+        encoder.finish().unwrap();
+
+        // Extract the tarball
+        extract_tar_into_dir(&tar_path, &extract_dir).unwrap();
+
+        // Verify the extracted content
+        let extracted_file = extract_dir.join("test.txt");
+        let mut file = File::open(extracted_file).unwrap();
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+        assert_eq!(contents, "Hello, world!");
     }
 }
