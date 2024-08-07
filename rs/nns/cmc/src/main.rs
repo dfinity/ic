@@ -400,6 +400,10 @@ impl Default for State {
     fn default() -> Self {
         let resolution = Duration::from_secs(60);
         let max_age = Duration::from_secs(60 * 60);
+        let initial_icp_xdr_conversion_rate = IcpXdrConversionRate {
+            timestamp_seconds: DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
+            xdr_permyriad_per_icp: 1_000_000, // 100 XDR = 1 ICP
+        };
 
         Self {
             ledger_canister_id: CanisterId::ic_00(),
@@ -409,11 +413,8 @@ impl Default for State {
             minting_account_id: None,
             authorized_subnets: BTreeMap::new(),
             default_subnets: vec![],
-            icp_xdr_conversion_rate: Some(IcpXdrConversionRate {
-                timestamp_seconds: DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
-                xdr_permyriad_per_icp: 1_000_000, // 100 XDR = 1 ICP
-            }),
-            average_icp_xdr_conversion_rate: None,
+            icp_xdr_conversion_rate: Some(initial_icp_xdr_conversion_rate.clone()),
+            average_icp_xdr_conversion_rate: Some(initial_icp_xdr_conversion_rate.clone()),
             recent_icp_xdr_rates: Some(vec![
                 IcpXdrConversionRate::default();
                 ICP_XDR_CONVERSION_RATE_CACHE_SIZE
@@ -2767,13 +2768,20 @@ mod tests {
     #[test]
     /// The function verifies that a default ICP/XDR conversion rate is set.
     fn test_default_icp_xdr_conversion_rate() {
-        let state = State::default();
-        let conversion_rate = state.icp_xdr_conversion_rate;
-        let default_rate = IcpXdrConversionRate {
+        let expected_initial_rate = IcpXdrConversionRate {
             timestamp_seconds: 1620633600,
             xdr_permyriad_per_icp: 1_000_000,
         };
-        assert!(matches!(conversion_rate, Some(rate) if rate == default_rate));
+
+        let state = State::default();
+        assert_eq!(
+            state.icp_xdr_conversion_rate,
+            Some(expected_initial_rate.clone()),
+        );
+        assert_eq!(
+            state.average_icp_xdr_conversion_rate,
+            Some(expected_initial_rate),
+        );
     }
 
     #[test]
