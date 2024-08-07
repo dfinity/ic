@@ -26,14 +26,13 @@ use ic_management_canister_types::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::{
     canister_snapshots::CanisterSnapshot,
     canister_state::{
         execution_state::Memory,
         system_state::{
             wasm_chunk_store::{self, WasmChunkStore},
-            CyclesUseCase,
+            CyclesUseCase, OnLowWasmMemoryHookStatus, ReservationError,
         },
         NextExecution,
     },
@@ -1416,7 +1415,7 @@ impl CanisterManager {
             cycles,
             self.config.default_freeze_threshold,
             Arc::clone(&self.fd_factory),
-            OnLowWasmMemoryHookStatus::ConditionsNotSatisfied,
+            OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
         );
 
         system_state.remove_cycles(creation_fee, CyclesUseCase::CanisterCreation);
