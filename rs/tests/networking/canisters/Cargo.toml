@@ -1,5 +1,5 @@
 [package]
-name = "cloner-canister"
+name = "cloner-canister-types"
 version = "0.1.0"
 edition = "2021"
 

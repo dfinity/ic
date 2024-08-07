@@ -36,14 +36,10 @@ use ic_system_test_driver::{
 use slog::info;
 use std::time::Duration;
 
-// 1.5 hours
-const WORKLOAD_RUNTIME: Duration = Duration::from_secs(90 * 60 * 60);
+const TEST_TIMEOUT: Duration = Duration::from_secs(4 * 60 * 60); // 4 hours
 
-// 10 minutes
-const DOWNLOAD_PROMETHEUS_WAIT_TIME: Duration = Duration::from_secs(10 * 60);
-
-// Timeout parameters
-const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
+/// Time to keep the testnet alive once all canisters are installed
+const TESTNET_LIFETIME_AFTER_SETUP: Duration = Duration::from_secs(60 * 60); // 1 hour
 
 const CLONER_CANISTER_WASM: &str = "rs/tests/networking/canisters/cloner_canister.wasm.gz";
 const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
@@ -60,11 +56,10 @@ const AMOUNT_OF_CLONER_CANISTERS: u64 =
     NUMBER_OF_CANISTERS_TO_INSTALL / CANISTERS_INSTALLED_PER_CLONER_CANISTER;
 
 fn main() -> Result<()> {
-    let per_task_timeout: Duration = WORKLOAD_RUNTIME + TASK_TIMEOUT_DELTA;
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(install_cloner_canisters))
-        .with_timeout_per_test(per_task_timeout) // each task (including the setup function) may take up to `per_task_timeout`.
+        .with_timeout_per_test(TEST_TIMEOUT)
         .execute_from_args()?;
     Ok(())
 }
@@ -112,7 +107,6 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn install_cloner_canisters(env: TestEnv) {
-    let start_time = std::time::Instant::now();
     let rt = tokio::runtime::Runtime::new().unwrap();
     let top_snapshot = env.topology_snapshot();
     let logger = env.logger();
@@ -192,14 +186,11 @@ pub fn install_cloner_canisters(env: TestEnv) {
 
     // keep the workload running for a while
     info!(&logger, "Step 5: Finished spinning up canisters.");
-
-    let time_to_wait_for_download =
-        (WORKLOAD_RUNTIME - DOWNLOAD_PROMETHEUS_WAIT_TIME) - start_time.elapsed();
     info!(
         &logger,
-        "Waiting {:?} before downloading prometheus data.", time_to_wait_for_download
+        "Waiting {:?} before downloading prometheus data.", TESTNET_LIFETIME_AFTER_SETUP
     );
-    std::thread::sleep(time_to_wait_for_download);
+    std::thread::sleep(TESTNET_LIFETIME_AFTER_SETUP);
     info!(&logger, "Step 6: Downloading prometheus data");
     env.download_prometheus_data_dir_if_exists();
 }
