@@ -277,13 +277,16 @@ fn test_log_visibility_of_fetch_canister_logs() {
     for (log_visibility, sender, expected_result) in test_cases {
         let (env, canister_id) = setup_and_install_wasm(
             CanisterSettingsArgsBuilder::new()
-                .with_log_visibility(log_visibility)
+                .with_log_visibility(log_visibility.clone())
                 .with_controllers(vec![controller])
                 .build(),
             wat_canister().build_wasm(),
         );
         let actual_result = fetch_canister_logs(&env, sender, canister_id);
-        assert_eq!(actual_result, expected_result);
+        assert_eq!(
+            actual_result, expected_result,
+            "Failed for log_visibility: {log_visibility:?}, sender: {sender}"
+        );
     }
 }
 
