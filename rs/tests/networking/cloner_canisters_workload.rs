@@ -44,7 +44,6 @@ const DOWNLOAD_PROMETHEUS_WAIT_TIME: Duration = Duration::from_secs(10 * 60);
 
 // Timeout parameters
 const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
-const OVERALL_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 
 const CLONER_CANISTER_WASM: &str = "rs/tests/src/cloner_canister.wasm.gz";
 const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
@@ -69,7 +68,6 @@ const INITIAL_CYCLES: u64 = 10_u64.pow(11); // 100B Cycles
 
 fn main() -> Result<()> {
     let per_task_timeout: Duration = WORKLOAD_RUNTIME + TASK_TIMEOUT_DELTA;
-    let overall_timeout: Duration = per_task_timeout + OVERALL_TIMEOUT_DELTA;
     SystemTestGroup::new()
         .with_setup(config)
         .add_test(systest!(install_cloner_canisters))
