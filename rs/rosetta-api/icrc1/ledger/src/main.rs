@@ -5,7 +5,9 @@ use candid::candid_method;
 use candid::types::number::Nat;
 use ic_canister_log::{declare_log_buffer, export};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk::api::stable::{StableReader, StableWriter};
+use ic_cdk::api::stable::StableReader;
+#[cfg(not(feature = "upgrade-to-memory-manager"))]
+use ic_cdk::api::stable::StableWriter;
 
 #[cfg(not(feature = "canbench-rs"))]
 use ic_cdk_macros::init;
@@ -24,10 +26,9 @@ use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Zero;
-use ic_stable_structures::{
-    reader::Reader,
-    writer::{BufferedWriter, Writer},
-};
+use ic_stable_structures::reader::Reader;
+#[cfg(feature = "upgrade-to-memory-manager")]
+use ic_stable_structures::writer::{BufferedWriter, Writer};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc21::{
     errors::Icrc21Error, lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
