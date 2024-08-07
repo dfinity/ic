@@ -121,7 +121,7 @@ impl CanisterHttpPoolManagerImpl {
                 canister_http_pool
                     .get_unvalidated_shares()
                     // Only check the unvalidated shares belonging to the requests that we can validate.
-                    .filter(|share| share.content.id <= next_callback_id)
+                    .filter(|share| share.content.id < next_callback_id)
                     .filter_map(|share| {
                         if active_callback_ids.contains(&share.content.id) {
                             None
@@ -296,7 +296,7 @@ impl CanisterHttpPoolManagerImpl {
         canister_http_pool
             .get_unvalidated_shares()
             // Only consider shares belonging to the requests that we can validate.
-            .filter(|share| share.content.id <= next_callback_id)
+            .filter(|share| share.content.id < next_callback_id)
             .filter_map(|share| {
                 if existing_signed_requests.contains(&(share.signature.signer, share.content.id)) {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
