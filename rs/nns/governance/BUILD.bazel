@@ -174,7 +174,8 @@ rust_library(
     version = "0.9.0",
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [
         ":build_script",
-        "@crate_index//:tla_instrumentation"
+        "@crate_index//:tla_instrumentation",
+        "@crate_index//:tokio"
     ],
 )
 
