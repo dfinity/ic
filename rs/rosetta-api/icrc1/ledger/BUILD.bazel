@@ -156,6 +156,25 @@ package(default_visibility = ["//visibility:public"])
                 "//rs/rosetta-api/icrc1/tokens_u256",
             ],
         ),
+        (
+            "_upgradetomemorymanager",
+            ["upgrade-to-memory-manager"],
+            [
+                ":ledger",
+                "//rs/rosetta-api/icrc1/tokens_u64",
+            ],
+        ),
+        (
+            "_u256_upgradetomemorymanager",
+            [
+                "upgrade-to-memory-manager",
+                "u256-tokens",
+            ],
+            [
+                ":ledger_u256",
+                "//rs/rosetta-api/icrc1/tokens_u256",
+            ],
+        ),        
     ]
 ]
 

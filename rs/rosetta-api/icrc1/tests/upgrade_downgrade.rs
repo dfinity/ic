@@ -1,9 +1,7 @@
 use candid::{Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg, UpgradeArg as IndexUpgradeArg};
-use ic_icrc1_ledger::{
-    FeatureFlags, InitArgsBuilder, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs,
-};
+use ic_icrc1_ledger::{FeatureFlags, InitArgsBuilder, LedgerArgument};
 use ic_icrc1_ledger_sm_tests::{
     BLOB_META_KEY, BLOB_META_VALUE, FEE, INT_META_KEY, INT_META_VALUE, NAT_META_KEY,
     NAT_META_VALUE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
@@ -100,14 +98,12 @@ fn should_upgrade_and_downgrade_with_memory_manager() {
         None,
         MINTER_PRINCIPAL,
     );
+    let wait_time = 60;
 
-    env.advance_time(Duration::from_secs(60));
+    env.advance_time(Duration::from_secs(wait_time));
     env.tick();
 
-    let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(LedgerUpgradeArgs {
-        test_upgrade_with_memory_manager: Some(false),
-        ..LedgerUpgradeArgs::default()
-    }));
+    let ledger_upgrade_arg = LedgerArgument::Upgrade(None);
     env.upgrade_canister(
         ledger_id,
         ledger_wasm(),
@@ -115,13 +111,21 @@ fn should_upgrade_and_downgrade_with_memory_manager() {
     )
     .unwrap();
 
-    env.advance_time(Duration::from_secs(60));
+    env.advance_time(Duration::from_secs(wait_time));
     env.tick();
 
-    let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(LedgerUpgradeArgs {
-        test_upgrade_with_memory_manager: Some(true),
-        ..LedgerUpgradeArgs::default()
-    }));
+    let ledger_upgrade_arg = LedgerArgument::Upgrade(None);
+    env.upgrade_canister(
+        ledger_id,
+        ledger_wasm_upgradetomemorymanager(),
+        Encode!(&ledger_upgrade_arg).unwrap(),
+    )
+    .unwrap();
+
+    env.advance_time(Duration::from_secs(wait_time));
+    env.tick();
+
+    let ledger_upgrade_arg = LedgerArgument::Upgrade(None);
     env.upgrade_canister(
         ledger_id,
         ledger_wasm(),
@@ -129,21 +133,7 @@ fn should_upgrade_and_downgrade_with_memory_manager() {
     )
     .unwrap();
 
-    env.advance_time(Duration::from_secs(60));
-    env.tick();
-
-    let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(LedgerUpgradeArgs {
-        test_upgrade_with_memory_manager: Some(false),
-        ..LedgerUpgradeArgs::default()
-    }));
-    env.upgrade_canister(
-        ledger_id,
-        ledger_wasm(),
-        Encode!(&ledger_upgrade_arg).unwrap(),
-    )
-    .unwrap();
-
-    env.advance_time(Duration::from_secs(60));
+    env.advance_time(Duration::from_secs(wait_time));
     env.tick();
 
     let ledger_upgrade_arg = LedgerArgument::Upgrade(None);
@@ -224,6 +214,10 @@ fn ledger_mainnet_wasm() -> Vec<u8> {
 
 fn ledger_wasm() -> Vec<u8> {
     load_wasm_using_env_var("IC_ICRC1_LEDGER_WASM_PATH")
+}
+
+fn ledger_wasm_upgradetomemorymanager() -> Vec<u8> {
+    load_wasm_using_env_var("IC_ICRC1_LEDGER_MEM_MGR_WASM_PATH")
 }
 
 fn load_wasm_using_env_var(env_var: &str) -> Vec<u8> {

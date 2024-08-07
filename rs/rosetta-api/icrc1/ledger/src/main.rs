@@ -123,38 +123,45 @@ fn init_state(init_args: InitArgs) {
     })
 }
 
+#[cfg(not(feature = "upgrade-to-memory-manager"))]
 #[pre_upgrade]
 fn pre_upgrade() {
     #[cfg(feature = "canbench-rs")]
     let _p = canbench_rs::bench_scope("pre_upgrade");
 
     let start = ic_cdk::api::instruction_counter();
-    if !Access::with_ledger(|ledger| ledger.upgrade_with_memory_manager()) {
-        let mut stable_writer = StableWriter::default();
-        Access::with_ledger(|ledger| ciborium::ser::into_writer(ledger, &mut stable_writer))
-            .expect("failed to encode ledger state");
-        let end = ic_cdk::api::instruction_counter();
-        let instructions_consumed = end - start;
-        let counter_bytes: [u8; 8] = instructions_consumed.to_le_bytes();
-        stable_writer
-            .write_all(&counter_bytes)
-            .expect("failed to write instructions consumed to stable memory");
-    } else {
-        UPGRADES_MEMORY.with_borrow_mut(|bs| {
-            Access::with_ledger(|ledger| {
-                let writer = Writer::new(bs, 0);
-                let mut buffered_writer = BufferedWriter::new(8388608, writer);
-                ciborium::ser::into_writer(ledger, &mut buffered_writer)
-                    .expect("Failed to write the Ledger state in stable memory");
-                let end = ic_cdk::api::instruction_counter();
-                let instructions_consumed = end - start;
-                let counter_bytes: [u8; 8] = instructions_consumed.to_le_bytes();
-                buffered_writer
-                    .write_all(&counter_bytes)
-                    .expect("failed to write instructions consumed to UPGRADES_MEMORY");
-            });
+    let mut stable_writer = StableWriter::default();
+    Access::with_ledger(|ledger| ciborium::ser::into_writer(ledger, &mut stable_writer))
+        .expect("failed to encode ledger state");
+    let end = ic_cdk::api::instruction_counter();
+    let instructions_consumed = end - start;
+    let counter_bytes: [u8; 8] = instructions_consumed.to_le_bytes();
+    stable_writer
+        .write_all(&counter_bytes)
+        .expect("failed to write instructions consumed to stable memory");
+}
+
+#[cfg(feature = "upgrade-to-memory-manager")]
+#[pre_upgrade]
+fn pre_upgrade() {
+    #[cfg(feature = "canbench-rs")]
+    let _p = canbench_rs::bench_scope("pre_upgrade");
+
+    let start = ic_cdk::api::instruction_counter();
+    UPGRADES_MEMORY.with_borrow_mut(|bs| {
+        Access::with_ledger(|ledger| {
+            let writer = Writer::new(bs, 0);
+            let mut buffered_writer = BufferedWriter::new(8388608, writer);
+            ciborium::ser::into_writer(ledger, &mut buffered_writer)
+                .expect("Failed to write the Ledger state in stable memory");
+            let end = ic_cdk::api::instruction_counter();
+            let instructions_consumed = end - start;
+            let counter_bytes: [u8; 8] = instructions_consumed.to_le_bytes();
+            buffered_writer
+                .write_all(&counter_bytes)
+                .expect("failed to write instructions consumed to UPGRADES_MEMORY");
         });
-    }
+    });
 }
 
 #[post_upgrade]
