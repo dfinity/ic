@@ -129,63 +129,61 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
         msg.strip()
     }
 
-    fn assemble_message<P: Peers + Clone + Send + 'static>(
+    async fn assemble_message<P: Peers + Clone + Send + 'static>(
         &self,
         id: <MaybeStrippedConsensusMessage as IdentifiableArtifact>::Id,
         attr: <MaybeStrippedConsensusMessage as IdentifiableArtifact>::Attribute,
         artifact: Option<(MaybeStrippedConsensusMessage, NodeId)>,
         peer_rx: P,
-    ) -> impl std::future::Future<Output = Result<(ConsensusMessage, NodeId), Aborted>> + Send {
-        async move {
-            // Download the Stripped message if it hasn't been pushed.
-            let (stripped_artifact, peer) = self
-                .fetch_stripped
-                .assemble_message(id.clone(), attr, artifact, peer_rx.clone())
-                .await?;
+    ) -> Result<(ConsensusMessage, NodeId), Aborted> {
+        // Download the Stripped message if it hasn't been pushed.
+        let (stripped_artifact, peer) = self
+            .fetch_stripped
+            .assemble_message(id.clone(), attr, artifact, peer_rx.clone())
+            .await?;
 
-            let mut stripped_block_proposal = match stripped_artifact {
-                MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) => stripped,
-                MaybeStrippedConsensusMessage::Unstripped(unstripped) => {
-                    return Ok((unstripped, peer));
-                }
+        let mut stripped_block_proposal = match stripped_artifact {
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) => stripped,
+            MaybeStrippedConsensusMessage::Unstripped(unstripped) => {
+                return Ok((unstripped, peer));
+            }
+        };
+
+        let mut join_set = tokio::task::JoinSet::new();
+
+        let missing_ingress_ids = stripped_block_proposal.missing_ingress_messages();
+        // For each stripped object in the message, try to fetch it either from the local pools
+        // or from a random peer who is advertising it.
+        for missing_ingress_id in missing_ingress_ids {
+            join_set.spawn(get_or_fetch(
+                missing_ingress_id,
+                self.ingress_pool.clone(),
+                self.transport.clone(),
+                id.as_ref().clone(),
+                self.log.clone(),
+                self.node_id,
+                peer_rx.clone(),
+            ));
+        }
+
+        while let Some(join_result) = join_set.join_next().await {
+            let Ok((ingress, _peer_id)) = join_result else {
+                return Err(Aborted {});
             };
 
-            let mut join_set = tokio::task::JoinSet::new();
-
-            let missing_ingress_ids = stripped_block_proposal.missing_ingress_messages();
-            // For each stripped object in the message, try to fetch it either from the local pools
-            // or from a random peer who is advertising it.
-            for missing_ingress_id in missing_ingress_ids {
-                join_set.spawn(get_or_fetch(
-                    missing_ingress_id,
-                    self.ingress_pool.clone(),
-                    self.transport.clone(),
-                    id.as_ref().clone(),
-                    self.log.clone(),
-                    self.node_id,
-                    peer_rx.clone(),
-                ));
-            }
-
-            while let Some(join_result) = join_set.join_next().await {
-                let Ok((ingress, _peer_id)) = join_result else {
-                    return Err(Aborted {});
-                };
-
-                stripped_block_proposal
-                    .try_insert_ingress_message(ingress)
-                    .map_err(|_| Aborted {})?;
-            }
-
-            let reconstructed_block_proposal = stripped_block_proposal
-                .try_assemble()
+            stripped_block_proposal
+                .try_insert_ingress_message(ingress)
                 .map_err(|_| Aborted {})?;
-
-            Ok((
-                ConsensusMessage::BlockProposal(reconstructed_block_proposal),
-                peer,
-            ))
         }
+
+        let reconstructed_block_proposal = stripped_block_proposal
+            .try_assemble()
+            .map_err(|_| Aborted {})?;
+
+        Ok((
+            ConsensusMessage::BlockProposal(reconstructed_block_proposal),
+            peer,
+        ))
     }
 }
 
