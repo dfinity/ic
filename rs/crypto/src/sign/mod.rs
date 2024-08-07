@@ -196,7 +196,7 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
         );
         let start_time = self.metrics.now();
         let result = BasicSigVerifierInternal::verify_basic_sig_batch(
-            &self.csp,
+            self.vault.as_ref(),
             self.registry_client.as_ref(),
             signature,
             message,

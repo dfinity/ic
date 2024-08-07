@@ -1128,7 +1128,9 @@ mod verify_complaint {
 
 mod verify_transcript {
     use super::*;
-    use ic_crypto_test_utils_canister_threshold_sigs::{setup_masked_random_params, IntoBuilder};
+    use ic_crypto_test_utils_canister_threshold_sigs::{
+        setup_masked_random_params, CorruptBytes, IntoBuilder,
+    };
 
     #[test]
     fn should_run_idkg_successfully_for_random_dealing() {
@@ -1694,6 +1696,76 @@ mod verify_transcript {
             assert_matches!(r,
                             Err(IDkgVerifyTranscriptError::InvalidArgument(e))
                             if e.contains("mismatching transcript IDs in transcript"));
+        }
+    }
+
+    #[test]
+    fn should_verify_transcript_reject_transcript_with_insufficient_dealing_signatures() {
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(4..10);
+
+        for alg in all_canister_threshold_algorithms() {
+            let (env, params, mut transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
+
+            let verification_threshold = params.verification_threshold().get() as usize;
+            let random_batchsigneddealing_signature_batch = &mut transcript
+                .verified_dealings
+                .values_mut()
+                .choose(rng)
+                .expect("empty verified dealings")
+                .signature
+                .signatures_map;
+
+            *random_batchsigneddealing_signature_batch = random_batchsigneddealing_signature_batch
+                .clone()
+                .into_iter()
+                .choose_multiple(rng, verification_threshold - 1)
+                .into_iter()
+                .collect();
+
+            let r = env
+                .nodes
+                .random_node(rng)
+                .verify_transcript(&params, &transcript);
+
+            assert_matches!(r,
+                Err(IDkgVerifyTranscriptError::InvalidArgument(e))
+                if e.contains(&format!("insufficient number of signers ({}<{verification_threshold})", verification_threshold - 1))
+            );
+        }
+    }
+
+    #[test]
+    fn should_verify_transcript_reject_transcript_with_corrupted_dealing_signature() {
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(1..10);
+
+        for alg in all_canister_threshold_algorithms() {
+            let (env, params, mut transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
+
+            let some_sig_in_some_dealing = transcript
+                .verified_dealings
+                .values_mut()
+                .choose(rng)
+                .expect("empty verified dealings")
+                .signature
+                .signatures_map
+                .values_mut()
+                .choose(rng)
+                .expect("empty signatures_map");
+
+            *some_sig_in_some_dealing = some_sig_in_some_dealing.clone_with_bit_flipped();
+
+            let r = env
+                .nodes
+                .random_node(rng)
+                .verify_transcript(&params, &transcript);
+
+            assert_matches!(
+                r,
+                Err(IDkgVerifyTranscriptError::InvalidDealingSignatureBatch { error, .. })
+                if error.contains("Invalid basic signature batch")
+            );
         }
     }
 
