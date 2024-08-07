@@ -79,5 +79,5 @@ name = "ic-systest-update-workload-large-payload-test"
 path = "update_workload_large_payload.rs"
 
 [[bin]]
-name = "ic-systest-cloner-canisters-workload"
-path = "cloner_canisters_workload.rs"
+name = "ic-systest-cloner-canister-workload"
+path = "cloner_canister_workload.rs"

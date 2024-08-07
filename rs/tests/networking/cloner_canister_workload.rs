@@ -1,10 +1,10 @@
 //! System test that sets up a 13 node APP subnet to benchmark the subnet
 //! when the installing a large number of canisters. The canisters are created
-//! by installing a `cloner canister`, which spins up a large batches of canisters
+//! by installing a `cloner canister`, which spins up large batches of canisters
 //! in parallel.
 //!
 //! To run the benchmark, run the following command in the dev container:
-//! ict test //rs/tests/networking:cloner_canisters -k -- --test_timeout=600000 --test_tmpdir=test_tmpdir
+//! ict test //rs/tests/networking:cloner_canister -k -- --test_timeout=600000 --test_tmpdir=test_tmpdir
 //!
 //! Wait for output to show the console links to the VMs.
 //! Use "Ctrl + F" to search for "/console"
