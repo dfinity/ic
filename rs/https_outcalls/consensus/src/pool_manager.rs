@@ -441,6 +441,7 @@ pub mod test {
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
+    use ic_replicated_state::metadata_state::subnet_call_context_manager::SubnetCallContext;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
@@ -470,6 +471,13 @@ pub mod test {
     ) -> ReplicatedState {
         // Add some pending http calls
         let mut replicated_state = ReplicatedState::new(subnet_test_id(0), SubnetType::System);
+        // This will increase the next_call_id to 1
+        if let Some(val) = http_calls.values().next() {
+            replicated_state
+                .metadata
+                .subnet_call_context_manager
+                .push_context(SubnetCallContext::CanisterHttpRequest(val.clone()));
+        }
         replicated_state
             .metadata
             .subnet_call_context_manager
