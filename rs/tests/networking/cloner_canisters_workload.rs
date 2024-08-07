@@ -5,6 +5,17 @@
 //!
 //! To run the benchmark, run the following command in the dev container:
 //! ict test //rs/tests/networking:cloner_canisters -k -- --test_timeout=600000 --test_tmpdir=test_tmpdir
+//!
+//! Wait for output to show the console links to the VMs.
+//! Use "Ctrl + F" to search for "/console"
+//! 2024-08-07 09:45:55.378 INFO[setup:rs/tests/driver/src/driver/log_events.rs:20:0] {"event_name":"vm_console_link_created_event","body":{"url":"https://farm.dfinity.systems/group/cloner-canisters-workload--1723023931452/vm/3aazi-jrwkv-znyt4-2sliu-stgro-p6dql-ac6sv-53e5j-y3ebi-eofm6-dae/console/","vm_name":"3aazi-jrwkv-znyt4-2sliu-stgro-p6dql-ac6sv-53e5j-y3ebi-eofm6-dae"}}
+//!
+//! Use the console link to stop and start the replica process in order to start a catch up process.
+//! To stop the replica use the command:
+//! `systemctl stop ic-replica`
+//!
+//! To start the replica again, use the command:
+//! `systemctl start ic-replica`
 
 use anyhow::Result;
 use candid::{CandidType, Encode};
@@ -25,11 +36,11 @@ use serde::{Deserialize, Serialize};
 use slog::info;
 use std::time::Duration;
 
-// 5 hours
-const WORKLOAD_RUNTIME: Duration = Duration::from_secs(5 * 60 * 60);
+// 2 hours
+const WORKLOAD_RUNTIME: Duration = Duration::from_secs(2 * 60 * 60);
 
-// 5 minutes
-const DOWNLOAD_PROMETHEUS_WAIT_TIME: Duration = Duration::from_secs(5 * 60);
+// 10 minutes
+const DOWNLOAD_PROMETHEUS_WAIT_TIME: Duration = Duration::from_secs(10 * 60);
 
 // Timeout parameters
 const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
@@ -43,13 +54,16 @@ const SUBNET_SIZE: usize = 13;
 // 100,000 canisters, with 500 batches, will take ~25 minutes to set up.
 // Yields 280-310ms commit and certify times.
 // We need minimum 350+ms, so we should probably push this to 150,000 canisters.
-const NUMBER_OF_CANISTERS: u64 = 125_000;
-const CANISTERS_PER_BATCH: u64 = 500;
-const ITERATIONS: u64 = NUMBER_OF_CANISTERS / CANISTERS_PER_BATCH;
+const NUMBER_OF_CANISTERS_TO_INSTALL: u64 = 125_000;
+const CANISTERS_INSTALLED_PER_CLONER_CANISTER: u64 = 500;
+const AMOUNT_OF_CLONER_CANISTERS: u64 =
+    NUMBER_OF_CANISTERS_TO_INSTALL / CANISTERS_INSTALLED_PER_CLONER_CANISTER;
 
-/// This number should not exceed the length of the canister output queue,
-/// which is currently 500.
+// Don't change these values.
+/// The batch size for the cloner canister to install canisters concurrently.
 const CLONER_CANISTER_BATCH_SIZE: u64 = 250;
+/// The initial cycles for the canisters spun up by the cloner canister.
+/// If too low or too high, the canisters will not be installed, or the cloner will run out of cycles.
 const INITIAL_CYCLES: u64 = 10_u64.pow(11); // 100B Cycles
 
 fn main() -> Result<()> {
@@ -84,7 +98,11 @@ pub fn config(env: TestEnv) {
     InternetComputer::new()
         .with_default_vm_resources(vm_resources)
         .with_required_host_features(vec![HostFeature::Performance])
-        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(SUBNET_SIZE))
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .add_nodes(SUBNET_SIZE)
+                .with_initial_notary_delay(Duration::from_millis(200)),
+        )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
     env.sync_with_prometheus();
@@ -123,26 +141,30 @@ pub fn install_cloner_canisters(env: TestEnv) {
         app_node.get_public_url().to_string()
     );
 
-    for i in 0..ITERATIONS {
+    for i in 0..AMOUNT_OF_CLONER_CANISTERS {
         let counter_canister_bytes_clone = counter_canister_bytes.clone();
-        info!(&logger, "{i}/{ITERATIONS}: Installing cloner canister.");
+        info!(
+            &logger,
+            "{i}/{AMOUNT_OF_CLONER_CANISTERS}: Installing cloner canister."
+        );
         let cloner_canister_id =
             app_node.create_and_install_canister_with_arg(CLONER_CANISTER_WASM, None);
         info!(
             &logger,
-            "{i}/{ITERATIONS}: Succeeded installing cloner canister, {}.", cloner_canister_id
+            "{i}/{AMOUNT_OF_CLONER_CANISTERS}: Succeeded installing cloner canister, {}.",
+            cloner_canister_id
         );
 
         info!(
             &logger,
-            "{i}/{ITERATIONS}: Spinning up {CANISTERS_PER_BATCH} canisters."
+            "{i}/{AMOUNT_OF_CLONER_CANISTERS}: Spinning up {CANISTERS_INSTALLED_PER_CLONER_CANISTER} canisters."
         );
 
         rt.block_on(async {
             let CanisterAgent { agent } = app_node.build_canister_agent().await;
 
             let args = Encode!(&SpinupCanistersArgs {
-                canisters_number: CANISTERS_PER_BATCH,
+                canisters_number: CANISTERS_INSTALLED_PER_CLONER_CANISTER,
                 wasm_module: counter_canister_bytes_clone,
                 initial_cycles: INITIAL_CYCLES, // 1B Cycles
                 batch_size: CLONER_CANISTER_BATCH_SIZE,
@@ -158,18 +180,21 @@ pub fn install_cloner_canisters(env: TestEnv) {
                 .await
             {
                 Ok(_) => {
-                    info!(&logger, "{i}/{ITERATIONS}: Successfully spun up canisters.");
+                    info!(
+                        &logger,
+                        "{i}/{AMOUNT_OF_CLONER_CANISTERS}: Successfully spun up canisters."
+                    );
                 }
                 Err(err) => {
                     info!(
                         &logger,
-                        " {i}/{ITERATIONS}:Failed to spin up canisters: {:?}", err
+                        " {i}/{AMOUNT_OF_CLONER_CANISTERS}:Failed to spin up canisters: {:?}", err
                     );
                 }
             }
             info!(
                 &logger,
-                "{i}/{ITERATIONS}: Time taken to spin up canisters: {:?}",
+                "{i}/{AMOUNT_OF_CLONER_CANISTERS}: Time taken to spin up canisters: {:?}",
                 timer.elapsed()
             );
         });
