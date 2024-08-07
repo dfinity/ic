@@ -120,7 +120,7 @@ impl CanisterHttpPoolManagerImpl {
             .chain(
                 canister_http_pool
                     .get_unvalidated_shares()
-                    // Only check the unvalidated shares belonging to the requests that we can't validate.
+                    // Only check the unvalidated shares belonging to the requests that we can validate.
                     .filter(|share| share.content.id <= next_callback_id)
                     .filter_map(|share| {
                         if active_callback_ids.contains(&share.content.id) {
