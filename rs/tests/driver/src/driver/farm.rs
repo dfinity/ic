@@ -455,6 +455,8 @@ impl GroupSpec {
             job_schedule: None,
             test_name: Some(group_base_name.to_string()),
         };
+
+        // Acquire bazel's volatile status containing key value pairs like USER and CI_JOB_NAME:
         let version_file_path = std::env::var("VERSION_FILE_PATH")
             .expect("Expected the environment variable VERSION_FILE_PATH to be defined!");
         let version_file = env.read_dependency_to_string(version_file_path).unwrap();

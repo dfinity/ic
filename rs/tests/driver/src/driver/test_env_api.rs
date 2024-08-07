@@ -1289,6 +1289,7 @@ impl HasIcName for IcNodeSnapshot {
     }
 }
 
+// TODO(IDX-3174): this doesn't need to be a trait anymore so replace the below methods into regular functions:
 pub trait HasDependencies {
     fn get_dependency_path<P: AsRef<Path>>(&self, p: P) -> PathBuf {
         let runfiles = std::env::var("RUNFILES")

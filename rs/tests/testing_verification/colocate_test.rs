@@ -85,6 +85,7 @@ fn setup(env: TestEnv) {
         .unwrap_or_else(|e| panic!("Failed to setup Universal VM {UVM_NAME} because: {e}"));
     info!(log, "Universal VM {UVM_NAME} installed!");
 
+    // Create a tarball of the runfiles (runtime dependencies) such that they can be copied to the UVM.
     let runfiles_tar_path = env.get_path(RUNFILES_TAR_ZST);
     let runfiles = std::env::var("RUNFILES")
         .expect("Expected the environment variable RUNFILES to be defined!");
@@ -108,6 +109,7 @@ fn setup(env: TestEnv) {
         panic!("Tarring the runfiles directory failed with error: {err}");
     }
 
+    // Create a tarball of some required files in the environment directory such that they can be copied to the UVM.
     let env_tar_path = env.get_path(ENV_TAR_ZST);
     info!(log, "Creating {env_tar_path:?} ...");
     let output = Command::new("tar")
@@ -283,18 +285,8 @@ fn start_test(env: TestEnv, uvm: DeployedUniversalVm) {
 
 fn scp(log: Logger, session: &Session, from: std::path::PathBuf, to: std::path::PathBuf) {
     let size = fs::metadata(from.clone()).unwrap().len();
-    info!(
-        log,
-        "scp-ing {:?} of {:?} KiB to {UVM_NAME}:{to:?} ...",
-        from,
-        size / 1024,
-    );
     ic_system_test_driver::retry_with_msg!(
-        format!(
-            "scp-ing {:?} of {:?} KiB to {UVM_NAME}:{to:?}",
-            from,
-            size / 1024,
-        ),
+        format!("scp-ing {:?} of {:?} B to {UVM_NAME}:{to:?}", from, size,),
         log.clone(),
         SCP_RETRY_TIMEOUT,
         SCP_RETRY_BACKOFF,
@@ -308,9 +300,7 @@ fn scp(log: Logger, session: &Session, from: std::path::PathBuf, to: std::path::
     .unwrap_or_else(|e| panic!("Failed to scp {:?} to {UVM_NAME}:{to:?} because: {e}", from));
     info!(
         log,
-        "scp-ed {:?} of {:?} KiB to {UVM_NAME}:{to:?} .",
-        from,
-        size / 1024,
+        "scp-ed {:?} of {:?} B to {UVM_NAME}:{to:?} .", from, size,
     );
 }
 
