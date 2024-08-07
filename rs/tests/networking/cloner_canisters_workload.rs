@@ -69,14 +69,14 @@ const INITIAL_CYCLES: u64 = 10_u64.pow(11); // 100B Cycles
 fn main() -> Result<()> {
     let per_task_timeout: Duration = WORKLOAD_RUNTIME + TASK_TIMEOUT_DELTA;
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(install_cloner_canisters))
         .with_timeout_per_test(per_task_timeout) // each task (including the setup function) may take up to `per_task_timeout`.
         .execute_from_args()?;
     Ok(())
 }
 
-pub fn config(env: TestEnv) {
+pub fn setup(env: TestEnv) {
     let logger = env.logger();
     PrometheusVm::default()
         .start(&env)
