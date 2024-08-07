@@ -2,7 +2,7 @@ use candid::Nat;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_clients::canister_status::{DefiniteCanisterSettings, LogVisibility};
 use ic_nns_constants::{REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     manage_neuron_response::Command,
     proposal::Action,
     update_canister_settings::{
