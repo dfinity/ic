@@ -6,6 +6,7 @@ use candid::CandidType;
 use ic_canister_client::Agent;
 use ic_canister_client::Sender;
 use ic_nns_common::types::NeuronId;
+use ic_nns_governance::pb::v1::proposal::Action;
 use ic_protobuf::registry::{
     node::v1::IPv4InterfaceConfig,
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
@@ -250,4 +251,9 @@ impl SubnetDescriptor {
 #[async_trait]
 pub trait ProposalPayload<T: CandidType> {
     async fn payload(&self, agent: &Agent) -> T;
+}
+
+#[async_trait]
+pub trait ProposalAction {
+    async fn action(&self) -> Action;
 }

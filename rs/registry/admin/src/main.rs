@@ -53,10 +53,13 @@ use ic_nns_governance::{
             swap_parameters, GovernanceParameters, InitialTokenDistribution, LedgerParameters,
             SwapParameters,
         },
+        install_code::CanisterInstallMode as GovernanceInstallMode,
         manage_neuron::Command,
         proposal::Action,
-        AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, ManageNeuron,
-        NnsFunction, NodeProvider, Proposal, RewardNodeProviders,
+        stop_or_start_canister::CanisterAction as GovernanceCanisterAction,
+        AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, InstallCode,
+        ManageNeuron, NnsFunction, NodeProvider, Proposal, RewardNodeProviders,
+        StopOrStartCanister,
     },
     proposals::proposal_submission::{
         create_external_update_proposal_candid, create_make_proposal_payload,
@@ -162,8 +165,8 @@ use std::{
     time::SystemTime,
 };
 use types::{
-    NodeDetails, ProposalMetadata, ProposalPayload, ProvisionalWhitelistRecord, Registry,
-    RegistryRecord, RegistryValue, SubnetDescriptor, SubnetRecord,
+    NodeDetails, ProposalAction, ProposalMetadata, ProposalPayload, ProvisionalWhitelistRecord,
+    Registry, RegistryRecord, RegistryValue, SubnetDescriptor, SubnetRecord,
 };
 use update_subnet::ProposeToUpdateSubnetCmd;
 use url::Url;
@@ -811,6 +814,11 @@ impl ProposalPayload<UpdateIcpXdrConversionRatePayload> for ProposeXdrIcpConvers
 struct StartCanisterCmd {
     #[clap(long)]
     pub canister_id: CanisterId,
+
+    /// If true, the proposal will be sent as an StopOrStartCanister proposal instead of ExecuteNnsFunction.
+    /// TODO(NNS1-3223): Change to `use_legacy_excutenns` after the StopOrStartCanister proposal is supported.
+    #[clap(long)]
+    use_explicit_action_type: bool,
 }
 
 impl ProposalTitle for StartCanisterCmd {
@@ -832,12 +840,30 @@ impl ProposalPayload<StopOrStartCanisterRequest> for StartCanisterCmd {
     }
 }
 
+#[async_trait]
+impl ProposalAction for StartCanisterCmd {
+    async fn action(&self) -> Action {
+        let canister_id = Some(self.canister_id.get());
+        let action = Some(GovernanceCanisterAction::Start as i32);
+        let start_canister = StopOrStartCanister {
+            canister_id,
+            action,
+        };
+        Action::StopOrStartCanister(start_canister)
+    }
+}
+
 /// Sub-command to submit a proposal to start a canister.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
 struct StopCanisterCmd {
     #[clap(long)]
     pub canister_id: CanisterId,
+
+    /// If true, the proposal will be sent as an StopOrStartCanister proposal instead of ExecuteNnsFunction.
+    /// TODO(NNS1-3223): Change to `use_legacy_excutenns` after the StopOrStartCanister proposal is supported.
+    #[clap(long)]
+    use_explicit_action_type: bool,
 }
 
 impl ProposalTitle for StopCanisterCmd {
@@ -856,6 +882,19 @@ impl ProposalPayload<StopOrStartCanisterRequest> for StopCanisterCmd {
             canister_id: self.canister_id,
             action: CanisterAction::Stop,
         }
+    }
+}
+
+#[async_trait]
+impl ProposalAction for StopCanisterCmd {
+    async fn action(&self) -> Action {
+        let canister_id = Some(self.canister_id.get());
+        let action = Some(GovernanceCanisterAction::Stop as i32);
+        let stop_canister = StopOrStartCanister {
+            canister_id,
+            action,
+        };
+        Action::StopOrStartCanister(stop_canister)
     }
 }
 
@@ -1003,6 +1042,11 @@ struct ProposeToChangeNnsCanisterCmd {
     /// If set, it will update the canister's memory allocation to this value.
     /// See `MemoryAllocation` for the semantics of this field.
     memory_allocation: Option<u64>,
+
+    /// If true, the proposal will be sent as an InstallCode proposal instead of ExecuteNnsFunction.
+    /// TODO(NNS1-3223): Change to `use_legacy_excutenns` after the InstallCode proposal is supported.
+    #[clap(long)]
+    use_explicit_action_type: bool,
 }
 
 #[async_trait]
@@ -1061,6 +1105,38 @@ impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
             compute_allocation: self.compute_allocation.map(candid::Nat::from),
             memory_allocation: self.memory_allocation.map(candid::Nat::from),
         }
+    }
+}
+
+#[async_trait]
+impl ProposalAction for ProposeToChangeNnsCanisterCmd {
+    async fn action(&self) -> Action {
+        let canister_id = Some(self.canister_id.get());
+        let wasm_module = Some(
+            read_wasm_module(
+                &self.wasm_module_path,
+                &self.wasm_module_url,
+                &self.wasm_module_sha256,
+            )
+            .await,
+        );
+        let arg = self.arg.as_ref().map(|path| read_file_fully(path));
+        let skip_stopping_before_installing = Some(self.skip_stopping_before_installing);
+        let install_mode = match self.mode {
+            CanisterInstallMode::Install => Some(GovernanceInstallMode::Install as i32),
+            CanisterInstallMode::Reinstall => Some(GovernanceInstallMode::Reinstall as i32),
+            CanisterInstallMode::Upgrade => Some(GovernanceInstallMode::Upgrade as i32),
+        };
+
+        let install_code = InstallCode {
+            skip_stopping_before_installing,
+            install_mode,
+            canister_id,
+            wasm_module,
+            arg,
+        };
+
+        Action::InstallCode(install_code)
     }
 }
 
@@ -3941,21 +4017,19 @@ async fn main() {
         }
         SubCommand::ProposeToChangeNnsCanister(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            if cmd.canister_id == ROOT_CANISTER_ID {
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            if cmd.use_explicit_action_type {
+                propose_action_from_command(cmd, canister_client, proposer).await;
+            } else if cmd.canister_id == ROOT_CANISTER_ID {
                 propose_external_proposal_from_command::<
                     UpgradeRootProposal,
                     ProposeToChangeNnsCanisterCmd,
-                >(
-                    cmd,
-                    NnsFunction::NnsRootUpgrade,
-                    make_canister_client(
-                        reachable_nns_urls,
-                        opts.verify_nns_responses,
-                        opts.nns_public_key_pem_file,
-                        sender,
-                    ),
-                    proposer,
-                )
+                >(cmd, NnsFunction::NnsRootUpgrade, canister_client, proposer)
                 .await;
             } else {
                 propose_external_proposal_from_command::<
@@ -3964,12 +4038,7 @@ async fn main() {
                 >(
                     cmd,
                     NnsFunction::NnsCanisterUpgrade,
-                    make_canister_client(
-                        reachable_nns_urls,
-                        opts.verify_nns_responses,
-                        opts.nns_public_key_pem_file,
-                        sender,
-                    ),
+                    canister_client,
                     proposer,
                 )
                 .await;
@@ -4025,33 +4094,43 @@ async fn main() {
         }
         SubCommand::ProposeToStartCanister(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            propose_external_proposal_from_command(
-                cmd,
-                NnsFunction::StopOrStartNnsCanister,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-                proposer,
-            )
-            .await;
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            if cmd.use_explicit_action_type {
+                propose_action_from_command(cmd, canister_client, proposer).await;
+            } else {
+                propose_external_proposal_from_command(
+                    cmd,
+                    NnsFunction::StopOrStartNnsCanister,
+                    canister_client,
+                    proposer,
+                )
+                .await;
+            }
         }
         SubCommand::ProposeToStopCanister(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            propose_external_proposal_from_command(
-                cmd,
-                NnsFunction::StopOrStartNnsCanister,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-                proposer,
-            )
-            .await;
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            if cmd.use_explicit_action_type {
+                propose_action_from_command(cmd, canister_client, proposer).await;
+            } else {
+                propose_external_proposal_from_command(
+                    cmd,
+                    NnsFunction::StopOrStartNnsCanister,
+                    canister_client,
+                    proposer,
+                )
+                .await;
+            }
         }
         SubCommand::ProposeToClearProvisionalWhitelist(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
@@ -5032,6 +5111,35 @@ async fn propose_external_proposal_from_command<
     };
 }
 
+async fn propose_action_from_command<Command>(cmd: Command, agent: Agent, proposer: NeuronId)
+where
+    Command: ProposalMetadata + ProposalTitle + ProposalAction,
+{
+    let canister_client = GovernanceCanisterClient(NnsCanisterClient::new(
+        agent,
+        GOVERNANCE_CANISTER_ID,
+        Some(proposer),
+    ));
+
+    let action = cmd.action().await;
+
+    print_proposal(&action, &cmd);
+
+    if cmd.is_dry_run() {
+        return;
+    }
+
+    let proposal_id = canister_client
+        .submit_proposal_action(action, cmd.url(), cmd.title(), cmd.summary())
+        .await
+        .unwrap_or_else(|e| {
+            eprintln!("propose_action_from_command error: {:?}", e);
+            std::process::exit(1);
+        });
+
+    println!("proposal {}", proposal_id);
+}
+
 #[derive(Serialize)]
 struct FirewallCommandResult {
     entries: Vec<FirewallRule>,
@@ -5877,6 +5985,38 @@ impl GovernanceCanisterClient {
             title,
         )
         .await
+    }
+
+    async fn submit_proposal_action(
+        &self,
+        action: Action,
+        url: String,
+        title: String,
+        summary: String,
+    ) -> Result<ProposalId, String> {
+        let serialized = Encode!(&ManageNeuron {
+            neuron_id_or_subaccount: None,
+            command: Some(Command::MakeProposal(Box::new(Proposal {
+                title: Some(title),
+                summary,
+                url,
+                action: Some(action),
+            }))),
+            id: Some((*self.0.proposal_author()).into()),
+        })
+        .map_err(|e| {
+            format!(
+                "Cannot candid-serialize the submit_proposal_action payload: {}",
+                e
+            )
+        })?;
+        let response = self
+            .0
+            .execute_update("manage_neuron", serialized)
+            .await?
+            .ok_or_else(|| "submit_proposal replied nothing.".to_string())?;
+
+        decode_make_proposal_response(response)
     }
 
     async fn submit_external_proposal(
