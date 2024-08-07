@@ -88,9 +88,11 @@ async fn main() {
                 args.unwrap_or(canister.default_upgrade_args()),
             );
             let canister_id = ic_repo.parse_canister_id(&canister);
-            let _past_proposals = dashboard
+            let last_upgrade_proposal_id = dashboard
                 .list_canister_upgrade_proposals(&canister_id)
-                .await;
+                .await
+                .last()
+                .cloned();
             let compressed_wasm_hash = ic_repo.build_canister_artifact(&canister);
             let output_dir = output_dir.join(canister.to_string()).join(to.to_string());
 
@@ -99,6 +101,7 @@ async fn main() {
                 to,
                 compressed_wasm_hash,
                 canister_id,
+                last_upgrade_proposal_id,
                 upgrade_args,
                 release_notes,
             };
