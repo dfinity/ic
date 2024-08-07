@@ -20,7 +20,7 @@ use ic_consensus_system_test_utils::{
 };
 use ic_nervous_system_common::E8;
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance::pb::v1::NnsFunction;
+use ic_nns_governance_api::pb::v1::NnsFunction;
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_sns_wasm::pb::v1::{
@@ -353,7 +353,7 @@ fn install_xrc_mock_canister(
         create_canister_from_icp(env.clone(), recovered_nns_node, principal, 10);
 
     let xrc_mock_wasm: PathBuf = fs::canonicalize(
-        env.get_dependency_path("rs/rosetta-api/tvl/xrc_mock/xrc_mock_canister.wasm"),
+        env.get_dependency_path("rs/rosetta-api/tvl/xrc_mock/xrc_mock_canister.wasm.gz"),
     )
     .unwrap();
 
