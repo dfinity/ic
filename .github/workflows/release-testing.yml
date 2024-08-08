@@ -161,6 +161,6 @@ jobs:
     name: Qualify
     needs: [ci-main, bazel-system-test-nightly, bazel-system-test-staging, bazel-system-test-hotfix, dependency-scan-release-cut]
     uses: dfinity/dre/.github/workflows/qualify.yaml@main
+    secrets: inherit
     with:
       version: ${{ github.sha }}
-      secrets: inherit

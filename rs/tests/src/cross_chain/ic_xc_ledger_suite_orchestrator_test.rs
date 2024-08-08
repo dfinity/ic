@@ -188,7 +188,7 @@ async fn install_nns_controlled_canister<'a>(
     use ic_canister_client::Sender;
     use ic_nervous_system_clients::canister_status::CanisterStatusType;
     use ic_nns_common::types::{NeuronId, ProposalId};
-    use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
+    use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 
     let canister = application_subnet_runtime
         .create_canister(Some(u128::MAX))
@@ -259,7 +259,7 @@ async fn upgrade_ledger_suite_orchestrator_by_nns_proposal<'a>(
     use ic_canister_client::Sender;
     use ic_nervous_system_clients::canister_status::CanisterStatusType;
     use ic_nns_common::types::{NeuronId, ProposalId};
-    use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
+    use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 
     let wasm = canister_wasm.as_slice().to_vec();
     let proposal_payload = ChangeCanisterRequest::new(

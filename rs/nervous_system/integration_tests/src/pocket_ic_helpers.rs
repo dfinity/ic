@@ -10,7 +10,7 @@ use ic_nns_constants::{
     self, ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
     REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     manage_neuron, manage_neuron_response, proposal, CreateServiceNervousSystem,
     ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
     ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, NetworkEconomics,
@@ -2150,7 +2150,7 @@ pub mod sns {
     pub mod swap {
         use super::*;
         use assert_matches::assert_matches;
-        use ic_nns_governance::pb::v1::create_service_nervous_system::SwapParameters;
+        use ic_nns_governance_api::pb::v1::create_service_nervous_system::SwapParameters;
         use ic_sns_swap::{
             pb::v1::{BuyerState, GetOpenTicketRequest, GetOpenTicketResponse},
             swap::principal_to_subaccount,

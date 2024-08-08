@@ -135,6 +135,7 @@ rust_ic_test(
     data = [
         ":ckbtc_minter_debug.wasm",
         "//rs/bitcoin/ckbtc/kyt:kyt_canister",
+        "//rs/bitcoin/kyt:btc_kyt_canister",
         "//rs/bitcoin/mock:bitcoin_canister_mock",
         "//rs/rosetta-api/icrc1/ledger:ledger_canister",
     ],
