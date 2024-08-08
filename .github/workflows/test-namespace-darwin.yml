@@ -1,5 +1,5 @@
 # Darwin tests on runners from https://namespace.so
-name: test-namespace
+name: test-namespace-with-cache
 on: [push]
 
 # Ensure there's only one instance of this workflow for any PR/branch/tag, and
