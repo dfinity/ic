@@ -115,13 +115,3 @@ require {
     type user_runtime_root_t;
 }
 allow node_exporter_t user_runtime_root_t:dir { search };
-
-# Allow node_exporter to create and use netlink route sockets
-allow node_exporter_t self:netlink_route_socket create_netlink_socket_perms;
-
-# Allow getattr, search, open, read, lock, ioctl (list_dir_perms) from /var/run/udev
-require {
-    type udev_var_run_t;
-}
-allow node_exporter_t udev_var_run_t:dir list_dir_perms;
-
