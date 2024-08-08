@@ -9,7 +9,9 @@ use crate::consensus::idkg::{
     PseudoRandomId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId,
     ReshareOfMaskedParams, ReshareOfUnmaskedParams, UnmaskedTimesMaskedParams, UnmaskedTranscript,
 };
-use crate::consensus::{BlockPayload, CatchUpShareContent, ConsensusMessageHashable};
+use crate::consensus::{
+    Block, BlockPayload, CatchUpShareContent, ConsensusMessageHashable, Payload, SummaryPayload,
+};
 use crate::consensus::{CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon};
 use crate::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgDealers, IDkgDealing, IDkgReceivers, IDkgTranscript,
@@ -395,15 +397,46 @@ impl<V: ExhaustiveSet + CryptoHashable> ExhaustiveSet for Hashed<CryptoHashOf<V>
     }
 }
 
+#[derive(Clone)]
+struct HashedSummaryBlock {
+    summary_block: HashedBlock,
+}
+
+impl ExhaustiveSet for HashedSummaryBlock {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        let summary_payloads = SummaryPayload::exhaustive_set(rng);
+        let mut index = 0;
+
+        Block::exhaustive_set(rng)
+            .into_iter()
+            .map(|mut block| {
+                let summary = match block.payload.as_ref() {
+                    BlockPayload::Summary(summary) => summary.clone(),
+                    BlockPayload::Data(_) => {
+                        let summary = summary_payloads[index % summary_payloads.len()].clone();
+                        index += 1;
+                        summary
+                    }
+                };
+                block.payload = Payload::new(crypto_hash, BlockPayload::Summary(summary));
+
+                Self {
+                    summary_block: Hashed::new(crypto_hash, block),
+                }
+            })
+            .collect()
+    }
+}
+
 impl ExhaustiveSet for CatchUpContent {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         let registry_versions = Option::<RegistryVersion>::exhaustive_set(rng);
-        <(HashedBlock, HashedRandomBeacon, CryptoHashOfState)>::exhaustive_set(rng)
+        <(HashedSummaryBlock, HashedRandomBeacon, CryptoHashOfState)>::exhaustive_set(rng)
             .into_iter()
             .enumerate()
             .map(|(i, (block, random_beacon, state_hash))| {
                 Self::new(
-                    block,
+                    block.summary_block,
                     random_beacon,
                     state_hash,
                     registry_versions[i % registry_versions.len()],
