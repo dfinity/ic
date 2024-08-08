@@ -881,14 +881,12 @@ pub fn compute_manifest(
         files
     };
 
-    #[cfg(debug_assertions)]
-    let original_files = files.clone();
-
     // Currently, the unverified checkpoint marker file should already be removed by the time we reach this point.
-    // If it accidentally exists, the marker file should be excluded from manifest computation and a critical alert will be raised.
-    // Note that in the future if we allow computing manifest before removing the marker, the critical alert should be adjusted accordingly.
+    // If it accidentally exists, the replica will crash in the outer function `handle_compute_manifest_request`.
+    //
+    // Because this function may still be used by tests and external tools to compute manifest of an unverified checkpoint,
+    // the function does not crash here. Instead, we exclude the marker file from the manifest computation.
     if !checkpoint.is_checkpoint_verified() {
-        metrics.manifest_computation_including_marker_critical.inc();
         files.retain(|FileWithSize(p, _)| {
             checkpoint.raw_path().join(p) != checkpoint.unverified_checkpoint_marker()
         });
@@ -896,12 +894,6 @@ pub fn compute_manifest(
             .iter()
             .any(|FileWithSize(p, _)| p.ends_with(UNVERIFIED_CHECKPOINT_MARKER)));
     }
-
-    #[cfg(debug_assertions)]
-    debug_assert_eq!(
-        original_files, files,
-        "the unverified checkpoint marker file is not expected to exist"
-    );
 
     let chunk_actions = match opt_manifest_delta {
         Some(manifest_delta) => {

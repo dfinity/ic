@@ -349,56 +349,31 @@ fn test_manifest_computation_skips_marker_file() {
 
     let mut thread_pool = scoped_threadpool::Pool::new(1);
 
-    if cfg!(debug_assertions) {
-        // The debug assertions in manifest computation panic in debug mode.
-        assert!(panic::catch_unwind(AssertUnwindSafe(|| {
-            compute_manifest(
-                &mut thread_pool,
-                &manifest_metrics,
-                &no_op_logger(),
-                StateSyncVersion::V1,
-                &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
-                1024,
-                None,
-            )
-        }))
-        .is_err());
-    } else {
-        let manifest_with_marker_present = compute_manifest(
-            &mut thread_pool,
-            &manifest_metrics,
-            &no_op_logger(),
-            StateSyncVersion::V1,
-            &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
-            1024,
-            None,
-        )
-        .expect("failed to compute manifest");
+    let manifest_with_marker_present = compute_manifest(
+        &mut thread_pool,
+        &manifest_metrics,
+        &no_op_logger(),
+        StateSyncVersion::V1,
+        &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
+        1024,
+        None,
+    )
+    .expect("failed to compute manifest");
 
-        fs::remove_file(root.join(UNVERIFIED_CHECKPOINT_MARKER))
-            .expect("failed to remove marker file");
+    fs::remove_file(root.join(UNVERIFIED_CHECKPOINT_MARKER)).expect("failed to remove marker file");
 
-        let manifest_with_marker_removed = compute_manifest(
-            &mut thread_pool,
-            &manifest_metrics,
-            &no_op_logger(),
-            StateSyncVersion::V1,
-            &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
-            1024,
-            None,
-        )
-        .expect("failed to compute manifest");
-        // The manifest computation should ignores the marker files and produce identical manifest.
-        assert_eq!(manifest_with_marker_present, manifest_with_marker_removed);
-    }
-
-    // The critical alert in manifest computation is triggered once in either branch of the test.
-    assert_eq!(
-        manifest_metrics
-            .manifest_computation_including_marker_critical
-            .get(),
-        1
-    );
+    let manifest_with_marker_removed = compute_manifest(
+        &mut thread_pool,
+        &manifest_metrics,
+        &no_op_logger(),
+        StateSyncVersion::V1,
+        &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
+        1024,
+        None,
+    )
+    .expect("failed to compute manifest");
+    // The manifest computation should ignore the marker files and produce identical manifest.
+    assert_eq!(manifest_with_marker_present, manifest_with_marker_removed);
 }
 
 #[test]

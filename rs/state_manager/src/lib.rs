@@ -172,7 +172,6 @@ pub struct ManifestMetrics {
     file_group_chunks: IntGauge,
     sub_manifest_chunks: IntGauge,
     chunk_id_usage_nearing_limits_critical: IntCounter,
-    manifest_computation_including_marker_critical: IntCounter,
 }
 
 #[derive(Clone)]
@@ -528,8 +527,6 @@ impl ManifestMetrics {
             sub_manifest_chunks,
             chunk_id_usage_nearing_limits_critical: metrics_registry
                 .error_counter(CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS),
-            manifest_computation_including_marker_critical: metrics_registry
-                .error_counter(MANIFEST_COMPUTATION_INCLUDING_MARKER_CRITICAL),
         }
     }
 }
