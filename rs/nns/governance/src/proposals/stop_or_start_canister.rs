@@ -1,5 +1,6 @@
 use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
+    enable_new_canister_management_topics,
     pb::v1::{stop_or_start_canister::CanisterAction, GovernanceError, StopOrStartCanister, Topic},
     proposals::call_canister::CallCanister,
 };
@@ -19,7 +20,7 @@ const CANISTERS_NOT_ALLOWED_TO_STOP: [&CanisterId; 3] = [
 
 impl StopOrStartCanister {
     pub fn validate(&self) -> Result<(), GovernanceError> {
-        if !cfg!(feature = "test") {
+        if !enable_new_canister_management_topics() {
             return Err(invalid_proposal_error(
                 "StopOrStartCanister proposal is not yet supported",
             ));

@@ -26,7 +26,7 @@ use ic_management_canister_types::{
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
+use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
     governance::submit_external_update_proposal, itest_helpers::install_rust_canister_from_path,
 };
@@ -408,10 +408,15 @@ pub(crate) async fn install_bitcoin_canister_with_network(
             get_current_fee_percentiles_maximum: 0,
             send_transaction_base: 0,
             send_transaction_per_byte: 0,
+            get_block_headers_base: 0,
+            get_block_headers_cycles_per_ten_instructions: 0,
+            get_block_headers_maximum: 0,
         },
         api_access: Flag::Enabled,
         disable_api_if_not_fully_synced: Flag::Disabled,
         watchdog_canister: None,
+        burn_cycles: Flag::Enabled,
+        lazily_evaluate_fee_percentiles: Flag::Enabled,
     };
 
     install_rust_canister_from_path(

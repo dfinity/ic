@@ -60,6 +60,7 @@ use ic_nns_governance::{
         governance_error::ErrorType::{
             self, InsufficientFunds, NotAuthorized, NotFound, PreconditionFailed, ResourceExhausted,
         },
+        install_code::CanisterInstallMode,
         manage_neuron::{
             self,
             claim_or_refresh::{By, MemoAndController},
@@ -78,7 +79,7 @@ use ic_nns_governance::{
         AddOrRemoveNodeProvider, ApproveGenesisKyc, Ballot, BallotChange, BallotInfo,
         BallotInfoChange, CreateServiceNervousSystem, Empty, ExecuteNnsFunction,
         Governance as GovernanceProto, GovernanceChange, GovernanceError,
-        IdealMatchedParticipationFunction, KnownNeuron, KnownNeuronData, ListNeurons,
+        IdealMatchedParticipationFunction, InstallCode, KnownNeuron, KnownNeuronData, ListNeurons,
         ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
         MonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState,
         NeuronType, NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction,
@@ -1691,7 +1692,7 @@ async fn test_all_follow_proposer() {
     )
     .now_or_never()
     .unwrap()
-    .expect("Manage neuron failed");
+    .panic_if_error("Manage neuron failed");
 
     gov.manage_neuron(
         // Must match neuron 6's serialized_id.
@@ -1707,7 +1708,7 @@ async fn test_all_follow_proposer() {
     )
     .now_or_never()
     .unwrap()
-    .expect("Manage neuron failed");
+    .panic_if_error("Manage neuron failed");
 
     gov.make_proposal(
         &NeuronId { id: 1 },
@@ -5791,7 +5792,7 @@ fn test_staked_maturity() {
         )
         .now_or_never()
         .unwrap()
-        .expect("Couldn't submit proposal.")
+        .panic_if_error("Couldn't submit proposal.")
         .command
         .unwrap()
     {
@@ -6480,7 +6481,7 @@ fn test_manage_and_reward_node_providers() {
         )
         .now_or_never()
         .unwrap()
-        .expect("Couldn't submit proposal.")
+        .panic_if_error("Couldn't submit proposal.")
         .command
         .unwrap()
     {
@@ -6524,7 +6525,7 @@ fn test_manage_and_reward_node_providers() {
         )
         .now_or_never()
         .unwrap()
-        .expect("Couldn't submit proposal.")
+        .panic_if_error("Couldn't submit proposal.")
         .command
         .unwrap()
     {
@@ -6572,7 +6573,7 @@ fn test_manage_and_reward_node_providers() {
         )
         .now_or_never()
         .unwrap()
-        .expect("Couldn't submit proposal.")
+        .panic_if_error("Couldn't submit proposal.")
         .command
         .unwrap()
     {
@@ -6611,7 +6612,7 @@ fn test_manage_and_reward_node_providers() {
         )
         .now_or_never()
         .unwrap()
-        .expect("Couldn't submit proposal.")
+        .panic_if_error("Couldn't submit proposal.")
         .command
         .unwrap()
     {
@@ -6661,7 +6662,7 @@ fn test_manage_and_reward_node_providers() {
         )
         .now_or_never()
         .unwrap()
-        .expect("Couldn't submit proposal.")
+        .panic_if_error("Couldn't submit proposal.")
         .command
         .unwrap()
     {
@@ -6706,7 +6707,7 @@ fn test_manage_and_reward_node_providers() {
         )
         .now_or_never()
         .unwrap()
-        .expect("Couldn't submit proposal.")
+        .panic_if_error("Couldn't submit proposal.")
         .command
         .unwrap()
     {
@@ -6755,7 +6756,7 @@ fn test_manage_and_reward_node_providers() {
         )
         .now_or_never()
         .unwrap()
-        .expect("Couldn't submit proposal.")
+        .panic_if_error("Couldn't submit proposal.")
         .command
         .unwrap()
     {
@@ -6832,7 +6833,7 @@ fn test_manage_and_reward_multiple_node_providers() {
         )
         .now_or_never()
         .unwrap()
-        .expect("Couldn't submit proposal.")
+        .panic_if_error("Couldn't submit proposal.")
         .command
         .unwrap()
     {
@@ -6879,7 +6880,7 @@ fn test_manage_and_reward_multiple_node_providers() {
             )
             .now_or_never()
             .unwrap()
-            .expect("Couldn't submit proposal.")
+            .panic_if_error("Couldn't submit proposal.")
             .command
             .unwrap()
         {
@@ -6929,7 +6930,7 @@ fn test_manage_and_reward_multiple_node_providers() {
             )
             .now_or_never()
             .unwrap()
-            .expect("Couldn't submit proposal.")
+            .panic_if_error("Couldn't submit proposal.")
             .command
             .unwrap()
         {
@@ -7005,7 +7006,7 @@ fn test_manage_and_reward_multiple_node_providers() {
         .manage_neuron(&voter_pid, &manage_neuron_cmd)
         .now_or_never()
         .unwrap()
-        .expect("Couldn't submit proposal.")
+        .panic_if_error("Couldn't submit proposal.")
         .command
         .unwrap()
     {
@@ -7067,7 +7068,7 @@ fn test_manage_and_reward_multiple_node_providers() {
         )
         .now_or_never()
         .unwrap()
-        .expect("Couldn't submit proposal.")
+        .panic_if_error("Couldn't submit proposal.")
         .command
         .unwrap()
     {
@@ -7104,7 +7105,7 @@ fn test_manage_and_reward_multiple_node_providers() {
         )
         .now_or_never()
         .unwrap()
-        .expect("Couldn't submit proposal.")
+        .panic_if_error("Couldn't submit proposal.")
         .command
         .unwrap()
     {
@@ -7127,7 +7128,7 @@ fn test_manage_and_reward_multiple_node_providers() {
         .manage_neuron(&voter_pid, &manage_neuron_cmd)
         .now_or_never()
         .unwrap()
-        .expect("Couldn't submit proposal.")
+        .panic_if_error("Couldn't submit proposal.")
         .command
         .unwrap()
     {
@@ -7197,7 +7198,7 @@ fn test_network_economics_proposal() {
         )
         .now_or_never()
         .unwrap()
-        .expect("Couldn't submit proposal.")
+        .panic_if_error("Couldn't submit proposal.")
         .command
         .unwrap()
     {
@@ -7248,7 +7249,7 @@ fn make_proposal_with_action(
         )
         .now_or_never()
         .unwrap()
-        .expect("Couldn't submit proposal.")
+        .panic_if_error("Couldn't submit proposal.")
         .command
         .unwrap()
     {
@@ -7325,7 +7326,7 @@ fn test_default_followees() {
         )
         .now_or_never()
         .unwrap()
-        .expect("Couldn't increase dissolve delay.")
+        .panic_if_error("Couldn't increase dissolve delay.")
         .command
         .unwrap()
     {
@@ -7426,7 +7427,7 @@ fn test_default_followees() {
         )
         .now_or_never()
         .unwrap()
-        .expect("Couldn't submit proposal.")
+        .panic_if_error("Couldn't submit proposal.")
         .command
         .unwrap()
     {
@@ -7587,6 +7588,68 @@ fn test_list_proposals_removes_execute_nns_function_payload() {
         action,
         proposal::Action::ExecuteNnsFunction(eu) if eu.payload.is_empty()
     );
+}
+
+#[test]
+fn test_list_proposals_removes_install_code_large_fields() {
+    let original_install_code = InstallCode {
+        wasm_module: Some(vec![0; 100_000]),
+        arg: Some(vec![0; 1_000]),
+        install_mode: Some(CanisterInstallMode::Upgrade as i32),
+        canister_id: Some(GOVERNANCE_CANISTER_ID.into()),
+        skip_stopping_before_installing: Some(false),
+    };
+    let proto = GovernanceProto {
+        economics: Some(NetworkEconomics::with_default_values()),
+        proposals: btreemap! {
+            1 => ProposalData {
+                id: Some(ProposalId { id: 1 }),
+                proposal: Some(Proposal {
+                    title: Some("Upgrade canister".to_string()),
+                    action: Some(proposal::Action::InstallCode(original_install_code.clone())),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }
+        },
+        ..Default::default()
+    };
+    let driver = fake::FakeDriver::default();
+    let gov = Governance::new(
+        proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+    let caller = &principal(1);
+
+    let results = gov.list_proposals(
+        caller,
+        &ListProposalInfo {
+            ..Default::default()
+        },
+    );
+
+    let action = results.proposal_info[0]
+        .proposal
+        .as_ref()
+        .unwrap()
+        .action
+        .as_ref()
+        .unwrap();
+    match action {
+        proposal::Action::InstallCode(install_code) => {
+            assert_eq!(
+                install_code,
+                &InstallCode {
+                    wasm_module: None,
+                    arg: None,
+                    ..original_install_code
+                }
+            );
+        }
+        _ => panic!("Unexpected action"),
+    };
 }
 
 #[test]
@@ -8882,7 +8945,7 @@ fn test_can_follow_by_subaccount_and_neuron_id() {
         )
         .now_or_never()
         .unwrap()
-        .expect("Manage neuron failed");
+        .panic_if_error("Manage neuron failed");
 
         // Check that you're actually following
         let neuron = gov.neuron_store.with_neuron(&nid, |n| n.clone()).unwrap();
@@ -9042,7 +9105,7 @@ fn test_start_dissolving() {
     )
     .now_or_never()
     .unwrap()
-    .expect("Manage neuron failed");
+    .panic_if_error("Manage neuron failed");
 
     let neuron_info = gov.get_neuron_info(&NeuronId { id }).unwrap();
     assert_eq!(neuron_info.state, NeuronState::Dissolving as i32);
@@ -9089,7 +9152,7 @@ fn test_start_dissolving_panics() {
     )
     .now_or_never()
     .unwrap()
-    .expect("Manage neuron failed");
+    .panic_if_error("Manage neuron failed");
 }
 
 /// Tests that a neuron in a dissolving state will stop dissolving if a
@@ -9136,7 +9199,7 @@ fn test_stop_dissolving() {
     )
     .now_or_never()
     .unwrap()
-    .expect("Manage neuron failed");
+    .panic_if_error("Manage neuron failed");
 
     // Advance time so that the neuron has age.
     fake_driver.advance_time_by(1);
@@ -9194,7 +9257,7 @@ fn test_stop_dissolving_panics() {
     )
     .now_or_never()
     .unwrap()
-    .expect("Manage neuron failed");
+    .panic_if_error("Manage neuron failed");
 }
 
 #[test]
@@ -9280,7 +9343,7 @@ fn increase_dissolve_delay(
     )
     .now_or_never()
     .unwrap()
-    .expect("Manage neuron failed");
+    .panic_if_error("Manage neuron failed");
 }
 
 /// Tests the command to increase dissolve delay of a given neuron. Tests five

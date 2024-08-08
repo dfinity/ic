@@ -7,9 +7,7 @@ use ic_system_test_driver::driver::{
     node_software_version::NodeSoftwareVersion,
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{
-        HasDependencies, HasTopologySnapshot, NnsCanisterWasmStrategy, NnsCustomizations,
-    },
+    test_env_api::{HasDependencies, HasTopologySnapshot, NnsCustomizations},
 };
 use serde::Deserialize;
 use slog::info;
@@ -102,7 +100,6 @@ pub fn setup(env: TestEnv) {
 
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
 

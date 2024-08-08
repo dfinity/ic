@@ -18,7 +18,7 @@ use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
 };
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     manage_neuron::{configure, Command, Configure, NeuronIdOrSubaccount, RemoveHotKey},
     ManageNeuron, ManageNeuronResponse,
 };
@@ -56,7 +56,7 @@ fn test_upgrade_after_state_shrink() {
             .create_canister_at_id_max_cycles_with_retries(GOVERNANCE_CANISTER_ID.get())
             .await
             .unwrap();
-        install_governance_canister(&mut canister, governance_proto.into()).await;
+        install_governance_canister(&mut canister, governance_proto).await;
 
         // First let's do a self-upgrade
         canister.stop().await.unwrap();
