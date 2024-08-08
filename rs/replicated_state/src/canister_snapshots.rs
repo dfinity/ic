@@ -173,18 +173,6 @@ impl CanisterSnapshots {
         canister_snapshots_usage
     }
 
-    /// Computes the memory usage used by all snapshots belonging to the specified canister ID.
-    // pub fn memory_usage(&self, canister_id: CanisterId) -> NumBytes {
-    //     let mut memory_size = NumBytes::new(0);
-    //     if let Some(snapshot_ids) = self.snapshot_ids.get(&canister_id) {
-    //         for snapshot_id in snapshot_ids {
-    //             debug_assert!(self.snapshots.contains_key(&snapshot_id));
-    //             memory_size += self.snapshots.get(snapshot_id).unwrap().size();
-    //         }
-    //     }
-    //     memory_size
-    // }
-
     /// Adds a new restore snapshot operation in the unflushed changes.
     pub fn add_restore_operation(&mut self, canister_id: CanisterId, snapshot_id: SnapshotId) {
         self.unflushed_changes
