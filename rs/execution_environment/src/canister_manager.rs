@@ -2074,9 +2074,6 @@ impl CanisterManager {
                 compilation_cost_handling,
             );
 
-            
-
-
             let mut new_execution_state = match new_execution_state {
                 Ok(execution_state) => execution_state,
                 Err(err) => {
