@@ -15,8 +15,9 @@ use ic_protobuf::state::{
     stats::v1::Stats,
     system_metadata::v1::{SplitFrom, SystemMetadata},
 };
-use ic_replicated_state::page_map::{
-    MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES,
+use ic_replicated_state::{
+    canister_snapshots::{CanisterSnapshot, SnapshotOperation},
+    page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
 };
 #[allow(unused)]
 use ic_replicated_state::{
@@ -25,11 +26,12 @@ use ic_replicated_state::{
     CanisterState, NumWasmPages, PageMap, ReplicatedState,
 };
 use ic_state_layout::{
-    error::LayoutError, CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadOnly,
-    RwPolicy, StateLayout, TipHandler,
+    error::LayoutError, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout,
+    ExecutionStateBits, FilePermissions, PageMapLayout, ReadOnly, RwPolicy, StateLayout,
+    TipHandler, WasmFile,
 };
 use ic_sys::fs::defrag_file_partially;
-use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height};
+use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height, SnapshotId};
 use ic_utils::thread::parallel_map;
 use ic_utils_thread::JoinOnDrop;
 use prometheus::HistogramTimer;
@@ -90,6 +92,7 @@ pub(crate) enum TipRequest {
     FlushPageMapDelta {
         height: Height,
         pagemaps: Vec<PageMapToFlush>,
+        snapshot_operations: Vec<SnapshotOperation>,
     },
     /// Reset tip folder to the checkpoint with given height.
     /// Merge overlays in tip folder if necessary.
@@ -223,7 +226,11 @@ pub(crate) fn spawn_tip_thread(
                             }
                         }
 
-                        TipRequest::FlushPageMapDelta { height, pagemaps } => {
+                        TipRequest::FlushPageMapDelta {
+                            height,
+                            pagemaps,
+                            snapshot_operations,
+                        } => {
                             let _timer = request_timer(&metrics, "flush_unflushed_delta");
                             #[cfg(debug_assertions)]
                             match tip_state {
@@ -239,6 +246,13 @@ pub(crate) fn spawn_tip_thread(
                                     err
                                 );
                             });
+
+                            // We flush snapshots to disk first.
+                            flush_snapshot_changes(&log, layout, snapshot_operations)
+                                .unwrap_or_else(|err| {
+                                    fatal!(log, "Failed to flush snapshot changes: {}", err);
+                                });
+
                             parallel_map(
                                 &mut thread_pool,
                                 pagemaps.into_iter(),
@@ -450,6 +464,112 @@ pub(crate) fn spawn_tip_thread(
             .expect("failed to spawn tip thread"),
     );
     (tip_handle, tip_sender)
+}
+
+/// Update the tip directory files with the most recent snapshot operations.
+/// `snapshot_operations` is an ordered list of all created/restores/deleted snapshots since the last flush.
+fn flush_snapshot_changes<T>(
+    log: &ReplicaLogger,
+    layout: &CheckpointLayout<RwPolicy<T>>,
+    snapshot_operations: Vec<SnapshotOperation>,
+) -> Result<(), LayoutError> {
+    // This loop is not parallelized as there are combinations such as creating then restoring from a snapshot within the same flush.
+    for op in snapshot_operations {
+        match op {
+            SnapshotOperation::Delete(snapshot_id) => {
+                layout.snapshot(&snapshot_id)?.delete_dir()?;
+            }
+            SnapshotOperation::Backup(canister_id, snapshot_id) => {
+                backup(log, layout, canister_id, snapshot_id)?;
+            }
+            SnapshotOperation::Restore(canister_id, snapshot_id) => {
+                restore(log, layout, canister_id, snapshot_id)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Represent a backup operation on disk.
+/// When a backup is triggered, execution creates a `CanisterSnapshot` where all the `PageMaps` as well as the wasm binary
+/// is a copy of the canister's at the time of the backup.
+/// This function will run at an unspecified point afterwards (but before the next checkpoint) and it copies all files the canister had in the tip
+/// to the snapshot directory.
+/// Note that a `PageMap` might have had unflushed deltas at the point of the backup, which we later flush as part of `FlushPageMapDelta` on top of
+/// the files we copy here.
+fn backup<T>(
+    log: &ReplicaLogger,
+    layout: &CheckpointLayout<RwPolicy<T>>,
+    canister_id: CanisterId,
+    snapshot_id: SnapshotId,
+) -> Result<(), LayoutError> {
+    let canister_layout = layout.canister(&canister_id)?;
+    let snapshot_layout = layout.snapshot(&snapshot_id)?;
+
+    PageMapLayout::copy_or_hardlink_files(
+        log,
+        &canister_layout.vmemory_0(),
+        &snapshot_layout.vmemory_0(),
+        FilePermissions::ReadOnly,
+    )?;
+    PageMapLayout::copy_or_hardlink_files(
+        log,
+        &canister_layout.stable_memory(),
+        &snapshot_layout.stable_memory(),
+        FilePermissions::ReadOnly,
+    )?;
+    PageMapLayout::copy_or_hardlink_files(
+        log,
+        &canister_layout.wasm_chunk_store(),
+        &snapshot_layout.wasm_chunk_store(),
+        FilePermissions::ReadOnly,
+    )?;
+
+    WasmFile::hardlink_file(&canister_layout.wasm(), &snapshot_layout.wasm())?;
+
+    Ok(())
+}
+
+/// Represent a restore operation on disk.
+/// When a restore is triggered, execution creates a `CanisterState` from a `CanisterSnapshot` by copying all its `PageMaps` as well as its wasm binary.
+/// This function will run at an unspecified point afterwards (but before the next checkpoint) and it copies all files the snapshot had in the tip
+/// to the canister directory, deleting what was there before.
+fn restore<T>(
+    log: &ReplicaLogger,
+    layout: &CheckpointLayout<RwPolicy<T>>,
+    canister_id: CanisterId,
+    snapshot_id: SnapshotId,
+) -> Result<(), LayoutError> {
+    let canister_layout = layout.canister(&canister_id)?;
+    let snapshot_layout = layout.snapshot(&snapshot_id)?;
+
+    canister_layout.vmemory_0().delete_files()?;
+    PageMapLayout::copy_or_hardlink_files(
+        log,
+        &snapshot_layout.vmemory_0(),
+        &canister_layout.vmemory_0(),
+        FilePermissions::ReadOnly,
+    )?;
+    canister_layout.stable_memory().delete_files()?;
+    PageMapLayout::copy_or_hardlink_files(
+        log,
+        &snapshot_layout.stable_memory(),
+        &canister_layout.stable_memory(),
+        FilePermissions::ReadOnly,
+    )?;
+    canister_layout.wasm_chunk_store().delete_files()?;
+    PageMapLayout::copy_or_hardlink_files(
+        log,
+        &snapshot_layout.wasm_chunk_store(),
+        &canister_layout.wasm_chunk_store(),
+        FilePermissions::ReadOnly,
+    )?;
+
+    canister_layout.wasm().try_delete_file()?;
+    WasmFile::hardlink_file(&snapshot_layout.wasm(), &canister_layout.wasm())?;
+
+    Ok(())
 }
 
 struct StorageInfo {
@@ -701,7 +821,7 @@ fn serialize_to_tip(
     metrics: &StorageMetrics,
     lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
-    //TODO(MR-530): Implement serializing canister snapshots.
+    // Snapshots should have been handled earlier in `flush_page_delta`.
     debug_assert!(state.canister_snapshots.is_unflushed_changes_empty());
 
     // Serialize ingress history separately. The `SystemMetadata` proto does not
@@ -740,6 +860,24 @@ fn serialize_to_tip(
     let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
         serialize_canister_to_tip(log, canister_state, tip, metrics, lsmt_config)
     });
+
+    for result in results.into_iter() {
+        result?;
+    }
+
+    let results = parallel_map(
+        thread_pool,
+        state.canister_snapshots.iter(),
+        |canister_snapshot| {
+            serialize_snapshot_to_tip(
+                canister_snapshot.0,
+                canister_snapshot.1,
+                tip,
+                metrics,
+                lsmt_config,
+            )
+        },
+    );
 
     for result in results.into_iter() {
         result?;
@@ -897,13 +1035,79 @@ fn serialize_canister_to_tip(
                 .metadata()
                 .clone(),
             total_query_stats: canister_state.scheduler_state.total_query_stats.clone(),
-            log_visibility: canister_state.system_state.log_visibility,
+            log_visibility: canister_state.system_state.log_visibility.clone(),
             canister_log: canister_state.system_state.canister_log.clone(),
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id,
         }
         .into(),
     )?;
+    Ok(())
+}
+
+/// Serialize a single snapshot to disk at checkpoint time.
+fn serialize_snapshot_to_tip(
+    snapshot_id: &SnapshotId,
+    canister_snapshot: &CanisterSnapshot,
+    tip: &CheckpointLayout<RwPolicy<TipHandler>>,
+    metrics: &StorageMetrics,
+    lsmt_config: &LsmtConfig,
+) -> Result<(), CheckpointError> {
+    let snapshot_layout = tip.snapshot(snapshot_id)?;
+
+    // The protobuf is written at each checkpoint.
+    snapshot_layout.snapshot().serialize(
+        CanisterSnapshotBits {
+            snapshot_id: *snapshot_id,
+            canister_id: canister_snapshot.canister_id(),
+            taken_at_timestamp: *canister_snapshot.taken_at_timestamp(),
+            canister_version: canister_snapshot.canister_version(),
+            binary_hash: Some(canister_snapshot.canister_module().module_hash().into()),
+            certified_data: canister_snapshot.certified_data().clone(),
+            wasm_chunk_store_metadata: canister_snapshot.chunk_store().metadata().clone(),
+            stable_memory_size: canister_snapshot.stable_memory().size,
+            wasm_memory_size: canister_snapshot.wasm_memory().size,
+            total_size: canister_snapshot.size(),
+        }
+        .into(),
+    )?;
+
+    // Like for canisters, the wasm binary is either already present on disk, or it is new and needs to be written.
+    let wasm_binary = canister_snapshot.canister_module();
+    if wasm_binary.file().is_none() {
+        snapshot_layout.wasm().serialize(wasm_binary)?;
+    } else {
+        // During `flush_page_maps` we created copied this file from the canister directory.
+        debug_assert!(snapshot_layout.wasm().raw_path().exists());
+    }
+
+    canister_snapshot
+        .execution_snapshot()
+        .wasm_memory
+        .page_map
+        .persist_delta(
+            &snapshot_layout.vmemory_0(),
+            tip.height(),
+            lsmt_config,
+            metrics,
+        )?;
+    canister_snapshot
+        .execution_snapshot()
+        .stable_memory
+        .page_map
+        .persist_delta(
+            &snapshot_layout.stable_memory(),
+            tip.height(),
+            lsmt_config,
+            metrics,
+        )?;
+    canister_snapshot.chunk_store().page_map().persist_delta(
+        &snapshot_layout.wasm_chunk_store(),
+        tip.height(),
+        lsmt_config,
+        metrics,
+    )?;
+
     Ok(())
 }
 

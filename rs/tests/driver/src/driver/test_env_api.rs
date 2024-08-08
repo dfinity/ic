@@ -130,64 +130,76 @@
 //! Thus, instead of randomly selecting a node to fetch registry updates, it is
 //! better to let the user select a node.
 
-use super::config::NODES_INFO;
-use super::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
-use super::farm::{DnsRecord, PlaynetCertificate};
-use super::test_setup::{GroupSetup, InfraProvider};
-use crate::driver::boundary_node::BoundaryNodeVm;
-use crate::driver::constants::{self, kibana_link, SSH_USERNAME};
-use crate::driver::farm::{Farm, GroupSpec};
-use crate::driver::log_events;
-use crate::driver::test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute};
-use crate::k8s::tnet::TNet;
-use crate::k8s::virtualmachine::{destroy_vm, restart_vm, start_vm};
-use crate::retry_with_msg;
-use crate::retry_with_msg_async;
-use crate::util::{block_on, create_agent};
-use anyhow::{anyhow, bail, Context, Result};
+use super::{
+    config::NODES_INFO,
+    driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR,
+    farm::{DnsRecord, PlaynetCertificate},
+    test_setup::{GroupSetup, InfraProvider},
+};
+use crate::{
+    driver::{
+        boundary_node::BoundaryNodeVm,
+        constants::{self, kibana_link, SSH_USERNAME},
+        farm::{Farm, GroupSpec},
+        log_events,
+        test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
+    },
+    k8s::{
+        tnet::TNet,
+        virtualmachine::{destroy_vm, restart_vm, start_vm},
+    },
+    retry_with_msg, retry_with_msg_async,
+    util::{block_on, create_agent},
+};
+use anyhow::{anyhow, bail, Result};
 use async_trait::async_trait;
 use canister_test::{RemoteTestRuntime, Runtime};
-use ic_agent::export::Principal;
-use ic_agent::{Agent, AgentError};
+use ic_agent::{export::Principal, Agent, AgentError};
 use ic_base_types::PrincipalId;
-use ic_canister_client::Agent as InternalAgent;
-use ic_canister_client::Sender;
+use ic_canister_client::{Agent as InternalAgent, Sender};
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
 };
-use ic_nns_governance::pb::v1::Neuron;
+use ic_nns_governance_api::pb::v1::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
 use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{node::v1 as pb_node, subnet::v1 as pb_subnet};
 use ic_registry_client_helpers::{
-    node::NodeRegistry, routing_table::RoutingTableRegistry, subnet::SubnetListRegistry,
-    subnet::SubnetRegistry,
+    node::NodeRegistry,
+    routing_table::RoutingTableRegistry,
+    subnet::{SubnetListRegistry, SubnetRegistry},
 };
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::malicious_behaviour::MaliciousBehaviour;
-use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
-use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
+use ic_types::{
+    malicious_behaviour::MaliciousBehaviour,
+    messages::{HttpStatusResponse, ReplicaHealthStatus},
+    NodeId, RegistryVersion, ReplicaVersion, SubnetId,
+};
 use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use slog::{debug, error, info, warn, Logger};
 use ssh2::Session;
-use std::cmp::max;
-use std::collections::{HashMap, HashSet};
-use std::ffi::OsStr;
-use std::fs;
-use std::future::Future;
-use std::io::{Read, Write};
-use std::net::{Ipv4Addr, SocketAddr, TcpStream};
-use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
-use std::{convert::TryFrom, net::IpAddr, str::FromStr, sync::Arc};
+use std::{
+    cmp::max,
+    collections::{HashMap, HashSet},
+    convert::TryFrom,
+    ffi::OsStr,
+    fs,
+    future::Future,
+    io::{Read, Write},
+    net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::{runtime::Runtime as Rt, sync::Mutex as TokioMutex};
 use url::Url;
 
@@ -1584,15 +1596,7 @@ pub struct NnsCustomizations {
     pub install_at_ids: bool,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum NnsCanisterWasmStrategy {
-    TakeBuiltFromSources,
-    TakeLatestMainnetDeployments,
-    NnsReleaseQualification,
-}
-
 pub struct NnsInstallationBuilder {
-    canister_wasm_strategy: NnsCanisterWasmStrategy,
     customizations: NnsCustomizations,
     installation_timeout: Duration,
 }
@@ -1606,25 +1610,9 @@ impl Default for NnsInstallationBuilder {
 impl NnsInstallationBuilder {
     pub fn new() -> Self {
         Self {
-            canister_wasm_strategy: NnsCanisterWasmStrategy::TakeBuiltFromSources,
             customizations: NnsCustomizations::default(),
             installation_timeout: NNS_CANISTER_INSTALL_TIMEOUT,
         }
-    }
-
-    pub fn use_mainnet_nns_canisters(mut self) -> Self {
-        self.canister_wasm_strategy = NnsCanisterWasmStrategy::TakeLatestMainnetDeployments;
-        self
-    }
-
-    pub fn use_qualifying_nns_canisters(mut self) -> Self {
-        self.canister_wasm_strategy = NnsCanisterWasmStrategy::NnsReleaseQualification;
-        self
-    }
-
-    pub fn use_nns_canisters_from_current_branch(mut self) -> Self {
-        self.canister_wasm_strategy = NnsCanisterWasmStrategy::TakeBuiltFromSources;
-        self
     }
 
     pub fn with_overall_timeout(mut self, duration: Duration) -> Self {
@@ -1642,39 +1630,8 @@ impl NnsInstallationBuilder {
         self
     }
 
-    pub fn with_canister_wasm_strategy(
-        mut self,
-        canister_wasm_strategy: NnsCanisterWasmStrategy,
-    ) -> Self {
-        self.canister_wasm_strategy = canister_wasm_strategy;
-        self
-    }
-
     pub fn install(&self, node: &IcNodeSnapshot, test_env: &TestEnv) -> Result<()> {
         let log = test_env.logger();
-        match self.canister_wasm_strategy {
-            NnsCanisterWasmStrategy::TakeBuiltFromSources => {
-                info!(
-                    log,
-                    "Installing NNS canisters build from the tip of the current branch ..."
-                );
-                test_env.set_nns_canisters_env_vars()?;
-            }
-            NnsCanisterWasmStrategy::TakeLatestMainnetDeployments => {
-                info!(log, "Installing mainnet NNS canisters ...");
-                test_env.set_mainnet_nns_canisters_env_vars()?;
-            }
-            NnsCanisterWasmStrategy::NnsReleaseQualification => {
-                let qual = test_env
-                    .read_dependency_to_string(
-                        "rs/tests/qualifying-nns-canisters/selected-qualifying-nns-canisters.json",
-                    )
-                    .unwrap();
-                info!(log, "Installing qualification NNS canisters ({}) ...", qual);
-                test_env.set_qualifying_nns_canisters_env_vars()?;
-            }
-        }
-
         let ic_name = node.ic_name();
         let url = node.get_public_url();
         let prep_dir = match test_env.prep_dir(&ic_name) {
@@ -1703,101 +1660,6 @@ impl NnsInstallationBuilder {
                 );
             }
         });
-        Ok(())
-    }
-}
-
-pub trait NnsCanisterEnvVars {
-    /// Set the environment variables pointing to the NNS canisters built from the tip of this branch.
-    ///
-    /// The system test must specify the runtime dependency `NNS_CANISTER_RUNTIME_DEPS`.
-    fn set_nns_canisters_env_vars(&self) -> Result<()>;
-
-    /// Set the environment variables pointing to the (latest deployment of) mainnet NNS canisters.
-    ///
-    /// The system test must specify the runtime dependency `MAINNET_NNS_CANISTER_RUNTIME_DEPS`.
-    fn set_mainnet_nns_canisters_env_vars(&self) -> Result<()>;
-
-    /// Set the environment variables pointing to the NNS canisters for release qualification, i.e.:
-    /// * Canisters listed in `QUALIFYING_NNS_CANISTERS` are built from the tip of this branch.
-    /// * Others are the (latest deployment of) mainnet NNS canisters.
-    ///
-    /// See also: `NNS_CANISTER_WASM_PROVIDERS`.
-    ///
-    /// The system test must specify the runtime dependency `QUALIFYING_NNS_CANISTER_RUNTIME_DEPS`.
-    fn set_qualifying_nns_canisters_env_vars(&self) -> Result<()>;
-}
-
-impl NnsCanisterEnvVars for TestEnv {
-    fn set_nns_canisters_env_vars(&self) -> Result<()> {
-        self.set_canister_env_vars("rs/tests/tip-nns-canisters")
-    }
-
-    fn set_mainnet_nns_canisters_env_vars(&self) -> Result<()> {
-        self.set_canister_env_vars("rs/tests/mainnet-nns-canisters")
-    }
-
-    fn set_qualifying_nns_canisters_env_vars(&self) -> Result<()> {
-        self.set_canister_env_vars("rs/tests/qualifying-nns-canisters")
-    }
-}
-
-pub trait SnsCanisterEnvVars {
-    /// Set the environment variables pointing to the SNS canisters built from the tip of this branch.
-    ///
-    /// The system test must specify the runtime dependency `SNS_CANISTER_RUNTIME_DEPS`.
-    fn set_sns_canisters_env_vars(&self) -> Result<()>;
-
-    /// Set the environment variables pointing to the (latest deployment of) mainnet SNS canisters.
-    ///
-    /// The system test must specify the runtime dependency `MAINNET_SNS_CANISTER_RUNTIME_DEPS`.
-    fn set_mainnet_sns_canisters_env_vars(&self) -> Result<()>;
-
-    /// Set the environment variables pointing to the SNS canisters for release qualification, i.e.:
-    /// * Canisters listed in `QUALIFYING_SNS_CANISTERS` are built from the tip of this branch.
-    /// * Others are the (latest deployment of) mainnet SNS canisters.
-    ///
-    /// See also: `SNS_CANISTER_WASM_PROVIDERS`.
-    ///
-    /// The system test must specify the runtime dependency `QUALIFYING_SNS_CANISTER_RUNTIME_DEPS`.
-    fn set_qualifying_sns_canisters_env_vars(&self) -> Result<()>;
-}
-
-impl SnsCanisterEnvVars for TestEnv {
-    fn set_sns_canisters_env_vars(&self) -> Result<()> {
-        self.set_canister_env_vars("rs/tests/tip-sns-canisters")
-    }
-
-    fn set_mainnet_sns_canisters_env_vars(&self) -> Result<()> {
-        self.set_canister_env_vars("rs/tests/mainnet-sns-canisters")
-    }
-
-    fn set_qualifying_sns_canisters_env_vars(&self) -> Result<()> {
-        self.set_canister_env_vars("rs/tests/qualifying-sns-canisters")
-    }
-}
-
-pub trait CanisterEnvVars {
-    fn set_canister_env_vars<P: AsRef<Path>>(&self, dirname: P) -> Result<()>;
-}
-
-impl<T: HasDependencies> CanisterEnvVars for T {
-    fn set_canister_env_vars<P: AsRef<Path>>(&self, dirname: P) -> Result<()> {
-        let dir = self.get_dependency_path(dirname);
-        let entries = std::fs::read_dir(dir.clone()).context(format!(
-            "Problem reading directory at {}",
-            dir.to_string_lossy()
-        ))?;
-        for entry in entries.flatten() {
-            let file_name = entry.file_name();
-            let canister_name = file_name
-                .to_str()
-                .context("Couldn't convert file path to string")?;
-            let env_name = format!("{}_WASM_PATH", canister_name)
-                .replace('-', "_")
-                .to_uppercase();
-            set_var_to_path(env_name, dir.join(file_name));
-        }
         Ok(())
     }
 }

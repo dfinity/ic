@@ -2,17 +2,6 @@ type AddWasmRequest = record { hash : blob; wasm : opt SnsWasm };
 type AddWasmResponse = record { result : opt Result };
 type AirdropDistribution = record { airdrop_neurons : vec NeuronDistribution };
 type Canister = record { id : opt principal };
-type CfNeuron = record {
-  has_created_neuron_recipes : opt bool;
-  hotkeys : opt Principals;
-  nns_neuron_id : nat64;
-  amount_icp_e8s : nat64;
-};
-type CfParticipant = record {
-  controller : opt principal;
-  hotkey_principal : text;
-  cf_neurons : vec CfNeuron;
-};
 type Countries = record { iso_codes : vec text };
 type DappCanisters = record { canisters : vec Canister };
 type DappCanistersTransferResult = record {
@@ -111,7 +100,6 @@ type NeuronDistribution = record {
   stake_e8s : nat64;
   vesting_period_seconds : opt nat64;
 };
-type NeuronsFundParticipants = record { participants : vec CfParticipant };
 type NeuronsFundParticipationConstraints = record {
   coefficient_intervals : vec LinearScalingCoefficient;
   max_neurons_fund_participation_icp_e8s : opt nat64;
@@ -127,7 +115,6 @@ type PrettySnsVersion = record {
   governance_wasm_hash : text;
   index_wasm_hash : text;
 };
-type Principals = record { principals : vec principal };
 type Result = variant { Error : SnsWasmError; Hash : blob };
 type Result_1 = variant { Ok : Ok; Error : SnsWasmError };
 type SnsCanisterIds = record {
@@ -165,7 +152,6 @@ type SnsInitPayload = record {
   transaction_fee_e8s : opt nat64;
   dapp_canisters : opt DappCanisters;
   neurons_fund_participation_constraints : opt NeuronsFundParticipationConstraints;
-  neurons_fund_participants : opt NeuronsFundParticipants;
   max_age_bonus_percentage : opt nat64;
   initial_token_distribution : opt InitialTokenDistribution;
   reward_rate_transition_duration_seconds : opt nat64;

@@ -153,8 +153,8 @@ impl CanisterState {
         &self.system_state.controllers
     }
 
-    pub fn log_visibility(&self) -> LogVisibility {
-        self.system_state.log_visibility
+    pub fn log_visibility(&self) -> &LogVisibility {
+        &self.system_state.log_visibility
     }
 
     /// Returns the difference in time since the canister was last charged for resource allocations.
@@ -578,6 +578,16 @@ impl CanisterState {
     /// Sets the new canister log.
     pub fn set_log(&mut self, other: CanisterLog) {
         self.system_state.canister_log = other;
+    }
+
+    /// Returns the cumulative amount of heap delta represented by this canister's state.
+    /// This is the amount that will need to be persisted during the next
+    /// checkpoint and counts the delta since previous checkpoint.
+    pub fn heap_delta(&self) -> NumBytes {
+        self.execution_state
+            .as_ref()
+            .map_or(NumBytes::from(0), |es| es.heap_delta())
+            + self.system_state.wasm_chunk_store.heap_delta()
     }
 }
 
