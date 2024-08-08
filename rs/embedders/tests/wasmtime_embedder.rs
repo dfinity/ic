@@ -2787,6 +2787,75 @@ fn large_wasm64_memory_allocation_test() {
 }
 
 #[test]
+fn large_wasm64_stable_read_write_test() {
+    // This test checks if we allow stable_read and stable_write to work with offsets
+    // larger than 4 GiB in the wasm heap memory in 64 bit mode.
+    let wat = r#"
+    (module
+        (import "ic0" "stable64_grow" (func $stable_grow (param i64) (result i64)))
+        (import "ic0" "stable64_read"
+            (func $ic0_stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
+        (import "ic0" "stable64_write"
+            (func $ic0_stable64_write (param $offset i64) (param $src i64) (param $size i64)))
+        (import "ic0" "msg_reply" (func $msg_reply))
+        (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param $src i64) (param $size i64)))
+        (func $test (export "canister_update test")
+
+            (i64.store (i64.const 4294967312) (i64.const 72))
+            (i64.store (i64.const 4294967313) (i64.const 101))
+            (i64.store (i64.const 4294967314) (i64.const 108))
+            (i64.store (i64.const 4294967315) (i64.const 108))
+            (i64.store (i64.const 4294967316) (i64.const 111))
+           
+            (drop (call $stable_grow (i64.const 10)))
+
+            ;; Write to stable memory from large heap offset.
+            (call $ic0_stable64_write (i64.const 0) (i64.const 4294967312) (i64.const 5))
+            ;; Read from stable memory at a different heap offset.
+            (call $ic0_stable64_read (i64.const 4294967320) (i64.const 0) (i64.const 5))
+           
+            ;; Return the result of the read operation.
+            (call $msg_reply_data_append (i64.const 4294967320) (i64.const 5))
+            (call $msg_reply)
+        )
+        (memory i64 70007 70007)
+    )"#;
+
+    let gb = 1024 * 1024 * 1024;
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    // Declare a large heap.
+    config.max_wasm_memory_size = NumBytes::from(10 * gb);
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_api_type(ic_system_api::ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            user_test_id(24).get(),
+            call_context_test_id(13),
+        ))
+        .with_wat(wat)
+        .with_canister_memory_limit(NumBytes::from(40 * gb))
+        .build();
+
+    let result = instance.run(FuncRef::Method(WasmMethod::Update("test".to_string())));
+    let wasm_res = instance
+        .store_data_mut()
+        .system_api_mut()
+        .unwrap()
+        .take_execution_result(result.as_ref().err());
+
+    assert_eq!(
+        wasm_res,
+        Ok(Some(WasmResult::Reply(vec![72, 101, 108, 108, 111])))
+    );
+}
+
+#[test]
 fn wasm64_saturate_fun_index() {
     let wat = r#"
         (module

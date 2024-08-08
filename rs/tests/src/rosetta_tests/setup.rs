@@ -2,34 +2,35 @@ use candid::Encode;
 use canister_test::{Canister, CanisterId, Runtime};
 use ic_ledger_core::Tokens;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron};
+use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
 use ic_nns_test_utils::itest_helpers::install_rust_canister;
 use ic_registry_subnet_type::SubnetType;
 use icp_ledger::{AccountIdentifier, ArchiveOptions, LedgerCanisterInitPayload};
 use prost::Message;
 use slog::{debug, error, info, Logger};
-use std::collections::{BTreeMap, HashMap};
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
-use std::time::Duration;
+use std::{
+    collections::{BTreeMap, HashMap},
+    fs::File,
+    io::Read,
+    path::Path,
+    time::Duration,
+};
 use url::Url;
 
-use crate::rosetta_tests::lib::hex2addr;
-use crate::rosetta_tests::rosetta_client::RosettaApiClient;
-use ic_system_test_driver::driver::test_env_api::{HasDependencies, SshSession};
-use ic_system_test_driver::driver::universal_vm::{
-    insert_file_to_config, UniversalVm, UniversalVms,
-};
-use ic_system_test_driver::driver::{
-    ic::InternetComputer,
-    resource::AllocatedVm,
-    test_env::TestEnv,
-    test_env_api::{
-        HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SubnetSnapshot,
+use crate::rosetta_tests::{lib::hex2addr, rosetta_client::RosettaApiClient};
+use ic_system_test_driver::{
+    driver::{
+        ic::InternetComputer,
+        resource::AllocatedVm,
+        test_env::TestEnv,
+        test_env_api::{
+            HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+            SshSession, SubnetSnapshot,
+        },
+        universal_vm::{insert_file_to_config, UniversalVm, UniversalVms},
     },
+    util::{block_on, runtime_from_url},
 };
-use ic_system_test_driver::util::{block_on, runtime_from_url};
 
 /// Transfer fee on the ledger.
 pub const TRANSFER_FEE: u64 = 10_000;

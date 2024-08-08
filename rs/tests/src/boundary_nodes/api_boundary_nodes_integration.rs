@@ -23,7 +23,7 @@ use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_nns_governance::pb::v1::NnsFunction;
+use ic_nns_governance_api::pb::v1::NnsFunction;
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_system_test_driver::{
     driver::{

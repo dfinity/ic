@@ -6,17 +6,15 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_2_OWNER_KEYPAIR,
 };
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance::{
-    governance::TimeWarp,
-    pb::v1::{
-        add_or_remove_node_provider::Change,
-        manage_neuron::{self, Command, NeuronIdOrSubaccount},
-        manage_neuron_response::Command as CommandResponse,
-        neuron::DissolveState,
-        proposal::Action,
-        AddOrRemoveNodeProvider, ManageNeuron, ManageNeuronResponse, Neuron, NodeProvider,
-        Proposal, ProposalInfo, Vote,
-    },
+use ic_nns_governance::governance::TimeWarp;
+use ic_nns_governance_api::pb::v1::{
+    add_or_remove_node_provider::Change,
+    manage_neuron::{self, Command, NeuronIdOrSubaccount},
+    manage_neuron_response::Command as CommandResponse,
+    neuron::DissolveState,
+    proposal::Action,
+    AddOrRemoveNodeProvider, ManageNeuron, ManageNeuronResponse, Neuron, NodeProvider, Proposal,
+    ProposalInfo, Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -49,8 +47,7 @@ fn test_deadline_is_extended_with_wait_for_quiet() {
                 cached_neuron_stake_e8s: 200_000_000,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_DAY_SECONDS * 365)),
                 ..Default::default()
-            }
-            .into(),
+            },
         );
 
         let nns_init_payload = nns_init_payload_builder.build();
@@ -85,7 +82,11 @@ fn test_deadline_is_extended_with_wait_for_quiet() {
             .await
             .expect("Error calling the manage_neuron api.");
 
-        let pid = match result.expect("Error making proposal").command.unwrap() {
+        let pid = match result
+            .panic_if_error("Error making proposal")
+            .command
+            .unwrap()
+        {
             CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
             some_error => panic!(
                 "Cannot find proposal id in response. The response is: {:?}",
