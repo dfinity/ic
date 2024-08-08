@@ -8156,6 +8156,7 @@ dependencies = [
  "tar",
  "tempfile",
  "tokio",
+ "zstd 0.13.1",
 ]
 
 [[package]]

@@ -13,6 +13,7 @@ DEPENDENCIES = [
     "@crate_index//:slog",
     "@crate_index//:tar",
     "@crate_index//:tokio",
+    "@crate_index//:zstd",
 ]
 
 DEV_DEPENDENCIES = [
