@@ -1,5 +1,7 @@
 use super::*;
-use crate::canister_status::{CanisterStatusType, DefiniteCanisterSettingsFromManagementCanister};
+use crate::canister_status::{
+    CanisterStatusType, DefiniteCanisterSettingsFromManagementCanister, LogVisibility,
+};
 use candid::Nat;
 use ic_base_types::{CanisterId, PrincipalId};
 use rand::{thread_rng, Rng};
@@ -111,6 +113,8 @@ async fn test_limit_outstanding_calls() {
             memory_allocation: zero.clone(),
             freezing_threshold: zero.clone(),
             reserved_cycles_limit: zero.clone(),
+            wasm_memory_limit: zero.clone(),
+            log_visibility: LogVisibility::Controllers,
         },
         status: CanisterStatusType::Running,
         reserved_cycles: zero.clone(),

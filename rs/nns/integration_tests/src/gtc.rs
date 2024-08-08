@@ -8,7 +8,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
-use ic_nns_governance::pb::v1::{GovernanceError, Neuron, NeuronInfo};
+use ic_nns_governance_api::pb::v1::{GovernanceError, Neuron, NeuronInfo};
 use ic_nns_gtc::{
     pb::v1::AccountState,
     test_constants::{
@@ -525,14 +525,9 @@ pub fn add_test_gtc_neurons(payload_builder: &mut NnsInitPayloadsBuilder) {
     payload_builder
         .genesis_token
         .add_ect_neurons(TEST_ECT_ACCOUNTS);
-    payload_builder.governance.add_gtc_neurons(
-        payload_builder
-            .genesis_token
-            .get_gtc_neurons()
-            .into_iter()
-            .map(|n| n.into())
-            .collect(),
-    );
+    payload_builder
+        .governance
+        .add_gtc_neurons(payload_builder.genesis_token.get_gtc_neurons());
     payload_builder
         .genesis_token
         .add_forward_whitelist(&[TEST_IDENTITY_4.gtc_address]);

@@ -17,6 +17,7 @@ use ic_nns_common::{
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
+    UpdateCanisterSettingsError, UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
 };
 use ic_protobuf::{
     registry::nns::v1::{NnsCanisterRecord, NnsCanisterRecords},
@@ -217,6 +218,30 @@ pub async fn change_canister_controllers(
         Ok(()) => ChangeCanisterControllersResponse::ok(),
         Err((code, description)) => {
             ChangeCanisterControllersResponse::error(Some(code), description)
+        }
+    }
+}
+
+pub async fn update_canister_settings(
+    update_canister_settings_request: UpdateCanisterSettingsRequest,
+    management_canister_client: &mut impl ManagementCanisterClient,
+) -> UpdateCanisterSettingsResponse {
+    let update_settings_args = UpdateSettings {
+        canister_id: update_canister_settings_request.canister_id,
+        settings: update_canister_settings_request.settings,
+        sender_canister_version: management_canister_client.canister_version(),
+    };
+
+    match management_canister_client
+        .update_settings(update_settings_args)
+        .await
+    {
+        Ok(()) => UpdateCanisterSettingsResponse::Ok(()),
+        Err((code, description)) => {
+            UpdateCanisterSettingsResponse::Err(UpdateCanisterSettingsError {
+                code: Some(code),
+                description,
+            })
         }
     }
 }
