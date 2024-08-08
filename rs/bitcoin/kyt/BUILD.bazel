@@ -1,0 +1,18 @@
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_canister(
+    name = "btc_kyt_canister",
+    srcs = [
+        "src/main.rs",
+    ],
+    proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
+    service_file = "btc_kyt_canister.did",
+    deps = [
+        "@crate_index//:bitcoin",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:ic-cdk",
+    ],
+)

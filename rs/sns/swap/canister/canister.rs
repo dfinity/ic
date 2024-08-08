@@ -570,6 +570,7 @@ mod tests {
         canister_status::{
             CanisterStatusResultFromManagementCanister, CanisterStatusResultV2, CanisterStatusType,
             DefiniteCanisterSettingsArgs, DefiniteCanisterSettingsFromManagementCanister,
+            LogVisibility,
         },
         management_canister_client::{
             MockManagementCanisterClient, MockManagementCanisterClientReply,
@@ -627,6 +628,8 @@ mod tests {
                         memory_allocation: candid::Nat::from(0_u32),
                         freezing_threshold: candid::Nat::from(0_u32),
                         reserved_cycles_limit: candid::Nat::from(0_u32),
+                        wasm_memory_limit: candid::Nat::from(0_u32),
+                        log_visibility: LogVisibility::Controllers,
                     },
                     cycles: candid::Nat::from(0_u32),
                     idle_cycles_burned_per_day: candid::Nat::from(0_u32),

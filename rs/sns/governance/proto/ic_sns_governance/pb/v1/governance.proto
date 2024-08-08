@@ -2049,7 +2049,7 @@ message ClaimSwapNeuronsRequest {
   // The set of parameters that define the neurons created in `claim_swap_neurons`. For
   // each NeuronParameter, one neuron will be created.
   // Deprecated. Use [`recipes`] instead.
-  repeated NeuronParameters neuron_parameters = 1;
+  repeated NeuronParameters neuron_parameters = 1 [deprecated = true];
 }
 
 // An enum for representing the various statuses a Neuron being claimed by the
