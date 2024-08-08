@@ -185,16 +185,20 @@ pub fn check_file_hash(path: &Path, expected_sha256_hex: &str) -> FileDownloadRe
 }
 
 /// Check if the file is in Gzip format by verifying the first 2 bytes
-fn is_gz_file<R: Read>(reader: &mut R) -> io::Result<bool> {
+fn is_gz_file<R: Read + Seek>(reader: &mut R) -> io::Result<bool> {
+    reader.seek(SeekFrom::Start(0))?;
     let mut buffer = [0; 2];
     reader.read_exact(&mut buffer)?;
+    reader.seek(SeekFrom::Start(0))?;
     Ok(buffer == [0x1f, 0x8b])
 }
 
 /// Check if the file is in Zstandard format by verifying the first 4 bytes
-fn is_zst_file<R: Read>(reader: &mut R) -> io::Result<bool> {
+fn is_zst_file<R: Read + Seek>(reader: &mut R) -> io::Result<bool> {
+    reader.seek(SeekFrom::Start(0))?;
     let mut buffer = [0; 4];
     reader.read_exact(&mut buffer)?;
+    reader.seek(SeekFrom::Start(0))?;
     Ok(buffer == [0x28, 0xb5, 0x2f, 0xfd])
 }
 
@@ -206,36 +210,20 @@ pub fn extract_tar_into_dir(tar_path: &Path, target_dir: &Path) -> FileDownloadR
         File::open(tar_path).map_err(|e| FileDownloadError::file_open_error(tar_path, e))?;
     let mut buf_reader = BufReader::new(tar_file);
 
-    // Check for gzip format
-    buf_reader
-        .seek(SeekFrom::Start(0))
-        .map_err(map_to_untar_error)?;
     if is_gz_file(&mut buf_reader).map_err(map_to_untar_error)? {
-        buf_reader
-            .seek(SeekFrom::Start(0))
-            .map_err(map_to_untar_error)?;
         let tar = GzDecoder::new(buf_reader);
         let mut archive = Archive::new(tar);
         return archive.unpack(target_dir).map_err(map_to_untar_error);
-    }
-
-    // Check for zstandard format
-    buf_reader
-        .seek(SeekFrom::Start(0))
-        .map_err(map_to_untar_error)?;
-    if is_zst_file(&mut buf_reader).map_err(map_to_untar_error)? {
-        buf_reader
-            .seek(SeekFrom::Start(0))
-            .map_err(map_to_untar_error)?;
+    } else if is_zst_file(&mut buf_reader).map_err(map_to_untar_error)? {
         let tar = ZstdDecoder::new(buf_reader).map_err(map_to_untar_error)?;
         let mut archive = Archive::new(tar);
         return archive.unpack(target_dir).map_err(map_to_untar_error);
+    } else {
+        Err(FileDownloadError::untar_error(
+            tar_path,
+            io::Error::new(io::ErrorKind::Other, "Unrecognized file type"),
+        ))
     }
-
-    Err(FileDownloadError::untar_error(
-        tar_path,
-        io::Error::new(io::ErrorKind::Other, "Unrecognized file type"),
-    ))
 }
 
 pub type FileDownloadResult<T> = Result<T, FileDownloadError>;
@@ -609,7 +597,10 @@ mod tests {
 
         match result {
             Err(FileDownloadError::IoError(message, _)) => {
-                assert_eq!(message, format!("Failed to unpack tar file: {:?}", tar_path));
+                assert_eq!(
+                    message,
+                    format!("Failed to unpack tar file: {:?}", tar_path)
+                );
             }
             _ => panic!("Expected FileDownloadError::IoError"),
         }
