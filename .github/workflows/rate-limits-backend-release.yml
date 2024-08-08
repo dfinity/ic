@@ -34,7 +34,7 @@ jobs:
     container:
       image: ghcr.io/dfinity/ic-build@sha256:86c24b5b717519527920d3b720906f91723514d63acddcbaeb27ecf4144aeb37
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
 
     steps:
       - uses: actions/checkout@v4
