@@ -2167,6 +2167,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cloner-canister-types"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "futures",
+ "ic-cdk 0.13.2",
+ "serde",
+]
+
+[[package]]
 name = "cloudabi"
 version = "0.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -14912,6 +14922,7 @@ dependencies = [
  "candid",
  "canister-test",
  "canister_http",
+ "cloner-canister-types",
  "dfn_candid",
  "ic-base-types",
  "ic-cdk 0.13.2",
