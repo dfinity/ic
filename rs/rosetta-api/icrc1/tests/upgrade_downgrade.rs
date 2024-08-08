@@ -98,51 +98,41 @@ fn should_upgrade_and_downgrade_with_memory_manager() {
         None,
         MINTER_PRINCIPAL,
     );
-    let wait_time = 60;
 
-    env.advance_time(Duration::from_secs(wait_time));
+    env.advance_time(Duration::from_secs(60));
     env.tick();
 
-    let ledger_upgrade_arg = LedgerArgument::Upgrade(None);
-    env.upgrade_canister(
-        ledger_id,
-        ledger_wasm(),
-        Encode!(&ledger_upgrade_arg).unwrap(),
-    )
-    .unwrap();
+    let test_upgrade = |ledger_wasm: Vec<u8>| {
+        env.upgrade_canister(
+            ledger_id,
+            ledger_wasm,
+            Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+        )
+        .unwrap();
 
-    env.advance_time(Duration::from_secs(wait_time));
-    env.tick();
+        env.advance_time(Duration::from_secs(60));
+        env.tick();
+    };
 
-    let ledger_upgrade_arg = LedgerArgument::Upgrade(None);
-    env.upgrade_canister(
-        ledger_id,
-        ledger_wasm_upgradetomemorymanager(),
-        Encode!(&ledger_upgrade_arg).unwrap(),
-    )
-    .unwrap();
+    test_upgrade(ledger_wasm());
+    test_upgrade(ledger_wasm_upgradetomemorymanager());
 
-    env.advance_time(Duration::from_secs(wait_time));
-    env.tick();
-
-    let ledger_upgrade_arg = LedgerArgument::Upgrade(None);
-    env.upgrade_canister(
-        ledger_id,
-        ledger_wasm(),
-        Encode!(&ledger_upgrade_arg).unwrap(),
-    )
-    .unwrap();
-
-    env.advance_time(Duration::from_secs(wait_time));
-    env.tick();
-
-    let ledger_upgrade_arg = LedgerArgument::Upgrade(None);
-    env.upgrade_canister(
+    // Current mainnet wasm cannot deserialize from memory manager
+    match env.upgrade_canister(
         ledger_id,
         ledger_mainnet_wasm(),
-        Encode!(&ledger_upgrade_arg).unwrap(),
-    )
-    .unwrap();
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    ) {
+        Ok(_) => panic!("Upgrade from memory manager directly to mainnet should fail!"),
+        Err(e) => assert!(e.description().contains("failed to decode ledger state")),
+    };
+
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+
+    // We have to go through current wasm to downgrade to mainnet wasm
+    test_upgrade(ledger_wasm());
+    test_upgrade(ledger_mainnet_wasm());
 }
 
 fn default_archive_options() -> ArchiveOptions {
