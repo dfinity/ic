@@ -9,7 +9,7 @@ use crate::driver::{
     resource::AllocatedVm,
     test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
     test_env_api::{
-        HasDependencies, HasIcDependencies, HasTopologySnapshot, IcNodeContainer,
+        HasDependencies, HasIcDependencies, HasTopologySnapshot, HasVmName, IcNodeContainer,
         InitialReplicaVersion, NodesInfo,
     },
     test_setup::InfraProvider,
@@ -20,6 +20,7 @@ use crate::k8s::tnet::{TNet, TNode};
 use crate::util::block_on;
 use anyhow::{bail, Result};
 use ic_base_types::NodeId;
+use ic_http_utils::file_downloader::FileDownloader;
 use ic_prep_lib::{
     internet_computer::{IcConfig, InitializedIc, TopologyConfig},
     node::{InitializedNode, NodeConfiguration, NodeIndex},
@@ -34,11 +35,12 @@ use slog::{info, warn, Logger};
 use std::{
     collections::BTreeMap,
     convert::Into,
+    fs,
     fs::File,
     io,
     io::Write,
     net::{IpAddr, SocketAddr},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Command,
     thread::{self, JoinHandle},
 };
@@ -335,57 +337,6 @@ pub fn setup_and_start_vms(
     result
 }
 
-// Startup nested VMs. NOTE: This is different from `setup_and_start_vms` in
-// that we need to configure and push a SetupOS image for each node.
-pub fn setup_and_start_nested_vms(
-    nodes: &[NestedNode],
-    env: &TestEnv,
-    farm: &Farm,
-    group_name: &str,
-    nns_url: &Url,
-    nns_public_key: &str,
-) -> anyhow::Result<()> {
-    let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
-    for node in nodes {
-        let t_farm = farm.to_owned();
-        let t_env = env.to_owned();
-        let t_group_name = group_name.to_owned();
-        let t_vm_name = node.name.to_owned();
-        let t_nns_url = nns_url.to_owned();
-        let t_nns_public_key = nns_public_key.to_owned();
-        join_handles.push(thread::spawn(move || {
-            let configured_image =
-                configure_setupos_image(&t_env, &t_vm_name, &t_nns_url, &t_nns_public_key)?;
-
-            let configured_image_spec = AttachImageSpec::new(t_farm.upload_file(
-                &t_group_name,
-                configured_image,
-                NESTED_CONFIGURED_IMAGE_PATH,
-            )?);
-            t_farm.attach_disk_images(
-                &t_group_name,
-                &t_vm_name,
-                "usb-storage",
-                vec![configured_image_spec],
-            )?;
-            t_farm.start_vm(&t_group_name, &t_vm_name)?;
-
-            Ok(())
-        }));
-    }
-
-    let mut result = Ok(());
-    // Wait for all threads to finish and return an error if any of them fails.
-    for jh in join_handles {
-        if let Err(e) = jh.join().expect("waiting for a thread failed") {
-            warn!(farm.logger, "starting VM failed with: {:?}", e);
-            result = Err(anyhow::anyhow!("failed to set up and start a VM pool"));
-        }
-    }
-
-    result
-}
-
 pub fn upload_config_disk_image(
     group_name: &str,
     node: &InitializedNode,
@@ -567,13 +518,111 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
     }
 }
 
-fn configure_setupos_image(
+#[derive(Clone)]
+pub enum NestedVersionTarget {
+    Mainnet,
+    /// When true, use the branch -test variant.
+    Branch(bool),
+    Published {
+        version: String,
+        url: Url,
+        sha256: String,
+    },
+}
+
+// Setup nested VMs. NOTE: This is different from `setup_and_start_vms` in that
+// we need to configure and push a SetupOS image for each node.
+pub fn setup_nested_vms(
+    nodes: &[NestedNode],
+    env: &TestEnv,
+    farm: &Farm,
+    group_name: &str,
+    nns_url: &Url,
+    nns_public_key: &str,
+    to: &NestedVersionTarget,
+) -> anyhow::Result<()> {
+    let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
+    for node in nodes {
+        let t_farm = farm.to_owned();
+        let t_env = env.to_owned();
+        let t_group_name = group_name.to_owned();
+        let t_vm_name = node.name.to_owned();
+        let t_nns_url = nns_url.to_owned();
+        let t_nns_public_key = nns_public_key.to_owned();
+        let t_to = to.to_owned();
+        join_handles.push(thread::spawn(move || {
+            let configured_image =
+                configure_setupos_image(&t_env, &t_vm_name, &t_nns_url, &t_nns_public_key, &t_to)?;
+
+            let configured_image_spec = AttachImageSpec::new(t_farm.upload_file(
+                &t_group_name,
+                configured_image,
+                NESTED_CONFIGURED_IMAGE_PATH,
+            )?);
+            t_farm.attach_disk_images(
+                &t_group_name,
+                &t_vm_name,
+                "usb-storage",
+                vec![configured_image_spec],
+            )?;
+
+            Ok(())
+        }));
+    }
+
+    let mut result = Ok(());
+    // Wait for all threads to finish and return an error if any of them fails.
+    for jh in join_handles {
+        if let Err(e) = jh.join().expect("waiting for a thread failed") {
+            warn!(farm.logger, "setting up VM failed with: {:?}", e);
+            result = Err(anyhow::anyhow!("failed to set up a VM pool"));
+        }
+    }
+
+    result
+}
+
+pub fn start_nested_vms(env: &TestEnv, farm: &Farm, group_name: &str) -> anyhow::Result<()> {
+    for node in env.get_all_nested_vms()? {
+        let t_farm = farm.to_owned();
+        let t_vm_name = node.vm_name().to_owned();
+        let t_group_name = group_name.to_owned();
+
+        t_farm.start_vm(&t_group_name, &t_vm_name)?;
+    }
+
+    Ok(())
+}
+
+pub fn configure_setupos_image(
     env: &TestEnv,
     name: &str,
     nns_url: &Url,
     nns_public_key: &str,
+    to: &NestedVersionTarget,
 ) -> anyhow::Result<PathBuf> {
-    let setupos_image = env.get_dependency_path("ic-os/setupos/envs/dev/disk-img.tar.zst");
+    let tmp_dir = env.get_path("setupos");
+    fs::create_dir_all(&tmp_dir)?;
+
+    let setupos_image = match to {
+        NestedVersionTarget::Branch(false) => {
+            env.get_dependency_path("ic-os/setupos/envs/dev/disk-img.tar.zst")
+        }
+        NestedVersionTarget::Branch(true) => {
+            bail!("Starting nested VMs from `-test` versions is unsupported.");
+        }
+        NestedVersionTarget::Mainnet => {
+            let url = env.get_mainnet_setupos_img_url()?;
+
+            download_setupos_image(&tmp_dir, &url, None)?
+        }
+        NestedVersionTarget::Published {
+            version: _,
+            url,
+            sha256,
+        } => download_setupos_image(&tmp_dir, url, Some(sha256.to_owned()))?,
+    };
+
     let setupos_inject_configs = env
         .get_dependency_path("rs/ic_os/setupos-inject-configuration/setupos-inject-configuration");
     let setupos_disable_checks =
@@ -603,14 +652,13 @@ fn configure_setupos_image(
         segments[0], segments[1], segments[2], segments[3]
     );
 
-    let tmp_dir = tempfile::tempdir().unwrap();
-    let uncompressed_image = tmp_dir.path().join("disk.img");
+    let uncompressed_image = tmp_dir.join("disk.img");
 
     let output = Command::new("tar")
         .arg("xaf")
         .arg(&setupos_image)
         .arg("-C")
-        .arg(tmp_dir.path())
+        .arg(tmp_dir)
         .output()?;
     std::io::stdout().write_all(&output.stdout)?;
     std::io::stderr().write_all(&output.stderr)?;
@@ -665,7 +713,7 @@ fn configure_setupos_image(
         bail!("could not inject configs into image");
     }
 
-    let configured_image = nested_vm.get_configured_setupos_image_path().unwrap();
+    let configured_image = nested_vm.get_configured_setupos_image_path()?;
 
     let mut img_file = File::open(&uncompressed_image)?;
     let configured_image_file = File::create(configured_image.clone())?;
@@ -675,4 +723,16 @@ fn configure_setupos_image(
     write_stream.flush()?;
 
     Ok(configured_image)
+}
+
+fn download_setupos_image(
+    tmp_dir: &Path,
+    url: &Url,
+    hash: Option<String>,
+) -> anyhow::Result<PathBuf> {
+    let output = tmp_dir.join("setupos_image");
+    let file_downloader = FileDownloader::new(None);
+    block_on(file_downloader.download_file(url.as_str(), &output, hash))?;
+
+    Ok(output)
 }
