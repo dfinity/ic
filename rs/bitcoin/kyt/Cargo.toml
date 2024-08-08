@@ -1,19 +1,13 @@
 [package]
-name = "call-tree-test"
+name = "btc-kyt-canister"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 description.workspace = true
 documentation.workspace = true
 
-[[bin]]
-name = "call-tree-test-canister"
-path = "src/main.rs"
-
 [dependencies]
 candid = { workspace = true }
-futures = { workspace = true }
 ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
+bitcoin = { workspace = true }
+futures = { workspace = true }
