@@ -1,8 +1,3 @@
-use ic_types::{CanisterId, NumBytes, SnapshotId, Time};
-use ic_validate_eq::ValidateEq;
-use ic_validate_eq_derive::ValidateEq;
-use ic_wasm_types::CanisterModule;
-
 use crate::{
     canister_state::execution_state::Memory,
     canister_state::system_state::wasm_chunk_store::WasmChunkStore, CanisterState, NumWasmPages,
@@ -10,6 +5,8 @@ use crate::{
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{CanisterId, NumBytes, SnapshotId, Time};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::CanisterModule;
 
 use std::{

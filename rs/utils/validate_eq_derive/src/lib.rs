@@ -4,11 +4,11 @@ use syn::Data::Struct;
 
 /// Derive of ValidateEq trait.
 /// Derived implementation compares fields of lhs and rhs and returns the first divergence if any.
-/// Each field must have one #[validate_eq(PartialEq|Recursive|Skip)] attribute.
-///   - PartialEq compares fields of lhs and rhs using .eq() and in case of divergence
-///     reports the field name and Debug of lhs and rhs
-///   - Recursive calls .validate_eq() and ruturns its error in case of divergence
+/// A field can have one #[validate_eq(Recursive|Skip)] attribute.
+///   - Recursive calls .validate_eq() and returns path + its error in case of divergence
 ///   - Skip ignores the field.
+///   - None (default) compares fields using PartialEq and reports their name in case of
+///   divergence.
 
 #[derive(Debug, PartialEq)]
 enum ValidateEqFieldAttr {
@@ -40,7 +40,7 @@ fn find_validate_eq_attr(field: &syn::Field) -> syn::Result<Option<&syn::Attribu
     }
 }
 
-// Given the field of a named struct to derive ValidateEq for, return the attribute or panic.
+// Given the field of a named struct to derive ValidateEq for, return the attribute
 fn parse_validate_eq_attr(field: &syn::Field) -> syn::Result<ValidateEqFieldAttr> {
     let attr = find_validate_eq_attr(field)?;
 
