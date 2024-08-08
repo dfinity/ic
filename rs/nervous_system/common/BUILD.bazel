@@ -32,6 +32,7 @@ DEPENDENCIES = [
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
+    "@crate_index//:tla_instrumentation",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -78,6 +79,18 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES + [":build_script"],
+)
+
+rust_library(
+    name = "common--test_feature",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "ic_nervous_system_common",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES + [":build_script"] + 
+        ["@crate_index//:tokio"],
 )
 
 rust_test(

@@ -128,10 +128,9 @@ mod tests;
 #[macro_use]
 pub mod tla;
 #[cfg(feature = "test")]
-use tla::{
-    split_neuron_desc, tla_log_locals, tla_log_request, tla_log_response, tla_update_method,
-    Destination, InstrumentationState, ToTla, TLA_INSTRUMENTATION_STATE, TLA_TRACES,
-};
+use ic_nervous_system_common::tla::{TLA_INSTRUMENTATION_STATE, TLA_TRACES};
+#[cfg(feature = "test")]
+use tla::{split_neuron_desc, tla_log_locals, tla_update_method, InstrumentationState, ToTla};
 
 // The limits on NNS proposal title len (in bytes).
 const PROPOSAL_TITLE_BYTES_MIN: usize = 5;
@@ -2679,17 +2678,7 @@ impl Governance {
         })?;
 
         let now = self.env.now();
-        tla_log_locals! { amount: split.amount_e8s };
-        // TODO: log the request in the ledger
-        // TODO: don't do the to_tla_value conversion in the macro,
-        //       can't distinguish between functions and records now - though maybe not necessary?
-        tla_log_request!(
-            Destination::new("ledger"),
-            BTreeMap::from([
-                ("amount", staked_amount),
-                ("transaction_fee", transaction_fee_e8s)
-            ])
-        );
+        tla_log_locals! { amount : split.amount_e8s };
         let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(
@@ -2700,8 +2689,7 @@ impl Governance {
                 now,
             )
             .await;
-        tla_log_response!(Destination::new("ledger"), result.is_err());
-        tla_log_locals! { amount: split.amount_e8s };
+        tla_log_locals! { amount : split.amount_e8s };
 
         if let Err(error) = result {
             let error = GovernanceError::from(error);
