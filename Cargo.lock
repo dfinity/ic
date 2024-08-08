@@ -1619,10 +1619,10 @@ checksum = "3a4f925191b4367301851c6d99b09890311d74b0d43f274c0b34c86d308a3663"
 name = "call-tree-test"
 version = "0.9.0"
 dependencies = [
- "dfn_core",
- "dfn_json",
- "dfn_macro",
+ "candid",
  "futures",
+ "ic-cdk 0.13.2",
+ "ic-cdk-macros 0.9.0",
  "serde",
  "serde_json",
 ]
@@ -2289,7 +2289,7 @@ dependencies = [
  "ic-base-types",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-recovery",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -2316,7 +2316,7 @@ dependencies = [
  "ic-constants",
  "ic-management-canister-types",
  "ic-nns-constants",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-registry-nns-data-provider",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -3429,7 +3429,6 @@ name = "downstream-calls-test"
 version = "0.1.0"
 dependencies = [
  "candid",
- "dfn_core",
  "ic-base-types",
  "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
@@ -3486,7 +3485,6 @@ name = "ecdsa-canister"
 version = "0.1.0"
 dependencies = [
  "candid",
- "dfn_core",
  "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-management-canister-types",
@@ -5141,6 +5139,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-handler-root",
  "ic-nns-init",
  "ic-nns-test-utils",
@@ -5170,6 +5169,8 @@ dependencies = [
  "registry-canister",
  "serde",
  "serde_json",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "tempfile",
  "tokio",
  "url",
@@ -6858,7 +6859,7 @@ dependencies = [
  "criterion",
  "hex",
  "ic-crypto-test-utils-reproducible-rng",
- "ic_bls12_381 0.9.2",
+ "ic_bls12_381",
  "itertools 0.12.0",
  "lazy_static",
  "pairing 0.23.0",
@@ -9053,7 +9054,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-test-utils",
  "ic-registry-subnet-type",
  "ic-sns-wasm",
@@ -9269,7 +9270,7 @@ dependencies = [
  "ic-metrics-encoder",
  "ic-nervous-system-runtime",
  "ic-nns-constants",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-stable-structures",
  "icp-ledger",
  "icrc-ledger-types",
@@ -9382,6 +9383,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-gtc",
  "ic-nns-handler-root",
  "ic-nns-test-utils",
@@ -9611,6 +9613,7 @@ dependencies = [
  "ic-nns-governance-init",
  "ic-nns-governance-protobuf-generator",
  "ic-nns-gtc-accounts",
+ "ic-nns-handler-root-interface",
  "ic-protobuf",
  "ic-sns-init",
  "ic-sns-root",
@@ -9715,7 +9718,7 @@ dependencies = [
  "ic-nervous-system-common-build-metadata",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-gtc-accounts",
  "ic-nns-gtc-protobuf-generator",
  "ic-nns-test-utils",
@@ -9859,7 +9862,7 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-nns-constants",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-gtc",
  "icp-ledger",
  "ledger-canister",
@@ -9907,6 +9910,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-governance-init",
  "ic-nns-gtc",
  "ic-nns-handler-root",
@@ -9983,6 +9987,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-governance-init",
  "ic-nns-gtc",
  "ic-nns-gtc-accounts",
@@ -10840,6 +10845,7 @@ dependencies = [
  "prost",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "rayon",
  "scoped_threadpool",
  "serde",
  "serde_cbor",
@@ -11036,7 +11042,7 @@ dependencies = [
  "ic-nervous-system-common-test-keys",
  "ic-neurons-fund",
  "ic-nns-common",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-sns-governance",
  "ic-sns-swap",
  "rgb",
@@ -11271,7 +11277,7 @@ dependencies = [
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-test-utils",
  "ic-protobuf",
  "ic-registry-subnet-type",
@@ -11888,7 +11894,6 @@ dependencies = [
  "cycles-minting-canister",
  "deterministic_ips",
  "dfn_candid",
- "dfn_core",
  "dfn_protobuf",
  "ed25519-dalek",
  "futures",
@@ -11928,7 +11933,7 @@ dependencies = [
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-gtc",
  "ic-nns-handler-root",
  "ic-nns-init",
@@ -12553,9 +12558,9 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "base64 0.13.1",
- "dfn_core",
  "hex",
  "ic-canister-client-sender",
+ "ic-cdk 0.13.2",
  "ic-certification-test-utils",
  "ic-constants",
  "ic-crypto-interfaces-sig-verification",
@@ -12610,7 +12615,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d420b25c0091059f6c3c23a21427a81915e6e0aca3b79e0d403ed767f286a3b9"
 dependencies = [
  "hex",
- "ic_bls12_381 0.10.0",
+ "ic_bls12_381",
  "lazy_static",
  "pairing 0.23.0",
  "rand 0.8.5",
@@ -12623,7 +12628,7 @@ version = "0.1.0"
 dependencies = [
  "getrandom 0.2.12",
  "hex",
- "ic_bls12_381 0.9.2",
+ "ic_bls12_381",
  "lazy_static",
  "pairing 0.23.0",
  "rand 0.8.5",
@@ -12854,21 +12859,6 @@ checksum = "8de254dd67bbd58073e23dc1c8553ba12fa1dc610a19de94ad2bbcd0460c067f"
 
 [[package]]
 name = "ic_bls12_381"
-version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fb94c398e5a5bc56a8f0ff995b2679829e2bbc5f145d9c3ea58d303036e05f2"
-dependencies = [
- "digest 0.10.7",
- "ff 0.13.0",
- "group 0.13.0",
- "pairing 0.23.0",
- "rand_core 0.6.4",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "ic_bls12_381"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22c65787944f32af084dffd0c68c1e544237b76e215654ddea8cd9f527dd8b69"
@@ -12879,6 +12869,7 @@ dependencies = [
  "pairing 0.23.0",
  "rand_core 0.6.4",
  "subtle",
+ "zeroize",
 ]
 
 [[package]]
@@ -12925,7 +12916,7 @@ dependencies = [
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-protobuf",
  "ic-registry-keys",
  "ic-registry-nns-data-provider",
@@ -12960,7 +12951,7 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-nns-constants",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-recovery",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
@@ -12998,7 +12989,7 @@ dependencies = [
  "ic-message",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-test-utils",
  "ic-prep",
  "ic-registry-subnet-features",
@@ -17355,9 +17346,9 @@ dependencies = [
 name = "response-payload-test"
 version = "0.9.0"
 dependencies = [
- "dfn_core",
- "dfn_json",
- "dfn_macro",
+ "candid",
+ "ic-cdk 0.13.2",
+ "ic-cdk-macros 0.9.0",
  "serde",
 ]
 
@@ -19422,7 +19413,6 @@ dependencies = [
  "cycles-minting-canister",
  "deterministic_ips",
  "dfn_candid",
- "dfn_core",
  "dfn_json",
  "dfn_protobuf",
  "discower_bowndary",
@@ -19474,6 +19464,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-gtc",
  "ic-nns-handler-root",
  "ic-nns-init",

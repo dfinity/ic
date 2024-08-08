@@ -1,6 +1,5 @@
 use crate::eth_rpc::JsonRpcResult;
-use crate::eth_rpc::{BlockSpec, BlockTag, SendRawTransactionResult};
-use crate::eth_rpc_client::requests::GetTransactionCountParams;
+use crate::eth_rpc::SendRawTransactionResult;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_client::EthRpcClient;
 use crate::eth_rpc_client::MultiCallError;
@@ -179,12 +178,8 @@ pub async fn process_retrieve_eth_requests() {
 
 async fn latest_transaction_count() -> Option<TransactionCount> {
     match read_state(EthRpcClient::from_state)
-        .eth_get_transaction_count(GetTransactionCountParams {
-            address: crate::state::minter_address().await,
-            block: BlockSpec::Tag(BlockTag::Latest),
-        })
+        .eth_get_latest_transaction_count(crate::state::minter_address().await)
         .await
-        .reduce_with_min_by_key(|transaction_count| *transaction_count)
     {
         Ok(transaction_count) => Some(transaction_count),
         Err(e) => {
@@ -444,10 +439,6 @@ async fn finalize_transactions_batch() {
 async fn finalized_transaction_count() -> Result<TransactionCount, MultiCallError<TransactionCount>>
 {
     read_state(EthRpcClient::from_state)
-        .eth_get_transaction_count(GetTransactionCountParams {
-            address: crate::state::minter_address().await,
-            block: BlockSpec::Tag(BlockTag::Finalized),
-        })
+        .eth_get_finalized_transaction_count(crate::state::minter_address().await)
         .await
-        .reduce_with_equality()
 }
