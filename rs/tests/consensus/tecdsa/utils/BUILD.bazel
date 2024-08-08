@@ -16,7 +16,7 @@ rust_library(
         "//rs/nns/cmc",
         "//rs/nns/common",
         "//rs/nns/constants",
-        "//rs/nns/governance",
+        "//rs/nns/governance/api",
         "//rs/nns/test_utils",
         "//rs/prep",
         "//rs/registry/canister",

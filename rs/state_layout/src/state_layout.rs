@@ -4,7 +4,7 @@ use crate::utils::do_copy;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_config::flag_status::FlagStatus;
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types::LogVisibility;
+use ic_management_canister_types::{LogVisibility, LogVisibilityV2};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -1565,6 +1565,50 @@ impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
 
         Ok(result)
     }
+
+    /// Helper function to copy the files from `PageMapsLayout` `src` to another `PageMapLayout` `dst`.
+    /// This is used in the context of canister snapshots, where files need to be copied from a canister
+    /// to a snaphsot or vice versa.
+    pub fn copy_or_hardlink_files<W>(
+        log: &ReplicaLogger,
+        src: &PageMapLayout<Permissions>,
+        dst: &PageMapLayout<W>,
+        dst_permissions: FilePermissions,
+    ) -> Result<(), LayoutError>
+    where
+        W: WritePolicy,
+    {
+        debug_assert_eq!(src.name_stem, dst.name_stem);
+
+        if src.base().exists() {
+            copy_file_and_set_permissions(log, &src.base(), &dst.base(), dst_permissions).map_err(
+                |err| LayoutError::IoError {
+                    path: dst.base(),
+                    message: format!(
+                        "Cannot copy or hardlink file {:?} to {:?}",
+                        src.base(),
+                        dst.base()
+                    ),
+                    io_err: err,
+                },
+            )?;
+        }
+        for overlay in src.existing_overlays()? {
+            let dst_path = dst.root.join(overlay.file_name().unwrap());
+            copy_file_and_set_permissions(log, &overlay, &dst_path, dst_permissions).map_err(
+                |err| LayoutError::IoError {
+                    path: dst.base(),
+                    message: format!(
+                        "Cannot copy or hardlink file {:?} to {:?}",
+                        overlay, dst_path
+                    ),
+                    io_err: err,
+                },
+            )?;
+        }
+
+        Ok(())
+    }
 }
 
 impl<Permissions: AccessPolicy> StorageLayout for PageMapLayout<Permissions> {
@@ -1983,6 +2027,39 @@ where
             }
         })
     }
+
+    /// Hardlink the (readonly) file from `src` to `dst`.
+    pub fn hardlink_file<W>(src: &WasmFile<T>, dst: &WasmFile<W>) -> Result<(), LayoutError>
+    where
+        W: WritePolicy,
+    {
+        let src_path = src.raw_path();
+        let dst_path = dst.raw_path();
+
+        if !src_path.exists() {
+            return Ok(());
+        }
+
+        #[cfg(debug_assertions)]
+        {
+            let src_metadata = src_path.metadata().map_err(|err| LayoutError::IoError {
+                path: src_path.to_path_buf(),
+                message: "Failed to read metadata".to_string(),
+                io_err: err,
+            })?;
+            debug_assert!(src_metadata.permissions().readonly());
+        }
+
+        std::fs::hard_link(src_path, dst_path).map_err(|err| LayoutError::IoError {
+            path: src_path.to_path_buf(),
+            message: format!(
+                "Failed to hardlink {:?} to {:?} while making a canister snapshot",
+                src_path, dst_path,
+            ),
+            io_err: err,
+        })?;
+        Ok(())
+    }
 }
 
 impl<T> WasmFile<T>
@@ -2089,6 +2166,10 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             total_query_stats: Some((&item.total_query_stats).into()),
             log_visibility: pb_canister_state_bits::LogVisibility::from(&item.log_visibility)
                 .into(),
+            log_visibility_v2: pb_canister_state_bits::LogVisibilityV2::from(
+                &LogVisibilityV2::from(item.log_visibility),
+            )
+            .into(),
             canister_log_records: item
                 .canister_log
                 .records()
@@ -2168,6 +2249,33 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             );
         }
 
+        // TODO(EXC-1670): remove after migration to `pb_canister_state_bits::LogVisibilityV2`.
+        // First try to decode `log_visibility_v2` and if it fails, fallback to `log_visibility`.
+        // This should populate `allowed_viewers` correctly with the list of principals.
+        let log_visibility: LogVisibility = match try_from_option_field::<
+            pb_canister_state_bits::LogVisibilityV2,
+            LogVisibilityV2,
+            _,
+        >(
+            value.log_visibility_v2,
+            "CanisterStateBits::log_visibility_v2",
+        ) {
+            Ok(log_visibility_v2) => LogVisibility::from(log_visibility_v2),
+            Err(_) => {
+                let pb_log_visibility = pb_canister_state_bits::LogVisibility::try_from(
+                    value.log_visibility,
+                )
+                .map_err(|_| ProxyDecodeError::ValueOutOfRange {
+                    typ: "LogVisibility",
+                    err: format!(
+                        "Unexpected value of log visibility: {}",
+                        value.log_visibility
+                    ),
+                })?;
+                LogVisibility::from(pb_log_visibility)
+            }
+        };
+
         Ok(Self {
             controllers,
             last_full_execution_round: value.last_full_execution_round.into(),
@@ -2234,17 +2342,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::total_query_stats",
             )
             .unwrap_or_default(),
-            log_visibility: LogVisibility::from(
-                pb_canister_state_bits::LogVisibility::try_from(value.log_visibility).map_err(
-                    |_| ProxyDecodeError::ValueOutOfRange {
-                        typ: "LogVisibility",
-                        err: format!(
-                            "Unexpected value of log visibility: {}",
-                            value.log_visibility
-                        ),
-                    },
-                )?,
-            ),
+            log_visibility,
             canister_log: CanisterLog::new(
                 value.next_canister_log_record_idx,
                 value

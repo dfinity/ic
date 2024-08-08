@@ -3524,7 +3524,7 @@ fn test_canister_settings_log_visibility_default_controllers() {
     // Assert.
     assert_eq!(
         canister_status.settings().log_visibility(),
-        LogVisibility::Controllers
+        &LogVisibility::Controllers
     );
 }
 
@@ -3546,7 +3546,7 @@ fn test_canister_settings_log_visibility_create_with_settings() {
     // Assert.
     assert_eq!(
         canister_status.settings().log_visibility(),
-        LogVisibility::Public
+        &LogVisibility::Public
     );
 }
 
@@ -3563,7 +3563,7 @@ fn test_canister_settings_log_visibility_set_to_public() {
     // Assert.
     assert_eq!(
         canister_status.settings().log_visibility(),
-        LogVisibility::Public
+        &LogVisibility::Public
     );
 }
 

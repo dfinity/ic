@@ -1619,10 +1619,10 @@ checksum = "3a4f925191b4367301851c6d99b09890311d74b0d43f274c0b34c86d308a3663"
 name = "call-tree-test"
 version = "0.9.0"
 dependencies = [
- "dfn_core",
- "dfn_json",
- "dfn_macro",
+ "candid",
  "futures",
+ "ic-cdk 0.13.2",
+ "ic-cdk-macros 0.9.0",
  "serde",
  "serde_json",
 ]
@@ -1875,6 +1875,7 @@ dependencies = [
  "cloudflare",
  "flate2",
  "futures",
+ "http 1.1.0",
  "ic-agent",
  "ic-http-certification",
  "ic-response-verification",
@@ -2167,6 +2168,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cloner-canister-types"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "futures",
+ "ic-cdk 0.13.2",
+ "serde",
+]
+
+[[package]]
 name = "cloudabi"
 version = "0.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2177,13 +2188,13 @@ dependencies = [
 
 [[package]]
 name = "cloudflare"
-version = "0.11.0"
-source = "git+https://github.com/blind-oracle/cloudflare-rs.git?rev=386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc#386c8c6a0a95ad0c8a87aa1aac27b26a6cfec5cc"
+version = "0.12.0"
+source = "git+https://github.com/dfinity/cloudflare-rs.git?rev=a6538a036926bd756986c9c0a5de356daef48881#a6538a036926bd756986c9c0a5de356daef48881"
 dependencies = [
  "chrono",
  "http 0.2.12",
  "percent-encoding",
- "reqwest 0.11.22",
+ "reqwest 0.11.27",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -2289,7 +2300,7 @@ dependencies = [
  "ic-base-types",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-recovery",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -2316,7 +2327,7 @@ dependencies = [
  "ic-constants",
  "ic-management-canister-types",
  "ic-nns-constants",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-registry-nns-data-provider",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
@@ -3429,7 +3440,6 @@ name = "downstream-calls-test"
 version = "0.1.0"
 dependencies = [
  "candid",
- "dfn_core",
  "ic-base-types",
  "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
@@ -3486,7 +3496,6 @@ name = "ecdsa-canister"
 version = "0.1.0"
 dependencies = [
  "candid",
- "dfn_core",
  "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-management-canister-types",
@@ -5141,6 +5150,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-handler-root",
  "ic-nns-init",
  "ic-nns-test-utils",
@@ -5170,6 +5180,8 @@ dependencies = [
  "registry-canister",
  "serde",
  "serde_json",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "tempfile",
  "tokio",
  "url",
@@ -5517,7 +5529,7 @@ dependencies = [
  "ratelimit",
  "rcgen",
  "regex",
- "reqwest 0.11.22",
+ "reqwest 0.11.27",
  "rustls 0.21.12",
  "rustls-pemfile 2.1.2",
  "serde",
@@ -6599,14 +6611,17 @@ dependencies = [
 name = "ic-crypto-ecdsa-secp256k1"
 version = "0.9.0"
 dependencies = [
+ "bip32",
  "hex",
- "ic-crypto-sha2",
- "ic-crypto-test-utils-reproducible-rng",
+ "hex-literal",
+ "hmac",
  "k256",
  "lazy_static",
  "num-bigint 0.4.6",
  "pem 1.1.1",
  "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "sha2 0.10.8",
  "simple_asn1",
  "wycheproof",
  "zeroize",
@@ -6855,7 +6870,7 @@ dependencies = [
  "criterion",
  "hex",
  "ic-crypto-test-utils-reproducible-rng",
- "ic_bls12_381 0.9.2",
+ "ic_bls12_381",
  "itertools 0.12.0",
  "lazy_static",
  "pairing 0.23.0",
@@ -8392,6 +8407,7 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-crypto-sha2",
+ "ic-icrc1-index-ng",
  "ic-icrc1-ledger",
  "ic-icrc1-ledger-sm-tests",
  "ic-icrc1-test-utils",
@@ -8402,6 +8418,7 @@ dependencies = [
  "ic-ledger-hash-of",
  "ic-nns-test-utils",
  "ic-nns-test-utils-golden-nns-state",
+ "ic-registry-subnet-type",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "icrc-ledger-types",
@@ -9048,7 +9065,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-test-utils",
  "ic-registry-subnet-type",
  "ic-sns-wasm",
@@ -9264,7 +9281,7 @@ dependencies = [
  "ic-metrics-encoder",
  "ic-nervous-system-runtime",
  "ic-nns-constants",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-stable-structures",
  "icp-ledger",
  "icrc-ledger-types",
@@ -9377,6 +9394,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-gtc",
  "ic-nns-handler-root",
  "ic-nns-test-utils",
@@ -9606,6 +9624,7 @@ dependencies = [
  "ic-nns-governance-init",
  "ic-nns-governance-protobuf-generator",
  "ic-nns-gtc-accounts",
+ "ic-nns-handler-root-interface",
  "ic-protobuf",
  "ic-sns-init",
  "ic-sns-root",
@@ -9710,7 +9729,7 @@ dependencies = [
  "ic-nervous-system-common-build-metadata",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-gtc-accounts",
  "ic-nns-gtc-protobuf-generator",
  "ic-nns-test-utils",
@@ -9854,7 +9873,7 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-nns-constants",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-gtc",
  "icp-ledger",
  "ledger-canister",
@@ -9902,6 +9921,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-governance-init",
  "ic-nns-gtc",
  "ic-nns-handler-root",
@@ -9978,6 +9998,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-governance-init",
  "ic-nns-gtc",
  "ic-nns-gtc-accounts",
@@ -10069,8 +10090,8 @@ dependencies = [
  "ic-types-test-utils",
  "mockall",
  "pin-project-lite",
- "quinn 0.11.2 (git+https://github.com/quinn-rs/quinn?rev=693c9b7cfbf89c541ba99523237594499984ffed)",
- "quinn-udp 0.5.2 (git+https://github.com/quinn-rs/quinn?rev=693c9b7cfbf89c541ba99523237594499984ffed)",
+ "quinn",
+ "quinn-udp",
  "serde",
  "slog",
  "tempfile",
@@ -10231,8 +10252,8 @@ dependencies = [
  "phantom_newtype",
  "prometheus",
  "prost",
- "quinn 0.11.2 (git+https://github.com/quinn-rs/quinn?rev=693c9b7cfbf89c541ba99523237594499984ffed)",
- "quinn-udp 0.5.2 (git+https://github.com/quinn-rs/quinn?rev=693c9b7cfbf89c541ba99523237594499984ffed)",
+ "quinn",
+ "quinn-udp",
  "rustls 0.23.11",
  "slog",
  "socket2 0.5.7",
@@ -10835,6 +10856,7 @@ dependencies = [
  "prost",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "rayon",
  "scoped_threadpool",
  "serde",
  "serde_cbor",
@@ -11031,7 +11053,7 @@ dependencies = [
  "ic-nervous-system-common-test-keys",
  "ic-neurons-fund",
  "ic-nns-common",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-sns-governance",
  "ic-sns-swap",
  "rgb",
@@ -11266,7 +11288,7 @@ dependencies = [
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-test-utils",
  "ic-protobuf",
  "ic-registry-subnet-type",
@@ -11883,7 +11905,6 @@ dependencies = [
  "cycles-minting-canister",
  "deterministic_ips",
  "dfn_candid",
- "dfn_core",
  "dfn_protobuf",
  "ed25519-dalek",
  "futures",
@@ -11923,7 +11944,7 @@ dependencies = [
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-gtc",
  "ic-nns-handler-root",
  "ic-nns-init",
@@ -12548,9 +12569,9 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "base64 0.13.1",
- "dfn_core",
  "hex",
  "ic-canister-client-sender",
+ "ic-cdk 0.13.2",
  "ic-certification-test-utils",
  "ic-constants",
  "ic-crypto-interfaces-sig-verification",
@@ -12605,7 +12626,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d420b25c0091059f6c3c23a21427a81915e6e0aca3b79e0d403ed767f286a3b9"
 dependencies = [
  "hex",
- "ic_bls12_381 0.10.0",
+ "ic_bls12_381",
  "lazy_static",
  "pairing 0.23.0",
  "rand 0.8.5",
@@ -12618,7 +12639,7 @@ version = "0.1.0"
 dependencies = [
  "getrandom 0.2.12",
  "hex",
- "ic_bls12_381 0.9.2",
+ "ic_bls12_381",
  "lazy_static",
  "pairing 0.23.0",
  "rand 0.8.5",
@@ -12849,21 +12870,6 @@ checksum = "8de254dd67bbd58073e23dc1c8553ba12fa1dc610a19de94ad2bbcd0460c067f"
 
 [[package]]
 name = "ic_bls12_381"
-version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fb94c398e5a5bc56a8f0ff995b2679829e2bbc5f145d9c3ea58d303036e05f2"
-dependencies = [
- "digest 0.10.7",
- "ff 0.13.0",
- "group 0.13.0",
- "pairing 0.23.0",
- "rand_core 0.6.4",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "ic_bls12_381"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22c65787944f32af084dffd0c68c1e544237b76e215654ddea8cd9f527dd8b69"
@@ -12874,6 +12880,7 @@ dependencies = [
  "pairing 0.23.0",
  "rand_core 0.6.4",
  "subtle",
+ "zeroize",
 ]
 
 [[package]]
@@ -12920,7 +12927,7 @@ dependencies = [
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-protobuf",
  "ic-registry-keys",
  "ic-registry-nns-data-provider",
@@ -12955,7 +12962,7 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-nns-constants",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-recovery",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
@@ -12993,7 +13000,7 @@ dependencies = [
  "ic-message",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
- "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-test-utils",
  "ic-prep",
  "ic-registry-subnet-features",
@@ -13089,6 +13096,7 @@ dependencies = [
 name = "icp-rosetta-integration-tests"
 version = "0.9.0"
 dependencies = [
+ "anyhow",
  "candid",
  "ic-agent",
  "ic-icrc-rosetta",
@@ -14908,6 +14916,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "networking-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "canister-test",
+ "canister_http",
+ "cloner-canister-types",
+ "dfn_candid",
+ "ic-base-types",
+ "ic-cdk 0.13.2",
+ "ic-management-canister-types",
+ "ic-prep",
+ "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-test-utilities",
+ "ic-test-utilities-types",
+ "ic-types",
+ "ic-utils 0.37.0",
+ "proxy_canister",
+ "reqwest 0.12.5",
+ "slog",
+ "tests",
+ "tokio",
+]
+
+[[package]]
 name = "new_debug_unreachable"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16694,30 +16730,14 @@ dependencies = [
 
 [[package]]
 name = "quinn"
-version = "0.11.2"
+version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4ceeeeabace7857413798eb1ffa1e9c905a9946a57d81fb69b4b71c4d8eb3ad"
+checksum = "b22d8e7369034b9a7132bc2008cac12f2013c8132b45e0554e6e20e2617f2156"
 dependencies = [
  "bytes",
  "pin-project-lite",
- "quinn-proto 0.11.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "quinn-udp 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "rustc-hash 1.1.0",
- "rustls 0.23.11",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "quinn"
-version = "0.11.2"
-source = "git+https://github.com/quinn-rs/quinn?rev=693c9b7cfbf89c541ba99523237594499984ffed#693c9b7cfbf89c541ba99523237594499984ffed"
-dependencies = [
- "bytes",
- "pin-project-lite",
- "quinn-proto 0.11.3 (git+https://github.com/quinn-rs/quinn?rev=693c9b7cfbf89c541ba99523237594499984ffed)",
- "quinn-udp 0.5.2 (git+https://github.com/quinn-rs/quinn?rev=693c9b7cfbf89c541ba99523237594499984ffed)",
+ "quinn-proto",
+ "quinn-udp",
  "rustc-hash 2.0.0",
  "rustls 0.23.11",
  "socket2 0.5.7",
@@ -16744,38 +16764,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "quinn-proto"
-version = "0.11.3"
-source = "git+https://github.com/quinn-rs/quinn?rev=693c9b7cfbf89c541ba99523237594499984ffed#693c9b7cfbf89c541ba99523237594499984ffed"
-dependencies = [
- "bytes",
- "rand 0.8.5",
- "ring 0.17.8",
- "rustc-hash 2.0.0",
- "rustls 0.23.11",
- "slab",
- "thiserror",
- "tinyvec",
- "tracing",
-]
-
-[[package]]
 name = "quinn-udp"
-version = "0.5.2"
+version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9096629c45860fc7fb143e125eb826b5e721e10be3263160c7d60ca832cf8c46"
-dependencies = [
- "libc",
- "once_cell",
- "socket2 0.5.7",
- "tracing",
- "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "quinn-udp"
-version = "0.5.2"
-source = "git+https://github.com/quinn-rs/quinn?rev=693c9b7cfbf89c541ba99523237594499984ffed#693c9b7cfbf89c541ba99523237594499984ffed"
+checksum = "8bffec3605b73c6f1754535084a85229fa8a30f86014e6c81aeec4abb68b0285"
 dependencies = [
  "libc",
  "once_cell",
@@ -17260,10 +17252,11 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.11.22"
+version = "0.11.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "046cd98826c46c2ac8ddecae268eb5c2e58628688a5fc7a2643704a73faba95b"
+checksum = "dd67538700a17451e7cba03ac727fb961abb7607553461627b97de0b89cf4a62"
 dependencies = [
+ "async-compression",
  "base64 0.21.5",
  "bytes",
  "encoding_rs",
@@ -17287,6 +17280,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
+ "sync_wrapper 0.1.2",
  "system-configuration",
  "tokio",
  "tokio-rustls 0.24.1",
@@ -17295,7 +17289,7 @@ dependencies = [
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm-streams 0.3.0",
+ "wasm-streams",
  "web-sys",
  "webpki-roots 0.25.2",
  "winreg 0.50.0",
@@ -17327,7 +17321,7 @@ dependencies = [
  "once_cell",
  "percent-encoding",
  "pin-project-lite",
- "quinn 0.11.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "quinn",
  "rustls 0.23.11",
  "rustls-native-certs 0.7.0",
  "rustls-pemfile 2.1.2",
@@ -17344,7 +17338,7 @@ dependencies = [
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm-streams 0.4.0",
+ "wasm-streams",
  "web-sys",
  "webpki-roots 0.26.1",
  "winreg 0.52.0",
@@ -17364,9 +17358,9 @@ dependencies = [
 name = "response-payload-test"
 version = "0.9.0"
 dependencies = [
- "dfn_core",
- "dfn_json",
- "dfn_macro",
+ "candid",
+ "ic-cdk 0.13.2",
+ "ic-cdk-macros 0.9.0",
  "serde",
 ]
 
@@ -19431,7 +19425,6 @@ dependencies = [
  "cycles-minting-canister",
  "deterministic_ips",
  "dfn_candid",
- "dfn_core",
  "dfn_json",
  "dfn_protobuf",
  "discower_bowndary",
@@ -19483,6 +19476,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-nns-gtc",
  "ic-nns-handler-root",
  "ic-nns-init",
@@ -20942,19 +20936,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b4a05336882dae732ce6bd48b7e11fe597293cb72c13da4f35d7d5f8d53b2a7"
 dependencies = [
  "leb128",
-]
-
-[[package]]
-name = "wasm-streams"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4609d447824375f43e1ffbc051b50ad8f4b3ae8219680c94452ea05eb240ac7"
-dependencies = [
- "futures-util",
- "js-sys",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
 ]
 
 [[package]]
