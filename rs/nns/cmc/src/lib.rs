@@ -29,7 +29,8 @@ pub const MINT_CYCLES_REFUND_FEE: Tokens = Tokens::from_e8s(DEFAULT_TRANSFER_FEE
 /// Cycles penalty charged for sending bad requests that incur a lot of work.
 pub const BAD_REQUEST_CYCLES_PENALTY: u128 = 100_000_000; // TODO(SDK-1248) revisit fair pricing. Currently costs significantly more than an update call
 
-pub const DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS: u64 = 1620633600; // 10 May 2021 10:00:00 AM CEST
+pub const DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS: u64 = 1_620_633_600; // 10 May 2021 10:00:00 AM CEST
+pub const DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE: u64 = 1_000_000; // 1 ICP = 100 XDR
 
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub enum ExchangeRateCanister {
