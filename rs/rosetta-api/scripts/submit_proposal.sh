@@ -100,7 +100,7 @@ touch "$EMPTY_FILE"
 
 sleep 5
 max_attempts=23 # wait 115 (+ 5) seconds = 2 min
-canister_hash=$(dfx canister --network "$NNS_URL" info "$CANISTER_ID" | grep hash | awk -Fx '{print $2}')
+canister_hash=$(dfx canister --network "$REPLICA_URL" info "$CANISTER_ID" | grep hash | awk -Fx '{print $2}')
 until [ "$canister_hash" = "$WASM_HASH" ]; do
     max_attempts=$(($max_attempts - 1))
     if [ $max_attempts -eq 0 ]; then
@@ -109,6 +109,6 @@ until [ "$canister_hash" = "$WASM_HASH" ]; do
     fi
     echo "New hash for canister $CANISTER_ID not found (found '$canister_hash'). Waiting 5s and checking again..."
     sleep 5
-    canister_hash=$(dfx canister --network "$NNS_URL" info "$CANISTER_ID" | grep hash | awk -Fx '{print $2}')
+    canister_hash=$(dfx canister --network "$REPLICA_URL" info "$CANISTER_ID" | grep hash | awk -Fx '{print $2}')
 done
 echo "New hash for canister $CANISTER_ID found, upgrade succeeded."

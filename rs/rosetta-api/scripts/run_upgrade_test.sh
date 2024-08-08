@@ -23,6 +23,11 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 COMMIT_ID="$1"
 LEDGER_OR_ARCHIVE="$2"
 ARG="${3:-}"
+SYSTEM_SUBNET=$(bazel run //rs/registry/admin:ic-admin -- --nns-url $NNS_URL get-subnet 0 | jq -r '.records[0].value.membership[0]')
+REPLICA_IP=$(bazel run //rs/registry/admin:ic-admin -- --nns-url $NNS_URL get-node $SYSTEM_SUBNET | grep -oP 'http: Some\(ConnectionEndpoint \{ ip_addr: "\K[^"]+')
+export NNS_URL=http://[$REPLICA_IP]:8080
+export REPLICA_URL=http://[$REPLICA_IP]:8080
+echo "REPLICA_URL=$NNS_URL"
 
 ROSETTA_DB_OLD=$("$SCRIPT_DIR/get_blocks.sh" | tail -n1)
 if [ -z "$ARG" ]; then

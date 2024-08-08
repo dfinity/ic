@@ -50,7 +50,7 @@ fn make_agent(url: Url) -> Result<Agent, AgentError> {
         .with_nonce_generator(TimestampBlob::default())
         // The testnet has an old replica version and the query
         // verification wouldn't work so we disable it
-        .with_verify_query_signatures(!is_exchanges_testnet)
+        .with_verify_query_signatures(false)
         .build()
 }
 

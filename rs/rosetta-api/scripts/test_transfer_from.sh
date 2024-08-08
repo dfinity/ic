@@ -22,7 +22,7 @@ export DFX_DISABLE_QUERY_VERIFICATION=1 # Query verification fails on dynamic te
 dfx identity use "$NNS_TEST_ID"
 NNS_TEST_PRINCIPAL=$(dfx identity get-principal)
 
-query_blocks_res=$(dfx canister --network $NNS_URL call --candid "$LEDGER_DID" --query "$LEDGER_CANISTER_ID" query_blocks '(record {start=0:nat64;length=1:nat64})')
+query_blocks_res=$(dfx canister --network $REPLICA_URL call --candid "$LEDGER_DID" --query "$LEDGER_CANISTER_ID" query_blocks '(record {start=0:nat64;length=1:nat64})')
 BEFORE_CHAIN_LENGTH=$(echo $query_blocks_res | sed -n 's/.*chain_length *= *\([^ ]\+\).*/\1/p' | tr -d '_')
 BEFORE_FIRST_BLOCK_INDEX=$(echo $query_blocks_res | sed -n 's/.*first_block_index *= *\([^ ]\+\).*/\1/p' | tr -d '_')
 
@@ -39,20 +39,20 @@ dfx identity use "$SPENDER_ID"
 SPENDER_PRINCIPAL=$(dfx identity get-principal)
 
 dfx identity use "$NNS_TEST_ID"
-dfx canister call --candid "$LEDGER_DID" --network "$NNS_URL" "$LEDGER_CANISTER_ID" icrc2_approve "(record {spender=record {owner=principal \"$SPENDER_PRINCIPAL\"}; amount=$AMOUNT_PER_APPROVAL},)"
+dfx canister call --candid "$LEDGER_DID" --network "$REPLICA_URL" "$LEDGER_CANISTER_ID" icrc2_approve "(record {spender=record {owner=principal \"$SPENDER_PRINCIPAL\"}; amount=$AMOUNT_PER_APPROVAL},)"
 
 dfx identity use "$SPENDER_ID"
 
 for ((batch = 0; batch < $NUM_OF_BATCHES; batch++)); do
     echo "start sending batch $((batch + 1))/$NUM_OF_BATCHES of $NUM_OF_TRANSFERS_PER_BATCH txs"
     for ((t = 0; t < $NUM_OF_TRANSFERS_PER_BATCH; t++)); do
-        dfx canister call --candid "$LEDGER_DID" --network "$NNS_URL" "$LEDGER_CANISTER_ID" icrc2_transfer_from "(record {from=record {owner=principal \"$NNS_TEST_PRINCIPAL\"}; to=record {owner=principal \"$SPENDER_PRINCIPAL\"}; amount=$AMOUNT_PER_TRANSFER},)" &
+        dfx canister call --candid "$LEDGER_DID" --network "$REPLICA_URL" "$LEDGER_CANISTER_ID" icrc2_transfer_from "(record {from=record {owner=principal \"$NNS_TEST_PRINCIPAL\"}; to=record {owner=principal \"$SPENDER_PRINCIPAL\"}; amount=$AMOUNT_PER_TRANSFER},)" &
     done
     wait
     echo "done sending batch $((batch + 1))/$NUM_OF_BATCHES of $NUM_OF_TRANSFERS_PER_BATCH txs"
 done
 
-query_blocks_res=$(dfx canister --network $NNS_URL call --candid "$LEDGER_DID" --query "$LEDGER_CANISTER_ID" query_blocks '(record {start=0:nat64;length=1:nat64})')
+query_blocks_res=$(dfx canister --network $REPLICA_URL call --candid "$LEDGER_DID" --query "$LEDGER_CANISTER_ID" query_blocks '(record {start=0:nat64;length=1:nat64})')
 AFTER_CHAIN_LENGTH=$(echo $query_blocks_res | sed -n 's/.*chain_length *= *\([^ ]\+\).*/\1/p' | tr -d '_')
 AFTER_FIRST_BLOCK_INDEX=$(echo $query_blocks_res | sed -n 's/.*first_block_index *= *\([^ ]\+\).*/\1/p' | tr -d '_')
 

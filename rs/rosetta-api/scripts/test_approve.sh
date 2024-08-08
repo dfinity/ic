@@ -23,11 +23,11 @@ SPENDER_1_PRINCIPAL="pcwbg-y26mf-k62dw-7xo2m-jfv2n-un56b-pjkp7-oirek-obdjm-bklck
 SPENDER_2_PRINCIPAL="tcpbp-bppbk-ac6zu-smi7p-opmky-qjuez-ugxzv-v33ci-vod7y-kpktd-kae"
 SPENDER_3_PRINCIPAL="xnrq6-gadm3-6ious-kx6kn-utuqf-iphoq-vrag4-rlfvt-5z7n7-52n4q-vae"
 
-query_blocks_res=$(dfx canister --network $NNS_URL call --candid "$LEDGER_DID" --query "$LEDGER_CANISTER_ID" query_blocks '(record {start=0:nat64;length=1:nat64})')
+query_blocks_res=$(dfx canister --network $REPLICA_URL call --candid "$LEDGER_DID" --query "$LEDGER_CANISTER_ID" query_blocks '(record {start=0:nat64;length=1:nat64})')
 BEFORE_CHAIN_LENGTH=$(echo $query_blocks_res | sed -n 's/.*chain_length *= *\([^ ]\+\).*/\1/p' | tr -d '_')
 BEFORE_FIRST_BLOCK_INDEX=$(echo $query_blocks_res | sed -n 's/.*first_block_index *= *\([^ ]\+\).*/\1/p' | tr -d '_')
 
-dfx canister call --candid "$LEDGER_DID" --network "$NNS_URL" "$LEDGER_CANISTER_ID" icrc2_approve "(record {spender=record {owner=principal \"$SPENDER_2_PRINCIPAL\"}; amount=200:nat},)"
+dfx canister call --candid "$LEDGER_DID" --network "$REPLICA_URL" "$LEDGER_CANISTER_ID" icrc2_approve "(record {spender=record {owner=principal \"$SPENDER_2_PRINCIPAL\"}; amount=200:nat},)"
 
 EXPIRATION=2993656999000000000 # expiration far in the future
 
@@ -37,15 +37,15 @@ for ((batch = 0; batch < $NUM_OF_BATCHES; batch++)); do
         case $(($t % 3)) in
 
             0)
-                dfx canister call --candid "$LEDGER_DID" --network "$NNS_URL" "$LEDGER_CANISTER_ID" icrc2_approve "(record {spender=record {owner=principal \"$SPENDER_1_PRINCIPAL\"}; amount=100:nat},)" &
+                dfx canister call --candid "$LEDGER_DID" --network "$REPLICA_URL" "$LEDGER_CANISTER_ID" icrc2_approve "(record {spender=record {owner=principal \"$SPENDER_1_PRINCIPAL\"}; amount=100:nat},)" &
                 ;;
 
             1)
-                dfx canister call --candid "$LEDGER_DID" --network "$NNS_URL" "$LEDGER_CANISTER_ID" icrc2_approve "(record {spender=record {owner=principal \"$SPENDER_2_PRINCIPAL\"}; amount=200:nat; expected_allowance=opt 200},)" &
+                dfx canister call --candid "$LEDGER_DID" --network "$REPLICA_URL" "$LEDGER_CANISTER_ID" icrc2_approve "(record {spender=record {owner=principal \"$SPENDER_2_PRINCIPAL\"}; amount=200:nat; expected_allowance=opt 200},)" &
                 ;;
 
             2)
-                dfx canister call --candid "$LEDGER_DID" --network "$NNS_URL" "$LEDGER_CANISTER_ID" icrc2_approve "(record {spender=record {owner=principal \"$SPENDER_3_PRINCIPAL\"}; amount=300:nat; expires_at=opt $EXPIRATION},)" &
+                dfx canister call --candid "$LEDGER_DID" --network "$REPLICA_URL" "$LEDGER_CANISTER_ID" icrc2_approve "(record {spender=record {owner=principal \"$SPENDER_3_PRINCIPAL\"}; amount=300:nat; expires_at=opt $EXPIRATION},)" &
                 let "EXPIRATION += 1"
                 ;;
 
@@ -55,7 +55,7 @@ for ((batch = 0; batch < $NUM_OF_BATCHES; batch++)); do
     echo "done sending batch $((batch + 1))/$NUM_OF_BATCHES of $NUM_OF_APPROVALS_PER_BATCH txs"
 done
 
-query_blocks_res=$(dfx canister --network $NNS_URL call --candid "$LEDGER_DID" --query "$LEDGER_CANISTER_ID" query_blocks '(record {start=0:nat64;length=1:nat64})')
+query_blocks_res=$(dfx canister --network $REPLICA_URL call --candid "$LEDGER_DID" --query "$LEDGER_CANISTER_ID" query_blocks '(record {start=0:nat64;length=1:nat64})')
 AFTER_CHAIN_LENGTH=$(echo $query_blocks_res | sed -n 's/.*chain_length *= *\([^ ]\+\).*/\1/p' | tr -d '_')
 AFTER_FIRST_BLOCK_INDEX=$(echo $query_blocks_res | sed -n 's/.*first_block_index *= *\([^ ]\+\).*/\1/p' | tr -d '_')
 
