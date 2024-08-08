@@ -19,7 +19,7 @@ use std::{collections::BTreeSet, sync::Arc};
 /// The upper bound of how many shares of HTTP outcall requests unknown to the local replica will be
 /// requested via P2P in advance. Since the request ids are strictly increasing, we can simply add
 /// the constant to the latest known request id.
-const MAX_NUMBER_OF_REQUESTS_AHEAD: u64 = 10;
+const MAX_NUMBER_OF_REQUESTS_AHEAD: u64 = 50;
 
 /// The canonical implementation of [`PriorityFnFactory`]
 pub struct CanisterHttpGossipImpl {
