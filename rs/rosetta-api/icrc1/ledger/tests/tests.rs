@@ -78,6 +78,10 @@ fn ledger_wasm() -> Vec<u8> {
     )
 }
 
+fn ledger_wasm_upgradetomemorymanager() -> Vec<u8> {
+    std::fs::read(std::env::var("IC_ICRC1_LEDGER_MEM_MGR_WASM_PATH").unwrap()).unwrap()
+}
+
 fn archive_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
@@ -374,10 +378,11 @@ fn test_block_transformation() {
 
 #[cfg_attr(feature = "u256-tokens", ignore)]
 #[test]
-fn icrc1_test_approval_upgrade() {
-    ic_icrc1_ledger_sm_tests::icrc1_test_approval_upgrade(
+fn icrc1_test_upgrade_serialization() {
+    ic_icrc1_ledger_sm_tests::icrc1_test_upgrade_serialization(
         ledger_mainnet_wasm(),
         ledger_wasm(),
+        ledger_wasm_upgradetomemorymanager(),
         encode_init_args,
     );
 }
