@@ -9504,6 +9504,13 @@ name = "ic-nervous-system-string"
 version = "0.0.1"
 
 [[package]]
+name = "ic-nervous-system-temporary"
+version = "0.0.1"
+dependencies = [
+ "rand 0.8.5",
+]
+
+[[package]]
 name = "ic-neurons-fund"
 version = "0.0.1"
 dependencies = [
