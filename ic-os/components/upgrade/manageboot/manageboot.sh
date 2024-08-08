@@ -188,7 +188,7 @@ while getopts ":f:" OPT; do
             ;;
     esac
 done
-shift $((OPTIND -1))
+shift $((OPTIND - 1))
 
 SYSTEM_TYPE="$1"
 ACTION="$2"
