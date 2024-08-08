@@ -29,7 +29,7 @@ use ic_system_test_driver::{
         ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, HasWasm, IcNodeContainer},
+        test_env_api::{load_wasm, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
     systest,
 };
@@ -120,7 +120,7 @@ pub fn install_cloner_canisters(env: TestEnv) {
         .find(|s| s.subnet_type() == SubnetType::Application)
         .unwrap();
     let app_node = app_subnet.nodes().next().unwrap();
-    let counter_canister_bytes = env.load_wasm(COUNTER_CANISTER_WAT);
+    let counter_canister_bytes = load_wasm(COUNTER_CANISTER_WAT);
 
     info!(
         &logger,
