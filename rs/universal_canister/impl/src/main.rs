@@ -1,5 +1,4 @@
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
-use core::arch::wasm32;
 use std::convert::TryInto;
 use std::hint::black_box;
 use universal_canister::Ops;
@@ -417,12 +416,19 @@ fn eval(ops_bytes: OpsBytes) {
             Ops::CallWithBestEffortResponse => api::call_with_best_effort_response(stack.pop_int()),
             Ops::MsgDeadline => stack.push_int64(api::msg_deadline()),
             Ops::MemorySizeIsAtLeast => {
+                let wasm_page_size = wee_alloc::PAGE_SIZE.0;
+
+                #[cfg(target_arch = "wasm32")]
+                let current_memory_size =
+                    || core::arch::wasm32::memory_size::<0>() * wasm_page_size;
+
+                #[cfg(not(target_arch = "wasm32"))]
+                let current_memory_size = || usize::MAX;
+
                 let target_memory_size = stack.pop_int64() as usize;
                 let mut a = vec![];
-                let wasm_page_size = wee_alloc::PAGE_SIZE.0;
                 loop {
-                    let current_memory_size = wasm32::memory_size::<0>() * wasm_page_size;
-                    if current_memory_size > target_memory_size {
+                    if current_memory_size() > target_memory_size {
                         break;
                     }
                     a.push(vec![13; wasm_page_size]);

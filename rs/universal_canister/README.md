@@ -21,7 +21,7 @@ mv bazel-bin/rs/universal_canister/impl/universal_canister.wasm.gz rs/universal_
 sha256sum rs/universal_canister/lib/src/universal-canister.wasm.gz
 
 # Take the output of the command above and paste it as the value of UNIVERSAL_CANISTER_WASM_SHA256
-# in lib/src/lib.rs
+# in rs/universal_canister/lib/src/lib.rs
 ```
 
 Note that the universal canister's implementation is temporarily using its `Cargo.lock` file
