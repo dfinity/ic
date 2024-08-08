@@ -351,6 +351,7 @@ members = [
     "rs/tests/driver",
     "rs/tests/httpbin-rs",
     "rs/tests/networking",
+    "rs/tests/networking/canisters",
     "rs/tests/networking/canister_http",
     "rs/tests/nested",
     "rs/tests/nns/sns",

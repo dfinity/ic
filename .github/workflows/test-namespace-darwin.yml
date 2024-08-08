@@ -10,7 +10,7 @@ concurrency:
 
 jobs:
   test-namespace:
-    runs-on: namespace-profile-darwin-small # profile created in namespace console
+    runs-on: namespace-profile-darwin-small-cache # profile created in namespace console
     steps:
 
       - name: Install nsc

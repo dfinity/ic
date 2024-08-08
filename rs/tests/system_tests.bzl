@@ -264,7 +264,8 @@ def system_test(
         env_inherit = env_inherit,
         env = env,
         tags = tags + ["requires-network", "system_test"] +
-               ([] if "experimental_system_test_colocation" in tags else ["manual"]) + additional_colocate_tags,
+               (["colocated"] if "experimental_system_test_colocation" in tags else ["manual"]) +
+               additional_colocate_tags,
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
