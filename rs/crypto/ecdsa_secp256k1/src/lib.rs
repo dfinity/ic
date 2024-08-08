@@ -464,7 +464,7 @@ impl PrivateKey {
              */
             let aux_rand = rng.gen::<[u8; 32]>();
             if let Ok(sig) = bip340.sign_prehash_with_aux_rand(message, &aux_rand) {
-                return sig.to_bytes().into();
+                return sig.to_bytes();
             }
         }
     }
