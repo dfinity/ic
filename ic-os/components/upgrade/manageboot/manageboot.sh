@@ -102,10 +102,10 @@ declare -A HOSTOS_PARTITIONS=(
 get_partition() {
     local ALTERNATIVE="$1"
     local PARTITION_TYPE="$2"
-    
+
     if [ "$SYSTEM_TYPE" == "guestos" ]; then
         echo "${GUESTOS_PARTITIONS[${ALTERNATIVE}_${PARTITION_TYPE}]}"
-    else if [ "$SYSTEM_TYPE" == "hostos" ]; then
+    elif [ "$SYSTEM_TYPE" == "hostos" ]; then
         echo "${HOSTOS_PARTITIONS[${ALTERNATIVE}_${PARTITION_TYPE}]}"
     fi
 }
