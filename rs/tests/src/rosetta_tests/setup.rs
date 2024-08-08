@@ -1,3 +1,4 @@
+use crate::rosetta_tests::{lib::hex2addr, rosetta_client::RosettaApiClient};
 use candid::Encode;
 use canister_test::{Canister, CanisterId, Runtime};
 use ic_ledger_core::Tokens;
@@ -5,6 +6,19 @@ use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
 use ic_nns_test_utils::itest_helpers::install_rust_canister;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
+    driver::{
+        ic::InternetComputer,
+        resource::AllocatedVm,
+        test_env::TestEnv,
+        test_env_api::{
+            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            IcNodeSnapshot, SshSession, SubnetSnapshot,
+        },
+        universal_vm::{insert_file_to_config, UniversalVm, UniversalVms},
+    },
+    util::{block_on, runtime_from_url},
+};
 use icp_ledger::{AccountIdentifier, ArchiveOptions, LedgerCanisterInitPayload};
 use prost::Message;
 use slog::{debug, error, info, Logger};
@@ -16,21 +30,6 @@ use std::{
     time::Duration,
 };
 use url::Url;
-
-use crate::rosetta_tests::{lib::hex2addr, rosetta_client::RosettaApiClient};
-use ic_system_test_driver::{
-    driver::{
-        ic::InternetComputer,
-        resource::AllocatedVm,
-        test_env::TestEnv,
-        test_env_api::{
-            HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-            SshSession, SubnetSnapshot,
-        },
-        universal_vm::{insert_file_to_config, UniversalVm, UniversalVms},
-    },
-    util::{block_on, runtime_from_url},
-};
 
 /// Transfer fee on the ledger.
 pub const TRANSFER_FEE: u64 = 10_000;
@@ -295,8 +294,7 @@ echo \"Rosetta container started \"
         .unwrap();
 
     // Add Rosetta image to config dir.
-    let path = env
-        .get_dependency_path("rs/rosetta-api/")
+    let path = get_dependency_path("rs/rosetta-api/")
         .into_os_string()
         .into_string()
         .unwrap();

@@ -7,6 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+hex = { workspace = true }
 ic-consensus-utils = { path = "../../consensus/utils" }
 ic-error-types = { path = "../../types/error_types" }
 ic-interfaces = { path = "../../interfaces" }
@@ -19,16 +20,15 @@ ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
-hex = { workspace = true }
 prometheus = { workspace = true }
 slog = { workspace = true }
 
 [dev-dependencies]
 ic-artifact-pool = { path = "../../artifact_pool" }
-ic-error-types = { path = "../../types/error_types" }
 ic-consensus-mocks = { path = "../../consensus/mocks" }
-ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-error-types = { path = "../../types/error_types" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
