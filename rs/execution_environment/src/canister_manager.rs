@@ -1833,41 +1833,6 @@ impl CanisterManager {
         }
 
         let new_snapshot_size = canister.snapshot_memory_usage();
-        let current_memory_usage = canister.memory_usage() + new_snapshot_size;
-        let message_memory = canister.message_memory_usage();
-        let compute_allocation = canister.compute_allocation();
-        let reveal_top_up = canister.controllers().contains(&sender);
-        let instructions = self.config.canister_snapshot_baseline_instructions
-            + NumInstructions::new(new_snapshot_size.get());
-
-        // Charge for the take snapshot of the canister.
-        let prepaid_cycles = self
-            .cycles_account_manager
-            .prepay_execution_cycles(
-                &mut canister.system_state,
-                current_memory_usage,
-                message_memory,
-                compute_allocation,
-                instructions,
-                subnet_size,
-                reveal_top_up,
-            )
-            .map_err(|err| CanisterManagerError::CanisterSnapshotNotEnoughCycles(err))?;
-
-        // To keep the invariant that `prepay_execution_cycles` is always paired
-        // with `refund_unused_execution_cycles` we refund zero immediately.
-        self.cycles_account_manager.refund_unused_execution_cycles(
-            &mut canister.system_state,
-            NumInstructions::from(0),
-            instructions,
-            prepaid_cycles,
-            // This counter is incremented if we refund more
-            // instructions than initially charged, which is impossible
-            // here.
-            &IntCounter::new("no_op", "no_op").unwrap(),
-            subnet_size,
-            &self.log,
-        );
 
         {
             // Run the following checks on memory usage and return an error
@@ -1945,6 +1910,42 @@ impl CanisterManager {
                         .try_decrement(new_snapshot_size, NumBytes::from(0), NumBytes::from(0))
                         .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
         }
+
+        let current_memory_usage = canister.memory_usage() + new_snapshot_size;
+        let message_memory = canister.message_memory_usage();
+        let compute_allocation = canister.compute_allocation();
+        let reveal_top_up = canister.controllers().contains(&sender);
+        let instructions = self.config.canister_snapshot_baseline_instructions
+            + NumInstructions::new(new_snapshot_size.get());
+
+        // Charge for the take snapshot of the canister.
+        let prepaid_cycles = self
+            .cycles_account_manager
+            .prepay_execution_cycles(
+                &mut canister.system_state,
+                current_memory_usage,
+                message_memory,
+                compute_allocation,
+                instructions,
+                subnet_size,
+                reveal_top_up,
+            )
+            .map_err(CanisterManagerError::CanisterSnapshotNotEnoughCycles)?;
+
+        // To keep the invariant that `prepay_execution_cycles` is always paired
+        // with `refund_unused_execution_cycles` we refund zero immediately.
+        self.cycles_account_manager.refund_unused_execution_cycles(
+            &mut canister.system_state,
+            NumInstructions::from(0),
+            instructions,
+            prepaid_cycles,
+            // This counter is incremented if we refund more
+            // instructions than initially charged, which is impossible
+            // here.
+            &IntCounter::new("no_op", "no_op").unwrap(),
+            subnet_size,
+            &self.log,
+        );
 
         // Create new snapshot.
         let new_snapshot = CanisterSnapshot::from_canister(canister, state.time())
@@ -2072,6 +2073,9 @@ impl CanisterManager {
                 round_limits,
                 compilation_cost_handling,
             );
+
+            
+
 
             let mut new_execution_state = match new_execution_state {
                 Ok(execution_state) => execution_state,
