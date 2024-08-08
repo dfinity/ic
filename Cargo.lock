@@ -21686,7 +21686,8 @@ name = "xnet-test"
 version = "0.9.0"
 dependencies = [
  "candid",
- "dfn_core",
+ "ic-cdk 0.13.2",
+ "ic-cdk-macros 0.9.0",
  "rand 0.8.5",
  "rand_pcg 0.3.1",
  "serde",
