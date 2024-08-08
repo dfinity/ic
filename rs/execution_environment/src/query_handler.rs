@@ -299,10 +299,13 @@ fn fetch_canister_logs(
         )
     })?;
 
-    let mut log_visibility = canister.log_visibility();
-    if !ALLOWED_VIEWERS_ENABLED && matches!(log_visibility, LogVisibilityV2::AllowedViewers(_)) {
-        log_visibility = &LogVisibilityV2::Controllers;
-    }
+    let log_visibility = match canister.log_visibility() {
+        // If the feature is disabled override `AllowedViewers` with default value.
+        LogVisibilityV2::AllowedViewers(_) if !ALLOWED_VIEWERS_ENABLED => {
+            &LogVisibilityV2::default()
+        }
+        other => other,
+    };
     match log_visibility {
         LogVisibilityV2::Public => Ok(()),
         LogVisibilityV2::Controllers if canister.controllers().contains(&sender) => Ok(()),
