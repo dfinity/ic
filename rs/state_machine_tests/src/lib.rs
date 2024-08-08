@@ -500,7 +500,7 @@ impl PocketIngressPool {
         self.validated.insert(
             IngressMessageId::new(m.expiry_time(), m.id()),
             ValidatedIngressArtifact {
-                msg: m.into(),
+                msg: todo!(),
                 timestamp,
             },
         );

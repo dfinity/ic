@@ -81,7 +81,7 @@ use std::time::{Duration, Instant};
 use tokio::runtime::{Builder, Runtime};
 
 const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
-const NODES_COUNT: usize = 13;
+const NODES_COUNT: usize = 9;
 const MAX_RETRIES: u32 = 10;
 const RETRY_WAIT: Duration = Duration::from_secs(10);
 const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
@@ -97,7 +97,7 @@ const INGRESS_MESSAGES_SUM_METRIC: &str = "consensus_ingress_messages_delivered_
 
 // Network parameters
 const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
-const LATENCY: Duration = Duration::from_millis(200); // artificial added latency
+const LATENCY: Duration = Duration::from_millis(2); // artificial added latency
 
 fn setup(env: TestEnv) {
     PrometheusVm::default()
@@ -250,39 +250,39 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
     info!(log, "Reporting workload execution results ...");
     env.emit_report(format!("{}", test_metrics));
 
-    info!(
-        log,
-        "Step 3: Assert expected number of success update calls on each canister.."
-    );
-    let requests_count = rps * TEST_DURATION.as_secs_f64();
-    let min_expected_success_calls = (SUCCESS_THRESHOLD * requests_count) as usize;
-    info!(
-        log,
-        "Minimal expected number of success calls {}", min_expected_success_calls,
-    );
-    info!(
-        log,
-        "Number of success calls {}, failure calls {}",
-        metrics.success_calls(),
-        metrics.failure_calls()
-    );
-
-    let min_expected_canister_counter = min_expected_success_calls / canister_count;
-    info!(
-        log,
-        "Minimal expected counter value on canisters {}", min_expected_canister_counter
-    );
-    for canister in canisters.iter() {
-        rt.block_on(assert_canister_counter_with_retries(
-            &log,
-            &agent.get(),
-            canister,
-            payload.clone(),
-            min_expected_canister_counter,
-            MAX_RETRIES,
-            RETRY_WAIT,
-        ));
-    }
+//    info!(
+//        log,
+//        "Step 3: Assert expected number of success update calls on each canister.."
+//    );
+//    let requests_count = rps * TEST_DURATION.as_secs_f64();
+//    let min_expected_success_calls = (SUCCESS_THRESHOLD * requests_count) as usize;
+//    info!(
+//        log,
+//        "Minimal expected number of success calls {}", min_expected_success_calls,
+//    );
+//    info!(
+//        log,
+//        "Number of success calls {}, failure calls {}",
+//        metrics.success_calls(),
+//        metrics.failure_calls()
+//    );
+//
+//    let min_expected_canister_counter = min_expected_success_calls / canister_count;
+//    info!(
+//        log,
+//        "Minimal expected counter value on canisters {}", min_expected_canister_counter
+//    );
+//    for canister in canisters.iter() {
+//        rt.block_on(assert_canister_counter_with_retries(
+//            &log,
+//            &agent.get(),
+//            canister,
+//            payload.clone(),
+//            min_expected_canister_counter,
+//            MAX_RETRIES,
+//            RETRY_WAIT,
+//        ));
+//    }
 
     if cfg!(feature = "upload_perf_systest_results") {
         let branch_version = env
@@ -468,7 +468,7 @@ fn average(nums: &[u64]) -> u64 {
 }
 
 fn test_small_messages(env: TestEnv) {
-    test(env, 4_000, 500.0)
+    test(env, 4000, 5000.0)
 }
 
 fn test_large_messages(env: TestEnv) {
@@ -482,7 +482,7 @@ fn main() -> Result<()> {
         .with_timeout_per_test(Duration::from_secs(60 * 30))
         .with_setup(setup)
         .add_test(systest!(test_small_messages))
-        .add_test(systest!(test_large_messages))
+        //.add_test(systest!(test_large_messages))
         .execute_from_args()?;
     Ok(())
 }

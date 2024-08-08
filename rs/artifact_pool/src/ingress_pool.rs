@@ -18,7 +18,7 @@ use ic_interfaces::{
     },
     time_source::TimeSource,
 };
-use ic_logger::{debug, trace, ReplicaLogger};
+use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::IngressMessageId,
@@ -183,12 +183,73 @@ impl<T: AsRef<IngressPoolObject> + HasTimestamp> PoolSection<T> for IngressPoolS
 }
 
 #[derive(Clone)]
+struct PeerCounter {
+    counter_per_peer: BTreeMap<NodeId, usize>,
+    limit: usize,
+}
+
+impl PeerCounter {
+    fn new(limit: usize) -> Self {
+        Self {
+            counter_per_peer: BTreeMap::default(),
+            limit,
+        }
+    }
+
+    fn add(&mut self, peer_id: NodeId, count: usize) {
+        *self.counter_per_peer.entry(peer_id).or_default() += count;
+    }
+
+    // FIXME
+    fn subtract(&mut self, peer_id: NodeId, count: usize) {
+        *self.counter_per_peer.entry(peer_id).or_default() -= count;
+    }
+
+    fn exceeds_limit(&self, peer_id: &NodeId) -> bool {
+        self.counter_per_peer
+            .get(peer_id)
+            .copied()
+            .unwrap_or_default()
+            > self.limit
+    }
+}
+
+#[derive(Clone)]
+struct PeerCounters {
+    bytes_counters: PeerCounter,
+    count_counters: PeerCounter,
+}
+
+impl PeerCounters {
+    fn new(config: &ArtifactPoolConfig) -> Self {
+        Self {
+            bytes_counters: PeerCounter::new(config.ingress_pool_max_bytes),
+            count_counters: PeerCounter::new(config.ingress_pool_max_count),
+        }
+    }
+
+    fn observe(&mut self, ingress_message: &IngressPoolObject) {
+        self.count_counters.add(ingress_message.peer_id, 1);
+        self.bytes_counters
+            .add(ingress_message.peer_id, ingress_message.count_bytes());
+    }
+
+    fn forget(&mut self, ingress_message: &IngressPoolObject) {
+        self.count_counters.subtract(ingress_message.peer_id, 1);
+        self.bytes_counters
+            .subtract(ingress_message.peer_id, ingress_message.count_bytes());
+    }
+
+    fn exceeds_limit(&self, peer_id: &NodeId) -> bool {
+        self.bytes_counters.exceeds_limit(peer_id) || self.count_counters.exceeds_limit(peer_id)
+    }
+}
+
+#[derive(Clone)]
 pub struct IngressPoolImpl {
     validated: IngressPoolSection<ValidatedIngressArtifact>,
     unvalidated: IngressPoolSection<UnvalidatedIngressArtifact>,
-    // Track unvalidated pool quota usage only
-    ingress_pool_max_count: usize,
-    ingress_pool_max_bytes: usize,
+    peer_counters: PeerCounters,
     ingress_messages_throttled: IntCounter,
     node_id: NodeId,
     log: ReplicaLogger,
@@ -204,8 +265,7 @@ impl IngressPoolImpl {
         log: ReplicaLogger,
     ) -> IngressPoolImpl {
         IngressPoolImpl {
-            ingress_pool_max_count: config.ingress_pool_max_count,
-            ingress_pool_max_bytes: config.ingress_pool_max_bytes,
+            peer_counters: PeerCounters::new(&config),
             ingress_messages_throttled: metrics_registry.int_counter(
                 "ingress_messages_throttled",
                 "Number of throttled ingress messages",
@@ -224,24 +284,6 @@ impl IngressPoolImpl {
             log,
         }
     }
-
-    /// Remove an artifact from unvalidated pool and remove it from peer_index
-    /// Return the removed artifact and its size.
-    fn remove_unvalidated(
-        &mut self,
-        message_id: &IngressMessageId,
-    ) -> Option<(UnvalidatedIngressArtifact, usize)> {
-        match self.unvalidated.remove(message_id) {
-            Some(unvalidated_artifact) => {
-                let size = unvalidated_artifact.message.signed_ingress.count_bytes();
-                Some((unvalidated_artifact, size))
-            }
-            None => {
-                trace!(self.log, "Did not find artifact in peer_index");
-                None
-            }
-        }
-    }
 }
 
 impl IngressPool for IngressPoolImpl {
@@ -254,6 +296,10 @@ impl IngressPool for IngressPoolImpl {
     fn unvalidated(&self) -> &dyn PoolSection<UnvalidatedIngressArtifact> {
         &self.unvalidated
     }
+
+    fn exceeds_limit(&self, peer_id: &NodeId) -> bool {
+        self.peer_counters.exceeds_limit(peer_id)
+    }
 }
 
 impl MutablePool<SignedIngress> for IngressPoolImpl {
@@ -262,7 +308,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
     /// Insert a new ingress message in the Ingress Pool and update the
     /// peer_index
     fn insert(&mut self, artifact: UnvalidatedArtifact<SignedIngress>) {
-        let ingress_pool_obj = IngressPoolObject::from(artifact.message);
+        let ingress_pool_obj = IngressPoolObject::new(artifact.peer_id, artifact.message);
         let peer_id = artifact.peer_id;
         let timestamp = artifact.timestamp;
         let size = ingress_pool_obj.count_bytes();
@@ -298,27 +344,24 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
         let mut purged = Vec::new();
         for change_action in change_set {
             match change_action {
-                ChangeAction::MoveToValidated((message_id, source_node_id)) => {
+                ChangeAction::MoveToValidated(message_id) => {
                     // remove it from unvalidated pool and remove it from peer_index, move it
                     // to the validated pool
-                    match self.remove_unvalidated(&message_id) {
-                        Some((unvalidated_artifact, size)) => {
-                            if source_node_id == self.node_id {
+                    match self.unvalidated.remove(&message_id) {
+                        Some(unvalidated_artifact) => {
+                            if unvalidated_artifact.peer_id == self.node_id {
                                 artifacts_with_opt.push(ArtifactWithOpt {
                                     artifact: unvalidated_artifact.message.signed_ingress.clone(),
                                     is_latency_sensitive: false,
                                 });
                             }
+                            self.peer_counters.observe(&unvalidated_artifact.message);
                             self.validated.insert(
                                 message_id,
                                 ValidatedIngressArtifact {
                                     msg: unvalidated_artifact.message,
                                     timestamp: unvalidated_artifact.timestamp,
                                 },
-                            );
-                            debug!(
-                                self.log,
-                                "Ingress pool: move {} bytes from unvalidated to validated", size
                             );
                         }
                         None => {
@@ -330,39 +373,12 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                     }
                 }
                 ChangeAction::RemoveFromUnvalidated(message_id) => {
-                    match self.remove_unvalidated(&message_id) {
-                        Some((_, size)) => {
-                            debug!(
-                                self.log,
-                                "Ingress pool: remove {} bytes from unvalidated", size
-                            );
-                        }
-                        None => {
-                            debug!(
-                                self.log,
-                                "Ingress pool: attempt to remove non-existent unvalidated ingress message {}",
-                                message_id
-                            );
-                        }
-                    }
+                    self.unvalidated.remove(&message_id);
                 }
                 ChangeAction::RemoveFromValidated(message_id) => {
-                    match self.validated.remove(&message_id) {
-                        Some(artifact) => {
-                            purged.push(message_id);
-                            let size = artifact.msg.signed_ingress.count_bytes();
-                            debug!(
-                                self.log,
-                                "Ingress pool: remove {} bytes from validated", size
-                            );
-                        }
-                        None => {
-                            debug!(
-                                self.log,
-                                "Ingress pool: attempt to remove non-existent validated ingress message {}",
-                                message_id
-                            );
-                        }
+                    if let Some(artifact) = self.validated.remove(&message_id) {
+                        purged.push(message_id);
+                        self.peer_counters.forget(&artifact.msg);
                     }
                 }
                 ChangeAction::PurgeBelowExpiry(expiry) => {
@@ -395,15 +411,11 @@ impl ValidatedPoolReader<SignedIngress> for IngressPoolImpl {
 
 impl IngressPoolThrottler for IngressPoolImpl {
     fn exceeds_threshold(&self) -> bool {
-        let ingress_count = self.validated.size() + self.unvalidated.size();
-        let ingress_bytes = self.validated.count_bytes() + self.unvalidated.count_bytes();
-
-        if ingress_count >= self.ingress_pool_max_count
-            || ingress_bytes >= self.ingress_pool_max_bytes
-        {
+        if self.peer_counters.exceeds_limit(&self.node_id) {
             self.ingress_messages_throttled.inc();
             return true;
         }
+
         false
     }
 }
