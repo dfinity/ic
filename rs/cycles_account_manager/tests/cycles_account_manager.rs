@@ -70,6 +70,7 @@ fn test_can_charge_application_subnets() {
                         .charge_canister_for_resource_allocation_and_usage(
                             &log,
                             &mut canister,
+                            NumBytes::from(0),
                             duration,
                             subnet_size,
                         )
@@ -330,6 +331,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
             .charge_canister_for_resource_allocation_and_usage(
                 &log,
                 &mut canister,
+                NumBytes::from(0),
                 Duration::from_secs(1),
                 subnet_size,
             )
@@ -348,6 +350,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
             .charge_canister_for_resource_allocation_and_usage(
                 &log,
                 &mut canister,
+                NumBytes::from(0),
                 Duration::from_secs(1),
                 subnet_size,
             )
@@ -366,6 +369,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
             .charge_canister_for_resource_allocation_and_usage(
                 &log,
                 &mut canister,
+                NumBytes::from(0),
                 Duration::from_secs(1),
                 subnet_size,
             )

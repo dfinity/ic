@@ -273,7 +273,8 @@ impl CyclesAccountManager {
 
     // Returns a list of the idle resource consumption rate in cycles per day
     // for each resource.
-    fn idle_cycles_burned_rate_by_resource(
+    #[doc(hidden)] // pub for usage in tests
+    pub fn idle_cycles_burned_rate_by_resource(
         &self,
         memory_allocation: MemoryAllocation,
         memory_usage: NumBytes,
@@ -1044,12 +1045,13 @@ impl CyclesAccountManager {
         &self,
         log: &ReplicaLogger,
         canister: &mut CanisterState,
+        canister_snapshots_memory_usage: NumBytes,
         duration_since_last_charge: Duration,
         subnet_size: usize,
     ) -> Result<(), CanisterOutOfCyclesError> {
         for (use_case, rate) in self.idle_cycles_burned_rate_by_resource(
             canister.memory_allocation(),
-            canister.memory_usage(),
+            canister.memory_usage() + canister_snapshots_memory_usage,
             canister.message_memory_usage(),
             canister.compute_allocation(),
             subnet_size,

@@ -1090,6 +1090,7 @@ impl SchedulerImpl {
         let state_time = state.time();
         let mut all_rejects = Vec::new();
         let mut uninstalled_canisters = Vec::new();
+        let canister_snapshots_usage = state.canister_snapshots.memory_usage();
         for canister in state.canisters_iter_mut() {
             // Postpone charging for resources when a canister has a paused execution
             // to avoid modifying the balance of a canister during an unfinished operation.
@@ -1111,11 +1112,17 @@ impl SchedulerImpl {
                 let duration_since_last_charge =
                     canister.duration_since_last_allocation_charge(state_time);
                 canister.scheduler_state.time_of_last_allocation_charge = state_time;
+
+                let canister_snapshots_memory_usage = canister_snapshots_usage
+                    .get(&canister.canister_id())
+                    .map(|usage| usage.clone())
+                    .unwrap_or(NumBytes::from(0));
                 if self
                     .cycles_account_manager
                     .charge_canister_for_resource_allocation_and_usage(
                         &self.log,
                         canister,
+                        canister_snapshots_memory_usage,
                         duration_since_last_charge,
                         subnet_size,
                     )

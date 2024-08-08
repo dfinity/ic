@@ -1490,6 +1490,99 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
 }
 
 #[test]
+fn canister_charging_resource_usage_includes_snapshots_usage() {
+    let initial_time = UNIX_EPOCH + Duration::from_secs(1);
+    let mut test = SchedulerTestBuilder::new()
+        .with_canister_snapshots(true)
+        .build();
+
+    let canister_id = test.create_canister_with_controller(
+        Cycles::new(200_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
+        None,
+        Some(initial_time),
+        None,
+        Some(canister_test_id(10).get()),
+    );
+    assert_eq!(test.state().canister_states.len(), 1);
+    assert_eq!(
+        test.state()
+            .canister_snapshots
+            .list_snapshots(canister_id)
+            .len(),
+        0
+    );
+
+    // TODO: grow memory or update chunk store so that snapshot memory is bigger than 0.
+
+    // Take a snapshot of the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    test.inject_call_to_ic00(
+        Method::TakeCanisterSnapshot,
+        args.encode(),
+        Cycles::zero(),
+        canister_test_id(10),
+        InputQueueType::LocalSubnet,
+    );
+
+    // Snapshot was created.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test.state().subnet_queues().input_queues_message_count(), 0);
+    assert_eq!(
+        test.state()
+            .canister_snapshots
+            .list_snapshots(canister_id)
+            .len(),
+        1
+    );
+
+    // Check balance has decreased and it includes the snapshot memory usage.
+    let canister_snapshots_usage = *test
+        .state()
+        .canister_snapshots
+        .memory_usage()
+        .get(&canister_id)
+        .unwrap();
+
+    println!(
+        "canister {}   usage for snapshots {} ",
+        canister_id, canister_snapshots_usage
+    );
+    let canister = test.state().canister_state(&canister_id).unwrap();
+
+    let balance_before = test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .system_state
+        .balance();
+    let duration = 1000
+        * test
+            .scheduler()
+            .cycles_account_manager
+            .duration_between_allocation_charges();
+    let expected_charge = test.compute_resource_charge_cost(
+        canister.memory_allocation(),
+        canister.memory_usage() + canister_snapshots_usage,
+        canister.message_memory_usage(),
+        canister.compute_allocation(),
+        duration,
+    );
+    test.set_time(initial_time + duration);
+
+    // Trigger a charge for resources.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    let balance_after = test
+        .state()
+        .canister_state(&canister_id)
+        .unwrap()
+        .system_state
+        .balance();
+    assert_eq!(balance_after, balance_before - expected_charge);
+}
+
+#[test]
 fn dont_charge_allocations_for_long_running_canisters() {
     let mut test = SchedulerTestBuilder::new().build();
     let initial_time = UNIX_EPOCH + Duration::from_secs(1);

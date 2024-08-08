@@ -202,6 +202,32 @@ impl SchedulerTest {
             .execution_cost(num_instructions, self.subnet_size())
     }
 
+    pub fn compute_resource_charge_cost(
+        &self,
+        memory_allocation: MemoryAllocation,
+        memory_usage: NumBytes,
+        message_memory_usage: NumBytes,
+        compute_allocation: ComputeAllocation,
+        duration: Duration,
+    ) -> Cycles {
+        let seconds_per_day: u128 = 24 * 60 * 60;
+        let mut cost = Cycles::new(0);
+        for (_, rate) in self
+            .scheduler
+            .cycles_account_manager
+            .idle_cycles_burned_rate_by_resource(
+                memory_allocation,
+                memory_usage,
+                message_memory_usage,
+                compute_allocation,
+                self.subnet_size(),
+            )
+        {
+            cost += rate * duration.as_secs() / seconds_per_day;
+        }
+        cost
+    }
+
     /// Creates a canister with the given balance and allocations.
     /// The `system_task` parameter can be used to optionally enable the
     /// heartbeat by passing `Some(SystemMethod::CanisterHeartbeat)`.
