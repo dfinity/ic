@@ -22,7 +22,6 @@ crossbeam-channel = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
 ed25519-dalek = { workspace = true }
 futures = { workspace = true }
 humantime = "2.0"
@@ -59,7 +58,7 @@ ic-nns-init = { path = "../../nns/init" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-nns-constants = { path = "../../nns/constants" }
-ic-nns-governance = { path = "../../nns/governance" }
+ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-nns-gtc = { path = "../../nns/gtc" }
 ic-nns-handler-root = { path = "../../nns/handlers/root/impl" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
