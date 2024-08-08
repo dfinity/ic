@@ -54,6 +54,12 @@ thread_local! {
     static RNG: RefCell<Lcg64Xsh32> = RefCell::new(Lcg64Xsh32::new(0xcafe_f00d_d15e_a5e5, 0x0a02_bdbf_7bb3_c0a7));
 }
 
+/// Input for `return_cycles` method.
+#[derive(CandidType, Deserialize)]
+struct CanisterIdRecord {
+    canister_id: Principal,
+}
+
 /// Request sent by the "fanout" method.
 #[derive(CandidType, Deserialize)]
 struct Request {
@@ -139,8 +145,6 @@ fn log(message: &str) {
 /// requests to other canisters.
 #[update]
 fn start(network_topology: NetworkTopology, rate: u64, payload_size: u64) -> String {
-    setup();
-
     NETWORK_TOPOLOGY.with(move |canisters| {
         *canisters.borrow_mut() = network_topology;
     });
@@ -238,12 +242,12 @@ fn handle_request(req: Request) -> Reply {
 /// Deposits the cycles this canister has minus 1T according to the given
 /// `DepositCyclesArgs`
 #[update]
-async fn return_cycles() -> String {
+async fn return_cycles(canister_id_record: CanisterIdRecord) -> String {
     let cycle_refund = canister_balance().saturating_sub(1_000_000_000_000);
-    let _ = call_with_payment::<(Vec<u8>,), ()>(
+    let _ = call_with_payment::<(CanisterIdRecord,), ()>(
         Principal::from_str("aaaaa-aa").unwrap(),
         "deposit_cycles",
-        (vec![],),
+        (canister_id_record,),
         cycle_refund,
     )
     .await;
@@ -258,4 +262,6 @@ fn metrics() -> Metrics {
 }
 
 #[init]
-fn main() {}
+fn main() {
+    setup();
+}
