@@ -6209,7 +6209,7 @@ fn can_create_and_delete_canister_snapshot() {
         // Check the checkpoint has the canister.
         let canister_path = state_manager
             .state_layout()
-            .checkpoint(height(1))
+            .checkpoint_verified(height(1))
             .unwrap()
             .canister(&canister_test_id(100))
             .unwrap()
@@ -6219,7 +6219,7 @@ fn can_create_and_delete_canister_snapshot() {
         // Check the checkpoint has the snapshot.
         let snapshot_path = state_manager
             .state_layout()
-            .checkpoint(height(1))
+            .checkpoint_verified(height(1))
             .unwrap()
             .snapshot(&snapshot_id)
             .unwrap()
@@ -6233,7 +6233,7 @@ fn can_create_and_delete_canister_snapshot() {
         // Check the next checkpoint still has the snapshot.
         let snapshot_path = state_manager
             .state_layout()
-            .checkpoint(height(2))
+            .checkpoint_verified(height(2))
             .unwrap()
             .snapshot(&snapshot_id)
             .unwrap()
@@ -6249,7 +6249,7 @@ fn can_create_and_delete_canister_snapshot() {
         // Check the next checkpoint does not contain the snapshot anymore
         let snapshot_path = state_manager
             .state_layout()
-            .checkpoint(height(3))
+            .checkpoint_verified(height(3))
             .unwrap()
             .snapshot(&snapshot_id)
             .unwrap()
