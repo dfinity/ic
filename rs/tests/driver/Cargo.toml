@@ -58,7 +58,6 @@ ic-nns-init = { path = "../../nns/init" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-nns-constants = { path = "../../nns/constants" }
-ic-nns-governance = { path = "../../nns/governance" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-nns-gtc = { path = "../../nns/gtc" }
 ic-nns-handler-root = { path = "../../nns/handlers/root/impl" }
