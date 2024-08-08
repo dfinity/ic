@@ -87,6 +87,7 @@ jobs:
           if-no-files-found: error
           path: |
             bazel-targets
+            bazel-bep.pb.zst
   bazel-build-all-config-check:
     runs-on:
       labels: dind-large
