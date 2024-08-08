@@ -14,13 +14,13 @@ use crate::logs::{PrintProxySink, DEBUG, INFO, TRACE_HTTP};
 use crate::numeric::{BlockNumber, GasAmount, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::State;
 use candid::Nat;
-use evm_rpc_client::types::candid::RpcConfig;
 use evm_rpc_client::{
     types::candid::{
         Block as EvmBlock, BlockTag as EvmBlockTag, FeeHistory as EvmFeeHistory,
         FeeHistoryArgs as EvmFeeHistoryArgs, GetLogsArgs as EvmGetLogsArgs,
         GetTransactionCountArgs as EvmGetTransactionCountArgs, LogEntry as EvmLogEntry,
-        MultiRpcResult as EvmMultiRpcResult, RpcError as EvmRpcError, RpcResult as EvmRpcResult,
+        MultiRpcResult as EvmMultiRpcResult, RpcConfig as EvmRpcConfig, RpcError as EvmRpcError,
+        RpcResult as EvmRpcResult, SendRawTransactionStatus as EvmSendRawTransactionStatus,
         TransactionReceipt as EvmTransactionReceipt,
     },
     EvmRpcClient, IcRuntime, OverrideRpcConfig,
@@ -30,6 +30,7 @@ use ic_ethereum_types::Address;
 use num_traits::ToPrimitive;
 use serde::{de::DeserializeOwned, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use std::convert::Infallible;
 use std::fmt::{Debug, Display};
 use std::str::FromStr;
 
@@ -72,7 +73,7 @@ impl EthRpcClient {
                     .with_evm_canister_id(evm_rpc_id)
                     .with_min_attached_cycles(MIN_ATTACHED_CYCLES)
                     .with_override_rpc_config(OverrideRpcConfig {
-                        eth_get_logs: Some(RpcConfig {
+                        eth_get_logs: Some(EvmRpcConfig {
                             response_size_estimate: Some(
                                 ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE + HEADER_SIZE_LIMIT,
                             ),
@@ -102,12 +103,12 @@ impl EthRpcClient {
         method: impl Into<String> + Clone,
         params: I,
         response_size_estimate: ResponseSizeEstimate,
-    ) -> HttpOutcallResult<JsonRpcResult<O>>
+    ) -> MultiCallResults<O>
     where
         I: Serialize + Clone,
         O: DeserializeOwned + HttpResponsePayload + Debug,
     {
-        let mut last_result: Option<HttpOutcallResult<JsonRpcResult<O>>> = None;
+        let mut results: MultiCallResults<O> = MultiCallResults::new();
         for provider in self.providers() {
             log!(
                 DEBUG,
@@ -121,22 +122,21 @@ impl EthRpcClient {
                 response_size_estimate,
             )
             .await;
-            match result {
-                Ok(JsonRpcResult::Result(value)) => return Ok(JsonRpcResult::Result(value)),
-                Ok(json_rpc_error @ JsonRpcResult::Error { .. }) => {
-                    log!(
-                        INFO,
-                        "Provider {provider:?} returned JSON-RPC error {json_rpc_error:?}",
-                    );
-                    last_result = Some(Ok(json_rpc_error));
+            //TODO XC-163: change eth_rpc::call to directly return a
+            // Result<O, SingleCallError>
+            let result: Result<O, SingleCallError> = match result {
+                Ok(JsonRpcResult::Result(value)) => Ok(value),
+                Ok(JsonRpcResult::Error { code, message }) => {
+                    Err(SingleCallError::JsonRpcError { code, message })
                 }
-                Err(e) => {
-                    log!(INFO, "Querying provider {provider:?} returned error {e:?}");
-                    last_result = Some(Err(e));
-                }
+                Err(error) => Err(SingleCallError::HttpOutcallError(error)),
             };
+            results.insert_once(provider.clone(), result);
+            if results.has_ok_results() {
+                return results;
+            }
         }
-        last_result.unwrap_or_else(|| panic!("BUG: No providers in RPC client {:?}", self))
+        results
     }
 
     /// Query all providers in parallel and return all results.
@@ -276,15 +276,24 @@ impl EthRpcClient {
     pub async fn eth_send_raw_transaction(
         &self,
         raw_signed_transaction_hex: String,
-    ) -> HttpOutcallResult<JsonRpcResult<SendRawTransactionResult>> {
+    ) -> Result<SendRawTransactionResult, MultiCallError<SendRawTransactionResult>> {
+        if let Some(evm_rpc_client) = &self.evm_rpc_client {
+            return evm_rpc_client
+                .eth_send_raw_transaction(raw_signed_transaction_hex)
+                .await
+                .reduce()
+                .into();
+        }
         // A successful reply is under 256 bytes, but we expect most calls to end with an error
         // since we submit the same transaction from multiple nodes.
-        self.sequential_call_until_ok(
-            "eth_sendRawTransaction",
-            vec![raw_signed_transaction_hex],
-            ResponseSizeEstimate::new(256),
-        )
-        .await
+        let results: MultiCallResults<SendRawTransactionResult> = self
+            .sequential_call_until_ok(
+                "eth_sendRawTransaction",
+                vec![raw_signed_transaction_hex],
+                ResponseSizeEstimate::new(256),
+            )
+            .await;
+        results.reduce().into()
     }
 
     pub async fn eth_get_finalized_transaction_count(
@@ -399,6 +408,10 @@ impl<T> MultiCallResults<T> {
         }
     }
 
+    fn has_ok_results(&self) -> bool {
+        !self.ok_results.is_empty()
+    }
+
     fn from_non_empty_iter<
         I: IntoIterator<Item = (RpcNodeProvider, HttpOutcallResult<JsonRpcResult<T>>)>,
     >(
@@ -460,6 +473,13 @@ impl<T: PartialEq> MultiCallResults<T> {
             0 => Err(self.expect_error()),
             1 => Err(MultiCallError::InconsistentResults(self)),
             _ => Ok(self.ok_results),
+        }
+    }
+
+    fn at_least_one_ok(self) -> Result<(RpcNodeProvider, T), MultiCallError<T>> {
+        match self.ok_results.len() {
+            0 => Err(self.expect_error()),
+            _ => Ok(self.ok_results.into_iter().next().unwrap()),
         }
     }
 
@@ -763,6 +783,40 @@ impl Reduce for MultiCallResults<Option<TransactionReceipt>> {
 
     fn reduce(self) -> ReducedResult<Self::Item> {
         self.reduce_with_equality().into()
+    }
+}
+
+impl Reduce for EvmMultiRpcResult<EvmSendRawTransactionStatus> {
+    type Item = SendRawTransactionResult;
+
+    fn reduce(self) -> ReducedResult<Self::Item> {
+        ReducedResult::from_internal(self).map_reduce(
+            &|tx_status| {
+                Ok::<SendRawTransactionResult, Infallible>(match tx_status {
+                    EvmSendRawTransactionStatus::Ok(_) => SendRawTransactionResult::Ok,
+                    EvmSendRawTransactionStatus::InsufficientFunds => {
+                        SendRawTransactionResult::InsufficientFunds
+                    }
+                    EvmSendRawTransactionStatus::NonceTooLow => {
+                        SendRawTransactionResult::NonceTooLow
+                    }
+                    EvmSendRawTransactionStatus::NonceTooHigh => {
+                        SendRawTransactionResult::NonceTooHigh
+                    }
+                })
+            },
+            |results| results.at_least_one_ok().map(|(_provider, result)| result),
+        )
+    }
+}
+
+impl Reduce for MultiCallResults<SendRawTransactionResult> {
+    type Item = SendRawTransactionResult;
+
+    fn reduce(self) -> ReducedResult<Self::Item> {
+        self.at_least_one_ok()
+            .map(|(_provider, result)| result)
+            .into()
     }
 }
 
