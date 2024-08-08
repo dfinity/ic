@@ -3,7 +3,6 @@ type BlockIndex = nat64;
 type log_visibility = variant {
   controllers;
   public;
-  allowed_viewers : vec principal;
 };
 type CanisterSettings = record {
   controllers : opt vec principal;

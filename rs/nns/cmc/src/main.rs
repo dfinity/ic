@@ -18,7 +18,7 @@ use ic_crypto_tree_hash::{
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::CheckedSub;
 use ic_management_canister_types::{
-    BoundedVec, CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
+    BoundedVec, CanisterIdRecord, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
     CreateCanisterArgs, Method, IC_00,
 };
 use ic_nervous_system_common::NNS_DAPP_BACKEND_CANISTER_ID;
@@ -2186,7 +2186,7 @@ async fn do_create_canister(
             &Method::CreateCanister.to_string(),
             dfn_candid::candid_one,
             CreateCanisterArgs {
-                settings: Some(canister_settings.clone()),
+                settings: Some(Ic00CanisterSettingsArgs::from(canister_settings.clone())),
                 sender_canister_version: Some(dfn_core::api::canister_version()),
             },
             dfn_core::api::Funds::new(cycles.get().try_into().unwrap()),

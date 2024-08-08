@@ -1,5 +1,7 @@
 use candid::{CandidType, Nat};
-use ic_management_canister_types::CanisterSettingsArgs;
+use ic_management_canister_types::{
+    BoundedControllers, CanisterSettingsArgs as Ic00CanisterSettingsArgs, LogVisibilityV2,
+};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ic_xrc_types::ExchangeRate;
@@ -62,6 +64,184 @@ pub struct CyclesCanisterInitPayload {
 pub struct NotifyTopUp {
     pub block_index: BlockIndex,
     pub canister_id: CanisterId,
+}
+
+#[derive(Default)]
+pub struct CanisterSettingsArgsBuilder {
+    controllers: Option<Vec<PrincipalId>>,
+    compute_allocation: Option<candid::Nat>,
+    memory_allocation: Option<candid::Nat>,
+    freezing_threshold: Option<candid::Nat>,
+    reserved_cycles_limit: Option<candid::Nat>,
+    log_visibility: Option<LogVisibility>,
+    wasm_memory_limit: Option<candid::Nat>,
+    wasm_memory_threshold: Option<candid::Nat>,
+}
+
+#[allow(dead_code)]
+impl CanisterSettingsArgsBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn build(self) -> CanisterSettingsArgs {
+        CanisterSettingsArgs {
+            controllers: self.controllers.map(BoundedControllers::new),
+            compute_allocation: self.compute_allocation,
+            memory_allocation: self.memory_allocation,
+            freezing_threshold: self.freezing_threshold,
+            reserved_cycles_limit: self.reserved_cycles_limit,
+            log_visibility: self.log_visibility,
+            wasm_memory_limit: self.wasm_memory_limit,
+            wasm_memory_threshold: self.wasm_memory_threshold,
+        }
+    }
+
+    pub fn with_controllers(self, controllers: Vec<PrincipalId>) -> Self {
+        Self {
+            controllers: Some(controllers),
+            ..self
+        }
+    }
+
+    /// Sets the compute allocation in percent. For more details see
+    /// the description of this field in the IC specification.
+    pub fn with_compute_allocation(self, compute_allocation: u64) -> Self {
+        Self {
+            compute_allocation: Some(candid::Nat::from(compute_allocation)),
+            ..self
+        }
+    }
+
+    /// Optionally sets the compute allocation in percent.
+    pub fn with_maybe_compute_allocation(self, compute_allocation: Option<u64>) -> Self {
+        match compute_allocation {
+            Some(compute_allocation) => self.with_compute_allocation(compute_allocation),
+            None => self,
+        }
+    }
+
+    /// Sets the memory allocation in bytes. For more details see
+    /// the description of this field in the IC specification.
+    pub fn with_memory_allocation(self, memory_allocation: u64) -> Self {
+        Self {
+            memory_allocation: Some(candid::Nat::from(memory_allocation)),
+            ..self
+        }
+    }
+
+    /// Optionally sets the memory allocation in percent.
+    pub fn with_maybe_memory_allocation(self, memory_allocation: Option<u64>) -> Self {
+        match memory_allocation {
+            Some(memory_allocation) => self.with_memory_allocation(memory_allocation),
+            None => self,
+        }
+    }
+
+    /// Sets the freezing threshold in seconds. For more details see
+    /// the description of this field in the IC specification.
+    pub fn with_freezing_threshold(self, freezing_threshold: u64) -> Self {
+        Self {
+            freezing_threshold: Some(candid::Nat::from(freezing_threshold)),
+            ..self
+        }
+    }
+
+    /// Sets the reserved cycles limit in cycles.
+    pub fn with_reserved_cycles_limit(self, reserved_cycles_limit: u128) -> Self {
+        Self {
+            reserved_cycles_limit: Some(candid::Nat::from(reserved_cycles_limit)),
+            ..self
+        }
+    }
+
+    /// Sets the log visibility.
+    pub fn with_log_visibility(self, log_visibility: LogVisibility) -> Self {
+        Self {
+            log_visibility: Some(log_visibility),
+            ..self
+        }
+    }
+
+    /// Sets the Wasm memory limit.
+    pub fn with_wasm_memory_limit(self, wasm_memory_limit: u64) -> Self {
+        Self {
+            wasm_memory_limit: Some(candid::Nat::from(wasm_memory_limit)),
+            ..self
+        }
+    }
+
+    /// Sets the Wasm memory threshold in bytes.
+    pub fn with_wasm_memory_threshold(self, wasm_memory_threshold: u64) -> Self {
+        Self {
+            wasm_memory_threshold: Some(candid::Nat::from(wasm_memory_threshold)),
+            ..self
+        }
+    }
+}
+
+// TODO(EXC-1670): remove after migration to `LogVisibilityV2`.
+/// Log visibility for a canister.
+/// ```text
+/// variant {
+///    controllers;
+///    public;
+/// }
+/// ```
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
+pub enum LogVisibility {
+    #[default]
+    #[serde(rename = "controllers")]
+    Controllers = 1,
+    #[serde(rename = "public")]
+    Public = 2,
+}
+
+impl From<LogVisibility> for LogVisibilityV2 {
+    fn from(log_visibility: LogVisibility) -> Self {
+        match log_visibility {
+            LogVisibility::Controllers => LogVisibilityV2::Controllers,
+            LogVisibility::Public => LogVisibilityV2::Public,
+        }
+    }
+}
+
+/// Struct used for encoding/decoding
+/// `(record {
+///     controllers: opt vec principal;
+///     compute_allocation: opt nat;
+///     memory_allocation: opt nat;
+///     freezing_threshold: opt nat;
+///     reserved_cycles_limit: opt nat;
+///     log_visibility : opt log_visibility;
+///     wasm_memory_limit: opt nat;
+///     wasm_memory_threshold: opt nat;
+/// })`
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
+pub struct CanisterSettingsArgs {
+    pub controllers: Option<BoundedControllers>,
+    pub compute_allocation: Option<candid::Nat>,
+    pub memory_allocation: Option<candid::Nat>,
+    pub freezing_threshold: Option<candid::Nat>,
+    pub reserved_cycles_limit: Option<candid::Nat>,
+    pub log_visibility: Option<LogVisibility>,
+    pub wasm_memory_limit: Option<candid::Nat>,
+    pub wasm_memory_threshold: Option<candid::Nat>,
+}
+
+impl From<CanisterSettingsArgs> for Ic00CanisterSettingsArgs {
+    fn from(settings: CanisterSettingsArgs) -> Self {
+        Ic00CanisterSettingsArgs {
+            controllers: settings.controllers,
+            compute_allocation: settings.compute_allocation,
+            memory_allocation: settings.memory_allocation,
+            freezing_threshold: settings.freezing_threshold,
+            reserved_cycles_limit: settings.reserved_cycles_limit,
+            log_visibility: settings.log_visibility.map(LogVisibilityV2::from),
+            wasm_memory_limit: settings.wasm_memory_limit,
+            wasm_memory_threshold: settings.wasm_memory_threshold,
+        }
+    }
 }
 
 /// Argument taken by create canister notification endpoint
