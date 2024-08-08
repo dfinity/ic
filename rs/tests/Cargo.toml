@@ -304,16 +304,16 @@ name = "test-driver-e2e-scenarios"
 path = "testing_verification/test_driver_e2e_scenarios.rs"
 
 [[bin]]
-name = "ic-systest-boundary-node-intgrtn"
-path = "boundary_nodes/boundary_node_intgrtn_test.rs"
+name = "ic-systest-bn-integration"
+path = "boundary_nodes/bn_integration_test.rs"
 
 [[bin]]
-name = "ic-systest-boundary-node-intgrtn-on-playnet"
-path = "boundary_nodes/boundary_node_intgrtn_on_playnet_test.rs"
+name = "ic-systest-bn-integration-on-playnet"
+path = "boundary_nodes/bn_integration_on_playnet_test.rs"
 
 [[bin]]
-name = "ic-systest-boundary-node-update-workload-test"
-path = "boundary_nodes/boundary_node_update_workload_test.rs"
+name = "ic-systest-bn-update-workload-test"
+path = "boundary_nodes/bn_update_workload_test.rs"
 
 [[bin]]
 name = "ic-systest-custom-domains-integration"
@@ -492,16 +492,16 @@ name = "ic-systest-single-app-large-node-with-nns"
 path = "testing_verification/testnets/single_app_large_node_with_nns.rs"
 
 [[bin]]
-name = "ic-systest-boundary-node-performance"
-path = "boundary_nodes/boundary_node_performance_test.rs"
+name = "ic-systest-bn-performance"
+path = "boundary_nodes/bn_performance_test.rs"
 
 [[bin]]
-name = "ic-systest-api-boundary-node-decentralization"
-path = "boundary_nodes/api_boundary_node_decentralization_test.rs"
+name = "ic-systest-api-bn-decentralization"
+path = "boundary_nodes/api_bn_decentralization_test.rs"
 
 [[bin]]
-name = "ic-systest-mainnet-boundary-node-performance"
-path = "boundary_nodes/mainnet_boundary_node_performance_test.rs"
+name = "ic-systest-mainnet-bn-performance"
+path = "boundary_nodes/mainnet_bn_performance_test.rs"
 
 [[bin]]
 name = "ic-systest-ipv4-integration"
