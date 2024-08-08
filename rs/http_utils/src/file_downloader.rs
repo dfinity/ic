@@ -595,4 +595,23 @@ mod tests {
         let contents = std::fs::read_to_string(extracted_file).unwrap();
         assert_eq!(contents, "Hello, world!");
     }
+
+    #[test]
+    async fn test_extract_tar_into_dir_unsupported_file_format() {
+        let temp_dir = tempdir().unwrap();
+        let tar_path = temp_dir.path().join("test.unsupported");
+        let extract_dir = temp_dir.path().join("extract");
+
+        let mut file = File::create(&tar_path).unwrap();
+        file.write_all(b"unsupported content").unwrap();
+
+        let result = extract_tar_into_dir(&tar_path, &extract_dir);
+
+        match result {
+            Err(FileDownloadError::IoError(message, _)) => {
+                assert_eq!(message, format!("Failed to unpack tar file: {:?}", tar_path));
+            }
+            _ => panic!("Expected FileDownloadError::IoError"),
+        }
+    }
 }
