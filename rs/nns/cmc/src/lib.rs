@@ -201,8 +201,18 @@ pub enum LogVisibility {
 impl From<LogVisibility> for LogVisibilityV2 {
     fn from(log_visibility: LogVisibility) -> Self {
         match log_visibility {
-            LogVisibility::Controllers => LogVisibilityV2::Controllers,
-            LogVisibility::Public => LogVisibilityV2::Public,
+            LogVisibility::Controllers => Self::Controllers,
+            LogVisibility::Public => Self::Public,
+        }
+    }
+}
+
+impl From<LogVisibilityV2> for LogVisibility {
+    fn from(log_visibility: LogVisibilityV2) -> Self {
+        match log_visibility {
+            LogVisibilityV2::Controllers => Self::Controllers,
+            LogVisibilityV2::Public => Self::Public,
+            LogVisibilityV2::AllowedViewers(_) => Self::default(),
         }
     }
 }
@@ -239,6 +249,21 @@ impl From<CanisterSettingsArgs> for Ic00CanisterSettingsArgs {
             freezing_threshold: settings.freezing_threshold,
             reserved_cycles_limit: settings.reserved_cycles_limit,
             log_visibility: settings.log_visibility.map(LogVisibilityV2::from),
+            wasm_memory_limit: settings.wasm_memory_limit,
+            wasm_memory_threshold: settings.wasm_memory_threshold,
+        }
+    }
+}
+
+impl From<Ic00CanisterSettingsArgs> for CanisterSettingsArgs {
+    fn from(settings: Ic00CanisterSettingsArgs) -> Self {
+        CanisterSettingsArgs {
+            controllers: settings.controllers,
+            compute_allocation: settings.compute_allocation,
+            memory_allocation: settings.memory_allocation,
+            freezing_threshold: settings.freezing_threshold,
+            reserved_cycles_limit: settings.reserved_cycles_limit,
+            log_visibility: settings.log_visibility.map(LogVisibility::from),
             wasm_memory_limit: settings.wasm_memory_limit,
             wasm_memory_threshold: settings.wasm_memory_threshold,
         }
