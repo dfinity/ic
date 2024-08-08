@@ -105,7 +105,6 @@ mod tests {
     #[derive(ValidateEq)]
     struct A {
         a: u64,
-
         #[allow(dead_code)]
         #[validate_eq(Skip)]
         b: u64,
@@ -177,7 +176,7 @@ mod tests {
     }
 
     #[test]
-    fn test_derive_template() {
+    fn test_derive_generic() {
         // Should compile.
         #[derive(ValidateEq)]
         #[allow(dead_code)]

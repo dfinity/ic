@@ -8,9 +8,8 @@ use syn::Data::Struct;
 ///   - Recursive calls .validate_eq() and returns path + its error in case of divergence
 ///   - Skip ignores the field.
 ///   - None (default) compares fields using PartialEq and reports their name in case of
-///   divergence.
+///     divergence.
 
-#[derive(Debug, PartialEq)]
 enum ValidateEqFieldAttr {
     /// Compare using .eq() and return field name if diverges.
     PartialEq,
@@ -21,7 +20,7 @@ enum ValidateEqFieldAttr {
     Skip,
 }
 
-// Find #[validate_eq(...)] attribute
+// Find #[validate_eq(...)] attribute if any.
 fn find_validate_eq_attr(field: &syn::Field) -> syn::Result<Option<&syn::Attribute>> {
     let matching_attrs = field
         .attrs
@@ -30,7 +29,7 @@ fn find_validate_eq_attr(field: &syn::Field) -> syn::Result<Option<&syn::Attribu
         .collect::<Vec<_>>();
     if matching_attrs.len() == 1 {
         Ok(Some(matching_attrs[0]))
-    } else if matching_attrs.len() == 0 {
+    } else if matching_attrs.is_empty() {
         Ok(None)
     } else {
         Err(syn::Error::new_spanned(
@@ -86,9 +85,9 @@ pub fn derive_validate_eq_impl(item: TokenStream) -> TokenStream {
                 Ok(ValidateEqFieldAttr::PartialEq) => {
                     impl_body.extend(quote! {
                         // This block of magic breaks if the type of the field implements
-                        // ValidateEq, yet we requested ParitalEq.
-                        // This is taken from static_assertions packages (assert_not_impl_any), it's not easy to call
-                        // external crates in auto derived code.
+                        // ValidateEq, yet we requested ParitalEq. This is taken from static_assertions
+                        // packages (assert_not_impl_any), it's not easy to call external crates in
+                        // auto derived code.
                         const _: fn() = || {
                             // Generic trait with a blanket impl over `()` for all types.
                             trait AmbiguousIfImpl<A> {
