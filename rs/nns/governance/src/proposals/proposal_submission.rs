@@ -3,8 +3,8 @@
 use candid::{CandidType, Decode, Encode};
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_governance_api::pb::v1::{
-    manage_neuron::Command, manage_neuron_response::Command as CommandResponse, proposal,
-    ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal,
+    manage_neuron::Command, manage_neuron_response::Command as CommandResponse, ExecuteNnsFunction,
+    ManageNeuron, ManageNeuronResponse, NewProposal, NewProposalAction, NnsFunction, Proposal,
 };
 
 /// Simplified the process of creating an ExternalUpdate proposal.
@@ -14,7 +14,7 @@ pub fn create_external_update_proposal_candid<T: CandidType>(
     url: &str,
     nns_function: NnsFunction,
     payload: T,
-) -> Proposal {
+) -> NewProposal {
     create_external_update_proposal_binary(
         title,
         summary,
@@ -30,12 +30,12 @@ pub fn create_external_update_proposal_binary(
     url: &str,
     nns_function: NnsFunction,
     payload: Vec<u8>,
-) -> Proposal {
-    Proposal {
+) -> NewProposal {
+    NewProposal {
         title: Some(title.to_string()),
         summary: summary.to_string(),
         url: url.to_string(),
-        action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
+        action: Some(NewProposalAction::ExecuteNnsFunction(ExecuteNnsFunction {
             nns_function: nns_function as i32,
             payload,
         })),
