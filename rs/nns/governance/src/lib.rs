@@ -131,8 +131,10 @@ use crate::{
     },
 };
 use candid::DecoderConfig;
+use ic_nervous_system_temporary::Temporary;
 use mockall::automock;
 use std::{
+    cell::RefCell,
     collections::{BTreeMap, HashMap},
     io,
 };
@@ -171,6 +173,36 @@ mod subaccount_index;
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
 /// The value of 10_000 follows the Candid recommendation.
 const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
+
+// TODO(NNS1-3248): Delete this once the feature has made it through the
+// probation period. At that point, we will not need this "kill switch". We can
+// leave this here indefinitely, but it will just be clutter after a modest
+// amount of time.
+thread_local! {
+    // TODO(NNS1-3247): To release the feature, set this to true. Do not simply
+    // delete. That way, if we need to recall the feature, we can do that via a
+    // 1-line change (by replacing true with `cfg!(feature = "test")`). After
+    // the feature has been released, it will go through its "probation" period.
+    // If that goes well, then, this can be deleted.
+    static IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED: RefCell<bool> = const { RefCell::new(cfg!(feature = "test")) };
+}
+
+pub fn is_private_neuron_enforcement_enabled() -> bool {
+    IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED.with(|ok| {
+        let ok = ok.borrow();
+        *ok
+    })
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_enable_private_neuron_enforcement() -> Temporary {
+    Temporary::new(&IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED, true)
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_disable_private_neuron_enforcement() -> Temporary {
+    Temporary::new(&IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED, false)
+}
 
 pub fn decoder_config() -> DecoderConfig {
     let mut config = DecoderConfig::new();

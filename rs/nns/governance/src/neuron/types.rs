@@ -3,6 +3,7 @@ use crate::{
         LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
         MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
     },
+    is_private_neuron_enforcement_enabled,
     neuron::{combine_aged_stakes, dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s},
     neuron_store::NeuronStoreError,
     pb::v1::{
@@ -707,18 +708,27 @@ impl Neuron {
     }
 
     /// Get the 'public' information associated with this neuron.
-    pub fn get_neuron_info(&self, now_seconds: u64) -> NeuronInfo {
-        // TODO(NNS1-3076): Enforce visibility.
+    pub fn get_neuron_info(&self, now_seconds: u64, requester: PrincipalId) -> NeuronInfo {
+        let mut recent_ballots = vec![];
+        let mut joined_community_fund_timestamp_seconds = None;
+
+        let redact =
+            is_private_neuron_enforcement_enabled() && !self.is_hotkey_or_controller(&requester);
+        if !redact {
+            recent_ballots.append(&mut self.recent_ballots.clone());
+            joined_community_fund_timestamp_seconds = self.joined_community_fund_timestamp_seconds;
+        }
+
         NeuronInfo {
             retrieved_at_timestamp_seconds: now_seconds,
             state: self.state(now_seconds) as i32,
             age_seconds: self.age_seconds(now_seconds),
             dissolve_delay_seconds: self.dissolve_delay_seconds(now_seconds),
-            recent_ballots: self.recent_ballots.clone(),
+            recent_ballots,
             voting_power: self.voting_power(now_seconds),
             created_timestamp_seconds: self.created_timestamp_seconds,
             stake_e8s: self.minted_stake_e8s(),
-            joined_community_fund_timestamp_seconds: self.joined_community_fund_timestamp_seconds,
+            joined_community_fund_timestamp_seconds,
             known_neuron_data: self.known_neuron_data.clone(),
             neuron_type: self.neuron_type,
             visibility: self.visibility.map(|visibility| visibility as i32),

@@ -9624,6 +9624,7 @@ dependencies = [
  "ic-nervous-system-proto",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
+ "ic-nervous-system-temporary",
  "ic-neurons-fund",
  "ic-nns-common",
  "ic-nns-constants",
