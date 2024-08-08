@@ -266,10 +266,10 @@ type InitialTokenDistribution = record {
   swap_distribution : opt SwapDistribution;
 };
 type InstallCode = record {
-  arg : opt blob;
-  wasm_module : opt blob;
   skip_stopping_before_installing : opt bool;
+  wasm_module_hash : opt blob;
   canister_id : opt principal;
+  arg_hash : opt blob;
   install_mode : opt int32;
 };
 type KnownNeuron = record {
@@ -492,6 +492,56 @@ type NeuronsFundParticipation = record {
 };
 type NeuronsFundSnapshot = record {
   neurons_fund_neuron_portions : vec NeuronsFundNeuronPortion;
+};
+type NewInstallCode = record {
+  arg : opt blob;
+  wasm_module : opt blob;
+  skip_stopping_before_installing : opt bool;
+  canister_id : opt principal;
+  install_mode : opt int32;
+};
+type ManageNeuronInput = record {
+  id : opt NeuronId;
+  command : opt ManageNeuronCommandInput;
+  neuron_id_or_subaccount : opt NeuronIdOrSubaccount;
+};
+type ManageNeuronCommandInput = variant {
+  Spawn : Spawn;
+  Split : Split;
+  Follow : Follow;
+  ClaimOrRefresh : ClaimOrRefresh;
+  Configure : Configure;
+  RegisterVote : RegisterVote;
+  Merge : Merge;
+  DisburseToNeuron : DisburseToNeuron;
+  MakeProposal : ProposalInput;
+  StakeMaturity : StakeMaturity;
+  MergeMaturity : MergeMaturity;
+  Disburse : Disburse;
+};
+type ProposalInput = record {
+  url : text;
+  title : opt text;
+  action : opt ProposalActionInput;
+  summary : text;
+};
+type ProposalActionInput = variant {
+  RegisterKnownNeuron : KnownNeuron;
+  ManageNeuron : ManageNeuronInput;
+  UpdateCanisterSettings : UpdateCanisterSettings;
+  InstallCode : NewInstallCode;
+  StopOrStartCanister : StopOrStartCanister;
+  CreateServiceNervousSystem : CreateServiceNervousSystem;
+  ExecuteNnsFunction : ExecuteNnsFunction;
+  RewardNodeProvider : RewardNodeProvider;
+  OpenSnsTokenSwap : OpenSnsTokenSwap;
+  SetSnsTokenSwapOpenTimeWindow : SetSnsTokenSwapOpenTimeWindow;
+  SetDefaultFollowees : SetDefaultFollowees;
+  RewardNodeProviders : RewardNodeProviders;
+  ManageNetworkEconomics : NetworkEconomics;
+  ApproveGenesisKyc : Principals;
+  AddOrRemoveNodeProvider : AddOrRemoveNodeProvider;
+  Motion : Motion;
 };
 type NodeProvider = record {
   id : opt principal;
@@ -751,14 +801,14 @@ service : (Governance) -> {
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;
   list_node_providers : () -> (ListNodeProvidersResponse) query;
   list_proposals : (ListProposalInfo) -> (ListProposalInfoResponse) query;
-  manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
+  manage_neuron : (ManageNeuronInput) -> (ManageNeuronResponse);
   settle_community_fund_participation : (SettleCommunityFundParticipation) -> (
       Result,
     );
   settle_neurons_fund_participation : (
       SettleNeuronsFundParticipationRequest,
     ) -> (SettleNeuronsFundParticipationResponse);
-  simulate_manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
+  simulate_manage_neuron : (ManageNeuronInput) -> (ManageNeuronResponse);
   transfer_gtc_neuron : (NeuronId, NeuronId) -> (Result);
   update_node_provider : (UpdateNodeProvider) -> (Result);
 }

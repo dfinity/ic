@@ -1186,6 +1186,107 @@ pub mod manage_neuron_response {
         StakeMaturity(StakeMaturityResponse),
     }
 }
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[compare_default]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ProposalInput {
+    #[prost(string, optional, tag = "20")]
+    pub title: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, tag = "1")]
+    pub summary: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub url: ::prost::alloc::string::String,
+    #[prost(
+        oneof = "ProposalActionInput",
+        tags = "10, 12, 13, 14, 15, 16, 21, 24, 25, 26, 27"
+    )]
+    pub action: ::core::option::Option<ProposalActionInput>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Oneof)]
+pub enum ProposalActionInput {
+    #[prost(message, tag = "10")]
+    ManageNeuron(::prost::alloc::boxed::Box<ManageNeuronInput>),
+    #[prost(message, tag = "12")]
+    ManageNetworkEconomics(NetworkEconomics),
+    #[prost(message, tag = "13")]
+    Motion(Motion),
+    #[prost(message, tag = "14")]
+    ExecuteNnsFunction(ExecuteNnsFunction),
+    #[prost(message, tag = "15")]
+    ApproveGenesisKyc(ApproveGenesisKyc),
+    #[prost(message, tag = "16")]
+    AddOrRemoveNodeProvider(AddOrRemoveNodeProvider),
+    #[prost(message, tag = "17")]
+    RewardNodeProvider(RewardNodeProvider),
+    #[prost(message, tag = "18")]
+    SetDefaultFollowees(SetDefaultFollowees),
+    #[prost(message, tag = "19")]
+    RewardNodeProviders(RewardNodeProviders),
+    #[prost(message, tag = "21")]
+    RegisterKnownNeuron(KnownNeuron),
+    #[prost(message, tag = "22")]
+    SetSnsTokenSwapOpenTimeWindow(SetSnsTokenSwapOpenTimeWindow),
+    #[prost(message, tag = "23")]
+    OpenSnsTokenSwap(OpenSnsTokenSwap),
+    #[prost(message, tag = "24")]
+    CreateServiceNervousSystem(CreateServiceNervousSystem),
+    #[prost(message, tag = "25")]
+    InstallCode(InstallCodeInput),
+    #[prost(message, tag = "26")]
+    StopOrStartCanister(StopOrStartCanister),
+    #[prost(message, tag = "27")]
+    UpdateCanisterSettings(UpdateCanisterSettings),
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ManageNeuronInput {
+    #[prost(message, optional, tag = "1")]
+    pub id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
+    #[prost(oneof = "manage_neuron::NeuronIdOrSubaccount", tags = "11, 12")]
+    pub neuron_id_or_subaccount: ::core::option::Option<manage_neuron::NeuronIdOrSubaccount>,
+    #[prost(
+        oneof = "ManageNeuronCommandInput",
+        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15"
+    )]
+    pub command: ::core::option::Option<ManageNeuronCommandInput>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Oneof)]
+pub enum ManageNeuronCommandInput {
+    #[prost(message, tag = "2")]
+    Configure(manage_neuron::Configure),
+    #[prost(message, tag = "3")]
+    Disburse(manage_neuron::Disburse),
+    #[prost(message, tag = "4")]
+    Spawn(manage_neuron::Spawn),
+    #[prost(message, tag = "5")]
+    Follow(manage_neuron::Follow),
+    #[prost(message, tag = "6")]
+    MakeProposal(::prost::alloc::boxed::Box<ProposalInput>),
+    #[prost(message, tag = "7")]
+    RegisterVote(manage_neuron::RegisterVote),
+    #[prost(message, tag = "8")]
+    Split(manage_neuron::Split),
+    #[prost(message, tag = "9")]
+    DisburseToNeuron(manage_neuron::DisburseToNeuron),
+    #[prost(message, tag = "10")]
+    ClaimOrRefresh(manage_neuron::ClaimOrRefresh),
+    #[prost(message, tag = "13")]
+    MergeMaturity(manage_neuron::MergeMaturity),
+    #[prost(message, tag = "14")]
+    Merge(manage_neuron::Merge),
+    #[prost(message, tag = "15")]
+    StakeMaturity(manage_neuron::StakeMaturity),
+}
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[compare_default]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -2320,17 +2421,18 @@ pub struct InstallCode {
     /// The install mode. Either install, reinstall, or upgrade. Required.
     #[prost(enumeration = "install_code::CanisterInstallMode", optional, tag = "2")]
     pub install_mode: ::core::option::Option<i32>,
-    /// The wasm module to install. required.
-    #[prost(bytes = "vec", optional, tag = "3")]
-    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
-    pub wasm_module: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
-    /// The arg to pass to the canister. Optional.
-    #[prost(bytes = "vec", optional, tag = "4")]
-    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
-    pub arg: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+
     /// Whether to skip stopping the canister before installing. Optional. Default is false.
     #[prost(bool, optional, tag = "5")]
     pub skip_stopping_before_installing: ::core::option::Option<bool>,
+
+    #[prost(bytes = "vec", optional, tag = "6")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub wasm_module_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+
+    #[prost(bytes = "vec", optional, tag = "7")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub arg_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// Nested message and enum types in `InstallCode`.
 pub mod install_code {
@@ -2381,6 +2483,25 @@ pub mod install_code {
         }
     }
 }
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InstallCodeInput {
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(enumeration = "install_code::CanisterInstallMode", optional, tag = "2")]
+    pub install_mode: ::core::option::Option<i32>,
+    #[prost(bytes = "vec", optional, tag = "3")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub wasm_module: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bytes = "vec", optional, tag = "4")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub arg: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bool, optional, tag = "5")]
+    pub skip_stopping_before_installing: ::core::option::Option<bool>,
+}
+
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

@@ -1,6 +1,7 @@
 use crate::pb::v1::{
-    manage_neuron::Command, manage_neuron_response::Command as CommandResponse, proposal,
-    ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal,
+    manage_neuron_response::Command as CommandResponse, ExecuteNnsFunction,
+    ManageNeuronCommandInput, ManageNeuronInput, ManageNeuronResponse, NnsFunction,
+    ProposalActionInput, ProposalInput,
 };
 use candid::{CandidType, Decode, Encode};
 use ic_nns_common::types::{NeuronId, ProposalId};
@@ -12,7 +13,7 @@ pub fn create_external_update_proposal_candid<T: CandidType>(
     url: &str,
     nns_function: NnsFunction,
     payload: T,
-) -> Proposal {
+) -> ProposalInput {
     create_external_update_proposal_binary(
         title,
         summary,
@@ -28,28 +29,30 @@ pub fn create_external_update_proposal_binary(
     url: &str,
     nns_function: NnsFunction,
     payload: Vec<u8>,
-) -> Proposal {
-    Proposal {
+) -> ProposalInput {
+    ProposalInput {
         title: Some(title.to_string()),
         summary: summary.to_string(),
         url: url.to_string(),
-        action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: nns_function as i32,
-            payload,
-        })),
+        action: Some(ProposalActionInput::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: nns_function as i32,
+                payload,
+            },
+        )),
     }
 }
 
 /// Wraps the given proposal into a MakeProposal command, and wraps the command
 /// into a payload to call `manage_neuron`.
 pub fn create_make_proposal_payload(
-    proposal: Proposal,
+    proposal: ProposalInput,
     proposer_neuron_id: &NeuronId,
-) -> ManageNeuron {
-    ManageNeuron {
+) -> ManageNeuronInput {
+    ManageNeuronInput {
         id: Some((*proposer_neuron_id).into()),
         neuron_id_or_subaccount: None,
-        command: Some(Command::MakeProposal(Box::new(proposal))),
+        command: Some(ManageNeuronCommandInput::MakeProposal(Box::new(proposal))),
     }
 }
 
