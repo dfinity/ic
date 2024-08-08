@@ -25,7 +25,6 @@ use ic_types::{crypto::CryptoHash, CryptoHashOfState, Height};
 use maplit::btreemap;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
-use std::panic::AssertUnwindSafe;
 use std::path::PathBuf;
 use std::{fs, panic};
 use strum::IntoEnumIterator;

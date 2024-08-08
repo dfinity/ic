@@ -99,10 +99,6 @@ const CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS: &str = "state_sync_corrupted_c
 const CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS: &str =
     "state_sync_chunk_id_usage_nearing_limits";
 
-/// Critical error tracking that manifest computation accidentally includes the unverified checkpoint marker file.
-const MANIFEST_COMPUTATION_INCLUDING_MARKER_CRITICAL: &str =
-    "state_manager_manifest_computation_including_marker_critical";
-
 /// Critical error tracking broken soft invariants encountered upon checkpoint loading.
 /// See note [Replicated State Invariants].
 pub(crate) const CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN: &str =

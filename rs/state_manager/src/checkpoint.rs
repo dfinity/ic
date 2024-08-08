@@ -169,7 +169,7 @@ pub fn load_checkpoint_parallel_and_mark_verified(
     metrics: &CheckpointMetrics,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<ReplicatedState, CheckpointError> {
-    let state = load_checkpoint_parallel(&checkpoint_layout, own_subnet_type, metrics, fd_factory)?;
+    let state = load_checkpoint_parallel(checkpoint_layout, own_subnet_type, metrics, fd_factory)?;
     checkpoint_layout
         .remove_unverified_checkpoint_marker()
         .map_err(CheckpointError::from)?;
