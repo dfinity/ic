@@ -18,12 +18,13 @@ use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{PrincipalId, SubnetId};
 use indexmap::IndexMap;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::{
     convert::{From, TryFrom, TryInto},
     net::{Ipv4Addr, Ipv6Addr},
 };
+use strum_macros::EnumString;
 
 /// All or part of the registry
 #[derive(Default, Serialize)]
@@ -244,6 +245,14 @@ impl SubnetDescriptor {
             }
         }
     }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Eq, EnumString, Copy)]
+pub enum LogVisibility {
+    #[strum(serialize = "controllers")]
+    Controllers,
+    #[strum(serialize = "public")]
+    Public,
 }
 
 /// Trait to extract the payload for each proposal type.

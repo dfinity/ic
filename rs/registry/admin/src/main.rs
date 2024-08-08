@@ -57,9 +57,12 @@ use ic_nns_governance::{
         manage_neuron::Command,
         proposal::Action,
         stop_or_start_canister::CanisterAction as GovernanceCanisterAction,
+        update_canister_settings::{
+            CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
+        },
         AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, InstallCode,
         ManageNeuron, NnsFunction, NodeProvider, Proposal, RewardNodeProviders,
-        StopOrStartCanister,
+        StopOrStartCanister, UpdateCanisterSettings,
     },
     proposals::proposal_submission::{
         create_external_update_proposal_candid, create_make_proposal_payload,
@@ -165,8 +168,9 @@ use std::{
     time::SystemTime,
 };
 use types::{
-    NodeDetails, ProposalAction, ProposalMetadata, ProposalPayload, ProvisionalWhitelistRecord,
-    Registry, RegistryRecord, RegistryValue, SubnetDescriptor, SubnetRecord,
+    LogVisibility, NodeDetails, ProposalAction, ProposalMetadata, ProposalPayload,
+    ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SubnetDescriptor,
+    SubnetRecord,
 };
 use update_subnet::ProposeToUpdateSubnetCmd;
 use url::Url;
@@ -450,6 +454,8 @@ enum SubCommand {
     GetApiBoundaryNodes,
     /// Submits a proposal to express the interest in renting a subnet.
     ProposeToRentSubnet(ProposeToRentSubnetCmd),
+    /// Propose to update the settings of a canister.
+    ProposeToUpdateCanisterSettings(ProposeToUpdateCanisterSettingsCmd),
 }
 
 /// Indicates whether a value should be added or removed.
@@ -1251,6 +1257,88 @@ impl ProposalPayload<SubnetRentalRequest> for ProposeToRentSubnetCmd {
             user: self.user,
             rental_condition_id: self.rental_condition_id,
         }
+    }
+}
+
+/// Sub-command to submit a proposal to update the settings of a canister. When neigther
+/// `--controllers` nor `--remove-all-controllers` is provided, the controllers will not be updated.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToUpdateCanisterSettingsCmd {
+    #[clap(long, required = true)]
+    /// The ID of the target canister.
+    canister_id: CanisterId,
+
+    /// If set, it will update the canister's controllers to this value.
+    #[clap(long, multiple_values(true), group = "update_controllers")]
+    controllers: Option<Vec<PrincipalId>>,
+    /// If set, it will remove all controllers of the canister.
+    #[clap(long, group = "update_controllers")]
+    remove_all_controllers: bool,
+
+    #[clap(long)]
+    /// If set, it will update the canister's compute allocation to this value.
+    compute_allocation: Option<u64>,
+    #[clap(long)]
+    /// If set, it will update the canister's memory allocation to this value.
+    memory_allocation: Option<u64>,
+    #[clap(long)]
+    /// If set, it will update the canister's freezing threshold to this value.
+    freezing_threshold: Option<u64>,
+    #[clap(long)]
+    /// If set, it will update the canister's log wasm memory limit to this value.
+    wasm_memory_limit: Option<u64>,
+    #[clap(long)]
+    /// If set, it will update the canister's log visibility to this value.
+    log_visibility: Option<LogVisibility>,
+}
+
+impl ProposalTitle for ProposeToUpdateCanisterSettingsCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!("Update canister settings: {}", self.canister_id),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
+    async fn action(&self) -> Action {
+        let canister_id = Some(self.canister_id.get());
+
+        let controllers = if self.remove_all_controllers {
+            Some(Controllers {
+                controllers: vec![],
+            })
+        } else {
+            self.controllers
+                .clone()
+                .map(|controllers| Controllers { controllers })
+        };
+        let compute_allocation = self.compute_allocation;
+        let memory_allocation = self.memory_allocation;
+        let freezing_threshold = self.freezing_threshold;
+        let wasm_memory_limit = self.wasm_memory_limit;
+        let log_visibility = match self.log_visibility {
+            Some(LogVisibility::Controllers) => Some(GovernanceLogVisibility::Controllers as i32),
+            Some(LogVisibility::Public) => Some(GovernanceLogVisibility::Public as i32),
+            None => None,
+        };
+
+        let update_settings = UpdateCanisterSettings {
+            canister_id,
+            settings: Some(CanisterSettings {
+                controllers,
+                compute_allocation,
+                memory_allocation,
+                freezing_threshold,
+                wasm_memory_limit,
+                log_visibility,
+            }),
+        };
+
+        Action::UpdateCanisterSettings(update_settings)
     }
 }
 
@@ -3591,6 +3679,7 @@ async fn main() {
                 ProposeToCreateServiceNervousSystem instead"
             ),
             SubCommand::ProposeToRentSubnet(_) => (),
+            SubCommand::ProposeToUpdateCanisterSettings(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
@@ -4860,6 +4949,16 @@ async fn main() {
                 proposer,
             )
             .await;
+        }
+        SubCommand::ProposeToUpdateCanisterSettings(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            propose_action_from_command(cmd, canister_client, proposer).await;
         }
         // Since we're matching on the `SubCommand` type the second time, this match doesn't have
         // to be exhaustive, e.g., we've already verified that the subcommand is not obsolete.
