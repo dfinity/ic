@@ -115,3 +115,6 @@ require {
     type user_runtime_root_t;
 }
 allow node_exporter_t user_runtime_root_t:dir { search };
+
+# Allow node_exporter to create and use netlink route sockets
+allow node_exporter_t self:netlink_route_socket create_netlink_socket_perms;
