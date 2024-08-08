@@ -224,11 +224,12 @@ impl BitcoinPayloadBuilder {
             // maximum block size of the IC is also 4MiB. This makes it impossible to transport a
             // BTC block via an IC block, since including the metadata would make the block too
             // large. We therefore allow a response to be oversized, if it is the first response in
-            // the block AND the payload builder has the highest prioroty.
+            // the block.
             // Since we tolerate up to 2x the size margin currently, this will pass validation
             // but trigger a warning.
+            let first_response_in_block = current_payload_size == 0 && priority == 0;
             if response_size + current_payload_size > byte_limit.get()
-                && !(current_payload_size == 0 && priority == 0)
+                && !first_response_in_block
             {
                 // Stop if we're about to exceed the byte limit.
                 break;
