@@ -1,8 +1,8 @@
 [package]
-name = "proc-macros"
+name = "ic-validate-eq-derive"
 
 [lib]
-name = "proc-macros"
+name = "ic-validate-eq-derive"
 path = "src/lib.rs"
 proc-macro = true
 
