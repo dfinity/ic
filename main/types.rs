@@ -454,6 +454,19 @@ pub struct CodeDeploymentRecord {
     pub module_hash: Vec<u8>,
 }
 
+/// Details about loading canister snapshot.
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
+)]
+pub struct LoadSnapshotRecord {
+    /// The version of the canister at the time that the snapshot was taken
+    pub canister_version: u64,
+    /// The ID of the snapshot that was loaded.
+    pub snapshot_id: SnapshotId,
+    /// The timestamp at which the snapshot was taken.
+    pub taken_at_timestamp: u64,
+}
+
 /// Details about updating canister controllers.
 #[derive(
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
@@ -477,6 +490,9 @@ pub enum CanisterChangeDetails {
     /// See [CodeDeploymentRecord].
     #[serde(rename = "code_deployment")]
     CodeDeployment(CodeDeploymentRecord),
+    /// See [LoadSnapshotRecord].
+    #[serde(rename = "load_snapshot")]
+    LoadSnapshot(LoadSnapshotRecord),
     /// See [ControllersChangeRecord].
     #[serde(rename = "controllers_change")]
     ControllersChange(ControllersChangeRecord),
@@ -525,4 +541,57 @@ pub struct CanisterInfoResponse {
     pub module_hash: Option<Vec<u8>>,
     /// Controllers of the canister.
     pub controllers: Vec<Principal>,
+}
+
+/// ID of a canister snapshot.
+pub type SnapshotId = Vec<u8>;
+
+/// A snapshot of the state of the canister at a given point in time.
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Default,
+)]
+pub struct Snapshot {
+    /// ID of the snapshot.
+    pub id: SnapshotId,
+    /// The timestamp at which the snapshot was taken.
+    pub taken_at_timestamp: u64,
+    /// The size of the snapshot in bytes.
+    pub total_size: u64,
+}
+
+/// Argument type of [take_canister_snapshot](super::take_canister_snapshot).
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
+)]
+pub struct TakeCanisterSnapshotArgs {
+    /// Principal of the canister.
+    pub canister_id: CanisterId,
+    /// An optional snapshot ID to be replaced by the new snapshot.
+    ///
+    /// The snapshot identified by the specified ID will be deleted once a new snapshot has been successfully created.
+    pub replace_snapshot: Option<SnapshotId>,
+}
+
+/// Argument type of [load_canister_snapshot](super::load_canister_snapshot).
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
+)]
+pub struct LoadCanisterSnapshotArgs {
+    /// Principal of the canister.
+    pub canister_id: CanisterId,
+    /// ID of the snapshot to be loaded.
+    pub snapshot_id: SnapshotId,
+    /// sender_canister_version must be set to ic_cdk::api::canister_version().
+    pub sender_canister_version: Option<u64>,
+}
+
+/// Argument type of [delete_canister_snapshot](super::delete_canister_snapshot).
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
+)]
+pub struct DeleteCanisterSnapshotArgs {
+    /// Principal of the canister.
+    pub canister_id: CanisterId,
+    /// ID of the snapshot to be deleted.
+    pub snapshot_id: SnapshotId,
 }

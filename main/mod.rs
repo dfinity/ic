@@ -185,3 +185,57 @@ pub async fn raw_rand() -> CallResult<(Vec<u8>,)> {
 pub async fn canister_info(arg: CanisterInfoRequest) -> CallResult<(CanisterInfoResponse,)> {
     call(Principal::management_canister(), "canister_info", (arg,)).await
 }
+
+/// Take a snapshot of the specified canister.
+///
+/// A snapshot consists of the wasm memory, stable memory, certified variables, wasm chunk store and wasm binary.
+///
+/// See [IC method `take_canister_snapshot`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-take_canister_snapshot).
+pub async fn take_canister_snapshot(arg: TakeCanisterSnapshotArgs) -> CallResult<(Snapshot,)> {
+    call(
+        Principal::management_canister(),
+        "take_canister_snapshot",
+        (arg,),
+    )
+    .await
+}
+
+/// Load a snapshot onto the canister.
+///
+/// It fails if no snapshot with the specified `snapshot_id` can be found.
+///
+/// See [IC method `load_canister_snapshot`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-load_canister_snapshot).
+pub async fn load_canister_snapshot(arg: LoadCanisterSnapshotArgs) -> CallResult<()> {
+    call(
+        Principal::management_canister(),
+        "load_canister_snapshot",
+        (arg,),
+    )
+    .await
+}
+
+/// List the snapshots of the canister.
+///
+/// See [IC method `list_canister_snapshots`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-list_canister_snapshots).
+pub async fn list_canister_snapshots(arg: CanisterIdRecord) -> CallResult<(Vec<Snapshot>,)> {
+    call(
+        Principal::management_canister(),
+        "list_canister_snapshots",
+        (arg,),
+    )
+    .await
+}
+
+/// Delete a specified snapshot that belongs to an existing canister.
+///
+/// An error will be returned if the snapshot is not found.
+///
+/// See [IC method `delete_canister_snapshot`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-delete_canister_snapshot).
+pub async fn delete_canister_snapshot(arg: DeleteCanisterSnapshotArgs) -> CallResult<()> {
+    call(
+        Principal::management_canister(),
+        "delete_canister_snapshot",
+        (arg,),
+    )
+    .await
+}
