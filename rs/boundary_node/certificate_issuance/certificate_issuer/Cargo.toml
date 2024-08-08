@@ -19,6 +19,7 @@ clap = { workspace = true }
 cloudflare = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }
+http = { workspace = true }
 ic-agent = { workspace = true }
 ic-http-certification = { workspace = true }
 ic-response-verification = { workspace = true }
