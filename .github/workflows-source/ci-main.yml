@@ -123,8 +123,10 @@ jobs:
           name: ${{ github.job }}-bep
           retention-days: 180
           if-no-files-found: ignore
+          compression-level: 9
           path: |
-            bazel-bep.pb.zst
+            bazel-bep.pb
+            bazel-bep.json
 
   bazel-build-all-config-check:
     <<: *dind-large-setup
@@ -150,8 +152,10 @@ jobs:
           name: ${{ github.job }}-bep
           retention-days: 180
           if-no-files-found: ignore
+          compression-level: 9
           path: |
-            bazel-bep.pb.zst
+            bazel-bep.pb
+            bazel-bep.json
 
   bazel-test-darwin-x86-64:
     name: Bazel Test Darwin x86-64
@@ -198,8 +202,10 @@ jobs:
           name: ${{ github.job }}-bep
           retention-days: 180
           if-no-files-found: ignore
+          compression-level: 9
           path: |
-            bazel-bep.pb.zst
+            bazel-bep.pb
+            bazel-bep.json
       - name: Purge Bazel Output
         if: always()
         shell: bash
@@ -225,8 +231,10 @@ jobs:
           name: ${{ github.job }}-bep
           retention-days: 180
           if-no-files-found: ignore
+          compression-level: 9
           path: |
-            bazel-bep.pb.zst
+            bazel-bep.pb
+            bazel-bep.json
 
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
@@ -247,8 +255,10 @@ jobs:
           name: ${{ github.job }}-bep
           retention-days: 180
           if-no-files-found: ignore
+          compression-level: 9
           path: |
-            bazel-bep.pb.zst
+            bazel-bep.pb
+            bazel-bep.json
 
   python-ci-tests:
     name: Python CI Tests

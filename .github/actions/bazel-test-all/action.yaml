@@ -48,11 +48,6 @@ runs:
           ${GITHUB_WORKSPACE}/gitlab-ci/src/bazel-ci/main.sh
           BAZEL_EXIT_CODE="$?"
 
-          if [ -f ./bazel-bep.pb ]; then
-              # compress bazel-bep.pb for uploading it to github
-              zstd bazel-bep.pb -10
-          fi
-
           if [ -n "$HONEYCOMB_API_TOKEN" ] && [ -f ./bazel-bep.pb ]; then
               bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
           fi
