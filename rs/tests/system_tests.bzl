@@ -29,7 +29,7 @@ def _run_system_test(ctx):
               {k8s} \
               --group-base-name {group_base_name} \
               {no_summary_report} \
-              run
+              "$@" run
         """.format(
             test_executable = ctx.executable.src.short_path,
             k8s = "--k8s" if k8s else "",
