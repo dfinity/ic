@@ -2480,7 +2480,7 @@ pub fn icrc1_test_upgrade_serialization<T>(
         },
     ];
     let mut initial_balances = vec![];
-    let all_accounts = vec![accounts.clone(), additional_accounts.clone()].concat();
+    let all_accounts = [accounts.clone(), additional_accounts.clone()].concat();
     for (index, account) in all_accounts.iter().enumerate() {
         initial_balances.push((*account, 10_000_000u64 + index as u64));
     }
