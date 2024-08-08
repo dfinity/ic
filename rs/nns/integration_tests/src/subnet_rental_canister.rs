@@ -8,8 +8,7 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::pb::v1::{
     manage_neuron_response::{Command as CommandResponse, RegisterVoteResponse},
-    proposal::Action,
-    ExecuteNnsFunction, NnsFunction, Proposal, Vote,
+    ExecuteNnsFunction, NewProposal, NewProposalAction, NnsFunction, Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -246,11 +245,11 @@ fn subnet_rental_request_lifecycle() {
         user: renter,
         rental_condition_id: RentalConditionId::App13CH,
     };
-    let proposal = Proposal {
+    let proposal = NewProposal {
         title: Some("Create subnet rental request".to_string()),
         summary: "".to_string(),
         url: "".to_string(),
-        action: Some(Action::ExecuteNnsFunction(ExecuteNnsFunction {
+        action: Some(NewProposalAction::ExecuteNnsFunction(ExecuteNnsFunction {
             nns_function: NnsFunction::SubnetRentalRequest as i32,
             payload: Encode!(&subnet_rental_request).expect("Error encoding proposal payload"),
         })),
@@ -396,11 +395,11 @@ fn test_renting_a_subnet_without_paying_fails() {
         user: renter,
         rental_condition_id: RentalConditionId::App13CH,
     };
-    let proposal = Proposal {
+    let proposal = NewProposal {
         title: Some("Create subnet rental request".to_string()),
         summary: "".to_string(),
         url: "".to_string(),
-        action: Some(Action::ExecuteNnsFunction(ExecuteNnsFunction {
+        action: Some(NewProposalAction::ExecuteNnsFunction(ExecuteNnsFunction {
             nns_function: NnsFunction::SubnetRentalRequest as i32,
             payload: Encode!(&subnet_rental_request).expect("Error encoding proposal payload"),
         })),

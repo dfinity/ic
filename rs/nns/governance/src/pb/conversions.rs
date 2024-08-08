@@ -555,6 +555,16 @@ impl From<pb_api::Proposal> for pb::Proposal {
         }
     }
 }
+impl From<pb_api::NewProposal> for pb::Proposal {
+    fn from(item: pb_api::NewProposal) -> Self {
+        Self {
+            title: item.title,
+            summary: item.summary,
+            url: item.url,
+            action: item.action.map(|x| x.into()),
+        }
+    }
+}
 
 impl From<pb::proposal::Action> for pb_api::proposal::Action {
     fn from(item: pb::proposal::Action) -> Self {
@@ -656,6 +666,49 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
         }
     }
 }
+impl From<pb_api::NewProposalAction> for pb::proposal::Action {
+    fn from(item: pb_api::NewProposalAction) -> Self {
+        match item {
+            pb_api::NewProposalAction::ManageNeuron(v) => {
+                pb::proposal::Action::ManageNeuron(Box::new((*v).into()))
+            }
+            pb_api::NewProposalAction::ManageNetworkEconomics(v) => {
+                pb::proposal::Action::ManageNetworkEconomics(v.into())
+            }
+            pb_api::NewProposalAction::Motion(v) => pb::proposal::Action::Motion(v.into()),
+            pb_api::NewProposalAction::ExecuteNnsFunction(v) => {
+                pb::proposal::Action::ExecuteNnsFunction(v.into())
+            }
+            pb_api::NewProposalAction::ApproveGenesisKyc(v) => {
+                pb::proposal::Action::ApproveGenesisKyc(v.into())
+            }
+            pb_api::NewProposalAction::AddOrRemoveNodeProvider(v) => {
+                pb::proposal::Action::AddOrRemoveNodeProvider(v.into())
+            }
+            pb_api::NewProposalAction::RewardNodeProvider(v) => {
+                pb::proposal::Action::RewardNodeProvider(v.into())
+            }
+            pb_api::NewProposalAction::RewardNodeProviders(v) => {
+                pb::proposal::Action::RewardNodeProviders(v.into())
+            }
+            pb_api::NewProposalAction::RegisterKnownNeuron(v) => {
+                pb::proposal::Action::RegisterKnownNeuron(v.into())
+            }
+            pb_api::NewProposalAction::CreateServiceNervousSystem(v) => {
+                pb::proposal::Action::CreateServiceNervousSystem(v.into())
+            }
+            pb_api::NewProposalAction::InstallCode(v) => {
+                pb::proposal::Action::InstallCode(v.into())
+            }
+            pb_api::NewProposalAction::StopOrStartCanister(v) => {
+                pb::proposal::Action::StopOrStartCanister(v.into())
+            }
+            pb_api::NewProposalAction::UpdateCanisterSettings(v) => {
+                pb::proposal::Action::UpdateCanisterSettings(v.into())
+            }
+        }
+    }
+}
 
 impl From<pb::Empty> for pb_api::Empty {
     fn from(_: pb::Empty) -> Self {
@@ -679,6 +732,15 @@ impl From<pb::ManageNeuron> for pb_api::ManageNeuron {
 }
 impl From<pb_api::ManageNeuron> for pb::ManageNeuron {
     fn from(item: pb_api::ManageNeuron) -> Self {
+        Self {
+            id: item.id,
+            neuron_id_or_subaccount: item.neuron_id_or_subaccount.map(|x| x.into()),
+            command: item.command.map(|x| x.into()),
+        }
+    }
+}
+impl From<pb_api::NewManageNeuron> for pb::ManageNeuron {
+    fn from(item: pb_api::NewManageNeuron) -> Self {
         Self {
             id: item.id,
             neuron_id_or_subaccount: item.neuron_id_or_subaccount.map(|x| x.into()),
@@ -1242,6 +1304,42 @@ impl From<pb_api::manage_neuron::Command> for pb::manage_neuron::Command {
             }
             pb_api::manage_neuron::Command::Merge(v) => pb::manage_neuron::Command::Merge(v.into()),
             pb_api::manage_neuron::Command::StakeMaturity(v) => {
+                pb::manage_neuron::Command::StakeMaturity(v.into())
+            }
+        }
+    }
+}
+impl From<pb_api::NewManageNeuronCommand> for pb::manage_neuron::Command {
+    fn from(item: pb_api::NewManageNeuronCommand) -> Self {
+        match item {
+            pb_api::NewManageNeuronCommand::Configure(v) => {
+                pb::manage_neuron::Command::Configure(v.into())
+            }
+            pb_api::NewManageNeuronCommand::Disburse(v) => {
+                pb::manage_neuron::Command::Disburse(v.into())
+            }
+            pb_api::NewManageNeuronCommand::Spawn(v) => pb::manage_neuron::Command::Spawn(v.into()),
+            pb_api::NewManageNeuronCommand::Follow(v) => {
+                pb::manage_neuron::Command::Follow(v.into())
+            }
+            pb_api::NewManageNeuronCommand::MakeProposal(v) => {
+                pb::manage_neuron::Command::MakeProposal(Box::new((*v).into()))
+            }
+            pb_api::NewManageNeuronCommand::RegisterVote(v) => {
+                pb::manage_neuron::Command::RegisterVote(v.into())
+            }
+            pb_api::NewManageNeuronCommand::Split(v) => pb::manage_neuron::Command::Split(v.into()),
+            pb_api::NewManageNeuronCommand::DisburseToNeuron(v) => {
+                pb::manage_neuron::Command::DisburseToNeuron(v.into())
+            }
+            pb_api::NewManageNeuronCommand::ClaimOrRefresh(v) => {
+                pb::manage_neuron::Command::ClaimOrRefresh(v.into())
+            }
+            pb_api::NewManageNeuronCommand::MergeMaturity(v) => {
+                pb::manage_neuron::Command::MergeMaturity(v.into())
+            }
+            pb_api::NewManageNeuronCommand::Merge(v) => pb::manage_neuron::Command::Merge(v.into()),
+            pb_api::NewManageNeuronCommand::StakeMaturity(v) => {
                 pb::manage_neuron::Command::StakeMaturity(v.into())
             }
         }
@@ -2784,6 +2882,25 @@ impl From<pb_api::create_service_nervous_system::governance_parameters::VotingRe
 
 impl From<pb::InstallCode> for pb_api::InstallCode {
     fn from(item: pb::InstallCode) -> Self {
+        let wasm_module_hash = item
+            .wasm_module
+            .map(|wasm_module| super::calculate_hash(&wasm_module).to_vec());
+        let arg_hash = item.arg.map(|arg| super::calculate_hash(&arg).to_vec());
+
+        Self {
+            canister_id: item.canister_id,
+            install_mode: item.install_mode,
+            wasm_module: None,
+            arg: None,
+            skip_stopping_before_installing: item.skip_stopping_before_installing,
+
+            wasm_module_hash,
+            arg_hash,
+        }
+    }
+}
+impl From<pb_api::InstallCode> for pb::InstallCode {
+    fn from(item: pb_api::InstallCode) -> Self {
         Self {
             canister_id: item.canister_id,
             install_mode: item.install_mode,
@@ -2793,8 +2910,8 @@ impl From<pb::InstallCode> for pb_api::InstallCode {
         }
     }
 }
-impl From<pb_api::InstallCode> for pb::InstallCode {
-    fn from(item: pb_api::InstallCode) -> Self {
+impl From<pb_api::NewInstallCode> for pb::InstallCode {
+    fn from(item: pb_api::NewInstallCode) -> Self {
         Self {
             canister_id: item.canister_id,
             install_mode: item.install_mode,

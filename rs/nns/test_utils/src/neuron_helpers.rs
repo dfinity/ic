@@ -6,8 +6,8 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_governance_api::pb::v1::{
-    manage_neuron_response::Command, proposal::Action, ExecuteNnsFunction, Neuron, NnsFunction,
-    Proposal,
+    manage_neuron_response::Command, ExecuteNnsFunction, Neuron, NewProposal, NewProposalAction,
+    NnsFunction,
 };
 use ic_state_machine_tests::StateMachine;
 use std::collections::HashMap;
@@ -65,12 +65,12 @@ pub fn get_neuron_3() -> TestNeuronOwner {
     }
 }
 
-pub fn get_some_proposal() -> Proposal {
-    Proposal {
+pub fn get_some_proposal() -> NewProposal {
+    NewProposal {
         title: Some("<proposal created from initialization>".to_string()),
         summary: "".to_string(),
         url: "".to_string(),
-        action: Some(Action::ExecuteNnsFunction(ExecuteNnsFunction {
+        action: Some(NewProposalAction::ExecuteNnsFunction(ExecuteNnsFunction {
             nns_function: NnsFunction::NnsRootUpgrade as i32,
             payload: Vec::new(),
         })),

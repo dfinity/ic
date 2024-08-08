@@ -6,12 +6,10 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_governance_api::pb::v1::{
-    add_or_remove_node_provider::Change,
-    manage_neuron::{Command, NeuronIdOrSubaccount},
-    manage_neuron_response::Command as CommandResponse,
-    proposal::Action,
-    AddOrRemoveNodeProvider, ManageNeuron, ManageNeuronResponse, NnsFunction, NodeProvider,
-    Proposal, ProposalStatus,
+    add_or_remove_node_provider::Change, manage_neuron::NeuronIdOrSubaccount,
+    manage_neuron_response::Command as CommandResponse, AddOrRemoveNodeProvider,
+    ManageNeuronResponse, NewManageNeuron, NewManageNeuronCommand, NewProposal, NewProposalAction,
+    NnsFunction, NodeProvider, ProposalStatus,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -49,24 +47,28 @@ fn test_add_and_remove_nodes_from_registry() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuron {
+                NewManageNeuron {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
                         ic_nns_common::pb::v1::NeuronId {
                             id: TEST_NEURON_1_ID,
                         },
                     )),
                     id: None,
-                    command: Some(Command::MakeProposal(Box::new(Proposal {
-                        title: Some("Just want to add this NP.".to_string()),
-                        summary: "".to_string(),
-                        url: "".to_string(),
-                        action: Some(Action::AddOrRemoveNodeProvider(AddOrRemoveNodeProvider {
-                            change: Some(Change::ToAdd(NodeProvider {
-                                id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                                reward_account: None,
-                            })),
-                        })),
-                    }))),
+                    command: Some(NewManageNeuronCommand::MakeProposal(Box::new(
+                        NewProposal {
+                            title: Some("Just want to add this NP.".to_string()),
+                            summary: "".to_string(),
+                            url: "".to_string(),
+                            action: Some(NewProposalAction::AddOrRemoveNodeProvider(
+                                AddOrRemoveNodeProvider {
+                                    change: Some(Change::ToAdd(NodeProvider {
+                                        id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                                        reward_account: None,
+                                    })),
+                                },
+                            )),
+                        },
+                    ))),
                 },
                 &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
             )
