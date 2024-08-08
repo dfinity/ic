@@ -574,9 +574,7 @@ mod tests {
         extract_tar_into_dir(&tar_path, &extract_dir).unwrap();
 
         let extracted_file = extract_dir.join("test.txt");
-        let mut file = File::open(extracted_file).unwrap();
-        let mut contents = String::new();
-        file.read_to_string(&mut contents).unwrap();
+        let contents = std::fs::read_to_string(extracted_file).unwrap();
         assert_eq!(contents, "Hello, world!");
     }
 
@@ -594,9 +592,7 @@ mod tests {
         extract_tar_into_dir(&tar_path, &extract_dir).unwrap();
 
         let extracted_file = extract_dir.join("test.txt");
-        let mut file = File::open(extracted_file).unwrap();
-        let mut contents = String::new();
-        file.read_to_string(&mut contents).unwrap();
+        let contents = std::fs::read_to_string(extracted_file).unwrap();
         assert_eq!(contents, "Hello, world!");
     }
 }
