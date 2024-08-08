@@ -118,6 +118,14 @@ jobs:
           path: |
             bazel-targets
             bazel-bep.pb.zst
+      - name: Upload bazel-bep.pb.zst
+        uses: actions/upload-artifact@v4
+        with:
+          name: bazel-bep
+          retention-days: 180
+          if-no-files-found: ignore
+          path: |
+            bazel-bep.pb.zst
 
   bazel-build-all-config-check:
     <<: *dind-large-setup
