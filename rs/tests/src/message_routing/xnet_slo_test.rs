@@ -127,6 +127,9 @@ impl Config {
 
 // Generic setup
 fn setup(env: TestEnv, config: Config) {
+    ic_system_test_driver::driver::prometheus_vm::PrometheusVm::default()
+        .start(&env)
+        .expect("failed to start prometheus VM");
     (0..config.subnets)
         .fold(InternetComputer::new(), |ic, _idx| {
             ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(config.nodes_per_subnet))
@@ -138,6 +141,8 @@ fn setup(env: TestEnv, config: Config) {
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
+    use ic_system_test_driver::driver::prometheus_vm::HasPrometheus;
+    env.sync_with_prometheus();
 }
 
 pub fn test(env: TestEnv, config: Config) {

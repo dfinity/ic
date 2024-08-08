@@ -14,8 +14,9 @@ use crate::certified_slice_pool::{
     certified_slice_count_bytes, CertifiedSliceError, CertifiedSlicePool, CertifiedSliceResult,
 };
 use async_trait::async_trait;
-use hyper::{client::Client, Body, Request, StatusCode, Uri};
-use ic_async_utils::{receive_body_without_timeout, BodyReceiveError};
+use http_body_util::BodyExt;
+use hyper::{Request, StatusCode, Uri};
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
@@ -44,7 +45,7 @@ use ic_types::{
     xnet::{CertifiedStreamSlice, RejectSignal, StreamIndex},
     Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
-use ic_xnet_hyper::{ExecuteOnRuntime, TlsConnector};
+use ic_xnet_hyper::TlsConnector;
 use ic_xnet_uri::XNetAuthority;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 pub use proximity::{GenRangeFn, ProximityMap};
@@ -324,7 +325,6 @@ impl XNetPayloadBuilderImpl {
         ));
         let xnet_client: Arc<dyn XNetClient> = Arc::new(XNetClientImpl::new(
             metrics_registry,
-            runtime_handle.clone(),
             tls_handshake,
             proximity_map.clone(),
         ));
@@ -1541,11 +1541,13 @@ pub trait XNetClient: Sync + Send {
     ) -> Result<CertifiedStreamSlice, XNetClientError>;
 }
 
+type XNetClientBody = http_body_util::Full<hyper::body::Bytes>;
+
 /// The default `XNetClient` implementation, wrapping an HTTP client (for both
 /// configuration and connection pooling).
 struct XNetClientImpl {
     /// An HTTP client to be used for querying.
-    http_client: Client<TlsConnector, Request<Body>>,
+    http_client: Client<TlsConnector, Request<XNetClientBody>>,
 
     /// Response body (encoded slice) size.
     response_body_size: HistogramVec,
@@ -1559,21 +1561,20 @@ impl XNetClientImpl {
     /// most 1 idle connection per host.
     fn new(
         metrics_registry: &MetricsRegistry,
-        runtime_handle: runtime::Handle,
         tls: Arc<dyn TlsConfig + Send + Sync>,
         proximity_map: Arc<ProximityMap>,
     ) -> XNetClientImpl {
+        #[cfg(not(test))]
+        let https = TlsConnector::new(tls);
+        #[cfg(test)]
+        let https = TlsConnector::new_for_tests(tls);
+
         // TODO(MR-28) Make timeout configurable.
-        let http_client: Client<TlsConnector, _> = Client::builder()
-            .pool_idle_timeout(Some(Duration::from_secs(600)))
-            .pool_max_idle_per_host(1)
-            .executor(ExecuteOnRuntime(runtime_handle))
-            .build(
-                #[cfg(not(test))]
-                TlsConnector::new(tls),
-                #[cfg(test)]
-                TlsConnector::new_for_tests(tls),
-            );
+        let http_client: Client<TlsConnector, Request<XNetClientBody>> =
+            Client::builder(TokioExecutor::new())
+                .pool_idle_timeout(Some(Duration::from_secs(600)))
+                .pool_max_idle_per_host(1)
+                .build(https);
 
         let response_body_size = metrics_registry.histogram_vec(
             METRIC_RESPONSE_BODY_SIZE,
@@ -1612,21 +1613,17 @@ impl XNetClient for XNetClientImpl {
                 Instant::now().saturating_duration_since(request_start),
             );
 
-            let response = result.map_err(|e| {
-                if e.is_timeout() {
-                    XNetClientError::Timeout
-                } else {
-                    XNetClientError::RequestFailed(e)
-                }
-            })?;
+            let response = result.map_err(XNetClientError::RequestFailed)?;
 
             let status = response.status();
-            let content = receive_body_without_timeout(
-                response.into_body(),
-                (5 * POOL_SLICE_BYTE_SIZE_MAX).into(),
-            )
-            .await
-            .map_err(XNetClientError::BodyReadError)?;
+
+            let content =
+                http_body_util::Limited::new(response.into_body(), 5 * POOL_SLICE_BYTE_SIZE_MAX)
+                    .collect()
+                    .await
+                    .map(|col| col.to_bytes())
+                    .map_err(XNetClientError::BodyReadError)?;
+
             Ok((status, content))
         })
         .await;
@@ -1662,10 +1659,10 @@ impl XNetClient for XNetClientImpl {
 #[derive(Debug)]
 pub enum XNetClientError {
     Timeout,
-    RequestFailed(hyper::Error),
+    RequestFailed(hyper_util::client::legacy::Error),
     NoContent,
     ErrorResponse(hyper::StatusCode, String),
-    BodyReadError(BodyReceiveError),
+    BodyReadError(Box<dyn std::error::Error + Send + Sync>),
     ProxyDecodeError(ProxyDecodeError),
 }
 
@@ -1673,7 +1670,7 @@ impl std::error::Error for XNetClientError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             XNetClientError::RequestFailed(e) => Some(e),
-            XNetClientError::BodyReadError(e) => Some(e),
+            XNetClientError::BodyReadError(e) => Some(&**e),
             XNetClientError::ProxyDecodeError(e) => Some(e),
             _ => None,
         }

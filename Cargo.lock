@@ -12718,9 +12718,11 @@ dependencies = [
 name = "ic-xnet-endpoint"
 version = "0.9.0"
 dependencies = [
+ "axum 0.7.5",
  "bytes",
  "crossbeam-channel",
- "hyper 0.14.26",
+ "hyper 1.4.1",
+ "hyper-util",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
  "ic-interfaces-certified-stream-store",
@@ -12748,6 +12750,8 @@ dependencies = [
  "slog",
  "threadpool",
  "tokio",
+ "tokio-rustls 0.26.0",
+ "tower",
  "url",
 ]
 
@@ -12755,7 +12759,9 @@ dependencies = [
 name = "ic-xnet-hyper"
 version = "0.9.0"
 dependencies = [
- "hyper 0.14.26",
+ "hyper 1.4.1",
+ "hyper-rustls 0.27.1",
+ "hyper-util",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-tls",
  "ic-interfaces-registry",
@@ -12763,6 +12769,7 @@ dependencies = [
  "socket2 0.5.7",
  "tokio",
  "tokio-rustls 0.26.0",
+ "tower",
 ]
 
 [[package]]
@@ -12772,7 +12779,10 @@ dependencies = [
  "assert_matches",
  "async-trait",
  "axum 0.7.5",
- "hyper 0.14.26",
+ "http-body-util",
+ "hyper 1.4.1",
+ "hyper-rustls 0.27.1",
+ "hyper-util",
  "ic-async-utils",
  "ic-base-types",
  "ic-canonical-state",
@@ -12825,7 +12835,7 @@ dependencies = [
 name = "ic-xnet-uri"
 version = "0.9.0"
 dependencies = [
- "http 0.2.12",
+ "http 1.1.0",
  "ic-types",
 ]
 
