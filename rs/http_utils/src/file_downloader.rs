@@ -213,11 +213,11 @@ pub fn extract_tar_into_dir(tar_path: &Path, target_dir: &Path) -> FileDownloadR
     if is_gz_file(&mut buf_reader).map_err(map_to_untar_error)? {
         let tar = GzDecoder::new(buf_reader);
         let mut archive = Archive::new(tar);
-        return archive.unpack(target_dir).map_err(map_to_untar_error);
+        archive.unpack(target_dir).map_err(map_to_untar_error)
     } else if is_zst_file(&mut buf_reader).map_err(map_to_untar_error)? {
         let tar = ZstdDecoder::new(buf_reader).map_err(map_to_untar_error)?;
         let mut archive = Archive::new(tar);
-        return archive.unpack(target_dir).map_err(map_to_untar_error);
+        archive.unpack(target_dir).map_err(map_to_untar_error)
     } else {
         Err(FileDownloadError::untar_error(
             tar_path,
