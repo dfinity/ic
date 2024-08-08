@@ -1,21 +1,13 @@
 use super::Governance;
-pub use tla_instrumentation::{
-    tla_log_all_globals, tla_log_locals, tla_log_request, tla_log_response,
-};
+
 pub use tla_instrumentation::{
     Destination, GlobalState, InstrumentationState, Label, ResolvedStatePair, TlaValue, ToTla,
     Update, VarAssignment,
 };
 pub use tla_instrumentation_proc_macros::tla_update_method;
-use tokio::task_local;
 
-use std::sync::RwLock;
-
-task_local! {
-    pub static TLA_INSTRUMENTATION_STATE: InstrumentationState;
-}
-
-pub static TLA_TRACES: RwLock<Vec<ResolvedStatePair>> = RwLock::new(Vec::new());
+pub use ic_nervous_system_common::tla::{TLA_INSTRUMENTATION_STATE, TLA_TRACES};
+pub use ic_nervous_system_common::{tla_log_locals, tla_log_request, tla_log_response};
 
 pub fn get_tla_globals(gov: &Governance) -> GlobalState {
     let mut state = GlobalState::new();

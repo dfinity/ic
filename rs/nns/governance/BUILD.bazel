@@ -20,7 +20,6 @@ BASE_DEPENDENCIES = [
     "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
-    "//rs/nervous_system/common",
     "//rs/nervous_system/governance",
     "//rs/nervous_system/neurons_fund",
     "//rs/nervous_system/proto",
@@ -77,6 +76,7 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/nervous_system/common",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
@@ -87,6 +87,7 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/nns/governance/api:api--test_feature",
+    "//rs/nervous_system/common:common--test_feature",
     "//rs/nns/constants:constants--test_feature",
     "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/sns/init:init--test_feature",

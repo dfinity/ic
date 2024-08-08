@@ -40,6 +40,11 @@ use std::{
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 pub const NODE_PROVIDER_REWARD: u64 = 10_000;
 
+use ic_nns_governance::governance::tla::{
+    tla_log_request, tla_log_response, Destination, InstrumentationState, ToTla,
+    TLA_INSTRUMENTATION_STATE, TLA_TRACES,
+};
+
 lazy_static! {
     pub(crate) static ref SNS_ROOT_CANISTER_ID: PrincipalId = PrincipalId::new_user_test_id(213599);
     pub(crate) static ref SNS_GOVERNANCE_CANISTER_ID: PrincipalId =
@@ -258,6 +263,20 @@ impl IcpLedger for FakeDriver {
             "Issuing ledger transfer from account {} (subaccount {}) to account {} amount {} fee {}",
             from_account, from_subaccount.as_ref().map_or_else(||"None".to_string(), ToString::to_string), to_account, amount_e8s, fee_e8s
         );
+        // TODO(oggy): don't do the to_tla_value conversion in the macro,
+        //       can't distinguish between functions and records now - though maybe not necessary?
+        tla_log_request!(
+            Destination::new("ledger"),
+            BTreeMap::from([
+                ("amount", amount_e8s),
+                ("fee", fee_e8s),
+                // TODO(oggy): what to do with options?
+                // ("from_subaccount", ...),
+                // TODO(oggy): what to do with this?
+                // ("to", ...),
+            ])
+        );
+
         let accounts = &mut self.state.try_lock().unwrap().accounts;
 
         let from_e8s = accounts
@@ -277,6 +296,7 @@ impl IcpLedger for FakeDriver {
         }
 
         *accounts.entry(to_account).or_default() += amount_e8s;
+        tla_log_response!(Destination::new("ledger"), false);
 
         Ok(0)
     }

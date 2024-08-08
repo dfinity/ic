@@ -11,6 +11,13 @@ use icp_ledger::{
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use mockall::automock;
 
+#[cfg(feature = "test")]
+use crate::tla::{Destination, ToTla, TLA_INSTRUMENTATION_STATE};
+#[cfg(feature = "test")]
+use std::collections::BTreeMap;
+
+use crate::{tla_log_request, tla_log_response};
+
 pub struct IcpLedgerCanister {
     id: CanisterId,
 }
@@ -132,7 +139,20 @@ impl IcpLedger for IcpLedgerCanister {
         to: AccountIdentifier,
         memo: u64,
     ) -> Result<u64, NervousSystemError> {
-        // tla_log_just_request!(Destination("ledger"));
+        // TODO(oggy): don't do the to_tla_value conversion in the macro,
+        //       can't distinguish between functions and records now - though maybe not necessary?
+        tla_log_request!(
+            Destination::new("ledger"),
+            BTreeMap::from([
+                ("amount", amount_e8s),
+                ("fee", fee_e8s),
+                // TODO(oggy): what to do with options?
+                // ("from_subaccount", ...),
+                // TODO(oggy): what to do with this?
+                // ("to", ...),
+            ])
+        );
+
         // Send 'amount_e8s' to the target account.
         //
         // We expect the 'fee_e8s' AND 'amount_e8s' to be
@@ -154,7 +174,7 @@ impl IcpLedger for IcpLedgerCanister {
             },
         )
         .await;
-        // tla_log_just_response!(Destination("ledger"), result);
+        tla_log_response!(Destination::new("ledger"), result.is_err());
 
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(format!(
