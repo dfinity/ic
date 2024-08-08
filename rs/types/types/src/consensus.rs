@@ -325,6 +325,7 @@ pub type HashedBlock = Hashed<CryptoHashOf<Block>, Block>;
 
 /// BlockMetadata contains the version, height and hash of a block
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct BlockMetadata {
     version: ReplicaVersion,
     height: Height,
@@ -403,6 +404,7 @@ impl AsRef<Block> for BlockProposal {
 
 /// NotarizationContent holds the values that are signed in a notarization
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct NotarizationContent {
     pub version: ReplicaVersion,
     pub height: Height,
@@ -503,6 +505,7 @@ impl TryFrom<pb::NotarizationShare> for NotarizationShare {
 
 /// FinalizationContent holds the values that are signed in a finalization
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct FinalizationContent {
     pub version: ReplicaVersion,
     pub height: Height,
@@ -708,6 +711,7 @@ impl TryFrom<pb::RandomBeaconShare> for RandomBeaconShare {
 /// which is the height and the replica version used to create the random
 /// tape.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RandomTapeContent {
     pub version: ReplicaVersion,
     pub height: Height,
@@ -797,6 +801,7 @@ impl TryFrom<pb::RandomTapeShare> for RandomTapeShare {
 
 /// A proof that shows a block maker has produced equivocating blocks.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct EquivocationProof {
     pub signer: NodeId,
     pub version: ReplicaVersion,
@@ -882,6 +887,7 @@ impl TryFrom<pb::EquivocationProof> for EquivocationProof {
 /// The enum encompassing all of the consensus artifacts exchanged between
 /// replicas.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum ConsensusMessage {
     RandomBeacon(RandomBeacon),
     Finalization(Finalization),
