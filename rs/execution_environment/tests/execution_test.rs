@@ -776,7 +776,7 @@ fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
     // Ensure that at least one round has passed between the attempts to take a snapshot.
     env.tick();
 
-    // Taking a snapshot of the second canister should take another 25MiB, however the available 
+    // Taking a snapshot of the second canister should take another 25MiB, however the available
     // memory at this point is 100 - 30 - 25 - 30 = 15 MiB, so it should fail.
     let error = env
         .take_canister_snapshot(TakeCanisterSnapshotArgs::new(other_canister_id, None))
