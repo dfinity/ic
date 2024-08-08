@@ -2540,16 +2540,12 @@ impl StateManagerImpl {
                             .checkpoint_op_duration
                             .with_label_values(&["recover"])
                             .start_timer();
-
-                        let state = checkpoint::load_checkpoint_parallel(
+                        let state = checkpoint::load_checkpoint_parallel_and_mark_verified(
                             &layout,
                             self.own_subnet_type,
                             &self.metrics.checkpoint_metrics,
                             self.get_fd_factory(),
                         )?;
-                        layout
-                            .remove_unverified_checkpoint_marker()
-                            .map_err(CheckpointError::from)?;
                         Ok((layout, state))
                     })
                     .unwrap_or_else(|err| {

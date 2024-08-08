@@ -79,22 +79,23 @@ impl StateSync {
             .state_layout
             .checkpoint_in_verification(height)
             .expect("failed to create checkpoint layout");
-        let state = crate::checkpoint::load_checkpoint_parallel(
+
+        let state = match crate::checkpoint::load_checkpoint_parallel_and_mark_verified(
             &ro_layout,
             self.state_manager.own_subnet_type,
             &self.state_manager.metrics.checkpoint_metrics,
             self.state_manager.get_fd_factory(),
-        )
-        .expect("failed to recover checkpoint");
-
-        if let Err(err) = ro_layout.remove_unverified_checkpoint_marker() {
-            fatal!(
-                self.log,
-                "Failed to remove the unverified checkpoint marker @height {}: {}",
-                height,
-                err
-            );
-        }
+        ) {
+            Ok(state) => state,
+            Err(err) => {
+                fatal!(
+                    self.log,
+                    "Failed to load checkpoint or remove the unverified marker @height {}: {}",
+                    height,
+                    err
+                );
+            }
+        };
 
         self.state_manager.on_synced_checkpoint(
             state,

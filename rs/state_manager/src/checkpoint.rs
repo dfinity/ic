@@ -161,6 +161,21 @@ pub fn load_checkpoint_parallel(
     )
 }
 
+/// Calls [load_checkpoint_parallel] and removes the unverified checkpoint marker.
+/// This combination is useful when marking a checkpoint as verified immediately after a successful loading.
+pub fn load_checkpoint_parallel_and_mark_verified(
+    checkpoint_layout: &CheckpointLayout<ReadOnly>,
+    own_subnet_type: SubnetType,
+    metrics: &CheckpointMetrics,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+) -> Result<ReplicatedState, CheckpointError> {
+    let state = load_checkpoint_parallel(&checkpoint_layout, own_subnet_type, metrics, fd_factory)?;
+    checkpoint_layout
+        .remove_unverified_checkpoint_marker()
+        .map_err(CheckpointError::from)?;
+    Ok(state)
+}
+
 /// Loads the node state heighted with `height` using the specified
 /// directory layout.
 pub fn load_checkpoint(
