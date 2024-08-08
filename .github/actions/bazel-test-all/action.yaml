@@ -50,6 +50,8 @@ runs:
 
           if [ -n "$HONEYCOMB_API_TOKEN" ] && [ -f ./bazel-bep.pb ]; then
               bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
+              # compress bazel-bep.pb for uploading it to github
+              zstd bazel-bep.pb -10
           fi
 
           exit "$BAZEL_EXIT_CODE"
