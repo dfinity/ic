@@ -685,7 +685,7 @@ fn notify_create_canister(
         controller: *TEST_USER1_PRINCIPAL,
         subnet_type: None,
         subnet_selection: None,
-        settings,
+        settings: settings.map(|x| x.into()),
     };
 
     if let WasmResult::Reply(res) = state_machine
@@ -772,7 +772,7 @@ fn cmc_create_canister_with_cycles(
 ) -> Result<CanisterId, CreateCanisterError> {
     #[allow(deprecated)]
     let create_args = Encode!(&CreateCanister {
-        settings,
+        settings: settings.map(|x| x.into()),
         subnet_type,
         subnet_selection: None,
     })
