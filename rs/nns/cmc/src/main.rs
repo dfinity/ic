@@ -402,7 +402,7 @@ impl Default for State {
         let max_age = Duration::from_secs(60 * 60);
         let initial_icp_xdr_conversion_rate = IcpXdrConversionRate {
             timestamp_seconds: DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
-            xdr_permyriad_per_icp: 1_000_000, // 100 XDR = 1 ICP
+            xdr_permyriad_per_icp: DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE,
         };
 
         Self {
@@ -2769,8 +2769,8 @@ mod tests {
     /// The function verifies that a default ICP/XDR conversion rate is set.
     fn test_default_icp_xdr_conversion_rate() {
         let expected_initial_rate = IcpXdrConversionRate {
-            timestamp_seconds: 1620633600,
-            xdr_permyriad_per_icp: 1_000_000,
+            timestamp_seconds: DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
+            xdr_permyriad_per_icp: DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE,
         };
 
         let state = State::default();
