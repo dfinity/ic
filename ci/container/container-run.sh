@@ -122,6 +122,10 @@ mkdir -p "${ZIG_CACHE}"
 ICT_TESTNETS_DIR="/tmp/ict_testnets"
 mkdir -p "${ICT_TESTNETS_DIR}"
 
+trap 'rm -rf "${SUBUID_FILE}" "${SUBGID_FILE}"' EXIT
+SUBUID_FILE=$(mktemp --suffix=containerrun)
+SUBGID_FILE=$(mktemp --suffix=containerrun)
+
 PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"
     --mount type=bind,source="${CACHE_DIR}",target="${CTR_HOME}/.cache"
@@ -130,7 +134,6 @@ PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
     --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
     --mount type=bind,source="/var/lib/containers",target="/var/lib/containers"
-    --mount type=tmpfs,destination=/var/sysimage
 )
 
 if [ "$(id -u)" = "1000" ]; then
@@ -184,6 +187,16 @@ if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -e "${SSH_AUTH_SOCK:-}" ]; then
 else
     eprintln "No ssh-agent to forward."
 fi
+
+# Create dynamic subuid/subgid files for the user to run nested containers
+echo "ubuntu:100000:65536" >$SUBUID_FILE
+chmod +r ${SUBUID_FILE}
+echo "ubuntu:100000:65536" >$SUBGID_FILE
+chmod +r ${SUBGID_FILE}
+PODMAN_RUN_ARGS+=(
+    --mount type=bind,source="${SUBUID_FILE}",target="/etc/subuid"
+    --mount type=bind,source="${SUBGID_FILE}",target="/etc/subgid"
+)
 
 # make sure we have all bind-mounts
 mkdir -p ~/.{aws,ssh,cache,local/share/fish} && touch ~/.{zsh,bash}_history
