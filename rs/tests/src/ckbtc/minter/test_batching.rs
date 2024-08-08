@@ -74,7 +74,7 @@ pub fn test_batching(env: TestEnv) {
 
     block_on(async {
         let runtime = runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
-        install_bitcoin_canister(&runtime, &logger, &env).await;
+        install_bitcoin_canister(&runtime, &logger).await;
 
         let mut ledger_canister = create_canister_at_id(&runtime, ledger_id.get()).await;
         let mut minter_canister = create_canister_at_id(&runtime, minter_id.get()).await;
@@ -86,21 +86,19 @@ pub fn test_batching(env: TestEnv) {
         let kyt_id = install_kyt(
             &mut kyt_canister,
             &logger,
-            &env,
             Principal::from(minting_user),
             vec![agent_principal],
         )
         .await;
         set_kyt_api_key(&agent, &kyt_id.get().0, "fake key".to_string()).await;
 
-        let ledger_id = install_ledger(&env, &mut ledger_canister, minting_user, &logger).await;
+        let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
 
         // We set the minter with a very long time in the queue parameter so we can add up requests in queue
         const SEC_NANOS: u64 = 1_000_000_000;
         const MIN_NANOS: u64 = 60 * SEC_NANOS;
         let five_hours_nanos = 300 * MIN_NANOS;
         let minter_id = install_minter(
-            &env,
             &mut minter_canister,
             ledger_id,
             &logger,
