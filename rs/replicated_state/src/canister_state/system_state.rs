@@ -419,7 +419,9 @@ impl OnLowWasmMemoryHookStatus {
         let wasm_capacity = if let Some(memory_allocation) = memory_allocation {
             debug_assert!(
                 used_stable_memory <= memory_allocation,
-                "Used stable memory is larger than memory allocation.",
+                "Used stable memory: {:?}, is larger than memory allocation: {:?}.",
+                used_stable_memory,
+                memory_allocation
             );
             std::cmp::min(memory_allocation - used_stable_memory, max_wasm_capacity)
         } else {
@@ -428,7 +430,9 @@ impl OnLowWasmMemoryHookStatus {
 
         debug_assert!(
             used_wasm_memory <= wasm_capacity,
-            "Used wasm memory is larger than maximal possible.",
+            "Used wasm memory: {:?}, is larger than maximal possible: {:?}.",
+            used_wasm_memory,
+            wasm_capacity
         );
 
         let left_wasm_space = wasm_capacity - used_wasm_memory;
