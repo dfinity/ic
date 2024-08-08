@@ -69,13 +69,13 @@ ic-sns-wasm = { path = "../../nns/sns-wasm" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 ic-types = { path = "../../types/types" }
+icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 num-traits = { workspace = true }
-icp-ledger = { path = "../../rosetta-api/icp_ledger" }
-pretty_assertions = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
-tokio = { workspace = true }
-wat = "1.0.52"
+pretty_assertions = { workspace = true }
 rust_decimal = "1.25"
 rust_decimal_macros = "1.25"
+tokio = { workspace = true }
+wat = "1.0.52"

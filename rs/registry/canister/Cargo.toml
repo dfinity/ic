@@ -57,10 +57,10 @@ ic-crypto-node-key-generation = { path = "../../crypto/node_key_generation" }
 ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-registry-nns-data-provider = { path = "../nns_data_provider" }
-ic-replica-tests = { path = "../../replica_tests" }
 ic-registry-client-fake = { path = "../fake" }
+ic-registry-nns-data-provider = { path = "../nns_data_provider" }
 ic-registry-proto-data-provider = { path = "../proto_data_provider" }
+ic-replica-tests = { path = "../../replica_tests" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }

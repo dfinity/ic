@@ -44,9 +44,9 @@ serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-registry-canister = { path = "../../registry/canister" }
-ic-registry-keys = { path = "../../registry/keys" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-registry-keys = { path = "../../registry/keys" }
+registry-canister = { path = "../../registry/canister" }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
