@@ -1,0 +1,6 @@
+[package]
+name = "ic-validate-eq"
+
+[lib]
+name = "ic-validate-eq"
+path = "src/lib.rs"
