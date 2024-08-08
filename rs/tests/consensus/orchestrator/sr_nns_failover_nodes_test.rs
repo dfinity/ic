@@ -165,7 +165,7 @@ pub fn test(env: TestEnv) {
         msg
     ));
 
-    let recovery_dir = env.get_dependency_path("rs/tests");
+    let recovery_dir = get_dependency_path("rs/tests");
     set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
 
     let recovery_args = RecoveryArgs {
@@ -337,11 +337,10 @@ pub fn test(env: TestEnv) {
 
 fn setup_file_server(env: &TestEnv, file_path: &std::path::PathBuf) -> String {
     // Set up Universal VM with HTTP Bin testing service
-    let activate_script = &env
-        .read_dependency_to_string(
-            "rs/tests/src/orchestrator/orchestrator_universal_vm_activation.sh",
-        )
-        .expect("File not found")[..];
+    let activate_script = &read_dependency_to_string(
+        "rs/tests/src/orchestrator/orchestrator_universal_vm_activation.sh",
+    )
+    .expect("File not found")[..];
     let config_dir = env
         .single_activate_script_config_dir(UNIVERSAL_VM_NAME, activate_script)
         .unwrap();
@@ -352,7 +351,7 @@ fn setup_file_server(env: &TestEnv, file_path: &std::path::PathBuf) -> String {
         &fs::read(file_path).expect("File not found")[..],
     );
 
-    let path = env.get_dependency_path("rs/tests/static-file-server.tar");
+    let path = get_dependency_path("rs/tests/static-file-server.tar");
     let _ = insert_file_to_config(
         config_dir.clone(),
         "static-file-server.tar",
