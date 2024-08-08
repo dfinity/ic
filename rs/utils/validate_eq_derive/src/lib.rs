@@ -88,6 +88,7 @@ pub fn derive_validate_eq_impl(item: TokenStream) -> TokenStream {
                         // ValidateEq, yet we requested ParitalEq. This is taken from static_assertions
                         // packages (assert_not_impl_any), it's not easy to call external crates in
                         // auto derived code.
+                        // It cannot catch generics or subfield implementing ValidateEq.
                         const _: fn() = || {
                             // Generic trait with a blanket impl over `()` for all types.
                             trait AmbiguousIfImpl<A> {
