@@ -2,5 +2,5 @@
 name = "ic-validate-eq"
 
 [lib]
-name = "ic-validate-eq"
+name = "ic_validate_eq"
 path = "src/lib.rs"

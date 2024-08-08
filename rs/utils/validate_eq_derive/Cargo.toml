@@ -2,7 +2,7 @@
 name = "ic-validate-eq-derive"
 
 [lib]
-name = "ic-validate-eq-derive"
+name = "ic_validate_eq_derive"
 path = "src/lib.rs"
 proc-macro = true
 
