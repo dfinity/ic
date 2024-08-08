@@ -87,7 +87,6 @@ jobs:
           if-no-files-found: error
           path: |
             bazel-targets
-            bazel-bep.pb.zst
       - name: Upload bazel-bep.pb.zst
         uses: actions/upload-artifact@v4
         with:
