@@ -1143,6 +1143,7 @@ impl CanisterManager {
         sender: PrincipalId,
         canister: &mut CanisterState,
         subnet_size: usize,
+        canister_snapshot_usage: NumBytes,
     ) -> Result<CanisterStatusResultV2, CanisterManagerError> {
         // Skip the controller check if the canister itself is requesting its
         // own status, as the canister is considered in the same trust domain.
@@ -1184,7 +1185,7 @@ impl CanisterManager {
             self.cycles_account_manager
                 .idle_cycles_burned_rate(
                     memory_allocation,
-                    canister_memory_usage,
+                    canister_memory_usage + canister_snapshot_usage,
                     canister_message_memory_usage,
                     compute_allocation,
                     subnet_size,

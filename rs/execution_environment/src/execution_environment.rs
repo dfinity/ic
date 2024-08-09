@@ -1890,10 +1890,13 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         subnet_size: usize,
     ) -> Result<Vec<u8>, UserError> {
+        let canister_snapshot_usage = state
+            .canister_snapshots
+            .memory_usage_by_canister(canister_id);
         let canister = get_canister_mut(canister_id, state)?;
 
         self.canister_manager
-            .get_canister_status(sender, canister, subnet_size)
+            .get_canister_status(sender, canister, subnet_size, canister_snapshot_usage)
             .map(|status| status.encode())
             .map_err(|err| err.into())
     }
