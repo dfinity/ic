@@ -247,6 +247,8 @@ system_test(
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/networking/canisters:cloner_canister_types",
+        "@crate_index//:tikv-jemalloc-ctl",
+        "@crate_index//:tikv-jemallocator",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:slog",

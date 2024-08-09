@@ -59,6 +59,10 @@ use ic_system_test_driver::driver::{
     test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, NnsCustomizations},
 };
 
+use tikv_jemallocator::Jemalloc;
+#[global_allocator]
+static ALLOC: Jemalloc = Jemalloc;
+
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 
 fn main() -> Result<()> {

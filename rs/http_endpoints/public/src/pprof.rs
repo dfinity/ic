@@ -9,7 +9,7 @@ use http::header;
 use hyper::{self, StatusCode};
 use ic_pprof::PprofCollector;
 use serde::Deserialize;
-use std::{sync::Arc, time::Duration};
+use std::{sync::Arc, thread, time::Duration};
 
 /// Default CPU profile duration.
 pub const DEFAULT_DURATION_SECONDS: u64 = 30;
@@ -121,10 +121,12 @@ impl PprofFlamegraphService {
     }
     pub fn new_router(collector: Arc<dyn PprofCollector>) -> Router {
         let state = PprofFlamegraphService { collector };
-        Router::new().route(
-            Self::route(),
-            axum::routing::get(pprof_flamegraph).with_state(state),
-        )
+        Router::new()
+            .route(
+                Self::route(),
+                axum::routing::get(pprof_flamegraph).with_state(state),
+            )
+            .merge(HeappyFlamegraphService::new_router())
     }
 }
 
@@ -147,4 +149,35 @@ pub(crate) async fn pprof_flamegraph(
             .into_response(),
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response(),
     }
+}
+
+#[derive(Clone)]
+pub(crate) struct HeappyFlamegraphService;
+
+impl HeappyFlamegraphService {
+    pub fn route() -> &'static str {
+        "/_/heappy/flamegraph"
+    }
+    pub fn new_router() -> Router {
+        Router::new().route(Self::route(), axum::routing::get(heappy_flamegraph))
+    }
+}
+
+pub(crate) async fn heappy_flamegraph() -> impl IntoResponse {
+    let svg = tokio::task::spawn_blocking(|| {
+        let heap_profiler_guard = heappy::HeapProfilerGuard::new(1).unwrap();
+        thread::sleep(Duration::from_secs(30));
+        let report = heap_profiler_guard.report();
+        let mut svg = Vec::new();
+        report.flamegraph(&mut svg);
+        svg
+    })
+    .await
+    .unwrap();
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, CONTENT_TYPE_SVG)],
+        svg,
+    )
+        .into_response()
 }

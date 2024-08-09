@@ -159,6 +159,8 @@ DEPENDENCIES = [
     "@crate_index//:serde_yaml",
     "@crate_index//:serde",
     "@crate_index//:sha2",
+    "@crate_index//:tikv-jemalloc-ctl",
+    "@crate_index//:tikv-jemallocator",
     "@crate_index//:slog-async",
     "@crate_index//:slog-term",
     "@crate_index//:slog",
