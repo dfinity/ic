@@ -159,7 +159,7 @@ impl EthRpcClient {
             }
             futures::future::join_all(fut).await
         };
-        MultiCallResults::from_iter(providers.iter().cloned().zip(results.into_iter()))
+        MultiCallResults::from_non_empty_iter(providers.iter().cloned().zip(results.into_iter()))
     }
 
     pub async fn eth_get_logs(
@@ -403,7 +403,9 @@ impl<T> MultiCallResults<T> {
         !self.ok_results.is_empty()
     }
 
-    fn from_iter<I: IntoIterator<Item = (RpcNodeProvider, Result<T, SingleCallError>)>>(
+    fn from_non_empty_iter<
+        I: IntoIterator<Item = (RpcNodeProvider, Result<T, SingleCallError>)>,
+    >(
         iter: I,
     ) -> Self {
         let mut results = MultiCallResults::new();
@@ -868,7 +870,7 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
             .collect();
         if !inconsistent_results.is_empty() {
             inconsistent_results.push((base_node_provider, base_result));
-            let error = MultiCallError::InconsistentResults(MultiCallResults::from_iter(
+            let error = MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(
                 inconsistent_results
                     .into_iter()
                     .map(|(provider, result)| (provider, Ok(result))),
@@ -907,13 +909,14 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
                         .last_key_value()
                         .expect("BUG: results_with_same_key is non-empty");
                     if &result != other_result {
-                        let error =
-                            MultiCallError::InconsistentResults(MultiCallResults::from_iter(
+                        let error = MultiCallError::InconsistentResults(
+                            MultiCallResults::from_non_empty_iter(
                                 votes_for_same_key
                                     .into_iter()
                                     .chain(std::iter::once((provider, result)))
                                     .map(|(provider, result)| (provider, Ok(result))),
-                            ));
+                            ),
+                        );
                         log!(
                             INFO,
                             "[reduce_with_strict_majority_by_key]: inconsistent results {error:?}"
@@ -950,13 +953,14 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
                         .expect("BUG: tally should be non-empty")
                         .1)
                 } else {
-                    let error = MultiCallError::InconsistentResults(MultiCallResults::from_iter(
-                        first
-                            .1
-                            .into_iter()
-                            .chain(second.1)
-                            .map(|(provider, result)| (provider, Ok(result))),
-                    ));
+                    let error =
+                        MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(
+                            first
+                                .1
+                                .into_iter()
+                                .chain(second.1)
+                                .map(|(provider, result)| (provider, Ok(result))),
+                        ));
                     log!(
                         INFO,
                         "[reduce_with_strict_majority_by_key]: no strict majority {error:?}"
