@@ -1375,6 +1375,10 @@ fn test_icp_upgrade() {
         .map(|n| n.0.to_u64().unwrap())
         .expect("transfer_from failed");
     }
+    for i in 0..10 {
+        let to = account(20_000_000 + i);
+        transfer(&env, canister_id, from, to, 1_000_000).expect("transfer failed");
+    }    
 }
 
 fn max_length_principal(index: u32) -> [u8; 29] {

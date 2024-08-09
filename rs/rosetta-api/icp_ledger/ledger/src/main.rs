@@ -270,6 +270,7 @@ async fn icrc1_send(
     to_account: Account,
     spender_account: Option<Account>,
     created_at_time: Option<u64>,
+    start: Option<u64>,
 ) -> Result<BlockIndex, CoreTransferError<Tokens>> {
     let from = AccountIdentifier::from(from_account);
     let to = AccountIdentifier::from(to_account);
@@ -362,6 +363,13 @@ async fn icrc1_send(
 
     let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
     archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
+    if let Some(start) = start {
+        let end = ic_cdk::api::instruction_counter();
+        ic_cdk::eprintln!(
+            "{}",
+            format!("instructions used in transfer {}", end - start)
+        );
+    }
     Ok(block_index)
 }
 
@@ -875,6 +883,7 @@ fn migrate_next_part() {
                     migrated_balances += 1;
                 }
                 None => {
+                    ledger.stable_balances.token_pool = ledger.balances.token_pool;
                     ledger.state = LedgerState::Ready;
                 }
             },
@@ -1047,6 +1056,7 @@ async fn transfer_candid(arg: TransferArgs) -> Result<BlockIndex, TransferError>
 async fn icrc1_transfer(
     arg: TransferArg,
 ) -> Result<Nat, icrc_ledger_types::icrc1::transfer::TransferError> {
+    let start = ic_cdk::api::instruction_counter();
     let from_account = Account {
         owner: Principal::from(caller()),
         subaccount: arg.from_subaccount,
@@ -1060,6 +1070,7 @@ async fn icrc1_transfer(
             arg.to,
             None,
             arg.created_at_time,
+            Some(start),
         )
         .await
         .map_err(convert_transfer_error)
@@ -1107,6 +1118,7 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
             arg.to,
             Some(spender_account),
             arg.created_at_time,
+            None,
         )
         .await
         .map_err(convert_transfer_error)
