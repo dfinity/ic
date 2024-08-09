@@ -145,6 +145,24 @@ impl ResourceSaturation {
     }
 }
 
+/// Idle resources for which the canister will be charged in cycles for,
+/// i.e. resources that will burn cycles even if the canister is not
+/// actively executing any messages.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct IdleCanisterResources {
+    /// The canister's memory allocation.
+    pub memory_allocation: MemoryAllocation,
+    /// The canister's memory usage, includes the memory used by its Execution
+    /// and System state.
+    pub memory_usage: NumBytes,
+    /// The memory usage consumed by incoming or outgoing messages for the canister.
+    pub message_memory_usage: NumBytes,
+    /// The memory usage consumed by snapshots belonging to the canister.
+    pub snapshots_memory_usage: NumBytes,
+    /// The compute allocation of the canister.
+    pub compute_allocation: ComputeAllocation,
+}
+
 // The fee for `UpdateSettings` is charged after applying
 // the settings to allow users to unfreeze canisters
 // after accidentally setting the freezing threshold too high.
@@ -252,20 +270,13 @@ impl CyclesAccountManager {
     // Returns the total idle resource consumption rate in cycles per day.
     pub fn idle_cycles_burned_rate(
         &self,
-        memory_allocation: MemoryAllocation,
-        memory_usage: NumBytes,
-        message_memory_usage: NumBytes,
-        compute_allocation: ComputeAllocation,
+        idle_canister_resources: IdleCanisterResources,
         subnet_size: usize,
     ) -> Cycles {
         let mut total_rate = Cycles::zero();
-        for (_, rate) in self.idle_cycles_burned_rate_by_resource(
-            memory_allocation,
-            memory_usage,
-            message_memory_usage,
-            compute_allocation,
-            subnet_size,
-        ) {
+        for (_, rate) in
+            self.idle_cycles_burned_rate_by_resource(idle_canister_resources, subnet_size)
+        {
             total_rate += rate;
         }
         total_rate
@@ -276,12 +287,17 @@ impl CyclesAccountManager {
     #[doc(hidden)] // pub for usage in tests
     pub fn idle_cycles_burned_rate_by_resource(
         &self,
-        memory_allocation: MemoryAllocation,
-        memory_usage: NumBytes,
-        message_memory_usage: NumBytes,
-        compute_allocation: ComputeAllocation,
+        idle_canister_resources: IdleCanisterResources,
         subnet_size: usize,
-    ) -> [(CyclesUseCase, Cycles); 3] {
+    ) -> [(CyclesUseCase, Cycles); 4] {
+        let IdleCanisterResources {
+            memory_allocation,
+            memory_usage,
+            message_memory_usage,
+            snapshots_memory_usage,
+            compute_allocation,
+        } = idle_canister_resources;
+
         let memory = match memory_allocation {
             MemoryAllocation::Reserved(bytes) => bytes,
             MemoryAllocation::BestEffort => memory_usage,
@@ -295,6 +311,10 @@ impl CyclesAccountManager {
             (
                 CyclesUseCase::Memory,
                 self.memory_cost(message_memory_usage, day, subnet_size),
+            ),
+            (
+                CyclesUseCase::Memory,
+                self.memory_cost(snapshots_memory_usage, day, subnet_size),
             ),
             (
                 CyclesUseCase::ComputeAllocation,
@@ -315,14 +335,15 @@ impl CyclesAccountManager {
         subnet_size: usize,
         reserved_balance: Cycles,
     ) -> Cycles {
+        let idle_canister_resources = IdleCanisterResources {
+            memory_allocation,
+            memory_usage,
+            message_memory_usage,
+            snapshots_memory_usage: NumBytes::from(0),
+            compute_allocation,
+        };
         let idle_cycles_burned_rate: u128 = self
-            .idle_cycles_burned_rate(
-                memory_allocation,
-                memory_usage,
-                message_memory_usage,
-                compute_allocation,
-                subnet_size,
-            )
+            .idle_cycles_burned_rate(idle_canister_resources, subnet_size)
             .get();
 
         let threshold = Cycles::from(
@@ -1049,13 +1070,16 @@ impl CyclesAccountManager {
         duration_since_last_charge: Duration,
         subnet_size: usize,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        for (use_case, rate) in self.idle_cycles_burned_rate_by_resource(
-            canister.memory_allocation(),
-            canister.memory_usage() + canister_snapshots_memory_usage,
-            canister.message_memory_usage(),
-            canister.compute_allocation(),
-            subnet_size,
-        ) {
+        let idle_canister_resources = IdleCanisterResources {
+            memory_allocation: canister.memory_allocation(),
+            memory_usage: canister.memory_usage(),
+            message_memory_usage: canister.message_memory_usage(),
+            snapshots_memory_usage: canister_snapshots_memory_usage,
+            compute_allocation: canister.compute_allocation(),
+        };
+        for (use_case, rate) in
+            self.idle_cycles_burned_rate_by_resource(idle_canister_resources, subnet_size)
+        {
             let cycles = rate * duration_since_last_charge.as_secs() / SECONDS_PER_DAY;
 
             // Charging for resources can charge all the way down to zero cycles.

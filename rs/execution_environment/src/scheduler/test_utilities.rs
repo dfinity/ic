@@ -10,7 +10,7 @@ use ic_config::{
     flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig},
 };
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, IdleCanisterResources};
 use ic_embedders::{
     wasm_executor::{
         CanisterStateChanges, PausedWasmExecution, SliceExecutionOutput, WasmExecutionResult,
@@ -204,28 +204,15 @@ impl SchedulerTest {
 
     pub fn compute_resource_charge_cost(
         &self,
-        memory_allocation: MemoryAllocation,
-        memory_usage: NumBytes,
-        message_memory_usage: NumBytes,
-        compute_allocation: ComputeAllocation,
+        idle_canister_resources: IdleCanisterResources,
         duration: Duration,
     ) -> Cycles {
         let seconds_per_day: u128 = 24 * 60 * 60;
-        let mut cost = Cycles::new(0);
-        for (_, rate) in self
+        let rate = self
             .scheduler
             .cycles_account_manager
-            .idle_cycles_burned_rate_by_resource(
-                memory_allocation,
-                memory_usage,
-                message_memory_usage,
-                compute_allocation,
-                self.subnet_size(),
-            )
-        {
-            cost += rate * duration.as_secs() / seconds_per_day;
-        }
-        cost
+            .idle_cycles_burned_rate(idle_canister_resources, self.subnet_size());
+        rate * duration.as_secs() / seconds_per_day
     }
 
     /// Creates a canister with the given balance and allocations.

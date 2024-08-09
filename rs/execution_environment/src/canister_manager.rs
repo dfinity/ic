@@ -15,7 +15,7 @@ use ic_base_types::NumSeconds;
 use ic_config::{
     execution_environment::MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER, flag_status::FlagStatus,
 };
-use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+use ic_cycles_account_manager::{CyclesAccountManager, IdleCanisterResources, ResourceSaturation};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
@@ -1159,9 +1159,15 @@ impl CanisterManager {
             .collect::<Vec<PrincipalId>>();
 
         let canister_memory_usage = canister.memory_usage();
-        let canister_message_memory_usage = canister.message_memory_usage();
-        let compute_allocation = canister.scheduler_state.compute_allocation;
         let memory_allocation = canister.memory_allocation();
+        let compute_allocation = canister.scheduler_state.compute_allocation;
+        let idle_canister_resources = IdleCanisterResources {
+            memory_allocation,
+            memory_usage: canister_memory_usage,
+            message_memory_usage: canister.message_memory_usage(),
+            snapshots_memory_usage: canister_snapshot_usage,
+            compute_allocation,
+        };
         let freeze_threshold = canister.system_state.freeze_threshold;
         let reserved_cycles_limit = canister.system_state.reserved_balance_limit();
         let log_visibility = canister.system_state.log_visibility.clone();
@@ -1183,13 +1189,7 @@ impl CanisterManager {
             reserved_cycles_limit.map(|x| x.get()),
             log_visibility,
             self.cycles_account_manager
-                .idle_cycles_burned_rate(
-                    memory_allocation,
-                    canister_memory_usage + canister_snapshot_usage,
-                    canister_message_memory_usage,
-                    compute_allocation,
-                    subnet_size,
-                )
+                .idle_cycles_burned_rate(idle_canister_resources, subnet_size)
                 .get(),
             canister.system_state.reserved_balance().get(),
             canister.scheduler_state.total_query_stats.num_calls,

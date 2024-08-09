@@ -8,7 +8,7 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, IdleCanisterResources};
 use ic_embedders::{
     wasm_utils::{compile, decoding::decode_wasm},
     WasmtimeEmbedder,
@@ -328,11 +328,18 @@ impl ExecutionTest {
             .scheduler_state
             .compute_allocation;
         let message_memory_usage = self.canister_state(canister_id).message_memory_usage();
+        let snapshots_memory_usage = self
+            .state()
+            .canister_snapshots
+            .memory_usage_by_canister(canister_id);
         self.cycles_account_manager.idle_cycles_burned_rate(
-            memory_allocation,
-            memory_usage,
-            message_memory_usage,
-            compute_allocation,
+            IdleCanisterResources {
+                memory_allocation,
+                memory_usage,
+                message_memory_usage,
+                snapshots_memory_usage,
+                compute_allocation,
+            },
             self.subnet_size(),
         )
     }

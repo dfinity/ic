@@ -13,6 +13,7 @@ use ic_config::{
     execution_environment::STOP_CANISTER_TIMEOUT_DURATION,
     subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig},
 };
+use ic_cycles_account_manager::IdleCanisterResources;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
@@ -1568,13 +1569,14 @@ fn canister_charging_resource_usage_includes_snapshots_usage() {
             .scheduler()
             .cycles_account_manager
             .duration_between_allocation_charges();
-    let expected_charge = test.compute_resource_charge_cost(
-        canister.memory_allocation(),
-        canister.memory_usage() + canister_snapshots_usage,
-        canister.message_memory_usage(),
-        canister.compute_allocation(),
-        duration,
-    );
+    let idle_canister_resources = IdleCanisterResources {
+        memory_allocation: canister.memory_allocation(),
+        memory_usage: canister.memory_usage(),
+        message_memory_usage: canister.message_memory_usage(),
+        snapshots_memory_usage: canister_snapshots_usage,
+        compute_allocation: canister.compute_allocation(),
+    };
+    let expected_charge = test.compute_resource_charge_cost(idle_canister_resources, duration);
     test.set_time(initial_time + duration);
 
     // Trigger a charge for resources.
