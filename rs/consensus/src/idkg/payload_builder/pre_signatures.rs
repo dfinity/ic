@@ -282,53 +282,23 @@ fn update_schnorr_transcript_in_creation(
     Ok((pre_signature.blinder_unmasked.is_some(), new_transcripts))
 }
 
-/// Purge all available but unmatched pre-signatures that are referencing a different key transcript
-/// than the one currently used.
-pub(super) fn purge_old_key_pre_signatures(
-    idkg_payload: &mut idkg::IDkgPayload,
-    all_signing_requests: &BTreeMap<CallbackId, SignWithThresholdContext>,
-) {
-    let matched_pre_signatures = all_signing_requests
-        .values()
-        .flat_map(|context| context.matched_pre_signature)
-        .map(|(pre_sig_id, _)| pre_sig_id)
-        .collect::<BTreeSet<_>>();
-
-    idkg_payload.available_pre_signatures.retain(|id, pre_sig| {
-        matched_pre_signatures.contains(id)
-            || idkg_payload
-                .key_transcripts
-                .get(&pre_sig.key_id())
-                .and_then(|key_transcript| key_transcript.current.as_ref())
-                .is_some_and(|current_key_transcript| {
-                    pre_sig.key_unmasked().as_ref().transcript_id
-                        == current_key_transcript.transcript_id()
-                })
-    });
-}
-
 /// Creating new pre-signatures if necessary by updating pre_signatures_in_creation,
 /// considering currently available pre-signatures, pre-signatures in creation, and
 /// chain key configs.
 pub(super) fn make_new_pre_signatures_if_needed(
     chain_key_config: &ChainKeyConfig,
     idkg_payload: &mut idkg::IDkgPayload,
-    matched_pre_signatures_per_key_id: &BTreeMap<MasterPublicKeyId, usize>,
+    stashed_pre_signatures_count: &BTreeMap<MasterPublicKeyId, usize>,
 ) {
     for (key_id, key_transcript) in &idkg_payload.key_transcripts {
         let Some(key_transcript) = key_transcript.current.as_ref() else {
             continue;
         };
 
-        let matched_pre_signature = matched_pre_signatures_per_key_id
+        let stashed_pre_signatures = stashed_pre_signatures_count
             .get(key_id)
             .copied()
             .unwrap_or_default();
-
-        let unassigned_pre_signatures = idkg_payload
-            .iter_pre_signature_ids(key_id)
-            .count()
-            .saturating_sub(matched_pre_signature);
 
         let node_ids: Vec<_> = key_transcript.receivers().iter().copied().collect();
         let new_pre_signatures = make_new_pre_signatures_if_needed_helper(
@@ -337,7 +307,9 @@ pub(super) fn make_new_pre_signatures_if_needed(
             chain_key_config,
             key_id,
             &mut idkg_payload.uid_generator,
-            unassigned_pre_signatures,
+            stashed_pre_signatures,
+            idkg_payload.pre_sigs_in_creation_count(key_id),
+            idkg_payload.available_pre_sigs_count(key_id),
         );
 
         idkg_payload
@@ -352,7 +324,9 @@ fn make_new_pre_signatures_if_needed_helper(
     chain_key_config: &ChainKeyConfig,
     key_id: &MasterPublicKeyId,
     uid_generator: &mut IDkgUIDGenerator,
-    unassigned_pre_signatures: usize,
+    stashed_pre_signatures_count: usize,
+    mut pre_sigs_in_creation_count: usize,
+    available_pre_sigs_count: usize,
 ) -> BTreeMap<PreSigId, PreSignatureInCreation> {
     let mut new_pre_signatures = BTreeMap::new();
 
@@ -365,11 +339,17 @@ fn make_new_pre_signatures_if_needed_helper(
         return new_pre_signatures;
     };
 
-    if pre_signatures_to_create <= unassigned_pre_signatures {
+    if pre_signatures_to_create <= pre_sigs_in_creation_count {
         return new_pre_signatures;
     }
 
-    for _ in 0..(pre_signatures_to_create - unassigned_pre_signatures) {
+    // There is capacity in the current block to start the creation of more pre-sigs for this key
+    for _ in 0..(pre_signatures_to_create - pre_sigs_in_creation_count) {
+        if stashed_pre_signatures_count + available_pre_sigs_count + pre_sigs_in_creation_count
+            >= 100
+        {
+            break;
+        }
         let pre_signature = match key_id {
             MasterPublicKeyId::Ecdsa(ecdsa_key_id) => {
                 let kappa_config = new_random_unmasked_config(
@@ -400,6 +380,7 @@ fn make_new_pre_signatures_if_needed_helper(
             }
         };
         new_pre_signatures.insert(uid_generator.next_pre_signature_id(), pre_signature);
+        pre_sigs_in_creation_count += 1;
     }
 
     new_pre_signatures

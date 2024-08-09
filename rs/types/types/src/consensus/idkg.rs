@@ -188,6 +188,22 @@ impl IDkgPayload {
             .cloned()
     }
 
+    /// Return an iterator of all ids of pre-signatures for the given key in the payload.
+    pub fn pre_sigs_in_creation_count(&self, key_id: &MasterPublicKeyId) -> usize {
+        self.pre_signatures_in_creation
+            .iter()
+            .filter(|(_, pre_sig)| pre_sig.key_id() == *key_id)
+            .count()
+    }
+
+    /// Return an iterator of all ids of pre-signatures for the given key in the payload.
+    pub fn available_pre_sigs_count(&self, key_id: &MasterPublicKeyId) -> usize {
+        self.available_pre_signatures
+            .iter()
+            .filter(|(_, pre_sig)| pre_sig.key_id() == *key_id)
+            .count()
+    }
+
     /// Return active transcript references in the  payload.
     pub fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
         let mut active_refs = BTreeSet::new();

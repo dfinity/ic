@@ -7,7 +7,7 @@ use crate::{
         metrics::{BatchStats, BlockStats},
         status::{self, Status},
     },
-    idkg::utils::{get_idkg_subnet_public_keys, get_pre_signature_ids_to_deliver},
+    idkg::utils::get_idkg_data,
 };
 use ic_consensus_utils::{
     crypto_hashable_to_seed, get_block_hash_string, membership::Membership, pool_reader::PoolReader,
@@ -134,8 +134,8 @@ pub fn deliver_batches(
 
         let randomness = Randomness::from(crypto_hashable_to_seed(&tape));
 
-        let idkg_subnet_public_keys = match get_idkg_subnet_public_keys(&block, pool, log) {
-            Ok(keys) => keys,
+        let idkg_data = match get_idkg_data(&block, pool, log) {
+            Ok(data) => data,
             Err(e) => {
                 // Do not deliver batch if we can't find a previous summary block,
                 // this means we should continue with the latest CUP.
@@ -227,8 +227,7 @@ pub fn deliver_batches(
             requires_full_state_hash,
             messages: batch_messages,
             randomness,
-            idkg_subnet_public_keys,
-            idkg_pre_signature_ids: get_pre_signature_ids_to_deliver(&block),
+            idkg_data,
             registry_version: block.context.registry_version,
             time: block.context.time,
             consensus_responses,

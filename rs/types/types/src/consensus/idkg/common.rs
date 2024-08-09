@@ -6,8 +6,8 @@ use crate::crypto::{
             IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
             IDkgTranscriptType,
         },
-        ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
-        ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
+        EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript, ThresholdEcdsaCombinedSignature,
+        ThresholdEcdsaSigInputs, ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
     },
     AlgorithmId,
 };
@@ -29,12 +29,12 @@ use std::{
 
 use super::{
     ecdsa::{
-        PreSignatureQuadrupleRef, QuadrupleInCreation, ThresholdEcdsaSigInputsError,
-        ThresholdEcdsaSigInputsRef,
+        PreSignatureQuadrupleError, PreSignatureQuadrupleRef, QuadrupleInCreation,
+        ThresholdEcdsaSigInputsError, ThresholdEcdsaSigInputsRef,
     },
     schnorr::{
-        PreSignatureTranscriptRef, ThresholdSchnorrSigInputsError, ThresholdSchnorrSigInputsRef,
-        TranscriptInCreation,
+        PreSignatureTranscriptError, PreSignatureTranscriptRef, ThresholdSchnorrSigInputsError,
+        ThresholdSchnorrSigInputsRef, TranscriptInCreation,
     },
 };
 
@@ -1031,6 +1031,12 @@ impl TryFrom<&pb::PreSignatureInCreation> for PreSignatureInCreation {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum PreSignatureTranslationError {
+    Ecdsa(PreSignatureQuadrupleError),
+    Schnorr(PreSignatureTranscriptError),
+}
+
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum PreSignatureRef {
@@ -1052,6 +1058,23 @@ impl PreSignatureRef {
         match self {
             Self::Schnorr(x) => x.update(height),
             Self::Ecdsa(x) => x.update(height),
+        }
+    }
+
+    /// Resolves the refs to get the PreSignature.
+    pub fn translate(
+        &self,
+        resolver: &dyn IDkgBlockReader,
+    ) -> Result<PreSignature, PreSignatureTranslationError> {
+        match self {
+            Self::Schnorr(x) => Ok(PreSignature::Schnorr(
+                x.translate(resolver)
+                    .map_err(PreSignatureTranslationError::Schnorr)?,
+            )),
+            Self::Ecdsa(x) => Ok(PreSignature::Ecdsa(
+                x.translate(resolver)
+                    .map_err(PreSignatureTranslationError::Ecdsa)?,
+            )),
         }
     }
 
@@ -1079,13 +1102,42 @@ impl TryFrom<&pb::PreSignatureRef> for PreSignatureRef {
     fn try_from(pre_signature: &pb::PreSignatureRef) -> Result<Self, Self::Error> {
         use pb::pre_signature_ref::Msg;
         let Some(msg) = pre_signature.msg.as_ref() else {
-            return Err(ProxyDecodeError::MissingField(
-                "PreSignatureInCreation::msg",
-            ));
+            return Err(ProxyDecodeError::MissingField("PreSignatureRef::msg"));
         };
         Ok(match msg {
             Msg::Schnorr(x) => PreSignatureRef::Schnorr(x.try_into()?),
             Msg::Ecdsa(x) => PreSignatureRef::Ecdsa(x.try_into()?),
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PreSignature {
+    Ecdsa(EcdsaPreSignatureQuadruple),
+    Schnorr(SchnorrPreSignatureTranscript),
+}
+
+impl From<&PreSignature> for pb::PreSignature {
+    fn from(value: &PreSignature) -> Self {
+        use pb::pre_signature::Msg;
+        let msg = match value {
+            PreSignature::Schnorr(x) => Msg::Schnorr(x.into()),
+            PreSignature::Ecdsa(x) => Msg::Ecdsa(x.into()),
+        };
+        Self { msg: Some(msg) }
+    }
+}
+
+impl TryFrom<&pb::PreSignature> for PreSignature {
+    type Error = ProxyDecodeError;
+    fn try_from(pre_signature: &pb::PreSignature) -> Result<Self, Self::Error> {
+        use pb::pre_signature::Msg;
+        let Some(msg) = pre_signature.msg.as_ref() else {
+            return Err(ProxyDecodeError::MissingField("PreSignature::msg"));
+        };
+        Ok(match msg {
+            Msg::Schnorr(x) => PreSignature::Schnorr(x.try_into()?),
+            Msg::Ecdsa(x) => PreSignature::Ecdsa(x.try_into()?),
         })
     }
 }

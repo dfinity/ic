@@ -575,6 +575,7 @@ pub fn get_subnet_record(
 
 /// Return the oldest registry version of transcripts in the given IDKG summary payload that are
 /// referenced by the given replicated state.
+/// TODO: Iterate over all transcripts in context directly
 pub fn get_oldest_idkg_state_registry_version(
     idkg: &IDkgPayload,
     state: &ReplicatedState,

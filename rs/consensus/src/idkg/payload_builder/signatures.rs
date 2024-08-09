@@ -90,6 +90,8 @@ pub(crate) fn update_signature_agreements(
         // We can only remove expired requests once they were matched with a
         // pre-signature. Otherwise the context may be matched with a pre-signature
         // at the next certified state height, which then wouldn't be removed.
+        // TODO: get ID from correct field, also we should be able to expire them now,
+        // even if they weren't matched
         let Some((pre_sig_id, _)) = context.matched_pre_signature else {
             continue;
         };
@@ -103,7 +105,6 @@ pub(crate) fn update_signature_agreements(
                     "Signature request expired",
                 )),
             );
-            payload.available_pre_signatures.remove(&pre_sig_id);
 
             if let Some(metrics) = idkg_payload_metrics {
                 metrics.payload_errors_inc("expired_requests");
@@ -115,6 +116,8 @@ pub(crate) fn update_signature_agreements(
         // In case of subnet recoveries, available pre-signatures are purged.
         // This means that pre-existing requests that were already matched
         // cannot be completed, and we should reject them.
+        // TODO: this is no longer possible, because contexts contain the full pre-sig
+        // What to do after recovery?
         if !payload.available_pre_signatures.contains_key(&pre_sig_id) {
             payload.signature_agreements.insert(
                 context.pseudo_random_id,
@@ -152,7 +155,6 @@ pub(crate) fn update_signature_agreements(
             context.pseudo_random_id,
             idkg::CompletedSignature::Unreported(response),
         );
-        payload.available_pre_signatures.remove(&pre_sig_id);
     }
 }
 

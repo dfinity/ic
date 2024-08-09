@@ -15,6 +15,7 @@ use ic_registry_subnet_features::ChainKeyConfig;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     SignWithThresholdContext, ThresholdArguments,
 };
+use ic_types::batch::IDkgData;
 use ic_types::consensus::idkg::common::{PreSignatureRef, SignatureScheme, ThresholdSigInputsRef};
 use ic_types::consensus::idkg::ecdsa::ThresholdEcdsaSigInputsRef;
 use ic_types::consensus::idkg::schnorr::ThresholdSchnorrSigInputsRef;
@@ -226,6 +227,7 @@ pub(super) fn block_chain_cache(
 /// Helper to build the [`RequestId`] if the context is already completed
 pub(super) fn get_context_request_id(context: &SignWithThresholdContext) -> Option<RequestId> {
     context
+        // Todo get ID from correct field
         .matched_pre_signature
         .map(|(pre_signature_id, height)| RequestId {
             pre_signature_id,
@@ -511,11 +513,11 @@ pub(crate) fn get_pre_signature_ids_to_deliver(
 /// Additionally, we return `Err(string)` if we were unable to find a dkg summary block for the height
 /// of the given block (as the lower bound for past blocks to lookup the transcript in). In that case
 /// a newer CUP is already present in the pool and we should continue from there.
-pub(crate) fn get_idkg_subnet_public_keys(
+pub(crate) fn get_idkg_data(
     block: &Block,
     pool: &PoolReader<'_>,
     log: &ReplicaLogger,
-) -> Result<BTreeMap<MasterPublicKeyId, MasterPublicKey>, String> {
+) -> Result<BTreeMap<MasterPublicKeyId, IDkgData>, String> {
     let Some(idkg_payload) = block.payload.as_ref().as_idkg() else {
         return Ok(BTreeMap::new());
     };
@@ -529,7 +531,7 @@ pub(crate) fn get_idkg_subnet_public_keys(
     let chain = pool.pool().build_block_chain(&summary, block);
     let block_reader = IDkgBlockReaderImpl::new(chain);
 
-    let mut public_keys = BTreeMap::new();
+    let mut idkg_data = BTreeMap::new();
 
     for (key_id, key_transcript) in &idkg_payload.key_transcripts {
         let Some(transcript_ref) = key_transcript
@@ -540,24 +542,50 @@ pub(crate) fn get_idkg_subnet_public_keys(
             continue;
         };
 
-        let ecdsa_subnet_public_key = match block_reader.transcript(&transcript_ref) {
-            Ok(transcript) => get_subnet_master_public_key(&transcript, log),
+        let maybe_public_key = match block_reader.transcript(&transcript_ref) {
+            Ok(transcript) => get_subnet_master_public_key(&transcript, log)
+                .map(|public_key| (public_key, transcript.transcript_id)),
             Err(err) => {
                 warn!(
                     log,
-                    "Failed to translate transcript ref {:?}: {:?}", transcript_ref, err
+                    "Failed to translate transcript ref {:?} for key id {}: {:?}",
+                    transcript_ref,
+                    key_id,
+                    err
                 );
-
                 None
             }
         };
 
-        if let Some(public_key) = ecdsa_subnet_public_key {
-            public_keys.insert(key_id.clone(), public_key);
+        if let Some((public_key, key_transcript_id)) = maybe_public_key {
+            let pre_signatures = idkg_payload
+                .available_pre_signatures
+                .iter()
+                .filter(|(_, pre_sig)| pre_sig.key_id() == *key_id)
+                .flat_map(|(&id, pre_sig)| match pre_sig.translate(&block_reader) {
+                    Ok(pre_signature) => Some((id, pre_signature)),
+                    Err(err) => {
+                        warn!(
+                            log,
+                            "Failed to translate pre-signature ref {:?}: {:?}", id, err
+                        );
+                        None
+                    }
+                })
+                .collect();
+
+            idkg_data.insert(
+                key_id.clone(),
+                IDkgData {
+                    public_key,
+                    key_transcript_id,
+                    pre_signatures,
+                },
+            );
         }
     }
 
-    Ok(public_keys)
+    Ok(idkg_data)
 }
 
 fn get_subnet_master_public_key(

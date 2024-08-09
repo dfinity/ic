@@ -100,6 +100,9 @@ pub struct EcdsaArguments {
     pub key_id: ::core::option::Option<super::super::super::registry::crypto::v1::EcdsaKeyId>,
     #[prost(bytes = "vec", tag = "2")]
     pub message_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "3")]
+    pub pre_signature:
+        ::core::option::Option<super::super::super::types::v1::EcdsaDeliveredPreSignature>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -108,6 +111,9 @@ pub struct SchnorrArguments {
     pub key_id: ::core::option::Option<super::super::super::registry::crypto::v1::SchnorrKeyId>,
     #[prost(bytes = "vec", tag = "2")]
     pub message: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "3")]
+    pub pre_signature:
+        ::core::option::Option<super::super::super::types::v1::SchnorrDeliveredPreSignature>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -139,10 +145,6 @@ pub struct SignWithThresholdContext {
     pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "5")]
     pub batch_time: u64,
-    #[prost(uint64, optional, tag = "6")]
-    pub pre_signature_id: ::core::option::Option<u64>,
-    #[prost(uint64, optional, tag = "7")]
-    pub height: ::core::option::Option<u64>,
     #[prost(bytes = "vec", optional, tag = "8")]
     pub nonce: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
@@ -153,6 +155,18 @@ pub struct SignWithThresholdContextTree {
     pub callback_id: u64,
     #[prost(message, optional, tag = "2")]
     pub context: ::core::option::Option<SignWithThresholdContext>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignatureStashTree {
+    #[prost(message, optional, tag = "1")]
+    pub key_id:
+        ::core::option::Option<super::super::super::registry::crypto::v1::MasterPublicKeyId>,
+    #[prost(message, optional, tag = "2")]
+    pub key_transcript_id:
+        ::core::option::Option<super::super::super::registry::subnet::v1::IDkgTranscriptId>,
+    #[prost(message, repeated, tag = "3")]
+    pub pre_signatures: ::prost::alloc::vec::Vec<super::super::super::types::v1::PreSignature>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -371,6 +385,8 @@ pub struct SubnetCallContextManager {
     pub idkg_dealings_contexts: ::prost::alloc::vec::Vec<IDkgDealingsContextTree>,
     #[prost(message, repeated, tag = "18")]
     pub sign_with_threshold_contexts: ::prost::alloc::vec::Vec<SignWithThresholdContextTree>,
+    #[prost(message, repeated, tag = "19")]
+    pub pre_signatures: ::prost::alloc::vec::Vec<PreSignatureStashTree>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

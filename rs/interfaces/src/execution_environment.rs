@@ -9,15 +9,14 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
 use ic_types::{
-    consensus::idkg::PreSigId,
-    crypto::canister_threshold_sig::MasterPublicKey,
+    batch::IDkgData,
     ingress::{IngressStatus, WasmResult},
     messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
     CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     convert::{Infallible, TryFrom},
     fmt, ops,
 };
@@ -1247,8 +1246,7 @@ pub trait Scheduler: Send {
         &self,
         state: Self::State,
         randomness: Randomness,
-        idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-        idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+        idkg_data: BTreeMap<MasterPublicKeyId, IDkgData>,
         current_round: ExecutionRound,
         round_summary: Option<ExecutionRoundSummary>,
         current_round_type: ExecutionRoundType,
