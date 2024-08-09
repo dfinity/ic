@@ -24,6 +24,8 @@ pub use storage::{
 use storage::{OverlayFile, OverlayVersion, Storage};
 
 use ic_types::{Height, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use int_map::{Bounds, IntMap};
 use libc::off_t;
 use page_allocator::Page;
@@ -432,10 +434,11 @@ impl<'a> MemoryInstructions<'a> {
 ///
 /// `PageMap` is designed to be cheap to copy so that heap can be easily
 /// versioned.
-#[derive(Clone)]
+#[derive(Clone, ValidateEq)]
 pub struct PageMap {
     /// The checkpoint that is used for all the pages that can not be found in
     /// the `page_delta`.
+    #[validate_eq(Skip)]
     storage: Storage,
 
     /// The height of the checkpoint that backs the page map.
@@ -444,18 +447,21 @@ pub struct PageMap {
     /// The map containing pages overriding pages from `storage`.
     /// We need these pages to be able to reconstruct the full heap.
     /// It is reset when `strip_all_deltas()` method is called.
+    #[validate_eq(Skip)]
     page_delta: PageDelta,
 
     /// The map containing deltas accumulated since the last flush to disk.
     /// It is reset when `strip_unflushed_delta()` or `strip_all_deltas()` methods are called.
     ///
     /// Invariant: unflushed_delta ⊆ page_delta
+    #[validate_eq(Skip)]
     unflushed_delta: PageDelta,
 
     has_stripped_unflushed_deltas: bool,
 
     /// The allocator for PageDelta pages.
     /// It is reset when `strip_all_deltas()` method is called.
+    #[validate_eq(Skip)]
     page_allocator: PageAllocator,
 }
 
