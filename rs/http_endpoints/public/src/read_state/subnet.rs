@@ -87,54 +87,55 @@ pub(crate) async fn read_state_subnet(
         }
     };
     let read_state = request.content().clone();
-    let certified_state_reader = match tokio::task::spawn_blocking(move || {
-        state_reader.get_certified_state_snapshot()
+    let response = tokio::task::spawn_blocking(move || {
+        let certified_state_reader = match state_reader.get_certified_state_snapshot() {
+            Some(reader) => reader,
+            None => return make_service_unavailable_response(),
+        };
+
+        // Verify authorization for requested paths.
+        if let Err(HttpError { status, message }) =
+            verify_paths(&read_state.paths, effective_canister_id.into())
+        {
+            return (status, message).into_response();
+        }
+
+        // Create labeled tree. This may be an expensive operation and by
+        // creating the labeled tree after verifying the paths we know that
+        // the depth is max 4.
+        // Always add "time" to the paths even if not explicitly requested.
+        let mut paths: Vec<Path> = read_state.paths;
+        paths.push(Path::from(Label::from("time")));
+        let labeled_tree = match sparse_labeled_tree_from_paths(&paths) {
+            Ok(tree) => tree,
+            Err(TooLongPathError) => {
+                let status = StatusCode::BAD_REQUEST;
+                let text = "Failed to parse requested paths: path is too long.".to_string();
+                return (status, text).into_response();
+            }
+        };
+
+        let (tree, certification) = match certified_state_reader.read_certified_state(&labeled_tree)
+        {
+            Some(r) => r,
+            None => return make_service_unavailable_response(),
+        };
+
+        let signature = certification.signed.signature.signature.get().0;
+        Cbor(HttpReadStateResponse {
+            certificate: Blob(into_cbor(&Certificate {
+                tree,
+                signature: Blob(signature),
+                delegation: delegation_from_nns,
+            })),
+        })
+        .into_response()
     })
-    .await
-    {
-        Ok(Some(reader)) => reader,
-        Ok(None) => return make_service_unavailable_response(),
-        Err(_) => {
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-
-    // Verify authorization for requested paths.
-    if let Err(HttpError { status, message }) =
-        verify_paths(&read_state.paths, effective_canister_id.into())
-    {
-        return (status, message).into_response();
+    .await;
+    match response {
+        Ok(res) => res,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
-
-    // Create labeled tree. This may be an expensive operation and by
-    // creating the labeled tree after verifying the paths we know that
-    // the depth is max 4.
-    // Always add "time" to the paths even if not explicitly requested.
-    let mut paths: Vec<Path> = read_state.paths;
-    paths.push(Path::from(Label::from("time")));
-    let labeled_tree = match sparse_labeled_tree_from_paths(&paths) {
-        Ok(tree) => tree,
-        Err(TooLongPathError) => {
-            let status = StatusCode::BAD_REQUEST;
-            let text = "Failed to parse requested paths: path is too long.".to_string();
-            return (status, text).into_response();
-        }
-    };
-
-    let (tree, certification) = match certified_state_reader.read_certified_state(&labeled_tree) {
-        Some(r) => r,
-        None => return make_service_unavailable_response(),
-    };
-
-    let signature = certification.signed.signature.signature.get().0;
-    let res = HttpReadStateResponse {
-        certificate: Blob(into_cbor(&Certificate {
-            tree,
-            signature: Blob(signature),
-            delegation: delegation_from_nns,
-        })),
-    };
-    Cbor(res).into_response()
 }
 
 fn verify_paths(paths: &[Path], effective_principal_id: PrincipalId) -> Result<(), HttpError> {

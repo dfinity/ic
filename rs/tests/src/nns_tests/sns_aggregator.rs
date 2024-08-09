@@ -27,8 +27,8 @@ use ic_system_test_driver::{
         ic::InternetComputer,
         test_env::{TestEnv, TestEnvAttribute},
         test_env_api::{
-            GetFirstHealthyNodeSnapshot, HasDependencies, HasPublicApiUrl, HasTopologySnapshot,
-            HasWasm, IcNodeContainer,
+            get_dependency_path, load_wasm, GetFirstHealthyNodeSnapshot, HasPublicApiUrl,
+            HasTopologySnapshot, IcNodeContainer,
         },
     },
     util::block_on,
@@ -305,11 +305,10 @@ impl AggregatorClient {
                 "Validating aggregator canister's installation via public endpoint {}",
                 app_node.get_public_url().as_str(),
             );
-            let p =
-                env.get_dependency_path("external/sns_aggregator/file/sns_aggregator_dev.wasm.gz");
+            let p = get_dependency_path("external/sns_aggregator/file/sns_aggregator_dev.wasm.gz");
             let p = std::fs::canonicalize(p.clone())
                 .unwrap_or_else(|e| panic!("cannot obtain canonical path from {p:?}: {e:?}"));
-            let canister_bytes = env.load_wasm(p);
+            let canister_bytes = load_wasm(p);
             let canister_id = app_node.with_default_agent({
                 let log = log.clone();
                 move |agent| async move {

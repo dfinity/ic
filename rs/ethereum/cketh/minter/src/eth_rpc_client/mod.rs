@@ -8,23 +8,26 @@ use crate::eth_rpc_client::providers::{
     EthereumProvider, RpcNodeProvider, SepoliaProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS,
 };
 use crate::eth_rpc_client::requests::GetTransactionCountParams;
-use crate::eth_rpc_client::responses::TransactionReceipt;
+use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
 use crate::logs::{PrintProxySink, DEBUG, INFO, TRACE_HTTP};
-use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei, WeiPerGas};
+use crate::numeric::{BlockNumber, GasAmount, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::State;
+use candid::Nat;
 use evm_rpc_client::types::candid::RpcConfig;
 use evm_rpc_client::{
     types::candid::{
         Block as EvmBlock, BlockTag as EvmBlockTag, FeeHistory as EvmFeeHistory,
         FeeHistoryArgs as EvmFeeHistoryArgs, GetLogsArgs as EvmGetLogsArgs,
-        LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, RpcError as EvmRpcError,
-        RpcResult as EvmRpcResult,
+        GetTransactionCountArgs as EvmGetTransactionCountArgs, LogEntry as EvmLogEntry,
+        MultiRpcResult as EvmMultiRpcResult, RpcError as EvmRpcError, RpcResult as EvmRpcResult,
+        TransactionReceipt as EvmTransactionReceipt,
     },
     EvmRpcClient, IcRuntime, OverrideRpcConfig,
 };
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
+use num_traits::ToPrimitive;
 use serde::{de::DeserializeOwned, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display};
@@ -231,6 +234,13 @@ impl EthRpcClient {
         &self,
         tx_hash: Hash,
     ) -> Result<Option<TransactionReceipt>, MultiCallError<Option<TransactionReceipt>>> {
+        if let Some(evm_rpc_client) = &self.evm_rpc_client {
+            return evm_rpc_client
+                .eth_get_transaction_receipt(tx_hash.to_string())
+                .await
+                .reduce()
+                .into();
+        }
         let results: MultiCallResults<Option<TransactionReceipt>> = self
             .parallel_call(
                 "eth_getTransactionReceipt",
@@ -238,7 +248,7 @@ impl EthRpcClient {
                 ResponseSizeEstimate::new(700),
             )
             .await;
-        results.reduce_with_equality()
+        results.reduce().into()
     }
 
     pub async fn eth_fee_history(
@@ -277,7 +287,51 @@ impl EthRpcClient {
         .await
     }
 
-    pub async fn eth_get_transaction_count(
+    pub async fn eth_get_finalized_transaction_count(
+        &self,
+        address: Address,
+    ) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
+        if let Some(evm_rpc_client) = &self.evm_rpc_client {
+            let results = evm_rpc_client
+                .eth_get_transaction_count(EvmGetTransactionCountArgs {
+                    address: address.to_string(),
+                    block: EvmBlockTag::Finalized,
+                })
+                .await;
+            return ReduceWithStrategy::<Equality>::reduce(results).into();
+        }
+        let results: MultiCallResults<TransactionCount> = self
+            .eth_get_transaction_count(GetTransactionCountParams {
+                address,
+                block: BlockSpec::Tag(BlockTag::Finalized),
+            })
+            .await;
+        ReduceWithStrategy::<Equality>::reduce(results).into()
+    }
+
+    pub async fn eth_get_latest_transaction_count(
+        &self,
+        address: Address,
+    ) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
+        if let Some(evm_rpc_client) = &self.evm_rpc_client {
+            let results = evm_rpc_client
+                .eth_get_transaction_count(EvmGetTransactionCountArgs {
+                    address: address.to_string(),
+                    block: EvmBlockTag::Latest,
+                })
+                .await;
+            return ReduceWithStrategy::<MinByKey>::reduce(results).into();
+        }
+        let results: MultiCallResults<TransactionCount> = self
+            .eth_get_transaction_count(GetTransactionCountParams {
+                address,
+                block: BlockSpec::Tag(BlockTag::Latest),
+            })
+            .await;
+        ReduceWithStrategy::<MinByKey>::reduce(results).into()
+    }
+
+    async fn eth_get_transaction_count(
         &self,
         params: GetTransactionCountParams,
     ) -> MultiCallResults<TransactionCount> {
@@ -651,7 +705,7 @@ impl Reduce for EvmMultiRpcResult<Option<EvmFeeHistory>> {
             })
         }
 
-        fn wei_per_gas_iter(values: Vec<candid::Nat>) -> Result<Vec<WeiPerGas>, String> {
+        fn wei_per_gas_iter(values: Vec<Nat>) -> Result<Vec<WeiPerGas>, String> {
             values.into_iter().map(WeiPerGas::try_from).collect()
         }
 
@@ -667,6 +721,95 @@ impl Reduce for MultiCallResults<FeeHistory> {
     fn reduce(self) -> ReducedResult<Self::Item> {
         self.reduce_with_strict_majority_by_key(|fee_history| fee_history.oldest_block)
             .into()
+    }
+}
+
+impl Reduce for EvmMultiRpcResult<Option<EvmTransactionReceipt>> {
+    type Item = Option<TransactionReceipt>;
+
+    fn reduce(self) -> ReducedResult<Self::Item> {
+        fn map_transaction_receipt(
+            receipt: Option<EvmTransactionReceipt>,
+        ) -> Result<Option<TransactionReceipt>, String> {
+            receipt
+                .map(|evm_receipt| {
+                    Ok(TransactionReceipt {
+                        block_hash: Hash::from_str(&evm_receipt.block_hash)?,
+                        block_number: BlockNumber::try_from(evm_receipt.block_number)?,
+                        effective_gas_price: WeiPerGas::try_from(evm_receipt.effective_gas_price)?,
+                        gas_used: GasAmount::try_from(evm_receipt.gas_used)?,
+                        status: TransactionStatus::try_from(
+                            evm_receipt
+                                .status
+                                .0
+                                .to_u8()
+                                .ok_or("invalid transaction status")?,
+                        )?,
+                        transaction_hash: Hash::from_str(&evm_receipt.transaction_hash)?,
+                    })
+                })
+                .transpose()
+        }
+
+        ReducedResult::from_internal(self).map_reduce(
+            &map_transaction_receipt,
+            MultiCallResults::reduce_with_equality,
+        )
+    }
+}
+
+impl Reduce for MultiCallResults<Option<TransactionReceipt>> {
+    type Item = Option<TransactionReceipt>;
+
+    fn reduce(self) -> ReducedResult<Self::Item> {
+        self.reduce_with_equality().into()
+    }
+}
+
+trait ReduceWithStrategy<S> {
+    type Item;
+    fn reduce(self) -> ReducedResult<Self::Item>;
+}
+
+pub enum Equality {}
+pub enum MinByKey {}
+
+impl ReduceWithStrategy<Equality> for MultiCallResults<TransactionCount> {
+    type Item = TransactionCount;
+
+    fn reduce(self) -> ReducedResult<Self::Item> {
+        self.reduce_with_equality().into()
+    }
+}
+
+impl ReduceWithStrategy<Equality> for EvmMultiRpcResult<Nat> {
+    type Item = TransactionCount;
+
+    fn reduce(self) -> ReducedResult<Self::Item> {
+        ReducedResult::from_internal(self).map_reduce(
+            &|tx_count: Nat| TransactionCount::try_from(tx_count),
+            MultiCallResults::reduce_with_equality,
+        )
+    }
+}
+
+impl ReduceWithStrategy<MinByKey> for MultiCallResults<TransactionCount> {
+    type Item = TransactionCount;
+
+    fn reduce(self) -> ReducedResult<Self::Item> {
+        self.reduce_with_min_by_key(|transaction_count| *transaction_count)
+            .into()
+    }
+}
+
+impl ReduceWithStrategy<MinByKey> for EvmMultiRpcResult<Nat> {
+    type Item = TransactionCount;
+
+    fn reduce(self) -> ReducedResult<Self::Item> {
+        ReducedResult::from_internal(self).map_reduce(
+            &|tx_count: Nat| TransactionCount::try_from(tx_count),
+            |results| results.reduce_with_min_by_key(|transaction_count| *transaction_count),
+        )
     }
 }
 
