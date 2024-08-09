@@ -140,7 +140,9 @@ use registry_canister::mutations::{
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
     do_set_firewall_config::SetFirewallConfigPayload,
     do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
-    do_update_elected_hostos_versions::UpdateElectedHostosVersionsPayload,
+    do_update_elected_hostos_versions::{
+        ReviseElectedHostosVersionsPayload, UpdateElectedHostosVersionsPayload,
+    },
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
     do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
     do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
@@ -3265,7 +3267,10 @@ impl ProposalPayload<UpdateElectedHostosVersionsPayload>
             release_package_urls: self.release_package_urls.clone(),
             hostos_versions_to_unelect: self.hostos_versions_to_unelect.clone(),
         };
-        payload.validate().expect("Failed to validate payload");
+        // TODO[NNS1-3000]: Use new Registry naming convention once NNS Governance supports it.
+        ReviseElectedHostosVersionsPayload::from(payload.clone())
+            .validate()
+            .expect("Failed to validate payload");
         payload
     }
 }
