@@ -612,19 +612,14 @@ impl NnsFunction {
                 (REGISTRY_CANISTER_ID, "deploy_guestos_to_all_subnet_nodes")
             }
             NnsFunction::UpdateElectedHostosVersions => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!(
-                        "{:?} is a deprecated NnsFunction. Use ReviseElectedHostosVersions instead",
-                        self
-                    ),
-                ));
+                (REGISTRY_CANISTER_ID, "update_elected_hostos_versions")
             }
             NnsFunction::UpdateNodesHostosVersion => {
                 (REGISTRY_CANISTER_ID, "update_nodes_hostos_version")
             }
             NnsFunction::ReviseElectedHostosVersions => {
-                (REGISTRY_CANISTER_ID, "revise_elected_hostos_versions")
+                // TODO[NNS1-3000]: Rename Registry API ednpoints callable only by NNS Governance.
+                (REGISTRY_CANISTER_ID, "update_elected_hostos_versions")
             }
             NnsFunction::DeployHostosToSomeNodes => {
                 // TODO[NNS1-3000]: Rename Registry API ednpoints callable only by NNS Governance.
