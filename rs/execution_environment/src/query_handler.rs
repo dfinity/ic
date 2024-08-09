@@ -310,6 +310,7 @@ fn fetch_canister_logs(
         LogVisibilityV2::Public => Ok(()),
         LogVisibilityV2::Controllers if canister.controllers().contains(&sender) => Ok(()),
         LogVisibilityV2::AllowedViewers(principals) if principals.get().contains(&sender) => Ok(()),
+        LogVisibilityV2::AllowedViewers(_) if canister.controllers().contains(&sender) => Ok(()),
         LogVisibilityV2::AllowedViewers(_) | LogVisibilityV2::Controllers => Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
             format!(
