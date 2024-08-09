@@ -5,34 +5,34 @@
 # [Misc]
 /.devcontainer/           @dfinity/idx
 /.github/                 @dfinity/idx
-/.github/workflows        @dfinity/idx
 /.github/CODEOWNERS       @dfinity/ic-owners-owners
-/buf.yaml                 @dfinity/ic-message-routing-owners
-/cpp/                     @dfinity/node
-/hs/                      @dfinity/utopia
-/licenses/                @dfinity/idx
-/bin/ict                  @dfinity/idx
+/.github/workflows        @dfinity/idx
 /bin/                     @dfinity/idx
 /bin/afl_test.sh          @dfinity/product-security
 /bin/afl_wrapper.sh       @dfinity/product-security
 /bin/build-all-fuzzers.sh @dfinity/product-security
 /bin/fuzzing_coverage.sh  @dfinity/product-security
+/bin/ict                  @dfinity/idx
+/buf.yaml                 @dfinity/ic-message-routing-owners
+/cpp/                     @dfinity/node
+/hs/                      @dfinity/utopia
+/licenses/                @dfinity/idx
 
 # [Bazel]
-/bazel/                   @dfinity/idx
-/bazel/fuzz_testing.bzl   @dfinity/idx @dfinity/product-security
-/third_party/             @dfinity/idx
-/WORKSPACE.bazel          @dfinity/idx
-/mainnet-canisters.bzl    @dfinity/idx @dfinity/nns-team
-/BUILD.bazel              @dfinity/idx
 .bazelrc                  @dfinity/idx
 .bazelversion             @dfinity/idx
+/BUILD.bazel              @dfinity/idx
+/WORKSPACE.bazel          @dfinity/idx
+/bazel/                   @dfinity/idx
+/bazel/fuzz_testing.bzl   @dfinity/idx @dfinity/product-security
+/mainnet-canisters.bzl    @dfinity/idx @dfinity/nns-team
+/third_party/             @dfinity/idx
 
 # [Rust Lang]
+clippy.toml               @dfinity/ic-interface-owners
+deny.toml                 @dfinity/networking
 rust-toolchain.toml       @dfinity/networking
 rustfmt.toml              @dfinity/networking
-deny.toml                 @dfinity/networking
-clippy.toml               @dfinity/ic-interface-owners
 
 # [Golang]
 go.mod                    @dfinity/idx
@@ -46,18 +46,18 @@ go_deps.bzl               @dfinity/idx
 /publish/ @dfinity/idx
 
 # [Packages]
-/packages/icrc-ledger-agent/         @dfinity/finint
-/packages/icrc-ledger-types/         @dfinity/finint
 /packages/ic-ledger-hash-of/         @dfinity/finint
-/packages/pocket-ic/                 @dfinity/pocket-ic
 /packages/ic-signature-verification/ @dfinity/crypto-team
 /packages/ic-vetkd-utils/            @dfinity/crypto-team
+/packages/icrc-ledger-agent/         @dfinity/finint
+/packages/icrc-ledger-types/         @dfinity/finint
+/packages/pocket-ic/                 @dfinity/pocket-ic
 
 # [IC-OS]
 /ic-os/                                                                 @dfinity/node
 /ic-os/boundary-guestos/                                                @dfinity/boundary-node @dfinity/node
-/ic-os/components/boundary-guestos/                                     @dfinity/boundary-node @dfinity/node
 /ic-os/components/boundary-guestos.bzl                                  @dfinity/boundary-node @dfinity/node
+/ic-os/components/boundary-guestos/                                     @dfinity/boundary-node @dfinity/node
 /ic-os/components/init/bootstrap-ic-node/boundary-guestos/              @dfinity/boundary-node @dfinity/node
 /toolchains/                                                            @dfinity/node
 
@@ -65,28 +65,28 @@ go_deps.bzl               @dfinity/idx
 /ic-os/components/monitoring/metrics-proxy/      @dfinity/dre
 
 # [GitLab-CI]
-/.pre-commit-config.yaml                                                @dfinity/idx
-/pre-commit/                                                            @dfinity/idx
 /.gitlab-ci.yml                                                         @dfinity/idx
 /.gitlab/                                                               @dfinity/idx
 /.gitlab/CODEOWNERS                                                     @dfinity/ic-owners-owners
+/.pre-commit-config.yaml                                                @dfinity/idx
 /gitlab-ci/                                                             @dfinity/idx
-/gitlab-ci/src/std-fs-check/                                            @dfinity/node
-/gitlab-ci/src/dependencies/                                            @dfinity/product-security
-/gitlab-ci/config/dependencies.yml                                      @dfinity/product-security
-/gitlab-ci/src/gen_gitlab_cargo_pipeline/farm_rate_limit.py             @dfinity/idx
 /gitlab-ci/config/child-pipeline--benchmark.yml                         @dfinity/execution
-/gitlab-ci/config/spawn-pipeline--benchmark.yml                         @dfinity/execution
+/gitlab-ci/config/dependencies.yml                                      @dfinity/product-security
 /gitlab-ci/config/rosetta.yml                                           @dfinity/finint
+/gitlab-ci/config/spawn-pipeline--benchmark.yml                         @dfinity/execution
+/gitlab-ci/src/dependencies/                                            @dfinity/product-security
+/gitlab-ci/src/gen_gitlab_cargo_pipeline/farm_rate_limit.py             @dfinity/idx
+/gitlab-ci/src/std-fs-check/                                            @dfinity/node
+/pre-commit/                                                            @dfinity/idx
 
 # [Testnet]
 /testnet/                                                  @dfinity/node @dfinity/dre
 /testnet/ansible/                                          @dfinity/platform-operations
 /testnet/docs/                                             @dfinity/ic-support
 /testnet/env/                                              @dfinity/platform-operations
+/testnet/mainnet_revisions.json                            @dfinity/consensus @dfinity/dre
 /testnet/release/                                          @dfinity/dre
 /testnet/tools/nns-tools/                                  @dfinity/nns-team
-/testnet/mainnet_revisions.json                            @dfinity/consensus @dfinity/dre
 
 # [Rust]
 /rs/                                                    @dfinity/ic-interface-owners
@@ -96,12 +96,12 @@ go_deps.bzl               @dfinity/idx
 /rs/bitcoin/                                            @dfinity/ic-interface-owners
 /rs/bitcoin/adapter/                                    @dfinity/networking
 /rs/bitcoin/ckbtc/                                      @dfinity/cross-chain-team
-/rs/bitcoin/mock/                                       @dfinity/finint
 /rs/bitcoin/client/                                     @dfinity/networking
 /rs/bitcoin/consensus/                                  @dfinity/execution @dfinity/consensus
 /rs/bitcoin/kyt/                                        @dfinity/cross-chain-team
-/rs/bitcoin/service/                                    @dfinity/networking
+/rs/bitcoin/mock/                                       @dfinity/finint
 /rs/bitcoin/replica_types/                              @dfinity/execution
+/rs/bitcoin/service/                                    @dfinity/networking
 /rs/boundary_node/                                      @dfinity/boundary-node
 /rs/canister_client/                                    @dfinity/networking
 /rs/canister_sandbox/                                   @dfinity/execution
@@ -195,19 +195,19 @@ go_deps.bzl               @dfinity/idx
 /rs/replica/                                            @dfinity/networking
 /rs/replica_tests/                                      @dfinity/execution
 /rs/replicated_state/                                   @dfinity/execution @dfinity/ic-message-routing-owners
-/rs/replicated_state/src/canister_state/queues.rs       @dfinity/ic-message-routing-owners
 /rs/replicated_state/src/canister_state/queues          @dfinity/ic-message-routing-owners
+/rs/replicated_state/src/canister_state/queues.rs       @dfinity/ic-message-routing-owners
 /rs/replicated_state/src/page_map.rs                    @dfinity/ic-message-routing-owners @dfinity/execution
 /rs/replicated_state/src/page_map/                      @dfinity/ic-message-routing-owners @dfinity/execution
 /rs/rosetta-api/                                        @dfinity/finint
 /rs/rust_canisters/                                     @dfinity/nns-team
-/rs/rust_canisters/memory_test/                         @dfinity/execution
 /rs/rust_canisters/call_tree_test/                      @dfinity/execution
+/rs/rust_canisters/canister_creator                     @dfinity/execution
+/rs/rust_canisters/memory_test/                         @dfinity/execution
 /rs/rust_canisters/proxy_canister/                      @dfinity/networking
 /rs/rust_canisters/response_payload_test/               @dfinity/execution
-/rs/rust_canisters/stable_structures/                   @dfinity/execution
 /rs/rust_canisters/stable_memory_integrity              @dfinity/execution
-/rs/rust_canisters/canister_creator                     @dfinity/execution
+/rs/rust_canisters/stable_structures/                   @dfinity/execution
 /rs/rust_canisters/xnet_test/                           @dfinity/ic-message-routing-owners
 /rs/scenario_tests/                                     @dfinity/idx
 /rs/sns/                                                @dfinity/nns-team
@@ -235,6 +235,7 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/execution/                                    @dfinity/execution @dfinity/idx
 /rs/tests/financial_integrations/                       @dfinity/finint @dfinity/idx
 /rs/tests/gix/                                          @dfinity/idx
+/rs/tests/k8s/                                          @dfinity/idx @dfinity/node
 /rs/tests/message_routing/                              @dfinity/ic-message-routing-owners @dfinity/idx
 /rs/tests/networking/                                   @dfinity/networking @dfinity/idx
 /rs/tests/nns/                                          @dfinity/nns-team @dfinity/idx
@@ -262,7 +263,6 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/src/query_stats/                              @dfinity/execution @dfinity/consensus @dfinity/idx
 /rs/tests/src/rosetta_test.rs                           @dfinity/finint @dfinity/idx
 /rs/tests/src/tecdsa/                                   @dfinity/consensus @dfinity/idx
-/rs/tests/k8s/                                          @dfinity/idx @dfinity/node
 /rs/tools/                                              @dfinity/ic-interface-owners
 /rs/tools/check_did/                                    @dfinity/finint
 /rs/tree_deserializer/                                  @dfinity/ic-message-routing-owners
@@ -292,6 +292,6 @@ go_deps.bzl               @dfinity/idx
 # [No-Approvals]
 # Ghost is a group with no direct members. GitLab will bypass codeowners for files that match ghost ownership.
 *.lock
-Cargo.toml
 .gitignore
+Cargo.toml
 stackage_snapshot.json
