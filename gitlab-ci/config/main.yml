@@ -301,7 +301,7 @@ bazel-test-macos:
     - !reference [.rules-master-pipeline-no-merge-train-rust-bazel-changed, rules]
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
       variables:
-        BAZEL_EXTRA_ARGS: "--test_tag_filters=test_macos,test_macos_master"
+        BAZEL_EXTRA_ARGS: "--test_tag_filters=test_macos"
   tags:
     - macos
   variables:
