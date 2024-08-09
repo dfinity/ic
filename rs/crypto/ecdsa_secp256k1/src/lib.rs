@@ -648,7 +648,11 @@ impl PublicKey {
     }
 
     /// Deprecated alias of verify_ecdsa_signature_prehashed_with_malleability
-    pub fn verify_signature_prehashed_with_malleability(&self, digest: &[u8], signature: &[u8]) -> bool {
+    pub fn verify_signature_prehashed_with_malleability(
+        &self,
+        digest: &[u8],
+        signature: &[u8],
+    ) -> bool {
         self.verify_ecdsa_signature_prehashed_with_malleability(digest, signature)
     }
 
@@ -682,7 +686,11 @@ impl PublicKey {
     /// This means that given a valid ECDSA signature, it is possible to create
     /// a "new" ECDSA signature that is also valid, without having access to the
     /// key. Unlike `verify_signature`, this function accepts either `s` value.
-    pub fn verify_ecdsa_signature_with_malleability(&self, message: &[u8], signature: &[u8]) -> bool {
+    pub fn verify_ecdsa_signature_with_malleability(
+        &self,
+        message: &[u8],
+        signature: &[u8],
+    ) -> bool {
         use k256::ecdsa::signature::Verifier;
         let signature = match k256::ecdsa::Signature::try_from(signature) {
             Ok(sig) => sig,
