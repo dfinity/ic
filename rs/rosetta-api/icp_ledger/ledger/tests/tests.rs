@@ -1166,8 +1166,8 @@ fn test_icp_upgrade() {
         )
         .expect("Unable to install the Ledger canister with the new init");
 
-    let num_approvals = 10_000;
-    let num_balances = 10_000;
+    let num_balances = 800_000;
+    let num_approvals = 100_000;
 
     let balances_batch_size = 100_000u32;
     let approvals_batch_size = 50_000u32;
@@ -1349,6 +1349,32 @@ fn test_icp_upgrade() {
 
     assert_eq!(expected_balances, actual_balances);
     assert_eq!(expected_allowances, actual_allowances);
+
+    for i in 0..10 {
+        let spender = account(10_000_000 + i);
+        let mut approve_args = default_approve_args(spender, 100_000_000_000_000);
+        approve_args.from_subaccount = from.subaccount;
+        let block_index =
+            send_approval(&env, canister_id, from.owner, &approve_args).expect("approval failed");
+        let mut transfer_from_args = default_transfer_from_args(from, spender, 1);
+        transfer_from_args.spender_subaccount = spender.subaccount;
+        use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
+        let block_index = Decode!(
+            &env.execute_ingress_as(
+                PrincipalId(spender.owner),
+                canister_id,
+                "icrc2_transfer_from",
+                Encode!(&transfer_from_args)
+                .unwrap()
+            )
+            .expect("failed to apply approval")
+            .bytes(),
+            Result<Nat, TransferFromError>
+        )
+        .expect("failed to decode transfer_from response")
+        .map(|n| n.0.to_u64().unwrap())
+        .expect("transfer_from failed");
+    }
 }
 
 fn max_length_principal(index: u32) -> [u8; 29] {
