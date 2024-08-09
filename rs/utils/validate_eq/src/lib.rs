@@ -100,6 +100,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    extern crate ic_validate_eq_derive;
     use ic_validate_eq_derive::ValidateEq;
 
     #[derive(ValidateEq)]
