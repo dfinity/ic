@@ -14,8 +14,10 @@ from scanner.manager.bazel_rust_dependency_manager import BazelCargoExecutor, Ba
 def bazel_test():
     return BazelRustDependencyManager()
 
+
 def open_test_file(rel_path):
     return open(os.path.join(os.path.dirname(__file__), rel_path), "r")
+
 
 def test_project_root_bazel(bazel_test):
     assert bazel_test.root.exists()
@@ -83,7 +85,6 @@ def test_dependency_to_direct_bazel_string(bazel_test):
 
 
 def test_versioned_dependency_to_direct_bazel_string(bazel_test):
-
     dependency = Dependency(id="random_string", name="rand", version="0.4.19", fix_version_for_vulnerability={})
     bazel_string = bazel_test._BazelRustDependencyManager__dependency_to_direct_bazel_string(dependency)
     assert bazel_string == "@crate_index//:rand_0_4_19"
@@ -148,6 +149,7 @@ def test_parse_vulnerability_from_cargo_audit_with_no_cvss(bazel_test):
     assert vulnerability.description == "Potential segfault in the time crate"
     assert vulnerability.score == -1
 
+
 def test_parse_first_level_dependencies_and_projects_from_cargo_tree_one_project():
     cargo_tree_output = """some lines
 that should be skipped
@@ -155,7 +157,7 @@ that should be skipped
 1project v4.5.6 (/some/path/to/project)
     """
     dep = Dependency(id="vuln-dep", name="vuln-dep", version="1.2.3")
-    executor = MockBazelCargoExecutor(expected_cargo_tree_deps=[dep],expected_cargo_tree_responses=[cargo_tree_output])
+    executor = MockBazelCargoExecutor(expected_cargo_tree_deps=[dep], expected_cargo_tree_responses=[cargo_tree_output])
     bazel_test = BazelRustDependencyManager(executor=executor)
 
     first_lvl_deps, projects = bazel_test._BazelRustDependencyManager__get_first_level_dependencies_and_projects_from_cargo(dep, pathlib.PurePath('/some/path/to'))
@@ -163,6 +165,7 @@ that should be skipped
     assert len(first_lvl_deps) == 0
     assert len(projects) == 1
     assert projects[0] == "to/project"
+
 
 def test_parse_first_level_dependencies_and_projects_from_cargo_tree_one_dep_two_projects():
     cargo_tree_output = """some lines
@@ -175,17 +178,18 @@ that should be skipped
 4project2 v7.8.9 (/path/to/project/src/project2)
     """
     dep = Dependency(id="vuln-dep", name="vuln-dep", version="1.2.3")
-    executor = MockBazelCargoExecutor(expected_cargo_tree_deps=[dep],expected_cargo_tree_responses=[cargo_tree_output])
+    executor = MockBazelCargoExecutor(expected_cargo_tree_deps=[dep], expected_cargo_tree_responses=[cargo_tree_output])
     bazel_test = BazelRustDependencyManager(executor=executor)
 
     first_lvl_deps, projects = bazel_test._BazelRustDependencyManager__get_first_level_dependencies_and_projects_from_cargo(dep, pathlib.PurePath('/path/to/project'))
 
     assert len(first_lvl_deps) == 1
-    assert first_lvl_deps[0] == Dependency(id="https://crates.io/crates/first-lvl-dep",name="first-lvl-dep", version="0")
+    assert first_lvl_deps[0] == Dependency(id="https://crates.io/crates/first-lvl-dep", name="first-lvl-dep", version="0")
     assert len(projects) == 2
     projects.sort()
     assert projects[0] == "project/src/project1"
     assert projects[1] == "project/src/project2"
+
 
 def test_parse_first_level_dependencies_and_projects_from_cargo_tree_two_deps_three_projects():
     cargo_tree_output = """0vun-dep v1.2.3
@@ -201,38 +205,39 @@ def test_parse_first_level_dependencies_and_projects_from_cargo_tree_two_deps_th
 2skip-me-again v789 (https://another.project.url)
     """
     dep = Dependency(id="vuln-dep", name="vuln-dep", version="1.2.3")
-    executor = MockBazelCargoExecutor(expected_cargo_tree_deps=[dep],expected_cargo_tree_responses=[cargo_tree_output])
+    executor = MockBazelCargoExecutor(expected_cargo_tree_deps=[dep], expected_cargo_tree_responses=[cargo_tree_output])
     bazel_test = BazelRustDependencyManager(executor=executor)
 
     first_lvl_deps, projects = bazel_test._BazelRustDependencyManager__get_first_level_dependencies_and_projects_from_cargo(dep, pathlib.PurePath('/path/to/project'))
 
     assert len(first_lvl_deps) == 2
     first_lvl_deps = sorted(first_lvl_deps, key=lambda x: x.id)
-    assert first_lvl_deps[0] == Dependency(id="first-lvl-dep",name="first-lvl-dep", version="1")
-    assert first_lvl_deps[1] == Dependency(id="https://crates.io/crates/first-lvl-dep",name="first-lvl-dep", version="0")
+    assert first_lvl_deps[0] == Dependency(id="first-lvl-dep", name="first-lvl-dep", version="1")
+    assert first_lvl_deps[1] == Dependency(id="https://crates.io/crates/first-lvl-dep", name="first-lvl-dep", version="0")
     assert len(projects) == 3
     projects.sort()
     assert projects[0] == "project/src/project1"
     assert projects[1] == "project/src/project2"
     assert projects[2] == "project/src/project3"
 
+
 def test_get_findings_for_cargo_only_repo():
     with open_test_file("test_data/cargo_audit_nns.json") as audit, open_test_file("test_data/cargo_tree_chrono.txt") as chrono, open_test_file("test_data/cargo_tree_time.txt") as time:
         expected_first_vulnerable_dep = Dependency(id='https://crates.io/crates/chrono', name='chrono', version='0.4.19',
-                                                  fix_version_for_vulnerability={
-                                                      'https://rustsec.org/advisories/RUSTSEC-2020-0159': [
-                                                          '>=0.4.20']})
+                                                   fix_version_for_vulnerability={
+                                                       'https://rustsec.org/advisories/RUSTSEC-2020-0159': [
+                                                           '>=0.4.20']})
         expected_second_vulnerable_dep = Dependency(id='https://crates.io/crates/time', name='time', version='0.1.45',
-                                                  fix_version_for_vulnerability={
-                                                      'https://rustsec.org/advisories/RUSTSEC-2020-0071': ['>=0.2.23',
-                                                                                                           '=0.2.0',
-                                                                                                           '=0.2.1',
-                                                                                                           '=0.2.2',
-                                                                                                           '=0.2.3',
-                                                                                                           '=0.2.4',
-                                                                                                           '=0.2.5',
-                                                                                                           '=0.2.6']})
-        executor = MockBazelCargoExecutor(expected_cargo_audit_output=json.load(audit),expected_cargo_tree_deps=[expected_first_vulnerable_dep, expected_second_vulnerable_dep], expected_cargo_tree_responses=[chrono.read(), time.read()])
+                                                    fix_version_for_vulnerability={
+                                                        'https://rustsec.org/advisories/RUSTSEC-2020-0071': ['>=0.2.23',
+                                                                                                             '=0.2.0',
+                                                                                                             '=0.2.1',
+                                                                                                             '=0.2.2',
+                                                                                                             '=0.2.3',
+                                                                                                             '=0.2.4',
+                                                                                                             '=0.2.5',
+                                                                                                             '=0.2.6']})
+        executor = MockBazelCargoExecutor(expected_cargo_audit_output=json.load(audit), expected_cargo_tree_deps=[expected_first_vulnerable_dep, expected_second_vulnerable_dep], expected_cargo_tree_responses=[chrono.read(), time.read()])
         bazel_test = BazelRustDependencyManager(executor=executor)
 
         findings = bazel_test.get_findings("nns-dapp", Project("nns-dapp", "nns-dapp"), None)
@@ -254,52 +259,53 @@ def test_get_findings_for_cargo_only_repo():
         # unique fields for first finding
         assert findings[0].vulnerable_dependency == expected_first_vulnerable_dep
         assert findings[0].vulnerabilities == [
-                Vulnerability(id='https://rustsec.org/advisories/RUSTSEC-2020-0159', name='RUSTSEC-2020-0159',
-                              description='Potential segfault in `localtime_r` invocations', score=-1)]
+            Vulnerability(id='https://rustsec.org/advisories/RUSTSEC-2020-0159', name='RUSTSEC-2020-0159',
+                          description='Potential segfault in `localtime_r` invocations', score=-1)]
         assert findings[0].first_level_dependencies == [
-                     Dependency(id='cycles-minting-canister', name='cycles-minting-canister', version='0.8.0',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='ic-nervous-system-common', name='ic-nervous-system-common', version='0.8.0',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='ic-nervous-system-root', name='ic-nervous-system-root', version='0.1.0',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='ic-nns-common', name='ic-nns-common', version='0.8.0',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='ic-nns-governance', name='ic-nns-governance', version='0.8.0',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='ic-sns-swap', name='ic-sns-swap', version='0.1.0',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='ic-sns-wasm', name='ic-sns-wasm', version='1.0.0',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='registry-canister', name='registry-canister', version='0.8.0',
-                                fix_version_for_vulnerability={})]
+            Dependency(id='cycles-minting-canister', name='cycles-minting-canister', version='0.8.0',
+                       fix_version_for_vulnerability={}),
+            Dependency(id='ic-nervous-system-common', name='ic-nervous-system-common', version='0.8.0',
+                       fix_version_for_vulnerability={}),
+            Dependency(id='ic-nervous-system-root', name='ic-nervous-system-root', version='0.1.0',
+                       fix_version_for_vulnerability={}),
+            Dependency(id='ic-nns-common', name='ic-nns-common', version='0.8.0',
+                       fix_version_for_vulnerability={}),
+            Dependency(id='ic-nns-governance', name='ic-nns-governance', version='0.8.0',
+                       fix_version_for_vulnerability={}),
+            Dependency(id='ic-sns-swap', name='ic-sns-swap', version='0.1.0',
+                       fix_version_for_vulnerability={}),
+            Dependency(id='ic-sns-wasm', name='ic-sns-wasm', version='1.0.0',
+                       fix_version_for_vulnerability={}),
+            Dependency(id='registry-canister', name='registry-canister', version='0.8.0',
+                       fix_version_for_vulnerability={})]
         assert findings[0].score == -1
 
         # unique fields for second finding
         assert findings[1].vulnerable_dependency == expected_second_vulnerable_dep
-        assert findings[1].vulnerabilities ==[
-                     Vulnerability(id='https://rustsec.org/advisories/RUSTSEC-2020-0071', name='RUSTSEC-2020-0071',
-                                   description='Potential segfault in the time crate', score=6)]
+        assert findings[1].vulnerabilities == [
+            Vulnerability(id='https://rustsec.org/advisories/RUSTSEC-2020-0071', name='RUSTSEC-2020-0071',
+                          description='Potential segfault in the time crate', score=6)]
         assert findings[1].first_level_dependencies == [
-                     Dependency(id='cycles-minting-canister', name='cycles-minting-canister', version='0.8.0',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='https://crates.io/crates/chrono', name='chrono', version='0.4.19',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='ic-nervous-system-common', name='ic-nervous-system-common', version='0.8.0',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='ic-nervous-system-root', name='ic-nervous-system-root', version='0.1.0',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='ic-nns-common', name='ic-nns-common', version='0.8.0',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='ic-nns-governance', name='ic-nns-governance', version='0.8.0',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='ic-sns-swap', name='ic-sns-swap', version='0.1.0',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='ic-sns-wasm', name='ic-sns-wasm', version='1.0.0',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='registry-canister', name='registry-canister', version='0.8.0',
-                                fix_version_for_vulnerability={})]
+            Dependency(id='cycles-minting-canister', name='cycles-minting-canister', version='0.8.0',
+                       fix_version_for_vulnerability={}),
+            Dependency(id='https://crates.io/crates/chrono', name='chrono', version='0.4.19',
+                       fix_version_for_vulnerability={}),
+            Dependency(id='ic-nervous-system-common', name='ic-nervous-system-common', version='0.8.0',
+                       fix_version_for_vulnerability={}),
+            Dependency(id='ic-nervous-system-root', name='ic-nervous-system-root', version='0.1.0',
+                       fix_version_for_vulnerability={}),
+            Dependency(id='ic-nns-common', name='ic-nns-common', version='0.8.0',
+                       fix_version_for_vulnerability={}),
+            Dependency(id='ic-nns-governance', name='ic-nns-governance', version='0.8.0',
+                       fix_version_for_vulnerability={}),
+            Dependency(id='ic-sns-swap', name='ic-sns-swap', version='0.1.0',
+                       fix_version_for_vulnerability={}),
+            Dependency(id='ic-sns-wasm', name='ic-sns-wasm', version='1.0.0',
+                       fix_version_for_vulnerability={}),
+            Dependency(id='registry-canister', name='registry-canister', version='0.8.0',
+                       fix_version_for_vulnerability={})]
         assert findings[1].score == 6
+
 
 def test_get_findings_for_bazel_repo():
     with open_test_file("test_data/cargo_audit_ic.json") as audit, open_test_file("test_data/bazel_queries_ic.json") as bazel:
@@ -350,19 +356,29 @@ def test_get_findings_for_bazel_repo():
                            fix_version_for_vulnerability={}),
                 Dependency(id='https://crates.io/crates/x509-parser', name='x509-parser', version='0.12.0',
                            fix_version_for_vulnerability={})]
-            assert findings[0].projects == ['rs/backup', 'rs/canister_client/sender', 'rs/crypto', 'rs/crypto/ecdsa_secp256k1', 'rs/crypto/ecdsa_secp256r1', 'rs/crypto/internal/crypto_lib/basic_sig/cose', 'rs/crypto/internal/crypto_lib/basic_sig/der_utils', 'rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1', 'rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1', 'rs/crypto/internal/crypto_lib/basic_sig/ed25519', 'rs/crypto/internal/crypto_lib/basic_sig/iccsa', 'rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1', 'rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils', 'rs/crypto/internal/crypto_service_provider', 'rs/crypto/node_key_validation', 'rs/crypto/node_key_validation/tls_cert_validation', 'rs/crypto/utils/basic_sig', 'rs/elastic_common_schema', 'rs/monitoring/logger', 'rs/monitoring/onchain_observability/adapter', 'rs/nervous_system/common', 'rs/nns/cmc', 'rs/nns/governance', 'rs/nns/gtc', 'rs/nns/handlers/root/impl', 'rs/nns/handlers/root/interface', 'rs/nns/sns-wasm', 'rs/prep', 'rs/registry/canister', 'rs/registry/nns_data_provider', 'rs/rosetta-api', 'rs/rosetta-api/icrc1/ledger/sm-tests', 'rs/rosetta-api/ledger_canister_blocks_synchronizer', 'rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils', 'rs/scenario_tests', 'rs/sns/governance', 'rs/sns/root', 'rs/sns/swap', 'rs/tests', 'rs/types/types', 'rs/validator', 'rs/validator/http_request_test_utils']
+            assert findings[0].projects == ['ic/rs/backup', 'ic/rs/canister_client/sender', 'ic/rs/crypto', 'ic/rs/crypto/ecdsa_secp256k1', 'ic/rs/crypto/ecdsa_secp256r1', 'ic/rs/crypto/internal/crypto_lib/basic_sig/cose',
+                                            'ic/rs/crypto/internal/crypto_lib/basic_sig/der_utils', 'ic/rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1', 'ic/rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1',
+                                            'ic/rs/crypto/internal/crypto_lib/basic_sig/ed25519', 'ic/rs/crypto/internal/crypto_lib/basic_sig/iccsa', 'ic/rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1',
+                                            'ic/rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils', 'ic/rs/crypto/internal/crypto_service_provider', 'ic/rs/crypto/node_key_validation',
+                                            'ic/rs/crypto/node_key_validation/tls_cert_validation', 'ic/rs/crypto/utils/basic_sig', 'ic/rs/elastic_common_schema', 'ic/rs/monitoring/logger', 'ic/rs/monitoring/onchain_observability/adapter',
+                                            'ic/rs/nervous_system/common', 'ic/rs/nns/cmc', 'ic/rs/nns/governance', 'ic/rs/nns/gtc', 'ic/rs/nns/handlers/root/impl', 'ic/rs/nns/handlers/root/interface', 'ic/rs/nns/sns-wasm',
+                                            'ic/rs/prep', 'ic/rs/registry/canister',
+                                            'ic/rs/registry/nns_data_provider', 'ic/rs/rosetta-api', 'ic/rs/rosetta-api/icrc1/ledger/sm-tests', 'ic/rs/rosetta-api/ledger_canister_blocks_synchronizer',
+                                            'ic/rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils', 'ic/rs/scenario_tests', 'ic/rs/sns/governance', 'ic/rs/sns/root', 'ic/rs/sns/swap', 'ic/rs/tests', 'ic/rs/types/types',
+                                            'ic/rs/validator',
+                                            'ic/rs/validator/http_request_test_utils']
             assert findings[0].score == -1
 
             # unique fields for second finding
             assert findings[1].vulnerable_dependency == Dependency(id='https://crates.io/crates/rocksdb', name='rocksdb',
-                                                  version='0.15.0', fix_version_for_vulnerability={
-                         'https://rustsec.org/advisories/RUSTSEC-2022-0046': ['>=0.19.0']})
+                                                                   version='0.15.0', fix_version_for_vulnerability={
+                    'https://rustsec.org/advisories/RUSTSEC-2022-0046': ['>=0.19.0']})
             assert findings[1].vulnerabilities == [
-                 Vulnerability(id='https://rustsec.org/advisories/RUSTSEC-2022-0046', name='RUSTSEC-2022-0046',
-                               description='Out-of-bounds read when opening multiple column families with TTL',
-                               score=-1)]
+                Vulnerability(id='https://rustsec.org/advisories/RUSTSEC-2022-0046', name='RUSTSEC-2022-0046',
+                              description='Out-of-bounds read when opening multiple column families with TTL',
+                              score=-1)]
             assert findings[1].first_level_dependencies == []
-            assert findings[1].projects == ['rs/artifact_pool']
+            assert findings[1].projects == ['ic/rs/artifact_pool']
             assert findings[1].score == -1
 
             # unique fields for third finding
@@ -382,34 +398,44 @@ def test_get_findings_for_bazel_repo():
                 Vulnerability(id='https://rustsec.org/advisories/RUSTSEC-2020-0071', name='RUSTSEC-2020-0071',
                               description='Potential segfault in the time crate', score=6)]
             assert findings[2].first_level_dependencies == [
-                     Dependency(id='https://crates.io/crates/build-info', name='build-info', version='0.0.26',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='https://crates.io/crates/build-info-build', name='build-info-build',
-                                version='0.0.26', fix_version_for_vulnerability={}),
-                     Dependency(id='https://crates.io/crates/cddl', name='cddl', version='0.9.1',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='https://crates.io/crates/chrono', name='chrono', version='0.4.19',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='https://crates.io/crates/cloudflare', name='cloudflare', version='0.9.1',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='https://crates.io/crates/log4rs', name='log4rs', version='1.2.0',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='https://crates.io/crates/prometheus-parse', name='prometheus-parse',
-                                version='0.2.4', fix_version_for_vulnerability={}),
-                     Dependency(id='https://crates.io/crates/rsa', name='rsa', version='0.4.0',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='https://crates.io/crates/simple_asn1', name='simple_asn1', version='0.5.4',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='https://crates.io/crates/thread_profiler', name='thread_profiler', version='0.3.0',
-                                fix_version_for_vulnerability={}),
-                     Dependency(id='https://crates.io/crates/x509-parser', name='x509-parser', version='0.12.0',
-                                fix_version_for_vulnerability={})]
-            assert findings[2].projects == ['rs/backup', 'rs/canister_client/sender', 'rs/crypto', 'rs/crypto/ecdsa_secp256k1', 'rs/crypto/ecdsa_secp256r1', 'rs/crypto/internal/crypto_lib/basic_sig/cose', 'rs/crypto/internal/crypto_lib/basic_sig/der_utils', 'rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1', 'rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1', 'rs/crypto/internal/crypto_lib/basic_sig/ed25519', 'rs/crypto/internal/crypto_lib/basic_sig/iccsa', 'rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1', 'rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils', 'rs/crypto/internal/crypto_service_provider', 'rs/crypto/node_key_validation', 'rs/crypto/node_key_validation/tls_cert_validation', 'rs/crypto/utils/basic_sig', 'rs/elastic_common_schema', 'rs/monitoring/logger', 'rs/monitoring/onchain_observability/adapter', 'rs/nervous_system/common', 'rs/nns/cmc', 'rs/nns/governance', 'rs/nns/gtc', 'rs/nns/handlers/root/impl', 'rs/nns/handlers/root/interface', 'rs/nns/sns-wasm', 'rs/prep', 'rs/registry/canister', 'rs/registry/nns_data_provider', 'rs/replica', 'rs/rosetta-api', 'rs/rosetta-api/icrc1/ledger/sm-tests', 'rs/rosetta-api/ledger_canister_blocks_synchronizer', 'rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils', 'rs/scenario_tests', 'rs/sns/governance', 'rs/sns/root', 'rs/sns/swap', 'rs/tests', 'rs/types/types', 'rs/validator', 'rs/validator/http_request_test_utils']
+                Dependency(id='https://crates.io/crates/build-info', name='build-info', version='0.0.26',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/build-info-build', name='build-info-build',
+                           version='0.0.26', fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/cddl', name='cddl', version='0.9.1',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/chrono', name='chrono', version='0.4.19',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/cloudflare', name='cloudflare', version='0.9.1',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/log4rs', name='log4rs', version='1.2.0',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/prometheus-parse', name='prometheus-parse',
+                           version='0.2.4', fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/rsa', name='rsa', version='0.4.0',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/simple_asn1', name='simple_asn1', version='0.5.4',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/thread_profiler', name='thread_profiler', version='0.3.0',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/x509-parser', name='x509-parser', version='0.12.0',
+                           fix_version_for_vulnerability={})]
+            assert findings[2].projects == ['ic/rs/backup', 'ic/rs/canister_client/sender', 'ic/rs/crypto', 'ic/rs/crypto/ecdsa_secp256k1', 'ic/rs/crypto/ecdsa_secp256r1', 'ic/rs/crypto/internal/crypto_lib/basic_sig/cose',
+                                            'ic/rs/crypto/internal/crypto_lib/basic_sig/der_utils', 'ic/rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1', 'ic/rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1',
+                                            'ic/rs/crypto/internal/crypto_lib/basic_sig/ed25519', 'ic/rs/crypto/internal/crypto_lib/basic_sig/iccsa', 'ic/rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1',
+                                            'ic/rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils', 'ic/rs/crypto/internal/crypto_service_provider', 'ic/rs/crypto/node_key_validation',
+                                            'ic/rs/crypto/node_key_validation/tls_cert_validation', 'ic/rs/crypto/utils/basic_sig', 'ic/rs/elastic_common_schema', 'ic/rs/monitoring/logger', 'ic/rs/monitoring/onchain_observability/adapter',
+                                            'ic/rs/nervous_system/common', 'ic/rs/nns/cmc', 'ic/rs/nns/governance', 'ic/rs/nns/gtc', 'ic/rs/nns/handlers/root/impl', 'ic/rs/nns/handlers/root/interface', 'ic/rs/nns/sns-wasm',
+                                            'ic/rs/prep', 'ic/rs/registry/canister', 'ic/rs/registry/nns_data_provider', 'ic/rs/replica', 'ic/rs/rosetta-api', 'ic/rs/rosetta-api/icrc1/ledger/sm-tests',
+                                            'ic/rs/rosetta-api/ledger_canister_blocks_synchronizer', 'ic/rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils', 'ic/rs/scenario_tests', 'ic/rs/sns/governance', 'ic/rs/sns/root',
+                                            'ic/rs/sns/swap', 'ic/rs/tests', 'ic/rs/types/types', 'ic/rs/validator', 'ic/rs/validator/http_request_test_utils']
             assert findings[2].score == 6
+
 
 class MockBazelCargoExecutor(BazelCargoExecutor):
 
-    def __init__(self, expected_cargo_audit_output: typing.Dict = (), expected_bazel_queries: typing.List[str] = (), expected_bazel_responses: typing.List[str] = (), expected_cargo_tree_deps: typing.List[Dependency] = (), expected_cargo_tree_responses: typing.List[str] = ()):
+    def __init__(self, expected_cargo_audit_output: typing.Dict = (), expected_bazel_queries: typing.List[str] = (), expected_bazel_responses: typing.List[str] = (), expected_cargo_tree_deps: typing.List[Dependency] = (),
+                 expected_cargo_tree_responses: typing.List[str] = ()):
         self.cargo_audit = expected_cargo_audit_output
 
         assert len(expected_bazel_queries) == len(expected_bazel_responses)

@@ -200,6 +200,57 @@ def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
     sub2.on_scan_job_failed.assert_not_called()
 
 
+def test_on_periodic_job_one_finding_in_jira_transition_to_failover(jira_lib_mock):
+    # one finding, present in JIRA
+    scanner = "BAZEL_RUST"
+    repository = Repository("ic", "https://github.com/dfinity/ic", [Project("ic", "ic")])
+    jira_finding = Finding(
+        repository=repository.name,
+        scanner=scanner,
+        vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
+        vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
+        first_level_dependencies=[Dependency("VDID2", "fl dep", "0.1 beta", {"VID1": ["3.0 alpha"]})],
+        projects=["foo", "bar", "bear"],
+        risk_assessor=[User("mickey", "Mickey Mouse")],
+        risk=SecurityRisk.INFORMATIONAL,
+        owning_teams=[Team.GIX_TEAM],
+        patch_responsible=[],
+        due_date=100,
+        score=100,
+    )
+    jira_lib_mock.get_open_findings_for_repo_and_scanner.return_value = {jira_finding.id(): jira_finding}
+
+    sub1 = Mock()
+    sub2 = Mock()
+    fake_bazel = FakeBazel(2)
+    failover_mock = Mock()
+    failover_mock.can_handle.return_value = True
+
+    scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2], failover_mock)
+    repos = [Repository("ic", "https://github.com/dfinity/ic", [Project(name="ic", path="ic", owner_by_path={'bear': [Team.NODE_TEAM]})])]
+
+    scanner_job.do_periodic_scan(repos)
+
+    expected_finding = fake_bazel.get_findings(repos[0].name, repos[0].projects[0], repository.engine_version)[0]
+    expected_finding.owning_teams = [Team.NODE_TEAM]
+    jira_lib_mock.get_open_findings_for_repo_and_scanner.assert_called_once()
+    jira_lib_mock.get_open_finding.assert_not_called()
+    jira_lib_mock.get_risk_assessor.assert_not_called()
+    # finding in jira should be deleted
+    jira_lib_mock.delete_finding.assert_called_once()
+
+    jira_lib_mock.create_or_update_open_finding.assert_not_called()
+    jira_lib_mock.create_or_update_open_finding.assert_not_called()
+
+    # finding should be passed to failover store
+    failover_mock.store_findings.assert_called_once_with(repository.name, scanner, [expected_finding])
+
+    sub1.on_scan_job_succeeded.assert_called_once()
+    sub2.on_scan_job_succeeded.assert_called_once()
+    sub1.on_scan_job_failed.assert_not_called()
+    sub2.on_scan_job_failed.assert_not_called()
+
+
 def test_on_periodic_job_one_finding_in_jira_clear_risk_and_keep_risk_note(jira_lib_mock):
     # one finding, present in JIRA
     repository = Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())])
@@ -269,7 +320,6 @@ def test_on_periodic_job_set_risk_for_related_finding(jira_lib_mock):
 
 
 def test_on_periodic_job_failure(jira_lib_mock):
-
     sub1 = Mock()
     sub2 = Mock()
 
