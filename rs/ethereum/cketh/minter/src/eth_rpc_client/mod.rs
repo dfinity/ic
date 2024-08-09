@@ -1,8 +1,8 @@
 use crate::checked_amount::CheckedAmountOf;
 use crate::eth_rpc::{
     self, Block, BlockSpec, BlockTag, Data, FeeHistory, FeeHistoryParams, FixedSizeData,
-    GetLogsParam, Hash, HttpOutcallError, HttpOutcallResult, HttpResponsePayload, JsonRpcResult,
-    LogEntry, ResponseSizeEstimate, SendRawTransactionResult, Topic, HEADER_SIZE_LIMIT,
+    GetLogsParam, Hash, HttpOutcallError, HttpResponsePayload, LogEntry, ResponseSizeEstimate,
+    SendRawTransactionResult, Topic, HEADER_SIZE_LIMIT,
 };
 use crate::eth_rpc_client::providers::{
     EthereumProvider, RpcNodeProvider, SepoliaProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS,
@@ -115,22 +115,13 @@ impl EthRpcClient {
                 "[sequential_call_until_ok]: calling provider: {:?}",
                 provider
             );
-            let result = eth_rpc::call(
+            let result: Result<O, SingleCallError> = eth_rpc::call(
                 provider.url().to_string(),
                 method.clone(),
                 params.clone(),
                 response_size_estimate,
             )
             .await;
-            //TODO XC-163: change eth_rpc::call to directly return a
-            // Result<O, SingleCallError>
-            let result: Result<O, SingleCallError> = match result {
-                Ok(JsonRpcResult::Result(value)) => Ok(value),
-                Ok(JsonRpcResult::Error { code, message }) => {
-                    Err(SingleCallError::JsonRpcError { code, message })
-                }
-                Err(error) => Err(SingleCallError::HttpOutcallError(error)),
-            };
             results.insert_once(provider.clone(), result);
             if results.has_ok_results() {
                 return results;
@@ -413,28 +404,8 @@ impl<T> MultiCallResults<T> {
     }
 
     fn from_non_empty_iter<
-        I: IntoIterator<Item = (RpcNodeProvider, HttpOutcallResult<JsonRpcResult<T>>)>,
+        I: IntoIterator<Item = (RpcNodeProvider, Result<T, SingleCallError>)>,
     >(
-        iter: I,
-    ) -> Self {
-        let mut results = MultiCallResults::new();
-        for (provider, result) in iter {
-            let result: Result<T, SingleCallError> = match result {
-                Ok(JsonRpcResult::Result(value)) => Ok(value),
-                Ok(JsonRpcResult::Error { code, message }) => {
-                    Err(SingleCallError::JsonRpcError { code, message })
-                }
-                Err(error) => Err(SingleCallError::HttpOutcallError(error)),
-            };
-            results.insert_once(provider, result);
-        }
-        if results.is_empty() {
-            panic!("BUG: MultiCallResults cannot be empty!")
-        }
-        results
-    }
-
-    fn from_iter<I: IntoIterator<Item = (RpcNodeProvider, Result<T, SingleCallError>)>>(
         iter: I,
     ) -> Self {
         let mut results = MultiCallResults::new();
@@ -521,6 +492,12 @@ impl From<EvmRpcError> for SingleCallError {
             },
             EvmRpcError::ValidationError(e) => SingleCallError::EvmRpcError(e.to_string()),
         }
+    }
+}
+
+impl From<HttpOutcallError> for SingleCallError {
+    fn from(value: HttpOutcallError) -> Self {
+        SingleCallError::HttpOutcallError(value)
     }
 }
 
@@ -893,7 +870,7 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
             .collect();
         if !inconsistent_results.is_empty() {
             inconsistent_results.push((base_node_provider, base_result));
-            let error = MultiCallError::InconsistentResults(MultiCallResults::from_iter(
+            let error = MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(
                 inconsistent_results
                     .into_iter()
                     .map(|(provider, result)| (provider, Ok(result))),
@@ -932,13 +909,14 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
                         .last_key_value()
                         .expect("BUG: results_with_same_key is non-empty");
                     if &result != other_result {
-                        let error =
-                            MultiCallError::InconsistentResults(MultiCallResults::from_iter(
+                        let error = MultiCallError::InconsistentResults(
+                            MultiCallResults::from_non_empty_iter(
                                 votes_for_same_key
                                     .into_iter()
                                     .chain(std::iter::once((provider, result)))
                                     .map(|(provider, result)| (provider, Ok(result))),
-                            ));
+                            ),
+                        );
                         log!(
                             INFO,
                             "[reduce_with_strict_majority_by_key]: inconsistent results {error:?}"
@@ -975,13 +953,14 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
                         .expect("BUG: tally should be non-empty")
                         .1)
                 } else {
-                    let error = MultiCallError::InconsistentResults(MultiCallResults::from_iter(
-                        first
-                            .1
-                            .into_iter()
-                            .chain(second.1)
-                            .map(|(provider, result)| (provider, Ok(result))),
-                    ));
+                    let error =
+                        MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(
+                            first
+                                .1
+                                .into_iter()
+                                .chain(second.1)
+                                .map(|(provider, result)| (provider, Ok(result))),
+                        ));
                     log!(
                         INFO,
                         "[reduce_with_strict_majority_by_key]: no strict majority {error:?}"
