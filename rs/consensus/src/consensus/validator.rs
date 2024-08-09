@@ -1119,7 +1119,7 @@ impl Validator {
                 if let ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal)) =
                     &action
                 {
-                    valid_qualified_ranks.add(&proposal);
+                    valid_qualified_ranks.add(proposal);
                 }
                 change_set.push(action);
             }
