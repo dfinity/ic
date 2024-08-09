@@ -9,6 +9,8 @@ pub use tla_instrumentation_proc_macros::tla_update_method;
 pub use ic_nervous_system_common::tla::{TLA_INSTRUMENTATION_STATE, TLA_TRACES};
 pub use ic_nervous_system_common::{tla_log_locals, tla_log_request, tla_log_response};
 
+use icp_ledger::{AccountIdentifier;
+
 pub fn get_tla_globals(gov: &Governance) -> GlobalState {
     let mut state = GlobalState::new();
     state.add(
@@ -29,6 +31,10 @@ macro_rules! tla_get_globals {
     ($self:expr) => {
         tla::get_tla_globals($self)
     };
+}
+
+pub fn account_to_tla(account: AccountIdentifier) {
+
 }
 
 pub fn split_neuron_desc() -> Update {
