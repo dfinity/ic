@@ -305,7 +305,7 @@ impl UncachedConsensusPoolImpl {
                     log,
                 ),
             ) as Box<_>,
-            #[cfg(feature = "rocksdb_backend")]
+            #[cfg(target_os = "macos")]
             PersistentPoolBackend::RocksDB(config) => Box::new(
                 crate::rocksdb_pool::PersistentHeightIndexedPool::new_consensus_pool(config, log),
             ) as Box<_>,
