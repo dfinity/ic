@@ -41,6 +41,7 @@ struct IngressPoolSection<T: AsRef<IngressPoolObject>> {
     /// and purge invocations. Never modify the artifacts map directly! Use the
     /// associated functions [`insert`], [`remove`] and [`purge_below`]
     byte_size: usize,
+    peer_counters: PeerCounters,
 }
 
 impl<T: AsRef<IngressPoolObject>> CountBytes for IngressPoolSection<T> {
@@ -48,9 +49,15 @@ impl<T: AsRef<IngressPoolObject>> CountBytes for IngressPoolSection<T> {
         self.byte_size
     }
 }
+
 impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
-    fn new(metrics: PoolMetrics) -> IngressPoolSection<T> {
+    fn new(
+        max_bytes: Option<usize>,
+        max_count: Option<usize>,
+        metrics: PoolMetrics,
+    ) -> IngressPoolSection<T> {
         IngressPoolSection {
+            peer_counters: PeerCounters::new(max_bytes, max_count),
             artifacts: BTreeMap::new(),
             metrics,
             byte_size: 0,
@@ -66,15 +73,18 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
         let new_artifact_size = artifact.as_ref().count_bytes();
         self.metrics
             .observe_insert(new_artifact_size, INGRESS_MESSAGE_ARTIFACT_TYPE);
+        self.byte_size += new_artifact_size;
+        self.peer_counters.observe(artifact.as_ref());
+
         if let Some(previous) = self.artifacts.insert(message_id, artifact) {
             let prev_size = previous.as_ref().count_bytes();
             self.byte_size -= prev_size;
-            self.byte_size += new_artifact_size;
+            self.peer_counters.forget(previous.as_ref());
+
             self.metrics
                 .observe_duplicate(prev_size, INGRESS_MESSAGE_ARTIFACT_TYPE);
-        } else {
-            self.byte_size += new_artifact_size;
         }
+
         // SAFETY: Checking byte size invariant
         section_ok(self);
     }
@@ -88,6 +98,7 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
         let removed = self.artifacts.remove(message_id);
         if let Some(artifact) = &removed {
             self.byte_size -= artifact.as_ref().count_bytes();
+            self.peer_counters.forget(artifact.as_ref());
             self.metrics.observe_remove(
                 artifact.as_ref().count_bytes(),
                 INGRESS_MESSAGE_ARTIFACT_TYPE,
@@ -113,6 +124,7 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
         for artifact in to_remove.values() {
             let artifact_size = artifact.as_ref().count_bytes();
             self.byte_size -= artifact_size;
+            self.peer_counters.forget(artifact.as_ref());
             self.metrics
                 .observe_remove(artifact_size, INGRESS_MESSAGE_ARTIFACT_TYPE);
         }
@@ -120,6 +132,7 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
         section_ok(self);
         Box::new(to_remove.into_values())
     }
+
     /// Counts the exact bytes by iterating over the artifact btreemap, instead
     /// of returning the memoized byte_size.
     fn count_bytes_slow(&self) -> usize {
@@ -140,15 +153,15 @@ fn section_ok<T: AsRef<IngressPoolObject>>(section: &IngressPoolSection<T>) {
     );
 }
 
-impl<T: AsRef<IngressPoolObject>> Default for IngressPoolSection<T> {
-    fn default() -> Self {
-        Self::new(PoolMetrics::new(
-            MetricsRegistry::new(),
-            POOL_INGRESS,
-            "default",
-        ))
-    }
-}
+//impl<T: AsRef<IngressPoolObject>> Default for IngressPoolSection<T> {
+//    fn default() -> Self {
+//        Self::new(PoolMetrics::new(
+//            MetricsRegistry::new(),
+//            POOL_INGRESS,
+//            "default",
+//        ))
+//    }
+//}
 
 impl<T: AsRef<IngressPoolObject> + HasTimestamp> PoolSection<T> for IngressPoolSection<T> {
     fn get(&self, message_id: &IngressMessageId) -> Option<&T> {
@@ -185,11 +198,11 @@ impl<T: AsRef<IngressPoolObject> + HasTimestamp> PoolSection<T> for IngressPoolS
 #[derive(Clone)]
 struct PeerCounter {
     counter_per_peer: BTreeMap<NodeId, usize>,
-    limit: usize,
+    limit: Option<usize>,
 }
 
 impl PeerCounter {
-    fn new(limit: usize) -> Self {
+    fn new(limit: Option<usize>) -> Self {
         Self {
             counter_per_peer: BTreeMap::default(),
             limit,
@@ -206,11 +219,13 @@ impl PeerCounter {
     }
 
     fn exceeds_limit(&self, peer_id: &NodeId) -> bool {
-        self.counter_per_peer
-            .get(peer_id)
-            .copied()
-            .unwrap_or_default()
-            > self.limit
+        self.limit.is_some_and(|limit| {
+            self.counter_per_peer
+                .get(peer_id)
+                .copied()
+                .unwrap_or_default()
+                >= limit
+        })
     }
 }
 
@@ -221,10 +236,10 @@ struct PeerCounters {
 }
 
 impl PeerCounters {
-    fn new(config: &ArtifactPoolConfig) -> Self {
+    fn new(max_bytes: Option<usize>, max_count: Option<usize>) -> Self {
         Self {
-            bytes_counters: PeerCounter::new(config.ingress_pool_max_bytes),
-            count_counters: PeerCounter::new(config.ingress_pool_max_count),
+            bytes_counters: PeerCounter::new(max_bytes),
+            count_counters: PeerCounter::new(max_count),
         }
     }
 
@@ -249,7 +264,6 @@ impl PeerCounters {
 pub struct IngressPoolImpl {
     validated: IngressPoolSection<ValidatedIngressArtifact>,
     unvalidated: IngressPoolSection<UnvalidatedIngressArtifact>,
-    peer_counters: PeerCounters,
     ingress_messages_throttled: IntCounter,
     node_id: NodeId,
     log: ReplicaLogger,
@@ -265,21 +279,20 @@ impl IngressPoolImpl {
         log: ReplicaLogger,
     ) -> IngressPoolImpl {
         IngressPoolImpl {
-            peer_counters: PeerCounters::new(&config),
             ingress_messages_throttled: metrics_registry.int_counter(
                 "ingress_messages_throttled",
                 "Number of throttled ingress messages",
             ),
-            validated: IngressPoolSection::new(PoolMetrics::new(
-                metrics_registry.clone(),
-                POOL_INGRESS,
-                POOL_TYPE_VALIDATED,
-            )),
-            unvalidated: IngressPoolSection::new(PoolMetrics::new(
-                metrics_registry,
-                POOL_INGRESS,
-                POOL_TYPE_UNVALIDATED,
-            )),
+            validated: IngressPoolSection::new(
+                Some(config.ingress_pool_max_bytes),
+                Some(config.ingress_pool_max_count),
+                PoolMetrics::new(metrics_registry.clone(), POOL_INGRESS, POOL_TYPE_VALIDATED),
+            ),
+            unvalidated: IngressPoolSection::new(
+                None,
+                None,
+                PoolMetrics::new(metrics_registry, POOL_INGRESS, POOL_TYPE_UNVALIDATED),
+            ),
             node_id,
             log,
         }
@@ -298,7 +311,7 @@ impl IngressPool for IngressPoolImpl {
     }
 
     fn exceeds_limit(&self, peer_id: &NodeId) -> bool {
-        self.peer_counters.exceeds_limit(peer_id)
+        self.validated.peer_counters.exceeds_limit(peer_id)
     }
 }
 
@@ -355,7 +368,6 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                                     is_latency_sensitive: false,
                                 });
                             }
-                            self.peer_counters.observe(&unvalidated_artifact.message);
                             self.validated.insert(
                                 message_id,
                                 ValidatedIngressArtifact {
@@ -376,9 +388,8 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                     self.unvalidated.remove(&message_id);
                 }
                 ChangeAction::RemoveFromValidated(message_id) => {
-                    if let Some(artifact) = self.validated.remove(&message_id) {
+                    if let Some(_artifact) = self.validated.remove(&message_id) {
                         purged.push(message_id);
-                        self.peer_counters.forget(&artifact.msg);
                     }
                 }
                 ChangeAction::PurgeBelowExpiry(expiry) => {
@@ -411,7 +422,7 @@ impl ValidatedPoolReader<SignedIngress> for IngressPoolImpl {
 
 impl IngressPoolThrottler for IngressPoolImpl {
     fn exceeds_threshold(&self) -> bool {
-        if self.peer_counters.exceeds_limit(&self.node_id) {
+        if self.validated.peer_counters.exceeds_limit(&self.node_id) {
             self.ingress_messages_throttled.inc();
             return true;
         }
@@ -468,17 +479,25 @@ mod tests {
     use rand::Rng;
     use std::time::Duration;
 
+    fn create_ingress_pool_section<T: AsRef<IngressPoolObject>>() -> IngressPoolSection<T> {
+        IngressPoolSection::new(
+            None,
+            None,
+            PoolMetrics::new(MetricsRegistry::new(), POOL_INGRESS, "default"),
+        )
+    }
+
     #[test]
     fn test_insert_in_ingress_pool() {
         with_test_replica_logger(|_log| {
-            let mut ingress_pool = IngressPoolSection::default();
+            let mut ingress_pool = create_ingress_pool_section();
             let ingress_msg = SignedIngressBuilder::new().build();
             let message_id = IngressMessageId::from(&ingress_msg);
 
             ingress_pool.insert(
                 message_id,
                 UnvalidatedIngressArtifact {
-                    message: IngressPoolObject::from(ingress_msg),
+                    message: IngressPoolObject::new(node_test_id(0), ingress_msg),
                     peer_id: node_test_id(0),
                     timestamp: UNIX_EPOCH,
                 },
@@ -507,7 +526,7 @@ mod tests {
                 ingress_pool.validated.insert(
                     message_id.clone(),
                     ValidatedIngressArtifact {
-                        msg: IngressPoolObject::from(ingress_msg),
+                        msg: IngressPoolObject::new(node_test_id(0), ingress_msg),
                         timestamp: UNIX_EPOCH,
                     },
                 );
@@ -536,7 +555,7 @@ mod tests {
                 ingress_pool.validated.insert(
                     message_id,
                     ValidatedIngressArtifact {
-                        msg: IngressPoolObject::from(ingress_msg),
+                        msg: IngressPoolObject::new(node_test_id(0), ingress_msg),
                         timestamp: UNIX_EPOCH,
                     },
                 );
@@ -604,7 +623,7 @@ mod tests {
                     ingress_pool.validated.insert(
                         message_id.clone(),
                         ValidatedIngressArtifact {
-                            msg: IngressPoolObject::from(ingress_msg),
+                            msg: IngressPoolObject::new(node_test_id(0), ingress_msg),
                             timestamp: UNIX_EPOCH,
                         },
                     );
@@ -656,7 +675,7 @@ mod tests {
                 );
 
                 let changeset = vec![
-                    ChangeAction::MoveToValidated((message_id0.clone(), node_test_id(0))),
+                    ChangeAction::MoveToValidated(message_id0.clone()),
                     ChangeAction::RemoveFromUnvalidated(message_id1.clone()),
                 ];
                 let result = ingress_pool.apply_changes(changeset);
@@ -719,10 +738,7 @@ mod tests {
                         peer_id: node_test_id(peer_id),
                         timestamp: time_source.get_relative_time(),
                     });
-                    changeset.push(ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(peer_id),
-                    )));
+                    changeset.push(ChangeAction::MoveToValidated(message_id));
                 }
                 assert_eq!(ingress_pool.unvalidated().size(), initial_count);
                 let result = ingress_pool.apply_changes(changeset);
@@ -750,23 +766,22 @@ mod tests {
                 // 3 ingress messages, each with 153 bytes (subject to change)
                 pool_config.ingress_pool_max_bytes = 153 * 5;
                 pool_config.ingress_pool_max_count = 3;
-                let time_source = FastForwardTimeSource::new();
                 let metrics_registry = MetricsRegistry::new();
                 let mut ingress_pool =
                     IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
                 assert!(!ingress_pool.exceeds_threshold());
 
                 // MESSAGE #1
-                insert_unvalidated_artifact(&mut ingress_pool, 2, time_source.get_relative_time());
+                insert_validated_artifact(&mut ingress_pool, 2);
                 assert!(!ingress_pool.exceeds_threshold());
                 // MESSAGE #2
                 insert_validated_artifact(&mut ingress_pool, 3);
                 assert!(!ingress_pool.exceeds_threshold());
                 // MESSAGE #3
-                insert_unvalidated_artifact(&mut ingress_pool, 4, time_source.get_relative_time());
+                insert_validated_artifact(&mut ingress_pool, 4);
                 assert!(ingress_pool.exceeds_threshold());
                 // MESSAGE #4
-                insert_unvalidated_artifact(&mut ingress_pool, 5, time_source.get_relative_time());
+                insert_validated_artifact(&mut ingress_pool, 5);
                 assert!(ingress_pool.exceeds_threshold());
             })
         })
@@ -779,23 +794,22 @@ mod tests {
                 // 3 ingress messages, each with 153 bytes (subject to change)
                 pool_config.ingress_pool_max_bytes = 153 * 3;
                 pool_config.ingress_pool_max_count = 5;
-                let time_source = FastForwardTimeSource::new();
                 let metrics_registry = MetricsRegistry::new();
                 let mut ingress_pool =
                     IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
                 assert!(!ingress_pool.exceeds_threshold());
 
                 // MESSAGE #1
-                insert_unvalidated_artifact(&mut ingress_pool, 2, time_source.get_relative_time());
+                insert_validated_artifact(&mut ingress_pool, 2);
                 assert!(!ingress_pool.exceeds_threshold());
                 // MESSAGE #2
                 insert_validated_artifact(&mut ingress_pool, 3);
                 assert!(!ingress_pool.exceeds_threshold());
                 // MESSAGE #3
-                insert_unvalidated_artifact(&mut ingress_pool, 4, time_source.get_relative_time());
+                insert_validated_artifact(&mut ingress_pool, 4);
                 assert!(ingress_pool.exceeds_threshold());
                 // MESSAGE #4
-                insert_unvalidated_artifact(&mut ingress_pool, 5, time_source.get_relative_time());
+                insert_validated_artifact(&mut ingress_pool, 5);
                 assert!(ingress_pool.exceeds_threshold());
             })
         })
@@ -849,12 +863,13 @@ mod tests {
         ingress_pool.validated.insert(
             message_id,
             ValidatedIngressArtifact {
-                msg: IngressPoolObject::from(ingress_msg),
+                msg: IngressPoolObject::new(node_test_id(0), ingress_msg),
                 timestamp: receive_time,
             },
         );
     }
 
+    #[warn(dead_code)]
     fn insert_unvalidated_artifact(ingress_pool: &mut IngressPoolImpl, nonce: u64, time: Time) {
         let ingress_msg = SignedIngressBuilder::new().nonce(nonce).build();
         ingress_pool.insert(UnvalidatedArtifact {

@@ -56,6 +56,7 @@ impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
         let unvalidated_artifacts = pool
             .unvalidated()
             .get_all_by_expiry_range(expiry_range.clone());
+
         change_set.extend(unvalidated_artifacts.filter_map(|artifact| {
             let ingress_object = &artifact.message;
 
