@@ -516,6 +516,7 @@ where
     }
 }
 
+#[derive(Clone)]
 struct PeerWatcher(watch::Receiver<PeerCounter>);
 
 impl PeerWatcher {
