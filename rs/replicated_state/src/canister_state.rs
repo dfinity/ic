@@ -372,6 +372,10 @@ impl CanisterState {
     /// This includes execution memory (heap, stable, globals, Wasm),
     /// canister history memory, wasm chunk storage and snapshots that
     /// belong to this canister.
+    ///
+    /// This amount is used to periodically charge the canister for the memory
+    /// resources it consumes and can be used to calculate the canister's
+    /// idle cycles burn rate and freezing threshold in cycles.
     pub fn memory_usage(&self) -> NumBytes {
         self.execution_memory_usage()
             + self.canister_history_memory_usage()
@@ -411,7 +415,10 @@ impl CanisterState {
         self.system_state.wasm_chunk_store.memory_usage()
     }
 
-    /// Returns the memory usage of a snapshot created based on the current canister's state.
+    /// Returns the memory usage of a newly created snapshot based on the current canister's state.
+    ///
+    /// It represents the memory usage of a snapshot that would be created at the time of the call
+    /// and would return a different value if the canister's state changes after the call.
     pub fn snapshot_memory_usage(&self) -> NumBytes {
         let execution_usage = self
             .execution_state
