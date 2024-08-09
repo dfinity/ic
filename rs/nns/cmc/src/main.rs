@@ -17,10 +17,11 @@ use ic_crypto_tree_hash::{
 };
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::CheckedSub;
-// TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
+// TODO(EXC-1687): remove temporary aliases `Ic00CanisterSettingsArgs` and `Ic00CanisterSettingsArgsBuilder`.
 use ic_management_canister_types::{
     BoundedVec, CanisterIdRecord, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
-    CreateCanisterArgs, Method, IC_00,
+    CanisterSettingsArgsBuilder as Ic00CanisterSettingsArgsBuilder, CreateCanisterArgs, Method,
+    IC_00,
 };
 use ic_nervous_system_common::NNS_DAPP_BACKEND_CANISTER_ID;
 use ic_nervous_system_governance::maturity_modulation::{
@@ -2177,9 +2178,11 @@ async fn do_create_canister(
             settings
         })
         .unwrap_or_else(|| {
-            CanisterSettingsArgsBuilder::new()
-                .with_controllers(vec![controller_id])
-                .build()
+            CanisterSettingsArgs::from(
+                Ic00CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![controller_id])
+                    .build(),
+            )
         });
 
     for subnet_id in subnets {
