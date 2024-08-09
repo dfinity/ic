@@ -9,7 +9,7 @@ import typing
 
 from data_source.commit_type import CommitType
 from data_source.finding_data_source import FindingDataSource
-from integration.gitlab.gitlab_api import GitlabApi
+from integration.github.github_api import GithubApi
 from model.finding import Finding
 from model.repository import Repository
 from model.security_risk import SecurityRisk
@@ -151,7 +151,7 @@ class DependencyScanner:
                     self.dependency_manager.get_scanner_id(), ScannerJobType.PERIODIC_SCAN, self.job_id, str(err)
                 )
 
-    def do_merge_request_scan(self, repository_name: str):
+    def do_merge_request_scan(self, repository: Repository):
         should_fail_job = False
         try:
             dependency_changes = self.dependency_manager.has_dependencies_changed()
@@ -166,7 +166,7 @@ class DependencyScanner:
                 return
 
             # developer has added made changes to dependencies.
-            findings = self.dependency_manager.get_findings(repository_name, None, None)
+            findings = self.dependency_manager.get_findings(repository.name, repository.projects[0], None)
 
             if len(findings) == 0:
                 return
@@ -175,7 +175,7 @@ class DependencyScanner:
             for index, finding in enumerate(findings):
                 vulnerable_dependency = finding.vulnerable_dependency
                 jira_finding = self.finding_data_source.get_open_finding(
-                    repository_name,
+                    repository.name,
                     self.dependency_manager.get_scanner_id(),
                     vulnerable_dependency.id,
                     vulnerable_dependency.version,
@@ -208,8 +208,8 @@ class DependencyScanner:
                     dep for dep in temp_first_level_dependencies if dep in dependency_diff
                 ]
 
-            gitlab_api = GitlabApi()
-            gitlab_api.comment_on_gitlab(info=findings_to_flag)
+            github_api = GithubApi()
+            github_api.comment_on_github(info=findings_to_flag)
 
             merge_request_id = os.environ.get("CI_MERGE_REQUEST_IID", "CI_MERGE_REQUEST_IID")
             for subscriber in self.subscribers:
@@ -223,10 +223,10 @@ class DependencyScanner:
         except Exception as err:
             should_fail_job = True
             logging.error(
-                f"{self.dependency_manager.get_scanner_id()} for {repository_name} failed for {self.job_id}."
+                f"{self.dependency_manager.get_scanner_id()} for {repository.name} failed for {self.job_id}."
             )
             logging.debug(
-                f"{self.dependency_manager.get_scanner_id()} for {repository_name} failed for {self.job_id} with error:\n{traceback.format_exc()}"
+                f"{self.dependency_manager.get_scanner_id()} for {repository.name} failed for {self.job_id} with error:\n{traceback.format_exc()}"
             )
             for subscriber in self.subscribers:
                 subscriber.on_scan_job_failed(
@@ -239,10 +239,10 @@ class DependencyScanner:
                         self.dependency_manager.get_scanner_id(), ScannerJobType.MERGE_SCAN, self.job_id
                     )
 
-    def do_release_scan(self, repository_name: str):
+    def do_release_scan(self, repository: Repository):
         should_fail_job = False
         try:
-            findings = self.dependency_manager.get_findings(repository_name, None, None)
+            findings = self.dependency_manager.get_findings(repository.name, repository.projects[0], None)
             failures: typing.List = []
 
             if len(findings) == 0:
@@ -251,7 +251,7 @@ class DependencyScanner:
             for finding in findings:
                 vulnerable_dependency = finding.vulnerable_dependency
                 jira_finding = self.finding_data_source.get_open_finding(
-                    repository_name,
+                    repository.name,
                     self.dependency_manager.get_scanner_id(),
                     vulnerable_dependency.id,
                     vulnerable_dependency.version,
@@ -290,10 +290,10 @@ class DependencyScanner:
         except Exception as err:
             should_fail_job = True
             logging.error(
-                f"{self.dependency_manager.get_scanner_id()} for {repository_name} failed for {self.job_id}."
+                f"{self.dependency_manager.get_scanner_id()} for {repository.name} failed for {self.job_id}."
             )
             logging.debug(
-                f"{self.dependency_manager.get_scanner_id()} for {repository_name} failed for {self.job_id} with error:\n{traceback.format_exc()}"
+                f"{self.dependency_manager.get_scanner_id()} for {repository.name} failed for {self.job_id} with error:\n{traceback.format_exc()}"
             )
             for subscriber in self.subscribers:
                 subscriber.on_scan_job_failed(

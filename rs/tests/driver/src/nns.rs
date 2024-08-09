@@ -19,11 +19,10 @@ use cycles_minting_canister::{
 use dfn_candid::candid_one;
 use ic_base_types::NodeId;
 use ic_canister_client::Sender;
-use ic_config::subnet_config::SchedulerConfig;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
     ManageNeuron, ManageNeuronResponse, NnsFunction, ProposalInfo, ProposalStatus, Vote,
 };
@@ -569,7 +568,6 @@ pub async fn submit_create_application_subnet_proposal(
 ) -> ProposalId {
     let config =
         subnet_configuration::get_default_config_params(SubnetType::Application, node_ids.len());
-    let scheduler = SchedulerConfig::application_subnet();
     let payload = CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
@@ -584,9 +582,6 @@ pub async fn submit_create_application_subnet_proposal(
         start_as_nns: false,
         subnet_type: SubnetType::Application,
         is_halted: false,
-        max_instructions_per_message: scheduler.max_instructions_per_message.get(),
-        max_instructions_per_round: scheduler.max_instructions_per_round.get(),
-        max_instructions_per_install_code: scheduler.max_instructions_per_install_code.get(),
         features: Default::default(),
         max_number_of_canisters: 4,
         ssh_readonly_access: vec![],

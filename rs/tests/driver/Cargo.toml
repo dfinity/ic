@@ -22,11 +22,10 @@ crossbeam-channel = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
 ed25519-dalek = { workspace = true }
-flate2 = { workspace = true }
 futures = { workspace = true }
 humantime = "2.0"
+humantime-serde = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 hex = { workspace = true }
 ic-artifact-pool = { path = "../../artifact_pool" }
@@ -59,7 +58,7 @@ ic-nns-init = { path = "../../nns/init" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-nns-constants = { path = "../../nns/constants" }
-ic-nns-governance = { path = "../../nns/governance" }
+ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-nns-gtc = { path = "../../nns/gtc" }
 ic-nns-handler-root = { path = "../../nns/handlers/root/impl" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
@@ -103,7 +102,6 @@ http = "0.2.12"
 lazy_static = { workspace = true }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 leb128 = "0.2.5"
-libflate = "1.3.0"
 lifeline = { path = "../../nns/handlers/lifeline/impl" }
 itertools = { workspace = true }
 maplit = "1.0.2"
@@ -130,7 +128,7 @@ serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
-sha2 = "0.10"
+sha2 = { workspace = true }
 slog = { workspace = true }
 slog-async = { workspace = true }
 slog-term = { workspace = true }
@@ -146,7 +144,8 @@ tokio-util = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tree-deserializer = { path = "../../tree_deserializer" }
-url = "2.1.1"
+url = { workspace = true }
 wat = "1.0.52"
+zstd = { workspace = true }
 ic-agent = { workspace = true }
 ic-utils = { workspace = true }

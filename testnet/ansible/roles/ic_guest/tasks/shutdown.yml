@@ -1,26 +1,27 @@
 ---
-# Prompt for USB key press. ASCII art is hard to escape, so base64 it is 
+# Prompt for USB key press. ASCII art is hard to escape, so base64 it is
 - debug:
-    msg: [
-      "{{ '8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo' | b64decode }}",
-      "{{ '8J+UkSBkODg4ODg4YiAgLmQ4OGIuICBkYiAgICBkYiAgLm84OGIuIGRiICAgZGIgICAgICBkYiAgIGREIGQ4ODg4OGIgZGIgICAgZGIg8J+UkQ==' | b64decode }}",
-      "{{ '8J+aqCBgfn44OH5+JyAuOFAgIFk4LiA4OCAgICA4OCBkOFAgIFk4IDg4ICAgODggICAgICA4OCAsOFAnIDg4JyAgICAgYDhiICBkOCcg8J+aqA==' | b64decode }}",
-      "{{ '8J+UkSAgICA4OCAgICA4OCAgICA4OCA4OCAgICA4OCA4UCAgICAgIDg4b29vODggICAgICA4OCw4UCAgIDg4b29vb28gIGA4YmQ4JyAg8J+UkQ==' | b64decode }}",
-      "{{ '8J+aqCAgICA4OCAgICA4OCAgICA4OCA4OCAgICA4OCA4YiAgICAgIDg4fn5+ODggICAgICA4OGA4YiAgIDg4fn5+fn4gICAgODggICAg8J+aqA==' | b64decode }}",
-      "{{ '8J+UkSAgICA4OCAgICBgOGIgIGQ4JyA4OGIgIGQ4OCBZOGIgIGQ4IDg4ICAgODggICAgICA4OCBgODguIDg4LiAgICAgICAgODggICAg8J+UkQ==' | b64decode }}",
-      "{{ '8J+aqCAgICBZUCAgICAgYFk4OFAnICB+WTg4ODhQJyAgYFk4OFAnIFlQICAgWVAgICAgICBZUCAgIFlEIFk4ODg4OFAgICAgWVAgICAg8J+aqA==' | b64decode }}",
-      "{{ '8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR' | b64decode }}"
-    ]
-  tags: [ "ic_guest" ]
+    msg:
+      - "{{ '8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo'
+        | b64decode }}"
+      - "{{ '8J+UkSBkODg4ODg4YiAgLmQ4OGIuICBkYiAgICBkYiAgLm84OGIuIGRiICAgZGIgICAgICBkYiAgIGREIGQ4ODg4OGIgZGIgICAgZGIg8J+UkQ==' | b64decode }}"
+      - "{{ '8J+aqCBgfn44OH5+JyAuOFAgIFk4LiA4OCAgICA4OCBkOFAgIFk4IDg4ICAgODggICAgICA4OCAsOFAnIDg4JyAgICAgYDhiICBkOCcg8J+aqA==' | b64decode }}"
+      - "{{ '8J+UkSAgICA4OCAgICA4OCAgICA4OCA4OCAgICA4OCA4UCAgICAgIDg4b29vODggICAgICA4OCw4UCAgIDg4b29vb28gIGA4YmQ4JyAg8J+UkQ==' | b64decode }}"
+      - "{{ '8J+aqCAgICA4OCAgICA4OCAgICA4OCA4OCAgICA4OCA4YiAgICAgIDg4fn5+ODggICAgICA4OGA4YiAgIDg4fn5+fn4gICAgODggICAg8J+aqA==' | b64decode }}"
+      - "{{ '8J+UkSAgICA4OCAgICBgOGIgIGQ4JyA4OGIgIGQ4OCBZOGIgIGQ4IDg4ICAgODggICAgICA4OCBgODguIDg4LiAgICAgICAgODggICAg8J+UkQ==' | b64decode }}"
+      - "{{ '8J+aqCAgICBZUCAgICAgYFk4OFAnICB+WTg4ODhQJyAgYFk4OFAnIFlQICAgWVAgICAgICBZUCAgIFlEIFk4ODg4OFAgICAgWVAgICAg8J+aqA==' | b64decode }}"
+      - "{{ '8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR8J+aqPCflJHwn5qo8J+UkfCfmqjwn5SR'
+        | b64decode }}"
+  tags: [ic_guest]
 
-- name: shutdown guest
+- name: Shutdown guest
   shell: |
     set -Exu
     virsh shutdown "{{ item }}"
     # virsh shutdown command is asynchronous, so the next command waits upto 70sec for the VM to shutdown
     counter=0
     until [[ $counter -gt 70 ]] ||  sudo virsh domstate "{{ item }}" | grep shut || sudo virsh domstate "{{ item }}" | grep "failed to get domain";
-       do 
+       do
           echo Waiting for shutdown: $counter/70;
           ((counter++));
           sleep 1;
@@ -30,5 +31,5 @@
     label:
   args:
     executable: /bin/bash
-  ignore_errors: yes
-  tags: [ "ic_guest" ]
+  ignore_errors: true
+  tags: [ic_guest]

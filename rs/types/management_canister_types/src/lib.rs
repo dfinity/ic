@@ -90,6 +90,7 @@ pub enum Method {
     // Bitcoin Interface.
     BitcoinGetBalance,
     BitcoinGetUtxos,
+    BitcoinGetBlockHeaders,
     BitcoinSendTransaction,
     BitcoinGetCurrentFeePercentiles,
     // Private APIs used exclusively by the bitcoin canisters.
@@ -108,7 +109,6 @@ pub enum Method {
     // Support for chunked uploading of Wasm modules.
     UploadChunk,
     StoredChunks,
-    DeleteChunks,
     ClearChunkStore,
 
     // Support for canister snapshots.
@@ -774,6 +774,7 @@ impl UninstallCodeArgs {
 
 impl Payload<'_> for UninstallCodeArgs {}
 
+// TODO(EXC-1670): remove after migration to `LogVisibilityV2`.
 /// Log visibility for a canister.
 /// ```text
 /// variant {
@@ -781,13 +782,39 @@ impl Payload<'_> for UninstallCodeArgs {}
 ///    public;
 /// }
 /// ```
-#[derive(Default, Clone, Copy, CandidType, Deserialize, Debug, PartialEq, Eq, EnumIter)]
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq, EnumIter)]
 pub enum LogVisibility {
     #[default]
     #[serde(rename = "controllers")]
     Controllers = 1,
     #[serde(rename = "public")]
     Public = 2,
+}
+
+// Ensure forward compatibility with the new `LogVisibilityV2`.
+// First read the old `LogVisibility`, if it fails (e.g., for `LogVisibilityV2::AllowedViewers`),
+// try to read the new `LogVisibilityV2`.
+impl Payload<'_> for LogVisibility {
+    fn decode(blob: &'_ [u8]) -> Result<Self, UserError> {
+        let result =
+            match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error) {
+                Ok(log_visibility) => log_visibility,
+                // Try to decode as LogVisibilityV2 and convert to LogVisibility
+                Err(_) => Self::from(LogVisibilityV2::decode(blob)?),
+            };
+        Ok(result)
+    }
+}
+
+impl From<LogVisibilityV2> for LogVisibility {
+    fn from(item: LogVisibilityV2) -> Self {
+        match item {
+            LogVisibilityV2::Controllers => Self::Controllers,
+            LogVisibilityV2::Public => Self::Public,
+            // Fall back to the default value.
+            LogVisibilityV2::AllowedViewers(_) => Self::default(),
+        }
+    }
 }
 
 impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
@@ -806,6 +833,174 @@ impl From<pb_canister_state_bits::LogVisibility> for LogVisibility {
             pb_canister_state_bits::LogVisibility::Controllers => Self::Controllers,
             pb_canister_state_bits::LogVisibility::Public => Self::Public,
         }
+    }
+}
+
+/// Maximum number of allowed log viewers (specified in the interface spec).
+const MAX_ALLOWED_LOG_VIEWERS_COUNT: usize = 10;
+
+pub type BoundedAllowedViewers =
+    BoundedVec<MAX_ALLOWED_LOG_VIEWERS_COUNT, UNBOUNDED, UNBOUNDED, PrincipalId>;
+
+/// Log visibility for a canister.
+/// ```text
+/// variant {
+///    controllers;
+///    public;
+///    allowed_viewers: vec principal;
+/// }
+/// ```
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq, EnumIter)]
+pub enum LogVisibilityV2 {
+    #[default]
+    #[serde(rename = "controllers")]
+    Controllers,
+    #[serde(rename = "public")]
+    Public,
+    #[serde(rename = "allowed_viewers")]
+    AllowedViewers(BoundedAllowedViewers),
+}
+
+// Ensure backward compatibility with the old `LogVisibility`.
+// `LogVisibilityV2` extends `LogVisibility` with an additional variant, `AllowedViewers`.
+// When decoding, if `AllowedViewers` is encountered, it is changed to a default value
+// to maintain compatibility with the old `LogVisibility`.
+impl Payload<'_> for LogVisibilityV2 {
+    fn decode(blob: &'_ [u8]) -> Result<Self, UserError> {
+        match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error) {
+            // Fall back to the default value.
+            Ok(Self::AllowedViewers(_)) => Ok(Self::default()),
+            Ok(log_visibility_v2) => Ok(log_visibility_v2),
+            Err(err) => Err(err),
+        }
+    }
+}
+
+impl From<LogVisibility> for LogVisibilityV2 {
+    fn from(item: LogVisibility) -> Self {
+        match item {
+            LogVisibility::Controllers => Self::Controllers,
+            LogVisibility::Public => Self::Public,
+        }
+    }
+}
+
+impl From<&LogVisibilityV2> for pb_canister_state_bits::LogVisibilityV2 {
+    fn from(item: &LogVisibilityV2) -> Self {
+        use pb_canister_state_bits as pb;
+        match item {
+            LogVisibilityV2::Controllers => pb::LogVisibilityV2 {
+                log_visibility_v2: Some(pb::log_visibility_v2::LogVisibilityV2::Controllers(1)),
+            },
+            LogVisibilityV2::Public => pb::LogVisibilityV2 {
+                log_visibility_v2: Some(pb::log_visibility_v2::LogVisibilityV2::Public(2)),
+            },
+            LogVisibilityV2::AllowedViewers(principals) => pb::LogVisibilityV2 {
+                log_visibility_v2: Some(pb::log_visibility_v2::LogVisibilityV2::AllowedViewers(
+                    pb::LogVisibilityAllowedViewers {
+                        principals: principals
+                            .get()
+                            .iter()
+                            .map(|c| (*c).into())
+                            .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>()
+                            .clone(),
+                    },
+                )),
+            },
+        }
+    }
+}
+
+impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb_canister_state_bits::LogVisibilityV2) -> Result<Self, Self::Error> {
+        use pb_canister_state_bits as pb;
+        let Some(log_visibility_v2) = item.log_visibility_v2 else {
+            return Err(ProxyDecodeError::MissingField(
+                "LogVisibilityV2::log_visibility_v2",
+            ));
+        };
+        match log_visibility_v2 {
+            pb::log_visibility_v2::LogVisibilityV2::Controllers(_) => Ok(Self::Controllers),
+            pb::log_visibility_v2::LogVisibilityV2::Public(_) => Ok(Self::Public),
+            pb::log_visibility_v2::LogVisibilityV2::AllowedViewers(data) => {
+                let data = data
+                    .principals
+                    .iter()
+                    .map(|p| {
+                        PrincipalId::try_from(p.raw.clone()).map_err(|e| {
+                            ProxyDecodeError::ValueOutOfRange {
+                                typ: "PrincipalId",
+                                err: e.to_string(),
+                            }
+                        })
+                    })
+                    .collect::<Result<Vec<PrincipalId>, _>>()?;
+                Ok(Self::AllowedViewers(BoundedAllowedViewers::new(data)))
+            }
+        }
+    }
+}
+
+#[test]
+fn test_log_visibility_v2_serialization_roundtrip() {
+    // Test `LogVisibilityV2` canidid serialization/deserialization.
+    for (initial, expected) in [
+        (LogVisibilityV2::Controllers, LogVisibilityV2::Controllers),
+        (LogVisibilityV2::Public, LogVisibilityV2::Public),
+        (
+            LogVisibilityV2::AllowedViewers(Default::default()),
+            LogVisibilityV2::default(),
+        ),
+    ] {
+        let encoded = LogVisibilityV2::encode(&initial);
+        let decoded = LogVisibilityV2::decode(&encoded).unwrap();
+        assert_eq!(decoded, expected);
+    }
+}
+
+#[test]
+fn test_log_visibility_v2_default_canidid_backward_compatibility() {
+    // Test `LogVisibilityV2` is backward compatible with `LogVisibility`
+    // via default canidid serialization.
+    for (initial, expected) in [
+        (LogVisibility::Controllers, LogVisibilityV2::Controllers),
+        (LogVisibility::Public, LogVisibilityV2::Public),
+    ] {
+        let encoded = Encode!(&initial).unwrap();
+        let decoded = Decode!(&encoded, LogVisibilityV2).unwrap();
+        assert_eq!(decoded, expected);
+    }
+}
+
+#[test]
+fn test_log_visibility_v2_backward_compatibility() {
+    // Test `LogVisibilityV2` is backward compatible with `LogVisibility`.
+    for (initial, expected) in [
+        (LogVisibility::Controllers, LogVisibilityV2::Controllers),
+        (LogVisibility::Public, LogVisibilityV2::Public),
+    ] {
+        let encoded = LogVisibility::encode(&initial);
+        let decoded = LogVisibilityV2::decode(&encoded).unwrap();
+        assert_eq!(decoded, expected);
+    }
+}
+
+#[test]
+fn test_log_visibility_v2_forward_compatibility() {
+    // Test `LogVisibilityV2` is forward compatible with `LogVisibility`.
+    for (initial, expected) in [
+        (LogVisibilityV2::Controllers, LogVisibility::Controllers),
+        (LogVisibilityV2::Public, LogVisibility::Public),
+        (
+            LogVisibilityV2::AllowedViewers(Default::default()),
+            LogVisibility::default(),
+        ),
+    ] {
+        let encoded = LogVisibilityV2::encode(&initial);
+        let decoded = LogVisibility::decode(&encoded).unwrap();
+        assert_eq!(decoded, expected);
     }
 }
 
@@ -865,8 +1060,8 @@ impl DefiniteCanisterSettingsArgs {
         self.reserved_cycles_limit.clone()
     }
 
-    pub fn log_visibility(&self) -> LogVisibility {
-        self.log_visibility
+    pub fn log_visibility(&self) -> &LogVisibility {
+        &self.log_visibility
     }
 }
 
@@ -1651,7 +1846,6 @@ impl DataSize for PrincipalId {
 
 /// Struct used for encoding/decoding
 /// `(record {
-///     controller: opt principal;
 ///     controllers: opt vec principal;
 ///     compute_allocation: opt nat;
 ///     memory_allocation: opt nat;
@@ -1659,11 +1853,10 @@ impl DataSize for PrincipalId {
 ///     reserved_cycles_limit: opt nat;
 ///     log_visibility : opt log_visibility;
 ///     wasm_memory_limit: opt nat;
+///     wasm_memory_threshold: opt nat;
 /// })`
 #[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
 pub struct CanisterSettingsArgs {
-    /// The field controller is deprecated and should not be used in new code.
-    controller: Option<PrincipalId>,
     pub controllers: Option<BoundedControllers>,
     pub compute_allocation: Option<candid::Nat>,
     pub memory_allocation: Option<candid::Nat>,
@@ -1671,6 +1864,7 @@ pub struct CanisterSettingsArgs {
     pub reserved_cycles_limit: Option<candid::Nat>,
     pub log_visibility: Option<LogVisibility>,
     pub wasm_memory_limit: Option<candid::Nat>,
+    pub wasm_memory_threshold: Option<candid::Nat>,
 }
 
 impl Payload<'_> for CanisterSettingsArgs {}
@@ -1680,7 +1874,6 @@ impl CanisterSettingsArgs {
     #[deprecated(note = "please use `CanisterSettingsArgsBuilder` instead")]
     pub fn new() -> Self {
         Self {
-            controller: None,
             controllers: None,
             compute_allocation: None,
             memory_allocation: None,
@@ -1688,17 +1881,13 @@ impl CanisterSettingsArgs {
             reserved_cycles_limit: None,
             log_visibility: None,
             wasm_memory_limit: None,
+            wasm_memory_threshold: None,
         }
-    }
-
-    pub fn get_controller(&self) -> Option<PrincipalId> {
-        self.controller
     }
 }
 
 #[derive(Default)]
 pub struct CanisterSettingsArgsBuilder {
-    controller: Option<PrincipalId>,
     controllers: Option<Vec<PrincipalId>>,
     compute_allocation: Option<candid::Nat>,
     memory_allocation: Option<candid::Nat>,
@@ -1706,6 +1895,7 @@ pub struct CanisterSettingsArgsBuilder {
     reserved_cycles_limit: Option<candid::Nat>,
     log_visibility: Option<LogVisibility>,
     wasm_memory_limit: Option<candid::Nat>,
+    wasm_memory_threshold: Option<candid::Nat>,
 }
 
 #[allow(dead_code)]
@@ -1716,7 +1906,6 @@ impl CanisterSettingsArgsBuilder {
 
     pub fn build(self) -> CanisterSettingsArgs {
         CanisterSettingsArgs {
-            controller: self.controller,
             controllers: self.controllers.map(BoundedControllers::new),
             compute_allocation: self.compute_allocation,
             memory_allocation: self.memory_allocation,
@@ -1724,13 +1913,7 @@ impl CanisterSettingsArgsBuilder {
             reserved_cycles_limit: self.reserved_cycles_limit,
             log_visibility: self.log_visibility,
             wasm_memory_limit: self.wasm_memory_limit,
-        }
-    }
-
-    pub fn with_controller(self, controller: PrincipalId) -> Self {
-        Self {
-            controller: Some(controller),
-            ..self
+            wasm_memory_threshold: self.wasm_memory_threshold,
         }
     }
 
@@ -1804,6 +1987,14 @@ impl CanisterSettingsArgsBuilder {
     pub fn with_wasm_memory_limit(self, wasm_memory_limit: u64) -> Self {
         Self {
             wasm_memory_limit: Some(candid::Nat::from(wasm_memory_limit)),
+            ..self
+        }
+    }
+
+    /// Sets the Wasm memory threshold in bytes.
+    pub fn with_wasm_memory_threshold(self, wasm_memory_threshold: u64) -> Self {
+        Self {
+            wasm_memory_threshold: Some(candid::Nat::from(wasm_memory_threshold)),
             ..self
         }
     }
@@ -2507,6 +2698,7 @@ impl ComputeInitialIDkgDealingsResponse {
 // Export the bitcoin types.
 pub use ic_btc_interface::{
     GetBalanceRequest as BitcoinGetBalanceArgs,
+    GetBlockHeadersRequest as BitcoinGetBlockHeadersArgs,
     GetCurrentFeePercentilesRequest as BitcoinGetCurrentFeePercentilesArgs,
     GetUtxosRequest as BitcoinGetUtxosArgs, Network as BitcoinNetwork,
     SendTransactionRequest as BitcoinSendTransactionArgs,
@@ -2521,6 +2713,7 @@ pub use ic_btc_replica_types::{
 
 impl Payload<'_> for BitcoinGetBalanceArgs {}
 impl Payload<'_> for BitcoinGetUtxosArgs {}
+impl Payload<'_> for BitcoinGetBlockHeadersArgs {}
 impl Payload<'_> for BitcoinSendTransactionArgs {}
 impl Payload<'_> for BitcoinGetCurrentFeePercentilesArgs {}
 impl Payload<'_> for BitcoinGetSuccessorsArgs {}

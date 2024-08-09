@@ -47,6 +47,7 @@ ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance = { path = "../../nns/governance" }
+ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-nns-handler-root = { path = "../../nns/handlers/root/impl" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-registry-routing-table = { path = "../routing_table" }
@@ -60,10 +61,12 @@ prost = { workspace = true }
 registry-canister = { path = "../canister" }
 serde = { workspace = true }
 serde_json = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
 tokio = { workspace = true }
 candid = { workspace = true }
 tempfile = { workspace = true }
-url = { version = "2.1.1", features = ["serde"] }
+url = { workspace = true }
 chrono = { workspace = true }
 indexmap = "2.2.6" # TODO: consider using the std's BTreeMap instead
 

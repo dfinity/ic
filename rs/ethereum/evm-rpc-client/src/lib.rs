@@ -4,11 +4,12 @@ mod tests;
 pub mod types;
 
 use crate::types::candid::{
-    Block, BlockTag, MultiRpcResult, ProviderError, RpcConfig, RpcError, RpcServices,
+    Block, BlockTag, FeeHistory, FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs, LogEntry,
+    MultiRpcResult, ProviderError, RpcConfig, RpcError, RpcServices, TransactionReceipt,
 };
 use async_trait::async_trait;
 use candid::utils::ArgumentEncoder;
-use candid::{CandidType, Principal};
+use candid::{CandidType, Nat, Principal};
 use ic_canister_log::{log, Sink};
 use ic_cdk::api::call::RejectionCode;
 use serde::de::DeserializeOwned;
@@ -34,8 +35,18 @@ pub struct EvmRpcClient<R: Runtime, L: Sink> {
     logger: L,
     providers: RpcServices,
     evm_canister_id: Principal,
+    override_rpc_config: OverrideRpcConfig,
     min_attached_cycles: u128,
     max_num_retries: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct OverrideRpcConfig {
+    pub eth_get_block_by_number: Option<RpcConfig>,
+    pub eth_get_logs: Option<RpcConfig>,
+    pub eth_fee_history: Option<RpcConfig>,
+    pub eth_get_transaction_receipt: Option<RpcConfig>,
+    pub eth_get_transaction_count: Option<RpcConfig>,
 }
 
 impl<L: Sink> EvmRpcClient<IcRuntime, L> {
@@ -50,10 +61,65 @@ impl<R: Runtime, L: Sink> EvmRpcClient<R, L> {
     }
 
     pub async fn eth_get_block_by_number(&self, block: BlockTag) -> MultiRpcResult<Block> {
-        self.call_internal("eth_getBlockByNumber", block).await
+        self.call_internal(
+            "eth_getBlockByNumber",
+            self.override_rpc_config.eth_get_block_by_number.clone(),
+            block,
+        )
+        .await
     }
 
-    async fn call_internal<In, Out>(&self, method: &str, args: In) -> MultiRpcResult<Out>
+    pub async fn eth_get_logs(&self, args: GetLogsArgs) -> MultiRpcResult<Vec<LogEntry>> {
+        self.call_internal(
+            "eth_getLogs",
+            self.override_rpc_config.eth_get_logs.clone(),
+            args,
+        )
+        .await
+    }
+
+    pub async fn eth_fee_history(
+        &self,
+        args: FeeHistoryArgs,
+    ) -> MultiRpcResult<Option<FeeHistory>> {
+        self.call_internal(
+            "eth_feeHistory",
+            self.override_rpc_config.eth_fee_history.clone(),
+            args,
+        )
+        .await
+    }
+
+    pub async fn eth_get_transaction_receipt(
+        &self,
+        transaction_hash: String,
+    ) -> MultiRpcResult<Option<TransactionReceipt>> {
+        self.call_internal(
+            "eth_getTransactionReceipt",
+            self.override_rpc_config.eth_get_transaction_receipt.clone(),
+            transaction_hash,
+        )
+        .await
+    }
+
+    pub async fn eth_get_transaction_count(
+        &self,
+        args: GetTransactionCountArgs,
+    ) -> MultiRpcResult<Nat> {
+        self.call_internal(
+            "eth_getTransactionCount",
+            self.override_rpc_config.eth_get_transaction_count.clone(),
+            args,
+        )
+        .await
+    }
+
+    async fn call_internal<In, Out>(
+        &self,
+        method: &str,
+        config: Option<RpcConfig>,
+        args: In,
+    ) -> MultiRpcResult<Out>
     where
         In: CandidType + Send + Clone + Debug + 'static,
         Out: CandidType + DeserializeOwned + Debug + 'static,
@@ -64,19 +130,20 @@ impl<R: Runtime, L: Sink> EvmRpcClient<R, L> {
         loop {
             log!(
                 self.logger,
-                "[{}]: Calling providers {:?} for {} with arguments '{:?}' and {} cycles",
+                "[{}]: Calling providers {:?} for {} with arguments '{:?}' and {} cycles (retry {})",
                 self.evm_canister_id,
                 self.providers,
                 method,
                 args,
-                attached_cycles
+                attached_cycles,
+                retries
             );
             let result: MultiRpcResult<Out> = self
                 .runtime
                 .call(
                     self.evm_canister_id,
                     method,
-                    (self.providers.clone(), None::<RpcConfig>, args.clone()),
+                    (self.providers.clone(), config.clone(), args.clone()),
                     attached_cycles,
                 )
                 .await
@@ -128,6 +195,7 @@ pub struct EvmRpcClientBuilder<R: Runtime, L: Sink> {
     logger: L,
     providers: RpcServices,
     evm_canister_id: Principal,
+    override_rpc_config: OverrideRpcConfig,
     min_attached_cycles: u128,
     max_num_retries: u32,
 }
@@ -150,6 +218,7 @@ impl<R: Runtime, L: Sink> EvmRpcClientBuilder<R, L> {
             logger,
             providers: DEFAULT_PROVIDERS,
             evm_canister_id: EVM_RPC_CANISTER_ID_FIDUCIARY,
+            override_rpc_config: Default::default(),
             min_attached_cycles: DEFAULT_MIN_ATTACHED_CYCLES,
             max_num_retries: DEFAULT_MAX_NUM_RETRIES,
         }
@@ -164,6 +233,7 @@ impl<R: Runtime, L: Sink> EvmRpcClientBuilder<R, L> {
             logger: self.logger,
             providers: self.providers,
             evm_canister_id: self.evm_canister_id,
+            override_rpc_config: self.override_rpc_config,
             min_attached_cycles: self.min_attached_cycles,
             max_num_retries: self.max_num_retries,
         }
@@ -176,6 +246,11 @@ impl<R: Runtime, L: Sink> EvmRpcClientBuilder<R, L> {
 
     pub fn with_evm_canister_id(mut self, evm_canister_id: Principal) -> Self {
         self.evm_canister_id = evm_canister_id;
+        self
+    }
+
+    pub fn with_override_rpc_config(mut self, override_rpc_config: OverrideRpcConfig) -> Self {
+        self.override_rpc_config = override_rpc_config;
         self
     }
 
@@ -195,6 +270,7 @@ impl<R: Runtime, L: Sink> EvmRpcClientBuilder<R, L> {
             logger: self.logger,
             providers: self.providers,
             evm_canister_id: self.evm_canister_id,
+            override_rpc_config: self.override_rpc_config,
             min_attached_cycles: self.min_attached_cycles,
             max_num_retries: self.max_num_retries,
         }

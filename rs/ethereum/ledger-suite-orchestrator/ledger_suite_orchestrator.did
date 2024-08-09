@@ -57,31 +57,13 @@ type Erc20Contract = record {
 };
 
 // ICRC1 ledger initialization argument that will be used when the orchestrator spawns a new ledger canister.
-// The `archive_options` field will be set by the orchestrator.
+// Other fields, such as `archive_options`, needed to initialize a new ledger will be set by the orchestrator.
 type LedgerInitArg = record {
-    minting_account : LedgerAccount;
-    fee_collector_account : opt LedgerAccount;
     transfer_fee : nat;
-    decimals : opt nat8;
-    max_memo_length : opt nat16;
+    decimals : nat8;
     token_symbol : text;
     token_name : text;
     token_logo : text;
-    initial_balances : vec record { LedgerAccount; nat };
-    feature_flags : opt LedgerFeatureFlags;
-    maximum_number_of_accounts : opt nat64;
-    accounts_overflow_trim_quantity : opt nat64;
-};
-
-type LedgerAccount = record {
-    owner : principal;
-    subaccount : opt LedgerSubaccount;
-};
-
-type LedgerSubaccount = blob;
-
-type LedgerFeatureFlags = record {
-    icrc2 : bool;
 };
 
 type ManagedCanisterIds = record {
