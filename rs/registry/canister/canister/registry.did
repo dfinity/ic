@@ -445,11 +445,11 @@ service : {
   remove_nodes_from_subnet : (RemoveNodesPayload) -> ();
   reroute_canister_ranges : (RerouteCanisterRangesPayload) -> ();
   retire_replica_version : (RetireReplicaVersionPayload) -> ();
+  revise_elected_guestos_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   revise_elected_replica_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   set_firewall_config : (SetFirewallConfigPayload) -> ();
   update_api_boundary_nodes_version : (UpdateApiBoundaryNodesVersionPayload) -> ();
   update_elected_hostos_versions : (UpdateElectedHostosVersionsPayload) -> ();
-  update_elected_replica_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   update_firewall_rules : (UpdateFirewallRulesPayload) -> ();
   update_node_directly : (UpdateNodeDirectlyPayload) -> ();
   update_node_domain_directly : (UpdateNodeDomainDirectlyPayload) -> (UpdateNodeDomainDirectlyResponse);
