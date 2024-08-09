@@ -630,6 +630,7 @@ fn get_disqualified_ranks(
     }
     rank_map
 }
+
 /// A data structure for storing ranks and proposal metadata.
 struct RankMap {
     map: BTreeMap<Height, BTreeMap<Rank, BasicSigned<BlockMetadata>>>,
