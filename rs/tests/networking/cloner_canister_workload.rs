@@ -54,6 +54,10 @@ const CANISTERS_INSTALLED_PER_CLONER_CANISTER: u64 = 500;
 const AMOUNT_OF_CLONER_CANISTERS: u64 =
     NUMBER_OF_CANISTERS_TO_INSTALL / CANISTERS_INSTALLED_PER_CLONER_CANISTER;
 
+use tikv_jemallocator::Jemalloc;
+#[global_allocator]
+static ALLOC: Jemalloc = Jemalloc;
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)

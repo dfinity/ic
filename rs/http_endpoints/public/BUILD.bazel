@@ -33,6 +33,7 @@ DEPENDENCIES = [
     "//rs/types/error_types",
     "//rs/types/types",
     "//rs/validator",
+    "@crate_index//:heappy",
     "@crate_index//:askama",
     "@crate_index//:axum",
     "@crate_index//:byte-unit",

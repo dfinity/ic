@@ -7,6 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+heappy = { git = "https://github.com/mkmik/heappy.git", rev = "98157390a0c3a5d42221386a2076c5b757802a5b", features = [ "enable_heap_profiler", "measure_free" ] }
 askama = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }

@@ -103,6 +103,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         cargo_config = "//:bazel/cargo.config",
         annotations = CRATE_ANNOTATIONS,
         packages = {
+            "heappy": crate.spec(
+                git = "https://github.com/mkmik/heappy.git",
+                rev = "6b65e7a729d897cfaa05dc786f38cc3079a84be0",
+                features = [
+                    "enable_heap_profiler",
+                    "measure_free",
+                ],
+            ),
             "actix-rt": crate.spec(
                 version = "^2.2.0",
             ),
@@ -1282,7 +1290,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.36",
             ),
             "tokio": crate.spec(
-                version = "^1.38.0",
+                version = "^1.39.0",
                 features = [
                     "full",
                 ],
