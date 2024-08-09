@@ -115,22 +115,13 @@ impl EthRpcClient {
                 "[sequential_call_until_ok]: calling provider: {:?}",
                 provider
             );
-            let result = eth_rpc::call(
+            let result: Result<O, SingleCallError> = eth_rpc::call(
                 provider.url().to_string(),
                 method.clone(),
                 params.clone(),
                 response_size_estimate,
             )
             .await;
-            //TODO XC-163: change eth_rpc::call to directly return a
-            // Result<O, SingleCallError>
-            let result: Result<O, SingleCallError> = match result {
-                Ok(JsonRpcResult::Result(value)) => Ok(value),
-                Ok(JsonRpcResult::Error { code, message }) => {
-                    Err(SingleCallError::JsonRpcError { code, message })
-                }
-                Err(error) => Err(SingleCallError::HttpOutcallError(error)),
-            };
             results.insert_once(provider.clone(), result);
             if results.has_ok_results() {
                 return results;
@@ -168,7 +159,7 @@ impl EthRpcClient {
             }
             futures::future::join_all(fut).await
         };
-        MultiCallResults::from_non_empty_iter(providers.iter().cloned().zip(results.into_iter()))
+        MultiCallResults::from_iter(providers.iter().cloned().zip(results.into_iter()))
     }
 
     pub async fn eth_get_logs(
