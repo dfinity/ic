@@ -6,5 +6,5 @@ use libfuzzer_sys::fuzz_target;
 use pb::Block;
 
 fuzz_target!(|data: &[u8]| {
-    let _decoded: Result<Block, ProxyDecodeError> = pb::Block::proxy_decode(&data);
+    let _decoded: Result<Block, ProxyDecodeError> = pb::Block::proxy_decode(data);
 });
