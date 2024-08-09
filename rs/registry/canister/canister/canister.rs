@@ -50,7 +50,9 @@ use registry_canister::{
         do_update_node_directly::UpdateNodeDirectlyPayload,
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
         do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
-        do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
+        do_update_nodes_hostos_version::{
+            DeployHostosToSomeNodes, UpdateNodesHostosVersionPayload,
+        },
         do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
         do_update_subnet::UpdateSubnetPayload,
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
@@ -448,6 +450,8 @@ fn update_elected_hostos_versions_(payload: UpdateElectedHostosVersionsPayload) 
     recertify_registry();
 }
 
+// TODO[NNS1-3000]: Remove this endpoint once mainnet NNS Governance starts calling the new
+// TODO[NNS1-3000]: `deploy_hostos_to_some_nodes` endpoint.
 #[export_name = "canister_update update_nodes_hostos_version"]
 fn update_nodes_hostos_version() {
     check_caller_is_governance_and_log("update_nodes_hostos_version");
@@ -459,6 +463,18 @@ fn update_nodes_hostos_version() {
 #[candid_method(update, rename = "update_nodes_hostos_version")]
 fn update_nodes_hostos_version_(payload: UpdateNodesHostosVersionPayload) {
     registry_mut().do_update_nodes_hostos_version(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update deploy_hostos_to_some_nodes"]
+fn deploy_hostos_to_some_nodes() {
+    check_caller_is_governance_and_log("deploy_hostos_to_some_nodes");
+    over(candid_one, deploy_hostos_to_some_nodes_);
+}
+
+#[candid_method(update, rename = "deploy_hostos_to_some_nodes")]
+fn deploy_hostos_to_some_nodes_(payload: DeployHostosToSomeNodes) {
+    registry_mut().do_deploy_hostos_to_some_nodes(payload);
     recertify_registry();
 }
 
