@@ -1619,10 +1619,10 @@ checksum = "3a4f925191b4367301851c6d99b09890311d74b0d43f274c0b34c86d308a3663"
 name = "call-tree-test"
 version = "0.9.0"
 dependencies = [
- "dfn_core",
- "dfn_json",
- "dfn_macro",
+ "candid",
  "futures",
+ "ic-cdk 0.13.2",
+ "ic-cdk-macros 0.9.0",
  "serde",
  "serde_json",
 ]
@@ -1875,6 +1875,7 @@ dependencies = [
  "cloudflare",
  "flate2",
  "futures",
+ "http 1.1.0",
  "ic-agent",
  "ic-http-certification",
  "ic-response-verification",
@@ -2164,6 +2165,16 @@ dependencies = [
  "libc",
  "time",
  "winapi 0.3.9",
+]
+
+[[package]]
+name = "cloner-canister-types"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "futures",
+ "ic-cdk 0.13.2",
+ "serde",
 ]
 
 [[package]]
@@ -3429,7 +3440,6 @@ name = "downstream-calls-test"
 version = "0.1.0"
 dependencies = [
  "candid",
- "dfn_core",
  "ic-base-types",
  "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
@@ -3486,7 +3496,6 @@ name = "ecdsa-canister"
 version = "0.1.0"
 dependencies = [
  "candid",
- "dfn_core",
  "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-management-canister-types",
@@ -5171,6 +5180,8 @@ dependencies = [
  "registry-canister",
  "serde",
  "serde_json",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "tempfile",
  "tokio",
  "url",
@@ -9079,10 +9090,14 @@ dependencies = [
  "candid_parser",
  "clap 4.4.6",
  "hex",
+ "maplit",
+ "reqwest 0.12.5",
+ "serde",
  "serde_json",
  "strum 0.26.2",
  "strum_macros 0.26.2",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -11935,7 +11950,6 @@ dependencies = [
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
  "ic-nns-governance-api",
  "ic-nns-gtc",
  "ic-nns-handler-root",
@@ -12580,9 +12594,9 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "base64 0.13.1",
- "dfn_core",
  "hex",
  "ic-canister-client-sender",
+ "ic-cdk 0.13.2",
  "ic-certification-test-utils",
  "ic-constants",
  "ic-crypto-interfaces-sig-verification",
@@ -14934,6 +14948,7 @@ dependencies = [
  "candid",
  "canister-test",
  "canister_http",
+ "cloner-canister-types",
  "dfn_candid",
  "ic-base-types",
  "ic-cdk 0.13.2",
@@ -17368,9 +17383,9 @@ dependencies = [
 name = "response-payload-test"
 version = "0.9.0"
 dependencies = [
- "dfn_core",
- "dfn_json",
- "dfn_macro",
+ "candid",
+ "ic-cdk 0.13.2",
+ "ic-cdk-macros 0.9.0",
  "serde",
 ]
 

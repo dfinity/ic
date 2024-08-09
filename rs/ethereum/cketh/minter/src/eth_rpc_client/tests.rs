@@ -662,6 +662,7 @@ mod eth_get_transaction_count {
 }
 
 mod evm_rpc_conversion {
+    use crate::eth_rpc::SendRawTransactionResult;
     use crate::eth_rpc_client::responses::TransactionReceipt;
     use crate::eth_rpc_client::tests::{ANKR, LLAMA_NODES, PUBLIC_NODE};
     use crate::eth_rpc_client::{
@@ -680,6 +681,7 @@ mod evm_rpc_conversion {
         HttpOutcallError as EvmHttpOutcallError, LogEntry as EvmLogEntry,
         MultiRpcResult as EvmMultiRpcResult, RpcApi as EvmRpcApi, RpcError as EvmRpcError,
         RpcResult as EvmRpcResult, RpcService as EvmRpcService, RpcService,
+        SendRawTransactionStatus as EvmSendRawTransactionStatus,
         TransactionReceipt as EvmTransactionReceipt,
     };
     use num_bigint::BigUint;
@@ -939,6 +941,20 @@ mod evm_rpc_conversion {
                 ReduceWithStrategy::<MinByKey>::reduce(evm_results),
                 ReduceWithStrategy::<MinByKey>::reduce(minter_results),
             )?;
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn should_have_consistent_send_raw_transaction_result_between_minter_and_evm_rpc
+        (
+            evm_tx_status in arb_evm_rpc_send_raw_transaction_status(),
+            first_error in arb_evm_rpc_error(),
+            second_error in arb_evm_rpc_error(),
+            third_error in arb_evm_rpc_error(),
+        ) {
+            let minter_tx_result = SendRawTransactionResult::from(evm_tx_status.clone());
+            test_consistency_between_minter_and_evm_rpc(minter_tx_result, evm_tx_status, first_error, second_error, third_error)?;
         }
     }
 
@@ -1370,5 +1386,19 @@ mod evm_rpc_conversion {
 
     fn arb_evm_rpc_transaction_count() -> impl Strategy<Value = EvmRpcResult<Nat>> {
         proptest::result::maybe_ok(arb_nat_256(), arb_evm_rpc_error())
+    }
+
+    fn arb_evm_rpc_send_raw_transaction_status(
+    ) -> impl Strategy<Value = EvmSendRawTransactionStatus> {
+        use proptest::{
+            option,
+            prelude::{prop_oneof, Just},
+        };
+        prop_oneof![
+            option::of(".*").prop_map(EvmSendRawTransactionStatus::Ok),
+            Just(EvmSendRawTransactionStatus::InsufficientFunds),
+            Just(EvmSendRawTransactionStatus::NonceTooLow),
+            Just(EvmSendRawTransactionStatus::NonceTooHigh),
+        ]
     }
 }

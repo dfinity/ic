@@ -16,7 +16,8 @@ mod common {
     use std::env;
     use xnet_test::CanisterId;
 
-    use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::HasDependencies};
+    use ic_system_test_driver::driver::test_env::TestEnv;
+    use ic_system_test_driver::driver::test_env_api::get_dependency_path;
 
     /// Concurrently calls `start` on all canisters in `canisters` with the
     /// given parameters.
@@ -60,7 +61,7 @@ mod common {
         canisters_per_subnet: usize,
     ) -> Vec<Vec<Canister>> {
         let logger = env.logger();
-        let wasm = Wasm::from_file(env.get_dependency_path(
+        let wasm = Wasm::from_file(get_dependency_path(
             env::var("XNET_TEST_CANISTER_WASM_PATH").expect("XNET_TEST_CANISTER_WASM_PATH not set"),
         ));
         let mut futures: Vec<Vec<_>> = Vec::new();
@@ -100,12 +101,10 @@ mod common {
         num_canisters: usize,
     ) -> Vec<Canister> {
         let logger = env.logger();
-        let wasm = Wasm::from_file(
-            env.get_dependency_path(
-                env::var("STATESYNC_TEST_CANISTER_WASM_PATH")
-                    .expect("STATESYNC_TEST_CANISTER_WASM_PATH not set"),
-            ),
-        );
+        let wasm = Wasm::from_file(get_dependency_path(
+            env::var("STATESYNC_TEST_CANISTER_WASM_PATH")
+                .expect("STATESYNC_TEST_CANISTER_WASM_PATH not set"),
+        ));
         let mut futures: Vec<_> = Vec::new();
         for canister_idx in 0..num_canisters {
             let new_wasm = wasm.clone();
