@@ -33,9 +33,8 @@ build:ci --remote_upload_local_results=true
 
 build:ci --noremote_local_fallback
 
-# Run `bazel build ... --config=local` to build targets without cache (and without build event upload).
+# Run `bazel build ... --config=local` to build targets without cache
 build:local --remote_cache=
-build:local --bes_backend=
 
 # Upload bes by default when running system tests so that e.g. failures can
 # be shared easily without having to rerun a potentially very-long systest
