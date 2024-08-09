@@ -96,8 +96,6 @@ assert_matches = { workspace = true }
 build-info-build = { workspace = true }
 
 [dev-dependencies]
-tla-instrumentation = { git = "https://github.com/oggy-dfin/tla-instrumentation.git", package = "tla_instrumentation", rev = "beef57f6f765d9f85da3e41000d25d4f41cad3f8" }
-tla-instrumentation-proc-macros = { git = "https://github.com/oggy-dfin/tla-instrumentation.git", package = "tla_instrumentation", rev = "beef57f6f765d9f85da3e41000d25d4f41cad3f8" }
 criterion = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
 futures = { workspace = true }

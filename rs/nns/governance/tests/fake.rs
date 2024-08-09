@@ -41,7 +41,7 @@ const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 pub const NODE_PROVIDER_REWARD: u64 = 10_000;
 
 use ic_nns_governance::governance::tla::{
-    tla_log_request, tla_log_response, Destination, InstrumentationState, ToTla,
+    account_to_tla, tla_log_request, tla_log_response, Destination, InstrumentationState, ToTla,
     TLA_INSTRUMENTATION_STATE, TLA_TRACES,
 };
 
@@ -268,12 +268,18 @@ impl IcpLedger for FakeDriver {
         tla_log_request!(
             Destination::new("ledger"),
             BTreeMap::from([
-                ("amount", amount_e8s),
-                ("fee", fee_e8s),
-                // TODO(oggy): what to do with options?
-                // ("from_subaccount", ...),
-                // TODO(oggy): what to do with this?
-                // ("to", ...),
+                ("method", "transfer")(
+                    "args",
+                    BTreeMap::from([
+                        ("amount", amount_e8s),
+                        ("fee", fee_e8s),
+                        ("from", account_to_tla(from_account)),
+                        ("to", account_to_tla(to_account)),
+                    ])
+                ) // TODO(oggy): what to do with options?
+                  // ("from_subaccount", ...),
+                  // TODO(oggy): what to do with this?
+                  // ("to", ...),
             ])
         );
 
