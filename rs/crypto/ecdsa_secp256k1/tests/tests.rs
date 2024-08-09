@@ -31,7 +31,7 @@ fn should_pass_wycheproof_ecdsa_secp256k1_verification_tests() -> Result<(), Key
         for test in &test_group.tests {
             // The Wycheproof ECDSA tests do not normalize s so we must use
             // the verification method that accepts either valid s
-            let accepted = pk.verify_signature_with_malleability(&test.msg, &test.sig);
+            let accepted = pk.verify_ecdsa_signature_with_malleability(&test.msg, &test.sig);
             assert_eq!(accepted, test.result == wycheproof::TestResult::Valid);
         }
     }
@@ -48,13 +48,13 @@ fn test_sign_prehash_works_with_any_size_input_gte_16() {
 
     for i in 0..16 {
         let buf = vec![0x42; i];
-        assert_eq!(sk.sign_digest(&buf), None);
+        assert_eq!(sk.sign_digest_with_ecdsa(&buf), None);
     }
 
     for i in 16..1024 {
         let buf = vec![0x42; i];
-        let sig = sk.sign_digest(&buf).unwrap();
-        assert!(pk.verify_signature_prehashed(&buf, &sig));
+        let sig = sk.sign_digest_with_ecdsa(&buf).unwrap();
+        assert!(pk.verify_ecdsa_signature_prehashed(&buf, &sig));
     }
 }
 
@@ -73,7 +73,7 @@ fn should_use_rfc6979_nonces_for_ecdsa_signature_generation() {
     let message = b"abc";
     let expected_sig = "d8bdb0ddfc8ebb8be42649048e92edc8547d1587b2a8f721738a2ecc0733401c70e86d3042ebbb50dccfbfbdf6c0462c7be45bcd0208d33e34efec273a86eab9";
 
-    let generated_sig = sk.sign_message(message);
+    let generated_sig = sk.sign_message_with_ecdsa(message);
     assert_eq!(hex::encode(generated_sig), expected_sig);
 
     // Now check the prehash variant:
@@ -83,7 +83,7 @@ fn should_use_rfc6979_nonces_for_ecdsa_signature_generation() {
         sha256.update(message);
         sha256.finalize().into()
     };
-    let generated_sig = sk.sign_digest(&message_hash).unwrap();
+    let generated_sig = sk.sign_digest_with_ecdsa(&message_hash).unwrap();
     assert_eq!(hex::encode(generated_sig), expected_sig);
 }
 
@@ -115,16 +115,16 @@ fn should_accept_ecdsa_signatures_that_we_generate() {
     for m in 0..100 {
         let mut msg = vec![0u8; m];
         rng.fill_bytes(&mut msg);
-        let sig = sk.sign_message(&msg);
+        let sig = sk.sign_message_with_ecdsa(&msg);
 
         assert_eq!(
-            sk.sign_message(&msg),
+            sk.sign_message_with_ecdsa(&msg),
             sig,
             "ECDSA signature generation is deterministic"
         );
 
-        assert!(pk.verify_signature(&msg, &sig));
-        assert!(pk.verify_signature_with_malleability(&msg, &sig));
+        assert!(pk.verify_ecdsa_signature(&msg, &sig));
+        assert!(pk.verify_ecdsa_signature_with_malleability(&msg, &sig));
     }
 }
 
@@ -154,8 +154,8 @@ fn should_reject_high_s_in_signature_unless_malleable() -> Result<(), KeyDecodin
     let msg = b"test";
     let sig = hex::decode("6471F8E5E63D6055AA6F6D3A8EBF49935D1316D6A54B9B09465B3BEB38E3AC14CE0FFBABD8E3248BEEBD568DCBCC7861126B1AB88E721D0206E9D67ECD878C7C").unwrap();
 
-    assert!(!pk.verify_signature(msg, &sig));
-    assert!(pk.verify_signature_with_malleability(msg, &sig));
+    assert!(!pk.verify_ecdsa_signature(msg, &sig));
+    assert!(pk.verify_ecdsa_signature_with_malleability(msg, &sig));
 
     // Test again using the pre-hashed variants:
     let msg_hash: [u8; 32] = {
@@ -165,8 +165,8 @@ fn should_reject_high_s_in_signature_unless_malleable() -> Result<(), KeyDecodin
         sha256.finalize().into()
     };
 
-    assert!(!pk.verify_signature_prehashed(&msg_hash, &sig));
-    assert!(pk.verify_signature_prehashed_with_malleability(&msg_hash, &sig));
+    assert!(!pk.verify_ecdsa_signature_prehashed(&msg_hash, &sig));
+    assert!(pk.verify_ecdsa_signature_prehashed_with_malleability(&msg_hash, &sig));
 
     Ok(())
 }
@@ -492,7 +492,7 @@ mod try_recovery_from_digest {
         let public_key = private_key.public_key();
         let digest = rng.gen::<[u8; 32]>();
         let signature = private_key
-            .sign_digest(&digest)
+            .sign_digest_with_ecdsa(&digest)
             .expect("cannot fail because digest > 16 bytes");
 
         let recid = public_key
