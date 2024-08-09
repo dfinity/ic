@@ -51,8 +51,8 @@ pub fn test(env: TestEnv) {
 
     info!(&logger, "Installing the Bitcoin canisters...");
     block_on(async {
-        install_bitcoin_canister_with_network(&nns, &logger, &env, Network::Testnet).await;
-        install_bitcoin_canister_with_network(&nns, &logger, &env, Network::Mainnet).await;
+        install_bitcoin_canister_with_network(&nns, &logger, Network::Testnet).await;
+        install_bitcoin_canister_with_network(&nns, &logger, Network::Mainnet).await;
     });
     info!(&logger, "Bitcoin canisters installed successfully.");
 

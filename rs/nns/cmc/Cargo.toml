@@ -45,8 +45,8 @@ yansi = "0.5.0"
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-ic-types-test-utils = { path = "../../types/types_test_utils" }
 futures = { workspace = true }
+ic-types-test-utils = { path = "../../types/types_test_utils" }
 
 [[bin]]
 name = "cycles-minting-canister"

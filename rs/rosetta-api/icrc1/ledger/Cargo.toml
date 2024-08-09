@@ -11,8 +11,8 @@ name = "ic-icrc1-ledger"
 path = "src/main.rs"
 
 [dependencies]
-async-trait = { workspace = true }
 assert_matches = { workspace = true, optional = true }
+async-trait = { workspace = true }
 canbench-rs = { version = "0.1.4", optional = true }
 candid = { workspace = true }
 ciborium = { workspace = true }

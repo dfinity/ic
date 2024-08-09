@@ -20,9 +20,9 @@ ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
+ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
-ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
@@ -45,8 +45,8 @@ slog = { workspace = true }
 socket2 = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-wat = "1.0.52"
 tower = { workspace = true }
+wat = "1.0.52"
 
 [dev-dependencies]
 ic-artifact-pool = { path = "../artifact_pool" }

@@ -1,5 +1,19 @@
-use std::{str::FromStr, time::SystemTime};
-
+use crate::{
+    canister_agent::HasCanisterAgentCapability,
+    canister_api::{CallMode, ListDeployedSnsesRequest, SnsRequestProvider},
+    driver::{
+        test_env::{TestEnv, TestEnvAttribute},
+        test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl},
+    },
+    nns::{
+        get_governance_canister, submit_external_proposal_with_test_id,
+        vote_execute_proposal_assert_executed,
+    },
+    util::{
+        block_on, create_service_nervous_system_into_params, deposit_cycles, runtime_from_url,
+        to_principal_id, UniversalCanister,
+    },
+};
 use anyhow::{bail, Context};
 use candid::{Decode, Encode, Principal};
 use canister_test::{Project, Runtime};
@@ -40,23 +54,7 @@ use ic_sns_wasm::pb::v1::{
 use ic_types::Cycles;
 use serde::{Deserialize, Serialize};
 use slog::info;
-
-use crate::{
-    canister_agent::HasCanisterAgentCapability,
-    canister_api::{CallMode, ListDeployedSnsesRequest, SnsRequestProvider},
-    driver::{
-        test_env::{TestEnv, TestEnvAttribute},
-        test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl},
-    },
-    nns::{
-        get_governance_canister, submit_external_proposal_with_test_id,
-        vote_execute_proposal_assert_executed,
-    },
-    util::{
-        block_on, create_service_nervous_system_into_params, deposit_cycles, runtime_from_url,
-        to_principal_id, UniversalCanister,
-    },
-};
+use std::{str::FromStr, time::SystemTime};
 
 pub const SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S: u64 = E8;
 pub const SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S: u64 = 250_000 * E8;

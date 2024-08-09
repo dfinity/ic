@@ -9,6 +9,6 @@ path = "src/cloner_canister.rs"
 
 [dependencies]
 candid = { workspace = true }
+futures = { workspace = true }
 ic-cdk = { workspace = true }
 serde = { workspace = true }
-futures = { workspace = true }

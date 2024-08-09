@@ -58,6 +58,16 @@ const WASM_PAGE_SIZE_BYTES: usize = 65536;
 const DEFAULT_FREEZE_THRESHOLD: NumSeconds = NumSeconds::new(1 << 30);
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
 
+/// Valid, but minimal wasm code.
+const EMPTY_WASM: &[u8] = &[
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x00, 0x08, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x02,
+    0x01, 0x00,
+];
+
+pub fn empty_wasm() -> Arc<WasmBinary> {
+    WasmBinary::new(CanisterModule::new(EMPTY_WASM.to_vec()))
+}
+
 pub struct ReplicatedStateBuilder {
     canisters: Vec<CanisterState>,
     subnet_type: SubnetType,
@@ -578,6 +588,11 @@ impl ExecutionStateBuilder {
         self
     }
 
+    pub fn with_wasm_binary(mut self, wasm_binary: Arc<WasmBinary>) -> Self {
+        self.execution_state.wasm_binary = wasm_binary;
+        self
+    }
+
     pub fn build(self) -> ExecutionState {
         self.execution_state
     }
@@ -772,6 +787,25 @@ pub fn new_canister_state(
         freeze_threshold,
     );
     CanisterState::new(system_state, None, scheduler_state)
+}
+
+pub fn new_canister_state_with_execution(
+    canister_id: CanisterId,
+    controller: PrincipalId,
+    initial_cycles: Cycles,
+    freeze_threshold: NumSeconds,
+) -> CanisterState {
+    let scheduler_state = SchedulerState::default();
+    let system_state = SystemState::new_running_for_testing(
+        canister_id,
+        controller,
+        initial_cycles,
+        freeze_threshold,
+    );
+    let execution_state = ExecutionStateBuilder::default()
+        .with_wasm_binary(empty_wasm())
+        .build();
+    CanisterState::new(system_state, Some(execution_state), scheduler_state)
 }
 
 /// Helper function to register a callback.

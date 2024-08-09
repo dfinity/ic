@@ -36,6 +36,8 @@ pub const CYCLES_LEDGER_INDEX_CANISTER_INDEX: u64 = 0x2100003;
 // Bitcoin canisters are deployed to the `w4rem` subnet
 pub const BITCOIN_TESTNET_CANISTER_INDEX: u64 = 0x1a00001;
 pub const BITCOIN_MAINNET_CANISTER_INDEX: u64 = 0x1a00004;
+// SNS Aggregator canister is deployed to the `x33ed` (SNS) subnet.
+pub const SNS_AGGREGATOR_CANISTER_INDEX: u64 = 0x2000010;
 
 /// WARNING: This list is incomplete. In particular, this does NOT include
 /// ledger archive, nor ledger index.
@@ -124,6 +126,9 @@ pub const BITCOIN_TESTNET_CANISTER_ID: CanisterId =
 /// 0x1_a00_004 (27_262_980): ghsi2-tqaaa-aaaan-aaaca-cai
 pub const BITCOIN_MAINNET_CANISTER_ID: CanisterId =
     CanisterId::from_u64(BITCOIN_MAINNET_CANISTER_INDEX);
+/// 0x2_000_010 (33_554_448): 3r4gx-wqaaa-aaaaq-aaaia-cai
+pub const SNS_AGGREGATOR_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(SNS_AGGREGATOR_CANISTER_INDEX);
 
 /// WARNING: This list is incomplete. In particular, this does NOT include
 /// ledger archive, nor ledger index.

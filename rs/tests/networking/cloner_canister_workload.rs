@@ -29,7 +29,7 @@ use ic_system_test_driver::{
         ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, HasWasm, IcNodeContainer},
+        test_env_api::{load_wasm, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
     systest,
 };
@@ -41,7 +41,6 @@ const TEST_TIMEOUT: Duration = Duration::from_secs(4 * 60 * 60); // 4 hours
 /// Time to keep the testnet alive once all canisters are installed
 const TESTNET_LIFETIME_AFTER_SETUP: Duration = Duration::from_secs(60 * 60); // 1 hour
 
-const CLONER_CANISTER_WASM: &str = "rs/tests/networking/canisters/cloner_canister.wasm.gz";
 const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 
 const SUBNET_SIZE: usize = 13;
@@ -120,7 +119,7 @@ pub fn install_cloner_canisters(env: TestEnv) {
         .find(|s| s.subnet_type() == SubnetType::Application)
         .unwrap();
     let app_node = app_subnet.nodes().next().unwrap();
-    let counter_canister_bytes = env.load_wasm(COUNTER_CANISTER_WAT);
+    let counter_canister_bytes = load_wasm(COUNTER_CANISTER_WAT);
 
     info!(
         &logger,
@@ -134,8 +133,10 @@ pub fn install_cloner_canisters(env: TestEnv) {
             &logger,
             "{i}/{AMOUNT_OF_CLONER_CANISTERS}: Installing cloner canister."
         );
-        let cloner_canister_id =
-            app_node.create_and_install_canister_with_arg(CLONER_CANISTER_WASM, None);
+        let cloner_canister_id = app_node.create_and_install_canister_with_arg(
+            &std::env::var("CLONER_CANISTER_WASM_PATH").expect("CLONER_CANISTER_WASM_PATH not set"),
+            None,
+        );
         info!(
             &logger,
             "{i}/{AMOUNT_OF_CLONER_CANISTERS}: Succeeded installing cloner canister, {}.",

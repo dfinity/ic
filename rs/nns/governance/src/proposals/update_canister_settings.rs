@@ -47,7 +47,7 @@ impl UpdateCanisterSettings {
 
     pub fn valid_topic(&self) -> Result<Topic, GovernanceError> {
         let canister_id = self.valid_canister_id()?;
-        topic_to_manage_canister(&canister_id)
+        Ok(topic_to_manage_canister(&canister_id))
     }
 
     fn valid_log_visibility(log_visibility_i32: i32) -> Result<RootLogVisibility, GovernanceError> {
@@ -163,13 +163,9 @@ mod tests {
 
         let is_invalid_proposal_with_keywords =
             |update_canister_settings: UpdateCanisterSettings, keywords: Vec<&str>| {
-                let error = match update_canister_settings.validate() {
-                    Err(error) => error,
-                    Ok(_) => panic!(
-                        "Expected an error for invalid proposal {:?} but it's valid",
-                        update_canister_settings
-                    ),
-                };
+                let error = update_canister_settings
+                    .validate()
+                    .expect_err("Expecting validation error for {install_code:?} but got Ok(())");
                 assert_eq!(error.error_type, ErrorType::InvalidProposal as i32);
                 for keyword in keywords {
                     let error_message = error.error_message.to_lowercase();
@@ -288,5 +284,34 @@ mod tests {
                 }
             }
         );
+    }
+
+    #[cfg(feature = "test")]
+    #[test]
+    fn test_update_canister_settings_topic_mapping() {
+        use ic_base_types::CanisterId;
+        use ic_nns_constants::SNS_WASM_CANISTER_ID;
+
+        let test_cases = vec![
+            (LEDGER_CANISTER_ID, Topic::ProtocolCanisterManagement),
+            (SNS_WASM_CANISTER_ID, Topic::ServiceNervousSystemManagement),
+            (
+                CanisterId::from_u64(123_456_789),
+                Topic::NetworkCanisterManagement,
+            ),
+        ];
+
+        for (canister_id, expected_topic) in test_cases {
+            let update_canister_settings = UpdateCanisterSettings {
+                canister_id: Some(canister_id.get()),
+                settings: Some(CanisterSettings {
+                    memory_allocation: Some(1 << 30),
+                    ..Default::default()
+                }),
+            };
+
+            assert_eq!(update_canister_settings.validate(), Ok(()));
+            assert_eq!(update_canister_settings.valid_topic(), Ok(expected_topic),);
+        }
     }
 }

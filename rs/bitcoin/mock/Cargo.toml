@@ -20,9 +20,9 @@ serde_bytes = { workspace = true }
 [dev-dependencies]
 bitcoin = "0.28.1"
 candid_parser = { workspace = true }
+hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-config = { path = "../../config" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
-hex = { workspace = true }

@@ -54,14 +54,16 @@ use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
 use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
+use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
 use ic_system_test_driver::driver::test_env_api::SshSession;
-use ic_system_test_driver::driver::test_env_api::{HasDependencies, IcNodeSnapshot};
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsCustomizations},
+    test_env_api::{
+        read_dependency_from_env_to_string, HasTopologySnapshot, IcNodeContainer, NnsCustomizations,
+    },
 };
 use ic_system_test_driver::generic_workload_engine;
 use ic_system_test_driver::generic_workload_engine::metrics::{
@@ -285,8 +287,7 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
     }
 
     if cfg!(feature = "upload_perf_systest_results") {
-        let branch_version = env
-            .read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
+        let branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
             .expect("tip-of-branch IC version");
 
         rt.block_on(persist_metrics(

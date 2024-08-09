@@ -265,7 +265,6 @@ impl SnsTestsInitPayloadBuilder {
                 dissolve_delay_interval_seconds: 10_001,
             }),
             nns_proposal_id: Some(10),
-            neurons_fund_participants: None,
             neurons_fund_participation: Some(false),
             neurons_fund_participation_constraints: None,
             ..Default::default()

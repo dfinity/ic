@@ -7,7 +7,7 @@ use ic_system_test_driver::{
         simulate_network::{simulate_network, NetworkSimulation},
         test_env::TestEnv,
         test_env_api::{
-            HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
             NnsInstallationBuilder, SubnetSnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
         universal_vm::{UniversalVm, UniversalVms},
@@ -51,7 +51,7 @@ pub fn config(
         .start(&env)
         .expect("failed to start prometheus VM");
 
-    let path = env.get_dependency_path("rs/tests/jaeger_uvm_config_image.zst");
+    let path = get_dependency_path("rs/tests/jaeger_uvm_config_image.zst");
 
     UniversalVm::new(JAEGER_VM_NAME.to_string())
         .with_required_host_features(vec![HostFeature::Performance])

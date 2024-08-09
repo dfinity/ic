@@ -242,9 +242,8 @@ struct Subnets {
 fn test(env: TestEnv) {
     let logger = env.logger();
 
-    let versions_json = env
-        .read_dependency_to_string("testnet/mainnet_revisions.json")
-        .expect("mainnet IC versions");
+    let versions_json =
+        read_dependency_to_string("testnet/mainnet_revisions.json").expect("mainnet IC versions");
 
     let parsed: Subnets =
         serde_json::from_str(&versions_json).expect("Can't parse the mainnet revisions JSON");

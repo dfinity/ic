@@ -137,7 +137,6 @@ fn init_with_confirmation_text(confirmation_text: Option<String>) -> Init {
         // The following fields are deprecated.
         min_icp_e8s: None,
         max_icp_e8s: None,
-        neurons_fund_participants: None,
     };
     assert_is_ok!(result.validate());
     result

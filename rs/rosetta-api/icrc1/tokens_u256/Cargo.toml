@@ -15,5 +15,5 @@ num-traits = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
-proptest = "1.0"
 hex = { workspace = true }
+proptest = "1.0"

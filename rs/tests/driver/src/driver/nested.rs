@@ -1,6 +1,7 @@
 use crate::driver::port_allocator::AddrType;
 use crate::driver::resource::AllocatedVm;
 use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::get_ssh_session_from_env;
 use crate::driver::test_env_api::*;
 use crate::retry_with_msg;
 use crate::util::create_agent;

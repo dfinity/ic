@@ -22,8 +22,8 @@ prometheus = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
-tokio = { workspace = true }
 threadpool = { workspace = true }
+tokio = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]

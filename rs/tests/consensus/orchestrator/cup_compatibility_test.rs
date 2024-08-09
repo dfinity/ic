@@ -125,13 +125,12 @@ fn download_mainnet_binary(version: String, log: &Logger, target_dir: &Path) -> 
 fn test(env: TestEnv) {
     let log = env.logger();
 
-    let mainnet_version = env
-        .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
-        .expect("mainnet IC version");
+    let mainnet_version =
+        read_dependency_to_string("testnet/mainnet_nns_revision.txt").expect("mainnet IC version");
     info!(log, "Continuing with mainnet version {mainnet_version}");
 
     let output_dir = PathBuf::from("cup_compatibility_test");
-    let branch_test = env.get_dependency_path("rs/tests/cup_compatibility/binaries/types_test");
+    let branch_test = get_dependency_path("rs/tests/cup_compatibility/binaries/types_test");
     let tmp_dir = tempfile::tempdir().unwrap();
     let mainnet_test = download_mainnet_binary(mainnet_version, &log, tmp_dir.path());
 

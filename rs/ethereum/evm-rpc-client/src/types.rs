@@ -175,6 +175,14 @@ pub mod candid {
         pub block: BlockTag,
     }
 
+    #[derive(Clone, Debug, Eq, PartialEq, CandidType, Deserialize)]
+    pub enum SendRawTransactionStatus {
+        Ok(Option<String>),
+        InsufficientFunds,
+        NonceTooLow,
+        NonceTooHigh,
+    }
+
     pub type RpcResult<T> = Result<T, RpcError>;
 
     #[derive(Clone, Debug, Eq, PartialEq, CandidType, Deserialize)]

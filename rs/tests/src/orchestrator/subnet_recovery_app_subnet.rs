@@ -275,7 +275,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool,
     let pub_key = file_sync_helper::read_file(&ssh_authorized_pub_keys_dir.join(SSH_USERNAME))
         .expect("Couldn't read public key");
 
-    let recovery_dir = env.get_dependency_path("rs/tests");
+    let recovery_dir = get_dependency_path("rs/tests");
     set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
 
     let recovery_args = RecoveryArgs {
@@ -315,8 +315,8 @@ pub fn app_subnet_recovery_test(env: TestEnv, subnet_size: usize, upgrade: bool,
         subnet_id,
         upgrade_version: version_is_broken
             .then(|| ReplicaVersion::try_from(working_version.clone()).unwrap()),
-        upgrade_image_url: env.get_ic_os_update_img_test_url().ok(),
-        upgrade_image_hash: env.get_ic_os_update_img_test_sha256().ok(),
+        upgrade_image_url: get_ic_os_update_img_test_url().ok(),
+        upgrade_image_hash: get_ic_os_update_img_test_sha256().ok(),
         replacement_nodes: Some(unassigned_nodes_ids.clone()),
         replay_until_height: None,
         pub_key: Some(pub_key),

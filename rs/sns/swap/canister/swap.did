@@ -121,7 +121,6 @@ type Init = record {
   icp_ledger_canister_id : text;
   sns_ledger_canister_id : text;
   neurons_fund_participation_constraints : opt NeuronsFundParticipationConstraints;
-  neurons_fund_participants : opt NeuronsFundParticipants;
   should_auto_finalize : opt bool;
   max_participant_icp_e8s : opt nat64;
   sns_governance_canister_id : text;
@@ -149,6 +148,9 @@ type ListCommunityFundParticipantsRequest = record {
   offset : opt nat64;
   limit : opt nat32;
 };
+type ListCommunityFundParticipantsResponse = record {
+  cf_participants : vec CfParticipant;
+};
 type ListDirectParticipantsRequest = record {
   offset : opt nat32;
   limit : opt nat32;
@@ -171,7 +173,6 @@ type NeuronBasketConstructionParameters = record {
   count : nat64;
 };
 type NeuronId = record { id : blob };
-type NeuronsFundParticipants = record { cf_participants : vec CfParticipant };
 type NeuronsFundParticipationConstraints = record {
   coefficient_intervals : vec LinearScalingCoefficient;
   max_neurons_fund_participation_icp_e8s : opt nat64;
@@ -296,7 +297,7 @@ service : (Init) -> {
   get_sale_parameters : (record {}) -> (GetSaleParametersResponse) query;
   get_state : (record {}) -> (GetStateResponse) query;
   list_community_fund_participants : (ListCommunityFundParticipantsRequest) -> (
-      NeuronsFundParticipants,
+      ListCommunityFundParticipantsResponse,
     ) query;
   list_direct_participants : (ListDirectParticipantsRequest) -> (
       ListDirectParticipantsResponse,

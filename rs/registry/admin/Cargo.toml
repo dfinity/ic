@@ -8,24 +8,38 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-ic-prep = { path = "../../prep" }
 async-trait = { workspace = true }
 base64 = { workspace = true }
+candid = { workspace = true }
+chrono = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
+cycles-minting-canister = { path = "../../nns/cmc" }
 futures = { workspace = true }
 hex = { workspace = true }
-cycles-minting-canister = { path = "../../nns/cmc" }
 ic-admin-derive = { path = "../admin-derive" }
 ic-btc-interface = { workspace = true }
-ic-nns-init = { path = "../../nns/init" }
 ic-canister-client = { path = "../../canister_client" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
-ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
 ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
+ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
 ic-http-utils = { path = "../../http_utils" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-nervous-system-clients = { path = "../../nervous_system/clients" }
+ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
+ic-nervous-system-humanize = { path = "../../nervous_system/humanize" }
+ic-nervous-system-proto = { path = "../../nervous_system/proto" }
+ic-nervous-system-root = { path = "../../nervous_system/root" }
+ic-nns-common = { path = "../../nns/common" }
+ic-nns-constants = { path = "../../nns/constants" }
+ic-nns-governance = { path = "../../nns/governance" }
+ic-nns-governance-api = { path = "../../nns/governance/api" }
+ic-nns-handler-root = { path = "../../nns/handlers/root/impl" }
+ic-nns-init = { path = "../../nns/init" }
+ic-nns-test-utils = { path = "../../nns/test_utils" }
+ic-prep = { path = "../../prep" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client = { path = "../client" }
 ic-registry-client-helpers = { path = "../helpers" }
@@ -34,26 +48,15 @@ ic-registry-local-store = { path = "../local_store" }
 ic-registry-nns-data-provider = { path = "../nns_data_provider" }
 ic-registry-nns-data-provider-wrappers = { path = "../nns_data_provider_wrappers" }
 ic-registry-provisional-whitelist = { path = "../provisional_whitelist" }
+ic-registry-routing-table = { path = "../routing_table" }
 ic-registry-subnet-features = { path = "../subnet_features" }
 ic-registry-subnet-type = { path = "../subnet_type" }
 ic-registry-transport = { path = "../transport" }
-ic-types = { path = "../../types/types" }
-ic-nervous-system-clients = { path = "../../nervous_system/clients" }
-ic-nervous-system-common = { path = "../../nervous_system/common" }
-ic-nervous-system-humanize = { path = "../../nervous_system/humanize" }
-ic-nervous-system-proto = { path = "../../nervous_system/proto" }
-ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
-ic-nervous-system-root = { path = "../../nervous_system/root" }
-ic-nns-common = { path = "../../nns/common" }
-ic-nns-constants = { path = "../../nns/constants" }
-ic-nns-governance = { path = "../../nns/governance" }
-ic-nns-governance-api = { path = "../../nns/governance/api" }
-ic-nns-handler-root = { path = "../../nns/handlers/root/impl" }
-ic-nns-test-utils = { path = "../../nns/test_utils" }
-ic-registry-routing-table = { path = "../routing_table" }
 ic-sns-init = { path = "../../sns/init" }
-ic-sns-wasm = { path = "../../nns/sns-wasm" }
 ic-sns-swap = { path = "../../sns/swap" }
+ic-sns-wasm = { path = "../../nns/sns-wasm" }
+ic-types = { path = "../../types/types" }
+indexmap = "2.2.6" # TODO: consider using the std's BTreeMap instead
 itertools = { workspace = true }
 maplit = "1.0.2"
 pretty_assertions = { workspace = true }
@@ -63,17 +66,14 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-tokio = { workspace = true }
-candid = { workspace = true }
 tempfile = { workspace = true }
+tokio = { workspace = true }
 url = { workspace = true }
-chrono = { workspace = true }
-indexmap = "2.2.6" # TODO: consider using the std's BTreeMap instead
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-pocket-ic = { path = "../../../packages/pocket-ic" }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
+pocket-ic = { path = "../../../packages/pocket-ic" }
 
 
 [[bin]]

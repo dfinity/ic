@@ -11,10 +11,10 @@ documentation.workspace = true
 cargo-fuzz = true
 
 [dependencies]
-libfuzzer-sys = "0.4"
-subtle = "2.4"
-num-bigint = { workspace = true }
 hex = { workspace = true }
+libfuzzer-sys = "0.4"
+num-bigint = { workspace = true }
+subtle = "2.4"
 
 [dependencies.ic-crypto-internal-threshold-sig-ecdsa]
 path = ".."

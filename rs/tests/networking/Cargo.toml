@@ -8,9 +8,9 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 canister_http = { path = "./canister_http" }
-candid = { workspace = true }
 cloner-canister-types = { path = "./canisters" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 ic-base-types = { path = "../../types/base_types" }

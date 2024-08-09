@@ -9090,10 +9090,14 @@ dependencies = [
  "candid_parser",
  "clap 4.4.6",
  "hex",
+ "maplit",
+ "reqwest 0.12.5",
+ "serde",
  "serde_json",
  "strum 0.26.2",
  "strum_macros 0.26.2",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]

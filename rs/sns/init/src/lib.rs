@@ -720,8 +720,6 @@ impl SnsInitPayload {
                 .neurons_fund_participation_constraints
                 .clone(),
             neurons_fund_participation: self.neurons_fund_participation,
-            // Deprecated field
-            neurons_fund_participants: None,
         })
     }
 

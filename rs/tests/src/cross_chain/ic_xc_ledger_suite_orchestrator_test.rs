@@ -20,7 +20,7 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
             NnsCustomizations,
         },
     },
@@ -72,7 +72,6 @@ pub fn ic_xc_ledger_suite_orchestrator_test(env: TestEnv) {
     };
 
     let ledger_orchestrator_wasm = wasm_from_path(
-        &env,
         "rs/ethereum/ledger-suite-orchestrator/ledger_suite_orchestrator_canister.wasm.gz",
     );
     let ledger_orchestrator = block_on(async {
@@ -353,8 +352,8 @@ async fn add_erc_20_by_nns_proposal<'a>(
     ManagedCanisters::from(orchestrator.as_ref().runtime(), created_canister_ids)
 }
 
-fn wasm_from_path<P: AsRef<Path>>(env: &TestEnv, path: P) -> CanisterModule {
-    CanisterModule::new(Wasm::from_file(env.get_dependency_path(path)).bytes())
+fn wasm_from_path<P: AsRef<Path>>(path: P) -> CanisterModule {
+    CanisterModule::new(Wasm::from_file(get_dependency_path(path)).bytes())
 }
 
 fn usdc_contract() -> Erc20Contract {
