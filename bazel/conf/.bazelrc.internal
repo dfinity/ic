@@ -2,7 +2,7 @@
 
 # Build event upload configuration
 build:ci --build_event_binary_file=bazel-bep.pb --build_event_json_file=bazel-bep.json
-build:ci --experimental_bep_target_summary --experimental_collect_resource_estimation=true --build_event_publish_all_actions
+build:ci --experimental_bep_target_summary --build_event_publish_all_actions
 
 build --bes_results_url=https://dash.idx.dfinity.network/invocation/
 build --bes_backend=bes.idx.dfinity.network
