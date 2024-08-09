@@ -10833,6 +10833,8 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-utils 0.9.0",
+ "ic-validate-eq",
+ "ic-validate-eq-derive",
  "ic-wasm-types",
  "itertools 0.12.0",
  "lazy_static",
