@@ -1374,9 +1374,12 @@ fn load_canister_snapshot_succeeds() {
         .unwrap()
         .system_state
         .canister_version;
+    // Canister version should be bumped after loading a snapshot.
     assert!(canister_version_after > canister_version_before);
     assert_eq!(canister_version_after, 2u64);
 
+    // Entry in canister history should contain the information of
+    // the snapshot that was loaded back into the canister.
     let canister_history = test
         .state()
         .canister_state(&canister_id)
@@ -1393,7 +1396,7 @@ fn load_canister_snapshot_succeeds() {
     assert_eq!(
         *last_canister_change.details(),
         CanisterChangeDetails::load_snapshot(
-            canister_version_after,
+            canister_version_before,
             snapshot_id.to_vec(),
             snapshot_taken_at_timestamp
         )
