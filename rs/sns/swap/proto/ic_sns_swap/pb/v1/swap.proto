@@ -410,7 +410,11 @@ message Init {
   optional uint64 nns_proposal_id = 26;
 
   // The Neurons' Fund participants of this SNS decentralization swap.
-  optional NeuronsFundParticipants neurons_fund_participants = 27;
+  //
+  // This field is obsolete, as Neurons' Fund participants are now determined at the end of
+  // a successful swap and cannot be specified during SNS initialization.
+  reserved 27;
+  reserved "neurons_fund_participants";
 
   // Controls whether swap finalization should be attempted automatically in the
   // canister heartbeat. If set to false, `finalize_swap` must be called
@@ -497,11 +501,6 @@ message LinearScalingCoefficient {
   optional uint64 slope_denominator = 4;
   // Intercept of the linear transformation (in ICP e8s).
   optional uint64 intercept_icp_e8s = 5;
-}
-
-// Represents multiple Neurons' Fund participants.
-message NeuronsFundParticipants {
-  repeated CfParticipant cf_participants = 1;
 }
 
 // Represents one NNS neuron from the Neurons' Fund participating in this swap.
@@ -1174,8 +1173,8 @@ message SettleNeuronsFundParticipationRequest {
 // the Neurons' Fund. However, this distribution also needs to be made available to the SNS Swap
 // that will use this information to create SNS neurons of an appropriate size for each
 // Neurons' Fund (as well as direct) participant. That is why in the `committed` case,
-// the NNS Governance should populate the `neurons_fund_participants` field, while in the `aborted`
-// case it should be empty.
+// the NNS Governance provides `neurons_fund_neuron_portions`, while in the `aborted`
+// case it does not.
 //
 // TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
 // manually propagated to (sns) swap.proto.
