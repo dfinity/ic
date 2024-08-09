@@ -33,5 +33,5 @@ jobs:
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             test \
             --config=ci --config=macos_ci \
-            --test_tag_filters="test_macos,-upload" \
+            --test_tag_filters="test_macos,test_macos_slow,-upload" \
             //rs/... //publish/binaries/...
