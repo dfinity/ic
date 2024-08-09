@@ -877,6 +877,7 @@ impl MemoryUsage {
 
                         sandbox_safe_system_state.update_on_low_wasm_memory_hook_status(
                             None,
+                            self.wasm_memory_limit,
                             self.stable_memory_usage,
                             self.wasm_memory_usage,
                         );
@@ -903,6 +904,7 @@ impl MemoryUsage {
 
                 sandbox_safe_system_state.update_on_low_wasm_memory_hook_status(
                     Some(reserved_bytes),
+                    self.wasm_memory_limit,
                     self.stable_memory_usage,
                     self.wasm_memory_usage,
                 );
@@ -918,11 +920,16 @@ impl MemoryUsage {
     ) -> Result<(), HypervisorError> {
         match execution_memory_type {
             ExecutionMemoryType::WasmMemory => {
-                let (new_usage, overflow) = self
-                    .wasm_memory_usage
-                    .get()
-                    .overflowing_add(execution_bytes.get());
-                if overflow {
+                let wasm_memory_limit = if let Some(wasm_memory_limit) = self.wasm_memory_limit {
+                    wasm_memory_limit.get()
+                } else {
+                    // If the wasm memory limit is not set, default is 4 GiB.
+                    4 * 1024 * 1024 * 1024
+                };
+
+                let new_usage = self.wasm_memory_usage.get() + execution_bytes.get();
+
+                if new_usage > wasm_memory_limit {
                     return Err(HypervisorError::OutOfMemory);
                 }
                 self.wasm_memory_usage = NumBytes::new(new_usage);

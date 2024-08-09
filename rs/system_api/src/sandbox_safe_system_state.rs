@@ -1218,6 +1218,7 @@ impl SandboxSafeSystemState {
     pub fn update_on_low_wasm_memory_hook_status(
         &mut self,
         memory_allocation: Option<NumBytes>,
+        wasm_memory_limit: Option<NumBytes>,
         used_stable_memory: NumBytes,
         used_wasm_memory: NumBytes,
     ) {
@@ -1226,6 +1227,7 @@ impl SandboxSafeSystemState {
             .update(
                 self.wasm_memory_threshold,
                 memory_allocation,
+                wasm_memory_limit,
                 used_stable_memory,
                 used_wasm_memory,
             );

@@ -408,14 +408,19 @@ impl OnLowWasmMemoryHookStatus {
         &mut self,
         wasm_memory_threshold: NumBytes,
         memory_allocation: Option<NumBytes>,
+        wasm_memory_limit: Option<NumBytes>,
         used_stable_memory: NumBytes,
         used_wasm_memory: NumBytes,
     ) {
-        // The maximum Wasm memory occupied by the canister is 4 GiB.
-        let max_wasm_capacity = NumBytes::new(4 * 1024 * 1024 * 1024);
+        // If wasm memory limit is not set, the default is 4 GiB.
+        let wasm_memory_limit = if let Some(limit) = wasm_memory_limit {
+            limit
+        } else {
+            NumBytes::new(4 * 1024 * 1024 * 1024)
+        };
 
         // If the canister has memory allocation, then it maximum allowed Wasm memory
-        // can be calculated as min(memory_allocation - used_stable_memory, 4 GiB).
+        // can be calculated as min(memory_allocation - used_stable_memory, wasm_memory_limit).
         let wasm_capacity = if let Some(memory_allocation) = memory_allocation {
             debug_assert!(
                 used_stable_memory <= memory_allocation,
@@ -423,9 +428,9 @@ impl OnLowWasmMemoryHookStatus {
                 used_stable_memory,
                 memory_allocation
             );
-            std::cmp::min(memory_allocation - used_stable_memory, max_wasm_capacity)
+            std::cmp::min(memory_allocation - used_stable_memory, wasm_memory_limit)
         } else {
-            max_wasm_capacity
+            wasm_memory_limit
         };
 
         debug_assert!(
