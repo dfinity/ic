@@ -1082,10 +1082,12 @@ impl Validator {
             // Disqualify rank if equivocation was found. If there already
             // exists a validated block of the same rank as the current
             // proposal, we must generate an equivocation proof.
-            if let Some(metadata) = valid_qualified_ranks.get(proposal.height(), proposal.rank()) {
+            if let Some(existing_metadata) =
+                valid_qualified_ranks.get(proposal.height(), proposal.rank())
+            {
                 // Ensure the proposal has a different hash from the validated
                 // block of same rank. Then we can construct the proof.
-                if proposal.content.get_hash().get_ref() != metadata.content.hash() {
+                if proposal.content.get_hash().get_ref() != existing_metadata.content.hash() {
                     change_set.push(ChangeAction::AddToValidated(ValidatedArtifact {
                         msg: ConsensusMessage::EquivocationProof(EquivocationProof {
                             signer: proposal.signature.signer,
@@ -1094,8 +1096,8 @@ impl Validator {
                             subnet_id: self.replica_config.subnet_id,
                             hash1: proposal.content.get_hash().clone(),
                             signature1: proposal.signature.signature.clone(),
-                            hash2: CryptoHashOf::new(metadata.content.hash().clone()),
-                            signature2: metadata.signature.signature,
+                            hash2: CryptoHashOf::new(existing_metadata.content.hash().clone()),
+                            signature2: existing_metadata.signature.signature,
                         }),
                         timestamp: self.time_source.get_relative_time(),
                     }));
@@ -3647,16 +3649,29 @@ pub mod test {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
             let ValidatorAndDependencies {
                 validator,
+                state_manager,
                 mut pool,
                 ..
             } = setup_dependencies(pool_config, &subnet_members);
 
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(Height::from(0));
+
+            // Ensure that we don't create an equivocation proof if we have
+            // two identical blocks (one validated, one unvalidated)
             let block = pool.make_next_block();
+            pool.insert_validated(block.clone());
+            pool.insert_unvalidated(block.clone());
+            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            assert_eq!(&changeset, &[]);
+            pool.remove_unvalidated(block.clone());
+
             let mut second_block = block.clone();
             second_block.content.as_mut().context.time += Duration::from_nanos(1);
             second_block.update_content();
             assert_ne!(block.content.get_hash(), second_block.content.get_hash());
-            pool.insert_validated(block.clone());
             pool.insert_unvalidated(second_block.clone());
 
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
