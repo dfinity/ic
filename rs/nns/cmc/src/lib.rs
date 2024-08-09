@@ -1,4 +1,5 @@
 use candid::{CandidType, Nat};
+// TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
 use ic_management_canister_types::{
     BoundedControllers, CanisterSettingsArgs as Ic00CanisterSettingsArgs, LogVisibilityV2,
 };
@@ -67,6 +68,9 @@ pub struct NotifyTopUp {
     pub canister_id: CanisterId,
 }
 
+// TODO(EXC-1687): remove temporary copy of management canister types.
+// It was added to overcome dependency on `LogVisibility` while
+// management canister already migrated to `LogVisibilityV2`.
 #[derive(Default)]
 pub struct CanisterSettingsArgsBuilder {
     controllers: Option<Vec<PrincipalId>>,
@@ -217,6 +221,9 @@ impl From<LogVisibilityV2> for LogVisibility {
     }
 }
 
+// TODO(EXC-1687): remove temporary copy of management canister types.
+// It was added to overcome dependency on `LogVisibility` while
+// management canister already migrated to `LogVisibilityV2`.
 /// Struct used for encoding/decoding
 /// `(record {
 ///     controllers: opt vec principal;
