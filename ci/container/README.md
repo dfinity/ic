@@ -79,7 +79,6 @@ sudo podman run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=
   --mount type=bind,source=/home/john /.cache,target=/home/ubuntu/.cache \
   --mount type=bind,source=/home/john/.ssh,target=/home/ubuntu/.ssh \
   --mount type=bind,source=/home/john/.aws,target=/home/ubuntu/.aws \
-  --mount type=bind,source=/var/lib/containers,target=/var/lib/containers \
   --mount type=bind,source=/home/john/.gitconfig,target=/home/ubuntu/.gitconfig \
   --mount type=bind,source=/home/john/.bash_history,target=/home/ubuntu/.bash_history \
   --mount type=bind,source=/home/john/.local/share/fish,target=/home/ubuntu/.local/share/fish \
