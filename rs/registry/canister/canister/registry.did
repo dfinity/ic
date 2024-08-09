@@ -308,6 +308,11 @@ type UpdateApiBoundaryNodesVersionPayload = record {
   node_ids : vec principal;
 };
 
+type DeployGuestOsToSomeApiBoundaryNodes = record {
+  version : text;
+  node_ids : vec principal;
+};
+
 type UpdateElectedHostosVersionsPayload = record {
   release_package_urls : vec text;
   hostos_version_to_elect : opt text;
@@ -431,6 +436,7 @@ service : {
   deploy_guestos_to_all_unassigned_nodes : (
     DeployGuestosToAllUnassignedNodesPayload
   ) -> ();
+  deploy_guestos_to_some_api_boundary_nodes : (DeployGuestOsToSomeApiBoundaryNodes) -> ();
   get_build_metadata : () -> (text) query;
   get_node_operators_and_dcs_of_node_provider : (principal) -> (GetNodeOperatorsAndDcsOfNodeProviderResponse) query;
   get_node_providers_monthly_xdr_rewards : () -> (GetNodeProvidersMonthlyXdrRewardsResponse) query;
