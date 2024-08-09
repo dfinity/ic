@@ -134,7 +134,7 @@ use candid::DecoderConfig;
 use ic_nervous_system_temporary::Temporary;
 use mockall::automock;
 use std::{
-    cell::RefCell,
+    cell::Cell,
     collections::{BTreeMap, HashMap},
     io,
 };
@@ -184,14 +184,11 @@ thread_local! {
     // 1-line change (by replacing true with `cfg!(feature = "test")`). After
     // the feature has been released, it will go through its "probation" period.
     // If that goes well, then, this can be deleted.
-    static IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED: RefCell<bool> = const { RefCell::new(cfg!(feature = "test")) };
+    static IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
 }
 
 pub fn is_private_neuron_enforcement_enabled() -> bool {
-    IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED.with(|ok| {
-        let ok = ok.borrow();
-        *ok
-    })
+    IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED.with(|ok| ok.get())
 }
 
 /// Only integration tests should use this.

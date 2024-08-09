@@ -3,17 +3,16 @@
 //! This is for "feature flags". That is,
 //!
 //!     use ic_nervous_system_temporary::Temporary;
-//!     use std::cell::RefCell;
+//!     use std::cell::Cell;
 //!     use rand::Rng;
 //!
 //!     thread_local! {
-//!         static IS_FOO_ENABLED: RefCell<bool> = RefCell::new(rand::thread_rng().gen());
+//!         static IS_FOO_ENABLED: Cell<bool> = Cell::new(rand::thread_rng().gen());
 //!     }
 //!
 //!     pub fn is_foo_enabled() -> bool {
 //!         IS_FOO_ENABLED.with(|ok| {
-//!             let ok = ok.borrow();
-//!             *ok
+//!             ok.get()
 //!         })
 //!     }
 //!
@@ -60,22 +59,21 @@
 //! If you want to call temporarily_*_foo from integration tests, you will have
 //! to get rid of the #[cfg(test)] attributes, and also add pub.
 
-use std::{cell::RefCell, thread::LocalKey};
+use std::{cell::Cell, thread::LocalKey};
 
 // This could be generic. That is, add a T parameter. Currently, only bool is supported, because YAGNI.
 #[must_use]
 pub struct Temporary {
-    flag: &'static LocalKey<RefCell<bool>>,
+    flag: &'static LocalKey<Cell<bool>>,
     original_value: bool,
 }
 
 impl Temporary {
-    pub fn new(flag: &'static LocalKey<RefCell<bool>>, temporary_value: bool) -> Self {
+    pub fn new(flag: &'static LocalKey<Cell<bool>>, temporary_value: bool) -> Self {
         // Set to true. Will be set back to false during drop.
         let original_value = flag.with(|flag| {
-            let mut flag = flag.borrow_mut();
-            let original_value: bool = *flag;
-            *flag = temporary_value;
+            let original_value: bool = flag.get();
+            flag.set(temporary_value);
             original_value
         });
 
@@ -89,8 +87,7 @@ impl Temporary {
 impl Drop for Temporary {
     fn drop(&mut self) {
         self.flag.with(|flag| {
-            let mut flag = flag.borrow_mut();
-            *flag = self.original_value;
-        })
+            flag.set(self.original_value);
+        });
     }
 }

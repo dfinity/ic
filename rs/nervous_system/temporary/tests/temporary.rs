@@ -1,16 +1,13 @@
 use ic_nervous_system_temporary::Temporary;
-use std::cell::RefCell;
+use std::cell::Cell;
 
 thread_local! {
-    static IS_FOO_ENABLED: RefCell<bool> = const { RefCell::new(false) };
-    static IS_BAR_ENABLED: RefCell<bool> = const { RefCell::new(true) };
+    static IS_FOO_ENABLED: Cell<bool> = const { Cell::new(false) };
+    static IS_BAR_ENABLED: Cell<bool> = const { Cell::new(true) };
 }
 
 pub fn is_foo_enabled() -> bool {
-    IS_FOO_ENABLED.with(|ok| {
-        let ok = ok.borrow();
-        *ok
-    })
+    IS_FOO_ENABLED.with(|ok| ok.get())
 }
 
 pub fn temporarily_enable_foo() -> Temporary {
@@ -22,10 +19,7 @@ pub fn temporarily_disable_foo() -> Temporary {
 }
 
 pub fn is_bar_enabled() -> bool {
-    IS_BAR_ENABLED.with(|ok| {
-        let ok = ok.borrow();
-        *ok
-    })
+    IS_BAR_ENABLED.with(|ok| ok.get())
 }
 
 pub fn temporarily_enable_bar() -> Temporary {
