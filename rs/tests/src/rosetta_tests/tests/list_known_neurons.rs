@@ -24,31 +24,22 @@ pub fn test(env: TestEnv) {
     let mut neurons = TestNeurons::new(0, &mut ledger_balances);
 
     let neuron0 = neurons.create(|neuron| {
-        neuron.known_neuron_data = Some(
-            KnownNeuronData {
-                name: "0".to_owned(),
-                description: Some("Neuron 0 description".to_owned()),
-            }
-            .into(),
-        )
+        neuron.known_neuron_data = Some(KnownNeuronData {
+            name: "0".to_owned(),
+            description: Some("Neuron 0 description".to_owned()),
+        })
     });
     let neuron1: NeuronDetails = neurons.create(|neuron| {
-        neuron.known_neuron_data = Some(
-            KnownNeuronData {
-                name: "1".to_owned(),
-                description: Some("Neuron 1 description".to_owned()),
-            }
-            .into(),
-        )
+        neuron.known_neuron_data = Some(KnownNeuronData {
+            name: "1".to_owned(),
+            description: Some("Neuron 1 description".to_owned()),
+        })
     });
     let neuron2 = neurons.create(|neuron| {
-        neuron.known_neuron_data = Some(
-            KnownNeuronData {
-                name: "2".to_owned(),
-                description: Some("Neuron 2 description".to_owned()),
-            }
-            .into(),
-        )
+        neuron.known_neuron_data = Some(KnownNeuronData {
+            name: "2".to_owned(),
+            description: Some("Neuron 2 description".to_owned()),
+        })
     });
 
     // Create Rosetta and ledger clients.
