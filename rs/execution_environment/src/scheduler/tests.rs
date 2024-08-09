@@ -19,7 +19,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
     CanisterStatusType, DerivationPath, EcdsaKeyId, EmptyBlob, Method, Payload as _, SchnorrKeyId,
-    SignWithSchnorrArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    SignWithSchnorrArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs, UploadChunkArgs,
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -1514,7 +1514,19 @@ fn canister_charging_resource_usage_includes_snapshots_usage() {
         0
     );
 
-    // TODO: grow memory or update chunk store so that snapshot memory is bigger than 0.
+    // Update chunk store as a way to create a snapshot of size > 0.
+    let args: UploadChunkArgs = UploadChunkArgs {
+        canister_id: canister_id.into(),
+        chunk: vec![42; 1024 * 1024],
+    };
+    test.inject_call_to_ic00(
+        Method::UploadChunk,
+        args.encode(),
+        Cycles::zero(),
+        canister_test_id(10),
+        InputQueueType::LocalSubnet,
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
@@ -1538,17 +1550,11 @@ fn canister_charging_resource_usage_includes_snapshots_usage() {
     );
 
     // Check balance has decreased and it includes the snapshot memory usage.
-    let canister_snapshots_usage = *test
+    let canister_snapshots_usage = test
         .state()
         .canister_snapshots
-        .memory_usage()
-        .get(&canister_id)
-        .unwrap();
+        .memory_usage_by_canister(canister_id);
 
-    println!(
-        "canister {}   usage for snapshots {} ",
-        canister_id, canister_snapshots_usage
-    );
     let canister = test.state().canister_state(&canister_id).unwrap();
 
     let balance_before = test

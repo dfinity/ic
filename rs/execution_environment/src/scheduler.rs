@@ -1115,7 +1115,7 @@ impl SchedulerImpl {
 
                 let canister_snapshots_memory_usage = canister_snapshots_usage
                     .get(&canister.canister_id())
-                    .map(|usage| usage.clone())
+                    .copied()
                     .unwrap_or(NumBytes::from(0));
                 if self
                     .cycles_account_manager
