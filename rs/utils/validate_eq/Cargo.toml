@@ -4,3 +4,6 @@ name = "ic-validate-eq"
 [lib]
 name = "ic_validate_eq"
 path = "src/lib.rs"
+
+[dependencies]
+ic-validate-eq-derive = { path = "../validate_eq_derive" }
