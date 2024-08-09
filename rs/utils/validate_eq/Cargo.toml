@@ -1,4 +1,5 @@
 [package]
+edition = "2021"
 name = "ic-validate-eq"
 
 [lib]

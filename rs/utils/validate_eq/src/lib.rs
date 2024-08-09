@@ -1,4 +1,3 @@
-extern crate ic_validate_eq_derive;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 
