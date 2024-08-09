@@ -28,6 +28,9 @@ use std::{
     time::Duration,
 };
 
+// The maximal number of https outcalls that we are trying toget a consensus on.
+const MAX_CANISTER_HTTP_RESPONSES_IN_FLIGHT: usize = 100;
+
 pub type CanisterHttpAdapterClient =
     Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
 
@@ -224,6 +227,16 @@ impl CanisterHttpPoolManagerImpl {
             );
             return Vec::new();
         };
+
+        if self.active_callback_ids().len() > MAX_CANISTER_HTTP_RESPONSES_IN_FLIGHT {
+            warn!(
+                self.log,
+                "Maximal number of http outcalls ({}) is in-flight: skipping shares creation",
+                MAX_CANISTER_HTTP_RESPONSES_IN_FLIGHT
+            );
+            return Vec::new();
+        }
+
         let mut change_set = Vec::new();
         loop {
             match self.http_adapter_shim.lock().unwrap().try_receive() {
@@ -800,6 +813,69 @@ pub mod test {
                 // send is, in fact called.
                 pool_manager.generate_change_set(&canister_http_pool);
             })
+        });
+    }
+
+    #[test]
+    pub fn test_create_shares_at_max_calls_in_flight() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 4);
+
+                let request = CanisterHttpRequestContext {
+                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
+                    url: "".to_string(),
+                    max_response_bytes: None,
+                    headers: vec![],
+                    body: None,
+                    http_method: CanisterHttpMethod::GET,
+                    transform: None,
+                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                };
+
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(
+                            (0..=MAX_CANISTER_HTTP_RESPONSES_IN_FLIGHT)
+                                .map(|i| (CallbackId::from(i as u64), request.clone()))
+                                .collect::<BTreeMap<_, _>>(),
+                        )),
+                    ));
+
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                shim_mock
+                    .expect_send()
+                    .times(MAX_CANISTER_HTTP_RESPONSES_IN_FLIGHT + 1)
+                    .return_const(Ok(()));
+
+                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
+                    Arc::new(Mutex::new(Box::new(shim_mock)));
+
+                let canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager,
+                    shim,
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+                let change_set = pool_manager.generate_change_set(&canister_http_pool);
+                assert!(change_set.is_empty());
+            });
         });
     }
 
