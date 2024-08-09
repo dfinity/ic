@@ -731,9 +731,10 @@ where
             Err((code, message)) if is_response_too_large(&code, &message) => {
                 let new_estimate = response_size_estimate.adjust();
                 if response_size_estimate == new_estimate {
-                    return Err(SingleCallError::HttpOutcallError(
-                        HttpOutcallError::IcError { code, message },
-                    ));
+                    return Err(SingleCallError::from(HttpOutcallError::IcError {
+                        code,
+                        message,
+                    }));
                 }
                 log!(DEBUG, "The {eth_method} response didn't fit into {response_size_estimate} bytes, retrying with {new_estimate}");
                 response_size_estimate = new_estimate;
@@ -741,9 +742,10 @@ where
                 continue;
             }
             Err((code, message)) => {
-                return Err(SingleCallError::HttpOutcallError(
-                    HttpOutcallError::IcError { code, message },
-                ))
+                return Err(SingleCallError::from(HttpOutcallError::IcError {
+                    code,
+                    message,
+                }))
             }
         };
 
@@ -763,7 +765,7 @@ where
         // If the server is not available, it will sometimes (wrongly) return HTML that will fail parsing as JSON.
         let http_status_code = http_status_code(&response);
         if !is_successful_http_code(&http_status_code) {
-            return Err(SingleCallError::HttpOutcallError(
+            return Err(SingleCallError::from(
                 HttpOutcallError::InvalidHttpJsonRpcResponse {
                     status: http_status_code,
                     body: String::from_utf8_lossy(&response.body).to_string(),
@@ -773,7 +775,7 @@ where
         }
 
         let reply: JsonRpcReply<O> = serde_json::from_slice(&response.body).map_err(|e| {
-            SingleCallError::HttpOutcallError(HttpOutcallError::InvalidHttpJsonRpcResponse {
+            SingleCallError::from(HttpOutcallError::InvalidHttpJsonRpcResponse {
                 status: http_status_code,
                 body: String::from_utf8_lossy(&response.body).to_string(),
                 parsing_error: Some(e.to_string()),
