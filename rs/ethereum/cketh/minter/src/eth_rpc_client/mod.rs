@@ -1,8 +1,8 @@
 use crate::checked_amount::CheckedAmountOf;
 use crate::eth_rpc::{
     self, Block, BlockSpec, BlockTag, Data, FeeHistory, FeeHistoryParams, FixedSizeData,
-    GetLogsParam, Hash, HttpOutcallError, HttpOutcallResult, HttpResponsePayload, JsonRpcResult,
-    LogEntry, ResponseSizeEstimate, SendRawTransactionResult, Topic, HEADER_SIZE_LIMIT,
+    GetLogsParam, Hash, HttpOutcallError, HttpResponsePayload, LogEntry, ResponseSizeEstimate,
+    SendRawTransactionResult, Topic, HEADER_SIZE_LIMIT,
 };
 use crate::eth_rpc_client::providers::{
     EthereumProvider, RpcNodeProvider, SepoliaProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS,
@@ -403,28 +403,6 @@ impl<T> MultiCallResults<T> {
         !self.ok_results.is_empty()
     }
 
-    fn from_non_empty_iter<
-        I: IntoIterator<Item = (RpcNodeProvider, HttpOutcallResult<JsonRpcResult<T>>)>,
-    >(
-        iter: I,
-    ) -> Self {
-        let mut results = MultiCallResults::new();
-        for (provider, result) in iter {
-            let result: Result<T, SingleCallError> = match result {
-                Ok(JsonRpcResult::Result(value)) => Ok(value),
-                Ok(JsonRpcResult::Error { code, message }) => {
-                    Err(SingleCallError::JsonRpcError { code, message })
-                }
-                Err(error) => Err(SingleCallError::HttpOutcallError(error)),
-            };
-            results.insert_once(provider, result);
-        }
-        if results.is_empty() {
-            panic!("BUG: MultiCallResults cannot be empty!")
-        }
-        results
-    }
-
     fn from_iter<I: IntoIterator<Item = (RpcNodeProvider, Result<T, SingleCallError>)>>(
         iter: I,
     ) -> Self {
@@ -512,6 +490,12 @@ impl From<EvmRpcError> for SingleCallError {
             },
             EvmRpcError::ValidationError(e) => SingleCallError::EvmRpcError(e.to_string()),
         }
+    }
+}
+
+impl From<HttpOutcallError> for SingleCallError {
+    fn from(value: HttpOutcallError) -> Self {
+        SingleCallError::HttpOutcallError(value)
     }
 }
 
