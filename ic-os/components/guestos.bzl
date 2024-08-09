@@ -144,6 +144,6 @@ component_files = {
     Label("upgrade/shared-resources/setup-shared-resources/setup-shared-data.service"): "/etc/systemd/system/setup-shared-data.service",
     Label("upgrade/systemd-generators/guestos/mount-generator"): "/etc/systemd/system-generators/mount-generator",
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
-    Label("upgrade/manageboot/guestos/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
+    Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
     Label("upgrade/shared-resources/monitor-expand-shared-data/monitor-expand-shared-data.py"): "/opt/ic/bin/monitor-expand-shared-data.py",
 }
