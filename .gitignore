@@ -36,24 +36,24 @@ rust-project.json
 
 ### ASCIIDOC ###
 
-/docs/**/*.png
-/docs/**/*.svg
 !/docs/assets/*.png
 !/docs/assets/*.svg
 /docs/**/*.html
+/docs/**/*.png
+/docs/**/*.svg
 /docs/**/.asciidoctor
 
 README.html
 
 ### Working files ###
-,*
-*~
 *.bak
-tarpaulin-report.html
 *.iml
-*.swp
 *.swo
+*.swp
+*~
+,*
 .envrc
+tarpaulin-report.html
 
 ### Haskell related ###
 
@@ -62,25 +62,25 @@ dist-newstyle
 **/.stack-work
 
 ### Rust tags created by rusty-tags
-**/rusty-tags.vi
 **/rusty-tags.emacs
+**/rusty-tags.vi
 
 ### Python litter
+**/*whl
 **/__pycache__/
 **/dist/*.tar.gz
-**/*whl
 
 
 # JUnit files
 test_report.xml
 
 # IC-OS disk image files
-*-os.iso
-*os.img
-disk.img
 *-img.tar.gz
 *-img.tar.zst
+*-os.iso
+*os.img
 dev-root-ca.crt
+disk.img
 
 # IC-OS binaries
 cpp/**/infogetty
@@ -90,24 +90,24 @@ cpp/**/prestorecon
 cpp/**/prestorecon.o
 
 # Various build artifacts
-artifacts
-**/build
-**/build-tmp
-**/build-out
-**/boot/version.txt
+**/bin/boundary-node-prober
 **/bin/canister_sandbox
+**/bin/ic-balance-exporter
 **/bin/ic-btc-adapter
-**/bin/ic-https-outcalls-adapter
 **/bin/ic-consensus-pool-util
 **/bin/ic-crypto-csp
+**/bin/ic-https-outcalls-adapter
 **/bin/ic-regedit
 **/bin/orchestrator
 **/bin/replica
+**/bin/sandbox_launcher
 **/bin/state-tool
 **/bin/vsock_agent
-**/bin/sandbox_launcher
-**/bin/boundary-node-prober
-**/bin/ic-balance-exporter
+**/boot/version.txt
+**/build
+**/build-out
+**/build-tmp
+artifacts
 
 # Boundary node prober binary
 boundary-node-prober
@@ -117,9 +117,9 @@ boundary-node-prober
 
 # Bazel outdir dirs
 /bazel-*
-bazel-build-log.json
 bazel-bep.pb
 bazel-bep.txt
+bazel-build-log.json
 bazel-timestamp.txt
 user.bazelrc
 
@@ -127,24 +127,24 @@ user.bazelrc
 .vscode
 
 # Intellij
-.idea
 .clwb
+.idea
 
 # OS X
 .DS_Store
 
 # Bind-mounts to devcontainer
-.cache
-.rustup
+.aws
 .bash_history
+.cache
+.config
+.local
+.npm
+.rustup
+.ssh
+.viminfo
 .zcompdump*
 .zsh*
-.npm
-.ssh
-.aws
-.viminfo
-.local
-.config
 
 test_tmpdir/**
 
