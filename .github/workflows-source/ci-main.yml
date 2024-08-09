@@ -117,7 +117,7 @@ jobs:
           if-no-files-found: error
           path: |
             bazel-targets
-      - name: Upload bazel-bep.pb.zst
+      - name: Upload bazel-bep
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
@@ -146,7 +146,7 @@ jobs:
           # TODO: disabling until the following issue is resolved
           # https://github.com/dfinity/ic/actions/runs/9699415138/job/26768332602
           RUN_ON_DIFF_ONLY: false
-      - name: Upload bazel-bep.pb.zst
+      - name: Upload bazel-bep
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
@@ -196,7 +196,7 @@ jobs:
           BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output/${ROOT_PIPELINE_ID}"
           BAZEL_TARGETS: "//rs/... //publish/binaries/..."
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
-      - name: Upload bazel-bep.pb.zst
+      - name: Upload bazel-bep
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
@@ -225,7 +225,7 @@ jobs:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
           BAZEL_EXTRA_ARGS: "--keep_going --config=fuzzing --build_tag_filters=libfuzzer"
-      - name: Upload bazel-bep.pb.zst
+      - name: Upload bazel-bep
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
@@ -249,7 +249,7 @@ jobs:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
           BAZEL_EXTRA_ARGS: "--keep_going --config=afl"
-      - name: Upload bazel-bep.pb.zst
+      - name: Upload bazel-bep
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
