@@ -9,7 +9,10 @@ use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::{mutate_state, State};
 use candid::{candid_method, CandidType, Principal};
 use ethnum;
-use evm_rpc_client::types::candid::HttpOutcallError as EvmHttpOutcallError;
+use evm_rpc_client::types::candid::{
+    HttpOutcallError as EvmHttpOutcallError,
+    SendRawTransactionStatus as EvmSendRawTransactionStatus,
+};
 use ic_canister_log::log;
 use ic_cdk::api::call::{call_with_payment128, RejectionCode};
 use ic_cdk::api::management_canister::http_request::{
@@ -121,6 +124,19 @@ pub enum SendRawTransactionResult {
     InsufficientFunds,
     NonceTooLow,
     NonceTooHigh,
+}
+
+impl From<EvmSendRawTransactionStatus> for SendRawTransactionResult {
+    fn from(value: EvmSendRawTransactionStatus) -> Self {
+        match value {
+            EvmSendRawTransactionStatus::Ok(_) => SendRawTransactionResult::Ok,
+            EvmSendRawTransactionStatus::InsufficientFunds => {
+                SendRawTransactionResult::InsufficientFunds
+            }
+            EvmSendRawTransactionStatus::NonceTooLow => SendRawTransactionResult::NonceTooLow,
+            EvmSendRawTransactionStatus::NonceTooHigh => SendRawTransactionResult::NonceTooHigh,
+        }
+    }
 }
 
 impl HttpResponsePayload for SendRawTransactionResult {
