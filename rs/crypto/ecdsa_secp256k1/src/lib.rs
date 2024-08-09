@@ -416,13 +416,11 @@ impl PrivateKey {
         pem_encode(&self.serialize_rfc5915_der(), PEM_HEADER_RFC5915)
     }
 
-    #[deprecated(note="use sign_message_with_ecdsa")]
     /// Deprecated alias of sign_message_with_ecdsa
     pub fn sign_message(&self, message: &[u8]) -> [u8; 64] {
         self.sign_message_with_ecdsa(message)
     }
 
-    #[deprecated(note="use sign_digest_with_ecdsa")]
     /// Deprecated alias of sign_digest_with_ecdsa
     pub fn sign_digest(&self, message: &[u8]) -> Option<[u8; 64]> {
         self.sign_digest_with_ecdsa(message)
@@ -634,25 +632,21 @@ impl PublicKey {
         pem_encode(&self.serialize_der(), "PUBLIC KEY")
     }
 
-    #[deprecated(note="use verify_ecdsa_signature")]
     /// Deprecated alias of verify_ecdsa_signature
     pub fn verify_signature(&self, message: &[u8], signature: &[u8]) -> bool {
         self.verify_ecdsa_signature(message, signature)
     }
 
-    #[deprecated(note="use verify_ecdsa_signature_with_malleability")]
     /// Deprecated alias of verify_ecdsa_signature_with_malleability
     pub fn verify_signature_with_malleability(&self, message: &[u8], signature: &[u8]) -> bool {
         self.verify_ecdsa_signature_with_malleability(message, signature)
     }
 
-    #[deprecated(note="use verify_ecdsa_signature_prehashed")]
     /// Deprecated alias of verify_ecdsa_signature_prehashed
     pub fn verify_signature_prehashed(&self, digest: &[u8], signature: &[u8]) -> bool {
         self.verify_ecdsa_signature_prehashed(digest, signature)
     }
 
-    #[deprecated(note="use verify_ecdsa_signature_prehashed_with_malleability")]
     /// Deprecated alias of verify_ecdsa_signature_prehashed_with_malleability
     pub fn verify_signature_prehashed_with_malleability(&self, digest: &[u8], signature: &[u8]) -> bool {
         self.verify_ecdsa_signature_prehashed_with_malleability(digest, signature)
