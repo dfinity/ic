@@ -2,6 +2,7 @@ mod candid;
 mod canister;
 mod dashboard;
 mod git;
+mod ic_admin;
 mod proposal;
 
 use crate::candid::encode_upgrade_args;
@@ -10,6 +11,7 @@ use crate::dashboard::DashboardClient;
 use crate::git::{GitCommitHash, GitRepository};
 use crate::proposal::{InstallProposalTemplate, ProposalTemplate, UpgradeProposalTemplate};
 use clap::{Parser, Subcommand};
+use ic_admin::IcAdminArgs;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -45,6 +47,10 @@ enum Commands {
         /// Output directory where generated files will be written
         #[arg(short, long)]
         output_dir: PathBuf,
+
+        /// Tool to submit proposal
+        #[command(subcommand)]
+        submit: Option<SubmitProposal>,
     },
     /// install a canister
     #[command(arg_required_else_help = true)]
@@ -63,7 +69,17 @@ enum Commands {
         /// Output directory where generated files will be written
         #[arg(short, long)]
         output_dir: PathBuf,
+
+        /// Tool to submit proposal
+        #[command(subcommand)]
+        submit: Option<SubmitProposal>,
     },
+}
+
+#[derive(Debug, Clone, Subcommand)]
+enum SubmitProposal {
+    /// Use `ic-admin` to submit the proposal.
+    IcAdmin(IcAdminArgs),
 }
 
 #[tokio::main]
@@ -76,6 +92,7 @@ async fn main() {
             to,
             args,
             output_dir,
+            submit: _,
         } => {
             check_dir_has_required_permissions(&output_dir).expect("invalid output directory");
 
@@ -113,6 +130,7 @@ async fn main() {
             at,
             args,
             output_dir,
+            submit: _,
         } => {
             let mut ic_repo = GitRepository::clone_ic();
 
