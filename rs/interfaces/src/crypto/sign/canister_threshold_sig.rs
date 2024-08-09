@@ -587,6 +587,8 @@ pub trait ThresholdEcdsaSigVerifier {
 
     /// Combine the given threshold ECDSA signature shares into a conventional ECDSA signature.
     ///
+    /// All of the signature shares must have been generated with respect to the same ThresholdEcdsaSigInputs
+    ///
     /// The signature is returned as raw bytes.
     ///
     /// # Errors
@@ -686,6 +688,8 @@ pub trait ThresholdSchnorrSigVerifier {
     ) -> Result<(), ThresholdSchnorrVerifySigShareError>;
 
     /// Combine the given threshold Schnorr signature shares into a conventional Schnorr signature.
+    ///
+    /// All of the signature shares must have been generated with respect to the same ThresholdSchnorrSigInputs
     ///
     /// The signature is returned as raw bytes.
     ///
