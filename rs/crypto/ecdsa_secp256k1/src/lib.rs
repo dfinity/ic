@@ -72,6 +72,17 @@ impl DerivationPath {
         Self { path }
     }
 
+    /// Create a path from a canister ID and a user provided path
+    pub fn from_canister_id_and_path(canister_id: &[u8], path: &[Vec<u8>]) -> Self {
+        let mut vpath = Vec::with_capacity(1 + path.len());
+        vpath.push(DerivationIndex(canister_id.to_vec()));
+
+        for n in path {
+            vpath.push(DerivationIndex(n.to_vec()));
+        }
+        Self::new(vpath)
+    }
+
     /// Return the length of this path
     pub fn len(&self) -> usize {
         self.path.len()
@@ -338,6 +349,39 @@ impl PrivateKey {
         Self { key }
     }
 
+    /// Generate a key for testing purposes
+    ///
+    /// Specifically this hashes the input seed and string together
+    /// using SHA-256, then reduces it modulo the group order.
+    pub fn generate_test_key(seed: &[u8], key_id: &str) -> Self {
+        use k256::{elliptic_curve::ops::Reduce, sha2::Digest, sha2::Sha256};
+
+        let digest: [u8; 32] = {
+            let mut h = Sha256::new();
+            h.update(seed);
+            h.update("test_key");
+            h.update(key_id);
+            h.finalize().into()
+        };
+
+        let scalar = {
+            let fb = k256::FieldBytes::from_slice(&digest);
+            let scalar = <k256::Scalar as Reduce<k256::U256>>::reduce_bytes(fb);
+
+            // This could with ~ 1/2**256 probability fail. If it ever did, it implies
+            // we've found an input such that the SHA-256 hash of the input reduced
+            // modulo the group order is zero. Such an input would be exceptionally
+            // useful for constructing test cases which currently cannot be created,
+            // since such an input is not known to any party.
+
+            k256::NonZeroScalar::new(scalar).expect("Not zero")
+        };
+
+        Self {
+            key: k256::SecretKey::from(scalar),
+        }
+    }
+
     /// Deserialize a private key encoded in SEC1 format
     pub fn deserialize_sec1(bytes: &[u8]) -> Result<Self, KeyDecodingError> {
         let byte_array: [u8; <Secp256k1 as Curve>::FieldBytesSize::USIZE] =
@@ -423,7 +467,7 @@ impl PrivateKey {
 
     /// Deprecated alias of sign_digest_with_ecdsa
     pub fn sign_digest(&self, message: &[u8]) -> Option<[u8; 64]> {
-        self.sign_digest_with_ecdsa(message)
+        Some(self.sign_digest_with_ecdsa(message))
     }
 
     /// Sign a message with ECDSA
@@ -441,20 +485,31 @@ impl PrivateKey {
     /// Sign a message digest with ECDSA
     ///
     /// The signature is normalized (using the minimum-s approach of BitCoin)
-    pub fn sign_digest_with_ecdsa(&self, digest: &[u8]) -> Option<[u8; 64]> {
+    pub fn sign_digest_with_ecdsa(&self, digest: &[u8]) -> [u8; 64] {
         if digest.len() < 16 {
             // k256 arbitrarily rejects digests that are < 128 bits
-            return None;
+            // handle this by prefixing with a sufficient number of zero bytes
+            let mut zdigest = [0u8; 32];
+            let z_prefix_len = zdigest.len() - digest.len();
+            zdigest[z_prefix_len..].copy_from_slice(digest);
+            return self.sign_digest_with_ecdsa(&zdigest);
         }
 
         use k256::ecdsa::{signature::hazmat::PrehashSigner, Signature};
         let ecdsa = k256::ecdsa::SigningKey::from(&self.key);
         let sig: Signature = ecdsa.sign_prehash(digest).expect("Failed to sign digest");
-        Some(sig.to_bytes().into())
+        sig.to_bytes().into()
     }
 
     /// Sign a message with BIP340 Schnorr
-    pub fn sign_bip340<R: Rng + CryptoRng>(&self, message: &[u8; 32], rng: &mut R) -> [u8; 64] {
+    ///
+    /// This can theoretically fail, in the case that k/s generated is zero.
+    /// This will never occur in practice
+    pub fn sign_bip340_with_aux_rand(
+        &self,
+        message: &[u8; 32],
+        aux_rand: &[u8; 32],
+    ) -> Option<[u8; 64]> {
         let need_flip = self.public_key().serialize_sec1(true)[0] == 0x03;
 
         let bip340 = if need_flip {
@@ -466,6 +521,14 @@ impl PrivateKey {
             k256::schnorr::SigningKey::from(&self.key)
         };
 
+        bip340
+            .sign_prehash_with_aux_rand(message, aux_rand)
+            .map(|s| s.to_bytes())
+            .ok()
+    }
+
+    /// Sign a message with BIP340 Schnorr
+    pub fn sign_bip340<R: Rng + CryptoRng>(&self, message: &[u8; 32], rng: &mut R) -> [u8; 64] {
         loop {
             /*
              * The only way this function can fail is the (cryptographically unlikely)
@@ -473,8 +536,8 @@ impl PrivateKey {
              * with a new aux_rand
              */
             let aux_rand = rng.gen::<[u8; 32]>();
-            if let Ok(sig) = bip340.sign_prehash_with_aux_rand(message, &aux_rand) {
-                return sig.to_bytes();
+            if let Some(sig) = self.sign_bip340_with_aux_rand(message, &aux_rand) {
+                return sig;
             }
         }
     }
@@ -707,6 +770,13 @@ impl PublicKey {
 
     /// Verify a (message digest,signature) pair
     pub fn verify_ecdsa_signature_prehashed(&self, digest: &[u8], signature: &[u8]) -> bool {
+        if digest.len() < 16 {
+            let mut zdigest = [0u8; 32];
+            let z_prefix_len = zdigest.len() - digest.len();
+            zdigest[z_prefix_len..].copy_from_slice(digest);
+            return self.verify_ecdsa_signature_prehashed(&zdigest, signature);
+        }
+
         use k256::ecdsa::signature::hazmat::PrehashVerifier;
 
         let signature = match k256::ecdsa::Signature::try_from(signature) {
@@ -735,6 +805,13 @@ impl PublicKey {
         digest: &[u8],
         signature: &[u8],
     ) -> bool {
+        if digest.len() < 16 {
+            let mut zdigest = [0u8; 32];
+            let z_prefix_len = zdigest.len() - digest.len();
+            zdigest[z_prefix_len..].copy_from_slice(digest);
+            return self.verify_ecdsa_signature_prehashed_with_malleability(&zdigest, signature);
+        }
+
         use k256::ecdsa::signature::hazmat::PrehashVerifier;
 
         let signature = match k256::ecdsa::Signature::try_from(signature) {

@@ -108,6 +108,23 @@ impl PrivateKey {
         Self { sk }
     }
 
+    /// Generate a test key using a seed and string
+    pub fn generate_test_key(seed: &[u8], key_id: &str) -> Self {
+        let digest = {
+            let mut sha2 = Sha512::new();
+            sha2.update(seed);
+            sha2.update(key_id);
+            let hash: [u8; 64] = sha2.finalize().into();
+            let mut truncated = [0u8; 32];
+            truncated.copy_from_slice(&hash[..32]);
+            truncated
+        };
+
+        Self {
+            sk: SigningKey::from_bytes(&digest),
+        }
+    }
+
     /// Sign a message and return a signature
     ///
     /// This is the non-prehashed variant of Ed25519
@@ -741,6 +758,17 @@ impl DerivationPath {
     /// Create a free-form derivation path
     pub fn new(path: Vec<DerivationIndex>) -> Self {
         Self { path }
+    }
+
+    /// Create a path from a canister ID and a user provided path
+    pub fn from_canister_id_and_path(canister_id: &[u8], path: &[Vec<u8>]) -> Self {
+        let mut vpath = Vec::with_capacity(1 + path.len());
+        vpath.push(DerivationIndex(canister_id.to_vec()));
+
+        for n in path {
+            vpath.push(DerivationIndex(n.to_vec()));
+        }
+        Self::new(vpath)
     }
 
     /// Return the length of this path
