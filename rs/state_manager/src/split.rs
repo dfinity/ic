@@ -1,7 +1,7 @@
 //! Prunes a replicated state, as part of a subnet split.
 use crate::{
     checkpoint::{load_checkpoint, make_checkpoint},
-    flush_page_maps,
+    flush_canister_snapshots_and_page_maps,
     tip::spawn_tip_thread,
     StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
 };
@@ -90,11 +90,11 @@ pub fn split(
         .map_err(|e| format!("{:?}", e))?;
 
     // Split the state.
-    let split_state = state.split(subnet_id, &routing_table, new_subnet_batch_time)?;
+    let mut split_state = state.split(subnet_id, &routing_table, new_subnet_batch_time)?;
 
     // Write the split state as a new checkpoint.
     write_checkpoint(
-        split_state,
+        &mut split_state,
         state_layout,
         &cp,
         &mut thread_pool,
@@ -171,7 +171,7 @@ fn read_checkpoint(
 /// Writes the given `ReplicatedState` into a new checkpoint under
 /// `state_layout`, based off of `old_cp`.
 fn write_checkpoint(
-    mut state: ReplicatedState,
+    state: &mut ReplicatedState,
     state_layout: StateLayout,
     old_cp: &CheckpointLayout<ReadOnly>,
     thread_pool: &mut Pool,
@@ -202,15 +202,16 @@ fn write_checkpoint(
 
     let new_height = old_height.increment();
 
-    flush_page_maps(
-        &mut state,
+    // We need to flush to handle the deletion of canister snapshots.
+    flush_canister_snapshots_and_page_maps(
+        state,
         new_height,
         &tip_channel,
         &metrics.checkpoint_metrics,
     );
 
     make_checkpoint(
-        &state,
+        state,
         new_height,
         &tip_channel,
         &metrics.checkpoint_metrics,

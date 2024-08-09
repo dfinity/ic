@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     checkpoint::make_checkpoint,
-    flush_page_maps,
+    flush_canister_snapshots_and_page_maps,
     state_sync::types::{FileInfo, Manifest},
     tip::spawn_tip_thread,
     CheckpointMetrics, ManifestMetrics, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
@@ -191,15 +191,16 @@ fn read_write_roundtrip() {
 
         // Read the latest checkpoint into a state.
         let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
-        let (cp, state) = read_checkpoint(&layout, &mut thread_pool, fd_factory.clone(), &metrics)
-            .expect("failed to read checkpoint");
+        let (cp, mut state) =
+            read_checkpoint(&layout, &mut thread_pool, fd_factory.clone(), &metrics)
+                .expect("failed to read checkpoint");
 
         // Sanity check: ensure that `split_from` is not set by default.
         assert_eq!(None, state.metadata.split_from);
 
         // Write back the state as a new checkpoint.
         write_checkpoint(
-            state,
+            &mut state,
             layout.clone(),
             &cp,
             &mut thread_pool,
@@ -445,7 +446,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         )
         .unwrap();
 
-    flush_page_maps(
+    flush_canister_snapshots_and_page_maps(
         &mut state,
         HEIGHT,
         &tip_channel,

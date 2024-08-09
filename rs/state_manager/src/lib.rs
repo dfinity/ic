@@ -2016,8 +2016,12 @@ impl StateManagerImpl {
 
     /// Flushes to disk all the canister heap deltas accumulated in memory
     /// during execution from the last flush.
-    fn flush_page_maps(&self, tip_state: &mut ReplicatedState, height: Height) {
-        flush_page_maps(
+    fn flush_canister_snapshots_and_page_maps(
+        &self,
+        tip_state: &mut ReplicatedState,
+        height: Height,
+    ) {
+        flush_canister_snapshots_and_page_maps(
             tip_state,
             height,
             &self.tip_channel,
@@ -2611,7 +2615,7 @@ impl StateManagerImpl {
 
 /// Flushes to disk all the canister heap deltas accumulated in memory
 /// during execution from the last flush.
-fn flush_page_maps(
+fn flush_canister_snapshots_and_page_maps(
     tip_state: &mut ReplicatedState,
     height: Height,
     tip_channel: &Sender<TipRequest>,
@@ -3232,7 +3236,7 @@ impl StateManager for StateManagerImpl {
 
         let checkpointed_state = match scope {
             CertificationScope::Full => {
-                self.flush_page_maps(&mut state, height);
+                self.flush_canister_snapshots_and_page_maps(&mut state, height);
                 let CreateCheckpointResult {
                     checkpointed_state,
                     state_metadata,
@@ -3259,13 +3263,13 @@ impl StateManager for StateManagerImpl {
                                 .saturating_sub(height.get())
                                 == NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
                             {
-                                self.flush_page_maps(&mut state, height);
+                                self.flush_canister_snapshots_and_page_maps(&mut state, height);
                             }
                         }
                     }
                     FlagStatus::Disabled => {
                         if self.tip_channel.is_empty() {
-                            self.flush_page_maps(&mut state, height);
+                            self.flush_canister_snapshots_and_page_maps(&mut state, height);
                         } else {
                             self.metrics.checkpoint_metrics.page_map_flush_skips.inc();
                         }
