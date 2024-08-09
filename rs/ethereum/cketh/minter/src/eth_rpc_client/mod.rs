@@ -792,18 +792,9 @@ impl Reduce for EvmMultiRpcResult<EvmSendRawTransactionStatus> {
     fn reduce(self) -> ReducedResult<Self::Item> {
         ReducedResult::from_internal(self).map_reduce(
             &|tx_status| {
-                Ok::<SendRawTransactionResult, Infallible>(match tx_status {
-                    EvmSendRawTransactionStatus::Ok(_) => SendRawTransactionResult::Ok,
-                    EvmSendRawTransactionStatus::InsufficientFunds => {
-                        SendRawTransactionResult::InsufficientFunds
-                    }
-                    EvmSendRawTransactionStatus::NonceTooLow => {
-                        SendRawTransactionResult::NonceTooLow
-                    }
-                    EvmSendRawTransactionStatus::NonceTooHigh => {
-                        SendRawTransactionResult::NonceTooHigh
-                    }
-                })
+                Ok::<SendRawTransactionResult, Infallible>(SendRawTransactionResult::from(
+                    tx_status,
+                ))
             },
             |results| results.at_least_one_ok().map(|(_provider, result)| result),
         )
