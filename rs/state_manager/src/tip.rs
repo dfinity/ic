@@ -204,6 +204,13 @@ pub(crate) fn spawn_tip_thread(
                                     continue;
                                 }
                                 Ok(tip) => {
+                                    if let Err(err) = tip.create_unverified_checkpoint_marker() {
+                                        sender
+                                            .send(Err(err))
+                                            .expect("Failed to return TipToCheckpoint error");
+                                        continue;
+                                    }
+
                                     let cp_or_err = state_layout.scratchpad_to_checkpoint(
                                         tip,
                                         height,
@@ -1208,6 +1215,21 @@ fn handle_compute_manifest_request(
         state_sync_version,
         MAX_SUPPORTED_STATE_SYNC_VERSION
     );
+
+    // According to the current checkpointing workflow, encountering a checkpoint with the unverified marker should not happen.
+    // Proceeding with manifest computation in such a scenario is risky because replicas might publish the root hash and create a CUP
+    // for an unverified checkpoint, which could then be lost.
+    // Therefore, crashing the replica is the safest option in this case.
+    //
+    // Note: In the future, if we decide to allow manifest computation before removing the unverified marker and introduce a mechanism
+    // to hide the manifest until the checkpoint is verified, this crash behavior should be re-evaluated accordingly.
+    if !checkpoint_layout.is_checkpoint_verified() {
+        fatal!(
+            log,
+            "Trying to compute manifest for unverified checkpoint @{}",
+            checkpoint_layout.height()
+        );
+    }
 
     let start = Instant::now();
     let manifest = crate::manifest::compute_manifest(

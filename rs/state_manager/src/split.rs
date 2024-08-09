@@ -148,7 +148,9 @@ fn read_checkpoint(
             "No checkpoints found at {}",
             state_layout.raw_path().display()
         ))?;
-    let cp = state_layout.checkpoint(height).map_err(|e| e.to_string())?;
+    let cp = state_layout
+        .checkpoint_verified(height)
+        .map_err(|e| e.to_string())?;
 
     let state = load_checkpoint(
         &cp,

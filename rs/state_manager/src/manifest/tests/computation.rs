@@ -18,15 +18,15 @@ use ic_config::flag_status::FlagStatus;
 use ic_crypto_sha2::Sha256;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_state_layout::{CheckpointLayout, CANISTER_FILE};
+use ic_state_layout::{CheckpointLayout, CANISTER_FILE, UNVERIFIED_CHECKPOINT_MARKER};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 use ic_types::{crypto::CryptoHash, CryptoHashOfState, Height};
 use maplit::btreemap;
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
+use std::{fs, panic};
 use strum::IntoEnumIterator;
 
 const NUM_THREADS: u32 = 3;
@@ -327,6 +327,52 @@ fn test_simple_manifest_computation() {
     for num_threads in 1..32u32 {
         test_computation_with_num_threads(num_threads)
     }
+}
+
+#[test]
+fn test_manifest_computation_skips_marker_file() {
+    let metrics_registry = MetricsRegistry::new();
+    let manifest_metrics = ManifestMetrics::new(&metrics_registry);
+    let dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
+
+    let root = dir.path();
+    fs::write(root.join("root.bin"), vec![0u8; 1000]).expect("failed to create file 'test.bin'");
+    fs::File::create(root.join(UNVERIFIED_CHECKPOINT_MARKER))
+        .expect("failed to create marker file");
+
+    let subdir = root.join("subdir");
+    fs::create_dir_all(&subdir).expect("failed to create dir 'subdir'");
+    fs::write(subdir.join("memory"), vec![1u8; 2048]).expect("failed to create file 'memory'");
+    fs::write(subdir.join("queue"), vec![0u8; 0]).expect("failed to create file 'queue'");
+    fs::write(subdir.join("metadata"), vec![2u8; 1050]).expect("failed to create file 'queue'");
+
+    let mut thread_pool = scoped_threadpool::Pool::new(1);
+
+    let manifest_with_marker_present = compute_manifest(
+        &mut thread_pool,
+        &manifest_metrics,
+        &no_op_logger(),
+        StateSyncVersion::V1,
+        &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
+        1024,
+        None,
+    )
+    .expect("failed to compute manifest");
+
+    fs::remove_file(root.join(UNVERIFIED_CHECKPOINT_MARKER)).expect("failed to remove marker file");
+
+    let manifest_with_marker_removed = compute_manifest(
+        &mut thread_pool,
+        &manifest_metrics,
+        &no_op_logger(),
+        StateSyncVersion::V1,
+        &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
+        1024,
+        None,
+    )
+    .expect("failed to compute manifest");
+    // The manifest computation should ignore the marker files and produce identical manifest.
+    assert_eq!(manifest_with_marker_present, manifest_with_marker_removed);
 }
 
 #[test]
