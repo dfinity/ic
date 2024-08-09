@@ -61,7 +61,7 @@ async fn get_tx(tx_id: String) -> Result<Transaction, BitcoinTxError> {
     // - Taproot transactions could be as big as full block size (4MiB).
     // - Currently a subnet's maximum response size is only 2MiB.
     // - Transactions bigger than 2MiB are very rare.
-    // 
+    //
     // TODO(XC-171): Transactions between 400k and 2MiB are uncommon but may need to be handled.
     let request = CanisterHttpRequestArgument {
         url: url.to_string(),

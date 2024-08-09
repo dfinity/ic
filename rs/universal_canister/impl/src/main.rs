@@ -416,11 +416,11 @@ fn eval(ops_bytes: OpsBytes) {
             Ops::CallWithBestEffortResponse => api::call_with_best_effort_response(stack.pop_int()),
             Ops::MsgDeadline => stack.push_int64(api::msg_deadline()),
             Ops::MemorySizeIsAtLeast => {
-                let wasm_page_size = wee_alloc::PAGE_SIZE.0;
-
                 #[cfg(target_arch = "wasm32")]
-                let current_memory_size =
-                    || core::arch::wasm32::memory_size::<0>() * wasm_page_size;
+                let current_memory_size = || {
+                    let wasm_page_size = wee_alloc::PAGE_SIZE.0;
+                    core::arch::wasm32::memory_size::<0>() * wasm_page_size
+                };
 
                 #[cfg(not(target_arch = "wasm32"))]
                 let current_memory_size = || usize::MAX;
@@ -431,7 +431,8 @@ fn eval(ops_bytes: OpsBytes) {
                     if current_memory_size() > target_memory_size {
                         break;
                     }
-                    a.push(vec![13; wasm_page_size]);
+                    // Allocate a megabyte more.
+                    a.push(vec![13u8; 1024 * 1024]);
                 }
                 std::hint::black_box(a);
             }
