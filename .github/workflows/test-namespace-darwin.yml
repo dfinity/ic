@@ -6,7 +6,7 @@ on: [push]
 # cancel the previous one if necessary
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: true # TODO: not on master
 
 jobs:
   test-namespace:
