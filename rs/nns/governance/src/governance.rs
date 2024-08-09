@@ -89,10 +89,7 @@ use ic_nns_constants::{
     LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
     SUBNET_RENTAL_CANISTER_ID,
 };
-use ic_nns_governance_api::{
-    bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
-    subnet_rental::{RentalConditionId, SubnetRentalProposalPayload, SubnetRentalRequest},
-};
+use ic_nns_governance_api::subnet_rental::SubnetRentalRequest;
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_swap::pb::v1::{self as sns_swap_pb, Lifecycle, NeuronsFundParticipationConstraints};
@@ -118,7 +115,6 @@ use std::{
     convert::{TryFrom, TryInto},
     fmt,
     ops::RangeInclusive,
-    str::FromStr,
     string::ToString,
 };
 

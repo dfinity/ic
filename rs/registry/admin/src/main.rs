@@ -38,10 +38,6 @@ use ic_nervous_system_root::change_canister::{
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance::proposals::proposal_submission::{
-    create_external_update_proposal_candid, create_make_proposal_payload,
-    decode_make_proposal_response,
-};
 use ic_nns_governance_api::{
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
     pb::v1::{
@@ -65,6 +61,10 @@ use ic_nns_governance_api::{
         AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, InstallCode,
         ManageNeuron, NnsFunction, NodeProvider, Proposal, RewardNodeProviders,
         StopOrStartCanister, UpdateCanisterSettings,
+    },
+    proposal_helpers::{
+        create_external_update_proposal_candid, create_make_proposal_payload,
+        decode_make_proposal_response,
     },
     subnet_rental::{RentalConditionId, SubnetRentalRequest},
 };
