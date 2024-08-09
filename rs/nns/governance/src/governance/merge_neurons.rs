@@ -345,11 +345,12 @@ pub fn build_merge_neurons_response(
     source: &Neuron,
     target: &Neuron,
     now_seconds: u64,
+    requester: PrincipalId,
 ) -> MergeResponse {
     let source_neuron = Some(NeuronProto::from(source.clone()));
     let target_neuron = Some(NeuronProto::from(target.clone()));
-    let source_neuron_info = Some(source.get_neuron_info(now_seconds));
-    let target_neuron_info = Some(target.get_neuron_info(now_seconds));
+    let source_neuron_info = Some(source.get_neuron_info(now_seconds, requester));
+    let target_neuron_info = Some(target.get_neuron_info(now_seconds, requester));
     MergeResponse {
         source_neuron,
         target_neuron,

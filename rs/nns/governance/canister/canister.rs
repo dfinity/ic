@@ -606,7 +606,7 @@ fn get_neuron_info() {
 #[candid_method(query, rename = "get_neuron_info")]
 fn get_neuron_info_(neuron_id: NeuronId) -> Result<NeuronInfo, GovernanceError> {
     governance()
-        .get_neuron_info(&NeuronIdProto::from(neuron_id))
+        .get_neuron_info(&NeuronIdProto::from(neuron_id), caller())
         .map(NeuronInfo::from)
         .map_err(GovernanceError::from)
 }
@@ -625,6 +625,7 @@ fn get_neuron_info_by_id_or_subaccount_(
     governance()
         .get_neuron_info_by_id_or_subaccount(
             &(gov_pb::manage_neuron::NeuronIdOrSubaccount::from(by)),
+            caller(),
         )
         .map(NeuronInfo::from)
         .map_err(GovernanceError::from)
