@@ -13823,61 +13823,112 @@ fn voting_period_seconds_topic_dependency() {
     assert_eq!(voting_period_fun(Topic::NetworkCanisterManagement), 3);
 }
 
-lazy_static! {
-    static ref NEURONS_FUND_NEURON_WITH_HOT_KEYS_AND_BALLOTS: Neuron = {
-        let neuron_id = 577_381_286;
-        let id = Some(NeuronId { id: neuron_id });
+/// Our cast of characters in this scenario consists of a bunch of neurons, each
+/// representing a different visibility case:
+///
+///     * None, but not a known neuron: These neurons have not explicitly
+///       selected a visibility. These are treated the same as Private.
+///
+///     * (Explicitly) Private: Before private neuron enforcement is enabled,
+///       these neurons behave as before: NeuronInfo is not redacted.
+///
+///     * Public: These are never redacted.
+///
+///     * Known: These are treated the same as Public. However, the Protocol
+///       Buffers visibility field would often have no value.
+///
+/// When private neurons are enforced, this means that a couple of fields in
+/// NeuronInfo are redacted when being read by some "random" principal.
+///
+/// Otherwise (i.e. private neurons are not enforced, or the neuron is public
+/// (or both)), NeuronInfo is not redacted
+///
+/// Fine print:
+///
+///     1. By random principal, we mean not the controller, nor a hot key.
+///
+///     2. The specific affected fields are recent_ballots and
+///        joined_community_fund_timestamp_seconds.
+#[test]
+fn test_neuron_info_private_enforcement() {
+    // Step 1: Prepare the world.
 
-        let controller = Some(PrincipalId::new_user_test_id(707_195_149));
+    let mut random = rand::rngs::StdRng::seed_from_u64(/* seed = */ 42);
 
-        let hot_key = PrincipalId::new_user_test_id(997_765_632);
+    // Step 1.1: Select values that all neurons will share.
+
+    let controller = PrincipalId::new_user_test_id(random.gen());
+    let hot_key = PrincipalId::new_user_test_id(random.gen());
+
+    let proposal_id = random.gen();
+    let recent_ballots = vec![BallotInfo {
+        proposal_id: Some(ProposalId { id: proposal_id }),
+        vote: Vote::Yes as i32,
+    }];
+
+    let joined_community_fund_timestamp_seconds = Some(random.gen());
+
+    // Step 1.2: Assemble the common neuron values.
+    let base_neuron = {
+        let controller = Some(controller);
         let hot_keys = vec![hot_key];
+        let recent_ballots = recent_ballots.clone();
 
-        let proposal_id = 440_663_685;
-        let recent_ballots = vec![
-            BallotInfo {
-                proposal_id: Some(ProposalId { id: proposal_id }),
-                vote: Vote::Yes as i32,
-            },
-        ];
-
-        let joined_community_fund_timestamp_seconds = Some(605_241_923);
-
-        let account = vec![42; 32];
-        let dissolve_state = Some(DissolveState::DissolveDelaySeconds(999));
-        let cached_neuron_stake_e8s = 10 * E8;
+        let dissolve_state = Some(DissolveState::DissolveDelaySeconds(random.gen()));
+        let cached_neuron_stake_e8s = random.gen();
 
         Neuron {
-            id,
             controller,
             hot_keys,
             recent_ballots,
             joined_community_fund_timestamp_seconds,
 
-            // Not used, but required for validity.
-            account,
+            // Not used. For validity and realism.
             dissolve_state,
             cached_neuron_stake_e8s,
 
             ..Default::default()
         }
     };
-}
 
-#[test]
-fn get_neuron_info_private_enforcement_enabled() {
-    // Step 1: Prepare the world.
+    // Step 1.3: Construct all neurons.
+    let mut new_neuron = || {
+        let id = Some(NeuronId { id: random.gen() });
+        let account = (0..32).map(|_| random.gen()).collect();
 
-    let _restore_on_drop = temporarily_enable_private_neuron_enforcement();
-    assert!(is_private_neuron_enforcement_enabled());
+        Neuron {
+            id,
+            account,
+            ..base_neuron.clone()
+        }
+    };
+    let no_explicit_visibility_neuron = new_neuron();
+    let private_neuron = Neuron {
+        visibility: Some(Visibility::Private as i32),
+        ..new_neuron()
+    };
+    let public_neuron = Neuron {
+        visibility: Some(Visibility::Public as i32),
+        ..new_neuron()
+    };
+    let known_neuron = Neuron {
+        known_neuron_data: Some(KnownNeuronData {
+            name: "Hello, world!".to_string(),
+            description: Some("All the best votes.".to_string()),
+        }),
+        ..new_neuron()
+    };
 
-    let neuron_id = NEURONS_FUND_NEURON_WITH_HOT_KEYS_AND_BALLOTS.id.unwrap();
-
+    // Step 1.4: Assumble the neurons into a Governance, the root test datum.
     let governance_proto = GovernanceProtoBuilder::new()
-        .with_neurons(vec![NEURONS_FUND_NEURON_WITH_HOT_KEYS_AND_BALLOTS.clone()])
+        .with_neurons(vec![
+            no_explicit_visibility_neuron.clone(),
+            private_neuron.clone(),
+            public_neuron.clone(),
+            known_neuron.clone(),
+        ])
         .build();
-
-    let driver = fake::FakeDriver::default(); // Initialize the minting account
+    let driver = fake::FakeDriver::default();
     let governance = Governance::new(
         governance_proto,
         driver.get_fake_env(),
@@ -13885,222 +13936,137 @@ fn get_neuron_info_private_enforcement_enabled() {
         driver.get_fake_cmc(),
     );
 
-    // Step 2: Call the code under test.
+    let main = |neuron_id_to_expect_redact: Vec<(NeuronId, bool)>| {
+        for (neuron_id, expect_redact) in neuron_id_to_expect_redact {
+            // Step 2: Call the code under test.
 
-    let controller = NEURONS_FUND_NEURON_WITH_HOT_KEYS_AND_BALLOTS
-        .controller
-        .unwrap();
-    let hot_key = *NEURONS_FUND_NEURON_WITH_HOT_KEYS_AND_BALLOTS
-        .hot_keys
-        .first()
-        .unwrap();
-    let random_principal_id = PrincipalId::new_user_test_id(617_157_922);
+            let random_principal_id = PrincipalId::new_user_test_id(617_157_922);
 
-    // Step 2.1: Call get_neuron_info.
+            // Step 2.1: Call get_neuron_info.
+            let get_neuron_info =
+                |requester| governance.get_neuron_info(&neuron_id, requester).unwrap();
+            let controller_get_result = get_neuron_info(controller);
+            let hot_key_get_result = get_neuron_info(hot_key);
+            let random_principal_get_result = get_neuron_info(random_principal_id);
 
-    let get_neuron_info = |requester| governance.get_neuron_info(&neuron_id, requester).unwrap();
-    let controller_get_result = get_neuron_info(controller);
-    let hot_key_get_result = get_neuron_info(hot_key);
-    let random_principal_get_result = get_neuron_info(random_principal_id);
+            // Step 2.2: Call list_neurons.
+            let list_neurons = |requester| {
+                governance.list_neurons(
+                    &ListNeurons {
+                        neuron_ids: vec![neuron_id.id],
+                        include_neurons_readable_by_caller: false,
+                        include_empty_neurons_readable_by_caller: None,
+                        include_public_neurons_in_full_neurons: None,
+                    },
+                    requester,
+                )
+            };
+            let controller_list_result = list_neurons(controller);
+            let hot_key_list_result = list_neurons(hot_key);
+            let random_principal_list_result = list_neurons(random_principal_id);
 
-    // Step 2.2: Call list_neurons.
+            // Step 3: Inspect results.
 
-    let list_neurons = |requester| {
-        governance.list_neurons(
-            &ListNeurons {
-                neuron_ids: vec![neuron_id.id],
-                include_neurons_readable_by_caller: false,
-                include_empty_neurons_readable_by_caller: None,
-                include_public_neurons_in_full_neurons: None,
-            },
-            requester,
-        )
+            // Step 3.1: Inspect get_neuron_info results.
+
+            // Step 3.1.1: NF status and recent ballots are not redacted when controller calls.
+            assert_eq!(
+                controller_get_result.joined_community_fund_timestamp_seconds,
+                joined_community_fund_timestamp_seconds,
+                "{:#?}",
+                controller_get_result,
+            );
+            assert_eq!(
+                controller_get_result.recent_ballots, recent_ballots,
+                "{:#?}",
+                controller_get_result,
+            );
+
+            // Step 3.1.2: Ditto for hot_key.
+            assert_eq!(hot_key_get_result, controller_get_result);
+
+            // Step 3.1.3: When random principal calls, ballots and NF status
+            // are redacted, unless private neurons are not enforced, or the
+            // neuron is public (either explicitly, or as a known neuron).
+            if expect_redact {
+                assert_eq!(
+                    random_principal_get_result.joined_community_fund_timestamp_seconds, None,
+                    "{:#?}",
+                    random_principal_get_result,
+                );
+                assert_eq!(
+                    random_principal_get_result.recent_ballots,
+                    vec![],
+                    "{:#?}",
+                    random_principal_get_result,
+                );
+            } else {
+                assert_eq!(random_principal_get_result, controller_get_result)
+            }
+
+            // Step 3.2: list_neurons results are supposed to be consistent with get_neuron_info.
+            assert_eq!(
+                controller_list_result.neuron_infos,
+                hashmap! {
+                    neuron_id.id => controller_get_result,
+                },
+                "{:#?}",
+                controller_list_result,
+            );
+            assert_eq!(
+                hot_key_list_result.neuron_infos,
+                hashmap! {
+                    neuron_id.id => hot_key_get_result,
+                },
+                "{:#?}",
+                hot_key_list_result,
+            );
+            assert_eq!(
+                random_principal_list_result.neuron_infos,
+                hashmap! {
+                    neuron_id.id => random_principal_get_result,
+                },
+                "{:#?}",
+                random_principal_list_result,
+            );
+        }
     };
-    let controller_list_result = list_neurons(controller);
-    let hot_key_list_result = list_neurons(hot_key);
-    let random_principal_list_result = list_neurons(random_principal_id);
 
-    // Step 3: Inspect results.
+    // Case A: Private neurons are enforced.
+    {
+        let _restore_on_drop = temporarily_enable_private_neuron_enforcement();
+        assert!(is_private_neuron_enforcement_enabled());
 
-    // Step 3.1: Inspect get_neuron_info results.
+        let neuron_id_to_expect_redact = vec![
+            (no_explicit_visibility_neuron.id.unwrap(), true),
+            (private_neuron.id.unwrap(), true),
+            // Unlike the previous two lines, expect_redact is false here,
+            // because these neurons are public (either explicitly, or by being
+            // a known neuron).
+            (public_neuron.id.unwrap(), false),
+            (known_neuron.id.unwrap(), false),
+        ];
+        main(neuron_id_to_expect_redact);
+    }
 
-    let joined_community_fund_timestamp_seconds =
-        NEURONS_FUND_NEURON_WITH_HOT_KEYS_AND_BALLOTS.joined_community_fund_timestamp_seconds;
-    let recent_ballots = NEURONS_FUND_NEURON_WITH_HOT_KEYS_AND_BALLOTS
-        .recent_ballots
-        .clone();
+    // Case B: Private neurons are NOT enforced.
+    {
+        // Here, private neuron enforcement is DISABLED, unlike the previous
+        // block/case.
+        let _restore_on_drop = temporarily_disable_private_neuron_enforcement();
+        assert!(!is_private_neuron_enforcement_enabled());
 
-    // NF status and recent ballots are not redacted when controller calls.
-    assert_eq!(
-        controller_get_result.joined_community_fund_timestamp_seconds,
-        joined_community_fund_timestamp_seconds,
-        "{:#?}",
-        controller_get_result,
-    );
-    assert_eq!(
-        controller_get_result.recent_ballots, recent_ballots,
-        "{:#?}",
-        controller_get_result,
-    );
-
-    // Ditto for hot_key.
-    assert_eq!(hot_key_get_result, controller_get_result);
-
-    // When random principal calls, ballots and NF status are redacted.
-    assert_eq!(
-        random_principal_get_result.joined_community_fund_timestamp_seconds, None,
-        "{:#?}",
-        random_principal_get_result,
-    );
-    assert_eq!(
-        random_principal_get_result.recent_ballots,
-        vec![],
-        "{:#?}",
-        random_principal_get_result,
-    );
-
-    // Step 3.2: Inspect list_neurons results.
-
-    assert_eq!(
-        controller_list_result.neuron_infos,
-        hashmap! {
-            neuron_id.id => controller_get_result,
-        },
-        "{:#?}",
-        controller_list_result,
-    );
-    assert_eq!(
-        hot_key_list_result.neuron_infos,
-        hashmap! {
-            neuron_id.id => hot_key_get_result,
-        },
-        "{:#?}",
-        hot_key_list_result,
-    );
-    assert_eq!(
-        random_principal_list_result.neuron_infos,
-        hashmap! {
-            neuron_id.id => random_principal_get_result,
-        },
-        "{:#?}",
-        random_principal_list_result,
-    );
-}
-
-#[test]
-fn get_neuron_info_private_enforcement_disabled() {
-    // Step 1: Prepare the world.
-
-    // This is the only thing different in step 1 that differs vs. the previous test.
-    let _restore_on_drop = temporarily_disable_private_neuron_enforcement();
-    assert!(!is_private_neuron_enforcement_enabled());
-
-    let neuron_id = NEURONS_FUND_NEURON_WITH_HOT_KEYS_AND_BALLOTS.id.unwrap();
-
-    let governance_proto = GovernanceProtoBuilder::new()
-        .with_neurons(vec![NEURONS_FUND_NEURON_WITH_HOT_KEYS_AND_BALLOTS.clone()])
-        .build();
-
-    let driver = fake::FakeDriver::default(); // Initialize the minting account
-    let governance = Governance::new(
-        governance_proto,
-        driver.get_fake_env(),
-        driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
-    );
-
-    // Step 2: Call the code under test. (Same as in the previous test.)
-
-    let controller = NEURONS_FUND_NEURON_WITH_HOT_KEYS_AND_BALLOTS
-        .controller
-        .unwrap();
-    let hot_key = *NEURONS_FUND_NEURON_WITH_HOT_KEYS_AND_BALLOTS
-        .hot_keys
-        .first()
-        .unwrap();
-    let random_principal_id = PrincipalId::new_user_test_id(617_157_922);
-
-    // Step 2.1: Call get_neuron_info.
-
-    let get_neuron_info = |requester| governance.get_neuron_info(&neuron_id, requester).unwrap();
-    let controller_get_result = get_neuron_info(controller);
-    let hot_key_get_result = get_neuron_info(hot_key);
-    let random_principal_get_result = get_neuron_info(random_principal_id);
-
-    // Step 2.2: Call list_neurons.
-
-    let list_neurons = |requester| {
-        governance.list_neurons(
-            &ListNeurons {
-                neuron_ids: vec![neuron_id.id],
-                include_neurons_readable_by_caller: false,
-                include_empty_neurons_readable_by_caller: None,
-                include_public_neurons_in_full_neurons: None,
-            },
-            requester,
-        )
-    };
-    let controller_list_result = list_neurons(controller);
-    let hot_key_list_result = list_neurons(hot_key);
-    let random_principal_list_result = list_neurons(random_principal_id);
-
-    // Step 3: Inspect results.
-
-    // Step 3.1: Inspect get_neuron_info results.
-
-    let joined_community_fund_timestamp_seconds =
-        NEURONS_FUND_NEURON_WITH_HOT_KEYS_AND_BALLOTS.joined_community_fund_timestamp_seconds;
-    let recent_ballots = NEURONS_FUND_NEURON_WITH_HOT_KEYS_AND_BALLOTS
-        .recent_ballots
-        .clone();
-
-    // NF status and recent ballots are not redacted when controller calls.
-    // (Same as previous test.)
-    assert_eq!(
-        controller_get_result.joined_community_fund_timestamp_seconds,
-        joined_community_fund_timestamp_seconds,
-        "{:#?}",
-        controller_get_result,
-    );
-    assert_eq!(
-        controller_get_result.recent_ballots, recent_ballots,
-        "{:#?}",
-        controller_get_result,
-    );
-
-    // Ditto for hot_key.
-    // (Same as previous test.)
-    assert_eq!(hot_key_get_result, controller_get_result);
-
-    // Unlike previous test, even random principal can see full NeuronInfo.
-    assert_eq!(random_principal_get_result, controller_get_result);
-
-    // Step 3.2: Inspect list_neurons results.
-
-    assert_eq!(
-        controller_list_result.neuron_infos,
-        hashmap! {
-            neuron_id.id => controller_get_result,
-        },
-        "{:#?}",
-        controller_list_result,
-    );
-    assert_eq!(
-        hot_key_list_result.neuron_infos,
-        hashmap! {
-            neuron_id.id => hot_key_get_result,
-        },
-        "{:#?}",
-        hot_key_list_result,
-    );
-    assert_eq!(
-        random_principal_list_result.neuron_infos,
-        hashmap! {
-            neuron_id.id => random_principal_get_result,
-        },
-        "{:#?}",
-        random_principal_list_result,
-    );
+        let neuron_id_to_expect_redact = vec![
+            // Here, expect_redact is false, unlike the previous block/case)
+            // where expect_redact is true for these neurons.
+            (no_explicit_visibility_neuron.id.unwrap(), false),
+            (private_neuron.id.unwrap(), false),
+            // Same as in the previous block/case.
+            (public_neuron.id.unwrap(), false),
+            (known_neuron.id.unwrap(), false),
+        ];
+        main(neuron_id_to_expect_redact);
+    }
 }
 
 // TODO - remove after migration of neuron_store.topic_follow_index to being stored on upgrade

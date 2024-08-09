@@ -712,12 +712,24 @@ impl Neuron {
         let mut recent_ballots = vec![];
         let mut joined_community_fund_timestamp_seconds = None;
 
-        let redact =
-            is_private_neuron_enforcement_enabled() && !self.is_hotkey_or_controller(&requester);
-        if !redact {
+        let show_full = !is_private_neuron_enforcement_enabled()
+            || self.visibility() == Some(Visibility::Public)
+            || self.is_hotkey_or_controller(&requester);
+        if show_full {
             recent_ballots.append(&mut self.recent_ballots.clone());
             joined_community_fund_timestamp_seconds = self.joined_community_fund_timestamp_seconds;
         }
+
+        let mut visibility = self.visibility.map(|visibility| visibility as i32);
+        let force_explicit_visibility =
+            is_private_neuron_enforcement_enabled() && visibility.is_none();
+        if force_explicit_visibility {
+            visibility = Some(if self.known_neuron_data.is_some() {
+                Visibility::Public
+            } else {
+                Visibility::Private
+            } as i32);
+        };
 
         NeuronInfo {
             retrieved_at_timestamp_seconds: now_seconds,
@@ -731,7 +743,7 @@ impl Neuron {
             joined_community_fund_timestamp_seconds,
             known_neuron_data: self.known_neuron_data.clone(),
             neuron_type: self.neuron_type,
-            visibility: self.visibility.map(|visibility| visibility as i32),
+            visibility,
         }
     }
 
