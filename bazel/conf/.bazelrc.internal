@@ -37,5 +37,9 @@ build:ci --noremote_local_fallback
 build:local --remote_cache=
 build:local --bes_backend=
 
+# Upload bes by default when running system tests so that e.g. failures can
+# be shared easily without having to rerun a potentially very-long systest
+build:systest --config=bes
+
 build:systest --s3_endpoint=https://s3-upload.idx.dfinity.network
 build:testnet --s3_endpoint=https://s3-upload.idx.dfinity.network
