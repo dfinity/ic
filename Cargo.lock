@@ -1875,6 +1875,7 @@ dependencies = [
  "cloudflare",
  "flate2",
  "futures",
+ "http 1.1.0",
  "ic-agent",
  "ic-http-certification",
  "ic-response-verification",
@@ -2164,6 +2165,16 @@ dependencies = [
  "libc",
  "time",
  "winapi 0.3.9",
+]
+
+[[package]]
+name = "cloner-canister-types"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "futures",
+ "ic-cdk 0.13.2",
+ "serde",
 ]
 
 [[package]]
@@ -9079,10 +9090,14 @@ dependencies = [
  "candid_parser",
  "clap 4.4.6",
  "hex",
+ "maplit",
+ "reqwest 0.12.5",
+ "serde",
  "serde_json",
  "strum 0.26.2",
  "strum_macros 0.26.2",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -14912,6 +14927,7 @@ dependencies = [
  "candid",
  "canister-test",
  "canister_http",
+ "cloner-canister-types",
  "dfn_candid",
  "ic-base-types",
  "ic-cdk 0.13.2",

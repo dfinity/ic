@@ -456,7 +456,9 @@ impl ExecutionEnvironment {
     }
 
     /// Executes a replicated message sent to a subnet.
-    /// Returns the new replicated state and the number of left instructions.
+    ///
+    /// Returns the new replicated state and an optional number of instructions
+    /// consumed by the message execution.
     #[allow(clippy::cognitive_complexity)]
     #[allow(clippy::too_many_arguments)]
     pub fn execute_subnet_message(
