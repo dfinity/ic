@@ -34,7 +34,6 @@ use registry_canister::{
         do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
         do_add_node_operator::AddNodeOperatorPayload,
         do_add_nodes_to_subnet::AddNodesToSubnetPayload,
-        do_bless_replica_version::BlessReplicaVersionPayload,
         do_change_subnet_membership::ChangeSubnetMembershipPayload,
         do_create_subnet::CreateSubnetPayload,
         do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
@@ -350,22 +349,6 @@ fn atomic_mutate() {
 
     let bytes = serialize_atomic_mutate_response(response_pb).expect("Error serializing response");
     reply(&bytes)
-}
-
-#[export_name = "canister_update bless_replica_version"]
-fn bless_replica_version() {
-    check_caller_is_governance_and_log("bless_replica_version");
-    over(candid_one, |payload: BlessReplicaVersionPayload| {
-        bless_replica_version_(payload)
-    });
-}
-
-#[candid_method(update, rename = "bless_replica_version")]
-fn bless_replica_version_(_payload: BlessReplicaVersionPayload) {
-    panic!(
-        "{}bless_replica_version is deprecated and should no longer be used!",
-        LOG_PREFIX
-    );
 }
 
 #[export_name = "canister_update retire_replica_version"]
