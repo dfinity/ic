@@ -14047,6 +14047,24 @@ fn test_neuron_info_private_enforcement() {
             (known_neuron.id.unwrap(), false),
         ];
         main(neuron_id_to_expect_redact);
+
+        for (neuron_id, expected_visibility) in [
+            (
+                no_explicit_visibility_neuron.id.unwrap(),
+                Visibility::Private,
+            ),
+            (private_neuron.id.unwrap(), Visibility::Private),
+            (public_neuron.id.unwrap(), Visibility::Public),
+            (known_neuron.id.unwrap(), Visibility::Public),
+        ] {
+            let neuron_info = governance.get_neuron_info(&neuron_id, controller).unwrap();
+            assert_eq!(
+                neuron_info.visibility,
+                Some(expected_visibility as i32),
+                "{:?}",
+                neuron_info,
+            );
+        }
     }
 
     // Case B: Private neurons are NOT enforced.
@@ -14066,6 +14084,17 @@ fn test_neuron_info_private_enforcement() {
             (known_neuron.id.unwrap(), false),
         ];
         main(neuron_id_to_expect_redact);
+
+        // Insepct visibility. This time, it should always be None.
+        for neuron_id in [
+            no_explicit_visibility_neuron.id.unwrap(),
+            private_neuron.id.unwrap(),
+            public_neuron.id.unwrap(),
+            known_neuron.id.unwrap(),
+        ] {
+            let neuron_info = governance.get_neuron_info(&neuron_id, controller).unwrap();
+            assert_eq!(neuron_info.visibility, None, "{:?}", neuron_info,);
+        }
     }
 }
 

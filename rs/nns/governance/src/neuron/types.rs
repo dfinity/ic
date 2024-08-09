@@ -720,15 +720,12 @@ impl Neuron {
             joined_community_fund_timestamp_seconds = self.joined_community_fund_timestamp_seconds;
         }
 
-        let mut visibility = self.visibility.map(|visibility| visibility as i32);
-        let force_explicit_visibility =
-            is_private_neuron_enforcement_enabled() && visibility.is_none();
-        if force_explicit_visibility {
-            visibility = Some(if self.known_neuron_data.is_some() {
-                Visibility::Public
-            } else {
-                Visibility::Private
-            } as i32);
+        let visibility = if !is_private_neuron_enforcement_enabled() {
+            None
+        } else if self.known_neuron_data.is_some() {
+            Some(Visibility::Public as i32)
+        } else {
+            Some(self.visibility.unwrap_or(Visibility::Private) as i32)
         };
 
         NeuronInfo {
