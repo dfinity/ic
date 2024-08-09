@@ -2075,7 +2075,12 @@ fn get_canister_status_with_incorrect_controller() {
         let other_sender = user_test_id(1).get();
         let canister = state.canister_state_mut(&canister_id).unwrap();
         assert_eq!(
-            canister_manager.get_canister_status(other_sender, canister, SMALL_APP_SUBNET_MAX_SIZE),
+            canister_manager.get_canister_status(
+                other_sender,
+                canister,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                NumBytes::from(0)
+            ),
             Err(CanisterManagerError::CanisterInvalidController {
                 canister_id,
                 controllers_expected: btreeset! {sender},
@@ -2113,7 +2118,12 @@ fn get_canister_status_of_running_canister() {
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
         let status = canister_manager
-            .get_canister_status(sender, canister, SMALL_APP_SUBNET_MAX_SIZE)
+            .get_canister_status(
+                sender,
+                canister,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                NumBytes::from(0),
+            )
             .unwrap()
             .status();
         assert_eq!(status, CanisterStatusType::Running);
@@ -2148,7 +2158,12 @@ fn get_canister_status_of_self() {
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
         let status = canister_manager
-            .get_canister_status(canister_id.get(), canister, SMALL_APP_SUBNET_MAX_SIZE)
+            .get_canister_status(
+                canister_id.get(),
+                canister,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                NumBytes::from(0),
+            )
             .unwrap()
             .status();
         assert_eq!(status, CanisterStatusType::Running);
@@ -2165,7 +2180,12 @@ fn get_canister_status_of_stopped_canister() {
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
         let status = canister_manager
-            .get_canister_status(sender, canister, SMALL_APP_SUBNET_MAX_SIZE)
+            .get_canister_status(
+                sender,
+                canister,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                NumBytes::from(0),
+            )
             .unwrap()
             .status();
         assert_eq!(status, CanisterStatusType::Stopped);
@@ -2182,7 +2202,12 @@ fn get_canister_status_of_stopping_canister() {
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
         let status = canister_manager
-            .get_canister_status(sender, canister, SMALL_APP_SUBNET_MAX_SIZE)
+            .get_canister_status(
+                sender,
+                canister,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                NumBytes::from(0),
+            )
             .unwrap()
             .status();
         assert_eq!(status, CanisterStatusType::Stopping);
@@ -2577,7 +2602,7 @@ fn can_get_canister_balance() {
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
         assert_matches!(
-            canister_manager.get_canister_status( sender, canister, SMALL_APP_SUBNET_MAX_SIZE),
+            canister_manager.get_canister_status( sender, canister, SMALL_APP_SUBNET_MAX_SIZE, NumBytes::from(0)),
             Ok(res) if res.cycles() == cycles.get()
         );
     });
