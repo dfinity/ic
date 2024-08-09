@@ -1914,9 +1914,10 @@ impl CanisterManager {
 
         // Delete old snapshot identified by `replace_snapshot` ID.
         if let Some(replace_snapshot) = replace_snapshot {
+            let old_snapshot = state.canister_snapshots.remove(replace_snapshot);
             // Already confirmed that `replace_snapshot` exists.
-            let is_removed = state.canister_snapshots.remove(replace_snapshot);
-            debug_assert!(is_removed.is_some());
+            debug_assert!(old_snapshot.is_some());
+            canister.system_state.snapshots_memory_usage -= old_snapshot.unwrap().size();
         }
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
@@ -1929,6 +1930,7 @@ impl CanisterManager {
         state
             .canister_snapshots
             .push(snapshot_id, Arc::new(new_snapshot));
+        canister.system_state.snapshots_memory_usage += new_snapshot_size;
         Ok(CanisterSnapshotResponse::new(
             &snapshot_id,
             state.time().as_nanos_since_unix_epoch(),
@@ -2150,7 +2152,10 @@ impl CanisterManager {
                 }
             }
         }
-        state.canister_snapshots.remove(delete_snapshot_id);
+        let old_snapshot = state.canister_snapshots.remove(delete_snapshot_id);
+        // `old_snapshot` should be `Some` since we checked above.
+        debug_assert!(old_snapshot.is_some());
+        canister.system_state.snapshots_memory_usage -= old_snapshot.unwrap().size();
         Ok(())
     }
 }
