@@ -358,6 +358,12 @@ impl BlockMetadata {
     }
 }
 
+impl HasHash for BlockMetadata {
+    fn hash(&self) -> &CryptoHash {
+        self.hash.get_ref()
+    }
+}
+
 /// A BlockProposal is a HashedBlock with BlockMetadata signed by the block maker.
 pub type BlockProposal = Signed<HashedBlock, BasicSignature<BlockMetadata>>;
 
