@@ -96,7 +96,6 @@ jobs:
           compression-level: 9
           path: |
             bazel-bep.pb
-            bazel-bep.json
   bazel-build-all-config-check:
     runs-on:
       labels: dind-large
@@ -136,7 +135,6 @@ jobs:
           compression-level: 9
           path: |
             bazel-bep.pb
-            bazel-bep.json
   bazel-test-darwin-x86-64:
     name: Bazel Test Darwin x86-64
     timeout-minutes: 120
@@ -191,7 +189,6 @@ jobs:
           compression-level: 9
           path: |
             bazel-bep.pb
-            bazel-bep.json
       - name: Purge Bazel Output
         if: always()
         shell: bash
@@ -231,7 +228,6 @@ jobs:
           compression-level: 9
           path: |
             bazel-bep.pb
-            bazel-bep.json
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
     runs-on:
@@ -266,7 +262,6 @@ jobs:
           compression-level: 9
           path: |
             bazel-bep.pb
-            bazel-bep.json
   python-ci-tests:
     name: Python CI Tests
     runs-on:
