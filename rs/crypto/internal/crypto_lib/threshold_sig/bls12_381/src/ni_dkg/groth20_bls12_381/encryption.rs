@@ -366,6 +366,8 @@ pub fn verify_zk_proofs(
         })
     })?;
 
+    // TODO(CRP-2525) The proofs can be verified independently
+
     crypto::verify_ciphertext_integrity(
         &ciphertext,
         epoch,

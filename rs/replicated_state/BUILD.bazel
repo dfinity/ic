@@ -36,6 +36,7 @@ DEPENDENCIES = [
     "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
+    "@crate_index//:rayon",
     "@crate_index//:serde",
     "@crate_index//:slog",
     "@crate_index//:strum",

@@ -212,6 +212,7 @@ impl Request {
             | Ok(Method::SignWithSchnorr)
             | Ok(Method::BitcoinGetBalance)
             | Ok(Method::BitcoinGetUtxos)
+            | Ok(Method::BitcoinGetBlockHeaders)
             | Ok(Method::BitcoinSendTransaction)
             | Ok(Method::BitcoinSendTransactionInternal)
             | Ok(Method::BitcoinGetSuccessors)

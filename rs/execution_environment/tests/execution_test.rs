@@ -3,12 +3,13 @@ use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_config::{
     execution_environment::Config as HypervisorConfig,
+    flag_status::FlagStatus,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, MasterPublicKeyId, Method, Payload,
-    SignWithECDSAArgs, UpdateSettingsArgs, IC_00,
+    SignWithECDSAArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
@@ -21,6 +22,9 @@ use ic_types::{ingress::WasmResult, messages::NO_DEADLINE, CanisterId, Cycles, N
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use more_asserts::{assert_le, assert_lt};
 use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
+
+/// One megabyte for better readability.
+const MIB: u64 = 1024 * 1024;
 
 /// One billion for better cycles readability.
 const B: u128 = 1e9 as u128;
@@ -677,8 +681,8 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            subnet_memory_capacity: NumBytes::from(21 * 1024 * 1024), // 21 MiB,
-            subnet_memory_reservation: NumBytes::from(1024 * 1024),   // 1 MiB
+            subnet_memory_capacity: NumBytes::from(21 * MIB),
+            subnet_memory_reservation: NumBytes::from(MIB),
             ..Default::default()
         },
     ));
@@ -698,7 +702,7 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
         .update_settings(
             &canister_id,
             CanisterSettingsArgsBuilder::new()
-                .with_memory_allocation(20u64 * 1024 * 1024 + 1)
+                .with_memory_allocation(20u64 * MIB + 1)
                 .build(),
         )
         .unwrap_err();
@@ -708,10 +712,77 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
     env.update_settings(
         &canister_id,
         CanisterSettingsArgsBuilder::new()
-            .with_memory_allocation(20u64 * 1024 * 1024)
+            .with_memory_allocation(20u64 * MIB)
             .build(),
     )
     .unwrap();
+}
+
+#[test]
+fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
+    let mut subnet_config = SubnetConfig::new(SubnetType::Application);
+    subnet_config.scheduler_config.scheduler_cores = 2;
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig {
+            subnet_memory_capacity: NumBytes::from(100 * MIB),
+            subnet_memory_reservation: NumBytes::from(0),
+            canister_snapshots: FlagStatus::Enabled,
+            ..Default::default()
+        },
+    ));
+
+    let now = std::time::SystemTime::now();
+    env.set_time(now);
+    env.set_checkpoints_enabled(false);
+
+    let canister_id = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+    env.execute_ingress(
+        canister_id,
+        "update",
+        wasm()
+            // As there are 2 scheduler cores, the memory capacity is 100 / 2 = 50 MiB per core.
+            .memory_size_is_at_least(30 * MIB)
+            .reply_data(&[42])
+            .build(),
+    )
+    .expect("Error increasing the canister memory size");
+
+    let other_canister_id = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+    env.execute_ingress(
+        other_canister_id,
+        "update",
+        wasm()
+            // The memory capacity is (100 - 30) / 2 = 35 MiB per core.
+            .memory_size_is_at_least(25 * MIB)
+            .reply_data(&[42])
+            .build(),
+    )
+    .expect("Error increasing the canister memory size");
+
+    // This should take another 30 MiB on top of the 30 MiB of the canister state.
+    // The available memory at this point is 100 - 30 - 25 = 45 MiB.
+    env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .unwrap();
+
+    // Ensure that at least one round has passed between the attempts to take a snapshot.
+    env.tick();
+
+    // Taking a snapshot of the second canister should take another 25MiB, however the available
+    // memory at this point is 100 - 30 - 25 - 30 = 15 MiB, so it should fail.
+    let error = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(other_canister_id, None))
+        .map(|_| ())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::SubnetOversubscribed);
 }
 
 fn assert_replied(result: Result<WasmResult, UserError>) {
@@ -769,8 +840,8 @@ fn exceeding_memory_capacity_fails_during_message_execution() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            subnet_memory_capacity: NumBytes::from(21 * 1024 * 1024), // 21 MiB,
-            subnet_memory_reservation: NumBytes::from(1024 * 1024),   // 1 MiB
+            subnet_memory_capacity: NumBytes::from(21 * MIB),
+            subnet_memory_reservation: NumBytes::from(MIB),
             ..Default::default()
         },
     ));
@@ -792,7 +863,7 @@ fn exceeding_memory_capacity_fails_during_message_execution() {
     // capacity in the best case scenario and then should fail after that point because
     // the capacity split over 4 threads will be less than 1MiB (keep in mind the wasm
     // module of the canister also takes some space).
-    let memory_to_allocate = 1024 * 1024 / WASM_PAGE_SIZE_IN_BYTES; // 1MiB in Wasm pages.
+    let memory_to_allocate = MIB / WASM_PAGE_SIZE_IN_BYTES; // 1MiB in Wasm pages.
     let mut expected_result = 0;
     let mut iterations = 0;
     loop {
@@ -821,7 +892,7 @@ fn max_canister_memory_respected_even_when_no_memory_allocation_is_set() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            max_canister_memory_size: NumBytes::from(10 * 1024 * 1024), // 10 MiB,
+            max_canister_memory_size: NumBytes::from(10 * MIB),
             ..Default::default()
         },
     ));
@@ -862,8 +933,8 @@ fn subnet_memory_reservation_works() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            subnet_memory_capacity: NumBytes::from(120 * 1024 * 1024),
-            subnet_memory_reservation: NumBytes::from(50 * 1024 * 1024),
+            subnet_memory_capacity: NumBytes::from(120 * MIB),
+            subnet_memory_reservation: NumBytes::from(50 * MIB),
             ..Default::default()
         },
     ));
@@ -919,8 +990,8 @@ fn subnet_memory_reservation_scales_with_number_of_cores() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            subnet_memory_capacity: NumBytes::from(120 * 1024 * 1024),
-            subnet_memory_reservation: NumBytes::from(50 * 1024 * 1024),
+            subnet_memory_capacity: NumBytes::from(120 * MIB),
+            subnet_memory_reservation: NumBytes::from(50 * MIB),
             ..Default::default()
         },
     ));
@@ -1530,7 +1601,7 @@ fn test_consensus_queue_invariant_on_exceeding_heap_delta_limit() {
     // signing request but also to increase the stable memory to exceed the heap
     // delta limit.
 
-    let heap_delta_limit = 100 * 1024 * 1024; // 100 MiB
+    let heap_delta_limit = 100 * MIB;
 
     let mut subnet_config = SubnetConfig::new(SubnetType::Application);
     subnet_config.scheduler_config.subnet_heap_delta_capacity = NumBytes::new(heap_delta_limit);
@@ -1819,7 +1890,7 @@ fn current_interval_length_works_on_system_subnets() {
 #[test]
 #[ignore]
 fn system_subnets_are_not_rate_limited() {
-    const GIB: u64 = 1024 * 1024 * 1024;
+    const GIB: u64 = 1024 * MIB;
     const WASM_PAGE_SIZE: u64 = 65_536;
     const SUBNET_HEAP_DELTA_CAPACITY: u64 = 140 * GIB;
     // It's a bit less than 2GiB, otherwise the vector allocation in canister traps.

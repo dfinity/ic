@@ -1,6 +1,6 @@
 use candid::{candid_method, Decode, Encode};
-use dfn_core::api::{call_bytes, Funds};
 use downstream_calls_test::{CallOrResponse, State};
+use ic_cdk::api::call::call_raw;
 use ic_cdk_macros::update;
 
 fn main() {}
@@ -33,17 +33,17 @@ async fn reply_or_defer(mut state: State) -> State {
     loop {
         match state.actions.pop_front() {
             Some(CallOrResponse::Call(canister_id)) => {
-                let response = call_bytes(
-                    canister_id,
+                let response = call_raw(
+                    canister_id.into(),
                     "reply_or_defer",
-                    &Encode!(&State {
+                    Encode!(&State {
                         actions: state.actions,
                         call_count: state.call_count + 1,
                         current_depth: state.current_depth + 1,
                         depth_total: state.depth_total + state.current_depth,
                     })
                     .unwrap(),
-                    Funds::zero(),
+                    0,
                 )
                 .await
                 .expect("calling other canister failed");

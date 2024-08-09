@@ -1,5 +1,6 @@
 use candid::CandidType;
 use ic_base_types::PrincipalId;
+use ic_nervous_system_clients::update_settings::CanisterSettings;
 use serde::Deserialize;
 
 pub mod client;
@@ -60,4 +61,24 @@ impl ChangeCanisterControllersResponse {
             change_canister_controllers_result: ChangeCanisterControllersResult::Ok(()),
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, CandidType)]
+pub struct UpdateCanisterSettingsRequest {
+    // The canister ID of the target canister.
+    pub canister_id: PrincipalId,
+    // The settings to be updated.
+    pub settings: CanisterSettings,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, CandidType)]
+pub enum UpdateCanisterSettingsResponse {
+    Ok(()),
+    Err(UpdateCanisterSettingsError),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, CandidType)]
+pub struct UpdateCanisterSettingsError {
+    pub code: Option<i32>,
+    pub description: String,
 }

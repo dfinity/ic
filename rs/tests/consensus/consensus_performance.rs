@@ -49,19 +49,20 @@ use ic_consensus_system_test_utils::{
     limit_tc_ssh_command, rw_message::install_nns_with_customizations_and_check_progress,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
+use ic_system_test_driver::canister_agent::CanisterAgent;
 use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
 use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
+use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
 use ic_system_test_driver::driver::test_env_api::SshSession;
-use ic_system_test_driver::driver::test_env_api::{HasDependencies, IcNodeSnapshot};
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::{
-        HasTopologySnapshot, IcNodeContainer, NnsCanisterWasmStrategy, NnsCustomizations,
+        read_dependency_from_env_to_string, HasTopologySnapshot, IcNodeContainer, NnsCustomizations,
     },
 };
 use ic_system_test_driver::generic_workload_engine;
@@ -70,7 +71,8 @@ use ic_system_test_driver::generic_workload_engine::metrics::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    assert_canister_counter_with_retries, get_app_subnet_and_node, MetricsFetcher,
+    assert_canister_counter_with_retries, assert_create_agent_using_call_v2,
+    get_app_subnet_and_node, MetricsFetcher,
 };
 use ic_types::Height;
 
@@ -129,7 +131,6 @@ fn setup(env: TestEnv) {
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
     env.sync_with_prometheus();
@@ -181,7 +182,10 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
         "Step 1: Install {} canisters on the subnet..", canister_count
     );
     let mut canisters = Vec::new();
-    let agent = rt.block_on(app_node.build_canister_agent());
+    let agent = rt.block_on(async {
+        let agent = assert_create_agent_using_call_v2(app_node.get_public_url().as_str()).await;
+        CanisterAgent { agent }
+    });
 
     let nodes = env
         .topology_snapshot()
@@ -191,12 +195,10 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
         .nodes()
         .collect::<Vec<_>>();
     let agents = rt.block_on(async {
-        join_all(
-            nodes
-                .iter()
-                .cloned()
-                .map(|n| async move { n.build_canister_agent().await }),
-        )
+        join_all(nodes.iter().cloned().map(|n| async move {
+            let agent = assert_create_agent_using_call_v2(n.get_public_url().as_str()).await;
+            CanisterAgent { agent }
+        }))
         .await
     });
 
@@ -285,8 +287,7 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
     }
 
     if cfg!(feature = "upload_perf_systest_results") {
-        let branch_version = env
-            .read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
+        let branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
             .expect("tip-of-branch IC version");
 
         rt.block_on(persist_metrics(

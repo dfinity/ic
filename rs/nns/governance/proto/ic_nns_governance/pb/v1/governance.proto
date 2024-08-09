@@ -1552,7 +1552,6 @@ message NeuronsFundSnapshot {
     optional ic_base_types.pb.v1.PrincipalId controller = 6;
 
     // The principals that can vote, propose, and follow on behalf of this neuron.
-    // TODO(NNS1-3199): Populate this field with the neuron's hotkeys.
     repeated ic_base_types.pb.v1.PrincipalId hotkeys = 7;
 
     // Deprecated. Please use `controller` instead (not `hotkeys`!)
@@ -2312,6 +2311,7 @@ message Governance {
     }
 
     NeuronSubsetMetrics non_self_authenticating_controller_neuron_subset_metrics = 38;
+    NeuronSubsetMetrics public_neuron_subset_metrics = 39;
   }
 
   GovernanceCachedMetrics metrics = 15;
@@ -2700,8 +2700,8 @@ message SettleNeuronsFundParticipationRequest {
 // the Neurons' Fund. However, this distribution also needs to be made available to the SNS Swap
 // that will use this information to create SNS neurons of an appropriate size for each
 // Neurons' Fund (as well as direct) participant. That is why in the `committed` case,
-// the NNS Governance should populate the `neurons_fund_participants` field, while in the `aborted`
-// case it should be empty.
+// the NNS Governance provides `neurons_fund_neuron_portions`, while in the `aborted`
+// case it does not.
 //
 // TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
 // manually propagated to (sns) swap.proto.
@@ -2847,5 +2847,20 @@ message RestoreAgingSummary {
     optional uint64 previous_total_stake_e8s = 3;
     // The current total stake of neurons in this group when considering to restore aging.
     optional uint64 current_total_stake_e8s = 4;
+  }
+}
+
+// The historical rewards that were provided to node providers, along with the contextual data
+// needed to calculate it.
+message ArchivedMonthlyNodeProviderRewards {
+  // The version of the rewards data.  These versions are added to accommodate changes to the
+  // rewards data structure over time.
+  oneof version {
+    V1 version_1 = 1;
+  }
+
+  // The first version of the stored rewards.
+  message V1 {
+    ic_nns_governance.pb.v1.MonthlyNodeProviderRewards rewards = 1;
   }
 }
