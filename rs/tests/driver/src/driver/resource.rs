@@ -1,6 +1,24 @@
+use super::constants::SSH_USERNAME;
+use super::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
+use crate::driver::farm::FarmResult;
+use crate::driver::farm::FileId;
+use crate::driver::farm::ImageLocation;
+use crate::driver::farm::ImageLocation::{IcOsImageViaUrl, ImageViaUrl};
+use crate::driver::farm::VMCreateResponse;
+use crate::driver::farm::{CreateVmRequest, HostFeature};
+use crate::driver::farm::{Farm, VmType};
 use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
+use crate::driver::ic::{ImageSizeGiB, VmAllocationStrategy, VmResources};
+use crate::driver::nested::NestedNode;
+use crate::driver::test_env::{TestEnv, TestEnvAttribute};
+use crate::driver::test_env_api::{
+    get_ic_os_img_sha256, get_ic_os_img_url, get_mainnet_ic_os_img_url,
+    get_malicious_ic_os_img_sha256, get_malicious_ic_os_img_url, HasIcDependencies,
+};
+use crate::driver::test_setup::{GroupSetup, InfraProvider};
 use crate::driver::universal_vm::UniversalVm;
 use crate::k8s::tnet::TNet;
+use crate::util::block_on;
 use anyhow::{self, bail};
 use kube::ResourceExt;
 use serde::{Deserialize, Serialize};
@@ -13,23 +31,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use url::Url;
 use zstd::stream::write::Encoder;
-
-use crate::driver::farm::FarmResult;
-use crate::driver::farm::FileId;
-use crate::driver::farm::ImageLocation;
-use crate::driver::farm::ImageLocation::{IcOsImageViaUrl, ImageViaUrl};
-use crate::driver::farm::VMCreateResponse;
-use crate::driver::farm::{CreateVmRequest, HostFeature};
-use crate::driver::farm::{Farm, VmType};
-use crate::driver::ic::{ImageSizeGiB, VmAllocationStrategy, VmResources};
-use crate::driver::nested::NestedNode;
-use crate::driver::test_env::{TestEnv, TestEnvAttribute};
-use crate::driver::test_env_api::HasIcDependencies;
-use crate::driver::test_setup::{GroupSetup, InfraProvider};
-use crate::util::block_on;
-
-use super::constants::SSH_USERNAME;
-use super::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
 
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(6);
 const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
@@ -162,8 +163,8 @@ pub fn get_resource_request(
                 "Using malicious guestos image for IC config."
             );
             (
-                test_env.get_malicious_ic_os_img_sha256()?,
-                test_env.get_malicious_ic_os_img_url()?,
+                get_malicious_ic_os_img_sha256()?,
+                get_malicious_ic_os_img_url()?,
             )
         } else if config.with_mainnet_config {
             warn!(
@@ -172,17 +173,14 @@ pub fn get_resource_request(
             );
             (
                 test_env.get_mainnet_ic_os_img_sha256()?,
-                test_env.get_mainnet_ic_os_img_url()?,
+                get_mainnet_ic_os_img_url()?,
             )
         } else {
             info!(
                 test_env.logger(),
                 "Using tip-of-branch guestos image for IC config."
             );
-            (
-                test_env.get_ic_os_img_sha256()?,
-                test_env.get_ic_os_img_url()?,
-            )
+            (get_ic_os_img_sha256()?, get_ic_os_img_url()?)
         }
     };
     let mut res_req = ResourceRequest::new(ImageType::IcOsImage, ic_os_img_url, ic_os_img_sha256);

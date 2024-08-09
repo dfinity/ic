@@ -5,7 +5,8 @@ pub mod types;
 
 use crate::types::candid::{
     Block, BlockTag, FeeHistory, FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs, LogEntry,
-    MultiRpcResult, ProviderError, RpcConfig, RpcError, RpcServices, TransactionReceipt,
+    MultiRpcResult, ProviderError, RpcConfig, RpcError, RpcServices, SendRawTransactionStatus,
+    TransactionReceipt,
 };
 use async_trait::async_trait;
 use candid::utils::ArgumentEncoder;
@@ -47,6 +48,7 @@ pub struct OverrideRpcConfig {
     pub eth_fee_history: Option<RpcConfig>,
     pub eth_get_transaction_receipt: Option<RpcConfig>,
     pub eth_get_transaction_count: Option<RpcConfig>,
+    pub eth_send_raw_transaction: Option<RpcConfig>,
 }
 
 impl<L: Sink> EvmRpcClient<IcRuntime, L> {
@@ -110,6 +112,18 @@ impl<R: Runtime, L: Sink> EvmRpcClient<R, L> {
             "eth_getTransactionCount",
             self.override_rpc_config.eth_get_transaction_count.clone(),
             args,
+        )
+        .await
+    }
+
+    pub async fn eth_send_raw_transaction(
+        &self,
+        raw_signed_tx_hex: String,
+    ) -> MultiRpcResult<SendRawTransactionStatus> {
+        self.call_internal(
+            "eth_sendRawTransaction",
+            self.override_rpc_config.eth_send_raw_transaction.clone(),
+            raw_signed_tx_hex,
         )
         .await
     }
