@@ -1713,6 +1713,7 @@ fn test_claim_swap_neurons_rejects_unauthorized_access() {
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // Build the request, but leave it empty as it is not relevant to the test
+    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
         neuron_parameters: vec![],
         neuron_recipes: None,
@@ -1762,6 +1763,7 @@ fn test_claim_swap_neurons_reports_invalid_neuron_parameters() {
     let test_neuron_id = NeuronId::new_test_neuron_id(1);
 
     // Create a request with an invalid NeuronParameter
+    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
         neuron_parameters: vec![],
         neuron_recipes: Some(NeuronRecipes::from(vec![NeuronRecipe {
@@ -1807,6 +1809,7 @@ fn test_claim_swap_neurons_reports_already_existing_neurons() {
 
     // Create a request with a neuron id that should collide with the neuron already inserted into
     // Governance
+    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
         neuron_parameters: vec![],
         neuron_recipes: Some(NeuronRecipes::from(vec![NeuronRecipe {
@@ -1856,6 +1859,7 @@ fn test_claim_swap_neurons_reports_failure_if_neuron_cannot_be_added() {
     let test_neuron_id_failure = NeuronId::new_test_neuron_id(2);
 
     // Create a request with a NeuronParameter should succeed
+    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
         neuron_parameters: vec![],
         neuron_recipes: Some(NeuronRecipes::from(vec![
@@ -1933,6 +1937,7 @@ fn test_claim_swap_neurons_succeeds() {
         followees: Some(NeuronIds::from(vec![NeuronId::new_test_neuron_id(20)])),
     };
 
+    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
         neuron_parameters: vec![],
         neuron_recipes: Some(NeuronRecipes::from(vec![

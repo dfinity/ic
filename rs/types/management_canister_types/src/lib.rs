@@ -774,6 +774,7 @@ impl UninstallCodeArgs {
 
 impl Payload<'_> for UninstallCodeArgs {}
 
+// TODO(EXC-1670): remove after migration to `LogVisibilityV2`.
 /// Log visibility for a canister.
 /// ```text
 /// variant {
@@ -781,13 +782,39 @@ impl Payload<'_> for UninstallCodeArgs {}
 ///    public;
 /// }
 /// ```
-#[derive(Default, Clone, Copy, CandidType, Deserialize, Debug, PartialEq, Eq, EnumIter)]
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq, EnumIter)]
 pub enum LogVisibility {
     #[default]
     #[serde(rename = "controllers")]
     Controllers = 1,
     #[serde(rename = "public")]
     Public = 2,
+}
+
+// Ensure forward compatibility with the new `LogVisibilityV2`.
+// First read the old `LogVisibility`, if it fails (e.g., for `LogVisibilityV2::AllowedViewers`),
+// try to read the new `LogVisibilityV2`.
+impl Payload<'_> for LogVisibility {
+    fn decode(blob: &'_ [u8]) -> Result<Self, UserError> {
+        let result =
+            match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error) {
+                Ok(log_visibility) => log_visibility,
+                // Try to decode as LogVisibilityV2 and convert to LogVisibility
+                Err(_) => Self::from(LogVisibilityV2::decode(blob)?),
+            };
+        Ok(result)
+    }
+}
+
+impl From<LogVisibilityV2> for LogVisibility {
+    fn from(item: LogVisibilityV2) -> Self {
+        match item {
+            LogVisibilityV2::Controllers => Self::Controllers,
+            LogVisibilityV2::Public => Self::Public,
+            // Fall back to the default value.
+            LogVisibilityV2::AllowedViewers(_) => Self::default(),
+        }
+    }
 }
 
 impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
@@ -806,6 +833,174 @@ impl From<pb_canister_state_bits::LogVisibility> for LogVisibility {
             pb_canister_state_bits::LogVisibility::Controllers => Self::Controllers,
             pb_canister_state_bits::LogVisibility::Public => Self::Public,
         }
+    }
+}
+
+/// Maximum number of allowed log viewers (specified in the interface spec).
+const MAX_ALLOWED_LOG_VIEWERS_COUNT: usize = 10;
+
+pub type BoundedAllowedViewers =
+    BoundedVec<MAX_ALLOWED_LOG_VIEWERS_COUNT, UNBOUNDED, UNBOUNDED, PrincipalId>;
+
+/// Log visibility for a canister.
+/// ```text
+/// variant {
+///    controllers;
+///    public;
+///    allowed_viewers: vec principal;
+/// }
+/// ```
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq, EnumIter)]
+pub enum LogVisibilityV2 {
+    #[default]
+    #[serde(rename = "controllers")]
+    Controllers,
+    #[serde(rename = "public")]
+    Public,
+    #[serde(rename = "allowed_viewers")]
+    AllowedViewers(BoundedAllowedViewers),
+}
+
+// Ensure backward compatibility with the old `LogVisibility`.
+// `LogVisibilityV2` extends `LogVisibility` with an additional variant, `AllowedViewers`.
+// When decoding, if `AllowedViewers` is encountered, it is changed to a default value
+// to maintain compatibility with the old `LogVisibility`.
+impl Payload<'_> for LogVisibilityV2 {
+    fn decode(blob: &'_ [u8]) -> Result<Self, UserError> {
+        match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error) {
+            // Fall back to the default value.
+            Ok(Self::AllowedViewers(_)) => Ok(Self::default()),
+            Ok(log_visibility_v2) => Ok(log_visibility_v2),
+            Err(err) => Err(err),
+        }
+    }
+}
+
+impl From<LogVisibility> for LogVisibilityV2 {
+    fn from(item: LogVisibility) -> Self {
+        match item {
+            LogVisibility::Controllers => Self::Controllers,
+            LogVisibility::Public => Self::Public,
+        }
+    }
+}
+
+impl From<&LogVisibilityV2> for pb_canister_state_bits::LogVisibilityV2 {
+    fn from(item: &LogVisibilityV2) -> Self {
+        use pb_canister_state_bits as pb;
+        match item {
+            LogVisibilityV2::Controllers => pb::LogVisibilityV2 {
+                log_visibility_v2: Some(pb::log_visibility_v2::LogVisibilityV2::Controllers(1)),
+            },
+            LogVisibilityV2::Public => pb::LogVisibilityV2 {
+                log_visibility_v2: Some(pb::log_visibility_v2::LogVisibilityV2::Public(2)),
+            },
+            LogVisibilityV2::AllowedViewers(principals) => pb::LogVisibilityV2 {
+                log_visibility_v2: Some(pb::log_visibility_v2::LogVisibilityV2::AllowedViewers(
+                    pb::LogVisibilityAllowedViewers {
+                        principals: principals
+                            .get()
+                            .iter()
+                            .map(|c| (*c).into())
+                            .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>()
+                            .clone(),
+                    },
+                )),
+            },
+        }
+    }
+}
+
+impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb_canister_state_bits::LogVisibilityV2) -> Result<Self, Self::Error> {
+        use pb_canister_state_bits as pb;
+        let Some(log_visibility_v2) = item.log_visibility_v2 else {
+            return Err(ProxyDecodeError::MissingField(
+                "LogVisibilityV2::log_visibility_v2",
+            ));
+        };
+        match log_visibility_v2 {
+            pb::log_visibility_v2::LogVisibilityV2::Controllers(_) => Ok(Self::Controllers),
+            pb::log_visibility_v2::LogVisibilityV2::Public(_) => Ok(Self::Public),
+            pb::log_visibility_v2::LogVisibilityV2::AllowedViewers(data) => {
+                let data = data
+                    .principals
+                    .iter()
+                    .map(|p| {
+                        PrincipalId::try_from(p.raw.clone()).map_err(|e| {
+                            ProxyDecodeError::ValueOutOfRange {
+                                typ: "PrincipalId",
+                                err: e.to_string(),
+                            }
+                        })
+                    })
+                    .collect::<Result<Vec<PrincipalId>, _>>()?;
+                Ok(Self::AllowedViewers(BoundedAllowedViewers::new(data)))
+            }
+        }
+    }
+}
+
+#[test]
+fn test_log_visibility_v2_serialization_roundtrip() {
+    // Test `LogVisibilityV2` canidid serialization/deserialization.
+    for (initial, expected) in [
+        (LogVisibilityV2::Controllers, LogVisibilityV2::Controllers),
+        (LogVisibilityV2::Public, LogVisibilityV2::Public),
+        (
+            LogVisibilityV2::AllowedViewers(Default::default()),
+            LogVisibilityV2::default(),
+        ),
+    ] {
+        let encoded = LogVisibilityV2::encode(&initial);
+        let decoded = LogVisibilityV2::decode(&encoded).unwrap();
+        assert_eq!(decoded, expected);
+    }
+}
+
+#[test]
+fn test_log_visibility_v2_default_canidid_backward_compatibility() {
+    // Test `LogVisibilityV2` is backward compatible with `LogVisibility`
+    // via default canidid serialization.
+    for (initial, expected) in [
+        (LogVisibility::Controllers, LogVisibilityV2::Controllers),
+        (LogVisibility::Public, LogVisibilityV2::Public),
+    ] {
+        let encoded = Encode!(&initial).unwrap();
+        let decoded = Decode!(&encoded, LogVisibilityV2).unwrap();
+        assert_eq!(decoded, expected);
+    }
+}
+
+#[test]
+fn test_log_visibility_v2_backward_compatibility() {
+    // Test `LogVisibilityV2` is backward compatible with `LogVisibility`.
+    for (initial, expected) in [
+        (LogVisibility::Controllers, LogVisibilityV2::Controllers),
+        (LogVisibility::Public, LogVisibilityV2::Public),
+    ] {
+        let encoded = LogVisibility::encode(&initial);
+        let decoded = LogVisibilityV2::decode(&encoded).unwrap();
+        assert_eq!(decoded, expected);
+    }
+}
+
+#[test]
+fn test_log_visibility_v2_forward_compatibility() {
+    // Test `LogVisibilityV2` is forward compatible with `LogVisibility`.
+    for (initial, expected) in [
+        (LogVisibilityV2::Controllers, LogVisibility::Controllers),
+        (LogVisibilityV2::Public, LogVisibility::Public),
+        (
+            LogVisibilityV2::AllowedViewers(Default::default()),
+            LogVisibility::default(),
+        ),
+    ] {
+        let encoded = LogVisibilityV2::encode(&initial);
+        let decoded = LogVisibility::decode(&encoded).unwrap();
+        assert_eq!(decoded, expected);
     }
 }
 
@@ -865,8 +1060,8 @@ impl DefiniteCanisterSettingsArgs {
         self.reserved_cycles_limit.clone()
     }
 
-    pub fn log_visibility(&self) -> LogVisibility {
-        self.log_visibility
+    pub fn log_visibility(&self) -> &LogVisibility {
+        &self.log_visibility
     }
 }
 
