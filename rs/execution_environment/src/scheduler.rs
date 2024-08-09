@@ -30,8 +30,7 @@ use ic_replicated_state::{
 };
 use ic_system_api::InstructionLimits;
 use ic_types::{
-    consensus::idkg::PreSigId,
-    crypto::canister_threshold_sig::MasterPublicKey,
+    batch::IDkgData,
     ingress::{IngressState, IngressStatus},
     messages::{CanisterMessage, Ingress, MessageId, Response, StopCanisterContext, NO_DEADLINE},
     AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, LongExecutionMode,
@@ -481,7 +480,7 @@ impl SchedulerImpl {
         ongoing_long_install_code: bool,
         long_running_canister_ids: BTreeSet<CanisterId>,
         registry_settings: &RegistryExecutionSettings,
-        idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        idkg_data: &BTreeMap<MasterPublicKeyId, IDkgData>,
     ) -> ReplicatedState {
         loop {
             let mut available_subnet_messages = false;
@@ -508,7 +507,7 @@ impl SchedulerImpl {
                     round_limits,
                     registry_settings,
                     measurement_scope,
-                    idkg_subnet_public_keys,
+                    idkg_data,
                 );
                 state = new_state;
 
@@ -540,7 +539,7 @@ impl SchedulerImpl {
         round_limits: &mut RoundLimits,
         registry_settings: &RegistryExecutionSettings,
         measurement_scope: &MeasurementScope,
-        idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        idkg_data: &BTreeMap<MasterPublicKeyId, IDkgData>,
     ) -> (ReplicatedState, Option<NumInstructions>) {
         let instruction_limits = get_instructions_limits_for_subnet_message(
             self.deterministic_time_slicing,
@@ -554,7 +553,7 @@ impl SchedulerImpl {
             state,
             instruction_limits,
             csprng,
-            idkg_subnet_public_keys,
+            idkg_data,
             registry_settings,
             round_limits,
         );
@@ -647,7 +646,7 @@ impl SchedulerImpl {
         root_measurement_scope: &MeasurementScope<'a>,
         scheduler_round_limits: &mut SchedulerRoundLimits,
         registry_settings: &RegistryExecutionSettings,
-        idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        idkg_data: &BTreeMap<MasterPublicKeyId, IDkgData>,
     ) -> (ReplicatedState, BTreeSet<CanisterId>) {
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, root_measurement_scope);
@@ -700,7 +699,7 @@ impl SchedulerImpl {
                         ongoing_long_install_code,
                         long_running_canister_ids,
                         registry_settings,
-                        idkg_subnet_public_keys,
+                        idkg_data,
                     );
                     scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
                 }
@@ -1422,8 +1421,7 @@ impl Scheduler for SchedulerImpl {
         &self,
         mut state: ReplicatedState,
         randomness: Randomness,
-        idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-        idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+        idkg_data: BTreeMap<MasterPublicKeyId, IDkgData>,
         current_round: ExecutionRound,
         round_summary: Option<ExecutionRoundSummary>,
         current_round_type: ExecutionRoundType,
@@ -1582,7 +1580,7 @@ impl Scheduler for SchedulerImpl {
                     &mut subnet_round_limits,
                     registry_settings,
                     &measurement_scope,
-                    &idkg_subnet_public_keys,
+                    &idkg_data,
                 );
                 state = new_state;
                 if subnet_round_limits.reached() {
@@ -1643,7 +1641,7 @@ impl Scheduler for SchedulerImpl {
                     &mut subnet_round_limits,
                     registry_settings,
                     &measurement_scope,
-                    &idkg_subnet_public_keys,
+                    &idkg_data,
                 );
                 state = new_state;
             }
@@ -1702,7 +1700,7 @@ impl Scheduler for SchedulerImpl {
             &root_measurement_scope,
             &mut scheduler_round_limits,
             registry_settings,
-            &idkg_subnet_public_keys,
+            &idkg_data,
         );
 
         // Update [`SignWithThresholdContext`]s by assigning randomness and matching pre-signatures.
@@ -1714,9 +1712,15 @@ impl Scheduler for SchedulerImpl {
                 .values_mut()
                 .collect();
 
+            let pre_signature_stash = &mut state
+                .metadata
+                .subnet_call_context_manager
+                .pre_signature_stash;
+
             update_signature_request_contexts(
                 current_round,
-                idkg_pre_signature_ids,
+                idkg_data,
+                pre_signature_stash,
                 contexts,
                 &mut csprng,
                 registry_settings,

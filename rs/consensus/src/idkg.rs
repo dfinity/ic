@@ -346,6 +346,7 @@ impl IDkgImpl {
             return;
         }
 
+        // TODO: also retain transcripts in certified state
         match IDkgProtocol::retain_active_transcripts(&*self.crypto, &active_transcripts) {
             Err(IDkgRetainKeysError::TransientInternalError { internal_error }) => {
                 warn!(

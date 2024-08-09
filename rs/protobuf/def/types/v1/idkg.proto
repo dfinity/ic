@@ -140,6 +140,36 @@ message PreSignatureRef {
   }
 }
 
+message EcdsaDeliveredPreSignature {
+  uint64 pre_signature_id = 1;
+  uint64 height = 2;
+  PreSignatureQuadruple pre_signature = 3;
+}
+
+message SchnorrDeliveredPreSignature {
+  uint64 pre_signature_id = 1;
+  uint64 height = 2;
+  PreSignatureTranscript pre_signature = 3;
+}
+
+message PreSignatureQuadruple {
+  registry.subnet.v1.IDkgTranscript kappa_unmasked = 1;
+  registry.subnet.v1.IDkgTranscript lambda_masked = 2;
+  registry.subnet.v1.IDkgTranscript kappa_times_lambda = 3;
+  registry.subnet.v1.IDkgTranscript key_times_lambda = 4;
+}
+
+message PreSignatureTranscript {
+  registry.subnet.v1.IDkgTranscript blinder_unmasked = 1;
+}
+
+message PreSignature {
+  oneof msg {
+    PreSignatureQuadruple ecdsa = 1;
+    PreSignatureTranscript schnorr = 2;
+  }
+}
+
 message QuadrupleInCreation {
   reserved 1, 2, 5;
 

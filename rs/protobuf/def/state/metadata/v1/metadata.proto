@@ -10,6 +10,7 @@ import "state/canister_state_bits/v1/canister_state_bits.proto";
 import "state/ingress/v1/ingress.proto";
 import "state/queues/v1/queues.proto";
 import "types/v1/types.proto";
+import "types/v1/idkg.proto";
 
 message Time {
   uint64 time_nanos = 1;
@@ -72,11 +73,13 @@ message SetupInitialDkgContextTree {
 message EcdsaArguments {
   registry.crypto.v1.EcdsaKeyId key_id = 1;
   bytes message_hash = 2;
+  types.v1.EcdsaDeliveredPreSignature pre_signature = 3;
 }
 
 message SchnorrArguments {
   registry.crypto.v1.SchnorrKeyId key_id = 1;
   bytes message = 2;
+  types.v1.SchnorrDeliveredPreSignature pre_signature = 3;
 }
 
 message ThresholdArguments {
@@ -92,14 +95,19 @@ message SignWithThresholdContext {
   repeated bytes derivation_path_vec = 3;
   bytes pseudo_random_id = 4;
   uint64 batch_time = 5;
-  optional uint64 pre_signature_id = 6;
-  optional uint64 height = 7;
+  reserved 6, 7;
   optional bytes nonce = 8;
 }
 
 message SignWithThresholdContextTree {
   uint64 callback_id = 1;
   SignWithThresholdContext context = 2;
+}
+
+message PreSignatureStashTree {
+  registry.crypto.v1.MasterPublicKeyId key_id = 1;
+  registry.subnet.v1.IDkgTranscriptId key_transcript_id = 2;
+  repeated types.v1.PreSignature pre_signatures = 3;
 }
 
 enum HttpMethod {
@@ -239,6 +247,7 @@ message SubnetCallContextManager {
   repeated RawRandContext raw_rand_contexts = 16;
   repeated IDkgDealingsContextTree idkg_dealings_contexts = 17;
   repeated SignWithThresholdContextTree sign_with_threshold_contexts = 18;
+  repeated PreSignatureStashTree pre_signatures = 19;
 }
 
 message SubnetMetrics {
