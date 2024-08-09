@@ -2,15 +2,15 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test_s
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [] # Nice.
+DEPENDENCIES = []  # Nice.
 
 DEV_DEPENDENCIES = [
-    "@crate_index//:rand", # Used by doc test.
+    "@crate_index//:rand",  # Used by doc test.
 ]
 
 LIB_SRCS = glob(
     ["src/**"],
-    exclude=["**/*tests.rs"],
+    exclude = ["**/*tests.rs"],
 )
 
 rust_library(
