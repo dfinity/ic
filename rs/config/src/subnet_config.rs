@@ -161,6 +161,11 @@ const DEFAULT_RESERVED_BALANCE_LIMIT: Cycles = Cycles::new(5 * T);
 /// 1/10th of a round.
 pub const DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS: NumInstructions = NumInstructions::new(200_000_000);
 
+/// Baseline cost for creating or loading a canister snapshot (2B instructions).
+/// The cost is based on the benchmarks: rs/execution_environment/benches/management_canister/
+pub const DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS: NumInstructions =
+    NumInstructions::new(2_000_000_000);
+
 /// The per subnet type configuration for the scheduler component
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SchedulerConfig {
@@ -259,6 +264,9 @@ pub struct SchedulerConfig {
 
     /// Number of instructions to count when uploading a chunk to the wasm store.
     pub upload_wasm_chunk_instructions: NumInstructions,
+
+    /// Number of instructions to count when creating or loading a canister snapshot.
+    pub canister_snapshot_baseline_instructions: NumInstructions,
 }
 
 impl SchedulerConfig {
@@ -286,6 +294,8 @@ impl SchedulerConfig {
             dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
             upload_wasm_chunk_instructions: DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS,
+            canister_snapshot_baseline_instructions:
+                DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS,
         }
     }
 
@@ -328,6 +338,7 @@ impl SchedulerConfig {
             dirty_page_overhead: SYSTEM_SUBNET_DIRTY_PAGE_OVERHEAD,
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
             upload_wasm_chunk_instructions: NumInstructions::from(0),
+            canister_snapshot_baseline_instructions: NumInstructions::from(0),
         }
     }
 
@@ -358,6 +369,8 @@ impl SchedulerConfig {
             dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
             accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
             upload_wasm_chunk_instructions: DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS,
+            canister_snapshot_baseline_instructions:
+                DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS,
         }
     }
 

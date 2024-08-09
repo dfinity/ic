@@ -306,6 +306,9 @@ where
         subnet_configs
             .scheduler_config
             .upload_wasm_chunk_instructions,
+        subnet_configs
+            .scheduler_config
+            .canister_snapshot_baseline_instructions,
     );
     for Benchmark(id, wat, expected_ops) in benchmarks {
         run_benchmark(
