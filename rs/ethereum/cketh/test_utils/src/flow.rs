@@ -648,6 +648,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> LatestTransactionCountProcessWi
         (override_mock)(default_eth_get_latest_transaction_count)
             .build()
             .expect_rpc_calls(&self.setup);
+        self.setup.as_ref().env.tick();
         self
     }
 
