@@ -436,6 +436,7 @@ service : {
   deploy_guestos_to_all_unassigned_nodes : (
     DeployGuestosToAllUnassignedNodesPayload
   ) -> ();
+  deploy_hostos_to_some_nodes : (DeployHostosToSomeNodes) -> ();
   get_build_metadata : () -> (text) query;
   get_node_operators_and_dcs_of_node_provider : (principal) -> (GetNodeOperatorsAndDcsOfNodeProviderResponse) query;
   get_node_providers_monthly_xdr_rewards : () -> (GetNodeProvidersMonthlyXdrRewardsResponse) query;
@@ -467,7 +468,6 @@ service : {
   ) -> ();
   update_node_rewards_table : (UpdateNodeRewardsTableProposalPayload) -> ();
   update_nodes_hostos_version : (UpdateNodesHostosVersionPayload) -> ();
-  deploy_hostos_to_some_nodes : (DeployHostosToSomeNodes) -> ();
   update_ssh_readonly_access_for_all_unassigned_nodes : (
     UpdateSshReadOnlyAccessForAllUnassignedNodesPayload
   ) -> ();
