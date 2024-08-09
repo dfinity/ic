@@ -2238,17 +2238,18 @@ impl StateManagerImpl {
         //
         // In the future, separating these sets could clarify their distinct purposes and
         // simplify reasoning about correctness without relying heavily on input behavior.
-        let heights_to_keep: BTreeSet<Height> = states
+        let checkpoint_heights_to_keep: BTreeSet<Height> = states
             .states_metadata
             .keys()
             .copied()
             .filter(|height| {
                 *height == Self::INITIAL_STATE_HEIGHT || *height >= last_checkpoint_to_keep
             })
-            .chain(std::iter::once(latest_certified_height))
             .chain(latest_manifest_height)
-            .chain(extra_inmemory_heights_to_keep.iter().copied())
             .collect();
+
+        let mut extra_inmemory_heights_to_keep = extra_inmemory_heights_to_keep;
+        extra_inmemory_heights_to_keep.insert(latest_certified_height);
 
         // Send object to deallocation thread if it has capacity.
         let deallocate = |x| {
@@ -2263,7 +2264,7 @@ impl StateManagerImpl {
 
         let (removed, retained) = states.snapshots.drain(0..).partition(|snapshot| {
             heights_to_remove.contains(&snapshot.height)
-                && !heights_to_keep.contains(&snapshot.height)
+                && !extra_inmemory_heights_to_keep.contains(&snapshot.height)
         });
         states.snapshots = retained;
 
@@ -2300,7 +2301,7 @@ impl StateManagerImpl {
         deallocate(Box::new(removed));
 
         for (height, metadata) in states.states_metadata.range(heights_to_remove) {
-            if heights_to_keep.contains(height) {
+            if checkpoint_heights_to_keep.contains(height) {
                 continue;
             }
             if let Some(ref checkpoint_layout) = metadata.checkpoint_layout {
@@ -2313,7 +2314,7 @@ impl StateManagerImpl {
             .certifications_metadata
             .split_off(&last_height_to_keep);
 
-        for h in heights_to_keep.iter() {
+        for h in extra_inmemory_heights_to_keep.iter() {
             if let Some(cert_metadata) = states.certifications_metadata.remove(h) {
                 certifications_metadata.insert(*h, cert_metadata);
             }
@@ -2343,7 +2344,7 @@ impl StateManagerImpl {
 
         let mut metadata_to_keep = states.states_metadata.split_off(&last_height_to_keep);
 
-        for h in heights_to_keep.iter() {
+        for h in checkpoint_heights_to_keep.iter() {
             if let Some(metadata) = states.states_metadata.remove(h) {
                 metadata_to_keep.insert(*h, metadata);
             }
@@ -2370,7 +2371,7 @@ impl StateManagerImpl {
 
         #[cfg(debug_assertions)]
         {
-            use ic_interfaces_state_manager::CERT_ANY;
+            use ic_interfaces_state_manager::{CERT_ANY, CERT_CERTIFIED};
             let unfiltered_checkpoint_heights = self
                 .state_layout
                 .unfiltered_checkpoint_heights()
@@ -2383,12 +2384,15 @@ impl StateManagerImpl {
                 });
 
             let state_heights = self.list_state_heights(CERT_ANY);
+            let certified_state_heights = self.list_state_heights(CERT_CERTIFIED);
 
-            debug_assert!(heights_to_keep
+            debug_assert!(checkpoint_heights_to_keep
                 .iter()
-                .all(|h| unfiltered_checkpoint_heights.contains(h)
-                    || extra_inmemory_heights_to_keep.contains(h)
-                    || *h == latest_certified_height));
+                .all(|h| unfiltered_checkpoint_heights.contains(h)));
+
+            debug_assert!(extra_inmemory_heights_to_keep
+                .iter()
+                .all(|h| certified_state_heights.contains(h)));
 
             debug_assert!(state_heights.contains(&latest_state_height));
             debug_assert!(state_heights.contains(&latest_certified_height));
