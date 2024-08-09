@@ -22,13 +22,13 @@ use ic_sys::PAGE_SIZE;
 use ic_types::NumInstructions;
 use ic_wasm_transform::Body;
 use wasmparser::{BlockType, FuncType, Operator, ValType};
-use wasmtime_environ::WASM_PAGE_SIZE;
 
 use ic_types::NumBytes;
 
 use super::{instrumentation::SpecialIndices, SystemApiFunc};
 
 const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: i64 = 64 * 1024; // 4GiB
+const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 pub(super) fn replacement_functions(
     special_indices: SpecialIndices,

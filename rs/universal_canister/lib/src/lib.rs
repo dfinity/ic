@@ -17,7 +17,7 @@ use universal_canister::Ops;
 /// `rs/universal_canister`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm.gz");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("255a47e950aae825f38a53af4e72583f976e05f7bbff6f5c825a821049350cbf");
+    hex!("9c0b4ed1d729ffdd0e8d194df3be621f58a2fb86e1f1bbf556d89f43637de303");
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
