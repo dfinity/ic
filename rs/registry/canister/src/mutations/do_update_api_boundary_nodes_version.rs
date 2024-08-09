@@ -11,17 +11,41 @@ use crate::{common::LOG_PREFIX, registry::Registry};
 
 use super::common::{check_api_boundary_nodes_exist, check_replica_version_is_blessed};
 
+/// Deprcated; please use `DeployGuestOsToSomeApiBoundaryNodes` instead.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UpdateApiBoundaryNodesVersionPayload {
     pub node_ids: Vec<NodeId>,
     pub version: String,
 }
 
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct DeployGuestOsToSomeApiBoundaryNodes {
+    pub node_ids: Vec<NodeId>,
+    pub version: String,
+}
+
+impl From<UpdateApiBoundaryNodesVersionPayload> for DeployGuestOsToSomeApiBoundaryNodes {
+    fn from(src: UpdateApiBoundaryNodesVersionPayload) -> Self {
+        let UpdateApiBoundaryNodesVersionPayload { node_ids, version } = src;
+
+        Self { node_ids, version }
+    }
+}
+
 impl Registry {
-    /// Updates the version for a set of ApiBoundaryNodeRecords
+    /// Deprecated; please use `do_update_api_boundary_nodes_version`.
     pub fn do_update_api_boundary_nodes_version(
         &mut self,
         payload: UpdateApiBoundaryNodesVersionPayload,
+    ) {
+        let payload = DeployGuestOsToSomeApiBoundaryNodes::from(payload);
+        self.do_deploy_guestos_to_some_api_boundary_nodes(payload);
+    }
+
+    /// Updates the version for a set of ApiBoundaryNodeRecords
+    pub fn do_deploy_guestos_to_some_api_boundary_nodes(
+        &mut self,
+        payload: DeployGuestOsToSomeApiBoundaryNodes,
     ) {
         println!(
             "{}do_update_api_boundary_nodes_version: {:?}",
@@ -45,7 +69,7 @@ impl Registry {
 
     fn validate_update_api_boundary_nodes_version_payload(
         &self,
-        payload: &UpdateApiBoundaryNodesVersionPayload,
+        payload: &DeployGuestOsToSomeApiBoundaryNodes,
     ) {
         check_api_boundary_nodes_exist(self, &payload.node_ids);
         check_replica_version_is_blessed(self, &payload.version);
