@@ -373,9 +373,6 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
         b.iter_batched_ref(
             || g1_sparse_muln_instance(32, 16, rng),
             |points_scalars| {
-                // False positive `map_identity` warning.
-                // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
-                #[allow(clippy::map_identity)]
                 let points_scalars_refs: Vec<_> =
                     points_scalars.iter().map(|(p, s)| (p, s)).collect();
                 G1Projective::muln_affine_sparse_vartime(&points_scalars_refs[..]);
@@ -552,9 +549,6 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
         b.iter_batched_ref(
             || g2_sparse_muln_instance(32, 16, rng),
             |points_scalars| {
-                // False positive `map_identity` warning.
-                // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
-                #[allow(clippy::map_identity)]
                 let points_scalars_refs: Vec<_> =
                     points_scalars.iter().map(|(p, s)| (p, s)).collect();
                 G2Projective::muln_affine_sparse_vartime(&points_scalars_refs[..]);
@@ -642,9 +636,6 @@ fn pairing_ops(c: &mut Criterion) {
             b.iter_batched_ref(
                 || n_pairing_instance(n, rng),
                 |terms| {
-                    // False positive `map_identity` warning.
-                    // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
-                    #[allow(clippy::map_identity)]
                     let terms_ref = terms.iter().map(|(g1, g2)| (g1, g2)).collect::<Vec<_>>();
                     Gt::multipairing(terms_ref.as_slice())
                 },
@@ -697,9 +688,6 @@ fn bls12_381_batch_sig_verification(c: &mut Criterion) {
                 b.iter_batched_ref(
                     || (n_batch_sig_verification_instances(size, rng), rng.fork()),
                     |(sigs_pks_msgs, rng_fork)| {
-                        // False positive `map_identity` warning.
-                        // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
-                        #[allow(clippy::map_identity)]
                         let sigs_pks_msgs_refs: Vec<_> = sigs_pks_msgs
                             .iter()
                             .map(|(sig, pk, msg)| (sig, pk, msg))
@@ -789,9 +777,6 @@ fn bls12_381_batch_sig_verification_multithreaded(c: &mut Criterion) {
                             let sigs_pks_msgs_c = sigs_pks_msgs.clone();
                             let mut rng_for_thread = rng_fork.fork();
                             std::thread::spawn(move || {
-                                // False positive `map_identity` warning.
-                                // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
-                                #[allow(clippy::map_identity)]
                                 let sigs_pks_msgs_refs = sigs_pks_msgs_c
                                     [i * size_c / NUM_THREADS..(i + 1) * size_c / NUM_THREADS]
                                     .iter()

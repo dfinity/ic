@@ -73,11 +73,13 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/sns/init",
+    # Keep sorted.
     "//rs/nns/governance",
+    "//rs/nns/governance/api",
     "//rs/nns/governance/init",
-    "//rs/nns/sns-wasm",
     "//rs/nns/handlers/root/impl:root",
+    "//rs/nns/sns-wasm",
+    "//rs/sns/init",
     "//rs/sns/swap",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
@@ -89,11 +91,13 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
 })
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/sns/init:init--test_feature",
+    # Keep sorted.
     "//rs/nns/governance:governance--test_feature",
+    "//rs/nns/governance/api:api--test_feature",
     "//rs/nns/governance/init:init--test_feature",
-    "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/nns/handlers/root/impl:root--test_feature",
+    "//rs/nns/sns-wasm:sns-wasm--test_feature",
+    "//rs/sns/init:init--test_feature",
     "//rs/sns/swap:swap--test_feature",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
@@ -382,6 +386,20 @@ rust_ic_test(
 #
 # These let you watch the progress of the test, rather than only being able to see the output only
 # at the end.
+#
+# Troubleshooting
+# ===============
+#
+# Symptom: [Governance] Error when refreshing XDR rate in run_periodic_tasks: External: Error calling 'get_average_icp_xdr_conversion_rate': code: Some(5), message: Canister rkp4c-7iaaa-aaaaa-aaaca-cai is stopping
+#
+# Possible solution: Wait a few hours for next golden state to be generated.
+#
+# Possible cause: In the current golden state, the cycles-minting canister is calling
+# the exchange-rate canister. In this case, the CMC cannot be upgraded, because
+# it never transitions from the stopping state to the stopped state. This transition
+# is required in order to proceed with upgrading the CMC.
+#
+# TODO: When the plaform supports best-effort requests, make the CMC use that.
 rust_ic_test(
     name = "upgrade_canisters_with_golden_nns_state",
     # This uses on the order of 10 GB of disk space.

@@ -5,8 +5,9 @@
 
 use comparable::{Changed, U64Change};
 use fixtures::NNSStateChange;
-use fixtures::{principal, NNSBuilder, NeuronBuilder};
+use fixtures::{NNSBuilder, NeuronBuilder};
 use futures::future::FutureExt;
+use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
@@ -46,14 +47,16 @@ fn do_test_merge_neurons(
     // Start the NNS 20 years after genesis, to give lots of time for aging.
     let epoch = DEFAULT_TEST_START_TIMESTAMP_SECONDS + (20 * ONE_YEAR_SECONDS);
 
+    let controller = PrincipalId::new_user_test_id(42);
+
     let mut nns = NNSBuilder::new()
         .set_start_time(epoch)
         .set_economics(NetworkEconomics::with_default_values())
         .with_supply(0) // causes minting account to be created
-        .add_account_for(principal(1), 0)
+        .add_account_for(controller, 0)
         // the source
         .add_neuron(
-            NeuronBuilder::new(1, n1_cached_stake, principal(1))
+            NeuronBuilder::new(1, n1_cached_stake, controller)
                 .set_dissolve_delay(n1_dissolve)
                 .set_maturity(n1_maturity)
                 .set_neuron_fees(n1_fees)
@@ -61,7 +64,7 @@ fn do_test_merge_neurons(
         )
         // the target
         .add_neuron(
-            NeuronBuilder::new(2, n2_cached_stake, principal(1))
+            NeuronBuilder::new(2, n2_cached_stake, controller)
                 .set_dissolve_delay(n2_dissolve)
                 .set_maturity(n2_maturity)
                 .set_neuron_fees(n2_fees)
@@ -74,7 +77,7 @@ fn do_test_merge_neurons(
 
     // First simulate
     let simulate_neuron_response = nns.governance.simulate_manage_neuron(
-        &principal(1),
+        &controller,
         ManageNeuron {
             id: Some(NeuronId { id: 2 }),
             neuron_id_or_subaccount: None,
@@ -97,7 +100,7 @@ fn do_test_merge_neurons(
         .governance
         .merge_neurons(
             &NeuronId { id: 2 },
-            &principal(1),
+            &controller,
             &Merge {
                 source_neuron_id: Some(NeuronId { id: 1 }),
             },
@@ -142,11 +145,15 @@ fn do_test_merge_neurons(
             );
             pretty_assertions::assert_eq!(
                 source_neuron_info,
-                nns.governance.get_neuron_info(&source_neuron_id).unwrap()
+                nns.governance
+                    .get_neuron_info(&source_neuron_id, controller)
+                    .unwrap()
             );
             pretty_assertions::assert_eq!(
                 target_neuron_info,
-                nns.governance.get_neuron_info(&target_neuron_id).unwrap()
+                nns.governance
+                    .get_neuron_info(&target_neuron_id, controller)
+                    .unwrap()
             );
         }
         CommandResponse::Error(e) => panic!("Received Error: {}", e),

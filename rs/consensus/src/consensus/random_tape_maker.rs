@@ -7,18 +7,18 @@
 //! How it works:
 //!
 //! 1. We deliver both the payload for finalized block at height h together with
-//! a random tape at height h. This is handled by the finalizer.
+//!    a random tape at height h. This is handled by the finalizer.
 //!
 //! 2. As soon as we finalize a block at height h, we start to create the random
-//! tape for height h+1. This is handled by random tape maker.
+//!    tape for height h+1. This is handled by random tape maker.
 //!
 //! 3. For security purpose, when the payload of height h is executed, it should
-//! not access random tape at the same height. This is because the random tape
-//! at h may be already known before a block at h is finalized, creating a
-//! window for a malicious blockmaker to launch an attack. To mitigate this
-//! attack, accessing randomness in a canister has to be an async call, where
-//! the randomness of height h+1 will be returned when the next block/batch/
-//! random tape is delivered.
+//!    not access random tape at the same height. This is because the random tape
+//!    at h may be already known before a block at h is finalized, creating a
+//!    window for a malicious blockmaker to launch an attack. To mitigate this
+//!    attack, accessing randomness in a canister has to be an async call, where
+//!    the randomness of height h+1 will be returned when the next block/batch/
+//!    random tape is delivered.
 
 use ic_consensus_utils::{
     active_low_threshold_transcript,

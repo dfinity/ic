@@ -7,9 +7,7 @@ use ic_system_test_driver::driver::{
     node_software_version::NodeSoftwareVersion,
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{
-        HasDependencies, HasTopologySnapshot, NnsCanisterWasmStrategy, NnsCustomizations,
-    },
+    test_env_api::{get_dependency_path, HasTopologySnapshot, NnsCustomizations},
 };
 use serde::Deserialize;
 use slog::info;
@@ -102,7 +100,6 @@ pub fn setup(env: TestEnv) {
 
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
 
@@ -126,7 +123,7 @@ pub fn setup(env: TestEnv) {
 
 fn write_file_and_update_env_variable(env: &TestEnv, pairs: Vec<(&str, String, &str)>) {
     for (file_name, value_in_file, env_variable) in pairs {
-        let path = env.get_dependency_path(file_name);
+        let path = get_dependency_path(file_name);
         std::fs::write(&path, value_in_file)
             .unwrap_or_else(|_| panic!("Failed to write to path: {}", path.display()));
         std::env::set_var(env_variable, file_name);

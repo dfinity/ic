@@ -41,12 +41,14 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
-    self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
+    self as ic00, CanisterIdRecord, InstallCodeArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
+    Method, Payload,
 };
 pub use ic_management_canister_types::{
-    CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2,
-    CanisterStatusType, EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, SignWithECDSAReply,
-    SignWithSchnorrReply, UpdateSettingsArgs,
+    CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
+    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, EcdsaCurve, EcdsaKeyId,
+    HttpHeader, HttpMethod, SignWithECDSAReply, SignWithSchnorrReply, TakeCanisterSnapshotArgs,
+    UpdateSettingsArgs,
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
@@ -2685,6 +2687,47 @@ impl StateMachine {
             .encode(),
         )
         .map(|_| ())
+    }
+
+    pub fn take_canister_snapshot(
+        &self,
+        args: TakeCanisterSnapshotArgs,
+    ) -> Result<CanisterSnapshotResponse, UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.get_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::TakeCanisterSnapshot,
+            args.encode(),
+        )
+        .map(|res| match res {
+            WasmResult::Reply(data) => CanisterSnapshotResponse::decode(&data),
+            WasmResult::Reject(reason) => {
+                panic!("take_canister_snapshot call rejected: {}", reason)
+            }
+        })?
+    }
+
+    pub fn load_canister_snapshot(
+        &self,
+        args: LoadCanisterSnapshotArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        self.execute_ingress_as(
+            PrincipalId::new_anonymous(),
+            ic00::IC_00,
+            Method::LoadCanisterSnapshot,
+            args.encode(),
+        )
+        .map(|res| match res {
+            WasmResult::Reply(data) => Ok(data),
+            WasmResult::Reject(reason) => {
+                panic!("load_canister_snapshot call rejected: {}", reason)
+            }
+        })?
     }
 
     /// Returns true if the canister with the specified id exists.

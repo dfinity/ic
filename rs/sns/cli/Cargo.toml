@@ -32,14 +32,14 @@ ic-sns-governance = { path = "../governance" }
 ic-sns-init = { path = "../init" }
 ic-sns-root = { path = "../root" }
 ic-sns-wasm = { path = "../../nns/sns-wasm" }
-pretty_assertions = { workspace = true }
-serde_json = { workspace = true }
-serde = { workspace = true }
-serde_yaml = { workspace = true }
+itertools = { workspace = true }
 json-patch = "0.2.6"
+pretty_assertions = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
-itertools = { workspace = true }
 
 [dev-dependencies]
 lazy_static = { workspace = true }

@@ -20,8 +20,8 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            NnsCanisterWasmStrategy, NnsCustomizations,
+            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            NnsCustomizations,
         },
     },
     nns::vote_and_execute_proposal,
@@ -39,7 +39,6 @@ pub fn setup_with_system_and_application_subnets(env: TestEnv) {
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
 
@@ -73,7 +72,6 @@ pub fn ic_xc_ledger_suite_orchestrator_test(env: TestEnv) {
     };
 
     let ledger_orchestrator_wasm = wasm_from_path(
-        &env,
         "rs/ethereum/ledger-suite-orchestrator/ledger_suite_orchestrator_canister.wasm.gz",
     );
     let ledger_orchestrator = block_on(async {
@@ -189,7 +187,7 @@ async fn install_nns_controlled_canister<'a>(
     use ic_canister_client::Sender;
     use ic_nervous_system_clients::canister_status::CanisterStatusType;
     use ic_nns_common::types::{NeuronId, ProposalId};
-    use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
+    use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 
     let canister = application_subnet_runtime
         .create_canister(Some(u128::MAX))
@@ -260,7 +258,7 @@ async fn upgrade_ledger_suite_orchestrator_by_nns_proposal<'a>(
     use ic_canister_client::Sender;
     use ic_nervous_system_clients::canister_status::CanisterStatusType;
     use ic_nns_common::types::{NeuronId, ProposalId};
-    use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
+    use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 
     let wasm = canister_wasm.as_slice().to_vec();
     let proposal_payload = ChangeCanisterRequest::new(
@@ -354,8 +352,8 @@ async fn add_erc_20_by_nns_proposal<'a>(
     ManagedCanisters::from(orchestrator.as_ref().runtime(), created_canister_ids)
 }
 
-fn wasm_from_path<P: AsRef<Path>>(env: &TestEnv, path: P) -> CanisterModule {
-    CanisterModule::new(Wasm::from_file(env.get_dependency_path(path)).bytes())
+fn wasm_from_path<P: AsRef<Path>>(path: P) -> CanisterModule {
+    CanisterModule::new(Wasm::from_file(get_dependency_path(path)).bytes())
 }
 
 fn usdc_contract() -> Erc20Contract {

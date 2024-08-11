@@ -38,7 +38,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:e16e14fd3b3cb14c0374a766abc0546461c6ee630d6eab67af92b5f107d0e093
+      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 180 # 3 hours
@@ -67,7 +67,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:e16e14fd3b3cb14c0374a766abc0546461c6ee630d6eab67af92b5f107d0e093
+      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 180 # 3 hours
@@ -95,7 +95,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:e16e14fd3b3cb14c0374a766abc0546461c6ee630d6eab67af92b5f107d0e093
+      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 90
@@ -123,7 +123,7 @@ jobs:
       group: zh1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:e16e14fd3b3cb14c0374a766abc0546461c6ee630d6eab67af92b5f107d0e093
+      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
       options: >-
         -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 60
@@ -157,3 +157,10 @@ jobs:
           export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
           cd gitlab-ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_release_job.py
+  trigger-qualifier-workflow:
+    name: Qualify
+    needs: [ci-main, bazel-system-test-nightly, bazel-system-test-staging, bazel-system-test-hotfix, dependency-scan-release-cut]
+    uses: dfinity/dre/.github/workflows/qualify.yaml@main
+    secrets: inherit
+    with:
+      version: ${{ github.sha }}

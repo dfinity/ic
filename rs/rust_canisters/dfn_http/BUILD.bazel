@@ -1,6 +1,10 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = [
+    # Keep sorted.
+    "//rs/nns/test_utils:__pkg__",
+    "//rs/rust_canisters:__subpackages__",
+])
 
 DEPENDENCIES = [
     # Keep sorted.

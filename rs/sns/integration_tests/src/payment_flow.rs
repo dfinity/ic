@@ -186,7 +186,6 @@ impl PaymentProtocolTestSetup {
             should_auto_finalize: Some(true),
             max_icp_e8s: None,
             min_icp_e8s: None,
-            neurons_fund_participants: None,
             neurons_fund_participation_constraints: None,
             neurons_fund_participation: None,
         }

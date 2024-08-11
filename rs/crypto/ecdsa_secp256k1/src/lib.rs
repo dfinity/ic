@@ -10,7 +10,7 @@ use k256::{
         generic_array::{typenum::Unsigned, GenericArray},
         Curve,
     },
-    Secp256k1,
+    AffinePoint, Scalar, Secp256k1,
 };
 use rand::{CryptoRng, RngCore};
 use zeroize::ZeroizeOnDrop;
@@ -43,6 +43,125 @@ lazy_static::lazy_static! {
     /// Section A.2.1
     /// https://www.secg.org/sec2-v2.pdf
     static ref SECP256K1_OID: simple_asn1::OID = simple_asn1::oid!(1, 3, 132, 0, 10);
+}
+
+/// A component of a derivation path
+#[derive(Debug, Clone)]
+pub struct DerivationIndex(pub Vec<u8>);
+
+/// Derivation Path
+///
+/// A derivation path is simply a sequence of DerivationIndex
+#[derive(Debug, Clone)]
+pub struct DerivationPath {
+    path: Vec<DerivationIndex>,
+}
+
+impl DerivationPath {
+    /// Create a BIP32-style derivation path
+    pub fn new_bip32(bip32: &[u32]) -> Self {
+        let mut path = Vec::with_capacity(bip32.len());
+        for n in bip32 {
+            path.push(DerivationIndex(n.to_be_bytes().to_vec()));
+        }
+        Self::new(path)
+    }
+
+    /// Create a free-form derivation path
+    pub fn new(path: Vec<DerivationIndex>) -> Self {
+        Self { path }
+    }
+
+    /// Return the length of this path
+    pub fn len(&self) -> usize {
+        self.path.len()
+    }
+
+    /// Return if this path is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Return the components of the derivation path
+    pub fn path(&self) -> &[DerivationIndex] {
+        &self.path
+    }
+
+    fn ckd(idx: &[u8], input: &[u8], chain_code: &[u8; 32]) -> ([u8; 32], Scalar) {
+        use hmac::{Hmac, Mac};
+        use k256::{elliptic_curve::ops::Reduce, sha2::Sha512};
+
+        let mut hmac = Hmac::<Sha512>::new_from_slice(chain_code)
+            .expect("HMAC-SHA-512 should accept 256 bit key");
+
+        hmac.update(input);
+        hmac.update(idx);
+
+        let hmac_output: [u8; 64] = hmac.finalize().into_bytes().into();
+
+        let fb = k256::FieldBytes::from_slice(&hmac_output[..32]);
+        let next_offset = <k256::Scalar as Reduce<k256::U256>>::reduce_bytes(fb);
+        let next_chain_key: [u8; 32] = hmac_output[32..].to_vec().try_into().expect("Correct size");
+
+        // If iL >= order, try again with the "next" index as described in SLIP-10
+        if next_offset.to_bytes().to_vec() != hmac_output[..32] {
+            let mut next_input = [0u8; 33];
+            next_input[0] = 0x01;
+            next_input[1..].copy_from_slice(&next_chain_key);
+            Self::ckd(idx, &next_input, chain_code)
+        } else {
+            (next_chain_key, next_offset)
+        }
+    }
+
+    fn ckd_pub(
+        idx: &[u8],
+        pt: AffinePoint,
+        chain_code: &[u8; 32],
+    ) -> ([u8; 32], Scalar, AffinePoint) {
+        use k256::elliptic_curve::{
+            group::prime::PrimeCurveAffine, group::GroupEncoding, ops::MulByGenerator,
+        };
+        use k256::ProjectivePoint;
+
+        let mut ckd_input = pt.to_bytes();
+
+        let pt: ProjectivePoint = pt.into();
+
+        loop {
+            let (next_chain_code, next_offset) = Self::ckd(idx, &ckd_input, chain_code);
+
+            let next_pt = (pt + k256::ProjectivePoint::mul_by_generator(&next_offset)).to_affine();
+
+            // If the new key is not infinity, we're done: return the new key
+            if !bool::from(next_pt.is_identity()) {
+                return (next_chain_code, next_offset, next_pt);
+            }
+
+            // Otherwise set up the next input as defined by SLIP-0010
+            ckd_input[0] = 0x01;
+            ckd_input[1..].copy_from_slice(&next_chain_code);
+        }
+    }
+
+    fn derive_offset(
+        &self,
+        pt: AffinePoint,
+        chain_code: &[u8; 32],
+    ) -> (AffinePoint, Scalar, [u8; 32]) {
+        let mut offset = Scalar::ZERO;
+        let mut pt = pt;
+        let mut chain_code = *chain_code;
+
+        for idx in self.path() {
+            let (next_chain_code, next_offset, next_pt) = Self::ckd_pub(&idx.0, pt, &chain_code);
+            chain_code = next_chain_code;
+            pt = next_pt;
+            offset = offset.add(&next_offset);
+        }
+
+        (pt, offset, chain_code)
+    }
 }
 
 const PEM_HEADER_PKCS8: &str = "PRIVATE KEY";
@@ -329,6 +448,57 @@ impl PrivateKey {
         let key = self.key.verifying_key();
         PublicKey { key: *key }
     }
+
+    /// Derive a private key from this private key using a derivation path
+    ///
+    /// This is the same derivation system used by the Internet Computer when
+    /// deriving subkeys for threshold ECDSA with secp256k1 and BIP340 Schnorr
+    ///
+    /// As long as each index of the derivation path is a 4-byte input with the highest
+    /// bit cleared, this derivation scheme matches BIP32 and SLIP-10
+    ///
+    /// See <https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-ecdsa_public_key>
+    /// for details on the derivation scheme.
+    ///
+    pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (Self, [u8; 32]) {
+        let chain_code = [0u8; 32];
+        self.derive_subkey_with_chain_code(derivation_path, &chain_code)
+    }
+
+    /// Derive a private key from this private key using a derivation path
+    /// and chain code
+    ///
+    /// This is the same derivation system used by the Internet Computer when
+    /// deriving subkeys for threshold ECDSA with secp256k1 and BIP340 Schnorr
+    ///
+    /// As long as each index of the derivation path is a 4-byte input with the highest
+    /// bit cleared, this derivation scheme matches BIP32 and SLIP-10
+    ///
+    /// See <https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-ecdsa_public_key>
+    /// for details on the derivation scheme.
+    ///
+    pub fn derive_subkey_with_chain_code(
+        &self,
+        derivation_path: &DerivationPath,
+        chain_code: &[u8; 32],
+    ) -> (Self, [u8; 32]) {
+        use k256::NonZeroScalar;
+
+        let public_key: AffinePoint = *self.key.verifying_key().as_affine();
+        let (_pt, offset, derived_chain_code) =
+            derivation_path.derive_offset(public_key, chain_code);
+
+        let derived_scalar = self.key.as_nonzero_scalar().as_ref().add(&offset);
+
+        let nz_ds =
+            NonZeroScalar::new(derived_scalar).expect("Derivation always produces non-zero sum");
+
+        let derived_key = Self {
+            key: k256::ecdsa::SigningKey::from(nz_ds),
+        };
+
+        (derived_key, derived_chain_code)
+    }
 }
 
 /// An ECDSA public key
@@ -513,6 +683,40 @@ impl PublicKey {
             .map(|recid| RecoveryId { recid })
             .map_err(|e| RecoveryError::WrongParameters(e.to_string()))
     }
+
+    /// Derive a public key from this public key using a derivation path
+    ///
+    /// This is the same derivation system used by the Internet Computer when
+    /// deriving subkeys for threshold ECDSA with secp256k1 and BIP340 Schnorr
+    ///
+    pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (Self, [u8; 32]) {
+        let chain_code = [0u8; 32];
+        self.derive_subkey_with_chain_code(derivation_path, &chain_code)
+    }
+
+    /// Derive a public key from this public key using a derivation path
+    /// and chain code
+    ///
+    /// This is the same derivation system used by the Internet Computer when
+    /// deriving subkeys for threshold ECDSA with secp256k1 and BIP340 Schnorr
+    ///
+    /// This derivation matches BIP340 and SLIP-10
+    pub fn derive_subkey_with_chain_code(
+        &self,
+        derivation_path: &DerivationPath,
+        chain_code: &[u8; 32],
+    ) -> (Self, [u8; 32]) {
+        let public_key: AffinePoint = *self.key.as_affine();
+        let (pt, _offset, chain_code) = derivation_path.derive_offset(public_key, chain_code);
+
+        let derived_key = Self {
+            key: k256::ecdsa::VerifyingKey::from(
+                k256::PublicKey::from_affine(pt).expect("Derived point is valid"),
+            ),
+        };
+
+        (derived_key, chain_code)
+    }
 }
 
 /// An error indicating that recovering the recovery of the signature y parity bit failed.
@@ -539,6 +743,7 @@ pub enum RecoveryError {
 /// 2. `(r, -y)`
 /// 3. `(r + n, y' )`
 /// 4. `(r + n, -y')`
+///
 /// where `y`, `y'` are computed from the affine x-coordinate together with the curve equation and `n` is the order of the curve.
 /// Note that because the affine coordinates are over `𝔽ₚ`, where `p > n` but `p` and `n` are somewhat close from each other,
 /// the last 2 possibilities often do not exist, see [`RecoveryId::is_x_reduced`].
