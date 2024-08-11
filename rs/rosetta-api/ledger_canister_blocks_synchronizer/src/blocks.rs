@@ -792,6 +792,30 @@ impl Blocks {
             )?;
         }
 
+        tx.execute(
+            r#"
+            CREATE INDEX IF NOT EXISTS block_idx_account_balances 
+            ON account_balances(block_idx)
+            "#,
+            [],
+        )?;
+
+        tx.execute(
+            r#"
+        CREATE INDEX IF NOT EXISTS tx_hash_index 
+        ON blocks(tx_hash)
+        "#,
+            [],
+        )?;
+
+        tx.execute(
+            r#"
+        CREATE INDEX IF NOT EXISTS block_hash_index 
+        ON blocks(block_hash)
+        "#,
+            [],
+        )?;
+
         tx.commit()
     }
 
