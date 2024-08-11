@@ -1,4 +1,3 @@
-use self::database_access::INSERT_INTO_TRANSACTIONS_STATEMENT;
 use crate::rosetta_block::RosettaBlock;
 use crate::{iso8601_to_timestamp, timestamp_to_iso8601};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
@@ -28,7 +27,7 @@ mod database_access {
     };
     use ic_ledger_hash_of::HashOf;
     use icp_ledger::{AccountIdentifier, Block, Operation};
-    use rusqlite::{named_params, params, Connection, Statement, ToSql};
+    use rusqlite::{named_params, params, Connection, Statement};
 
 
     pub fn push_hashed_block(
@@ -38,73 +37,69 @@ mod database_access {
         let mut stmt = con.prepare("INSERT INTO blocks (block_hash, encoded_block, parent_hash, block_idx, verified, timestamp, tx_hash, operation_type, from_account, to_account, spender_account, amount, allowance, expected_allowance, fee, created_at_time, expires_at, memo, icrc1_memo) VALUES (
             :block_hash, :encoded_block, :parent_hash, :block_idx, FALSE, :timestamp, :tx_hash, :operation_type, :from_account, :to_account, :spender_account, :amount, :allowance, :expected_allowance, :fee, :created_at_time, :expires_at, :memo, :icrc1_memo
             )").map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        let params = build_insert_block_params(hb)?;
-        execute_insert_statement(&mut stmt,params)?;
-        Ok(())
-
+            execute_insert_block_statement(&mut stmt,&hb)
     }
 
-    fn build_insert_block_params<'a>(hb:&'a HashedBlock) -> Result< [(&'a str, &'a dyn ToSql)],BlockStoreError>{
+    pub fn execute_insert_block_statement<'a>(stmt: &mut Statement,hb:&'a HashedBlock) -> Result<(),BlockStoreError>{
             let tx = Block::decode(hb.block.clone()).map_err(|e| BlockStoreError::Other(e.to_string()))?.transaction;
             let operation_type = tx.operation.clone();
             let mut from_account = None;
             let mut to_account = None;
             let mut spender_account = None;
-            let mut amount = None;
+            let mut amount:Option<String> = None;
             let mut allowance = None;
             let mut expected_allowance = None;
             let mut expires_at = None;
             let mut fee = None;
     
             match operation_type {
-                Operation::Burn { from, amount, .. } => {
+                Operation::Burn { from, amount:a, .. } => {
                     from_account = Some(from.to_hex());
-                    amount = Some(amount.get_e8s().to_string());
+                    amount = Some(a.get_e8s().to_string());
                     
                 }
-                Operation::Mint { to, amount } => {
-                    amount = Some(amount.get_e8s().to_string());
+                Operation::Mint { to, amount:a } => {
+                    amount = Some(a.get_e8s().to_string());
                     to_account = Some(to.to_hex());
                     
                 }
                 Operation::Approve {
                     from,
                     spender,
-                    allowance,
-                    expected_allowance,
-                    expires_at,
-                    fee,
+                    allowance:al,
+                    expected_allowance:eal,
+                    expires_at:ea,
+                    fee:f,
                 } => {
                     from_account = Some(from.to_hex());
-                    allowance = Some(allowance.get_e8s().to_string());
-                    expected_allowance = expected_allowance.map(|a| a.get_e8s().to_string());
+                    allowance = Some(al.get_e8s().to_string());
+                    expected_allowance =  eal.map(|a| a.get_e8s().to_string());
                     spender_account = Some(spender.to_hex());
-                    expires_at = expires_at.map(timestamp_to_iso8601);
-                    fee = Some(fee.get_e8s().to_string());
-    
-                               }
+                    expires_at = ea.map(timestamp_to_iso8601);
+                    fee = Some(f.get_e8s().to_string());
+                    }
                 Operation::Transfer {
                     from,
                     to,
-                    amount,
-                    fee,
+                    amount:a,
+                    fee:f,
                     spender
                 } => {
                     from_account = Some(from.to_hex());
-                    amount = Some(amount.get_e8s().to_string());
+                    amount = Some(a.get_e8s().to_string());
                     to_account = Some(to.to_hex());
-                    fee = Some(fee.get_e8s().to_string()); 
-                    spender_account = Some(spender.to_hex());
+                    fee = Some(f.get_e8s().to_string()); 
+                    spender_account = spender.map(|sp| sp.to_hex());
                 }
             };
-            Ok(named_params! {
+            let params = named_params! {
                 ":block_hash": hb.hash.into_bytes().to_vec(),
                 ":encoded_block": hb.block.clone().into_vec(),
                 ":parent_hash": hb.parent_hash.map(|ph| ph.into_bytes().to_vec()),
                 ":block_idx": hb.index,
                 ":timestamp": timestamp_to_iso8601(hb.timestamp),
                 ":tx_hash": tx.hash().into_bytes().to_vec(),
-                ":operation_type": operation_type.into(),
+                ":operation_type": <Operation as Into<&str>>::into(operation_type),
                 ":from_account": from_account,
                 ":to_account": to_account,
                 ":spender_account": spender_account,
@@ -116,12 +111,9 @@ mod database_access {
                 ":expires_at": expires_at,
                 ":memo": tx.memo.0.to_string(),
                 ":icrc1_memo": tx.icrc1_memo.as_ref().map(|memo| memo.to_vec()),
-            })
-    }
-
-    fn execute_insert_statement<P: rusqlite::Params>(stmt: &mut Statement, params: P)  -> Result<(), BlockStoreError> {
-        stmt.execute(params).map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        Ok(())
+            };
+            stmt.execute(params).map_err(|e| BlockStoreError::Other(e.to_string()))?;
+            Ok(())
     }
 
     pub fn get_all_block_indices_from_blocks_table(
@@ -169,7 +161,7 @@ mod database_access {
         connection: &mut Connection,
         block_idx: &u64,
     ) -> Result<icp_ledger::Transaction, BlockStoreError> {
-        let command = "SELECT block from blocks where block_idx = ?";
+        let command = "SELECT encoded_block from blocks where block_idx = ?";
         let mut stmt = connection
             .prepare(command)
             .map_err(|e| BlockStoreError::Other(e.to_string()))
@@ -293,7 +285,7 @@ mod database_access {
     ) -> Result<HashedBlock, BlockStoreError> {
         let mut stmt = con.prepare_cached(&match verified {
             Some(verified) => format!("SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp from blocks WHERE verified = {} ORDER BY block_idx ASC Limit 2",verified),
-            None => "SELECT hash, block, parent_hash, idx, timestamp from blocks ORDER BY idx ASC Limit 2".to_string()
+            None => "SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp from blocks ORDER BY block_idx ASC Limit 2".to_string()
         }).map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut blocks = read_hashed_blocks(&mut stmt, params![])?.into_iter();
         match blocks.next() {
@@ -318,7 +310,7 @@ mod database_access {
     ) -> Result<HashedBlock, BlockStoreError> {
         let mut stmt = con.prepare_cached(&match verified {
             Some(verified) => format!("SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp from blocks WHERE verified = {} ORDER BY block_idx DESC Limit 1",verified),
-            None => "SELECT hash, block, parent_hash, idx, timestamp from blocks ORDER BY idx DESC Limit 1".to_string()
+            None => "SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp from blocks ORDER BY block_idx DESC Limit 1".to_string()
         }).map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut blocks = read_hashed_blocks(&mut stmt, params![])?.into_iter();
         match blocks.next() {
@@ -744,14 +736,14 @@ impl Blocks {
                 from_account VARCHAR(64),
                 to_account VARCHAR(64),
                 spender_account VARCHAR(64),
-                amount INTEGER,
+                amount TEXT,
                 allowance TEXT,
                 expected_allowance TEXT,
-                fee INTEGER,
+                fee TEXT,
                 created_at_time TEXT,
                 expires_at TEXT,
                 memo TEXT,
-                icrc1_memo BLOB,
+                icrc1_memo BLOB
             )
             "#,
             []
@@ -840,7 +832,7 @@ impl Blocks {
         let first_rosetta_block_index = match first_rosetta_block_index {
             Some(first_rosetta_block_index) => first_rosetta_block_index,
             None => connection
-                .query_row("SELECT max(idx) + 1 FROM blocks", [], |row| {
+                .query_row("SELECT max(block_idx) + 1 FROM blocks", [], |row| {
                     row.get::<_, Option<u64>>(0)
                 })?
                 .unwrap_or(0),
@@ -1099,8 +1091,9 @@ impl Blocks {
         connection
             .execute_batch("BEGIN TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
-        let mut stmt_hb =  connection.prepare("INSERT INTO blocks (block_hash, encoded_block, parent_hash, block_idx, verified, timestamp) VALUES (?1, ?2, ?3, ?4, FALSE, ?5)")
-        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let mut stmt_hb = connection.prepare("INSERT INTO blocks (block_hash, encoded_block, parent_hash, block_idx, verified, timestamp, tx_hash, operation_type, from_account, to_account, spender_account, amount, allowance, expected_allowance, fee, created_at_time, expires_at, memo, icrc1_memo) VALUES (
+            :block_hash, :encoded_block, :parent_hash, :block_idx, FALSE, :timestamp, :tx_hash, :operation_type, :from_account, :to_account, :spender_account, :amount, :allowance, :expected_allowance, :fee, :created_at_time, :expires_at, :memo, :icrc1_memo
+            )").map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut stmt_select =  connection
         .prepare("SELECT block_idx,account,tokens FROM account_balances WHERE account=?1 AND block_idx<=?2 ORDER BY block_idx DESC LIMIT 1")
         .map_err(|e| BlockStoreError::Other(e.to_string()))?;
@@ -1109,7 +1102,7 @@ impl Blocks {
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
 
         for hb in &batch {
-            match database_access::push_hashed_block_execution(hb, &mut stmt_hb) {
+            match database_access::execute_insert_block_statement(&mut stmt_hb,hb) {
                 Ok(_) => (),
                 Err(e) => {
                     connection
@@ -1183,7 +1176,7 @@ impl Blocks {
                     *block_height
                 };
                 let mut stmt = connection
-                    .prepare("UPDATE blocks SET verified = TRUE WHERE idx >= ?1 AND idx <= ?2")
+                    .prepare("UPDATE blocks SET verified = TRUE WHERE block_idx >= ?1 AND block_idx <= ?2")
                     .map_err(|e| BlockStoreError::Other(e.to_string()))?;
                 stmt.execute(params![verified.index, height])
                     .map_err(|e| BlockStoreError::Other(e.to_string()))?;
@@ -1196,7 +1189,7 @@ impl Blocks {
                     *block_height
                 };
                 let mut stmt = connection
-                    .prepare("UPDATE blocks SET verified = TRUE WHERE idx <= ?")
+                    .prepare("UPDATE blocks SET verified = TRUE WHERE block_idx <= ?")
                     .map_err(|e| BlockStoreError::Other(e.to_string()))?;
                 stmt.execute(params![height])
                     .map_err(|e| BlockStoreError::Other(e.to_string()))?;
@@ -1302,8 +1295,8 @@ impl Blocks {
 
         let mut select_hashed_blocks_stmt = sql_tx
             .prepare_cached(
-                r#"SELECT hash, block, parent_hash, idx, timestamp
-           FROM blocks WHERE idx >= :start AND idx <= :end"#,
+                r#"SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp
+           FROM blocks WHERE block_idx >= :start AND block_idx <= :end"#,
             )
             .unwrap();
 
@@ -1516,9 +1509,9 @@ impl Blocks {
             .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
         let mut statement = connection
             .prepare_cached(
-                r#"SELECT blocks.idx, block
+                r#"SELECT blocks.block_idx, encoded_block
                    FROM rosetta_blocks_transactions JOIN blocks
-                   ON rosetta_blocks_transactions.block_idx = blocks.idx
+                   ON rosetta_blocks_transactions.block_idx = blocks.block_idx
                    WHERE rosetta_blocks_transactions.rosetta_block_idx=:idx"#,
             )
             .map_err(|e| format!("Unable to select block: {e:?}"))?;

@@ -95,7 +95,8 @@ async fn store_coherence_test() {
     for hb in &scribe.blockchain {
         let hash = hb.hash.into_bytes().to_vec();
         let parent_hash = hb.parent_hash.map(|ph| ph.into_bytes().to_vec());
-        let command = "INSERT INTO blocks (hash, block, parent_hash, idx, verified, timestamp) VALUES (?1, ?2, ?3, ?4, FALSE, ?5)";
+        let transaction = Block::decode(hb.block.clone()).unwrap().transaction;
+        let command = "INSERT INTO blocks (block_hash, encoded_block, parent_hash, block_idx, verified, timestamp,tx_hash,operation_type) VALUES (?1, ?2, ?3, ?4, FALSE, ?5,?6,?7)";
         con.execute(
             command,
             params![
@@ -103,7 +104,10 @@ async fn store_coherence_test() {
                 hb.block.clone().into_vec(),
                 parent_hash,
                 hb.index,
-                timestamp_to_iso8601(hb.timestamp)
+                timestamp_to_iso8601(hb.timestamp),
+                transaction.hash().into_bytes().to_vec(),
+                <Operation as Into<&str>>::into(transaction.operation.clone())
+
             ],
         )
         .unwrap();
