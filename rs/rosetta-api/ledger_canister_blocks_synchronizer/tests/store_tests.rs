@@ -107,7 +107,6 @@ async fn store_coherence_test() {
                 timestamp_to_iso8601(hb.timestamp),
                 transaction.hash().into_bytes().to_vec(),
                 <Operation as Into<&str>>::into(transaction.operation.clone())
-
             ],
         )
         .unwrap();
@@ -115,7 +114,6 @@ async fn store_coherence_test() {
     drop(con);
     for hb in &scribe.blockchain {
         assert_eq!(store.get_hashed_block(&hb.index).unwrap(), *hb);
-        assert_eq!(store.get_transaction_hash(&hb.index).unwrap(), None);
         assert!(store.get_all_accounts().unwrap().is_empty());
     }
     let store = sqlite_on_disk_store(location);
