@@ -93,5 +93,4 @@ jobs:
           retention-days: 90
           if-no-files-found: ignore
           compression-level: 9
-          path: |
-            bazel-bep.pb
+          path: bazel-bep.pb
