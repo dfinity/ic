@@ -94,8 +94,7 @@ jobs:
           retention-days: 90
           if-no-files-found: ignore
           compression-level: 9
-          path: |
-            bazel-bep.pb
+          path: bazel-bep.pb
   bazel-build-all-config-check:
     runs-on:
       labels: dind-large
@@ -133,8 +132,7 @@ jobs:
           retention-days: 90
           if-no-files-found: ignore
           compression-level: 9
-          path: |
-            bazel-bep.pb
+          path: bazel-bep.pb
   bazel-test-darwin-x86-64:
     name: Bazel Test Darwin x86-64
     timeout-minutes: 120
@@ -187,8 +185,7 @@ jobs:
           retention-days: 90
           if-no-files-found: ignore
           compression-level: 9
-          path: |
-            bazel-bep.pb
+          path: bazel-bep.pb
       - name: Purge Bazel Output
         if: always()
         shell: bash
@@ -226,8 +223,7 @@ jobs:
           retention-days: 90
           if-no-files-found: ignore
           compression-level: 9
-          path: |
-            bazel-bep.pb
+          path: bazel-bep.pb
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
     runs-on:
@@ -260,8 +256,7 @@ jobs:
           retention-days: 90
           if-no-files-found: ignore
           compression-level: 9
-          path: |
-            bazel-bep.pb
+          path: bazel-bep.pb
   python-ci-tests:
     name: Python CI Tests
     runs-on:

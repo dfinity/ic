@@ -146,8 +146,7 @@ jobs:
           retention-days: 90
           if-no-files-found: ignore
           compression-level: 9
-          path: |
-            bazel-bep.pb
+          path: bazel-bep.pb
   system-tests-benchmarks-nightly:
     name: Bazel System Test Benchmarks
     runs-on:
@@ -187,8 +186,7 @@ jobs:
           retention-days: 90
           if-no-files-found: ignore
           compression-level: 9
-          path: |
-            bazel-bep.pb
+          path: bazel-bep.pb
   dependency-scan-nightly:
     name: Dependency Scan Nightly
     runs-on:
