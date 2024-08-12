@@ -303,6 +303,13 @@ type UpdateElectedHostosVersionsPayload = record {
   release_package_sha256_hex : opt text;
 };
 
+type ReviseElectedHostosVersionsPayload = record {
+  release_package_urls : vec text;
+  hostos_version_to_elect : opt text;
+  hostos_versions_to_unelect : vec text;
+  release_package_sha256_hex : opt text;
+};
+
 type UpdateFirewallRulesPayload = record {
   expected_hash : text;
   scope : FirewallRulesScope;
@@ -443,6 +450,7 @@ service : {
   set_firewall_config : (SetFirewallConfigPayload) -> ();
   update_api_boundary_nodes_version : (UpdateApiBoundaryNodesVersionPayload) -> ();
   update_elected_hostos_versions : (UpdateElectedHostosVersionsPayload) -> ();
+  revise_elected_hostos_versions : (ReviseElectedHostosVersionsPayload) -> ();
   update_firewall_rules : (UpdateFirewallRulesPayload) -> ();
   update_node_directly : (UpdateNodeDirectlyPayload) -> ();
   update_node_domain_directly : (UpdateNodeDomainDirectlyPayload) -> (UpdateNodeDomainDirectlyResponse);
@@ -459,6 +467,5 @@ service : {
     UpdateSshReadOnlyAccessForAllUnassignedNodesPayload
   ) -> ();
   update_subnet : (UpdateSubnetPayload) -> ();
-  update_subnet_replica_version : (DeployGuestosToAllSubnetNodesPayload) -> ();
   update_unassigned_nodes_config : (UpdateUnassignedNodesConfigPayload) -> ();
 };
