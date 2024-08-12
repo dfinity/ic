@@ -1881,7 +1881,7 @@ dependencies = [
  "ic-response-verification",
  "ic-utils 0.37.0",
  "idna 1.0.2",
- "instant-acme 0.3.2",
+ "instant-acme",
  "leb128",
  "mockall",
  "opentelemetry 0.20.0",
@@ -5528,7 +5528,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-types",
  "indoc",
- "instant-acme 0.7.1",
+ "instant-acme",
  "lazy_static",
  "little-loadshedder",
  "maxminddb",
@@ -13600,21 +13600,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
 dependencies = [
  "cfg-if 1.0.0",
-]
-
-[[package]]
-name = "instant-acme"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8b94f62e8dd2b561e7646bd0cc92e4c9d940859fc1c146ad8ab6e5d3e6f7c03"
-dependencies = [
- "base64 0.21.5",
- "hyper 0.14.26",
- "hyper-rustls 0.24.2",
- "ring 0.16.20",
- "serde",
- "serde_json",
- "thiserror",
 ]
 
 [[package]]
