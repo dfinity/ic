@@ -10957,6 +10957,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
+ "ic-nns-governance-api",
  "ic-rosetta-test-utils",
  "ic-types",
  "icp-ledger",
