@@ -265,7 +265,8 @@ impl CanisterHistory {
 /// Contains structs needed for running and maintaining the canister on the IC.
 /// The state here cannot be directly modified by the Wasm module in the
 /// canister but can be indirectly via the SystemApi interface.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
+#[cfg_attr(debug_assertions, derive(PartialEq, Eq))]
 pub struct SystemState {
     pub controllers: BTreeSet<PrincipalId>,
     pub canister_id: CanisterId,

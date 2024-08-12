@@ -109,7 +109,8 @@ impl SchedulerState {
 }
 
 /// The full state of a single canister.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
 pub struct CanisterState {
     /// See `SystemState` for documentation.
     pub system_state: SystemState,

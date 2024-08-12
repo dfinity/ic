@@ -304,6 +304,7 @@ impl Memory {
     }
 }
 
+#[cfg(debug_assertions)]
 impl PartialEq for Memory {
     fn eq(&self, other: &Self) -> bool {
         // Skip the sandbox memory since it is not relevant for equality.
@@ -474,6 +475,7 @@ pub struct ExecutionState {
 
 // We have to implement it by hand as embedder_cache can not be compared for
 // equality (and doesn't need to be).
+#[cfg(debug_assertions)]
 impl PartialEq for ExecutionState {
     fn eq(&self, rhs: &Self) -> bool {
         // Destruction is done on purpose, to ensure if the new

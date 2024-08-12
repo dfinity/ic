@@ -34,7 +34,8 @@ struct ChunkInfo {
 
 /// Uploaded chunks which can be assembled to create a Wasm module.
 /// It is cheap to clone because the data is stored in a [`PageMap`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
+#[cfg_attr(debug_assertions, derive(PartialEq, Eq))]
 pub struct WasmChunkStore {
     data: PageMap,
     metadata: WasmChunkStoreMetadata,

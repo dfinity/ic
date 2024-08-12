@@ -16,7 +16,8 @@ use std::{
 ///
 /// Additionally, keeps track of all the accumulated changes
 /// since the last flush to the disk.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default)]
+#[cfg_attr(debug_assertions, derive(PartialEq, Eq))]
 pub struct CanisterSnapshots {
     snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
     /// Snapshot operations are consumed by the `StateManager` in order to
@@ -233,7 +234,8 @@ impl CanisterSnapshots {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
+#[cfg_attr(debug_assertions, derive(PartialEq, Eq))]
 pub struct PageMemory {
     /// The contents of this memory.
     pub page_map: PageMap,
@@ -259,7 +261,8 @@ impl From<&PageMemory> for Memory {
 }
 
 /// Contains all information related to a canister's execution state.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
+#[cfg_attr(debug_assertions, derive(PartialEq, Eq))]
 pub struct ExecutionStateSnapshot {
     /// The raw canister module.
     pub wasm_binary: CanisterModule,
@@ -270,7 +273,8 @@ pub struct ExecutionStateSnapshot {
 }
 
 /// Contains all information related to a canister snapshot.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
+#[cfg_attr(debug_assertions, derive(PartialEq, Eq))]
 pub struct CanisterSnapshot {
     /// Identifies the canister to which this snapshot belongs.
     canister_id: CanisterId,
