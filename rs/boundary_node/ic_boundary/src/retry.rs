@@ -9,7 +9,7 @@ use ic_types::{CanisterId, SubnetId};
 use crate::{
     http::AxumResponse,
     persist::RouteSubnet,
-    routes::{ApiError, ErrorCause, RequestContext, RequestType},
+    routes::{ApiError, ErrorCause, RequestContext},
     snapshot::Node,
 };
 
