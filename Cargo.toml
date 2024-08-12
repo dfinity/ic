@@ -559,7 +559,7 @@ minicbor-derive = "0.13.0"
 mockall = "0.12.1"
 mockito = "1.2.0"
 nftables = "0.4"
-nix = "0.24.3"
+nix = "0.26.4"
 num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
 opentelemetry = { version = "0.23.0", features = ["metrics", "trace"] }

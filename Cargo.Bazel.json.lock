@@ -1,5 +1,5 @@
 {
-  "checksum": "41549930a4486b6dfb0564966143dbc02c62c5d600f307122c9a739e4839171e",
+  "checksum": "2386e0b7ddd85cc750224cdc45b779287d74f7f0854dab633f4c16d1dc98e128",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17498,7 +17498,7 @@
               "target": "nftables"
             },
             {
-              "id": "nix 0.24.3",
+              "id": "nix 0.26.4",
               "target": "nix"
             },
             {
@@ -35716,38 +35716,30 @@
         ],
         "crate_features": {
           "common": [
+            "elf",
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
           "selects": {
             "aarch64-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "aarch64-unknown-nixos-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "arm-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "armv7-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "i686-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
@@ -35760,14 +35752,10 @@
               "system"
             ],
             "x86_64-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "x86_64-unknown-nixos-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ]
@@ -37198,14 +37186,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "memoffset 0.6.5": {
+    "memoffset 0.7.1": {
       "name": "memoffset",
-      "version": "0.6.5",
+      "version": "0.7.1",
       "package_url": "https://github.com/Gilnaa/memoffset",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/memoffset/0.6.5/download",
-          "sha256": "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
+          "url": "https://static.crates.io/crates/memoffset/0.7.1/download",
+          "sha256": "5de893c32cde5f383baa4c04c5d6dbdd735cfd4a794b0debdb2bb1b421da5ff4"
         }
       },
       "targets": [
@@ -37248,14 +37236,14 @@
         "deps": {
           "common": [
             {
-              "id": "memoffset 0.6.5",
+              "id": "memoffset 0.7.1",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2015",
-        "version": "0.6.5"
+        "version": "0.7.1"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -38967,14 +38955,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "nix 0.24.3": {
+    "nix 0.26.4": {
       "name": "nix",
-      "version": "0.24.3",
+      "version": "0.26.4",
       "package_url": "https://github.com/nix-rust/nix",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/nix/0.24.3/download",
-          "sha256": "fa52e972a9a719cecb6864fb88568781eb706bac2cd1d4f04a648542dbf78069"
+          "url": "https://static.crates.io/crates/nix/0.26.4/download",
+          "sha256": "598beaf3cc6fdd9a5dfb1630c2800c7acd31df7aaf0f565796fba2b53ca1af1b"
         }
       },
       "targets": [
@@ -39016,6 +39004,7 @@
             "mqueue",
             "net",
             "personality",
+            "pin-utils",
             "poll",
             "process",
             "pthread",
@@ -39048,79 +39037,20 @@
             {
               "id": "libc 0.2.155",
               "target": "libc"
+            },
+            {
+              "id": "pin-utils 0.1.0",
+              "target": "pin_utils"
             }
           ],
           "selects": {
             "cfg(not(target_os = \"redox\"))": [
               {
-                "id": "memoffset 0.6.5",
+                "id": "memoffset 0.7.1",
                 "target": "memoffset"
               }
             ]
           }
-        },
-        "edition": "2018",
-        "version": "0.24.3"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "nix 0.26.4": {
-      "name": "nix",
-      "version": "0.26.4",
-      "package_url": "https://github.com/nix-rust/nix",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/nix/0.26.4/download",
-          "sha256": "598beaf3cc6fdd9a5dfb1630c2800c7acd31df7aaf0f565796fba2b53ca1af1b"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "nix",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "nix",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "fs",
-            "process",
-            "signal"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bitflags 1.3.2",
-              "target": "bitflags"
-            },
-            {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "libc 0.2.155",
-              "target": "libc"
-            }
-          ],
-          "selects": {}
         },
         "edition": "2018",
         "version": "0.26.4"
@@ -78527,7 +78457,7 @@
     "moka 0.12.1",
     "more-asserts 0.3.1",
     "nftables 0.4.0",
-    "nix 0.24.3",
+    "nix 0.26.4",
     "num-bigint 0.4.6",
     "num-bigint-dig 0.8.4",
     "num-rational 0.2.4",
