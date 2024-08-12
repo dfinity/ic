@@ -296,7 +296,7 @@ type UpdateApiBoundaryNodesVersionPayload = record {
   node_ids : vec principal;
 };
 
-type DeployGuestOsToSomeApiBoundaryNodes = record {
+type DeployGuestosToSomeApiBoundaryNodes = record {
   version : text;
   node_ids : vec principal;
 };
@@ -435,7 +435,7 @@ service : {
   deploy_guestos_to_all_unassigned_nodes : (
     DeployGuestosToAllUnassignedNodesPayload
   ) -> ();
-  deploy_guestos_to_some_api_boundary_nodes : (DeployGuestOsToSomeApiBoundaryNodes) -> ();
+  deploy_guestos_to_some_api_boundary_nodes : (DeployGuestosToSomeApiBoundaryNodes) -> ();
   deploy_hostos_to_some_nodes : (DeployHostosToSomeNodes) -> ();
   get_build_metadata : () -> (text) query;
   get_node_operators_and_dcs_of_node_provider : (principal) -> (GetNodeOperatorsAndDcsOfNodeProviderResponse) query;

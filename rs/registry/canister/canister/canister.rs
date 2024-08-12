@@ -45,7 +45,7 @@ use registry_canister::{
         do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
         do_update_api_boundary_nodes_version::{
-            DeployGuestOsToSomeApiBoundaryNodes, UpdateApiBoundaryNodesVersionPayload,
+            DeployGuestosToSomeApiBoundaryNodes, UpdateApiBoundaryNodesVersionPayload,
         },
         do_update_elected_hostos_versions::{
             ReviseElectedHostosVersionsPayload, UpdateElectedHostosVersionsPayload,
@@ -600,7 +600,7 @@ fn deploy_guestos_to_some_api_boundary_nodes() {
 }
 
 #[candid_method(update, rename = "deploy_guestos_to_some_api_boundary_nodes")]
-fn deploy_guestos_to_some_api_boundary_nodes_(payload: DeployGuestOsToSomeApiBoundaryNodes) {
+fn deploy_guestos_to_some_api_boundary_nodes_(payload: DeployGuestosToSomeApiBoundaryNodes) {
     registry_mut().do_deploy_guestos_to_some_api_boundary_nodes(payload);
     recertify_registry();
 }

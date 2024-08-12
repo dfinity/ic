@@ -11,7 +11,7 @@ use crate::{common::LOG_PREFIX, registry::Registry};
 
 use super::common::{check_api_boundary_nodes_exist, check_replica_version_is_blessed};
 
-/// Deprecated; please use `DeployGuestOsToSomeApiBoundaryNodes` instead.
+/// Deprecated; please use `DeployGuestosToSomeApiBoundaryNodes` instead.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UpdateApiBoundaryNodesVersionPayload {
     pub node_ids: Vec<NodeId>,
@@ -19,12 +19,12 @@ pub struct UpdateApiBoundaryNodesVersionPayload {
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct DeployGuestOsToSomeApiBoundaryNodes {
+pub struct DeployGuestosToSomeApiBoundaryNodes {
     pub node_ids: Vec<NodeId>,
     pub version: String,
 }
 
-impl From<UpdateApiBoundaryNodesVersionPayload> for DeployGuestOsToSomeApiBoundaryNodes {
+impl From<UpdateApiBoundaryNodesVersionPayload> for DeployGuestosToSomeApiBoundaryNodes {
     fn from(src: UpdateApiBoundaryNodesVersionPayload) -> Self {
         let UpdateApiBoundaryNodesVersionPayload { node_ids, version } = src;
 
@@ -38,14 +38,14 @@ impl Registry {
         &mut self,
         payload: UpdateApiBoundaryNodesVersionPayload,
     ) {
-        let payload = DeployGuestOsToSomeApiBoundaryNodes::from(payload);
+        let payload = DeployGuestosToSomeApiBoundaryNodes::from(payload);
         self.do_deploy_guestos_to_some_api_boundary_nodes(payload);
     }
 
     /// Updates the version for a set of ApiBoundaryNodeRecords
     pub fn do_deploy_guestos_to_some_api_boundary_nodes(
         &mut self,
-        payload: DeployGuestOsToSomeApiBoundaryNodes,
+        payload: DeployGuestosToSomeApiBoundaryNodes,
     ) {
         println!(
             "{}do_update_api_boundary_nodes_version: {:?}",
@@ -69,7 +69,7 @@ impl Registry {
 
     fn validate_update_api_boundary_nodes_version_payload(
         &self,
-        payload: &DeployGuestOsToSomeApiBoundaryNodes,
+        payload: &DeployGuestosToSomeApiBoundaryNodes,
     ) {
         check_api_boundary_nodes_exist(self, &payload.node_ids);
         check_replica_version_is_blessed(self, &payload.version);
