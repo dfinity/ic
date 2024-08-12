@@ -3317,7 +3317,7 @@ fn push_inputs<'a>(
 
 /// Instructions for building various kinds of messages; essentially a wrapper for
 /// `RequestBuilder`, `ResponseBuilder`.
-#[allow(dead_code)]
+#[allow(clippy::enum_variant_names)]
 #[derive(Copy, Clone)]
 enum MessageBuilder {
     // `(sender, receiver)`.
