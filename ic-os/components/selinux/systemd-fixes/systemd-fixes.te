@@ -120,6 +120,13 @@ list_dirs_pattern(systemd_tmpfiles_t, unlabeled_t, unlabeled_t)
 read_files_pattern(systemd_tmpfiles_t, tmpfs_t, tmpfs_t)
 
 ###############################################################################
+# systemd-generator
+
+# systemd_generator_t is missing this permission, and it blocks ssh
+require { type systemd_generator_t; }
+init_delete_runtime_files(systemd_generator_t)
+
+###############################################################################
 # udev
 
 # not clear why, but harmless
