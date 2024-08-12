@@ -39,7 +39,7 @@ RUN sed -e 's/ *systemd//' -i /etc/nsswitch.conf
 
 # Clear files that may lead to indeterministic build.
 RUN apt-get clean && \
-    find /usr/lib/python3.8 -name "*.pyc" | xargs rm && \
+    find /usr/lib/python3.12 -name "*.pyc" | xargs rm && \
     find /usr/lib/python3 -name "*.pyc" | xargs rm && \
     find /usr/share/python3 -name "*.pyc" | xargs rm && \
     truncate --size 0 /etc/machine-id
@@ -111,10 +111,6 @@ RUN systemctl disable \
     fstrim.service \
     fstrim.timer
 
-# Clear additional files that may lead to indeterministic build.
-RUN find /usr/local/share/fonts -name .uuid | xargs rm && \
-    find /usr/share/fonts -name .uuid | xargs rm
-
 # ------ GUESTOS WORK --------------------------------------------
 
 # Divert symbolic link for dynamically generated nftables
@@ -129,19 +125,8 @@ RUN mkdir -p /var/lib/ic/backup \
 # Create two mount points for temporary use during setup of "var" partition
 RUN mkdir -p /mnt/var_old /mnt/var_new
 
-# Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf E.g., systemd-timesync/coredump. 
-## `systemd-sysusers` does not honor the SOURCE_DATE_EPOCH env var. 
-## With `podman --timestamp=0` each file gets written with timestamp of the Unix epoch. 
-## When systemd-sysusers writes the shadow entry for these users, the 2nd field in the row (# days since the epoch) is set to (today - unix epoch). 
-## This is not reproducible. 
-## Reset the passwords to the locked password ("!!"). `usermod` honors SOURCE_DATE_EPOCH (set in the base dockerfile). This removes the password timestamp.
-## Why not use `faketime`? Doesn't work with `podman --timestamp=0`.
-RUN systemd-sysusers && \
-    usermod -p '!!' systemd-timesync && \
-    usermod -p '!!' systemd-coredump
-
 # Set /bin/sh to point to /bin/bash instead of the default /bin/dash
-RUN echo "set dash/sh false" | debconf-communicate && dpkg-reconfigure -fnoninteractive dash
+RUN ln -sf bash /usr/bin/sh
 
 # Group accounts to which parts of the runtime state are assigned such that
 # user accounts can be granted individual access rights.
