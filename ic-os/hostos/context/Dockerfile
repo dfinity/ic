@@ -91,6 +91,7 @@ RUN systemctl enable \
     chrony \
     libvirtd \
     nftables \
+    ssh \
     systemd-journal-gatewayd \
     systemd-networkd \
     systemd-networkd-wait-online \

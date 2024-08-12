@@ -96,6 +96,7 @@ RUN \
 RUN systemctl enable \
     chrony \
     nftables \
+    ssh \
     systemd-networkd \
     systemd-networkd-wait-online \
     systemd-resolved \
