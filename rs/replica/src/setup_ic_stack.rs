@@ -284,6 +284,7 @@ pub fn construct_ic_stack(
         execution_services.query_execution_service.clone(),
         log.clone(),
         subnet_type,
+        delegation_from_nns.clone(),
     );
     // ---------- QUERY STATS DEPS FOLLOW -----------
     let query_stats_payload_builder = execution_services
