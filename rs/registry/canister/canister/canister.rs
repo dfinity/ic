@@ -44,7 +44,9 @@ use registry_canister::{
         do_retire_replica_version::RetireReplicaVersionPayload,
         do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
-        do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
+        do_update_api_boundary_nodes_version::{
+            DeployGuestOsToSomeApiBoundaryNodes, UpdateApiBoundaryNodesVersionPayload,
+        },
         do_update_elected_hostos_versions::{
             ReviseElectedHostosVersionsPayload, UpdateElectedHostosVersionsPayload,
         },
@@ -577,6 +579,8 @@ fn remove_api_boundary_nodes_(payload: RemoveApiBoundaryNodesPayload) {
     recertify_registry();
 }
 
+// TODO[NNS1-3000]: Remove this endpoint once mainnet NNS Governance starts calling the new
+// TODO[NNS1-3000]: `deploy_guestos_to_some_api_boundary_nodes` endpoint.
 #[export_name = "canister_update update_api_boundary_nodes_version"]
 fn update_api_boundary_nodes_version() {
     check_caller_is_governance_and_log("update_api_boundary_nodes_version");
@@ -586,6 +590,18 @@ fn update_api_boundary_nodes_version() {
 #[candid_method(update, rename = "update_api_boundary_nodes_version")]
 fn update_api_boundary_nodes_version_(payload: UpdateApiBoundaryNodesVersionPayload) {
     registry_mut().do_update_api_boundary_nodes_version(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update deploy_guestos_to_some_api_boundary_nodes"]
+fn deploy_guestos_to_some_api_boundary_nodes() {
+    check_caller_is_governance_and_log("deploy_guestos_to_some_api_boundary_nodes");
+    over(candid_one, deploy_guestos_to_some_api_boundary_nodes_);
+}
+
+#[candid_method(update, rename = "deploy_guestos_to_some_api_boundary_nodes")]
+fn deploy_guestos_to_some_api_boundary_nodes_(payload: DeployGuestOsToSomeApiBoundaryNodes) {
+    registry_mut().do_deploy_guestos_to_some_api_boundary_nodes(payload);
     recertify_registry();
 }
 
