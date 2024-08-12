@@ -12,6 +12,7 @@ use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use libc::{c_void, close};
 use nix::sys::mman::{madvise, mmap, munmap, MapFlags, MmapAdvise, ProtFlags};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::os::raw::c_int;
 use std::os::unix::io::RawFd;
@@ -184,6 +185,47 @@ impl PageAllocatorInner {
                 page.copy_from_slice(0, *contents);
                 (*page_index, Page(Arc::new(page)))
             })
+            .collect()
+    }
+
+    // This is the same functionality as `allocate`, but it uses rayon to parallelize
+    // the copying of pages. This is useful when the number of pages is large.
+    pub fn allocate_fastpath(
+        page_allocator: &Arc<Self>,
+        pages: &[(PageIndex, &PageBytes)],
+    ) -> Vec<(PageIndex, Page)> {
+        let mut guard = page_allocator.core_allocator.lock().unwrap();
+        let allocator_creator = || {
+            MmapBasedPageAllocatorCore::new(Arc::clone(page_allocator.fd_factory.as_ref().unwrap()))
+        };
+        let core = guard.get_or_insert_with(allocator_creator);
+        // It would also be correct to increment the counters after all the
+        // allocations, but doing it before gives better performance because
+        // the core allocator can memory-map larger chunks.
+        ALLOCATED_PAGES.inc_by(pages.len());
+        core.allocated_pages += pages.len();
+
+        // Collect page addresses to avoid locking and copying for every page.
+        // This enables parallel copying of pages.
+        let mut allocated_pages_vec: Vec<_> = pages
+            .iter()
+            .map(|(_, _)| core.allocate_page(page_allocator))
+            .collect();
+
+        // Copy the contents of the pages in parallel using rayon parallel iterators.
+        // NB: the number of threads used are the same as the ones allocated when starting
+        // the sandbox, controlled by the embedders_config.num_rayon_page_allocator_threads.
+        allocated_pages_vec
+            .par_iter_mut()
+            .zip(pages.par_iter())
+            .for_each(|(allocated_page, delta_page)| {
+                allocated_page.copy_from_slice(0, delta_page.1);
+            });
+
+        allocated_pages_vec
+            .into_iter()
+            .zip(pages)
+            .map(|(allocated_page, delta_page)| (delta_page.0, Page(Arc::new(allocated_page))))
             .collect()
     }
 
