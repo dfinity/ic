@@ -126,7 +126,9 @@ jobs:
           # we don't always run bazel test (e.g. README changes only)
           if-no-files-found: ignore
           compression-level: 9
-          path: bazel-bep.pb
+          path: |
+            bazel-bep.pb
+            profile.gz
 
   bazel-build-all-config-check:
     <<: *dind-large-setup
@@ -154,7 +156,9 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
           compression-level: 9
-          path: bazel-bep.pb
+          path: |
+            bazel-bep.pb
+            profile.gz
 
   bazel-test-darwin-x86-64:
     name: Bazel Test Darwin x86-64
@@ -203,7 +207,9 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
           compression-level: 9
-          path: bazel-bep.pb
+          path: |
+            bazel-bep.pb
+            profile.gz
       - name: Purge Bazel Output
         if: always()
         shell: bash
@@ -230,7 +236,9 @@ jobs:
           retention-days: 90
           if-no-files-found: ignore
           compression-level: 9
-          path: bazel-bep.pb
+          path: |
+            bazel-bep.pb
+            profile.gz
 
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
@@ -252,7 +260,9 @@ jobs:
           retention-days: 90
           if-no-files-found: ignore
           compression-level: 9
-          path: bazel-bep.pb
+          path: |
+            bazel-bep.pb
+            profile.gz
 
   python-ci-tests:
     name: Python CI Tests

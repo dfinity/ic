@@ -2,6 +2,7 @@
 
 # Build event upload configuration
 build:bes --build_event_binary_file=bazel-bep.pb --experimental_bep_target_summary=true --build_event_publish_all_actions=true
+build:bes --profile=profile.gz
 build:bes --bes_results_url=https://dash.idx.dfinity.network/invocation/
 build:bes --bes_backend=bes.idx.dfinity.network
 build:bes --bes_upload_mode=wait_for_upload_complete
