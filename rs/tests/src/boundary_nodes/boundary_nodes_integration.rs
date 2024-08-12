@@ -29,7 +29,7 @@ use ic_system_test_driver::{
         boundary_node::BoundaryNodeVm,
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, HasVm, HasWasm, IcNodeContainer,
+            load_wasm, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer,
             RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
@@ -80,7 +80,7 @@ async fn install_canister(env: TestEnv, logger: Logger, path: &str) -> Result<Pr
     );
     let agent = assert_create_agent(install_node.0.as_str()).await;
 
-    let canister = env.load_wasm(path);
+    let canister = load_wasm(path);
 
     info!(&logger, "installing canister from path {}", path);
     let canister_id = create_canister(&agent, install_node.1, &canister, None)
@@ -648,7 +648,7 @@ pub fn http_canister_test(env: TestEnv) {
         info!(&logger, "Creating replica agent...");
         let agent = assert_create_agent(install_node.0.as_str()).await;
         let kv_store_canister =
-            env.load_wasm(env::var("KV_STORE_WASM_PATH").expect("KV_STORE_WASM_PATH not set"));
+            load_wasm(env::var("KV_STORE_WASM_PATH").expect("KV_STORE_WASM_PATH not set"));
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.1, &kv_store_canister, None)
@@ -830,7 +830,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
         info!(&logger, "Creating replica agent...");
         let agent = assert_create_agent(install_node.0.as_str()).await;
         let kv_store_canister =
-            env.load_wasm(env::var("KV_STORE_WASM_PATH").expect("KV_STORE_WASM_PATH not set"));
+            load_wasm(env::var("KV_STORE_WASM_PATH").expect("KV_STORE_WASM_PATH not set"));
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.1, &kv_store_canister, None)
@@ -1002,7 +1002,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
         info!(&logger, "Creating replica agent...");
         let agent = assert_create_agent(install_node.0.as_str()).await;
         let kv_store_canister =
-            env.load_wasm(env::var("KV_STORE_WASM_PATH").expect("KV_STORE_WASM_PATH not set"));
+            load_wasm(env::var("KV_STORE_WASM_PATH").expect("KV_STORE_WASM_PATH not set"));
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.1, &kv_store_canister, None)
@@ -1184,7 +1184,7 @@ pub fn denylist_test(env: TestEnv) {
         info!(&logger, "creating replica agent");
         let agent = assert_create_agent(install_node.as_ref().unwrap().0.as_str()).await;
 
-        let http_counter_canister = env.load_wasm(env::var("HTTP_COUNTER_WASM_PATH").expect("HTTP_COUNTER_WASM_PATH not set"));
+        let http_counter_canister = load_wasm(env::var("HTTP_COUNTER_WASM_PATH").expect("HTTP_COUNTER_WASM_PATH not set"));
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.clone().unwrap().1, &http_counter_canister, None)
@@ -1295,7 +1295,7 @@ pub fn canister_allowlist_test(env: TestEnv) {
         info!(&logger, "creating replica agent");
         let agent = assert_create_agent(install_node.as_ref().unwrap().0.as_str()).await;
 
-        let http_counter_canister = env.load_wasm(env::var("HTTP_COUNTER_WASM_PATH").expect("HTTP_COUNTER_WASM_PATH not set"));
+        let http_counter_canister = load_wasm(env::var("HTTP_COUNTER_WASM_PATH").expect("HTTP_COUNTER_WASM_PATH not set"));
 
         info!(&logger, "installing canister");
         let canister_id = create_canister(&agent, install_node.clone().unwrap().1, &http_counter_canister, None)

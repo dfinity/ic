@@ -36,6 +36,8 @@ type DefiniteCanisterSettings = record {
   freezing_threshold : opt nat;
   controllers : vec principal;
   reserved_cycles_limit : opt nat;
+  log_visibility : opt LogVisibility;
+  wasm_memory_limit : opt nat;
   memory_allocation : opt nat;
   compute_allocation : opt nat;
 };
@@ -68,6 +70,7 @@ type ListSnsCanistersResponse = record {
   dapps : vec principal;
   archives : vec principal;
 };
+type LogVisibility = variant { controllers; public };
 type ManageDappCanisterSettingsRequest = record {
   freezing_threshold : opt nat64;
   canister_ids : vec principal;

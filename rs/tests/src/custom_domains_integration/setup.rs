@@ -8,7 +8,7 @@ use ic_system_test_driver::{
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{
-            GetFirstHealthyNodeSnapshot, HasDependencies, HasPublicApiUrl, HasTopologySnapshot,
+            get_dependency_path, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
             IcNodeContainer, NnsInstallationBuilder, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
         universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
@@ -217,7 +217,9 @@ async fn setup_remote_docker_host(
     images: &[&str],
 ) -> Result<DeployedUniversalVm, Error> {
     UniversalVm::new(REMOTE_DOCKER_HOST_VM_ID.into())
-        .with_config_img(env.get_dependency_path("rs/tests/custom_domains_uvm_config_image.zst"))
+        .with_config_img(get_dependency_path(
+            "rs/tests/custom_domains_uvm_config_image.zst",
+        ))
         .start(&env)
         .context("failed to setup universal VM")?;
 

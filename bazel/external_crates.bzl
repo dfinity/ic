@@ -244,7 +244,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.0",
             ),
             "ic_bls12_381": crate.spec(
-                version = "^0.9.2",
+                version = "=0.10.0",
                 features = [
                     "alloc",
                     "experimental",
@@ -1458,7 +1458,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.50",
             ),
             "wasmtime": crate.spec(
-                version = "^22.0.0",
+                version = "^23.0.1",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1468,7 +1468,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^22.0.0",
+                version = "^23.0.1",
             ),
             "wast": crate.spec(
                 version = "^53.0.0",
