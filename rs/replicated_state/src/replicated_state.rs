@@ -365,7 +365,7 @@ impl MemoryTaken {
 // * We don't derive `Serialize` and `Deserialize` because these are handled by
 // our OP layer.
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "debug_assertions", derive(PartialEq))]
+#[cfg_attr(debug_assertions, derive(PartialEq))]
 pub struct ReplicatedState {
     /// States of all canisters, indexed by canister ids.
     pub canister_states: BTreeMap<CanisterId, CanisterState>,

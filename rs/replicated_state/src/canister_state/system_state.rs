@@ -266,7 +266,7 @@ impl CanisterHistory {
 /// The state here cannot be directly modified by the Wasm module in the
 /// canister but can be indirectly via the SystemApi interface.
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "debug_assertions", derive(PartialEq, Eq))]
+#[cfg_attr(debug_assertions, derive(PartialEq, Eq))]
 pub struct SystemState {
     pub controllers: BTreeSet<PrincipalId>,
     pub canister_id: CanisterId,
