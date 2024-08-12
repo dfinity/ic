@@ -1283,7 +1283,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     // Increase the canister balance to be able to take a new snapshot.
     let subnet_type = SubnetType::Application;
     let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
-    let canister_snapshot_size = test.canister_state(canister_id).snapshot_memory_usage();
+    let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
     let instructions = scheduler_config.canister_snapshot_baseline_instructions
         + NumInstructions::new(canister_snapshot_size.get());
     let expected_charge = test.execution_cost(instructions);
@@ -1395,7 +1395,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     // Increase the canister balance to be able to take a new snapshot.
     let subnet_type = SubnetType::Application;
     let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
-    let canister_snapshot_size = test.canister_state(canister_id).snapshot_memory_usage();
+    let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
     let instructions = scheduler_config.canister_snapshot_baseline_instructions
         + NumInstructions::new(canister_snapshot_size.get());
     let expected_charge = test.execution_cost(instructions);

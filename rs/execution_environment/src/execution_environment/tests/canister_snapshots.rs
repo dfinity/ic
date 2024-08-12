@@ -784,7 +784,7 @@ fn take_canister_snapshot_fails_when_canister_would_be_frozen() {
     // Taking a snapshot of the canister will decrease the balance.
     // Increase the canister balance to be able to take a new snapshot.
     let scheduler_config = SubnetConfig::new(SubnetType::Application).scheduler_config;
-    let canister_snapshot_size = test.canister_state(canister_id).snapshot_memory_usage();
+    let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
     let instructions = scheduler_config.canister_snapshot_baseline_instructions
         + NumInstructions::new(canister_snapshot_size.get());
     let expected_charge = test
@@ -1538,7 +1538,7 @@ fn take_canister_snapshot_charges_canister_cycles() {
 
     // Increase memory usage.
     grow_stable_memory(&mut test, canister_id, WASM_PAGE_SIZE, NUM_PAGES);
-    let canister_snapshot_size = test.canister_state(canister_id).snapshot_memory_usage();
+    let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
 
     let initial_balance = test.canister_state(canister_id).system_state.balance();
     let instructions = scheduler_config.canister_snapshot_baseline_instructions
@@ -1599,7 +1599,7 @@ fn load_canister_snapshot_charges_canister_cycles() {
         .snapshot_id();
     assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
 
-    let canister_snapshot_size = test.canister_state(canister_id).snapshot_memory_usage();
+    let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
     let initial_balance = test.canister_state(canister_id).system_state.balance();
     let instructions = scheduler_config.canister_snapshot_baseline_instructions
         + NumInstructions::new(canister_snapshot_size.get());
