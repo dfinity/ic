@@ -228,9 +228,7 @@ impl BitcoinPayloadBuilder {
             // Since we tolerate up to 2x the size margin currently, this will pass validation
             // but trigger a warning.
             let first_response_in_block = current_payload_size == 0 && priority == 0;
-            if response_size + current_payload_size > byte_limit.get()
-                && !first_response_in_block
-            {
+            if response_size + current_payload_size > byte_limit.get() && !first_response_in_block {
                 // Stop if we're about to exceed the byte limit.
                 break;
             }
