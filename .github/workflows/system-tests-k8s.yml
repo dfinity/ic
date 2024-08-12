@@ -1,4 +1,4 @@
-name: Sytem Tests K8s
+name: System Tests K8s
 
 # Run specific system test:
 # gh workflow run system-tests-k8s.yml \
@@ -7,6 +7,8 @@ name: Sytem Tests K8s
 #   --field jobs="32"
 
 on:
+  schedule:
+    - cron: "0 3 * * *"
   pull_request:
     paths:
       - '.github/workflows/system-tests-k8s.yml'
@@ -22,8 +24,14 @@ on:
         default: '32'
 
 env:
-  TARGETS: "${{ github.event.inputs.targets || '//rs/tests/testing_verification:basic_health_test' }}"
-  JOBS: "${{ github.event.inputs.jobs || '32' }}"
+  TARGETS: |
+    ${{ github.event_name == 'schedule' && '//...' ||
+    github.event_name == 'workflow_dispatch' && github.event.inputs.targets ||
+    '//rs/tests/testing_verification:basic_health_test' }}
+  JOBS: |
+    ${{ github.event_name == 'schedule' && '9' ||
+    github.event_name == 'workflow_dispatch' && github.event.inputs.jobs ||
+    '32' }}
   AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   CI_COMMIT_SHA: ${{ github.sha }}
@@ -46,7 +54,7 @@ jobs:
       group: ln1
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
       options: >-
         -e NODE_NAME -e KUBECONFIG
         --privileged --cgroupns host
@@ -76,5 +84,5 @@ jobs:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "${{ env.TARGETS }}"
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS: "--jobs=${{ env.JOBS }} --test_tag_filters=k8s,-manual --k8s"
+          BAZEL_EXTRA_ARGS: "--jobs=${{ env.JOBS }} --test_tag_filters=k8s,-manual,-colocated --k8s"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}

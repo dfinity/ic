@@ -461,14 +461,14 @@ impl BackupHelper {
         let ic_admin = self.binary_file("ic-replay", replica_version);
         let mut cmd = Command::new(ic_admin);
         cmd.arg("--data-root")
-            .arg(&self.data_dir())
+            .arg(self.data_dir())
             .arg("--subnet-id")
-            .arg(&self.subnet_id.to_string())
-            .arg(&self.ic_config_file_local(replica_version))
+            .arg(self.subnet_id.to_string())
+            .arg(self.ic_config_file_local(replica_version))
             .arg("restore-from-backup")
-            .arg(&self.local_store_dir())
-            .arg(&self.spool_root_dir())
-            .arg(&replica_version.to_string())
+            .arg(self.local_store_dir())
+            .arg(self.spool_root_dir())
+            .arg(replica_version.to_string())
             .arg(start_height.to_string())
             .stdout(Stdio::piped());
         debug!(self.log, "[#{}] Will execute: {:?}", self.thread_id, cmd);
@@ -557,7 +557,13 @@ impl BackupHelper {
         None
     }
 
-    fn get_disk_stats(&self, dir: &Path, threshold: u32, typ: DiskStats) -> Result<u32, String> {
+    fn get_disk_stats(
+        &self,
+        dir: &Path,
+        threshold: u32,
+        typ: DiskStats,
+        notify_if_exceeds_threshold: bool,
+    ) -> Result<u32, String> {
         let mut cmd = Command::new("df");
         cmd.arg(match typ {
             DiskStats::Inodes => "-i",
@@ -578,7 +584,7 @@ impl BackupHelper {
                     let mut num_str = val.to_string();
                     num_str.pop();
                     if let Ok(n) = num_str.parse::<u32>() {
-                        if n >= threshold {
+                        if notify_if_exceeds_threshold && n >= threshold {
                             let resource = match typ {
                                 DiskStats::Inodes => "inodes",
                                 DiskStats::Space => "space",
@@ -653,22 +659,36 @@ impl BackupHelper {
             .map_err(|err| format!("Error creating timestamp file: {:?}", err))?;
         file.write_all(now_str.as_bytes())
             .map_err(|err| format!("Error writing timestamp: {:?}", err))?;
-
-        self.log_disk_stats()
+        self.log_disk_stats(true)
     }
 
-    pub(crate) fn log_disk_stats(&self) -> Result<(), String> {
+    pub(crate) fn log_disk_stats(&self, notify_if_exceeds_threshold: bool) -> Result<(), String> {
         let mut stats = Vec::new();
-        for (dir, threshold) in &[
-            (&self.root_dir, self.hot_disk_resource_threshold_percentage),
+        for (dir, threshold, storage_type) in [
+            (
+                &self.root_dir,
+                self.hot_disk_resource_threshold_percentage,
+                "hot",
+            ),
             (
                 &self.cold_storage_dir,
                 self.cold_disk_resource_threshold_percentage,
+                "cold",
             ),
         ] {
-            let space = self.get_disk_stats(dir, *threshold, DiskStats::Space)?;
-            let inodes = self.get_disk_stats(dir, *threshold, DiskStats::Inodes)?;
-            stats.push((dir.as_path(), space, inodes));
+            let space = self.get_disk_stats(
+                dir,
+                threshold,
+                DiskStats::Space,
+                notify_if_exceeds_threshold,
+            )?;
+            let inodes = self.get_disk_stats(
+                dir,
+                threshold,
+                DiskStats::Inodes,
+                notify_if_exceeds_threshold,
+            )?;
+            stats.push((dir.as_path(), space, inodes, storage_type));
         }
         self.notification_client
             .push_metrics_disk_stats(stats.as_slice());

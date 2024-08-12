@@ -22,11 +22,9 @@ pub struct ChangeCanisterRequest {
     ///
     /// The value depend on the canister. For instance:
     /// * Canisters that don't emit any inter-canister call, such as the
-    ///   registry canister,
-    /// have no reason to be stopped before being upgraded.
+    ///   registry canister, have no reason to be stopped before being upgraded.
     /// * Canisters that emit inter-canister call are at risk of undefined
-    ///   behavior if
-    /// a callback is delivered to them after the upgrade.
+    ///   behavior if a callback is delivered to them after the upgrade.
     pub stop_before_installing: bool,
 
     // -------------------------------------------------------------------- //

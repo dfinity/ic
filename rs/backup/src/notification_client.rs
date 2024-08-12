@@ -120,6 +120,7 @@ impl NotificationClient {
             &Path,
             /*space % usage*/ u32,
             /*inodes % usage*/ u32,
+            /*storage type*/ &str,
         )],
     ) {
         let message = format!(
@@ -128,14 +129,15 @@ impl NotificationClient {
              {}",
             stats
                 .iter()
-                .map(|(dir, space, inodes)| {
+                .map(|(dir, space, inodes, storage_type)| {
                     format!(
-                        "backup_disk_usage{{ic=\"{0}\", dir=\"{1}\", resource=\"space\"}} {2}\n\
-                         backup_disk_usage{{ic=\"{0}\", dir=\"{1}\", resource=\"inodes\"}} {3}\n",
+                        "backup_disk_usage{{ic=\"{0}\", dir=\"{1}\", resource=\"space\", storage_type=\"{4}\"}} {2}\n\
+                         backup_disk_usage{{ic=\"{0}\", dir=\"{1}\", resource=\"inodes\", storage_type=\"{4}\"}} {3}\n",
                         self.network_name,
                         dir.to_str().unwrap_or_default(),
                         space,
-                        inodes
+                        inodes,
+                        storage_type
                     )
                 })
                 .collect::<Vec<_>>()

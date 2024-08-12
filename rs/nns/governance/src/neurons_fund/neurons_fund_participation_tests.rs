@@ -16,13 +16,13 @@ fn nid(id: u64) -> NeuronId {
 /// 3. Derive the final participation from the initial participation.
 /// 4. Assert that the relationship between the field values is correct for the initial
 ///    and final participations. In particular, a decrease is expected for the fields
-///   `intended_neurons_fund_participation_icp_e8s` and `allocated_neurons_fund_participation_icp_e8s`.
-///   (Initial participation is for the best-case scenario, so final participation is less than or
-///   equal to the initial.) Note that these two fields have the same value in the initial
-///   participation, but a slightly different value in the final participation. This is because we
-///   set the smallest neuron's maturity to a value is sufficient for it to participate in the best
-///   case scenario (corresponding to the initial participation) while not sufficient for it to
-///   participate in the final participation.
+///    `intended_neurons_fund_participation_icp_e8s` and `allocated_neurons_fund_participation_icp_e8s`.
+///    (Initial participation is for the best-case scenario, so final participation is less than or
+///    equal to the initial.) Note that these two fields have the same value in the initial
+///    participation, but a slightly different value in the final participation. This is because we
+///    set the smallest neuron's maturity to a value is sufficient for it to participate in the best
+///    case scenario (corresponding to the initial participation) while not sufficient for it to
+///    participate in the final participation.
 /// 5. Assert that the `total_amount_icp_e8s` is computed correctly.
 /// 6. Assert that the neuron portions comprising maturity refunds computed through
 ///    ```
@@ -39,7 +39,6 @@ fn nid(id: u64) -> NeuronId {
 #[test]
 fn test() {
     let controller = PrincipalId::default();
-    // TODO(NNS1-3199): Populate this field if it is relevant for this test
     let hotkeys = Vec::new();
     let small_neuron = NeuronsFundNeuron {
         id: nid(111),

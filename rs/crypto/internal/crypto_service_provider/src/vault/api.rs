@@ -692,7 +692,7 @@ pub trait PublicAndSecretKeyStoreCspVault {
     ///   and potentially additionally stored public keys, like rotated IDKG dealing encryption public keys)
     ///   have a corresponding secret key in the secret key store,
     /// * all public keys are valid, also with respect to the current time.
-    /// If all check passes, the current node public keys in validated form is returned.
+    ///   If all check passes, the current node public keys in validated form is returned.
     ///
     /// # Errors
     /// The method return on the first encountered error and will not check further any other key pairs.

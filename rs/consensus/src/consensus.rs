@@ -374,23 +374,23 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
     /// There are two decisions that [ConsensusImpl] makes:
     ///
     /// 1. It must return immediately if one of the subcomponent returns a
-    /// non-empty [ChangeSet]. It is important that a [ChangeSet] is fully
-    /// applied to the pool or timer before another subcomponent uses
-    /// them, because each subcomponent expects to see full state in order to
-    /// make correct decisions on what to do next.
+    ///    non-empty [ChangeSet]. It is important that a [ChangeSet] is fully
+    ///    applied to the pool or timer before another subcomponent uses
+    ///    them, because each subcomponent expects to see full state in order to
+    ///    make correct decisions on what to do next.
     ///
     /// 2. The order in which subcomponents are called also matters. At the
-    /// moment it is important to call finalizer first, because otherwise
-    /// we'll just keep producing notarized blocks indefinitely without
-    /// finalizing anything, due to the above decision of having to return
-    /// early.
-    /// Additionally, we call the purger after every function that may increment
-    /// the finalized or CUP height (currently aggregation & validation), as
-    /// these heights determine which artifacts we can purge. This reduces the
-    /// number of excess artifacts, which allows us to maintain a stricter bound
-    /// on the memory consumption of our advertised validated pool.
-    /// The order of the rest subcomponents decides whom is given
-    /// a priority, but it should not affect liveness or correctness.
+    ///    moment it is important to call finalizer first, because otherwise
+    ///    we'll just keep producing notarized blocks indefinitely without
+    ///    finalizing anything, due to the above decision of having to return
+    ///    early.
+    ///    Additionally, we call the purger after every function that may increment
+    ///    the finalized or CUP height (currently aggregation & validation), as
+    ///    these heights determine which artifacts we can purge. This reduces the
+    ///    number of excess artifacts, which allows us to maintain a stricter bound
+    ///    on the memory consumption of our advertised validated pool.
+    ///    The order of the rest subcomponents decides whom is given
+    ///    a priority, but it should not affect liveness or correctness.
     fn on_state_change(&self, pool: &T) -> ChangeSet {
         let pool_reader = PoolReader::new(pool);
         trace!(self.log, "on_state_change");

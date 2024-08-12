@@ -453,7 +453,9 @@ impl ExecutionEnvironment {
     }
 
     /// Executes a replicated message sent to a subnet.
-    /// Returns the new replicated state and the number of left instructions.
+    ///
+    /// Returns the new replicated state and an optional number of instructions
+    /// consumed by the message execution.
     #[allow(clippy::cognitive_complexity)]
     #[allow(clippy::too_many_arguments)]
     pub fn execute_subnet_message(
@@ -495,35 +497,12 @@ impl ExecutionEnvironment {
                             Payload::Data(_),
                         ) = (&context, &response.response_payload)
                         {
-                            // TODO(CON-1302): This abuses the fact that we currently only have
-                            // at most one ECDSA key per subnet. So when we find the first ECDSA
-                            // signature agreement after the introduction of this metric, we will
-                            // initialize it with the old value from `ecdsa_signature_agreements`.
-                            // This can be removed once we will no longer rollback to a version
-                            // without the new metric.
-                            let default = if threshold_context.is_ecdsa() {
-                                state.metadata.subnet_metrics.ecdsa_signature_agreements
-                            } else {
-                                0
-                            };
                             *state
                                 .metadata
                                 .subnet_metrics
                                 .threshold_signature_agreements
                                 .entry(threshold_context.key_id())
-                                .or_insert(default) += 1;
-                        }
-
-                        // TODO(CON-1302): Remove this metric once we will no longer rollback to a
-                        // version without the new metric above
-                        if matches!(
-                            (&context, &response.response_payload),
-                            (
-                                SubnetCallContext::SignWithThreshold(threshold_context),
-                                Payload::Data(_)
-                            ) if threshold_context.is_ecdsa()
-                        ) {
-                            state.metadata.subnet_metrics.ecdsa_signature_agreements += 1;
+                                .or_default() += 1;
                         }
 
                         state.push_subnet_output_response(
@@ -1323,6 +1302,7 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::BitcoinGetBalance)
             | Ok(Ic00Method::BitcoinGetUtxos)
+            | Ok(Ic00Method::BitcoinGetBlockHeaders)
             | Ok(Ic00Method::BitcoinSendTransaction)
             | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => {
                 // Code path can only be triggered if there are no bitcoin canisters to route
@@ -2086,10 +2066,7 @@ impl ExecutionEnvironment {
                 round_limits,
                 &resource_saturation,
             )
-            .map(|response| {
-                state.metadata.heap_delta_estimate += NumBytes::from(response.total_size());
-                response.encode()
-            })
+            .map(|response| response.encode())
             .map_err(|err| err.into());
         // Put canister back.
         state.put_canister_state(canister);
@@ -2943,6 +2920,7 @@ impl ExecutionEnvironment {
     /// - If the execution is finished, then it outputs the subnet response.
     /// - If the execution is paused, then it enqueues it to the task queue of
     ///   the canister.
+    ///
     /// In both cases, the functions gets the canister from the result and adds
     /// it to the replicated state.
     fn process_install_code_result(

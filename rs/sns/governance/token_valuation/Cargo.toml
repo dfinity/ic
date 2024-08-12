@@ -8,13 +8,13 @@ async-trait = { workspace = true }
 candid = { workspace = true }
 cycles-minting-canister = { path = "../../../nns/cmc" }
 futures = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
 ic-cdk = { workspace = true }
 ic-nervous-system-common = { path = "../../../nervous_system/common" }
 ic-nervous-system-runtime = { path = "../../../nervous_system/runtime" }
 ic-nervous-system-string = { path = "../../../nervous_system/string" }
 ic-nns-constants = { path = "../../../nns/constants" }
 ic-sns-swap-proto-library = { path = "../../../sns/swap/proto_library" }
-ic-base-types = { path = "../../../types/base_types" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 mockall = { workspace = true }
 rust_decimal = "1.25"

@@ -8,7 +8,7 @@ use ic_base_types::PrincipalId;
 use ic_crypto_ecdsa_secp256k1::PublicKey;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance::pb::v1::GovernanceError;
+use ic_nns_governance_api::pb::v1::GovernanceError;
 use sha3::{Digest, Keccak256};
 use std::{collections::HashSet, time::SystemTime};
 
