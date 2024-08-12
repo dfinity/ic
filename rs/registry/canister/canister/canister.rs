@@ -44,8 +44,12 @@ use registry_canister::{
         do_retire_replica_version::RetireReplicaVersionPayload,
         do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
-        do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
-        do_update_elected_hostos_versions::UpdateElectedHostosVersionsPayload,
+        do_update_api_boundary_nodes_version::{
+            DeployGuestOsToSomeApiBoundaryNodes, UpdateApiBoundaryNodesVersionPayload,
+        },
+        do_update_elected_hostos_versions::{
+            ReviseElectedHostosVersionsPayload, UpdateElectedHostosVersionsPayload,
+        },
         do_update_node_directly::UpdateNodeDirectlyPayload,
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
         do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
@@ -382,20 +386,6 @@ fn revise_elected_guestos_versions_(payload: ReviseElectedGuestosVersionsPayload
 }
 
 // TODO[NNS1-3000]: Remove this endpoint once mainnet NNS Governance starts calling the new
-// TODO[NNS1-3000]: `deploy_guestos_to_all_subnet_nodes` endpoint.
-#[export_name = "canister_update update_subnet_replica_version"]
-fn update_subnet_replica_version() {
-    check_caller_is_governance_and_log("update_subnet_replica_version");
-    over(candid_one, update_subnet_replica_version_);
-}
-
-#[candid_method(update, rename = "update_subnet_replica_version")]
-fn update_subnet_replica_version_(payload: DeployGuestosToAllSubnetNodesPayload) {
-    registry_mut().do_deploy_guestos_to_all_subnet_nodes(payload);
-    recertify_registry();
-}
-
-// TODO[NNS1-3000]: Remove this endpoint once mainnet NNS Governance starts calling the new
 // TODO[NNS1-3000]: `revise_elected_guestos_versions` endpoint.
 #[export_name = "canister_update revise_elected_replica_versions"]
 fn revise_elected_replica_versions() {
@@ -421,15 +411,31 @@ fn deploy_guestos_to_all_subnet_nodes_(payload: DeployGuestosToAllSubnetNodesPay
     recertify_registry();
 }
 
+// TODO[NNS1-3000]: Remove this endpoint once mainnet NNS Governance starts calling the new
+// TODO[NNS1-3000]: `revise_elected_hostos_versions` endpoint.
 #[export_name = "canister_update update_elected_hostos_versions"]
 fn update_elected_hostos_versions() {
     check_caller_is_governance_and_log("update_elected_hostos_versions");
     over(candid_one, update_elected_hostos_versions_);
 }
 
+// TODO[NNS1-3000]: Remove this endpoint once mainnet NNS Governance starts calling the new
+// TODO[NNS1-3000]: `revise_elected_hostos_versions` endpoint.
 #[candid_method(update, rename = "update_elected_hostos_versions")]
 fn update_elected_hostos_versions_(payload: UpdateElectedHostosVersionsPayload) {
     registry_mut().do_update_elected_hostos_versions(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update revise_elected_hostos_versions"]
+fn revise_elected_hostos_versions() {
+    check_caller_is_governance_and_log("revise_elected_hostos_versions");
+    over(candid_one, revise_elected_hostos_versions_);
+}
+
+#[candid_method(update, rename = "revise_elected_hostos_versions")]
+fn revise_elected_hostos_versions_(payload: ReviseElectedHostosVersionsPayload) {
+    registry_mut().do_revise_elected_hostos_versions(payload);
     recertify_registry();
 }
 
@@ -573,6 +579,8 @@ fn remove_api_boundary_nodes_(payload: RemoveApiBoundaryNodesPayload) {
     recertify_registry();
 }
 
+// TODO[NNS1-3000]: Remove this endpoint once mainnet NNS Governance starts calling the new
+// TODO[NNS1-3000]: `deploy_guestos_to_some_api_boundary_nodes` endpoint.
 #[export_name = "canister_update update_api_boundary_nodes_version"]
 fn update_api_boundary_nodes_version() {
     check_caller_is_governance_and_log("update_api_boundary_nodes_version");
@@ -582,6 +590,18 @@ fn update_api_boundary_nodes_version() {
 #[candid_method(update, rename = "update_api_boundary_nodes_version")]
 fn update_api_boundary_nodes_version_(payload: UpdateApiBoundaryNodesVersionPayload) {
     registry_mut().do_update_api_boundary_nodes_version(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update deploy_guestos_to_some_api_boundary_nodes"]
+fn deploy_guestos_to_some_api_boundary_nodes() {
+    check_caller_is_governance_and_log("deploy_guestos_to_some_api_boundary_nodes");
+    over(candid_one, deploy_guestos_to_some_api_boundary_nodes_);
+}
+
+#[candid_method(update, rename = "deploy_guestos_to_some_api_boundary_nodes")]
+fn deploy_guestos_to_some_api_boundary_nodes_(payload: DeployGuestOsToSomeApiBoundaryNodes) {
+    registry_mut().do_deploy_guestos_to_some_api_boundary_nodes(payload);
     recertify_registry();
 }
 
