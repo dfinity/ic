@@ -638,6 +638,8 @@ tempfile = "3.10.1"
 thiserror = "1.0.62"
 threadpool = "1.8.1"
 time = { version = "0.3.36", features = ["formatting"] }
+tla-instrumentation = { git = "https://github.com/oggy-dfin/tla-instrumentation.git", rev = "c9c4ffe3acd8c9cabeb6eee67096ba8cbd9b13a7", package = "tla_instrumentation" }
+tla-instrumentation-proc-macros = { git = "https://github.com/oggy-dfin/tla-instrumentation.git", rev = "c9c4ffe3acd8c9cabeb6eee67096ba8cbd9b13a7", package = "tla_instrumentation_proc_macros" }
 tokio = { version = "1.38.0", features = ["full"] }
 tokio-metrics = "0.3.1"
 tokio-rustls = { version = "0.26.0", default-features = false, features = [

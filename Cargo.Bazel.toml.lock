@@ -10882,7 +10882,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 [[package]]
 name = "tla_instrumentation"
 version = "0.1.0"
-source = "git+https://github.com/oggy-dfin/tla-instrumentation.git?rev=c9c4ffe3acd8c9cabeb6eee67096ba8cbd9b13a7#c9c4ffe3acd8c9cabeb6eee67096ba8cbd9b13a7"
+source = "git+https://github.com/oggy-dfin/tla-instrumentation.git?rev=84b6e07b24dcf3db115d6b02913ac101e48e2c67#84b6e07b24dcf3db115d6b02913ac101e48e2c67"
 dependencies = [
  "candid",
  "itertools 0.13.0",
@@ -10893,7 +10893,7 @@ dependencies = [
 [[package]]
 name = "tla_instrumentation_proc_macros"
 version = "0.1.0"
-source = "git+https://github.com/oggy-dfin/tla-instrumentation.git?rev=c9c4ffe3acd8c9cabeb6eee67096ba8cbd9b13a7#c9c4ffe3acd8c9cabeb6eee67096ba8cbd9b13a7"
+source = "git+https://github.com/oggy-dfin/tla-instrumentation.git?rev=84b6e07b24dcf3db115d6b02913ac101e48e2c67#84b6e07b24dcf3db115d6b02913ac101e48e2c67"
 dependencies = [
  "proc-macro2 1.0.85",
  "quote 1.0.35",
