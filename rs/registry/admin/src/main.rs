@@ -3202,10 +3202,7 @@ async fn propose_to_create_service_nervous_system(
         Some(proposer),
     ));
     let response = canister_client
-        .submit_external_proposal(
-            &create_make_proposal_payload(proposal.into(), &proposer).into(),
-            &title,
-        )
+        .submit_external_proposal(&create_make_proposal_payload(proposal, &proposer), &title)
         .await;
 
     match response {
@@ -6082,12 +6079,11 @@ impl GovernanceCanisterClient {
                     title,
                     summary,
                     &url,
-                    external_update_type.into(),
+                    external_update_type,
                     payload,
                 ),
                 self.0.proposal_author(),
-            )
-            .into(),
+            ),
             title,
         )
         .await
