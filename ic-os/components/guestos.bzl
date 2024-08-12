@@ -146,4 +146,5 @@ component_files = {
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
     Label("upgrade/shared-resources/monitor-expand-shared-data/monitor-expand-shared-data.py"): "/opt/ic/bin/monitor-expand-shared-data.py",
+    Label("upgrade/systemd-generators/DOES-NOT-EXIST"): "/etc/systemd/system-generators/DOES-NOT-EXIST",
 }
