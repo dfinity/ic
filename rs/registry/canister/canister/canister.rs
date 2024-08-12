@@ -382,20 +382,6 @@ fn revise_elected_guestos_versions_(payload: ReviseElectedGuestosVersionsPayload
 }
 
 // TODO[NNS1-3000]: Remove this endpoint once mainnet NNS Governance starts calling the new
-// TODO[NNS1-3000]: `deploy_guestos_to_all_subnet_nodes` endpoint.
-#[export_name = "canister_update update_subnet_replica_version"]
-fn update_subnet_replica_version() {
-    check_caller_is_governance_and_log("update_subnet_replica_version");
-    over(candid_one, update_subnet_replica_version_);
-}
-
-#[candid_method(update, rename = "update_subnet_replica_version")]
-fn update_subnet_replica_version_(payload: DeployGuestosToAllSubnetNodesPayload) {
-    registry_mut().do_deploy_guestos_to_all_subnet_nodes(payload);
-    recertify_registry();
-}
-
-// TODO[NNS1-3000]: Remove this endpoint once mainnet NNS Governance starts calling the new
 // TODO[NNS1-3000]: `revise_elected_guestos_versions` endpoint.
 #[export_name = "canister_update revise_elected_replica_versions"]
 fn revise_elected_replica_versions() {
