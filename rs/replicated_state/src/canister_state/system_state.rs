@@ -189,9 +189,10 @@ pub fn compute_total_canister_change_size(changes: &VecDeque<Arc<CanisterChange>
 /// The system can drop the oldest canister changes from the list to keep its length bounded
 /// (with `20` latest canister changes to always remain in the list).
 /// The system also drops all canister changes if the canister runs out of cycles.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
 pub struct CanisterHistory {
     /// The canister changes stored in the order from the oldest to the most recent.
+    #[validate_eq(Skip)]
     changes: Arc<VecDeque<Arc<CanisterChange>>>,
     /// The `total_num_changes` records the total number of canister changes
     /// that have ever been recorded. In particular, if the system drops some canister changes,

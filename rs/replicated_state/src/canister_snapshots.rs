@@ -236,9 +236,10 @@ impl CanisterSnapshots {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
 pub struct PageMemory {
     /// The contents of this memory.
+    #[validate_eq(Skip)]
     pub page_map: PageMap,
     /// The size of the memory in wasm pages. This does not indicate how much
     /// data is stored in the `page_map`, only the number of pages the memory
@@ -262,13 +263,16 @@ impl From<&PageMemory> for Memory {
 }
 
 /// Contains all information related to a canister's execution state.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
 pub struct ExecutionStateSnapshot {
     /// The raw canister module.
+    #[validate_eq(Skip)]
     pub wasm_binary: CanisterModule,
     /// Snapshot of stable memory.
+    #[validate_eq(Recursive)]
     pub stable_memory: PageMemory,
     /// Snapshot of wasm memory.
+    #[validate_eq(Recursive)]
     pub wasm_memory: PageMemory,
 }
 
@@ -288,6 +292,7 @@ pub struct CanisterSnapshot {
     /// Snapshot of chunked store.
     #[validate_eq(Recursive)]
     chunk_store: WasmChunkStore,
+    #[validate_eq(Recursive)]
     execution_snapshot: ExecutionStateSnapshot,
 }
 
