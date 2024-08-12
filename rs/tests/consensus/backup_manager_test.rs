@@ -34,6 +34,11 @@ use ic_consensus_system_test_utils::{
         generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
         wait_until_authentication_is_granted, AuthMean,
     },
+    subnet::enable_chain_key_on_subnet,
+    upgrade::{
+        assert_assigned_replica_version, bless_public_replica_version,
+        deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
+    },
 };
 use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
 use ic_management_canister_types::{
@@ -50,13 +55,6 @@ use ic_system_test_driver::{
     },
     systest,
     util::{block_on, get_nns_node, MessageCanister, UniversalCanister},
-};
-use ic_tests::orchestrator::utils::{
-    subnet_recovery::enable_chain_key_on_subnet,
-    upgrade::{
-        assert_assigned_replica_version, bless_public_replica_version,
-        deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
-    },
 };
 use ic_types::{Height, ReplicaVersion};
 use slog::{debug, error, info, Logger};
@@ -131,7 +129,7 @@ pub fn test(env: TestEnv) {
     fs::create_dir_all(&backup_binaries_dir).expect("failure creating backup binaries directory");
 
     // Copy all the binaries needed for the replay of the current version in order to avoid downloading them
-    let testing_dir = env.get_dependency_path("rs/tests");
+    let testing_dir = get_dependency_path("rs/tests");
     let binaries_path = testing_dir.join("backup/binaries");
     copy_file(&binaries_path, &backup_binaries_dir, "ic-replay");
     copy_file(&binaries_path, &backup_binaries_dir, "sandbox_launcher");
@@ -142,8 +140,7 @@ pub fn test(env: TestEnv) {
         log,
         "Download the binaries needed for replay of the mainnet version"
     );
-    let mainnet_version = env
-        .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
+    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt")
         .expect("could not read mainnet version!");
 
     // Download all the binaries needed for the replay of the mainnet version

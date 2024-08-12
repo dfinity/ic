@@ -236,6 +236,7 @@ type GovernanceCachedMetrics = record {
   total_staked_maturity_e8s_equivalent_seed : nat64;
   community_fund_total_staked_e8s : nat64;
   not_dissolving_neurons_e8s_buckets_seed : vec record { nat64; float64 };
+  public_neuron_subset_metrics : opt NeuronSubsetMetrics;
   timestamp_seconds : nat64;
   seed_neuron_count : nat64;
 };
@@ -284,6 +285,7 @@ type LedgerParameters = record {
 };
 type ListKnownNeuronsResponse = record { known_neurons : vec KnownNeuron };
 type ListNeurons = record {
+  include_public_neurons_in_full_neurons : opt bool;
   neuron_ids : vec nat64;
   include_empty_neurons_readable_by_caller : opt bool;
   include_neurons_readable_by_caller : bool;

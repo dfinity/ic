@@ -42,6 +42,7 @@ use anyhow::Result;
 use futures::future::join_all;
 use ic_consensus_system_test_utils::{
     limit_tc_ssh_command, rw_message::install_nns_with_customizations_and_check_progress,
+    subnet::enable_chain_key_signing_on_subnet,
 };
 use ic_consensus_threshold_sig_system_test_utils::{
     run_chain_key_signature_test, ChainSignatureRequest,
@@ -58,9 +59,7 @@ use ic_system_test_driver::driver::{
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{
-        HasTopologySnapshot, IcNodeContainer, NnsCanisterWasmStrategy, NnsCustomizations,
-    },
+    test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsCustomizations},
 };
 use ic_system_test_driver::generic_workload_engine::engine::Engine;
 use ic_system_test_driver::generic_workload_engine::metrics::{
@@ -70,7 +69,6 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
     block_on, get_app_subnet_and_node, get_nns_node, MessageCanister,
 };
-use ic_tests::orchestrator::utils::subnet_recovery::enable_chain_key_signing_on_subnet;
 use ic_types::Height;
 use slog::{error, info};
 use std::fs::create_dir_all;
@@ -153,7 +151,6 @@ pub fn setup(env: TestEnv) {
 
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
     env.sync_with_prometheus();

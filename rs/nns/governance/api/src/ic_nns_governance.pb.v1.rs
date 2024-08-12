@@ -1630,7 +1630,6 @@ pub mod neurons_fund_snapshot {
         #[prost(message, optional, tag = "6")]
         pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
         /// The principals that can vote, propose, and follow on behalf of this neuron.
-        /// TODO(NNS1-3199): Populate this field with the neuron's hotkeys.
         #[prost(message, repeated, tag = "7")]
         pub hotkeys: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
         /// Deprecated. Please use `controller` instead (not `hotkeys`!)
@@ -2805,6 +2804,9 @@ pub mod governance {
         #[prost(message, optional, tag = "38")]
         pub non_self_authenticating_controller_neuron_subset_metrics:
             ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
+        #[prost(message, optional, tag = "39")]
+        pub public_neuron_subset_metrics:
+            ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
     }
     /// Nested message and enum types in `GovernanceCachedMetrics`.
     pub mod governance_cached_metrics {
@@ -3076,6 +3078,16 @@ pub struct ListNeurons {
     /// compatibility. Here, being "empty" means 0 stake, 0 maturity and 0 staked maturity.
     #[prost(bool, optional, tag = "3")]
     pub include_empty_neurons_readable_by_caller: ::core::option::Option<bool>,
+    /// If this is set to true, and a neuron in the "requested list" has its
+    /// visibility set to public, then, it will (also) be included in the
+    /// full_neurons field in the response (which is of type ListNeuronsResponse).
+    /// Note that this has no effect on which neurons are in the "requested list".
+    /// In particular, this does not cause all public neurons to become part of the
+    /// requested list. In general, you probably want to set this to true, but
+    /// since this feature was added later, it is opt in to avoid confusing
+    /// existing (unmigrated) callers.
+    #[prost(bool, optional, tag = "4")]
+    pub include_public_neurons_in_full_neurons: ::core::option::Option<bool>,
 }
 /// A response to a `ListNeurons` request.
 ///

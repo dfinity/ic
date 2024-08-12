@@ -152,8 +152,9 @@ pub struct Swap {
     /// Specified on creation. That is, always specified and immutable.
     #[prost(message, optional, tag = "1")]
     pub init: ::core::option::Option<Init>,
-    /// Specified in the transition from PENDING to OPEN and immutable
-    /// thereafter.
+    /// Derived from `init`, always specified and immutable. In most cases `init`
+    /// should be used instead.
+    /// TODO(NNS1-3213): Deprecate this field
     #[prost(message, optional, tag = "4")]
     pub params: ::core::option::Option<Params>,
     /// Neurons' Fund participation.  Specified in the transition from
@@ -173,8 +174,11 @@ pub struct Swap {
     /// to the outcome of the swap.
     #[prost(message, repeated, tag = "7")]
     pub neuron_recipes: ::prost::alloc::vec::Vec<SnsNeuronRecipe>,
-    /// Gets set to whatever value is in the corresponding field of OpenRequest
-    /// (that field is required at the application level).
+    /// The proposal ID that was used to create the SNS that opened this swap.
+    /// Note: the name is a historical artifact because the swap used to be opened
+    /// with an OpenSnsTokenSwap request.
+    /// This is set at installation from `init.nns_proposal_id`, and that field should be used instead.
+    /// TODO(NNS1-3213): Deprecate this field
     #[prost(uint64, optional, tag = "9")]
     pub open_sns_token_swap_proposal_id: ::core::option::Option<u64>,
     /// A lock stored in Swap state. If set to true, then a finalize_swap
@@ -361,9 +365,6 @@ pub struct Init {
     /// swap.
     #[prost(uint64, optional, tag = "26")]
     pub nns_proposal_id: ::core::option::Option<u64>,
-    /// The Neurons' Fund participants of this SNS decentralization swap.
-    #[prost(message, optional, tag = "27")]
-    pub neurons_fund_participants: ::core::option::Option<NeuronsFundParticipants>,
     /// Controls whether swap finalization should be attempted automatically in the
     /// canister heartbeat. If set to false, `finalize_swap` must be called
     /// manually. Note: it is safe to call `finalize_swap` multiple times
@@ -465,14 +466,6 @@ pub struct LinearScalingCoefficient {
     /// Intercept of the linear transformation (in ICP e8s).
     #[prost(uint64, optional, tag = "5")]
     pub intercept_icp_e8s: ::core::option::Option<u64>,
-}
-/// Represents multiple Neurons' Fund participants.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct NeuronsFundParticipants {
-    #[prost(message, repeated, tag = "1")]
-    pub cf_participants: ::prost::alloc::vec::Vec<CfParticipant>,
 }
 /// Represents one NNS neuron from the Neurons' Fund participating in this swap.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Eq)]
@@ -833,24 +826,6 @@ pub mod sns_neuron_recipe {
         CommunityFund(super::CfInvestment),
     }
 }
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct OpenRequest {
-    /// The parameters of the swap.
-    #[prost(message, optional, tag = "1")]
-    pub params: ::core::option::Option<Params>,
-    /// Neurons' Fund participation.
-    #[prost(message, repeated, tag = "2")]
-    pub cf_participants: ::prost::alloc::vec::Vec<CfParticipant>,
-    /// The ID of the proposal whose execution consists of calling this method.
-    #[prost(uint64, optional, tag = "3")]
-    pub open_sns_token_swap_proposal_id: ::core::option::Option<u64>,
-}
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct OpenResponse {}
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1507,8 +1482,8 @@ pub mod settle_neurons_fund_participation_request {
 /// the Neurons' Fund. However, this distribution also needs to be made available to the SNS Swap
 /// that will use this information to create SNS neurons of an appropriate size for each
 /// Neurons' Fund (as well as direct) participant. That is why in the `committed` case,
-/// the NNS Governance should populate the `neurons_fund_participants` field, while in the `aborted`
-/// case it should be empty.
+/// the NNS Governance provides `neurons_fund_neuron_portions`, while in the `aborted`
+/// case it does not.
 ///
 /// TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
 /// manually propagated to (sns) swap.proto.

@@ -91,7 +91,7 @@ BASE_DEV_DEPENDENCIES = [
 # ]
 
 TEST_DEV_DEPENDENCIES = BASE_DEV_DEPENDENCIES + [
-    "//rs/nns/governance:governance--test_feature",
+    "//rs/nns/governance/api:api--test_feature",
     "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/nns/test_utils:test_utils--test_feature",
     "//rs/sns/governance:governance--test_feature",

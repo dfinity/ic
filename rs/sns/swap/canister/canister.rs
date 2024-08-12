@@ -7,7 +7,6 @@ use dfn_core::{
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_nervous_system_clients::ledger_client::LedgerCanister;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResultV2,
@@ -29,8 +28,7 @@ use ic_sns_swap::{
         ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
         ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
         NewSaleTicketRequest, NewSaleTicketResponse, NotifyPaymentFailureRequest,
-        NotifyPaymentFailureResponse, OpenRequest, OpenResponse, RefreshBuyerTokensRequest,
-        RefreshBuyerTokensResponse, Swap,
+        NotifyPaymentFailureResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Swap,
     },
 };
 use ic_stable_structures::{writer::Writer, Memory};
@@ -124,33 +122,6 @@ fn list_community_fund_participants_(
 ) -> ListCommunityFundParticipantsResponse {
     log!(INFO, "list_community_fund_participants");
     swap().list_community_fund_participants(&request)
-}
-
-/// Try to open the swap.
-///
-/// See Swap.open.
-#[export_name = "canister_update open"]
-fn open() {
-    over_async(candid_one, open_)
-}
-
-/// See `open`.
-#[candid_method(update, rename = "open")]
-async fn open_(req: OpenRequest) -> OpenResponse {
-    log!(INFO, "open");
-    // Require authorization.
-    let allowed_canister = swap().init_or_panic().nns_governance_or_panic();
-    if caller() != PrincipalId::from(allowed_canister) {
-        panic!(
-            "This method can only be called by canister {}",
-            allowed_canister
-        );
-    }
-    let sns_ledger = create_real_icrc1_ledger(swap().init_or_panic().sns_ledger_or_panic());
-    match swap_mut().open(id(), &sns_ledger, now_seconds(), req).await {
-        Ok(res) => res,
-        Err(msg) => panic!("{}", msg),
-    }
 }
 
 /// See `Swap.refresh_buyer_token_e8`.
@@ -387,13 +358,6 @@ fn create_real_icp_ledger(id: CanisterId) -> ic_nervous_system_common::ledger::I
     ic_nervous_system_common::ledger::IcpLedgerCanister::new(id)
 }
 
-/// Returns a real ledger stub that communicates with the specified
-/// canister, which is assumed to be a canister that implements the
-/// ICRC1 interface.
-fn create_real_icrc1_ledger(id: CanisterId) -> LedgerCanister {
-    LedgerCanister::new(id)
-}
-
 #[export_name = "canister_init"]
 fn canister_init() {
     over_init(|CandidOne(arg)| canister_init_(arg))
@@ -606,6 +570,7 @@ mod tests {
         canister_status::{
             CanisterStatusResultFromManagementCanister, CanisterStatusResultV2, CanisterStatusType,
             DefiniteCanisterSettingsArgs, DefiniteCanisterSettingsFromManagementCanister,
+            LogVisibility,
         },
         management_canister_client::{
             MockManagementCanisterClient, MockManagementCanisterClientReply,
@@ -663,6 +628,8 @@ mod tests {
                         memory_allocation: candid::Nat::from(0_u32),
                         freezing_threshold: candid::Nat::from(0_u32),
                         reserved_cycles_limit: candid::Nat::from(0_u32),
+                        wasm_memory_limit: candid::Nat::from(0_u32),
+                        log_visibility: LogVisibility::Controllers,
                     },
                     cycles: candid::Nat::from(0_u32),
                     idle_cycles_burned_per_day: candid::Nat::from(0_u32),

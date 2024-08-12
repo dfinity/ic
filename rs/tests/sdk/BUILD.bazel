@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "NNS_CANISTER_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
@@ -29,11 +29,11 @@ RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + [
     "@dfx",
 ]
 
-BOUNDARY_NODE_RUNTIME_DEPS = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + [
+BOUNDARY_NODE_RUNTIME_DEPS = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + [
     "@nns_dapp_canister//file",
 ]
 
-system_test(
+system_test_nns(
     name = "dfx_smoke_test",
     flaky = True,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS

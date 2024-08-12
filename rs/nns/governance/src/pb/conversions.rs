@@ -3271,6 +3271,7 @@ impl From<pb::governance::GovernanceCachedMetrics> for pb_api::governance::Gover
             non_self_authenticating_controller_neuron_subset_metrics: item
                 .non_self_authenticating_controller_neuron_subset_metrics
                 .map(|x| x.into()),
+            public_neuron_subset_metrics: item.public_neuron_subset_metrics.map(|x| x.into()),
         }
     }
 }
@@ -3327,6 +3328,7 @@ impl From<pb_api::governance::GovernanceCachedMetrics> for pb::governance::Gover
             non_self_authenticating_controller_neuron_subset_metrics: item
                 .non_self_authenticating_controller_neuron_subset_metrics
                 .map(|x| x.into()),
+            public_neuron_subset_metrics: item.public_neuron_subset_metrics.map(|x| x.into()),
         }
     }
 }
@@ -3594,6 +3596,7 @@ impl From<pb::ListNeurons> for pb_api::ListNeurons {
             neuron_ids: item.neuron_ids,
             include_neurons_readable_by_caller: item.include_neurons_readable_by_caller,
             include_empty_neurons_readable_by_caller: item.include_empty_neurons_readable_by_caller,
+            include_public_neurons_in_full_neurons: item.include_public_neurons_in_full_neurons,
         }
     }
 }
@@ -3603,6 +3606,7 @@ impl From<pb_api::ListNeurons> for pb::ListNeurons {
             neuron_ids: item.neuron_ids,
             include_neurons_readable_by_caller: item.include_neurons_readable_by_caller,
             include_empty_neurons_readable_by_caller: item.include_empty_neurons_readable_by_caller,
+            include_public_neurons_in_full_neurons: item.include_public_neurons_in_full_neurons,
         }
     }
 }

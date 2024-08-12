@@ -5,7 +5,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     add_or_remove_node_provider::Change,
     manage_neuron::{Command, NeuronIdOrSubaccount},
     manage_neuron_response::Command as CommandResponse,
@@ -73,7 +73,11 @@ fn test_add_and_remove_nodes_from_registry() {
             .await
             .expect("Error calling the manage_neuron api.");
 
-        let pid = match result.expect("Error making proposal").command.unwrap() {
+        let pid = match result
+            .panic_if_error("Error making proposal")
+            .command
+            .unwrap()
+        {
             CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
             some_error => panic!(
                 "Cannot find proposal id in response. The response is: {:?}",

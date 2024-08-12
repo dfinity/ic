@@ -42,7 +42,7 @@ const SECONDS_PER_DAY: u128 = 24 * 60 * 60;
 
 /// Maximum payload size of a management call to update_settings
 /// overriding the canister's freezing threshold.
-const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 256;
+const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 267;
 
 /// Errors returned by the [`CyclesAccountManager`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -975,7 +975,7 @@ impl CyclesAccountManager {
     /// 1. It burns no more cycles than the `amount_to_burn`.
     ///
     /// 2. It burns no more cycles than `balance` - `freezing_limit`, where `freezing_limit`
-    /// is the amount of idle cycles burned by the canister during its `freezing_threshold`.
+    ///    is the amount of idle cycles burned by the canister during its `freezing_threshold`.
     ///
     /// Returns the number of cycles that were burned.
     pub fn cycles_burn(
@@ -1163,7 +1163,15 @@ mod tests {
                 .build(),
             sender_canister_version: None, // ingress messages are not supposed to set this field
         };
-        assert!(2 * Encode!(&payload).unwrap().len() <= MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE);
+
+        let payload_size = 2 * Encode!(&payload).unwrap().len();
+
+        assert!(
+            payload_size <= MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE,
+            "Payload size: {}, is greater than MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: {}.",
+            payload_size,
+            MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE
+        );
     }
 
     #[test]

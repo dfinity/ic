@@ -15,6 +15,7 @@ Typical example usage:
 import os
 import shutil
 
+import pytest
 from git import Repo
 
 import git_changes
@@ -67,7 +68,7 @@ def setup_repo(tmpdir, testcase, branch="feature_branch"):
     if "CI_COMMIT_REF_NAME" in os.environ:
         del os.environ["CI_COMMIT_REF_NAME"]
 
-
+@pytest.mark.fails_on_merge_train
 def test_change_one_file(tmpdir):
     """Tests that a commit has changed one crate."""
     setup_repo(tmpdir, "change_one_file")
@@ -80,6 +81,7 @@ def test_change_one_file(tmpdir):
     assert not changed_files
 
 
+@pytest.mark.fails_on_merge_train
 def test_change_file_ignore(tmpdir):
     """Tests that a commit has changed one crate."""
     setup_repo(tmpdir, "change_file_ignore")

@@ -131,8 +131,10 @@ use crate::{
     },
 };
 use candid::DecoderConfig;
+use ic_nervous_system_temporary::Temporary;
 use mockall::automock;
 use std::{
+    cell::Cell,
     collections::{BTreeMap, HashMap},
     io,
 };
@@ -161,6 +163,7 @@ mod neuron;
 pub mod neuron_data_validation;
 mod neuron_store;
 pub mod neurons_fund;
+mod node_provider_rewards;
 pub mod pb;
 pub mod proposals;
 mod reward;
@@ -170,6 +173,33 @@ mod subaccount_index;
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
 /// The value of 10_000 follows the Candid recommendation.
 const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
+
+// TODO(NNS1-3248): Delete this once the feature has made it through the
+// probation period. At that point, we will not need this "kill switch". We can
+// leave this here indefinitely, but it will just be clutter after a modest
+// amount of time.
+thread_local! {
+    // TODO(NNS1-3247): To release the feature, set this to true. Do not simply
+    // delete. That way, if we need to recall the feature, we can do that via a
+    // 1-line change (by replacing true with `cfg!(feature = "test")`). After
+    // the feature has been released, it will go through its "probation" period.
+    // If that goes well, then, this can be deleted.
+    static IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+}
+
+pub fn is_private_neuron_enforcement_enabled() -> bool {
+    IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED.with(|ok| ok.get())
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_enable_private_neuron_enforcement() -> Temporary {
+    Temporary::new(&IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED, true)
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_disable_private_neuron_enforcement() -> Temporary {
+    Temporary::new(&IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED, false)
+}
 
 pub fn decoder_config() -> DecoderConfig {
     let mut config = DecoderConfig::new();
@@ -497,6 +527,7 @@ pub fn encode_metrics(
             total_voting_power_non_self_authenticating_controller: _,
             total_staked_e8s_non_self_authenticating_controller: _,
             non_self_authenticating_controller_neuron_subset_metrics,
+            public_neuron_subset_metrics,
         } = metrics;
 
         w.encode_gauge(
@@ -718,7 +749,15 @@ pub fn encode_metrics(
                 "non_self_authenticating_controller",
                 "have a controller that is not self-authenticating with \
                  one exception: neurons controlled by the genesis token \
-                 canister are not counted here.",
+                 canister are not counted here",
+                w,
+            )?;
+        }
+
+        if let Some(public_neuron_subset_metrics) = public_neuron_subset_metrics {
+            public_neuron_subset_metrics.encode(
+                "public",
+                "that have visibility set to public",
                 w,
             )?;
         }
@@ -886,6 +925,10 @@ impl NeuronSubsetMetricsPb {
 
         Ok(())
     }
+}
+
+fn enable_new_canister_management_topics() -> bool {
+    cfg!(feature = "test")
 }
 
 #[cfg(test)]

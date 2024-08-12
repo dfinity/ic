@@ -117,7 +117,7 @@ rust_ic_test(
     # TODO(IDX-3164): enable on PR when flakiness issue is resolved
     #                 or we have new darwin runners in use
     tags = [
-        "test_macos_master",
+        "test_macos_slow",
     ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -167,6 +167,7 @@ BENCH_DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
+    "//rs/universal_canister/lib",
     "@crate_index//:criterion",
     "@crate_index//:lazy_static",
     "@crate_index//:tempfile",
