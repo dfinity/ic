@@ -388,7 +388,7 @@ pub async fn load_or_create_acme_account(
     path: &PathBuf,
     acme_provider_url: &str,
     http_client: Box<dyn instant_acme::HttpClient>,
-) -> Result<Account, Error> {
+) -> Result<(Account, AccountCredentials), Error> {
     let f = File::open(path).context("failed to open credentials file for reading");
 
     // Credentials already exist
@@ -396,15 +396,20 @@ pub async fn load_or_create_acme_account(
         let creds: AccountCredentials =
             serde_json::from_reader(f).context("failed to json parse existing acme credentials")?;
 
-        let account =
-            Account::from_credentials(creds).context("failed to load account from credentials")?;
+        let account = Account::from_credentials(creds)
+            .await
+            .context("failed to load account from credentials")?;
 
-        return Ok(account);
+        // no Clone on AccountCredentials
+        let creds: AccountCredentials =
+            serde_json::from_reader(f).context("failed to json parse existing acme credentials")?;
+
+        return Ok((account, creds));
     }
 
-    warn!("TLS: Creating new ACME account");
     // Create new account
-    let account = Account::create_with_http(
+    warn!("TLS: Creating new ACME account");
+    let (account, credentials) = Account::create_with_http(
         &NewAccount {
             contact: &[],
             terms_of_service_agreed: true,
@@ -420,10 +425,10 @@ pub async fn load_or_create_acme_account(
     // Store credentials
     let f = File::create(path).context("failed to open credentials file for writing")?;
 
-    serde_json::to_writer_pretty(f, &account.credentials())
+    serde_json::to_writer_pretty(f, &credentials)
         .context("failed to serialize acme credentials")?;
 
-    Ok(account)
+    Ok((account, credentials))
 }
 
 pub async fn acme_challenge(State(token): State<Arc<TokenOwner>>) -> impl IntoResponse {
@@ -457,15 +462,17 @@ async fn prepare_acme_provisioner(
     warn!("TLS: Using ACME provisioner");
 
     // ACME client
-    let acme_http_client = hyper::Client::builder().build(
-        hyper_rustls::HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .https_only()
-            .enable_all_versions()
-            .build(),
-    );
+    let acme_http_client = hyper::Client::builder()
+        .http2_keep_alive_interval(Some(Duration::from_secs(30)))
+        .http2_keep_alive_while_idle(true)
+        .build(
+            hyper_rustls::HttpsConnectorBuilder::new()
+                .https_only()
+                .enable_all_versions()
+                .build(),
+        );
 
-    let acme_account = load_or_create_acme_account(
+    let (acme_account, _) = load_or_create_acme_account(
         acme_credentials,
         LetsEncrypt::Production.url(),
         Box::new(acme_http_client),

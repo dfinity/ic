@@ -1881,7 +1881,7 @@ dependencies = [
  "ic-response-verification",
  "ic-utils 0.37.0",
  "idna 1.0.2",
- "instant-acme",
+ "instant-acme 0.3.2",
  "leb128",
  "mockall",
  "opentelemetry 0.20.0",
@@ -4775,9 +4775,9 @@ dependencies = [
 
 [[package]]
 name = "http-body-util"
-version = "0.1.0"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41cb79eb393015dadd30fc252023adb0b2400a0caee0fa2a077e6e21a551e840"
+checksum = "793429d76616a256bcb62c2a2ec2bed781c8307e797e2598c50010f2bee2544f"
 dependencies = [
  "bytes",
  "futures-util",
@@ -5516,7 +5516,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-types",
  "indoc",
- "instant-acme",
+ "instant-acme 0.4.3",
  "lazy_static",
  "little-loadshedder",
  "maxminddb",
@@ -13592,6 +13592,22 @@ dependencies = [
  "hyper 0.14.26",
  "hyper-rustls 0.24.2",
  "ring 0.16.20",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "instant-acme"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "51e78737dbac1bae14cb5556c9cd7c604886095c59cdb5af71f12a4c59be2b05"
+dependencies = [
+ "base64 0.21.5",
+ "hyper 0.14.26",
+ "hyper-rustls 0.24.2",
+ "ring 0.17.8",
+ "rustls-pki-types",
  "serde",
  "serde_json",
  "thiserror",

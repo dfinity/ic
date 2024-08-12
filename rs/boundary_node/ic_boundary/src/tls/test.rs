@@ -328,7 +328,7 @@ async fn load_or_create_acme_account_test() -> Result<(), Error> {
     drop(f);
 
     // Create an account
-    let account = load_or_create_acme_account(
+    let (account, creds) = load_or_create_acme_account(
         &p,                             // path
         &acme_provider_url,             // acme_provider_url
         Box::new(hyper::Client::new()), // http_client
@@ -336,10 +336,10 @@ async fn load_or_create_acme_account_test() -> Result<(), Error> {
     .await?;
 
     // Serialize the credentials for later comparison
-    let creds = serde_json::to_string(&account.credentials())?;
+    let creds_string = serde_json::to_string(&creds)?;
 
     // Reload the account
-    let account = load_or_create_acme_account(
+    let (account, creds) = load_or_create_acme_account(
         &p,                             // path
         &acme_provider_url,             // acme_provider_url
         Box::new(hyper::Client::new()), // http_client
@@ -347,8 +347,8 @@ async fn load_or_create_acme_account_test() -> Result<(), Error> {
     .await?;
 
     assert_eq!(
-        creds,                                          // previous
-        serde_json::to_string(&account.credentials())?, // current
+        creds_string,                   // previous
+        serde_json::to_string(&creds)?, // current
     );
 
     // Clean up
