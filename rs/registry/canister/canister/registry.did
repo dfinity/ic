@@ -267,8 +267,6 @@ type RerouteCanisterRangesPayload = record {
   destination_subnet : principal;
 };
 
-type RetireReplicaVersionPayload = record { replica_version_ids : vec text };
-
 type ReviseElectedGuestosVersionsPayload = record {
   release_package_urls : vec text;
   replica_versions_to_unelect : vec text;
@@ -450,7 +448,6 @@ service : {
   remove_nodes : (RemoveNodesPayload) -> ();
   remove_nodes_from_subnet : (RemoveNodesPayload) -> ();
   reroute_canister_ranges : (RerouteCanisterRangesPayload) -> ();
-  retire_replica_version : (RetireReplicaVersionPayload) -> ();
   revise_elected_guestos_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   revise_elected_replica_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   set_firewall_config : (SetFirewallConfigPayload) -> ();
