@@ -12,7 +12,7 @@ use k256::{
     },
     AffinePoint, Scalar, Secp256k1,
 };
-use rand::{CryptoRng, RngCore};
+use rand::{CryptoRng, Rng, RngCore};
 use zeroize::ZeroizeOnDrop;
 
 /// An error indicating that decoding a key failed
@@ -319,10 +319,10 @@ fn pem_encode(raw: &[u8], label: &'static str) -> String {
     })
 }
 
-/// An ECDSA private key
+/// A secp256k1 public key, suitable for generating ECDSA and BIP340 signatures
 #[derive(Clone, ZeroizeOnDrop)]
 pub struct PrivateKey {
-    key: k256::ecdsa::SigningKey,
+    key: k256::SecretKey,
 }
 
 impl PrivateKey {
@@ -334,7 +334,7 @@ impl PrivateKey {
 
     /// Generate a new random private key using some provided RNG
     pub fn generate_using_rng<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
-        let key = k256::ecdsa::SigningKey::random(rng);
+        let key = k256::SecretKey::random(rng);
         Self { key }
     }
 
@@ -345,7 +345,7 @@ impl PrivateKey {
                 KeyDecodingError::InvalidKeyEncoding(format!("invalid key size = {}.", bytes.len()))
             })?;
 
-        let key = k256::ecdsa::SigningKey::from_bytes(&GenericArray::from(byte_array))
+        let key = k256::SecretKey::from_bytes(&GenericArray::from(byte_array))
             .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
         Ok(Self { key })
     }
@@ -353,7 +353,7 @@ impl PrivateKey {
     /// Deserialize a private key encoded in PKCS8 format
     pub fn deserialize_pkcs8_der(der: &[u8]) -> Result<Self, KeyDecodingError> {
         use k256::pkcs8::DecodePrivateKey;
-        let key = k256::ecdsa::SigningKey::from_pkcs8_der(der)
+        let key = k256::SecretKey::from_pkcs8_der(der)
             .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
         Ok(Self { key })
     }
@@ -416,37 +416,74 @@ impl PrivateKey {
         pem_encode(&self.serialize_rfc5915_der(), PEM_HEADER_RFC5915)
     }
 
-    /// Sign a message
+    /// Deprecated alias of sign_message_with_ecdsa
+    pub fn sign_message(&self, message: &[u8]) -> [u8; 64] {
+        self.sign_message_with_ecdsa(message)
+    }
+
+    /// Deprecated alias of sign_digest_with_ecdsa
+    pub fn sign_digest(&self, message: &[u8]) -> Option<[u8; 64]> {
+        self.sign_digest_with_ecdsa(message)
+    }
+
+    /// Sign a message with ECDSA
     ///
     /// The message is hashed with SHA-256 and the signature is
     /// normalized (using the minimum-s approach of BitCoin)
-    pub fn sign_message(&self, message: &[u8]) -> [u8; 64] {
+    pub fn sign_message_with_ecdsa(&self, message: &[u8]) -> [u8; 64] {
         use k256::ecdsa::{signature::Signer, Signature};
-        let sig: Signature = self.key.sign(message);
+
+        let ecdsa = k256::ecdsa::SigningKey::from(&self.key);
+        let sig: Signature = ecdsa.sign(message);
         sig.to_bytes().into()
     }
 
-    /// Sign a message digest
+    /// Sign a message digest with ECDSA
     ///
     /// The signature is normalized (using the minimum-s approach of BitCoin)
-    pub fn sign_digest(&self, digest: &[u8]) -> Option<[u8; 64]> {
+    pub fn sign_digest_with_ecdsa(&self, digest: &[u8]) -> Option<[u8; 64]> {
         if digest.len() < 16 {
             // k256 arbitrarily rejects digests that are < 128 bits
             return None;
         }
 
         use k256::ecdsa::{signature::hazmat::PrehashSigner, Signature};
-        let sig: Signature = self
-            .key
-            .sign_prehash(digest)
-            .expect("Failed to sign digest");
+        let ecdsa = k256::ecdsa::SigningKey::from(&self.key);
+        let sig: Signature = ecdsa.sign_prehash(digest).expect("Failed to sign digest");
         Some(sig.to_bytes().into())
+    }
+
+    /// Sign a message with BIP340 Schnorr
+    pub fn sign_bip340<R: Rng + CryptoRng>(&self, message: &[u8; 32], rng: &mut R) -> [u8; 64] {
+        let need_flip = self.public_key().serialize_sec1(true)[0] == 0x03;
+
+        let bip340 = if need_flip {
+            let ns = self.key.to_nonzero_scalar().negate();
+            let nz_ns =
+                k256::NonZeroScalar::new(ns).expect("Negation of non-zero is always non-zero");
+            k256::schnorr::SigningKey::from(nz_ns)
+        } else {
+            k256::schnorr::SigningKey::from(&self.key)
+        };
+
+        loop {
+            /*
+             * The only way this function can fail is the (cryptographically unlikely)
+             * situation where k or s of zero is generated. If this occurs, simply retry
+             * with a new aux_rand
+             */
+            let aux_rand = rng.gen::<[u8; 32]>();
+            if let Ok(sig) = bip340.sign_prehash_with_aux_rand(message, &aux_rand) {
+                return sig.to_bytes();
+            }
+        }
     }
 
     /// Return the public key corresponding to this private key
     pub fn public_key(&self) -> PublicKey {
-        let key = self.key.verifying_key();
-        PublicKey { key: *key }
+        PublicKey {
+            key: self.key.public_key(),
+        }
     }
 
     /// Derive a private key from this private key using a derivation path
@@ -484,27 +521,27 @@ impl PrivateKey {
     ) -> (Self, [u8; 32]) {
         use k256::NonZeroScalar;
 
-        let public_key: AffinePoint = *self.key.verifying_key().as_affine();
+        let public_key: AffinePoint = self.key.public_key().to_projective().to_affine();
         let (_pt, offset, derived_chain_code) =
             derivation_path.derive_offset(public_key, chain_code);
 
-        let derived_scalar = self.key.as_nonzero_scalar().as_ref().add(&offset);
+        let derived_scalar = self.key.to_nonzero_scalar().as_ref().add(&offset);
 
         let nz_ds =
             NonZeroScalar::new(derived_scalar).expect("Derivation always produces non-zero sum");
 
         let derived_key = Self {
-            key: k256::ecdsa::SigningKey::from(nz_ds),
+            key: k256::SecretKey::from(nz_ds),
         };
 
         (derived_key, derived_chain_code)
     }
 }
 
-/// An ECDSA public key
+/// A secp256k1 public key, suitable for verifying ECDSA or BIP340 signatures
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublicKey {
-    key: k256::ecdsa::VerifyingKey,
+    key: k256::PublicKey,
 }
 
 impl PublicKey {
@@ -515,15 +552,37 @@ impl PublicKey {
     ///
     /// See SEC1 <https://www.secg.org/sec1-v2.pdf> section 2.3.3 for details of the format
     pub fn deserialize_sec1(bytes: &[u8]) -> Result<Self, KeyDecodingError> {
-        let key = k256::ecdsa::VerifyingKey::from_sec1_bytes(bytes)
+        let key = k256::PublicKey::from_sec1_bytes(bytes)
             .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
         Ok(Self { key })
+    }
+
+    /// Deserialize a public key stored as BIP340 key
+    ///
+    /// This is just the encoding of the x coordinate of the point. Implicitly,
+    /// the y coordinate is the even choice.
+    ///
+    /// See BIP340 <https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki>
+    /// for details
+    pub fn deserialize_bip340(bytes: &[u8]) -> Result<Self, KeyDecodingError> {
+        if bytes.len() != 32 {
+            return Err(KeyDecodingError::InvalidKeyEncoding(format!(
+                "Expected 32 bytes got {}",
+                bytes.len()
+            )));
+        }
+
+        let mut sec1 = [0u8; 33];
+        sec1[0] = 0x02; // even y
+        sec1[1..].copy_from_slice(bytes);
+
+        Self::deserialize_sec1(&sec1)
     }
 
     /// Deserialize a public key stored in DER SubjectPublicKeyInfo format
     pub fn deserialize_der(bytes: &[u8]) -> Result<Self, KeyDecodingError> {
         use k256::pkcs8::DecodePublicKey;
-        let key = k256::ecdsa::VerifyingKey::from_public_key_der(bytes)
+        let key = k256::PublicKey::from_public_key_der(bytes)
             .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
         Ok(Self { key })
     }
@@ -545,7 +604,22 @@ impl PublicKey {
     ///
     /// See SEC1 <https://www.secg.org/sec1-v2.pdf> section 2.3.3 for details
     pub fn serialize_sec1(&self, compressed: bool) -> Vec<u8> {
+        use k256::elliptic_curve::sec1::ToEncodedPoint;
         self.key.to_encoded_point(compressed).as_bytes().to_vec()
+    }
+
+    /// Serialize a public key in the style of BIP340
+    ///
+    /// That is, with the x coordinate only and the y coordinate being implicit
+    ///
+    /// See BIP340 <https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki>
+    /// for details
+    pub fn serialize_bip340(&self) -> Vec<u8> {
+        let sec1 = self.serialize_sec1(true);
+
+        // Remove the leading byte of the SEC1 encoding, which indicates
+        // the sign of y, returning only the encoding of the x coordinate
+        sec1[1..].to_vec()
     }
 
     /// Serialize a public key in DER as a SubjectPublicKeyInfo
@@ -558,61 +632,81 @@ impl PublicKey {
         pem_encode(&self.serialize_der(), "PUBLIC KEY")
     }
 
+    /// Deprecated alias of verify_ecdsa_signature
+    pub fn verify_signature(&self, message: &[u8], signature: &[u8]) -> bool {
+        self.verify_ecdsa_signature(message, signature)
+    }
+
+    /// Deprecated alias of verify_ecdsa_signature_with_malleability
+    pub fn verify_signature_with_malleability(&self, message: &[u8], signature: &[u8]) -> bool {
+        self.verify_ecdsa_signature_with_malleability(message, signature)
+    }
+
+    /// Deprecated alias of verify_ecdsa_signature_prehashed
+    pub fn verify_signature_prehashed(&self, digest: &[u8], signature: &[u8]) -> bool {
+        self.verify_ecdsa_signature_prehashed(digest, signature)
+    }
+
+    /// Deprecated alias of verify_ecdsa_signature_prehashed_with_malleability
+    pub fn verify_signature_prehashed_with_malleability(
+        &self,
+        digest: &[u8],
+        signature: &[u8],
+    ) -> bool {
+        self.verify_ecdsa_signature_prehashed_with_malleability(digest, signature)
+    }
+
     /// Verify a (message,signature) pair, requiring s-normalization
     ///
     /// If used to verify signatures generated by a library that does not
     /// perform s-normalization, this function will reject roughly half of all
     /// signatures.
-    pub fn verify_signature(&self, message: &[u8], signature: &[u8]) -> bool {
+    pub fn verify_ecdsa_signature(&self, message: &[u8], signature: &[u8]) -> bool {
         use k256::ecdsa::signature::Verifier;
         let signature = match k256::ecdsa::Signature::try_from(signature) {
             Ok(sig) => sig,
             Err(_) => return false,
         };
 
-        /*
-         * In k256 0.11 and earlier, verify required that s be normalized. There is a regression in
-         * k256 0.12 (https://github.com/RustCrypto/elliptic-curves/issues/908) which causes either s
-         * to be accepted. Until this is fixed, include an explicit check on the sign of s.
-         */
-        if signature.normalize_s().is_some() {
-            return false;
-        }
-
-        self.key.verify(message, &signature).is_ok()
+        let ecdsa = k256::ecdsa::VerifyingKey::from(&self.key);
+        ecdsa.verify(message, &signature).is_ok()
     }
 
     /// Verify a (message,signature) pair
     ///
     /// The message is hashed with SHA-256
     ///
-    /// This accepts signatures without s-normalization
+    /// This accepts signatures without requiring s-normalization
     ///
-    /// ECDSA signatures are a tuple of integers (r,s) which satisfy a certain
+    /// ECDSA signatures are a pair of integers (r,s) which satisfy a certain
     /// equation which involves also the public key and the message.  A quirk of
     /// ECDSA is that if (r,s) is a valid signature then (r,-s) is also a valid
     /// signature (here negation is modulo the group order).
     ///
     /// This means that given a valid ECDSA signature, it is possible to create
     /// a "new" ECDSA signature that is also valid, without having access to the
-    /// public key. Unlike `verify_signature`, this function accepts either `s`
-    /// value.
-    pub fn verify_signature_with_malleability(&self, message: &[u8], signature: &[u8]) -> bool {
+    /// key. Unlike `verify_signature`, this function accepts either `s` value.
+    pub fn verify_ecdsa_signature_with_malleability(
+        &self,
+        message: &[u8],
+        signature: &[u8],
+    ) -> bool {
         use k256::ecdsa::signature::Verifier;
         let signature = match k256::ecdsa::Signature::try_from(signature) {
             Ok(sig) => sig,
             Err(_) => return false,
         };
 
+        let ecdsa = k256::ecdsa::VerifyingKey::from(&self.key);
         if let Some(normalized) = signature.normalize_s() {
-            self.key.verify(message, &normalized).is_ok()
+            ecdsa.verify(message, &normalized).is_ok()
         } else {
-            self.key.verify(message, &signature).is_ok()
+            ecdsa.verify(message, &signature).is_ok()
         }
     }
 
     /// Verify a (message digest,signature) pair
-    pub fn verify_signature_prehashed(&self, digest: &[u8], signature: &[u8]) -> bool {
+    pub fn verify_ecdsa_signature_prehashed(&self, digest: &[u8], signature: &[u8]) -> bool {
         use k256::ecdsa::signature::hazmat::PrehashVerifier;
 
         let signature = match k256::ecdsa::Signature::try_from(signature) {
@@ -620,32 +714,23 @@ impl PublicKey {
             Err(_) => return false,
         };
 
-        /*
-         * In k256 0.11 and earlier, verify required that s be normalized. There is a regression in
-         * k256 0.12 (https://github.com/RustCrypto/elliptic-curves/issues/908) which causes either s
-         * to be accepted. Until this is fixed, include an explicit check on the sign of s.
-         */
-        if signature.normalize_s().is_some() {
-            return false;
-        }
-
-        self.key.verify_prehash(digest, &signature).is_ok()
+        let ecdsa = k256::ecdsa::VerifyingKey::from(&self.key);
+        ecdsa.verify_prehash(digest, &signature).is_ok()
     }
 
-    /// Verify a (message digest,signature) pair
+    /// Verify a (digest,signature) pair
     ///
-    /// This accepts signatures without s-normalization
+    /// This accepts signatures without requiring s-normalization
     ///
-    /// ECDSA signatures are a tuple of integers (r,s) which satisfy a certain
+    /// ECDSA signatures are a pair of integers (r,s) which satisfy a certain
     /// equation which involves also the public key and the message.  A quirk of
     /// ECDSA is that if (r,s) is a valid signature then (r,-s) is also a valid
-    /// signature (here negation is modulo the group order).
+    /// signature (here negation is modulo the group order) for the same message.
     ///
     /// This means that given a valid ECDSA signature, it is possible to create
-    /// a "new" ECDSA signature that is also valid, without having access to the
-    /// public key. Unlike `verify_signature_prehashed`, this function accepts either `s`
-    /// value.
-    pub fn verify_signature_prehashed_with_malleability(
+    /// a "new" ECDSA signature, without having access to the key. Unlike
+    /// `verify_signature_prehashed`, this function accepts either `s` value.
+    pub fn verify_ecdsa_signature_prehashed_with_malleability(
         &self,
         digest: &[u8],
         signature: &[u8],
@@ -657,10 +742,37 @@ impl PublicKey {
             Err(_) => return false,
         };
 
+        let ecdsa = k256::ecdsa::VerifyingKey::from(&self.key);
         if let Some(normalized) = signature.normalize_s() {
-            self.key.verify_prehash(digest, &normalized).is_ok()
+            ecdsa.verify_prehash(digest, &normalized).is_ok()
         } else {
-            self.key.verify_prehash(digest, &signature).is_ok()
+            ecdsa.verify_prehash(digest, &signature).is_ok()
+        }
+    }
+
+    /// Verify a BIP340 (message,signature) pair
+    pub fn verify_bip340_signature(&self, message: &[u8], signature: &[u8]) -> bool {
+        use k256::elliptic_curve::point::AffineCoordinates;
+        use k256::schnorr::signature::hazmat::PrehashVerifier;
+        use std::ops::Neg;
+
+        let signature = match k256::schnorr::Signature::try_from(signature) {
+            Ok(sig) => sig,
+            Err(_) => return false,
+        };
+
+        let pt = self.key.to_projective().to_affine();
+
+        let pt = if pt.y_is_odd().into() { pt.neg() } else { pt };
+
+        if let Ok(pk) = k256::PublicKey::from_affine(pt) {
+            if let Ok(bip340) = k256::schnorr::VerifyingKey::try_from(pk) {
+                bip340.verify_prehash(message, &signature).is_ok()
+            } else {
+                false
+            }
+        } else {
+            false
         }
     }
 
@@ -679,7 +791,10 @@ impl PublicKey {
     ) -> Result<RecoveryId, RecoveryError> {
         let signature = k256::ecdsa::Signature::from_slice(signature)
             .map_err(|e| RecoveryError::SignatureParseError(e.to_string()))?;
-        k256::ecdsa::RecoveryId::trial_recovery_from_prehash(&self.key, digest, &signature)
+
+        let ecdsa = k256::ecdsa::VerifyingKey::from(&self.key);
+
+        k256::ecdsa::RecoveryId::trial_recovery_from_prehash(&ecdsa, digest, &signature)
             .map(|recid| RecoveryId { recid })
             .map_err(|e| RecoveryError::WrongParameters(e.to_string()))
     }
@@ -710,7 +825,7 @@ impl PublicKey {
         let (pt, _offset, chain_code) = derivation_path.derive_offset(public_key, chain_code);
 
         let derived_key = Self {
-            key: k256::ecdsa::VerifyingKey::from(
+            key: k256::PublicKey::from(
                 k256::PublicKey::from_affine(pt).expect("Derived point is valid"),
             ),
         };
