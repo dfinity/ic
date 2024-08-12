@@ -96,30 +96,30 @@ async fn update_handler<Artifact: PbArtifact>(
         update: match pb_slot_update.update {
             Some(pb::slot_update::Update::Advert(advert)) => {
                 let id: Artifact::Id = Artifact::PbId::decode(advert.id.as_slice())
-                    .map(|pb_id| {
+                    .map_err(|e| UpdateHandlerError::IdDecoding(e))
+                    .and_then(|pb_id| {
                         pb_id
                             .try_into()
                             .map_err(|e| UpdateHandlerError::IdPbConversion(e))
-                    })
-                    .map_err(|e| UpdateHandlerError::IdDecoding(e))??;
+                    })?;
                 let attr: Artifact::Attribute =
                     Artifact::PbAttribute::decode(advert.attribute.as_slice())
-                        .map(|pb_attr| {
+                        .map_err(|e| UpdateHandlerError::AttrDecoding(e))
+                        .and_then(|pb_attr| {
                             pb_attr
                                 .try_into()
                                 .map_err(|e| UpdateHandlerError::AttrPbConversion(e))
-                        })
-                        .map_err(|e| UpdateHandlerError::AttrDecoding(e))??;
+                        })?;
                 Update::Advert((id, attr))
             }
             Some(pb::slot_update::Update::Artifact(artifact)) => {
                 let message: Artifact = Artifact::PbMessage::decode(artifact.as_slice())
-                    .map(|pb_msg| {
+                    .map_err(|e| UpdateHandlerError::MessageDecoding(e))
+                    .and_then(|pb_msg| {
                         pb_msg
                             .try_into()
                             .map_err(|e| UpdateHandlerError::MessagePbConversion(e))
-                    })
-                    .map_err(|e| UpdateHandlerError::MessageDecoding(e))??;
+                    })?;
                 Update::Artifact(message)
             }
             None => return Err(UpdateHandlerError::MissingUpdate),
