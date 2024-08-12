@@ -160,7 +160,7 @@ impl CanisterSnapshots {
         }
     }
 
-    /// Computes the memory usage used by all snapshots belonging to the specified canister ID.
+    /// Computes the total memory usage of all of the specified canister's snapshots.
     ///
     /// Used for testing that `SystemState::snapshots_memory_usage` is updated as needed
     /// whenever taking or deleting a snapshot.
