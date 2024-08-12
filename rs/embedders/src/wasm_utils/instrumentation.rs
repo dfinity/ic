@@ -122,7 +122,6 @@ use ic_types::methods::WasmMethod;
 use ic_types::NumBytes;
 use ic_types::NumInstructions;
 use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
-use wasmtime_environ::WASM_PAGE_SIZE;
 
 use crate::wasmtime_embedder::{
     STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_BYTEMAP_MEMORY_NAME,
@@ -136,6 +135,8 @@ use wasmparser::{
 
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
+
+const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum WasmMemoryType {
