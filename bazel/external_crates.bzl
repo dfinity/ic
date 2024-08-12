@@ -104,10 +104,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         annotations = CRATE_ANNOTATIONS,
         packages = {
             "actix-rt": crate.spec(
-                version = "^2.2.0",
+                version = "^2.10.0",
             ),
             "actix-web": crate.spec(
-                version = "^4.3.0",
+                version = "^4.9.0",
             ),
             "addr": crate.spec(
                 version = "^0.15.6",

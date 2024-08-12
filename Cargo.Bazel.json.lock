@@ -1,5 +1,5 @@
 {
-  "checksum": "4f03c1ff7a00859e68f6dcde5a572e79b0f7f0b6e8382c46d189433750bc0f32",
+  "checksum": "b7da15d63b05c6cdf9d3fe92193a092bd96edc55d5524c91231d335c83a905a2",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -241,14 +241,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "actix-http 3.3.1": {
+    "actix-http 3.9.0": {
       "name": "actix-http",
-      "version": "3.3.1",
-      "package_url": "https://github.com/actix/actix-web.git",
+      "version": "3.9.0",
+      "package_url": "https://github.com/actix/actix-web",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/actix-http/3.3.1/download",
-          "sha256": "c2079246596c18b4a33e274ae10c0e50613f4d32a4198e09c7b93771013fed74"
+          "url": "https://static.crates.io/crates/actix-http/3.9.0/download",
+          "sha256": "d48f96fc3003717aeb9856ca3d02a8c7de502667ad76eeacd830b48d2e91fac4"
         }
       },
       "targets": [
@@ -273,20 +273,12 @@
         "crate_features": {
           "common": [
             "__compress",
-            "base64",
-            "brotli",
             "compress-brotli",
             "compress-gzip",
             "compress-zstd",
             "default",
-            "flate2",
-            "h2",
             "http2",
-            "local-channel",
-            "rand",
-            "sha1",
-            "ws",
-            "zstd"
+            "ws"
           ],
           "selects": {}
         },
@@ -297,7 +289,7 @@
               "target": "actix_codec"
             },
             {
-              "id": "actix-rt 2.8.0",
+              "id": "actix-rt 2.10.0",
               "target": "actix_rt"
             },
             {
@@ -313,15 +305,15 @@
               "target": "ahash"
             },
             {
-              "id": "base64 0.21.6",
+              "id": "base64 0.22.0",
               "target": "base64"
             },
             {
-              "id": "bitflags 1.3.2",
+              "id": "bitflags 2.4.1",
               "target": "bitflags"
             },
             {
-              "id": "brotli 3.3.4",
+              "id": "brotli 6.0.0",
               "target": "brotli"
             },
             {
@@ -409,13 +401,13 @@
               "target": "tracing"
             },
             {
-              "id": "zstd 0.12.4",
+              "id": "zstd 0.13.1",
               "target": "zstd"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
+        "edition": "2021",
         "proc_macro_deps": {
           "common": [
             {
@@ -425,7 +417,7 @@
           ],
           "selects": {}
         },
-        "version": "3.3.1"
+        "version": "3.9.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -486,14 +478,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "actix-router 0.5.1": {
+    "actix-router 0.5.3": {
       "name": "actix-router",
-      "version": "0.5.1",
-      "package_url": "https://github.com/actix/actix-web.git",
+      "version": "0.5.3",
+      "package_url": "https://github.com/actix/actix-web",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/actix-router/0.5.1/download",
-          "sha256": "d66ff4d247d2b160861fa2866457e85706833527840e4133f8f49aa423a38799"
+          "url": "https://static.crates.io/crates/actix-router/0.5.3/download",
+          "sha256": "13d324164c51f63867b57e73ba5936ea151b8a41a1d23d1031eeb9f70d0236f8"
         }
       },
       "targets": [
@@ -517,8 +509,8 @@
         ],
         "crate_features": {
           "common": [
-            "default",
-            "http"
+            "http",
+            "unicode"
           ],
           "selects": {}
         },
@@ -529,12 +521,20 @@
               "target": "bytestring"
             },
             {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
               "id": "http 0.2.12",
               "target": "http"
             },
             {
               "id": "regex 1.10.5",
               "target": "regex"
+            },
+            {
+              "id": "regex-lite 0.1.6",
+              "target": "regex_lite"
             },
             {
               "id": "serde 1.0.203",
@@ -547,8 +547,8 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.5.1"
+        "edition": "2021",
+        "version": "0.5.3"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -557,14 +557,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "actix-rt 2.8.0": {
+    "actix-rt 2.10.0": {
       "name": "actix-rt",
-      "version": "2.8.0",
-      "package_url": "https://github.com/actix/actix-net.git",
+      "version": "2.10.0",
+      "package_url": "https://github.com/actix/actix-net",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/actix-rt/2.8.0/download",
-          "sha256": "15265b6b8e2347670eb363c47fc8c75208b4a4994b27192f345fcbe707804f3e"
+          "url": "https://static.crates.io/crates/actix-rt/2.10.0/download",
+          "sha256": "24eda4e2a6e042aa4e55ac438a2ae052d3b5da0ecf83d7411e1a368946925208"
         }
       },
       "targets": [
@@ -607,7 +607,7 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
+        "edition": "2021",
         "proc_macro_deps": {
           "common": [
             {
@@ -617,7 +617,7 @@
           ],
           "selects": {}
         },
-        "version": "2.8.0"
+        "version": "2.10.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -664,7 +664,7 @@
         "deps": {
           "common": [
             {
-              "id": "actix-rt 2.8.0",
+              "id": "actix-rt 2.10.0",
               "target": "actix_rt"
             },
             {
@@ -829,14 +829,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "actix-web 4.3.1": {
+    "actix-web 4.9.0": {
       "name": "actix-web",
-      "version": "4.3.1",
-      "package_url": "https://github.com/actix/actix-web.git",
+      "version": "4.9.0",
+      "package_url": "https://github.com/actix/actix-web",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/actix-web/4.3.1/download",
-          "sha256": "cd3cb42f9566ab176e1ef0b8b3a896529062b4efc6be0123046095914c4c1c96"
+          "url": "https://static.crates.io/crates/actix-web/4.9.0/download",
+          "sha256": "9180d76e5cc7ccbc4d60a506f2c727730b154010262df5b910eb17dbe4b8cb38"
         }
       },
       "targets": [
@@ -861,15 +861,16 @@
         "crate_features": {
           "common": [
             "__compress",
-            "actix-macros",
-            "actix-web-codegen",
+            "compat",
+            "compat-routing-macros-force-pub",
             "compress-brotli",
             "compress-gzip",
             "compress-zstd",
-            "cookie",
             "cookies",
             "default",
-            "macros"
+            "http2",
+            "macros",
+            "unicode"
           ],
           "selects": {}
         },
@@ -880,15 +881,15 @@
               "target": "actix_codec"
             },
             {
-              "id": "actix-http 3.3.1",
+              "id": "actix-http 3.9.0",
               "target": "actix_http"
             },
             {
-              "id": "actix-router 0.5.1",
+              "id": "actix-router 0.5.3",
               "target": "actix_router"
             },
             {
-              "id": "actix-rt 2.8.0",
+              "id": "actix-rt 2.10.0",
               "target": "actix_rt"
             },
             {
@@ -904,7 +905,7 @@
               "target": "actix_utils"
             },
             {
-              "id": "ahash 0.7.8",
+              "id": "ahash 0.8.11",
               "target": "ahash"
             },
             {
@@ -936,8 +937,8 @@
               "target": "futures_util"
             },
             {
-              "id": "http 0.2.12",
-              "target": "http"
+              "id": "impl-more 0.1.6",
+              "target": "impl_more"
             },
             {
               "id": "itoa 1.0.9",
@@ -968,6 +969,10 @@
               "target": "regex"
             },
             {
+              "id": "regex-lite 0.1.6",
+              "target": "regex_lite"
+            },
+            {
               "id": "serde 1.0.203",
               "target": "serde"
             },
@@ -984,7 +989,7 @@
               "target": "smallvec"
             },
             {
-              "id": "socket2 0.4.9",
+              "id": "socket2 0.5.7",
               "target": "socket2"
             },
             {
@@ -998,7 +1003,7 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
+        "edition": "2021",
         "proc_macro_deps": {
           "common": [
             {
@@ -1006,7 +1011,7 @@
               "target": "actix_macros"
             },
             {
-              "id": "actix-web-codegen 4.2.0",
+              "id": "actix-web-codegen 4.3.0",
               "target": "actix_web_codegen"
             },
             {
@@ -1016,7 +1021,7 @@
           ],
           "selects": {}
         },
-        "version": "4.3.1"
+        "version": "4.9.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -1025,14 +1030,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "actix-web-codegen 4.2.0": {
+    "actix-web-codegen 4.3.0": {
       "name": "actix-web-codegen",
-      "version": "4.2.0",
-      "package_url": "https://github.com/actix/actix-web.git",
+      "version": "4.3.0",
+      "package_url": "https://github.com/actix/actix-web",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/actix-web-codegen/4.2.0/download",
-          "sha256": "2262160a7ae29e3415554a3f1fc04c764b1540c116aa524683208078b7a75bc9"
+          "url": "https://static.crates.io/crates/actix-web-codegen/4.3.0/download",
+          "sha256": "f591380e2e68490b5dfaf1dd1aa0ebe78d84ba7067078512b4ea6e4492d622b8"
         }
       },
       "targets": [
@@ -1054,10 +1059,16 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "compat-routing-macros-force-pub"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
-              "id": "actix-router 0.5.1",
+              "id": "actix-router 0.5.3",
               "target": "actix_router"
             },
             {
@@ -1069,14 +1080,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "4.2.0"
+        "edition": "2021",
+        "version": "4.3.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -1373,13 +1384,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "default",
-            "std"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -7840,8 +7844,6 @@
         "crate_features": {
           "common": [
             "alloc-stdlib",
-            "default",
-            "ffi-api",
             "std"
           ],
           "selects": {}
@@ -7867,6 +7869,70 @@
         "version": "3.3.4"
       },
       "license": "BSD-3-Clause/MIT",
+      "license_ids": [
+        "BSD-3-Clause",
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "brotli 6.0.0": {
+      "name": "brotli",
+      "version": "6.0.0",
+      "package_url": "https://github.com/dropbox/rust-brotli",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/brotli/6.0.0/download",
+          "sha256": "74f7971dbd9326d58187408ab83117d8ac1bb9c17b085fdacd1cf2f598719b6b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "brotli",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "brotli",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc-stdlib",
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "alloc-no-stdlib 2.0.4",
+              "target": "alloc_no_stdlib"
+            },
+            {
+              "id": "alloc-stdlib 0.2.2",
+              "target": "alloc_stdlib"
+            },
+            {
+              "id": "brotli-decompressor 4.0.1",
+              "target": "brotli_decompressor"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "6.0.0"
+      },
+      "license": "BSD-3-Clause OR MIT",
       "license_ids": [
         "BSD-3-Clause",
         "MIT"
@@ -7924,6 +7990,65 @@
         },
         "edition": "2015",
         "version": "2.3.4"
+      },
+      "license": "BSD-3-Clause/MIT",
+      "license_ids": [
+        "BSD-3-Clause",
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "brotli-decompressor 4.0.1": {
+      "name": "brotli-decompressor",
+      "version": "4.0.1",
+      "package_url": "https://github.com/dropbox/rust-brotli-decompressor",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/brotli-decompressor/4.0.1/download",
+          "sha256": "9a45bd2e4095a8b518033b128020dd4a55aab1c0a381ba4404a472630f4bc362"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "brotli_decompressor",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "brotli_decompressor",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc-stdlib",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "alloc-no-stdlib 2.0.4",
+              "target": "alloc_no_stdlib"
+            },
+            {
+              "id": "alloc-stdlib 0.2.2",
+              "target": "alloc_stdlib"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "4.0.1"
       },
       "license": "BSD-3-Clause/MIT",
       "license_ids": [
@@ -16831,11 +16956,11 @@
         "deps": {
           "common": [
             {
-              "id": "actix-rt 2.8.0",
+              "id": "actix-rt 2.10.0",
               "target": "actix_rt"
             },
             {
-              "id": "actix-web 4.3.1",
+              "id": "actix-web 4.9.0",
               "target": "actix_web"
             },
             {
@@ -31106,6 +31231,45 @@
         "MIT"
       ],
       "license_file": null
+    },
+    "impl-more 0.1.6": {
+      "name": "impl-more",
+      "version": "0.1.6",
+      "package_url": "https://github.com/robjtede/impl-more",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/impl-more/0.1.6/download",
+          "sha256": "206ca75c9c03ba3d4ace2460e57b189f39f43de612c2f85836e65c929701bb2d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "impl_more",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "impl_more",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.1.6"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
     },
     "impl-rlp 0.3.0": {
       "name": "impl-rlp",
@@ -51279,6 +51443,53 @@
         },
         "edition": "2021",
         "version": "0.4.7"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "regex-lite 0.1.6": {
+      "name": "regex-lite",
+      "version": "0.1.6",
+      "package_url": "https://github.com/rust-lang/regex/tree/master/regex-lite",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/regex-lite/0.1.6/download",
+          "sha256": "53a49587ad06b26609c52e423de037e7f57f20d53535d66e08c695f347df952a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "regex_lite",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "regex_lite",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std",
+            "string"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.6"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -77116,15 +77327,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "arrays",
-            "default",
-            "legacy",
-            "zdict_builder"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -77242,10 +77444,7 @@
         ],
         "crate_features": {
           "common": [
-            "arrays",
-            "legacy",
-            "std",
-            "zdict_builder"
+            "std"
           ],
           "selects": {}
         },
@@ -78501,8 +78700,8 @@
     "x86_64-uwp-windows-msvc": []
   },
   "direct_deps": [
-    "actix-rt 2.8.0",
-    "actix-web 4.3.1",
+    "actix-rt 2.10.0",
+    "actix-web 4.9.0",
     "addr 0.15.6",
     "aide 0.13.2",
     "anyhow 1.0.72",
