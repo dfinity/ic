@@ -28,7 +28,17 @@ pub struct HttpsConfig {
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct HttpGatewayConfig {
-    pub listen_at: Option<u16>,
+    pub ip_addr: Option<String>,
+    pub port: Option<u16>,
+    pub forward_to: HttpGatewayBackend,
+    pub domains: Option<Vec<String>>,
+    pub https_config: Option<HttpsConfig>,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct HttpGatewayDetails {
+    pub instance_id: InstanceId,
+    pub port: u16,
     pub forward_to: HttpGatewayBackend,
     pub domains: Option<Vec<String>>,
     pub https_config: Option<HttpsConfig>,
@@ -261,6 +271,29 @@ impl From<Principal> for RawSubnetId {
 impl From<RawSubnetId> for Principal {
     fn from(val: RawSubnetId) -> Self {
         Principal::from_slice(&val.subnet_id)
+    }
+}
+
+#[derive(
+    Clone, Serialize, Deserialize, Debug, JsonSchema, PartialEq, Eq, PartialOrd, Ord, Hash,
+)]
+pub struct RawNodeId {
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub node_id: Vec<u8>,
+}
+
+impl From<RawNodeId> for Principal {
+    fn from(val: RawNodeId) -> Self {
+        Principal::from_slice(&val.node_id)
+    }
+}
+
+impl From<Principal> for RawNodeId {
+    fn from(principal: Principal) -> Self {
+        Self {
+            node_id: principal.as_slice().to_vec(),
+        }
     }
 }
 
@@ -624,8 +657,8 @@ pub struct SubnetConfig {
     pub subnet_seed: [u8; 32],
     /// Instruction limits for canister execution on this subnet.
     pub instruction_config: SubnetInstructionConfig,
-    /// Number of nodes in the subnet.
-    pub size: u64,
+    /// Node ids of nodes in the subnet.
+    pub node_ids: Vec<RawNodeId>,
     /// Some mainnet subnets have several disjunct canister ranges.
     pub canister_ranges: Vec<CanisterIdRange>,
 }
@@ -698,5 +731,143 @@ impl Topology {
             .iter()
             .find(|(_, config)| config.subnet_kind == kind)
             .map(|(id, _)| *id)
+    }
+}
+
+#[derive(
+    Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, JsonSchema,
+)]
+pub enum CanisterHttpMethod {
+    GET,
+    POST,
+    HEAD,
+}
+
+#[derive(
+    Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, JsonSchema,
+)]
+pub struct CanisterHttpHeader {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawCanisterHttpRequest {
+    pub subnet_id: RawSubnetId,
+    pub request_id: u64,
+    pub http_method: CanisterHttpMethod,
+    pub url: String,
+    pub headers: Vec<CanisterHttpHeader>,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub body: Vec<u8>,
+    pub max_response_bytes: Option<u64>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub struct CanisterHttpRequest {
+    pub subnet_id: Principal,
+    pub request_id: u64,
+    pub http_method: CanisterHttpMethod,
+    pub url: String,
+    pub headers: Vec<CanisterHttpHeader>,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub body: Vec<u8>,
+    pub max_response_bytes: Option<u64>,
+}
+
+impl From<RawCanisterHttpRequest> for CanisterHttpRequest {
+    fn from(raw_canister_http_request: RawCanisterHttpRequest) -> Self {
+        Self {
+            subnet_id: candid::Principal::from_slice(
+                &raw_canister_http_request.subnet_id.subnet_id,
+            ),
+            request_id: raw_canister_http_request.request_id,
+            http_method: raw_canister_http_request.http_method,
+            url: raw_canister_http_request.url,
+            headers: raw_canister_http_request.headers,
+            body: raw_canister_http_request.body,
+            max_response_bytes: raw_canister_http_request.max_response_bytes,
+        }
+    }
+}
+
+impl From<CanisterHttpRequest> for RawCanisterHttpRequest {
+    fn from(canister_http_request: CanisterHttpRequest) -> Self {
+        Self {
+            subnet_id: canister_http_request.subnet_id.into(),
+            request_id: canister_http_request.request_id,
+            http_method: canister_http_request.http_method,
+            url: canister_http_request.url,
+            headers: canister_http_request.headers,
+            body: canister_http_request.body,
+            max_response_bytes: canister_http_request.max_response_bytes,
+        }
+    }
+}
+
+#[derive(
+    Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, JsonSchema,
+)]
+pub struct CanisterHttpReply {
+    pub status: u16,
+    pub headers: Vec<CanisterHttpHeader>,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub body: Vec<u8>,
+}
+
+#[derive(
+    Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, JsonSchema,
+)]
+pub struct CanisterHttpReject {
+    pub reject_code: u64,
+    pub message: String,
+}
+
+#[derive(
+    Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, JsonSchema,
+)]
+pub enum CanisterHttpResponse {
+    CanisterHttpReply(CanisterHttpReply),
+    CanisterHttpReject(CanisterHttpReject),
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawMockCanisterHttpResponse {
+    pub subnet_id: RawSubnetId,
+    pub request_id: u64,
+    pub response: CanisterHttpResponse,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub struct MockCanisterHttpResponse {
+    pub subnet_id: Principal,
+    pub request_id: u64,
+    pub response: CanisterHttpResponse,
+}
+
+impl From<RawMockCanisterHttpResponse> for MockCanisterHttpResponse {
+    fn from(raw_mock_canister_http_response: RawMockCanisterHttpResponse) -> Self {
+        Self {
+            subnet_id: candid::Principal::from_slice(
+                &raw_mock_canister_http_response.subnet_id.subnet_id,
+            ),
+            request_id: raw_mock_canister_http_response.request_id,
+            response: raw_mock_canister_http_response.response,
+        }
+    }
+}
+
+impl From<MockCanisterHttpResponse> for RawMockCanisterHttpResponse {
+    fn from(mock_canister_http_response: MockCanisterHttpResponse) -> Self {
+        Self {
+            subnet_id: RawSubnetId {
+                subnet_id: mock_canister_http_response.subnet_id.as_slice().to_vec(),
+            },
+            request_id: mock_canister_http_response.request_id,
+            response: mock_canister_http_response.response,
+        }
     }
 }

@@ -101,6 +101,8 @@ fn match_pre_signatures_by_key_id(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
     use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
     use ic_replicated_state::metadata_state::subnet_call_context_manager::{
@@ -136,7 +138,7 @@ mod tests {
             }),
             MasterPublicKeyId::Schnorr(key_id) => ThresholdArguments::Schnorr(SchnorrArguments {
                 key_id: key_id.clone(),
-                message: vec![1; 64],
+                message: Arc::new(vec![1; 64]),
             }),
         };
         let context = SignWithThresholdContext {

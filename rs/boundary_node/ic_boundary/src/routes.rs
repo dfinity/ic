@@ -19,7 +19,7 @@ use axum::{
 use bytes::Bytes;
 use candid::{CandidType, Decode, Principal};
 use http::{
-    header::{HeaderName, HeaderValue, CONTENT_TYPE},
+    header::{HeaderName, HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS},
     Method,
 };
 use ic_types::{
@@ -53,6 +53,10 @@ const METHOD_HTTP: &str = "http_request";
 // https://rust-lang.github.io/rust-clippy/master/index.html#/declare_interior_mutable_const
 #[allow(clippy::declare_interior_mutable_const)]
 const CONTENT_TYPE_CBOR: HeaderValue = HeaderValue::from_static("application/cbor");
+#[allow(clippy::declare_interior_mutable_const)]
+const X_CONTENT_TYPE_OPTIONS_NO_SNIFF: HeaderValue = HeaderValue::from_static("nosniff");
+#[allow(clippy::declare_interior_mutable_const)]
+const X_FRAME_OPTIONS_DENY: HeaderValue = HeaderValue::from_static("DENY");
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_IC_CACHE: HeaderName = HeaderName::from_static("x-ic-cache-status");
 #[allow(clippy::declare_interior_mutable_const)]
@@ -193,13 +197,7 @@ impl ErrorCause {
     }
 
     pub fn retriable(&self) -> bool {
-        matches!(
-            self,
-            Self::ReplicaErrorDNS(_)
-                | Self::ReplicaErrorConnect
-                | Self::ReplicaTLSErrorOther(_)
-                | Self::ReplicaTLSErrorCert(_)
-        )
+        !matches!(self, Self::PayloadTooLarge(_) | Self::MalformedResponse(_))
     }
 }
 
@@ -594,7 +592,6 @@ pub async fn validate_request(
     }
 
     let resp = next.run(request).await;
-
     Ok(resp)
 }
 
@@ -710,6 +707,12 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
         response
             .headers_mut()
             .insert(CONTENT_TYPE, CONTENT_TYPE_CBOR);
+        response
+            .headers_mut()
+            .insert(X_CONTENT_TYPE_OPTIONS, X_CONTENT_TYPE_OPTIONS_NO_SNIFF);
+        response
+            .headers_mut()
+            .insert(X_FRAME_OPTIONS, X_FRAME_OPTIONS_DENY);
     }
 
     response.headers_mut().insert(
@@ -830,6 +833,12 @@ pub async fn status(
     response
         .headers_mut()
         .insert(CONTENT_TYPE, CONTENT_TYPE_CBOR);
+    response
+        .headers_mut()
+        .insert(X_CONTENT_TYPE_OPTIONS, X_CONTENT_TYPE_OPTIONS_NO_SNIFF);
+    response
+        .headers_mut()
+        .insert(X_FRAME_OPTIONS, X_FRAME_OPTIONS_DENY);
 
     response
 }

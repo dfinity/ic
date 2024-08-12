@@ -7,7 +7,7 @@ use ic_nns_common::{
     types::{UpdateIcpXdrConversionRatePayload, UpdateIcpXdrConversionRatePayloadReason},
 };
 use ic_nns_constants::{EXCHANGE_RATE_CANISTER_ID, EXCHANGE_RATE_CANISTER_INDEX};
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     manage_neuron_response, proposal::Action, ExecuteNnsFunction, NnsFunction, Proposal,
 };
 use ic_nns_test_utils::{

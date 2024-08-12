@@ -40,7 +40,7 @@ struct IngressWatcherSubscription {
 
 /// A handle to the [`IngressWatcher`] used to register subscription over a channel.
 #[derive(Clone)]
-pub(crate) struct IngressWatcherHandle {
+pub struct IngressWatcherHandle {
     subscriber_registration_tx: Sender<IngressWatcherSubscription>,
     metrics: HttpHandlerMetrics,
 }
@@ -115,7 +115,7 @@ enum MessageExecutionStatus {
 /// Invariants:
 /// - 1:1 mapping of keys in `message_statuses` and `cancellations`.
 /// - 1:1 mapping of keys in `message_statuses` with execution status as completed and `completed_execution_heights`.
-pub(crate) struct IngressWatcher {
+pub struct IngressWatcher {
     log: ReplicaLogger,
     metrics: HttpHandlerMetrics,
     rt_handle: Handle,
@@ -132,7 +132,7 @@ pub(crate) struct IngressWatcher {
 }
 
 impl IngressWatcher {
-    pub(crate) fn start(
+    pub fn start(
         rt_handle: Handle,
         log: ReplicaLogger,
         metrics: HttpHandlerMetrics,

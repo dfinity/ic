@@ -744,6 +744,7 @@ impl SchedulerTestBuilder {
         Self { batch_time, ..self }
     }
 
+    #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
     pub fn with_round_summary(self, round_summary: ExecutionRoundSummary) -> Self {
         Self {
             round_summary: Some(round_summary),

@@ -1,3 +1,4 @@
+#![cfg_attr(feature = "fuzzing_code", allow(dead_code, unused_imports))]
 use std::{
     collections::BTreeMap,
     fs::File,
@@ -1484,6 +1485,7 @@ fn overlapping_page_ranges() {
     );
 }
 
+#[cfg(not(feature = "fuzzing_code"))]
 mod proptest_tests {
     use super::*;
     use proptest::collection::vec as prop_vec;

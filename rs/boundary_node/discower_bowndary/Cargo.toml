@@ -7,17 +7,17 @@ edition = "2021"
 anyhow = { workspace = true }
 arc-swap = "1"
 async-trait = { workspace = true }
-ic-agent = { workspace = true }
-tokio = { workspace = true }
-tokio-util = { workspace = true }
-thiserror = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
 http = { workspace = true }
-url = "2.4.0"
-simple_moving_average = "1.0.2"
+ic-agent = { workspace = true }
 rand = { workspace = true }
 ring = { version = "0.17.7", features = ["std"] }
+simple_moving_average = "1.0.2"
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+url = { workspace = true }
 
 [lib]
 name = "discower_bowndary"

@@ -29,7 +29,7 @@ use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob,
-    InstallCodeArgs, InstallCodeArgsV2, LogVisibility, MasterPublicKeyId, Method, Payload,
+    InstallCodeArgs, InstallCodeArgsV2, LogVisibilityV2, MasterPublicKeyId, Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
 use ic_metrics::MetricsRegistry;
@@ -690,7 +690,7 @@ impl ExecutionTest {
     pub fn set_log_visibility(
         &mut self,
         canister_id: CanisterId,
-        log_visibility: LogVisibility,
+        log_visibility: LogVisibilityV2,
     ) -> Result<WasmResult, UserError> {
         let payload = UpdateSettingsArgs {
             canister_id: canister_id.into(),
@@ -1003,6 +1003,12 @@ impl ExecutionTest {
                     .system_state
                     .task_queue
                     .push_front(ExecutionTask::GlobalTimer);
+            }
+            CanisterTask::OnLowWasmMemory => {
+                canister
+                    .system_state
+                    .task_queue
+                    .push_front(ExecutionTask::OnLowWasmMemory);
             }
         }
         let result = execute_canister(
@@ -1963,11 +1969,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_wasm_chunk_store(mut self, status: FlagStatus) -> Self {
-        self.execution_config.wasm_chunk_store = status;
-        self
-    }
-
     pub fn with_non_native_stable(mut self) -> Self {
         self.execution_config
             .embedders_config
@@ -1978,14 +1979,6 @@ impl ExecutionTestBuilder {
 
     pub fn with_snapshots(mut self, status: FlagStatus) -> Self {
         self.execution_config.canister_snapshots = status;
-        self
-    }
-
-    pub fn with_canister_logging(mut self, status: FlagStatus) -> Self {
-        self.execution_config
-            .embedders_config
-            .feature_flags
-            .canister_logging = status;
         self
     }
 

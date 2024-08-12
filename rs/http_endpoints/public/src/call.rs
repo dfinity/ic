@@ -1,10 +1,11 @@
 //! Module that deals with ingress messages
 mod call_v2;
 mod call_v3;
-pub(crate) mod ingress_watcher;
+mod ingress_watcher;
 
 pub use call_v2::CallServiceV2;
 pub use call_v3::CallServiceV3;
+pub use ingress_watcher::{IngressWatcher, IngressWatcherHandle};
 
 use crate::{
     common::{build_validator, validation_error_to_http_error},

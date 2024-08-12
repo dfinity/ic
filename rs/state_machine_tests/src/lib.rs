@@ -6,7 +6,7 @@ use ic_config::{
     state_manager::LsmtConfig, subnet_config::SubnetConfig,
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
-use ic_consensus::dkg::make_registry_cup;
+use ic_consensus::dkg::{make_registry_cup, make_registry_cup_from_cup_contents};
 use ic_consensus_utils::crypto::SignVerify;
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_crypto_ecdsa_secp256k1::{PrivateKey, PublicKey};
@@ -19,13 +19,15 @@ use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
+use ic_http_endpoints_public::{metrics::HttpHandlerMetrics, IngressWatcher, IngressWatcherHandle};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
+use ic_interfaces::batch_payload::BatchPayloadBuilder;
 use ic_interfaces::{
-    batch_payload::IntoMessages,
+    batch_payload::{IntoMessages, PastPayload, ProposalContext},
     canister_http::{CanisterHttpChangeAction, CanisterHttpPool},
     certification::{Verifier, VerifierError},
-    consensus::PayloadBuilder as ConsensusPayloadBuilder,
+    consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
     consensus_pool::ConsensusTime,
     execution_environment::{IngressFilterService, IngressHistoryReader, QueryExecutionService},
     ingress_pool::{
@@ -39,12 +41,14 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
-    self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
+    self as ic00, CanisterIdRecord, InstallCodeArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
+    Method, Payload,
 };
 pub use ic_management_canister_types::{
-    CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2,
-    CanisterStatusType, EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, SignWithECDSAReply,
-    SignWithSchnorrReply, UpdateSettingsArgs,
+    CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
+    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, EcdsaCurve, EcdsaKeyId,
+    HttpHeader, HttpMethod, SignWithECDSAReply, SignWithSchnorrReply, TakeCanisterSnapshotArgs,
+    UpdateSettingsArgs,
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
@@ -137,7 +141,7 @@ pub use ic_types::{
     messages::{CallbackId, HttpRequestError, MessageId},
     signature::BasicSignature,
     time::Time,
-    CanisterId, CryptoHashOfState, Cycles, PrincipalId, SubnetId, UserId,
+    CanisterId, CryptoHashOfState, Cycles, NumBytes, PrincipalId, SubnetId, UserId,
 };
 use ic_xnet_payload_builder::{
     certified_slice_pool::{certified_slice_count_bytes, CertifiedSliceError},
@@ -164,8 +168,15 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 use tempfile::TempDir;
-use tokio::{runtime::Runtime, sync::mpsc};
+use tokio::{
+    runtime::Runtime,
+    sync::{mpsc, watch},
+};
 use tower::{buffer::Buffer as TowerBuffer, ServiceExt};
+
+/// The size of the channel used to communicate between the [`IngressWatcher`] and
+/// execution. Mirrors the size used in production defined in `setup_ic_stack.rs`
+const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 
 #[cfg(test)]
 mod tests;
@@ -572,6 +583,100 @@ impl XNetSlicePool for PocketXNetSlicePoolImpl {
     fn garbage_collect_slice(&self, _subnet_id: SubnetId, _stream_position: ExpectedIndices) {}
 }
 
+/// A custom `QueryStatsPayloadBuilderImpl` that uses a single
+/// `QueryStatsPayloadBuilderImpl` to retrieve total query stats
+/// and turns them into a collection of fractional query stats
+/// for each node of the corresponding subnet.
+/// Those fractional query stats are stored in the field `pending_payloads`
+/// until they become part of a block and get `purge`d.
+struct PocketQueryStatsPayloadBuilderImpl {
+    query_stats_payload_builder: Box<dyn BatchPayloadBuilder>,
+    node_ids: Vec<NodeId>,
+    pending_payloads: RwLock<Vec<QueryStatsPayload>>,
+}
+
+impl PocketQueryStatsPayloadBuilderImpl {
+    pub(crate) fn new(
+        query_stats_payload_builder: Box<dyn BatchPayloadBuilder>,
+        node_ids: Vec<NodeId>,
+    ) -> Self {
+        Self {
+            query_stats_payload_builder,
+            node_ids,
+            pending_payloads: RwLock::new(Vec::new()),
+        }
+    }
+
+    pub(crate) fn purge(&self, payload: &QueryStatsPayload) {
+        assert!(self.pending_payloads.read().unwrap().contains(payload));
+        self.pending_payloads
+            .write()
+            .unwrap()
+            .retain(|p| p != payload);
+    }
+}
+
+impl BatchPayloadBuilder for PocketQueryStatsPayloadBuilderImpl {
+    fn build_payload(
+        &self,
+        height: Height,
+        max_size: NumBytes,
+        past_payloads: &[PastPayload],
+        context: &ValidationContext,
+    ) -> Vec<u8> {
+        if let Some(payload) = self.pending_payloads.read().unwrap().iter().next() {
+            return payload.serialize_with_limit(max_size);
+        }
+        let serialized_payload = self.query_stats_payload_builder.build_payload(
+            height,
+            max_size,
+            past_payloads,
+            context,
+        );
+        let num_nodes = self.node_ids.len();
+        if let Some(payload) = QueryStatsPayload::deserialize(&serialized_payload).unwrap() {
+            assert!(self.node_ids.contains(&payload.proposer));
+            *self.pending_payloads.write().unwrap() = self
+                .node_ids
+                .iter()
+                .map(|node_id| {
+                    let mut payload = payload.clone();
+                    payload.proposer = *node_id;
+                    // scale down the stats by the number of nodes
+                    // since they'll be aggregated across all nodes
+                    payload.stats = payload
+                        .stats
+                        .into_iter()
+                        .map(|mut s| {
+                            s.stats.num_calls /= num_nodes as u32;
+                            s.stats.num_instructions /= num_nodes as u64;
+                            s.stats.ingress_payload_size /= num_nodes as u64;
+                            s.stats.egress_payload_size /= num_nodes as u64;
+                            s
+                        })
+                        .collect();
+                    payload
+                })
+                .collect();
+        }
+        if let Some(payload) = self.pending_payloads.read().unwrap().iter().next() {
+            payload.serialize_with_limit(max_size)
+        } else {
+            vec![]
+        }
+    }
+
+    fn validate_payload(
+        &self,
+        _height: Height,
+        _proposal_context: &ProposalContext,
+        _payload: &[u8],
+        _past_payloads: &[PastPayload],
+    ) -> Result<(), PayloadValidationError> {
+        Ok(())
+    }
+}
+
 /// A replica node of the subnet with the corresponding `StateMachine`.
 pub struct StateMachineNode {
     pub node_id: NodeId,
@@ -606,6 +711,7 @@ impl From<u64> for StateMachineNode {
 /// can be used to test this part of the stack in isolation.
 pub struct StateMachine {
     subnet_id: SubnetId,
+    subnet_type: SubnetType,
     public_key: ThresholdSigPublicKey,
     public_key_der: Vec<u8>,
     secret_key: SecretKeyBytes,
@@ -636,8 +742,14 @@ pub struct StateMachine {
     pub nodes: Vec<StateMachineNode>,
     pub batch_summary: Option<BatchSummary>,
     time_source: Arc<FastForwardTimeSource>,
+    consensus_pool_cache: Arc<FakeConsensusPoolCache>,
     canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
     canister_http_payload_builder: Arc<CanisterHttpPayloadBuilderImpl>,
+    certified_height_tx: watch::Sender<Height>,
+    pub ingress_watcher_handle: IngressWatcherHandle,
+    /// A drop guard to gracefully cancel the ingress watcher task.
+    _ingress_watcher_drop_guard: tokio_util::sync::DropGuard,
+    query_stats_payload_builder: Arc<PocketQueryStatsPayloadBuilderImpl>,
     // This field must be the last one so that the temporary directory is deleted at the very end.
     state_dir: Box<dyn StateMachineStateDir>,
     // DO NOT PUT ANY FIELDS AFTER `state_dir`!!!
@@ -696,7 +808,6 @@ pub struct StateMachineBuilder {
     nns_subnet_id: Option<SubnetId>,
     subnet_id: Option<SubnetId>,
     routing_table: RoutingTable,
-    use_cost_scaling_flag: bool,
     enable_canister_snapshots: bool,
     idkg_keys_signing_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
     ecdsa_signature_fee: Option<Cycles>,
@@ -723,7 +834,6 @@ impl StateMachineBuilder {
             checkpoint_interval_length: None,
             subnet_type: SubnetType::System,
             enable_canister_snapshots: false,
-            use_cost_scaling_flag: false,
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
             nns_subnet_id: None,
             subnet_id: None,
@@ -836,13 +946,6 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn with_use_cost_scaling_flag(self, use_cost_scaling_flag: bool) -> Self {
-        Self {
-            use_cost_scaling_flag,
-            ..self
-        }
-    }
-
     pub fn with_canister_snapshots(self, enable_canister_snapshots: bool) -> Self {
         Self {
             enable_canister_snapshots,
@@ -942,7 +1045,6 @@ impl StateMachineBuilder {
             self.subnet_type,
             self.subnet_size,
             self.subnet_id,
-            self.use_cost_scaling_flag,
             self.enable_canister_snapshots,
             self.idkg_keys_signing_enabled_status,
             self.ecdsa_signature_fee,
@@ -1042,6 +1144,7 @@ impl StateMachineBuilder {
             sm.ingress_manager.clone(),
             Arc::new(xnet_payload_builder),
             sm.canister_http_payload_builder.clone(),
+            sm.query_stats_payload_builder.clone(),
             sm.metrics_registry.clone(),
             sm.replica_logger.clone(),
         ));
@@ -1067,6 +1170,15 @@ impl StateMachine {
         StateMachineBuilder::new().build()
     }
 
+    /// Drops the payload builder of this `StateMachine`.
+    /// This function should be called when this `StateMachine` is supposed to be dropped
+    /// if this `StateMachine` was created using `StateMachineBuilder::build_with_subnets`
+    /// because the payload builder contains an `Arc` of this `StateMachine`
+    /// which creates a circular dependency preventing this `StateMachine`s from being dropped.
+    pub fn drop_payload_builder(&self) {
+        self.payload_builder.write().unwrap().take();
+    }
+
     // TODO: cleanup, replace external calls with `StateMachineBuilder`.
     /// Constructs a new environment with the specified configuration.
     pub fn new_with_config(config: StateMachineConfig) -> Self {
@@ -1081,6 +1193,11 @@ impl StateMachine {
         // Make sure the latest state is certified and fetch it from `StateManager`.
         self.certify_latest_state();
         let certified_height = self.state_manager.latest_certified_height();
+
+        self.certified_height_tx
+            .send(certified_height)
+            .expect("Ingress watcher is running");
+
         let state = self
             .state_manager
             .get_state_at(certified_height)
@@ -1143,10 +1260,15 @@ impl StateMachine {
             .write()
             .unwrap()
             .apply_changes(changeset);
+        let query_stats = QueryStatsPayload::deserialize(&batch_payload.query_stats).unwrap();
+        if let Some(ref query_stats) = query_stats {
+            self.query_stats_payload_builder.purge(query_stats);
+        }
         let mut payload = PayloadBuilder::new()
             .with_ingress_messages(ingress_messages)
             .with_xnet_payload(xnet_payload)
-            .with_consensus_responses(http_responses);
+            .with_consensus_responses(http_responses)
+            .with_query_stats(query_stats);
 
         // Push responses to ECDSA management canister calls into `PayloadBuilder`.
         let sign_with_ecdsa_contexts = state
@@ -1190,6 +1312,26 @@ impl StateMachine {
     /// after this `StateMachine` has been built.
     pub fn reload_registry(&self) {
         self.registry_client.reload();
+        // Since the latest registry version could have changed,
+        // we update the CUP in `FakeConsensusPoolCache` to refer
+        // to the latest registry version.
+        let registry_version = self.registry_client.get_latest_version();
+        let cup_contents = self
+            .registry_client
+            .get_cup_contents(self.subnet_id, registry_version)
+            .unwrap()
+            .value
+            .unwrap();
+        let cup = make_registry_cup_from_cup_contents(
+            self.registry_client.as_ref(),
+            self.subnet_id,
+            cup_contents,
+            registry_version,
+            &self.replica_logger,
+        )
+        .unwrap();
+        let cup_proto: pb::CatchUpPackage = cup.into();
+        self.consensus_pool_cache.update_cup(cup_proto);
     }
 
     /// Constructs and initializes a new state machine that uses the specified
@@ -1204,7 +1346,6 @@ impl StateMachine {
         subnet_type: SubnetType,
         subnet_size: usize,
         subnet_id: Option<SubnetId>,
-        use_cost_scaling_flag: bool,
         enable_canister_snapshots: bool,
         idkg_keys_signing_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
         ecdsa_signature_fee: Option<Cycles>,
@@ -1284,14 +1425,12 @@ impl StateMachine {
             ..Default::default()
         };
 
-        let mut cycles_account_manager = CyclesAccountManager::new(
+        let cycles_account_manager = Arc::new(CyclesAccountManager::new(
             subnet_config.scheduler_config.max_instructions_per_message,
             subnet_type,
             subnet_id,
             subnet_config.cycles_account_manager_config,
-        );
-        cycles_account_manager.set_using_cost_scaling(use_cost_scaling_flag);
-        let cycles_account_manager = Arc::new(cycles_account_manager);
+        ));
         let state_manager = Arc::new(StateManagerImpl::new(
             Arc::new(FakeVerifier),
             subnet_id,
@@ -1314,11 +1453,11 @@ impl StateMachine {
             metrics_registry.clone(),
             replica_logger.clone(),
         )));
-        let consensus_pool_cache = FakeConsensusPoolCache::new(cup_proto);
+        let consensus_pool_cache = Arc::new(FakeConsensusPoolCache::new(cup_proto));
         let crypto = CryptoReturningOk::default();
         let canister_http_payload_builder = Arc::new(CanisterHttpPayloadBuilderImpl::new(
             canister_http_pool.clone(),
-            Arc::new(consensus_pool_cache),
+            consensus_pool_cache.clone(),
             Arc::new(crypto),
             state_manager.clone(),
             subnet_id,
@@ -1326,6 +1465,23 @@ impl StateMachine {
             &metrics_registry,
             replica_logger.clone(),
         ));
+
+        // Setup ingress watcher for synchronous call endpoint.
+        let (completed_execution_messages_tx, completed_execution_messages_rx) =
+            mpsc::channel(COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE);
+        let (certified_height_tx, certified_height_rx) = watch::channel(Height::from(0));
+
+        let cancellation_token = tokio_util::sync::CancellationToken::new();
+        let cancellation_token_clone = cancellation_token.clone();
+        let ingress_watcher_drop_guard = cancellation_token.drop_guard();
+        let (ingress_watcher_handle, _join_handle) = IngressWatcher::start(
+            runtime.handle().clone(),
+            replica_logger.clone(),
+            HttpHandlerMetrics::new(&metrics_registry),
+            certified_height_rx,
+            completed_execution_messages_rx,
+            cancellation_token_clone,
+        );
 
         // NOTE: constructing execution services requires tokio context.
         //
@@ -1335,8 +1491,6 @@ impl StateMachine {
         //
         // The API state machine provides is blocking anyway.
         let execution_services = runtime.block_on(async {
-            #[allow(clippy::disallowed_methods)]
-            let (completed_execution_messages_tx, _) = mpsc::channel(1);
             ExecutionServices::setup_execution(
                 replica_logger.clone(),
                 &metrics_registry,
@@ -1444,8 +1598,21 @@ impl StateMachine {
             RandomStateKind::Deterministic,
         ));
 
+        let query_stats_payload_builder = execution_services
+            .query_stats_payload_builder
+            .into_payload_builder(
+                state_manager.clone(),
+                nodes[0].node_id,
+                replica_logger.clone(),
+            );
+        let pocket_query_stats_payload_builder = Arc::new(PocketQueryStatsPayloadBuilderImpl::new(
+            query_stats_payload_builder,
+            nodes.iter().map(|n| n.node_id).collect(),
+        ));
+
         Self {
             subnet_id,
+            subnet_type,
             secret_key,
             public_key,
             public_key_der,
@@ -1466,6 +1633,9 @@ impl StateMachine {
             query_handler: runtime.block_on(async {
                 TowerBuffer::new(execution_services.query_execution_service, 1)
             }),
+            ingress_watcher_handle,
+            _ingress_watcher_drop_guard: ingress_watcher_drop_guard,
+            certified_height_tx,
             runtime,
             state_dir,
             // Note: state machine tests are commonly used for testing
@@ -1479,8 +1649,10 @@ impl StateMachine {
             nodes,
             batch_summary: None,
             time_source,
+            consensus_pool_cache,
             canister_http_pool,
             canister_http_payload_builder,
+            query_stats_payload_builder: pocket_query_stats_payload_builder,
         }
     }
 
@@ -2517,6 +2689,47 @@ impl StateMachine {
         .map(|_| ())
     }
 
+    pub fn take_canister_snapshot(
+        &self,
+        args: TakeCanisterSnapshotArgs,
+    ) -> Result<CanisterSnapshotResponse, UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.get_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::TakeCanisterSnapshot,
+            args.encode(),
+        )
+        .map(|res| match res {
+            WasmResult::Reply(data) => CanisterSnapshotResponse::decode(&data),
+            WasmResult::Reject(reason) => {
+                panic!("take_canister_snapshot call rejected: {}", reason)
+            }
+        })?
+    }
+
+    pub fn load_canister_snapshot(
+        &self,
+        args: LoadCanisterSnapshotArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        self.execute_ingress_as(
+            PrincipalId::new_anonymous(),
+            ic00::IC_00,
+            Method::LoadCanisterSnapshot,
+            args.encode(),
+        )
+        .map(|res| match res {
+            WasmResult::Reply(data) => Ok(data),
+            WasmResult::Reject(reason) => {
+                panic!("load_canister_snapshot call rejected: {}", reason)
+            }
+        })?
+    }
+
     /// Returns true if the canister with the specified id exists.
     pub fn canister_exists(&self, canister: CanisterId) -> bool {
         self.state_manager
@@ -2796,6 +3009,11 @@ impl StateMachine {
         self.registry_client.update_to_latest_version();
 
         assert_eq!(next_version, self.registry_client.get_latest_version());
+    }
+
+    /// Returns the subnet type of this state machine.
+    pub fn get_subnet_type(&self) -> SubnetType {
+        self.subnet_type
     }
 
     /// Returns the subnet id of this state machine.

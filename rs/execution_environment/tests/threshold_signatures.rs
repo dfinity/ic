@@ -329,7 +329,7 @@ fn test_compute_initial_idkg_dealings_with_unknown_key() {
         assert_eq!(
             result,
             Ok(WasmResult::Reject(format!(
-                "Unable to route management canister request {}: IDkgKeyError(\"Requested unknown iDGK key {} on subnet {}, subnet has keys: []\")",
+                "Unable to route management canister request {}: IDkgKeyError(\"Requested unknown threshold key {} on subnet {}, subnet has keys: []\")",
                 method, unknown_key, nns_subnet,
             ))),
         );
@@ -485,7 +485,7 @@ fn test_sign_with_threshold_key_unknown_key_rejected() {
         assert_eq!(
             result,
             Ok(WasmResult::Reject(format!(
-                "Unable to route management canister request {}: IDkgKeyError(\"Requested unknown or signing disabled iDKG key: {}, existing keys with signing enabled: {}\")",
+                "Unable to route management canister request {}: IDkgKeyError(\"Requested unknown or signing disabled threshold key: {}, existing keys with signing enabled: {}\")",
                 method,
                 wrong_key,
                 format_keys(vec![correct_key]),
@@ -552,7 +552,7 @@ fn test_signing_disabled_vs_unknown_key_on_public_key_and_signing_requests() {
                 sign_with_method,
                 signing_disabled_key.clone(),
             )),
-            "Requested unknown or signing disabled iDKG key"
+            "Requested unknown or signing disabled threshold key"
         );
 
         // Requesting non-existent public key (should fail).
@@ -563,7 +563,7 @@ fn test_signing_disabled_vs_unknown_key_on_public_key_and_signing_requests() {
                 public_key_method,
                 unknown_key.clone(),
             )),
-            "Requested unknown iDKG key"
+            "Requested unknown threshold key"
         );
 
         // Signing with non-existent key (should fail).
@@ -574,7 +574,7 @@ fn test_signing_disabled_vs_unknown_key_on_public_key_and_signing_requests() {
                 sign_with_method,
                 unknown_key.clone(),
             )),
-            "Requested unknown or signing disabled iDKG key"
+            "Requested unknown or signing disabled threshold key"
         );
     }
 }
@@ -609,7 +609,7 @@ fn test_threshold_key_public_key_req_with_unknown_key_rejected() {
         assert_eq!(
             result,
             Ok(WasmResult::Reject(format!(
-                "Unable to route management canister request {}: IDkgKeyError(\"Requested unknown iDKG key: {}, existing keys: {}\")",
+                "Unable to route management canister request {}: IDkgKeyError(\"Requested unknown threshold key: {}, existing keys: {}\")",
                 method,
                 wrong_key,
                 format_keys(vec![correct_key]),

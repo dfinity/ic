@@ -11,11 +11,11 @@ use crate::management::IcCanisterRuntime;
 use crate::management::{CallError, CanisterRuntime, Reason};
 use crate::state::{
     mutate_state, read_state, Archive, Canister, Canisters, CanistersMetadata, Index, Ledger,
-    ManageSingleCanister, ManagedCanisterStatus, State, WasmHash,
+    LedgerSuiteVersion, ManageSingleCanister, ManagedCanisterStatus, State, WasmHash,
 };
 use crate::storage::{
-    read_wasm_store, validate_wasm_hashes, wasm_store_try_get, StorableWasm, TaskQueue,
-    WasmHashError, WasmStore, WasmStoreError, TASKS,
+    read_wasm_store, validate_wasm_hashes, wasm_store_contain, wasm_store_try_get, StorableWasm,
+    TaskQueue, WasmHashError, WasmStore, WasmStoreError, TASKS,
 };
 use candid::{CandidType, Encode, Nat, Principal};
 use futures::future;
@@ -477,6 +477,20 @@ impl UpgradeOrchestratorArgs {
         })
     }
 
+    pub fn new_ledger_suite_version(self, old: LedgerSuiteVersion) -> LedgerSuiteVersion {
+        LedgerSuiteVersion {
+            ledger_compressed_wasm_hash: self
+                .ledger_compressed_wasm_hash
+                .unwrap_or(old.ledger_compressed_wasm_hash),
+            index_compressed_wasm_hash: self
+                .index_compressed_wasm_hash
+                .unwrap_or(old.index_compressed_wasm_hash),
+            archive_compressed_wasm_hash: self
+                .archive_compressed_wasm_hash
+                .unwrap_or(old.archive_compressed_wasm_hash),
+        }
+    }
+
     pub fn upgrade_ledger_suite(&self) -> bool {
         self.ledger_compressed_wasm_hash.is_some()
             || self.index_compressed_wasm_hash.is_some()
@@ -495,6 +509,7 @@ impl UpgradeOrchestratorArgs {
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 pub struct InstallLedgerSuiteArgs {
     contract: Erc20Token,
+    minter_id: Principal,
     ledger_init_arg: LedgerInitArg,
     ledger_compressed_wasm_hash: WasmHash,
     index_compressed_wasm_hash: WasmHash,
@@ -523,6 +538,7 @@ pub enum InvalidAddErc20ArgError {
     InvalidErc20Contract(String),
     Erc20ContractAlreadyManaged(Erc20Token),
     WasmHashError(WasmHashError),
+    InternalError(String),
 }
 
 impl InstallLedgerSuiteArgs {
@@ -533,25 +549,48 @@ impl InstallLedgerSuiteArgs {
     ) -> Result<InstallLedgerSuiteArgs, InvalidAddErc20ArgError> {
         let contract = Erc20Token::try_from(args.contract.clone())
             .map_err(|e| InvalidAddErc20ArgError::InvalidErc20Contract(e.to_string()))?;
+        let minter_id =
+            state
+                .minter_id()
+                .cloned()
+                .ok_or(InvalidAddErc20ArgError::InternalError(
+                    "ERROR: minter principal not set in state".to_string(),
+                ))?;
         if let Some(_canisters) = state.managed_canisters(&contract) {
             return Err(InvalidAddErc20ArgError::Erc20ContractAlreadyManaged(
                 contract,
             ));
         }
-        let [ledger_compressed_wasm_hash, index_compressed_wasm_hash, _archive_compressed_wasm_hash] =
-            validate_wasm_hashes(
-                wasm_store,
-                Some(&args.ledger_compressed_wasm_hash),
-                Some(&args.index_compressed_wasm_hash),
-                None,
+        let (ledger_compressed_wasm_hash, index_compressed_wasm_hash) = {
+            let LedgerSuiteVersion {
+                ledger_compressed_wasm_hash,
+                index_compressed_wasm_hash,
+                archive_compressed_wasm_hash: _,
+            } = state
+                .ledger_suite_version()
+                .expect("ERROR: ledger suite version missing");
+            //TODO XC-138: move read method to state and ensure that hash is in store and remove this.
+            assert!(
+                //nothing can be changed in AddErc20Arg to fix this.
+                wasm_store_contain::<Ledger>(wasm_store, ledger_compressed_wasm_hash),
+                "BUG: ledger compressed wasm hash missing"
+            );
+            assert!(
+                //nothing can be changed in AddErc20Arg to fix this.
+                wasm_store_contain::<Index>(wasm_store, index_compressed_wasm_hash),
+                "BUG: index compressed wasm hash missing"
+            );
+            (
+                ledger_compressed_wasm_hash.clone(),
+                index_compressed_wasm_hash.clone(),
             )
-            .map_err(InvalidAddErc20ArgError::WasmHashError)?;
-
+        };
         Ok(Self {
             contract,
+            minter_id,
             ledger_init_arg: args.ledger_init_arg,
-            ledger_compressed_wasm_hash: ledger_compressed_wasm_hash.unwrap(),
-            index_compressed_wasm_hash: index_compressed_wasm_hash.unwrap(),
+            ledger_compressed_wasm_hash,
+            index_compressed_wasm_hash,
         })
     }
 }
@@ -809,6 +848,7 @@ async fn install_ledger_suite<R: CanisterRuntime>(
         &args.contract,
         &args.ledger_compressed_wasm_hash,
         &LedgerArgument::Init(icrc1_ledger_init_arg(
+            args.minter_id,
             args.ledger_init_arg.clone(),
             runtime.id().into(),
             more_controllers,
@@ -857,19 +897,32 @@ fn record_new_erc20_token_once(contract: Erc20Token, metadata: CanistersMetadata
 }
 
 fn icrc1_ledger_init_arg(
+    minter_id: Principal,
     ledger_init_arg: LedgerInitArg,
     archive_controller_id: PrincipalId,
     archive_more_controller_ids: Vec<PrincipalId>,
     cycles_for_archive_creation: Nat,
 ) -> LedgerInitArgs {
+    use ic_icrc1_ledger::FeatureFlags as LedgerFeatureFlags;
     use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
+    use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
+
+    const LEDGER_FEE_SUBACCOUNT: [u8; 32] = [
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0x0f, 0xee,
+    ];
+    const MAX_MEMO_LENGTH: u16 = 80;
+    const ICRC2_FEATURE: LedgerFeatureFlags = LedgerFeatureFlags { icrc2: true };
 
     LedgerInitArgs {
-        minting_account: ledger_init_arg.minting_account,
-        fee_collector_account: ledger_init_arg.fee_collector_account,
-        initial_balances: ledger_init_arg.initial_balances,
+        minting_account: LedgerAccount::from(minter_id),
+        fee_collector_account: Some(LedgerAccount {
+            owner: minter_id,
+            subaccount: Some(LEDGER_FEE_SUBACCOUNT),
+        }),
+        initial_balances: vec![],
         transfer_fee: ledger_init_arg.transfer_fee,
-        decimals: ledger_init_arg.decimals,
+        decimals: Some(ledger_init_arg.decimals),
         token_name: ledger_init_arg.token_name,
         token_symbol: ledger_init_arg.token_symbol,
         metadata: vec![(
@@ -881,10 +934,10 @@ fn icrc1_ledger_init_arg(
             archive_more_controller_ids,
             cycles_for_archive_creation,
         ),
-        max_memo_length: ledger_init_arg.max_memo_length,
-        feature_flags: ledger_init_arg.feature_flags,
-        maximum_number_of_accounts: ledger_init_arg.maximum_number_of_accounts,
-        accounts_overflow_trim_quantity: ledger_init_arg.accounts_overflow_trim_quantity,
+        max_memo_length: Some(MAX_MEMO_LENGTH),
+        feature_flags: Some(ICRC2_FEATURE),
+        maximum_number_of_accounts: None,
+        accounts_overflow_trim_quantity: None,
     }
 }
 

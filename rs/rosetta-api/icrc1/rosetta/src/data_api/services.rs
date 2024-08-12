@@ -496,7 +496,7 @@ pub fn call(
                 )
             };
             let idempotent = match blocks.last() {
-                // If the last block in the database has the same index as the highest block index in the query we return true
+                // If the block with the highest block index that was retrieved from the database has the same index as the highest block index in the query we return true
                 Some(last_block) => {
                     last_block.block_identifier.index == query_block_range.highest_block_index
                 }
