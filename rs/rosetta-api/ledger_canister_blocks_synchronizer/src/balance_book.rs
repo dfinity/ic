@@ -179,8 +179,11 @@ impl BalancesStore for ClientBalancesStore {
     type AccountId = AccountIdentifier;
     type Tokens = Tokens;
 
-    fn get_balance(&self, k: &AccountIdentifier) -> Option<&Tokens> {
-        self.acc_to_hist.get(k).and_then(|hist| hist.get_last_ref())
+    fn get_balance(&self, k: &AccountIdentifier) -> Option<Tokens> {
+        self.acc_to_hist
+            .get(k)
+            .and_then(|hist| hist.get_last_ref())
+            .cloned()
     }
 
     // In here, ledger removes zero amount accounts from it's map,

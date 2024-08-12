@@ -8,16 +8,20 @@ use ic_system_test_driver::{
 };
 
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_nns_governance::pb::v1::NnsFunction;
+use ic_nns_governance_api::pb::v1::NnsFunction;
 use ic_types::{time::current_time, SubnetId};
 use openssh_keys::PublicKey;
-use registry_canister::mutations::do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload;
-use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
+use registry_canister::mutations::{
+    do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
+    do_update_subnet::UpdateSubnetPayload,
+};
 use reqwest::Url;
 use ssh2::Session;
-use std::io::{Read, Write};
-use std::net::{IpAddr, TcpStream};
-use std::time::Duration;
+use std::{
+    io::{Read, Write},
+    net::{IpAddr, TcpStream},
+    time::Duration,
+};
 
 pub fn generate_key_strings() -> (String, String) {
     // Our keys are Ed25519, and not RSA. Once we figure out a direct way to encode
@@ -136,9 +140,6 @@ pub fn get_updatesubnetpayload_with_keys(
         subnet_type: None,
         is_halted: None,
         halt_at_cup_height: None,
-        max_instructions_per_message: None,
-        max_instructions_per_round: None,
-        max_instructions_per_install_code: None,
         features: None,
         ecdsa_config: None,
         ecdsa_key_signing_enable: None,

@@ -2,13 +2,15 @@
 /// Axum handlers operate on a global state of type ApiState, whose
 /// interface guarantees consistency and determinism.
 use crate::pocket_ic::{
-    AdvanceTimeAndTick, EffectivePrincipal, GetCanisterHttp, MockCanisterHttp, PocketIc,
+    AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, GetCanisterHttp, MockCanisterHttp,
+    PocketIc,
 };
 use crate::InstanceId;
 use crate::{OpId, Operation};
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
 use base64;
+use futures::future::Shared;
 use hyper::header::{HeaderValue, HOST};
 use hyper::Version;
 use hyper_legacy::{client::connect::HttpConnector, Client};
@@ -29,16 +31,11 @@ use ic_types::{canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES, CanisterId, Subn
 use pocket_ic::common::rest::{
     CanisterHttpHeader, CanisterHttpMethod, CanisterHttpReject, CanisterHttpReply,
     CanisterHttpRequest, CanisterHttpResponse, HttpGatewayBackend, HttpGatewayConfig,
-    MockCanisterHttpResponse, Topology,
+    HttpGatewayDetails, HttpGatewayInfo, MockCanisterHttpResponse, Topology,
 };
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{BTreeMap, HashMap},
-    path::PathBuf,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::{
     sync::mpsc::error::TryRecvError,
     sync::mpsc::Receiver,
@@ -106,8 +103,8 @@ pub struct ApiState {
     sync_wait_time: Duration,
     // PocketIC server port
     port: Option<u16>,
-    // status of HTTP gateway (true = running, false = stopped)
-    http_gateways: Arc<RwLock<Vec<bool>>>,
+    // HTTP gateway infos (`None` = stopped)
+    http_gateways: Arc<RwLock<Vec<Option<HttpGatewayDetails>>>>,
 }
 
 #[derive(Default)]
@@ -175,7 +172,7 @@ impl PocketIcApiStateBuilder {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone)]
 pub enum OpOut {
     NoOutput,
     Time(u64),
@@ -186,7 +183,7 @@ pub enum OpOut {
     StableMemBytes(Vec<u8>),
     MaybeSubnetId(Option<SubnetId>),
     Error(PocketIcError),
-    RawResponse((u16, BTreeMap<String, Vec<u8>>, Vec<u8>)),
+    RawResponse(Shared<ApiResponse>),
     Pruned,
     MessageId((EffectivePrincipal, Vec<u8>)),
     Topology(Topology),
@@ -272,13 +269,16 @@ impl std::fmt::Debug for OpOut {
             OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
             OpOut::MaybeSubnetId(Some(subnet_id)) => write!(f, "SubnetId({})", subnet_id),
             OpOut::MaybeSubnetId(None) => write!(f, "NoSubnetId"),
-            OpOut::RawResponse((status, headers, bytes)) => {
+            OpOut::RawResponse(fut) => {
                 write!(
                     f,
-                    "ApiV2Resp({}:{:?}:{})",
-                    status,
-                    headers,
-                    base64::encode(bytes)
+                    "ApiResp({:?})",
+                    fut.peek().map(|(status, headers, bytes)| format!(
+                        "{}:{:?}:{}",
+                        status,
+                        headers,
+                        base64::encode(bytes)
+                    ))
                 )
             }
             OpOut::Pruned => write!(f, "Pruned"),
@@ -327,7 +327,7 @@ pub type UpdateResult = std::result::Result<UpdateReply, UpdateError>;
 /// returned directly.
 /// If the computation can be run and takes longer, a Started variant is returned, containing the
 /// requested op and the initial state.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum UpdateReply {
     /// The requested instance is busy executing another update.
     Busy {
@@ -470,7 +470,7 @@ impl ApiState {
     pub async fn create_http_gateway(
         &self,
         http_gateway_config: HttpGatewayConfig,
-    ) -> (InstanceId, u16) {
+    ) -> HttpGatewayInfo {
         use crate::state_api::routes::verify_cbor_content_header;
         use axum::extract::{DefaultBodyLimit, Path, Request as AxumRequest, State};
         use axum::handler::Handler;
@@ -610,19 +610,32 @@ impl ApiState {
             next.run(request).await
         }
 
-        let port = http_gateway_config.listen_at.unwrap_or_default();
-        let addr = format!("[::]:{}", port);
+        let ip_addr = http_gateway_config
+            .ip_addr
+            .unwrap_or("127.0.0.1".to_string());
+        let port = http_gateway_config.port.unwrap_or_default();
+        let addr = format!("{}:{}", ip_addr, port);
         let listener = std::net::TcpListener::bind(&addr)
             .unwrap_or_else(|_| panic!("Failed to start HTTP gateway on port {}", port));
         let real_port = listener.local_addr().unwrap().port();
 
         let mut http_gateways = self.http_gateways.write().await;
-        http_gateways.push(true);
-        let instance_id = http_gateways.len() - 1;
+        let instance_id = http_gateways.len();
+        let http_gateway_details = HttpGatewayDetails {
+            instance_id,
+            port: real_port,
+            forward_to: http_gateway_config.forward_to.clone(),
+            domains: http_gateway_config.domains.clone(),
+            https_config: http_gateway_config.https_config.clone(),
+        };
+        http_gateways.push(Some(http_gateway_details));
         drop(http_gateways);
 
         let http_gateways = self.http_gateways.clone();
         let pocket_ic_server_port = self.port.unwrap();
+        let handle = Handle::new();
+        let shutdown_handle = handle.clone();
+        let axum_handle = handle.clone();
         spawn(async move {
             let replica_url = match http_gateway_config.forward_to {
                 HttpGatewayBackend::Replica(replica_url) => replica_url,
@@ -681,13 +694,11 @@ impl ApiState {
                 .with_state(replica_url.trim_end_matches('/').to_string())
                 .into_make_service();
 
-            let handle = Handle::new();
-            let shutdown_handle = handle.clone();
             let http_gateways_for_shutdown = http_gateways.clone();
             tokio::spawn(async move {
                 loop {
                     let guard = http_gateways_for_shutdown.read().await;
-                    if !guard[instance_id] {
+                    if guard[instance_id].is_none() {
                         shutdown_handle.shutdown();
                         break;
                     }
@@ -704,7 +715,7 @@ impl ApiState {
                 match config {
                     Ok(config) => {
                         axum_server::from_tcp_rustls(listener, config)
-                            .handle(handle)
+                            .handle(axum_handle)
                             .serve(router)
                             .await
                             .unwrap();
@@ -712,13 +723,13 @@ impl ApiState {
                     Err(e) => {
                         error!("TLS config could not be created: {:?}", e);
                         let mut guard = http_gateways.write().await;
-                        guard[instance_id] = false;
+                        guard[instance_id] = None;
                         return;
                     }
                 }
             } else {
                 axum_server::from_tcp(listener)
-                    .handle(handle)
+                    .handle(axum_handle)
                     .serve(router)
                     .await
                     .unwrap();
@@ -726,13 +737,20 @@ impl ApiState {
 
             info!("Terminating HTTP gateway.");
         });
-        (instance_id, real_port)
+
+        // Wait until the HTTP gateway starts listening.
+        while handle.listening().await.is_none() {}
+
+        HttpGatewayInfo {
+            instance_id,
+            port: real_port,
+        }
     }
 
     pub async fn stop_http_gateway(&self, instance_id: InstanceId) {
         let mut http_gateways = self.http_gateways.write().await;
         if instance_id < http_gateways.len() {
-            http_gateways[instance_id] = false;
+            http_gateways[instance_id] = None;
         }
     }
 
@@ -950,17 +968,27 @@ impl ApiState {
         res
     }
 
+    pub async fn list_http_gateways(&self) -> Vec<HttpGatewayDetails> {
+        self.http_gateways
+            .read()
+            .await
+            .clone()
+            .into_iter()
+            .flatten()
+            .collect()
+    }
+
     /// An operation bound to an instance (a Computation) can update the PocketIC state.
     ///
     /// * If the instance is busy executing an operation, the call returns [UpdateReply::Busy]
-    /// immediately. In that case, the state label and operation id contained in the result
-    /// indicate that the instance is busy with a previous operation.
+    ///   immediately. In that case, the state label and operation id contained in the result
+    ///   indicate that the instance is busy with a previous operation.
     ///
     /// * If the instance is available and the computation exceeds a (short) timeout,
-    /// [UpdateReply::Busy] is returned.
+    ///   [UpdateReply::Busy] is returned.
     ///
     /// * If the computation finished within the timeout, [UpdateReply::Output] is returned
-    /// containing the result.
+    ///   containing the result.
     ///
     /// Operations are _not_ queued by default. Thus, if the instance is busy with an existing operation,
     /// the client has to retry until the operation is done. Some operations for which the client

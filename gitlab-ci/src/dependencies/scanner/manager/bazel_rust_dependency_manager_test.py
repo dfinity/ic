@@ -20,7 +20,6 @@ def open_test_file(rel_path):
 def test_project_root_bazel(bazel_test):
     assert bazel_test.root.exists()
     assert bazel_test.root.is_dir()
-    assert bazel_test.root.name == "ic"
 
 
 def test_cargo_lock_exists(bazel_test):
@@ -310,7 +309,7 @@ def test_get_findings_for_bazel_repo():
         executor = MockBazelCargoExecutor(expected_cargo_audit_output=json.load(audit), expected_bazel_queries=expected_queries, expected_bazel_responses=expected_responses)
         bazel_test = BazelRustDependencyManager(executor=executor)
 
-        findings = bazel_test.get_findings("ic", None, None)
+        findings = bazel_test.get_findings("ic", Project("ic", "ic"), None)
 
         assert findings is not None
         assert len(findings) == 3

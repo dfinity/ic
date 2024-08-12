@@ -30,7 +30,7 @@ ic-ledger-core = { path = "ledger_core" }
 ic-ledger-hash-of = { path = "../../packages/ic-ledger-hash-of" }
 ic-nns-common = { path = "../nns/common" }
 ic-nns-constants = { path = "../nns/constants" }
-ic-nns-governance = { path = "../nns/governance" }
+ic-nns-governance-api = { path = "../nns/governance/api" }
 ic-types = { path = "../types/types" }
 icp-ledger = { path = "icp_ledger" }
 lazy_static = { workspace = true }
@@ -62,3 +62,6 @@ ic-rosetta-test-utils = { path = "test_utils" }
 ic-types = { path = "../types/types" }
 proptest = "1.0"
 rand_chacha = { workspace = true }
+
+[features]
+rosetta-blocks = []

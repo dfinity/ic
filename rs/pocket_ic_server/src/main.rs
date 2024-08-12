@@ -14,6 +14,7 @@ use axum::{
     response::IntoResponse,
     Extension, Json,
 };
+use axum_server::Handle;
 use clap::Parser;
 use ic_canister_sandbox_backend_lib::{
     canister_sandbox_main, compiler_sandbox::compiler_sandbox_main,
@@ -51,7 +52,7 @@ const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
 #[derive(Parser)]
-#[clap(version = "4.0.0")]
+#[clap(version = "5.0.0")]
 struct Args {
     /// If you use PocketIC from the command line, you should not use this flag.
     /// Client libraries use this flag to provide a common identifier (the process ID of the test
@@ -59,7 +60,10 @@ struct Args {
     /// the same server.
     #[clap(long)]
     pid: Option<u32>,
-    /// The port under which the PocketIC server should be started
+    /// The IP address at which the PocketIC server should listen (defaults to 127.0.0.1)
+    #[clap(long, short)]
+    ip_addr: Option<String>,
+    /// The port at which the PocketIC server should listen
     #[clap(long, short, default_value_t = 0)]
     port: u16,
     /// The file to which the PocketIC server port should be written
@@ -148,9 +152,9 @@ async fn start(runtime: Arc<Runtime>) {
         };
     }
 
-    let addr = format!("127.0.0.1:{}", args.port);
-    let listener = tokio::net::TcpListener::bind(&addr)
-        .await
+    let ip_addr = args.ip_addr.unwrap_or("127.0.0.1".to_string());
+    let addr = format!("{}:{}", ip_addr, args.port);
+    let listener = std::net::TcpListener::bind(addr)
         .unwrap_or_else(|_| panic!("Failed to start PocketIC server on port {}", args.port));
     let real_port = listener.local_addr().unwrap().port();
 
@@ -218,6 +222,47 @@ async fn start(runtime: Arc<Runtime>) {
         .layer(TraceLayer::new_for_http())
         .into_make_service();
 
+    let handle = Handle::new();
+    let shutdown_handle = handle.clone();
+    let axum_handle = handle.clone();
+    // This is a safeguard against orphaning this child process.
+    let port_file_path_clone = port_file_path.clone();
+    let ready_file_path_clone = ready_file_path.clone();
+    tokio::spawn(async move {
+        loop {
+            let guard = app_state.min_alive_until.read().await;
+            if guard.elapsed() > Duration::from_secs(args.ttl) {
+                break;
+            }
+            drop(guard);
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+
+        debug!("The PocketIC server will terminate");
+
+        shutdown_handle.shutdown();
+
+        if use_ready_file {
+            // Clean up ready file.
+            let _ = std::fs::remove_file(ready_file_path_clone.unwrap());
+        }
+        if use_port_file {
+            // Clean up port file.
+            let _ = std::fs::remove_file(port_file_path_clone.unwrap());
+        }
+    });
+
+    let main_task = tokio::spawn(async move {
+        axum_server::from_tcp(listener)
+            .handle(axum_handle)
+            .serve(router)
+            .await
+            .unwrap();
+    });
+
+    // Wait until the PocketIC server starts listening.
+    while handle.listening().await.is_none() {}
+
     if use_port_file {
         let _ = port_file
             .as_mut()
@@ -235,32 +280,7 @@ async fn start(runtime: Arc<Runtime>) {
 
     info!("The PocketIC server is listening on port {}", real_port);
 
-    // This is a safeguard against orphaning this child process.
-    let shutdown_signal = async move {
-        loop {
-            let guard = app_state.min_alive_until.read().await;
-            if guard.elapsed() > Duration::from_secs(args.ttl) {
-                break;
-            }
-            drop(guard);
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        }
-
-        debug!("The PocketIC server will terminate");
-
-        if use_ready_file {
-            // Clean up ready file.
-            let _ = std::fs::remove_file(ready_file_path.unwrap());
-        }
-        if use_port_file {
-            // Clean up port file.
-            let _ = std::fs::remove_file(port_file_path.unwrap());
-        }
-    };
-    axum::serve(listener, router)
-        .with_graceful_shutdown(shutdown_signal)
-        .await
-        .unwrap();
+    main_task.await.unwrap();
 }
 
 async fn serve_api(Extension(api): Extension<OpenApi>) -> impl IntoApiResponse {

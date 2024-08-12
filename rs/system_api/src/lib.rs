@@ -1476,9 +1476,8 @@ impl SystemApiImpl {
     }
 
     /// Appends the specified bytes on the heap as a string to the canister's logs.
-    pub fn save_log_message(&mut self, is_enabled: bool, src: usize, size: usize, heap: &[u8]) {
+    pub fn save_log_message(&mut self, src: usize, size: usize, heap: &[u8]) {
         self.sandbox_safe_system_state.append_canister_log(
-            is_enabled,
             self.api_type.time(),
             valid_subslice("save_log_message", src, size, heap)
                 .unwrap_or(

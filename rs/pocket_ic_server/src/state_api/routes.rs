@@ -11,8 +11,7 @@ use crate::pocket_ic::{
     GetTopology, MockCanisterHttp, PubKey, Query, QueryRequest, ReadStateRequest, SetStableMemory,
     SetTime, StatusRequest, SubmitIngressMessage, Tick,
 };
-use crate::OpId;
-use crate::{pocket_ic::PocketIc, BlobStore, InstanceId, Operation};
+use crate::{async_trait, pocket_ic::PocketIc, BlobStore, InstanceId, OpId, Operation};
 use aide::{
     axum::routing::{delete, get, post, ApiMethodRouter},
     axum::ApiRouter,
@@ -35,10 +34,11 @@ use hyper::header;
 use ic_http_endpoints_public::cors_layer;
 use ic_types::CanisterId;
 use pocket_ic::common::rest::{
-    self, ApiResponse, ExtendedSubnetConfigSet, HttpGatewayConfig, HttpGatewayInfo, InstanceConfig,
-    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
-    RawCanisterResult, RawCycles, RawMessageId, RawMockCanisterHttpResponse, RawSetStableMemory,
-    RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime, RawWasmResult, Topology,
+    self, ApiResponse, ExtendedSubnetConfigSet, HttpGatewayConfig, HttpGatewayDetails,
+    InstanceConfig, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
+    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawMessageId,
+    RawMockCanisterHttpResponse, RawSetStableMemory, RawStableMemory, RawSubmitIngressResult,
+    RawSubnetId, RawTime, RawWasmResult, Topology,
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
@@ -199,6 +199,8 @@ where
     AppState: extract::FromRef<S>,
 {
     ApiRouter::new()
+        // List all HTTP gateways.
+        .api_route("/", get(list_http_gateways))
         // Create a new HTTP gateway instance. Takes a HttpGatewayConfig.
         // Returns an InstanceId and the HTTP gateway's port.
         .api_route("/", post(create_http_gateway))
@@ -206,15 +208,12 @@ where
         .api_route("/:id/stop", post(stop_http_gateway))
 }
 
-async fn run_operation<T: Serialize>(
+async fn run_operation<T: Serialize + FromOpOut>(
     api_state: Arc<ApiState>,
     instance_id: InstanceId,
     timeout: Option<Duration>,
     op: impl Operation + Send + Sync + 'static,
-) -> (StatusCode, ApiResponse<T>)
-where
-    (StatusCode, ApiResponse<T>): From<OpOut>,
-{
+) -> (StatusCode, ApiResponse<T>) {
     let retry_if_busy = op.retry_if_busy();
     let op = Arc::new(op);
     let mut retry_policy: ExponentialBackoff = ExponentialBackoffBuilder::new()
@@ -277,7 +276,7 @@ where
                             );
                         }
                     }
-                    UpdateReply::Output(op_out) => break op_out.into(),
+                    UpdateReply::Output(op_out) => break FromOpOut::from(op_out).await,
                 }
             }
         }
@@ -287,8 +286,14 @@ where
 #[derive(Debug, Copy, Clone)]
 pub struct OpConversionError;
 
-impl<T: TryFrom<OpOut>> From<OpOut> for (StatusCode, ApiResponse<T>) {
-    fn from(value: OpOut) -> Self {
+#[async_trait]
+trait FromOpOut: Sized {
+    async fn from(value: OpOut) -> (StatusCode, ApiResponse<Self>);
+}
+
+#[async_trait]
+impl<T: TryFrom<OpOut>> FromOpOut for T {
+    async fn from(value: OpOut) -> (StatusCode, ApiResponse<T>) {
         // match errors explicitly to make sure they have a 4xx status code
         match value {
             OpOut::Error(e) => (
@@ -463,13 +468,17 @@ impl TryFrom<OpOut> for Vec<RawCanisterHttpRequest> {
     }
 }
 
-impl From<OpOut> for (StatusCode, ApiResponse<PocketHttpResponse>) {
-    fn from(value: OpOut) -> Self {
+#[async_trait]
+impl FromOpOut for PocketHttpResponse {
+    async fn from(value: OpOut) -> (StatusCode, ApiResponse<PocketHttpResponse>) {
         match value {
-            OpOut::RawResponse((status, headers, bytes)) => (
-                StatusCode::from_u16(status).unwrap(),
-                ApiResponse::Success((headers, bytes)),
-            ),
+            OpOut::RawResponse(fut) => {
+                let (status, headers, bytes) = fut.await;
+                (
+                    StatusCode::from_u16(status).unwrap(),
+                    ApiResponse::Success((headers, bytes)),
+                )
+            }
             OpOut::Error(PocketIcError::RequestRoutingError(e)) => {
                 (StatusCode::BAD_REQUEST, ApiResponse::Error { message: e })
             }
@@ -736,7 +745,7 @@ async fn handle_raw<T: Operation + Send + Sync + 'static>(
 /// When polling, the type (and therefore the variant) is no longer known. Therefore we need
 /// to try every variant and immediately convert to an axum::Response so that axum understands
 /// the return type.
-fn op_out_to_response(op_out: OpOut) -> Response {
+async fn op_out_to_response(op_out: OpOut) -> Response {
     match op_out {
         OpOut::Pruned => (
             StatusCode::GONE,
@@ -816,7 +825,8 @@ fn op_out_to_response(op_out: OpOut) -> Response {
             )),
         )
             .into_response(),
-        OpOut::RawResponse((status, headers, bytes)) => {
+        OpOut::RawResponse(fut) => {
+            let (status, headers, bytes) = fut.await;
             let code = StatusCode::from_u16(status).unwrap();
             let mut resp = Response::builder().status(code);
             for (name, value) in headers {
@@ -842,7 +852,7 @@ pub async fn handler_read_graph(
         if let Some((_new_state_label, op_out)) =
             ApiState::read_result(api_state.get_graph(), &state_label, &op_id)
         {
-            op_out_to_response(op_out)
+            op_out_to_response(op_out).await
         } else {
             (
                 StatusCode::NOT_FOUND,
@@ -1109,19 +1119,23 @@ pub async fn delete_instance(
     StatusCode::OK
 }
 
+pub async fn list_http_gateways(
+    State(AppState { api_state, .. }): State<AppState>,
+) -> Json<Vec<HttpGatewayDetails>> {
+    let http_gateways = api_state.list_http_gateways().await;
+    Json(http_gateways)
+}
+
 /// Create a new HTTP gateway instance from a given HTTP gateway configuration.
 /// The new InstanceId and HTTP gateway's port will be returned.
 pub async fn create_http_gateway(
     State(AppState { api_state, .. }): State<AppState>,
     extract::Json(http_gateway_config): extract::Json<HttpGatewayConfig>,
 ) -> (StatusCode, Json<rest::CreateHttpGatewayResponse>) {
-    let (instance_id, port) = api_state.create_http_gateway(http_gateway_config).await;
+    let http_gateway_info = api_state.create_http_gateway(http_gateway_config).await;
     (
         StatusCode::CREATED,
-        Json(rest::CreateHttpGatewayResponse::Created(HttpGatewayInfo {
-            instance_id,
-            port,
-        })),
+        Json(rest::CreateHttpGatewayResponse::Created(http_gateway_info)),
     )
 }
 

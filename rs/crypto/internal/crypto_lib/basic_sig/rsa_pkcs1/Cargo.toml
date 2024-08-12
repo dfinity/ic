@@ -7,16 +7,16 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-rsa = { version = "0.9.2", features = [ "sha2" ] }
-ic-types = { path = "../../../../../types/types" }
-ic-crypto-sha2 = { path = "../../../../sha2" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
+ic-crypto-sha2 = { path = "../../../../sha2" }
+ic-types = { path = "../../../../../types/types" }
+num-bigint = { workspace = true }
 num-traits = { workspace = true }
 pkcs8 = { workspace = true }
-sha2 = { workspace = true }
+rsa = { version = "0.9.2", features = [ "sha2" ] }
 serde = { workspace = true }
+sha2 = { workspace = true }
 simple_asn1 = { workspace = true }
-num-bigint = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }
