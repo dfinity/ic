@@ -45,15 +45,6 @@ message SubnetRecord {
   // The maximum combined size of the ingress and xnet messages that fit into a block.
   uint64 max_block_payload_size = 19;
 
-  reserved 20;
-  reserved "max_instructions_per_message";
-
-  reserved 21;
-  reserved "max_instructions_per_round";
-
-  reserved 22;
-  reserved "max_instructions_per_install_code";
-
   // Information on whether a feature is supported by this subnet.
   SubnetFeatures features = 23;
 
@@ -91,11 +82,14 @@ message SubnetRecord {
   // key. If the removed key is not held by another subnet, it will be lost.
   optional ChainKeyConfig chain_key_config = 29;
 
-  reserved 1, 2, 4, 6, 13;
+  reserved 1, 2, 4, 6, 13, 20, 21, 22;
   reserved "ic_version_id";
   reserved "initial_dkg_transcript";
   reserved "ingress_bytes_per_block_soft_cap";
   reserved "gossip_config";
+  reserved "max_instructions_per_message";
+  reserved "max_instructions_per_round";
+  reserved "max_instructions_per_install_code";
 }
 
 message EcdsaInitialization {
