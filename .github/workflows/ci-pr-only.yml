@@ -52,10 +52,11 @@ jobs:
           cd "${GITHUB_WORKSPACE}"/bin
           ./build-all-fuzzers.sh --zip
       - name: Upload bazel-bep
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
-          retention-days: 90
+          retention-days: 14
           if-no-files-found: ignore
           compression-level: 9
           path: bazel-bep.pb
