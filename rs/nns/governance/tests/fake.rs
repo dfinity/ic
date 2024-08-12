@@ -41,8 +41,8 @@ const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 pub const NODE_PROVIDER_REWARD: u64 = 10_000;
 
 use ic_nns_governance::governance::tla::{
-    account_to_tla, tla_log_request, tla_log_response, Destination, InstrumentationState, ToTla,
-    TLA_INSTRUMENTATION_STATE, TLA_TRACES,
+    account_to_tla, tla_log_request, tla_log_response, Destination, ToTla,
+    TLA_INSTRUMENTATION_STATE,
 };
 
 lazy_static! {
@@ -268,14 +268,16 @@ impl IcpLedger for FakeDriver {
         tla_log_request!(
             Destination::new("ledger"),
             BTreeMap::from([
-                ("method", "transfer")(
+                ("method", "transfer".to_tla_value()),
+                (
                     "args",
                     BTreeMap::from([
-                        ("amount", amount_e8s),
-                        ("fee", fee_e8s),
+                        ("amount", amount_e8s.to_tla_value()),
+                        ("fee", fee_e8s.to_tla_value()),
                         ("from", account_to_tla(from_account)),
                         ("to", account_to_tla(to_account)),
                     ])
+                    .to_tla_value()
                 ) // TODO(oggy): what to do with options?
                   // ("from_subaccount", ...),
                   // TODO(oggy): what to do with this?
