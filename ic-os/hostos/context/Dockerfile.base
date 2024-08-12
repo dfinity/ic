@@ -63,7 +63,8 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
     libusb-1.0-0-dev \
     ninja-build \
     pkg-config \
-    python3
+    python3 \
+    python3-setuptools
 
 # Configure and compile QEMU
 COPY --from=download /tmp/qemu-6.2.0.tar.xz /tmp/qemu-6.2.0.tar.xz
