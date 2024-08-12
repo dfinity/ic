@@ -118,10 +118,11 @@ jobs:
           path: |
             bazel-targets
       - name: Upload bazel-bep
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
-          retention-days: 90
+          retention-days: 14
           # we don't always run bazel test (e.g. README changes only)
           if-no-files-found: ignore
           compression-level: 9
@@ -146,10 +147,11 @@ jobs:
           # https://github.com/dfinity/ic/actions/runs/9699415138/job/26768332602
           RUN_ON_DIFF_ONLY: false
       - name: Upload bazel-bep
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
-          retention-days: 90
+          retention-days: 14
           if-no-files-found: ignore
           compression-level: 9
           path: bazel-bep.pb
@@ -194,10 +196,11 @@ jobs:
           BAZEL_TARGETS: "//rs/... //publish/binaries/..."
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - name: Upload bazel-bep
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
-          retention-days: 90
+          retention-days: 14
           if-no-files-found: ignore
           compression-level: 9
           path: bazel-bep.pb
