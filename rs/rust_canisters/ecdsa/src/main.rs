@@ -1,6 +1,5 @@
 use candid::{candid_method, CandidType, Encode};
-use dfn_core::api::{call_bytes, Funds};
-use ic_cdk::api::print;
+use ic_cdk::api::{call::call_raw, print};
 use ic_cdk_macros::update;
 use ic_management_canister_types::{
     DerivationPath, EcdsaCurve, EcdsaKeyId, Method as Ic00Method, SignWithECDSAArgs, IC_00,
@@ -30,10 +29,10 @@ async fn get_sig(options: Options) {
         "calling get sig with key {} and derivation path {:?}",
         options.key_name, options.derivation_path,
     ));
-    let response = call_bytes(
-        IC_00,
+    let response = call_raw(
+        IC_00.into(),
         &Ic00Method::SignWithECDSA.to_string(),
-        &Encode!(&SignWithECDSAArgs {
+        Encode!(&SignWithECDSAArgs {
             message_hash: [0; 32],
             derivation_path: DerivationPath::new(
                 options
@@ -48,7 +47,7 @@ async fn get_sig(options: Options) {
             },
         })
         .unwrap(),
-        Funds::new(1_000_000_000_000),
+        1_000_000_000_000,
     )
     .await;
     print(format!("got result {:?}", response));
