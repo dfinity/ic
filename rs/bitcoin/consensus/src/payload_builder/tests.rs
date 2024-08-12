@@ -436,7 +436,7 @@ fn bitcoin_payload_builder_fits_largest_blocks() {
 
             let validation_result = bitcoin_payload_builder.validate_self_validating_payload(
                 &payload,
-                &proposal_context.validation_context,
+                proposal_context.validation_context,
                 &[],
             );
             assert!(
