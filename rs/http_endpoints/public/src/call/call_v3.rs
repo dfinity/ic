@@ -34,12 +34,8 @@ use ic_types::{
     CanisterId,
 };
 use serde_cbor::Value as CBOR;
-use std::{
-    collections::BTreeMap,
-    convert::Infallible,
-    sync::{Arc, RwLock},
-    time::Duration,
-};
+use std::{collections::BTreeMap, convert::Infallible, sync::Arc, time::Duration};
+use tokio::sync::OnceCell;
 use tokio_util::time::FutureExt;
 use tower::{util::BoxCloneService, ServiceBuilder};
 
@@ -114,7 +110,7 @@ impl From<IngressError> for CallV3Response {
 #[derive(Clone)]
 pub struct CallServiceV3 {
     ingress_watcher_handle: IngressWatcherHandle,
-    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     metrics: HttpHandlerMetrics,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ingress_message_certificate_timeout_seconds: u64,
@@ -131,7 +127,7 @@ impl CallServiceV3 {
         ingress_watcher_handle: IngressWatcherHandle,
         metrics: HttpHandlerMetrics,
         ingress_message_certificate_timeout_seconds: u64,
-        delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+        delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Router {
         let call_service = Self {
@@ -157,7 +153,7 @@ impl CallServiceV3 {
         ingress_watcher_handle: IngressWatcherHandle,
         metrics: HttpHandlerMetrics,
         ingress_message_certificate_timeout_seconds: u64,
-        delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+        delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> BoxCloneService<Request<Body>, Response, Infallible> {
         let router = Self::new_router(
@@ -320,7 +316,7 @@ async fn call_sync_v3(
             .inc();
     }
 
-    let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
+    let delegation_from_nns = delegation_from_nns.get().cloned();
     let signature = certification.signed.signature.signature.get().0;
 
     CallV3Response::Certificate(Certificate {

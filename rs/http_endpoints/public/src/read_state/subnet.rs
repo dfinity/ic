@@ -17,13 +17,13 @@ use ic_types::{
     },
     CanisterId, PrincipalId,
 };
-use std::convert::TryFrom;
-use std::sync::{Arc, RwLock};
+use std::{convert::TryFrom, sync::Arc};
+use tokio::sync::OnceCell;
 
 #[derive(Clone)]
 pub(crate) struct SubnetReadStateService {
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
-    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 }
 
@@ -37,7 +37,7 @@ impl SubnetReadStateService {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new_router(
         health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
-        delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+        delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Router {
         let state = Self {
@@ -70,7 +70,7 @@ pub(crate) async fn read_state_subnet(
         return (status, text).into_response();
     }
 
-    let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
+    let delegation_from_nns = delegation_from_nns.get().cloned();
     let make_service_unavailable_response = || {
         let status = StatusCode::SERVICE_UNAVAILABLE;
         let text = "Certified state is not available yet. Please try again...".to_string();

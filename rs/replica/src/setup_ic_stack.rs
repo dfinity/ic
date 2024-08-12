@@ -38,7 +38,7 @@ use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::sync::{Arc, RwLock};
 use tokio::sync::{
     mpsc::{channel, UnboundedSender},
-    watch,
+    watch, OnceCell,
 };
 
 /// The buffer size for the channel that [`IngressHistoryWriterImpl`] uses to send
@@ -131,6 +131,9 @@ pub fn construct_ic_stack(
         registry.get_latest_version(),
         registry.as_ref(),
     );
+
+    let delegation_from_nns = Arc::new(OnceCell::new());
+
     // ---------- THE PERSISTED CONSENSUS ARTIFACT POOL DEPS FOLLOW ----------
     // This is the first object that is required for the creation of the IC stack. Initializing the
     // persistent consensus pool is the only way for retrieving the height of the last CUP and/or
@@ -341,7 +344,7 @@ pub fn construct_ic_stack(
         consensus_pool_cache,
         subnet_type,
         config.malicious_behaviour.malicious_flags,
-        None,
+        delegation_from_nns,
         Arc::new(Pprof),
         tracing_handle,
         max_certified_height_rx,
