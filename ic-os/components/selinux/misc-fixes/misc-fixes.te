@@ -15,6 +15,8 @@ permissive unconfined_t;
 require { type lvm_t; }
 
 # Note that "cryptsetup" is also running as lvm_t.
+require { type initrc_t; }
+allow lvm_t initrc_t : sem rw_sem_perms;
 
 # cryptsetup needs to create /run/cryptsetup: This is its lockfile directory to
 # track which devices, which is the lockfile directory tracking devices on

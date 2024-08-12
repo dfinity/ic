@@ -124,6 +124,7 @@ require {
 search_dirs_pattern(filebeat_t, bin_t, bin_t)
 
 # Allow to read `/sys/fs/cgroup/unified/system.slice/filebeat.service/cgroup.controllers`
+require { type cgroup_t; }
 fs_read_cgroup_files(filebeat_t)
 allow filebeat_t cgroup_t:dir read;
 
