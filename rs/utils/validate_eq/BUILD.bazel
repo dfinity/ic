@@ -16,6 +16,6 @@ rust_test(
     crate = ":validate_eq",
     proc_macro_deps = [
         # Keep sorted.
-	"//rs/utils/validate_eq_derive",
+        "//rs/utils/validate_eq_derive",
     ],
 )

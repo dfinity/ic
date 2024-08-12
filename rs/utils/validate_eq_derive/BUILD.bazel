@@ -9,7 +9,7 @@ rust_proc_macro(
     version = "0.1.0",
     deps = [
         # Keep sorted.
-	"@crate_index//:quote",
-	"@crate_index//:syn"
+        "@crate_index//:quote",
+        "@crate_index//:syn"
     ],
 )
