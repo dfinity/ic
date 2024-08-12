@@ -404,13 +404,16 @@ impl CanisterQueues {
             InputQueueType::RemoteSubnet => &mut self.remote_subnet_input_schedule,
         };
 
-        // It is possible for an input schedule to contain an empty input queue if e.g.
-        // all messages in said queue have expired / were shed since it was scheduled.
-        // Meaning that iteration may be required.
+        // It is possible for an input schedule to contain an empty or garbage collected
+        // input queue if  all messages in said queue have expired / were shed since it
+        // was scheduled. Meaning that iteration may be required.
         while let Some(sender) = input_schedule.pop_front() {
-            // FIXME: an input schedule may contain a sender whose messages have all timed
-            // out / been shed and its queue garbage collected.
-            let input_queue = &mut self.canister_queues.get_mut(&sender).unwrap().0;
+            let input_queue = match self.canister_queues.get_mut(&sender) {
+                Some((input_queue, _)) => input_queue,
+
+                // Queue pair was garbage collected.
+                None => continue,
+            };
             let msg = pop_and_advance(input_queue, &mut self.pool);
 
             // If the input queue is non-empty, re-enqueue the sender at the back of the
@@ -737,7 +740,7 @@ impl CanisterQueues {
         self.ingress_queue.count_bytes()
     }
 
-    /// Returns the number of canister messages enqueued in input queues.
+    /// Returns the number of non-stale canister messages enqueued in input queues.
     pub fn input_queues_message_count(&self) -> usize {
         self.pool.message_stats().inbound_message_count
     }
@@ -757,16 +760,18 @@ impl CanisterQueues {
             + self.canister_queues.len() * CanisterQueue::EMPTY_SIZE_BYTES
     }
 
+    /// Returns the number of non-stale requests enqueued in input queues.
     pub fn input_queues_request_count(&self) -> usize {
         self.pool.message_stats().inbound_message_count
             - self.pool.message_stats().inbound_response_count
     }
 
+    /// Returns the number of non-stale responses enqueued in input queues.
     pub fn input_queues_response_count(&self) -> usize {
         self.pool.message_stats().inbound_response_count
     }
 
-    /// Returns the number of actual messages in output queues.
+    /// Returns the number of actual (non-stale) messages in output queues.
     pub fn output_queues_message_count(&self) -> usize {
         self.pool.message_stats().outbound_message_count
     }
@@ -969,18 +974,20 @@ impl CanisterQueues {
     ) {
         use Context::*;
 
-        // Ensure that the first reference in a queue is never stale: if we dropped the
-        // message at the head of a queue, advance to the first non-stale reference.
         let context = id.context();
         let remote = match context {
             Inbound => msg.sender(),
             Outbound => msg.receiver(),
         };
         let (input_queue, output_queue) = self.canister_queues.get_mut(&remote).unwrap();
-        let queue = match context {
-            Inbound => input_queue,
-            Outbound => output_queue,
+        let (queue, reverse_queue) = match context {
+            Inbound => (input_queue, output_queue),
+            Outbound => (output_queue, input_queue),
         };
+
+        // Ensure that the first reference in a queue is never stale: if we dropped the
+        // message at the head of a queue, advance to the first non-stale reference.
+        //
         // Defensive check, reference may have already been popped by an earlier
         // `on_message_dropped()` call if multiple messages got dropped at once.
         if queue.peek() == Some(&CanisterQueueItem::Reference(*id)) {
@@ -988,13 +995,21 @@ impl CanisterQueues {
             queue.pop_while(|item| self.pool.get(item.id()).is_none());
         }
 
-        // Generate reject response, if necessary.
+        // Generate reject response, iff this was an outbound request. Or release the
+        // response slot iff this was an inbound request.
         let request = match (context, msg) {
             // Outbound request: produce a `SYS_TRANSIENT` timeout response.
             (Outbound, RequestOrResponse::Request(request)) => request,
 
-            // Inbound request or response; or outbound response; all done.
-            (Inbound, _) | (_, RequestOrResponse::Response(_)) => return,
+            // Outbound request: release the response slot and return.
+            (Inbound, RequestOrResponse::Request(request)) => {
+                reverse_queue.release_reserved_response_slot();
+                self.queue_stats.on_drop_input_request(request);
+                return;
+            }
+
+            // Inbound or outbound response, nothing left to do.
+            (_, RequestOrResponse::Response(_)) => return,
         };
         let response = generate_timeout_response(request);
         let destination = &request.receiver;
@@ -1440,6 +1455,16 @@ impl QueueStats {
             debug_assert!(self.output_queues_reserved_slots > 0);
             self.output_queues_reserved_slots -= 1;
         }
+    }
+
+    /// Updates the stats to reflect the dropping of the given request from an input
+    /// queue.
+    fn on_drop_input_request(&mut self, request: &Request) {
+        // We should never be expiring or shedding a guaranteed response request.
+        debug_assert_ne!(NO_DEADLINE, request.deadline);
+
+        debug_assert!(self.output_queues_reserved_slots > 0);
+        self.output_queues_reserved_slots -= 1;
     }
 }
 

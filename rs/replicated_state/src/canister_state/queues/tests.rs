@@ -99,25 +99,14 @@ impl CanisterQueuesFixture {
         iter.pop()
     }
 
-    /// Times out all requests in the output queue.
-    // FIXME: This will now time out all messages, not just outbound requests.
-    fn time_out_all_output_requests(&mut self) -> usize {
-        let local_canisters = maplit::btreemap! {
-            self.this => {
-                let scheduler_state = SchedulerState::default();
-                let system_state = SystemState::new_running_for_testing(
-                    CanisterId::from_u64(42),
-                    user_test_id(24).get(),
-                    Cycles::new(1 << 36),
-                    NumSeconds::from(100_000),
-                );
-                CanisterState::new(system_state, None, scheduler_state)
-            }
-        };
+    /// Times out all messages with deadlines: all requests in output queues (best
+    /// effort or guaranteed response); and all best effort messages, except
+    /// responses in input queues.
+    fn time_out_all_messages_with_deadlines(&mut self) -> usize {
         self.queues.time_out_messages(
             Time::from_nanos_since_unix_epoch(u64::MAX),
             &self.this,
-            &local_canisters,
+            &BTreeMap::default(),
         )
     }
 
@@ -292,7 +281,7 @@ fn test_available_output_request_slots_counts_timed_out_output_requests() {
 
     // Push output request, then time it out.
     queues.push_output_request().unwrap();
-    queues.time_out_all_output_requests();
+    queues.time_out_all_messages_with_deadlines();
 
     // Pop the reject response, to isolate the timed out request.
     queues.pop_input().unwrap();
@@ -317,7 +306,7 @@ fn test_backpressure_with_timed_out_requests() {
     for _ in 0..DEFAULT_QUEUE_CAPACITY {
         queues.push_output_request().unwrap();
     }
-    queues.time_out_all_output_requests();
+    queues.time_out_all_messages_with_deadlines();
 
     // Check that no new request can be pushed.
     assert!(queues.push_output_request().is_err());
@@ -337,7 +326,9 @@ fn test_has_output() {
     assert_eq!(0, queues.available_output_request_slots());
 
     // Time out all output requests.
-    queues.time_out_all_output_requests();
+    queues.time_out_all_messages_with_deadlines();
+    // Still no output request slots available.
+    assert_eq!(0, queues.available_output_request_slots());
 
     // Consume the reject responses, to free up input queue response slots.
     for _ in 0..DEFAULT_QUEUE_CAPACITY {
@@ -346,7 +337,7 @@ fn test_has_output() {
 
     // There is no output.
     assert!(!queues.queues.has_output());
-    // And all output request slots are available.
+    // All output request slots are now available.
     assert_eq!(
         DEFAULT_QUEUE_CAPACITY,
         queues.available_output_request_slots()
@@ -486,6 +477,23 @@ impl CanisterQueuesMultiFixture {
         )
     }
 
+    fn push_input_request_with_deadline(
+        &mut self,
+        other: CanisterId,
+        deadline: CoarseTime,
+        input_queue_type: InputQueueType,
+    ) -> Result<(), (StateError, RequestOrResponse)> {
+        self.queues.push_input(
+            RequestBuilder::default()
+                .sender(other)
+                .receiver(self.this)
+                .deadline(deadline)
+                .build()
+                .into(),
+            input_queue_type,
+        )
+    }
+
     fn push_input_response(
         &mut self,
         other: CanisterId,
@@ -540,6 +548,17 @@ impl CanisterQueuesMultiFixture {
     fn pop_output(&mut self) -> Option<RequestOrResponse> {
         let mut iter = self.queues.output_into_iter();
         iter.pop()
+    }
+
+    /// Times out all messages with deadlines: all requests in output queues (best
+    /// effort or guaranteed response); and all best effort messages, except
+    /// responses in input queues.
+    fn time_out_all_messages_with_deadlines(&mut self) -> usize {
+        self.queues.time_out_messages(
+            Time::from_nanos_since_unix_epoch(u64::MAX),
+            &self.this,
+            &BTreeMap::default(),
+        )
     }
 
     fn local_schedule(&self) -> Vec<CanisterId> {
@@ -930,6 +949,122 @@ fn test_peek_input_with_stale_references() {
 
     assert!(!queues.has_input());
     assert!(queues.pool.len() == 0);
+}
+
+/// Produces a `CanisterQueues` with 3 local input queues and 3 remote input
+/// queues, all enqueued in their resepective input schedules, but only the
+/// middle one still containing any messages.
+fn fixture_with_empty_queues_in_input_schedules() -> CanisterQueues {
+    let other_1 = canister_test_id(1);
+    let other_2 = canister_test_id(2);
+    let other_3 = canister_test_id(3);
+    let other_4 = canister_test_id(4);
+    let other_5 = canister_test_id(5);
+    let other_6 = canister_test_id(6);
+
+    let mut queues = CanisterQueuesMultiFixture::new();
+
+    // 3 local input queues (from `other_1` through `other_3`) and 3 remote ones
+    // (from `other_4` through `other_6`). Queues from `other_2` and `other_5` hold
+    // guaranteed response requests; the other queues contain best-effort requests.
+    queues
+        .push_input_request_with_deadline(other_1, coarse_time(1), LocalSubnet)
+        .unwrap();
+    queues.push_input_request(other_2, LocalSubnet).unwrap();
+    queues
+        .push_input_request_with_deadline(other_3, coarse_time(1), LocalSubnet)
+        .unwrap();
+    queues
+        .push_input_request_with_deadline(other_4, coarse_time(1), RemoteSubnet)
+        .unwrap();
+    queues.push_input_request(other_5, RemoteSubnet).unwrap();
+    queues
+        .push_input_request_with_deadline(other_6, coarse_time(1), RemoteSubnet)
+        .unwrap();
+
+    // Time out the messages from `other_1`, `other_3`, `other_4` and `other_6`.
+    queues.time_out_all_messages_with_deadlines();
+    debug_assert!(queues.queues.stats_ok());
+
+    let queues = queues.queues;
+
+    // Ensure that we only have the messages from `other_2` and `other_5` left.
+    assert_eq!(2, queues.input_queues_message_count());
+    // And no messages and only 2 reserved slots in output queues.
+    assert_eq!(0, queues.output_queues_message_count());
+    assert_eq!(2, queues.output_queues_reserved_slots());
+
+    // But both schedules still have length 3.
+    assert_eq!(3, queues.local_subnet_input_schedule.len());
+    assert_eq!(3, queues.remote_subnet_input_schedule.len());
+
+    queues
+}
+
+#[test]
+fn test_empty_queue_in_input_schedule() {
+    let mut queues = fixture_with_empty_queues_in_input_schedules();
+
+    assert!(queues.has_input());
+    assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Request(request) if request.sender == canister_test_id(2));
+
+    assert!(queues.has_input());
+    assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Request(request) if request.sender == canister_test_id(5));
+
+    assert!(!queues.has_input());
+    assert_eq!(None, queues.pop_input());
+
+    assert!(queues.pool.len() == 0);
+}
+
+#[test]
+fn test_gced_queue_in_input_schedule() {
+    let mut queues = fixture_with_empty_queues_in_input_schedules();
+
+    // Garbage collect the empty queue paurs.
+    queues.garbage_collect();
+    // Only 2 queue pairs should be left.
+    assert_eq!(2, queues.canister_queues.len());
+
+    assert!(queues.has_input());
+    assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Request(request) if request.sender == canister_test_id(2));
+
+    assert!(queues.has_input());
+    assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Request(request) if request.sender == canister_test_id(5));
+
+    assert!(!queues.has_input());
+    assert_eq!(None, queues.pop_input());
+
+    assert!(queues.pool.len() == 0);
+}
+
+#[test]
+fn roundtrip_encode_empty_queue_in_input_schedule() {
+    let queues = fixture_with_empty_queues_in_input_schedules();
+
+    let encoded: pb_queues::CanisterQueues = (&queues).into();
+    let decoded = (encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)
+        .try_into()
+        .unwrap();
+
+    assert_eq!(queues, decoded);
+}
+
+#[test]
+fn roundtrip_encode_gced_queue_in_input_schedule() {
+    let mut queues = fixture_with_empty_queues_in_input_schedules();
+
+    // Garbage collect the empty queue paurs.
+    queues.garbage_collect();
+    // Only 2 queue pairs should be left.
+    assert_eq!(2, queues.canister_queues.len());
+
+    let encoded: pb_queues::CanisterQueues = (&queues).into();
+    let decoded = (encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)
+        .try_into()
+        .unwrap();
+
+    assert_eq!(queues, decoded);
 }
 
 /// Enqueues 6 output requests across 3 canisters and consumes them.

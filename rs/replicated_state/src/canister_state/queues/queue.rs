@@ -181,6 +181,15 @@ impl CanisterQueue {
         Ok(())
     }
 
+    /// Releases a reserved response slot.
+    ///
+    /// This is used when a request in the reverse queue is dropped before having
+    /// had a chance to be popped.
+    pub(super) fn release_reserved_response_slot(&mut self) {
+        debug_assert!(self.response_slots > 0);
+        self.response_slots -= 1;
+    }
+
     /// Returns the number of reserved response slots.
     pub(super) fn reserved_slots(&self) -> usize {
         debug_assert!(self.request_slots + self.response_slots >= self.queue.len());
