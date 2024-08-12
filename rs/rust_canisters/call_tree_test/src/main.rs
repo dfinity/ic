@@ -1,6 +1,7 @@
 //! This module contains a canister used for XNet integration test.
-use dfn_core::api;
-use dfn_macro::composite_query;
+use candid::{CandidType, Principal};
+use ic_cdk::api::{call::call_raw, id};
+use ic_cdk_macros::query;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::cmp::min;
@@ -13,7 +14,7 @@ const PAGE_SIZE: usize = 4096;
 /// Datastructure representing a call tree.
 /// It's comprised of a canister_id representing where the canister originates
 /// and a recurisve list of subtrees, which in turn are also of type CallTree.
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(CandidType, Deserialize, Serialize, Clone)]
 struct CallTree {
     canister_id: String,
     subtrees: Vec<CallTree>,
@@ -39,7 +40,7 @@ thread_local! {
     static MEMORY: RefCell<Vec<Vec<u8>>> = const { RefCell::new(Vec::new()) };
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(CandidType, Serialize, Deserialize)]
 struct Arguments {
     /// List of calltrees, each representing a call to another canister triggering running a call tree.
     calltrees: Vec<CallTree>,
@@ -49,7 +50,7 @@ struct Arguments {
     num_pages: usize,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(CandidType, Serialize, Deserialize)]
 struct Message {
     sender: String,
     receiver: String,
@@ -75,12 +76,12 @@ fn touch_memory(num_pages: usize) {
 
 /// Initializes network topology and instructs this canister to start sending
 /// requests to other canisters.
-#[composite_query]
+#[query(composite = true)]
 async fn start(arguments: Arguments) -> Vec<Message> {
     let calltrees = arguments.calltrees;
 
     let mut messages = vec![];
-    let this_cid = api::id().to_string();
+    let this_cid = id().to_string();
 
     touch_memory(arguments.num_pages);
 
@@ -99,11 +100,11 @@ async fn start(arguments: Arguments) -> Vec<Message> {
                 receiver: entry.canister_id.clone(),
             });
         }
-        futures.push(api::call_bytes(
-            api::CanisterId::from_str(&entry.canister_id).unwrap(),
+        futures.push(call_raw(
+            Principal::from_str(&entry.canister_id).unwrap(),
             "start",
-            &msg[..],
-            api::Funds::zero(),
+            msg,
+            0,
         ));
     }
 

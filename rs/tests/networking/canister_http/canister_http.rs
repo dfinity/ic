@@ -53,9 +53,9 @@ pub fn install_nns_canisters(env: &TestEnv) {
 pub fn setup(env: TestEnv) {
     // Set up Universal VM with HTTP Bin testing service
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_config_img(
-            env.get_dependency_path("rs/tests/networking/canister_http/http_uvm_config_image.zst"),
-        )
+        .with_config_img(get_dependency_path(
+            "rs/tests/networking/canister_http/http_uvm_config_image.zst",
+        ))
         .enable_ipv4()
         .start(&env)
         .expect("failed to set up universal VM");
@@ -76,17 +76,6 @@ pub fn setup(env: TestEnv) {
         .expect("failed to setup IC under test");
     await_nodes_healthy(&env);
     install_nns_canisters(&env);
-}
-
-pub fn get_pem_content(test_env: &TestEnv, typ: &PemType) -> String {
-    match typ {
-        PemType::PemCert => test_env
-            .get_canister_http_test_ca_cert()
-            .expect("Did find test CA file"),
-        PemType::PemKey => test_env
-            .get_canister_http_test_ca_key()
-            .expect("Did not find test CA key file"),
-    }
 }
 
 pub fn get_universal_vm_address(env: &TestEnv) -> Ipv6Addr {
@@ -205,7 +194,7 @@ pub fn create_proxy_canister<'a>(
     let proxy_canister_id = rt.block_on(create_and_install(
         &node.build_default_agent(),
         node.effective_canister_id(),
-        &env.load_wasm(env::var("PROXY_WASM_PATH").expect("PROXY_WASM_PATH not set")),
+        &load_wasm(env::var("PROXY_WASM_PATH").expect("PROXY_WASM_PATH not set")),
     ));
     info!(
         &env.logger(),
