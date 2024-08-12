@@ -167,12 +167,16 @@ impl WasmChunkStore {
         Ok(hash)
     }
 
-    pub(crate) fn from_checkpoint(data: PageMap, metadata: WasmChunkStoreMetadata) -> Self {
+    pub fn from_checkpoint(data: PageMap, metadata: WasmChunkStoreMetadata) -> Self {
         Self { data, metadata }
     }
 
     fn page_index(chunk_index: u64) -> PageIndex {
         (chunk_index * PAGES_PER_CHUNK).into()
+    }
+
+    pub(crate) fn heap_delta(&self) -> NumBytes {
+        NumBytes::from((self.data.num_delta_pages() * PAGE_SIZE) as u64)
     }
 }
 

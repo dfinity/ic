@@ -183,7 +183,7 @@ canister_version_tests ecid =
                               ctr2 @?= 2,
                             simpleTestCase "after setting freezing threshold" ecid $ \cid -> do
                               ctr1 <- query cid (replyData canister_version) >>= asWord64
-                              ic_update_settings ic00 cid (#freezing_threshold .== 2 ^ (20 :: Int))
+                              ic_set_freezing_threshold ic00 cid (2 ^ 20)
                               ctr2 <- query cid (replyData canister_version) >>= asWord64
                               ctr1 @?= 1
                               ctr2 @?= 2,
@@ -334,7 +334,7 @@ canister_version_tests ecid =
                               ctr2 @?= 1,
                             simpleTestCase "after failed change of settings" ecid $ \cid -> do
                               ctr1 <- query cid (replyData canister_version) >>= asWord64
-                              ic_update_settings' ic00 cid (#freezing_threshold .== 2 ^ (70 :: Int)) >>= isReject [5]
+                              ic_set_freezing_threshold' ic00 cid (2 ^ 70) >>= isReject [5]
                               ctr2 <- query cid (replyData canister_version) >>= asWord64
                               ctr1 @?= 1
                               ctr2 @?= 1

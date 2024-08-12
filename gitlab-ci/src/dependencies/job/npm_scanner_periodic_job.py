@@ -1,6 +1,7 @@
 import logging
 
 from data_source.jira_finding_data_source import JiraFindingDataSource
+from model.ic import get_ic_repo_ci_pipeline_base_url, get_ic_repo_merge_request_base_url
 from model.project import Project
 from model.repository import Repository
 from model.team import Team
@@ -120,7 +121,7 @@ REPOS_TO_SCAN = [
                 owner=Team.GIX_TEAM,
             )
         ],
-        "18.17.1",
+        DEFAULT_NODE_VERSION,
     ),
     # Removing ic-docutrack temporarily since it supports
     # only pnpm and not npm
@@ -157,6 +158,8 @@ if __name__ == "__main__":
         notify_on_finding_deleted=notify_on_finding_deleted,
         notify_on_scan_job_succeeded=notify_on_scan_job_succeeded,
         notify_on_scan_job_failed=notify_on_scan_job_failed,
+        merge_request_base_url= get_ic_repo_merge_request_base_url(),
+        ci_pipeline_base_url= get_ic_repo_ci_pipeline_base_url(),
     )
     notifier = NotificationCreator(config)
     finding_data_source_subscribers = [notifier]

@@ -15,18 +15,16 @@ use ic_nervous_system_runtime::Runtime;
 use serde::Serialize;
 
 /// Argument to the similarly-named methods on the NNS and SNS root canisters.
-#[derive(CandidType, Serialize, Deserialize, Clone)]
+#[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct ChangeCanisterRequest {
     /// Whether the canister should first be stopped before the install_code
     /// method is called.
     ///
     /// The value depend on the canister. For instance:
     /// * Canisters that don't emit any inter-canister call, such as the
-    ///   registry canister,
-    /// have no reason to be stopped before being upgraded.
+    ///   registry canister, have no reason to be stopped before being upgraded.
     /// * Canisters that emit inter-canister call are at risk of undefined
-    ///   behavior if
-    /// a callback is delivered to them after the upgrade.
+    ///   behavior if a callback is delivered to them after the upgrade.
     pub stop_before_installing: bool,
 
     // -------------------------------------------------------------------- //
@@ -188,7 +186,7 @@ pub enum CanisterAction {
 }
 
 /// Argument to the similarly-named methods on the NNS and SNS root canisters.
-#[derive(candid::CandidType, Serialize, candid::Deserialize, Clone, Copy, Debug)]
+#[derive(candid::CandidType, Serialize, candid::Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StopOrStartCanisterRequest {
     pub canister_id: CanisterId,
     pub action: CanisterAction,

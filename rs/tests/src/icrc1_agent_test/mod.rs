@@ -8,6 +8,7 @@ use ic_crypto_tree_hash::{LookupStatus, MixedHashTree};
 use ic_icrc1_ledger::{ArchiveOptions, FeatureFlags, InitArgsBuilder, LedgerArgument, UpgradeArgs};
 use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::test_env_api::get_dependency_path;
 use ic_system_test_driver::util::{agent_with_identity, random_ed25519_identity};
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use icrc_ledger_types::icrc1::account::Account;
@@ -18,12 +19,13 @@ use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value, icrc3::blocks::GetBlocksRequest,
 };
 use on_wire::IntoWire;
+use std::env;
 
 use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
-        test_env_api::{HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
     util::{assert_create_agent, block_on, runtime_from_url},
 };
@@ -66,7 +68,6 @@ pub fn test(env: TestEnv) {
                 .unwrap(),
         };
         install_icrc1_ledger(
-            &env,
             &mut empty_ledger,
             &LedgerArgument::Init(InitArgsBuilder::for_tests().build()),
         )
@@ -144,7 +145,7 @@ pub fn test(env: TestEnv) {
                 max_transactions_per_response: None,
             })
             .build();
-        install_icrc1_ledger(&env, &mut ledger, &LedgerArgument::Init(init_args.clone())).await;
+        install_icrc1_ledger(&mut ledger, &LedgerArgument::Init(init_args.clone())).await;
 
         // name
         assert_eq!(
@@ -397,14 +398,10 @@ fn mleaf<B: AsRef<[u8]>>(blob: B) -> MixedHashTree {
     MixedHashTree::Leaf(blob.as_ref().to_vec())
 }
 
-pub async fn install_icrc1_ledger<'a>(
-    env: &TestEnv,
-    canister: &mut Canister<'a>,
-    args: &LedgerArgument,
-) {
+pub async fn install_icrc1_ledger<'a>(canister: &mut Canister<'a>, args: &LedgerArgument) {
     install_rust_canister_from_path(
         canister,
-        env.get_dependency_path("rs/rosetta-api/icrc1/ledger/ledger_canister.wasm"),
+        get_dependency_path(env::var("LEDGER_WASM_PATH").expect("LEDGER_WASM_PATH not set")),
         Some(Encode!(&args).unwrap()),
     )
     .await

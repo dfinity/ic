@@ -4,9 +4,9 @@
     "minter": {
       "type": "custom",
       "build": [
-        "bazel build //rs/ethereum/cketh/minter:cketh_minter"
+        "bazel build //rs/ethereum/cketh/minter:cketh_minter.wasm.gz"
       ],
-      "wasm": "../../../../bazel-bin/rs/ethereum/cketh/minter/cketh_minter.wasm",
+      "wasm": "../../../../bazel-bin/rs/ethereum/cketh/minter/cketh_minter.wasm.gz",
       "candid": "../minter/cketh_minter.did",
       "shrink": false
     },

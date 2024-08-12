@@ -322,20 +322,6 @@ def icos_build(
         tags = ["manual"],
     )
 
-    gzip_compress(
-        name = "disk-img.tar.gz",
-        srcs = [":disk-img.tar"],
-        visibility = visibility,
-        tags = ["manual"],
-    )
-
-    sha256sum(
-        name = "disk-img.tar.gz.sha256",
-        srcs = [":disk-img.tar.gz"],
-        visibility = visibility,
-        tags = ["manual"],
-    )
-
     # -------------------- Assemble upgrade image --------------------
 
     if upgrades:
@@ -444,7 +430,6 @@ def icos_build(
             name = "upload_disk-img",
             inputs = [
                 ":disk-img.tar.zst",
-                ":disk-img.tar.gz",
             ],
             remote_subdir = upload_prefix + "/disk-img" + upload_suffix,
             visibility = visibility,
@@ -454,14 +439,6 @@ def icos_build(
             name = "disk-img-url",
             target = ":upload_disk-img",
             basenames = ["upload_disk-img_disk-img.tar.zst.url"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        output_files(
-            name = "disk-img-url-gz",
-            target = ":upload_disk-img",
-            basenames = ["upload_disk-img_disk-img.tar.gz.url"],
             visibility = visibility,
             tags = ["manual"],
         )
@@ -587,7 +564,7 @@ CID=\\$$((\\$$RANDOM + 3))
 cp $$IMAGE \\$$TEMP
 cd \\$$TEMP
 tar xf disk-img.tar
-qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/OVMF/OVMF_CODE.fd -device vhost-vsock-pci,guest-cid=\\$$CID -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
+qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -device vhost-vsock-pci,guest-cid=\\$$CID -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
 EOF
         """,
         executable = True,
@@ -613,7 +590,7 @@ CID=\\$$((\\$$RANDOM + 3))
 cp $$IMAGE \\$$TEMP
 cd \\$$TEMP
 tar xf disk-img.tar
-qemu-system-x86_64 -machine type=q35 -nographic -m 4G -bios /usr/share/OVMF/OVMF_CODE.fd -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
+qemu-system-x86_64 -machine type=q35 -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
 EOF
         """,
         executable = True,
@@ -629,7 +606,6 @@ EOF
         testonly = malicious,
         srcs = [
             ":disk-img.tar.zst",
-            ":disk-img.tar.gz",
         ] + ([
             ":update-img.tar.zst",
             ":update-img.tar.gz",

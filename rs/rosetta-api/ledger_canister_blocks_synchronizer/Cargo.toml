@@ -26,7 +26,7 @@ rusqlite = { version = "~0.28.0", features = ["bundled"] }
 serde = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-url = "2.2.1"
+url = { workspace = true }
 
 [dev-dependencies]
 actix-rt = "2.2.0"

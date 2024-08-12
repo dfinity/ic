@@ -41,6 +41,7 @@ use anyhow::Result;
 
 use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
@@ -52,7 +53,6 @@ use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{
         await_boundary_node_healthy, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-        NnsCanisterWasmStrategy,
     },
 };
 use ic_system_test_driver::util::{block_on, create_canister};
@@ -60,7 +60,6 @@ use ic_tests::nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
     set_icp_xdr_exchange_rate,
 };
-use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
 use std::env;
 use std::str::FromStr;
@@ -131,7 +130,6 @@ pub fn setup(env: TestEnv) {
     // set up NNS canisters
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         nns_dapp_customizations(),
     );
 
@@ -191,7 +189,7 @@ pub fn setup(env: TestEnv) {
     // we set the exchange rate to 12 XDR per 1 ICP
     let xrc_payload = new_icp_cxdr_mock_exchange_rate_canister_init_payload(12_000_000_000);
     let xrc_canister_id = xrc_node.create_and_install_canister_with_arg(
-        &env::var("XRC_WASM_PATH").unwrap(),
+        &env::var("XRC_WASM_PATH").expect("XRC_WASM_PATH not set"),
         Some(Encode!(&xrc_payload).unwrap()),
     );
     assert_eq!(xrc_canister_id, default_xrc_principal_id.into());

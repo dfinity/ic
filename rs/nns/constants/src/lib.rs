@@ -29,8 +29,15 @@ pub const SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 10;
 pub const LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 11;
 pub const ICP_LEDGER_ARCHIVE_1_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 12;
 pub const SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 13;
-// Exchange Rate Canister is deployed to the II subnet.
+// Exchange Rate, Cycles Ledger (Index) Canisters are deployed to the II subnet.
 pub const EXCHANGE_RATE_CANISTER_INDEX: u64 = 0x2100001;
+pub const CYCLES_LEDGER_CANISTER_INDEX: u64 = 0x2100002;
+pub const CYCLES_LEDGER_INDEX_CANISTER_INDEX: u64 = 0x2100003;
+// Bitcoin canisters are deployed to the `w4rem` subnet
+pub const BITCOIN_TESTNET_CANISTER_INDEX: u64 = 0x1a00001;
+pub const BITCOIN_MAINNET_CANISTER_INDEX: u64 = 0x1a00004;
+// SNS Aggregator canister is deployed to the `x33ed` (SNS) subnet.
+pub const SNS_AGGREGATOR_CANISTER_INDEX: u64 = 0x2000010;
 
 /// WARNING: This list is incomplete. In particular, this does NOT include
 /// ledger archive, nor ledger index.
@@ -107,6 +114,21 @@ pub const SUBNET_RENTAL_CANISTER_ID: CanisterId =
 /// 0x2_100_001 (34_603_009): uf6dk-hyaaa-aaaaq-qaaaq-cai
 pub const EXCHANGE_RATE_CANISTER_ID: CanisterId =
     CanisterId::from_u64(EXCHANGE_RATE_CANISTER_INDEX);
+/// 0x2_100_002 (34_603_010): um5iw-rqaaa-aaaaq-qaaba-cai
+pub const CYCLES_LEDGER_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(CYCLES_LEDGER_CANISTER_INDEX);
+/// 0x2_100_003 (34_603_011): ul4oc-4iaaa-aaaaq-qaabq-cai
+pub const CYCLES_LEDGER_INDEX_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(CYCLES_LEDGER_INDEX_CANISTER_INDEX);
+/// 0x1_a00_001 (27_262_977): g4xu7-jiaaa-aaaan-aaaaq-cai
+pub const BITCOIN_TESTNET_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(BITCOIN_TESTNET_CANISTER_INDEX);
+/// 0x1_a00_004 (27_262_980): ghsi2-tqaaa-aaaan-aaaca-cai
+pub const BITCOIN_MAINNET_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(BITCOIN_MAINNET_CANISTER_INDEX);
+/// 0x2_000_010 (33_554_448): 3r4gx-wqaaa-aaaaq-aaaia-cai
+pub const SNS_AGGREGATOR_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(SNS_AGGREGATOR_CANISTER_INDEX);
 
 /// WARNING: This list is incomplete. In particular, this does NOT include
 /// ledger archive, nor ledger index.

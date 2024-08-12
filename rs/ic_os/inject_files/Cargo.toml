@@ -7,5 +7,5 @@ edition = "2021"
 anyhow = { workspace = true }
 clap = { version = "4.4.3", features = ["derive"] }
 partition_tools = { path = "../partition_tools" }
-tokio = { workspace = true }
 tempfile = { workspace = true }
+tokio = { workspace = true }
