@@ -1,6 +1,5 @@
 use ic_http_utils::file_downloader::FileDownloadError;
 use ic_image_upgrader::error::UpgradeError;
-use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
     registry::RegistryClientError, replica_version::ReplicaVersionParseError, Height, NodeId,
     RegistryVersion, ReplicaVersion, SubnetId,
@@ -36,7 +35,7 @@ pub(crate) enum OrchestratorError {
     MakeRegistryCupError(SubnetId, RegistryVersion),
 
     /// The CUP at the given height failed to be deserialized
-    DeserializeCupError(Option<Height>, ProxyDecodeError),
+    DeserializeCupError(Option<Height>, String),
 
     /// The given replica version does not have an entry in the Registry
     ReplicaVersionMissingError(ReplicaVersion, RegistryVersion),
@@ -88,6 +87,10 @@ impl OrchestratorError {
 
     pub(crate) fn key_monitoring_error(msg: impl ToString) -> Self {
         OrchestratorError::ThresholdKeyMonitoringError(msg.to_string())
+    }
+
+    pub(crate) fn deserialize_cup_error(height: Option<Height>, msg: impl ToString) -> Self {
+        OrchestratorError::DeserializeCupError(height, msg.to_string())
     }
 }
 

@@ -272,7 +272,17 @@ impl CatchUpPackageProvider {
         subnet_id: SubnetId,
     ) -> OrchestratorResult<CatchUpPackage> {
         let registry_version = self.registry.get_latest_version();
-        let local_cup_height = local_cup.as_ref().and_then(get_cup_proto_height);
+        let local_cup_height = local_cup
+            .as_ref()
+            .map(|cup| {
+                get_cup_proto_height(cup).ok_or_else(|| {
+                    OrchestratorError::deserialize_cup_error(
+                        None,
+                        "Failed to get CUP proto height.",
+                    )
+                })
+            })
+            .transpose()?;
 
         let subnet_cup = self
             .get_peer_cup(subnet_id, registry_version, local_cup.as_ref())
@@ -296,7 +306,7 @@ impl CatchUpPackageProvider {
                 registry_version,
             ))?;
         let latest_cup = CatchUpPackage::try_from(&latest_cup_proto).map_err(|err| {
-            OrchestratorError::DeserializeCupError(get_cup_proto_height(&latest_cup_proto), err)
+            OrchestratorError::deserialize_cup_error(get_cup_proto_height(&latest_cup_proto), err)
         })?;
 
         let height = Some(latest_cup.height());
