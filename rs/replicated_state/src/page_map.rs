@@ -1083,6 +1083,7 @@ impl Buffer {
 //
 // So we compare the total number of pages and equality of each page
 // instead.
+#[cfg(debug_assertions)]
 impl PartialEq for PageMap {
     fn eq(&self, rhs: &PageMap) -> bool {
         if self.num_host_pages() != rhs.num_host_pages() {
@@ -1092,6 +1093,7 @@ impl PartialEq for PageMap {
         self.host_pages_iter().eq(rhs.host_pages_iter())
     }
 }
+#[cfg(debug_assertions)]
 impl Eq for PageMap {}
 
 impl std::fmt::Debug for PageMap {
