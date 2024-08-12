@@ -1,5 +1,5 @@
 use crate::{
-    decoder_config, enable_new_canister_management_topics,
+    are_set_visibility_proposals_enabled, decoder_config, enable_new_canister_management_topics,
     governance::{
         merge_neurons::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
@@ -4811,7 +4811,10 @@ impl Governance {
         manage_neuron: &ManageNeuron,
     ) -> Result<(), GovernanceError> {
         // TODO(NNS1-3228): Delete this.
-        if manage_neuron.is_set_visibility() {
+        if manage_neuron.is_set_visibility() &&
+            // But SetVisibility proposals are disabled
+            !are_set_visibility_proposals_enabled()
+        {
             return Err(GovernanceError::new_with_message(
                 ErrorType::Unavailable,
                 "Setting neuron visibility via proposal is not allowed yet, \
