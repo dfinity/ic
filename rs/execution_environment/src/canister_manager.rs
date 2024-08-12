@@ -1829,7 +1829,7 @@ impl CanisterManager {
             });
         }
 
-        let new_snapshot_size = canister.snapshot_memory_usage();
+        let new_snapshot_size = canister.snapshot_size_bytes();
 
         {
             // Run the following checks on memory usage and return an error
@@ -1914,9 +1914,22 @@ impl CanisterManager {
 
         // Delete old snapshot identified by `replace_snapshot` ID.
         if let Some(replace_snapshot) = replace_snapshot {
+            let old_snapshot = state.canister_snapshots.remove(replace_snapshot);
             // Already confirmed that `replace_snapshot` exists.
-            let is_removed = state.canister_snapshots.remove(replace_snapshot);
-            debug_assert!(is_removed.is_some());
+            let old_snapshot_size = old_snapshot.unwrap().size();
+            canister.system_state.snapshots_memory_usage = canister
+                .system_state
+                .snapshots_memory_usage
+                .get()
+                .saturating_sub(old_snapshot_size.get())
+                .into();
+            // Confirm that `snapshots_memory_usage` is updated correctly.
+            debug_assert_eq!(
+                canister.system_state.snapshots_memory_usage,
+                state
+                    .canister_snapshots
+                    .compute_memory_usage_by_canister(canister.canister_id()),
+            );
         }
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
@@ -1929,6 +1942,7 @@ impl CanisterManager {
         state
             .canister_snapshots
             .push(snapshot_id, Arc::new(new_snapshot));
+        canister.system_state.snapshots_memory_usage += new_snapshot_size;
         Ok(CanisterSnapshotResponse::new(
             &snapshot_id,
             state.time().as_nanos_since_unix_epoch(),
@@ -2150,7 +2164,22 @@ impl CanisterManager {
                 }
             }
         }
-        state.canister_snapshots.remove(delete_snapshot_id);
+        let old_snapshot = state.canister_snapshots.remove(delete_snapshot_id);
+        // Already confirmed that `replace_snapshot` exists.
+        let old_snapshot_size = old_snapshot.unwrap().size();
+        canister.system_state.snapshots_memory_usage = canister
+            .system_state
+            .snapshots_memory_usage
+            .get()
+            .saturating_sub(old_snapshot_size.get())
+            .into();
+        // Confirm that `snapshots_memory_usage` is updated correctly.
+        debug_assert_eq!(
+            canister.system_state.snapshots_memory_usage,
+            state
+                .canister_snapshots
+                .compute_memory_usage_by_canister(canister.canister_id()),
+        );
         Ok(())
     }
 }
