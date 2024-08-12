@@ -34,7 +34,6 @@ use registry_canister::{
         do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
         do_add_node_operator::AddNodeOperatorPayload,
         do_add_nodes_to_subnet::AddNodesToSubnetPayload,
-        do_bless_replica_version::BlessReplicaVersionPayload,
         do_change_subnet_membership::ChangeSubnetMembershipPayload,
         do_create_subnet::CreateSubnetPayload,
         do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
@@ -52,7 +51,9 @@ use registry_canister::{
         do_update_node_directly::UpdateNodeDirectlyPayload,
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
         do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
-        do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
+        do_update_nodes_hostos_version::{
+            DeployHostosToSomeNodes, UpdateNodesHostosVersionPayload,
+        },
         do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
         do_update_subnet::UpdateSubnetPayload,
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
@@ -354,22 +355,6 @@ fn atomic_mutate() {
     reply(&bytes)
 }
 
-#[export_name = "canister_update bless_replica_version"]
-fn bless_replica_version() {
-    check_caller_is_governance_and_log("bless_replica_version");
-    over(candid_one, |payload: BlessReplicaVersionPayload| {
-        bless_replica_version_(payload)
-    });
-}
-
-#[candid_method(update, rename = "bless_replica_version")]
-fn bless_replica_version_(_payload: BlessReplicaVersionPayload) {
-    panic!(
-        "{}bless_replica_version is deprecated and should no longer be used!",
-        LOG_PREFIX
-    );
-}
-
 #[export_name = "canister_update retire_replica_version"]
 fn retire_replica_version() {
     check_caller_is_governance_and_log("retire_replica_version");
@@ -386,17 +371,15 @@ fn retire_replica_version_(_payload: RetireReplicaVersionPayload) {
     );
 }
 
-// TODO[NNS1-3000]: Remove this endpoint once mainnet NNS Governance starts calling the new
-// TODO[NNS1-3000]: `revise_elected_replica_versions` endpoint.
-#[export_name = "canister_update update_elected_replica_versions"]
-fn update_elected_replica_versions() {
-    check_caller_is_governance_and_log("update_elected_replica_versions");
-    over(candid_one, update_elected_replica_versions_);
+#[export_name = "canister_update revise_elected_guestos_versions"]
+fn revise_elected_guestos_versions() {
+    check_caller_is_governance_and_log("revise_elected_guestos_versions");
+    over(candid_one, revise_elected_guestos_versions_);
 }
 
-#[candid_method(update, rename = "update_elected_replica_versions")]
-fn update_elected_replica_versions_(payload: ReviseElectedGuestosVersionsPayload) {
-    registry_mut().do_revise_elected_replica_versions(payload);
+#[candid_method(update, rename = "revise_elected_guestos_versions")]
+fn revise_elected_guestos_versions_(payload: ReviseElectedGuestosVersionsPayload) {
+    registry_mut().do_revise_elected_guestos_versions(payload);
     recertify_registry();
 }
 
@@ -414,6 +397,8 @@ fn update_subnet_replica_version_(payload: DeployGuestosToAllSubnetNodesPayload)
     recertify_registry();
 }
 
+// TODO[NNS1-3000]: Remove this endpoint once mainnet NNS Governance starts calling the new
+// TODO[NNS1-3000]: `revise_elected_guestos_versions` endpoint.
 #[export_name = "canister_update revise_elected_replica_versions"]
 fn revise_elected_replica_versions() {
     check_caller_is_governance_and_log("revise_elected_replica_versions");
@@ -422,7 +407,7 @@ fn revise_elected_replica_versions() {
 
 #[candid_method(update, rename = "revise_elected_replica_versions")]
 fn revise_elected_replica_versions_(payload: ReviseElectedGuestosVersionsPayload) {
-    registry_mut().do_revise_elected_replica_versions(payload);
+    registry_mut().do_revise_elected_guestos_versions(payload);
     recertify_registry();
 }
 
@@ -466,6 +451,8 @@ fn revise_elected_hostos_versions_(payload: ReviseElectedHostosVersionsPayload) 
     recertify_registry();
 }
 
+// TODO[NNS1-3000]: Remove this endpoint once mainnet NNS Governance starts calling the new
+// TODO[NNS1-3000]: `deploy_hostos_to_some_nodes` endpoint.
 #[export_name = "canister_update update_nodes_hostos_version"]
 fn update_nodes_hostos_version() {
     check_caller_is_governance_and_log("update_nodes_hostos_version");
@@ -477,6 +464,18 @@ fn update_nodes_hostos_version() {
 #[candid_method(update, rename = "update_nodes_hostos_version")]
 fn update_nodes_hostos_version_(payload: UpdateNodesHostosVersionPayload) {
     registry_mut().do_update_nodes_hostos_version(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update deploy_hostos_to_some_nodes"]
+fn deploy_hostos_to_some_nodes() {
+    check_caller_is_governance_and_log("deploy_hostos_to_some_nodes");
+    over(candid_one, deploy_hostos_to_some_nodes_);
+}
+
+#[candid_method(update, rename = "deploy_hostos_to_some_nodes")]
+fn deploy_hostos_to_some_nodes_(payload: DeployHostosToSomeNodes) {
+    registry_mut().do_deploy_hostos_to_some_nodes(payload);
     recertify_registry();
 }
 
