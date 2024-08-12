@@ -56,9 +56,9 @@
 //
 // To get access to P8s and Grafana look for the following lines in the ict console output:
 //
-//     prometheus: Prometheus Web UI at http://prometheus.single_large_node--1692597750709.testnet.farm.dfinity.systems,
-//     grafana: Grafana at http://grafana.single_large_node--1692597750709.testnet.farm.dfinity.systems,
-//     progress_clock: IC Progress Clock at http://grafana.single_large_node--1692597750709.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10su0026from=now-5mu0026to=now,
+//     prometheus: Prometheus Web UI at http://prometheus.from_config--1692597750709.testnet.farm.dfinity.systems,
+//     grafana: Grafana at http://grafana.from_config--1692597750709.testnet.farm.dfinity.systems,
+//     progress_clock: IC Progress Clock at http://grafana.from_config--1692597750709.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10su0026from=now-5mu0026to=now,
 //
 // Happy testing!
 
