@@ -128,7 +128,7 @@ jobs:
           compression-level: 9
           path: |
             bazel-bep.pb
-            profile.gz
+            profile.json
 
   bazel-build-all-config-check:
     <<: *dind-large-setup
@@ -158,7 +158,7 @@ jobs:
           compression-level: 9
           path: |
             bazel-bep.pb
-            profile.gz
+            profile.json
 
   bazel-test-darwin-x86-64:
     name: Bazel Test Darwin x86-64
@@ -209,7 +209,7 @@ jobs:
           compression-level: 9
           path: |
             bazel-bep.pb
-            profile.gz
+            profile.json
       - name: Purge Bazel Output
         if: always()
         shell: bash
@@ -238,7 +238,7 @@ jobs:
           compression-level: 9
           path: |
             bazel-bep.pb
-            profile.gz
+            profile.json
 
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
@@ -262,7 +262,7 @@ jobs:
           compression-level: 9
           path: |
             bazel-bep.pb
-            profile.gz
+            profile.json
 
   python-ci-tests:
     name: Python CI Tests
