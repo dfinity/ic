@@ -79,19 +79,18 @@ fn oversized_reject_message_is_truncated() {
     );
 }
 
-/// Tests that inducting a loopback stream where `signals_end` < `end` panics: messages are always
-/// garbage collected up to `signals_end` and `signals_end` is monotonically increasing.
+/// Tests that inducting a loopback stream with signals panics.
 #[test]
 #[should_panic(
     expected = "Invalid message indices in stream slice from subnet g24bn-xymaa-aaaaa-aaaap-yai: messages begin (21) != stream signals_end (22)"
 )]
-fn induct_loopback_stream_with_signals_end_before_messages_end_panics() {
+fn induct_loopback_stream_with_signals_panics() {
     with_local_test_setup(
         btreemap![LOCAL_SUBNET => StreamConfig {
             begin: 21,
             messages: vec![
-                BuildRequest(*LOCAL_CANISTER, *LOCAL_CANISTER),
-                BuildRequest(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
             ],
             signals_end: 22,
             ..StreamConfig::default()
@@ -113,8 +112,8 @@ fn induct_loopback_stream_signals_end_before_messages_begin_panics() {
         btreemap![LOCAL_SUBNET => StreamConfig {
             begin: 21,
             messages: vec![
-                BuildRequest(*LOCAL_CANISTER, *LOCAL_CANISTER),
-                BuildRequest(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
             ],
             signals_end: 20,
             ..StreamConfig::default()
@@ -164,7 +163,7 @@ fn induct_loopback_stream_reject_response() {
     with_local_test_setup(
         btreemap![LOCAL_SUBNET => StreamConfig {
             begin: 21,
-            messages: vec![BuildRequest(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER)],
+            messages: vec![Request(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER)],
             signals_end: 21,
             ..StreamConfig::default()
         }],
@@ -233,10 +232,10 @@ fn induct_loopback_stream_reroute_response() {
         btreemap![LOCAL_SUBNET => StreamConfig {
             begin: 21,
             messages: vec![
-                BuildRequest(*LOCAL_CANISTER, *LOCAL_CANISTER),
-                BuildResponse(*LOCAL_CANISTER, *LOCAL_CANISTER),
-                BuildRequest(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER),
-                BuildResponse(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER),
+                Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                Response(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                Request(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER),
+                Response(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER),
             ],
             signals_end: 21,
             ..StreamConfig::default()
@@ -346,8 +345,8 @@ fn induct_loopback_stream_success() {
         btreemap![LOCAL_SUBNET => StreamConfig {
             begin: 21,
             messages: vec![
-                BuildRequest(*LOCAL_CANISTER, *LOCAL_CANISTER),
-                BuildResponse(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                Response(*LOCAL_CANISTER, *LOCAL_CANISTER),
             ],
             signals_end: 21,
             ..StreamConfig::default()
@@ -478,8 +477,8 @@ fn with_induct_loopback_stream_with_memory_limit_setup(
         btreemap![LOCAL_SUBNET => StreamConfig {
             begin: 21,
             messages: vec![
-                BuildRequest(*LOCAL_CANISTER, *LOCAL_CANISTER),
-                BuildRequest(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
             ],
             signals_end: 21,
             ..StreamConfig::default()
@@ -606,9 +605,9 @@ fn garbage_collect_messages_success() {
         btreemap![REMOTE_SUBNET => StreamConfig {
             begin: 31,
             messages: vec![
-                BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildResponse(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
             ],
             signals_end: 43,
             ..StreamConfig::default()
@@ -662,9 +661,9 @@ fn garbage_collect_messages_with_reject_signals_success() {
         btreemap![REMOTE_SUBNET => StreamConfig {
             begin: 31,
             messages: vec![
-                BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildResponse(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
             ],
             signals_end: 43,
             ..StreamConfig::default()
@@ -730,7 +729,7 @@ fn garbage_collect_signals_success() {
         // An outgoing stream with reject signals.
         btreemap![REMOTE_SUBNET => StreamConfig {
             begin: 23,
-            messages: vec![BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER)],
+            messages: vec![Request(*LOCAL_CANISTER, *REMOTE_CANISTER)],
             signals_end: 153,
             reject_signals: vec![
                 RejectSignal::new(CanisterMigrating, 138.into()),
@@ -840,8 +839,8 @@ fn garbage_collect_signals_with_invalid_slice_messages() {
             header_begin: Some(142),
             messages_begin: 143,
             messages: vec![
-                BuildRequest(*REMOTE_CANISTER, *LOCAL_CANISTER),
-                BuildResponse(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Response(*REMOTE_CANISTER, *LOCAL_CANISTER),
             ],
             ..StreamSliceConfig::default()
         }],
@@ -908,9 +907,9 @@ fn assert_garbage_collect_messages_last_signal_before_first_message() {
         btreemap![REMOTE_SUBNET => StreamConfig {
             begin: 31,
             messages: vec![
-                BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildResponse(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
             ],
             signals_end: 43,
             ..StreamConfig::default()
@@ -950,9 +949,9 @@ fn assert_garbage_collect_messages_last_signal_after_last_message() {
         btreemap![REMOTE_SUBNET => StreamConfig {
             begin: 31,
             messages: vec![
-                BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildResponse(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
             ],
             signals_end: 43,
             ..StreamConfig::default()
@@ -1041,9 +1040,9 @@ fn garbage_collect_local_state_success() {
         btreemap![REMOTE_SUBNET => StreamConfig {
             begin: 31,
             messages: vec![
-                BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildResponse(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
             ],
             signals_end: 43,
             flags: StreamFlags {
@@ -1117,10 +1116,10 @@ fn garbage_collect_local_state_with_reject_signals_for_response_success() {
         btreemap![REMOTE_SUBNET => StreamConfig {
             begin: 31,
             messages: vec![
-                BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildResponse(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildResponse(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
             ],
             signals_end: 43,
             ..StreamConfig::default()
@@ -1190,8 +1189,8 @@ fn garbage_collect_local_state_with_bad_reject_signal_for_response() {
         btreemap![REMOTE_SUBNET => StreamConfig {
             begin: 31,
             messages: vec![
-                BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildResponse(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
             ],
             signals_end: 43,
             ..StreamConfig::default()
@@ -1223,7 +1222,7 @@ fn garbage_collect_local_state_with_reject_signals_for_request_success() {
         // An outgoing stream with one request @21 in it.
         btreemap![REMOTE_SUBNET => StreamConfig {
             begin: 21,
-            messages: vec![BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER)],
+            messages: vec![Request(*LOCAL_CANISTER, *REMOTE_CANISTER)],
             ..StreamConfig::default()
         }],
         // An incoming stream slice with one reject signal for the request @21.
@@ -1283,7 +1282,7 @@ fn garbage_collect_local_state_with_reject_signals_for_request_from_absent_canis
         // An outgoing stream with one request from an absent `OTHER_LOCAL_CANISTER` @21 in it.
         btreemap![REMOTE_SUBNET => StreamConfig {
             begin: 21,
-            messages: vec![BuildRequest(*OTHER_LOCAL_CANISTER, *REMOTE_CANISTER)],
+            messages: vec![Request(*OTHER_LOCAL_CANISTER, *REMOTE_CANISTER)],
             ..StreamConfig::default()
         }],
         // An incoming stream slice with one reject signal for the request @21.
@@ -1340,7 +1339,7 @@ fn garbage_collect_local_state_with_reject_signals_for_misrouted_request() {
         // An outgoing stream with one misrouted loopback request @21 in it.
         btreemap![REMOTE_SUBNET => StreamConfig {
             begin: 21,
-            messages: vec![BuildRequest(*LOCAL_CANISTER, *LOCAL_CANISTER)],
+            messages: vec![Request(*LOCAL_CANISTER, *LOCAL_CANISTER)],
             ..StreamConfig::default()
         }],
         // An incoming stream slice with one reject signal for the request @21.
@@ -1402,7 +1401,7 @@ fn garbage_collect_local_state_with_reject_signals_for_request_from_migrating_ca
         // An outgoing stream with one request @21 in it.
         btreemap![REMOTE_SUBNET => StreamConfig {
             begin: 21,
-            messages: vec![BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER)],
+            messages: vec![Request(*LOCAL_CANISTER, *REMOTE_CANISTER)],
             ..StreamConfig::default()
         }],
         // An incoming stream slice with one reject signal for the request @21.
@@ -1493,11 +1492,11 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
             messages_begin: 0,
             messages: vec![
                 // ...a reject response for a request sent to `REMOTE_CANISTER` @0...
-                BuildRejectResponse(*REMOTE_CANISTER, *LOCAL_CANISTER, RejectReason::QueueFull),
+                RejectResponse(*REMOTE_CANISTER, *LOCAL_CANISTER, RejectReason::QueueFull),
                 // ...a normal response @1...
-                BuildResponse(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Response(*REMOTE_CANISTER, *LOCAL_CANISTER),
                 // ...a request from @2.
-                BuildRequest(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
             ],
             ..StreamSliceConfig::default()
         }],
@@ -1574,7 +1573,7 @@ fn check_stream_handler_locally_generated_reject_response_impl(
         // An outgoing stream with one request @21 in it.
         btreemap![REMOTE_SUBNET => StreamConfig {
             begin: 21,
-            messages: vec![BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER)],
+            messages: vec![Request(*LOCAL_CANISTER, *REMOTE_CANISTER)],
             ..StreamConfig::default()
         }],
         // An incoming stream slice with a reject signal for the request @21 in it.
@@ -1586,7 +1585,7 @@ fn check_stream_handler_locally_generated_reject_response_impl(
         |stream_handler, state, slices, _| {
             // Generate the expected reject response for the request in `outgoing_stream`.
             let request = request_ref_in_stream(state.get_stream(&REMOTE_SUBNET), 21);
-            let reject_response = Response {
+            let reject_response = ic_types::messages::Response {
                 originator: request.sender,
                 respondent: request.receiver,
                 originator_reply_callback: request.sender_reply_callback,
@@ -1700,7 +1699,7 @@ fn check_stream_handler_generated_reject_response_impl(
     with_local_test_setup(
         // A loopback stream with one request in it.
         btreemap![LOCAL_SUBNET => StreamConfig {
-            messages: vec![BuildRequest(*LOCAL_CANISTER, *LOCAL_CANISTER)],
+            messages: vec![Request(*LOCAL_CANISTER, *LOCAL_CANISTER)],
             ..StreamConfig::default()
         }],
         |stream_handler, mut state, _| {
@@ -1709,7 +1708,7 @@ fn check_stream_handler_generated_reject_response_impl(
 
             // Generate the expected reject response for the request in `loopback_stream`.
             let request = request_ref_in_stream(state.get_stream(&LOCAL_SUBNET), 0);
-            let reject_response = Response {
+            let reject_response = ic_types::messages::Response {
                 originator: request.sender,
                 respondent: request.receiver,
                 originator_reply_callback: request.sender_reply_callback,
@@ -1789,8 +1788,7 @@ fn check_stream_handler_generated_reject_response_queue_full() {
             let mut callback_id = 2;
             while let Ok(()) = push_input(
                 state,
-                BuildRequest(*LOCAL_CANISTER, *LOCAL_CANISTER)
-                    .build_with(CallbackId::new(callback_id)),
+                Request(*LOCAL_CANISTER, *LOCAL_CANISTER).build_with(CallbackId::new(callback_id)),
             ) {
                 callback_id += 1;
             }
@@ -1844,8 +1842,8 @@ fn induct_stream_slices_partial_success() {
         btreemap![REMOTE_SUBNET => StreamConfig {
             begin: 31,
             messages: vec![
-                BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildResponse(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
             ],
             signals_end: 43,
             ..StreamConfig::default()
@@ -1855,21 +1853,21 @@ fn induct_stream_slices_partial_success() {
             messages_begin: 43,
             messages: vec![
                 // ...two incoming request @43 and @44...
-                BuildRequest(*REMOTE_CANISTER, *LOCAL_CANISTER),
-                BuildRequest(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
                 // ...an incoming response @45...
-                BuildResponse(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Response(*REMOTE_CANISTER, *LOCAL_CANISTER),
                 // ...a request to a missing canister @46 (on this subnet according to the
                 // routing table); this is expected to trigger a reject response...
-                BuildRequest(*REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
+                Request(*REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
                 // ..a request not from `REMOTE_SUBNET` @47...
-                BuildRequest(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
                 // ...a request from a missing canister @48 (not anywhere according to the routing
                 // table); this is expected to be accepted but dropped...
-                BuildRequest(*UNKNOWN_CANISTER, *LOCAL_CANISTER),
+                Request(*UNKNOWN_CANISTER, *LOCAL_CANISTER),
                 // ...and a response to a missing canister @49 (on this subnet according to the
                 // routing table); this expected to be accepted but dropped.
-                BuildResponse(*REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
+                Response(*REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
             ],
             // ...and two accept signals.
             signals_end: 33,
@@ -1976,8 +1974,8 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
         btreemap![REMOTE_SUBNET => StreamConfig {
             begin: 21,
             messages: vec![
-                BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildResponse(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
             ],
             signals_end: 43,
             ..StreamConfig::default()
@@ -1987,15 +1985,15 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
             messages_begin: 43,
             messages: vec![
                 // ...a request addressed to a canister hosted by another subnet...
-                BuildRequest(*REMOTE_CANISTER, *OTHER_REMOTE_CANISTER),
+                Request(*REMOTE_CANISTER, *OTHER_REMOTE_CANISTER),
                 // ...a response addressed to a canister hosted by another subnet...
-                BuildResponse(*REMOTE_CANISTER, *OTHER_REMOTE_CANISTER),
+                Response(*REMOTE_CANISTER, *OTHER_REMOTE_CANISTER),
                 // ...a request addressed to a canister not mapped to any subnet in the routing
                 // table...
-                BuildRequest(*REMOTE_CANISTER, *UNKNOWN_CANISTER),
+                Request(*REMOTE_CANISTER, *UNKNOWN_CANISTER),
                 // ...a response addressed to a canister not mapped to any subnet in the routing
                 // table.
-                BuildResponse(*REMOTE_CANISTER, *UNKNOWN_CANISTER),
+                Response(*REMOTE_CANISTER, *UNKNOWN_CANISTER),
             ],
             signals_end: 21,
             ..StreamSliceConfig::default()
@@ -2072,8 +2070,8 @@ fn induct_stream_slices_with_messages_to_migrating_canister() {
         btreemap![REMOTE_SUBNET => StreamConfig {
             begin: 21,
             messages: vec![
-                BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildResponse(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
             ],
             signals_end: 43,
             ..StreamConfig::default()
@@ -2083,8 +2081,8 @@ fn induct_stream_slices_with_messages_to_migrating_canister() {
         btreemap![REMOTE_SUBNET => StreamSliceConfig {
             messages_begin: 43,
             messages: vec![
-                BuildRequest(*OTHER_REMOTE_CANISTER, *REMOTE_CANISTER),
-                BuildResponse(*OTHER_REMOTE_CANISTER, *REMOTE_CANISTER),
+                Request(*OTHER_REMOTE_CANISTER, *REMOTE_CANISTER),
+                Response(*OTHER_REMOTE_CANISTER, *REMOTE_CANISTER),
             ],
             signals_end: 21,
             ..StreamSliceConfig::default()
@@ -2182,8 +2180,8 @@ fn induct_stream_slices_with_messages_to_migrated_canister() {
         btreemap![REMOTE_SUBNET => StreamConfig {
             begin: 21,
             messages: vec![
-                BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildResponse(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
             ],
             signals_end: 43,
             ..StreamConfig::default()
@@ -2192,8 +2190,8 @@ fn induct_stream_slices_with_messages_to_migrated_canister() {
         btreemap![REMOTE_SUBNET => StreamSliceConfig {
             messages_begin: 43,
             messages: vec![
-                BuildRequest(*REMOTE_CANISTER, *LOCAL_CANISTER),
-                BuildResponse(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Response(*REMOTE_CANISTER, *LOCAL_CANISTER),
             ],
             signals_end: 21,
             ..StreamSliceConfig::default()
@@ -2287,8 +2285,8 @@ fn induct_stream_slices_with_messages_from_migrating_canister() {
         btreemap![CANISTER_MIGRATION_SUBNET => StreamConfig {
             begin: 21,
             messages: vec![
-                BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildResponse(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
             ],
             signals_end: 43,
             ..StreamConfig::default()
@@ -2297,8 +2295,8 @@ fn induct_stream_slices_with_messages_from_migrating_canister() {
         btreemap![CANISTER_MIGRATION_SUBNET => StreamSliceConfig {
             messages_begin: 43,
             messages: vec![
-                BuildRequest(*REMOTE_CANISTER, *LOCAL_CANISTER),
-                BuildResponse(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Response(*REMOTE_CANISTER, *LOCAL_CANISTER),
             ],
             signals_end: 21,
             ..StreamSliceConfig::default()
@@ -2390,9 +2388,9 @@ fn induct_stream_slices_with_memory_limit_impl(subnet_type: SubnetType) {
         btreemap![REMOTE_SUBNET => StreamSliceConfig {
             messages_begin: 43,
             messages: vec![
-                BuildRequest(*REMOTE_CANISTER, *LOCAL_CANISTER),
-                BuildResponse(*REMOTE_CANISTER, *LOCAL_CANISTER),
-                BuildRequest(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Response(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
             ],
             signals_end: 31,
             ..StreamSliceConfig::default()
@@ -2478,9 +2476,9 @@ fn process_stream_slices_with_reject_signals_partial_success() {
             LOCAL_SUBNET => StreamConfig {
                 begin: 21,
                 messages: vec![
-                    BuildRequest(*LOCAL_CANISTER, *LOCAL_CANISTER),
-                    BuildRequest(*LOCAL_CANISTER, *LOCAL_CANISTER),
-                    BuildRequest(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                    Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                    Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                    Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
                 ],
                 signals_end: 21,
                 ..StreamConfig::default()
@@ -2489,10 +2487,10 @@ fn process_stream_slices_with_reject_signals_partial_success() {
             REMOTE_SUBNET => StreamConfig {
                 begin: 31,
                 messages: vec![
-                    BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER), // request @31
-                    BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER), // request @32
-                    BuildResponse(*LOCAL_CANISTER, *REMOTE_CANISTER), // response @33
-                    BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER), // request @34
+                    Request(*LOCAL_CANISTER, *REMOTE_CANISTER), // request @31
+                    Request(*LOCAL_CANISTER, *REMOTE_CANISTER), // request @32
+                    Response(*LOCAL_CANISTER, *REMOTE_CANISTER), // response @33
+                    Request(*LOCAL_CANISTER, *REMOTE_CANISTER), // request @34
                 ],
                 signals_end: 153,
                 reject_signals: vec![
@@ -2511,9 +2509,9 @@ fn process_stream_slices_with_reject_signals_partial_success() {
             messages_begin: 153,
             messages: vec![
                 // ...a valid request from the remote subnet @153...
-                BuildRequest(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
                 // ...a request from an unknown canister @154...
-                BuildRequest(*UNKNOWN_CANISTER, *LOCAL_CANISTER),
+                Request(*UNKNOWN_CANISTER, *LOCAL_CANISTER),
             ],
             // ...a `signals_end` that will leave one request @34 after gc'ing...
             signals_end: 34,
@@ -2646,19 +2644,19 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
                 begin: 21,
                 messages: vec![
                     // ...3 messages to and from `LOCAL_CANISTER` @21..=23...
-                    BuildRequest(*LOCAL_CANISTER, *LOCAL_CANISTER),
-                    BuildRequest(*LOCAL_CANISTER, *LOCAL_CANISTER),
-                    BuildRequest(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                    Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                    Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
+                    Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
                     // ...a request @24 and a response @25 to `LOCAL_CANISTER` from `OTHER_LOCAL_CANISTER`...
-                    BuildRequest(*OTHER_LOCAL_CANISTER, *LOCAL_CANISTER),
-                    BuildResponse(*OTHER_LOCAL_CANISTER, *LOCAL_CANISTER),
+                    Request(*OTHER_LOCAL_CANISTER, *LOCAL_CANISTER),
+                    Response(*OTHER_LOCAL_CANISTER, *LOCAL_CANISTER),
                     // ...a request @26 from `LOCAL_CANISTER` to `OTHER_LOCAL_CANISTER (a reject response
                     // should be generated for it)...
-                    BuildRequest(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER),
+                    Request(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER),
                     // ...and a response @27 from `LOCAL_CANISTER` to `OTHER_LOCAL_CANISTER` (a reject
                     // signal will be generated during induction; the response will be rerouted; and then
                     // the reject signal is gc'ed; i.e. the signal is never visible).
-                    BuildResponse(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER),
+                    Response(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER),
                 ],
                 signals_end: 21,
                 ..StreamConfig::default()
@@ -2669,10 +2667,10 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
                 messages: vec![
                     // ...4 messages from `LOCAL_CANISTER` to `REMOTE_CANISTER`... @31..=34, with a
                     // response @33...
-                    BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                    BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                    BuildResponse(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                    BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                    Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                    Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                    Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                    Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
                 ],
                 signals_end: 153,
                 // ...and 4 reject signals.
@@ -2691,15 +2689,15 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
             messages_begin: 153,
             messages: vec![
                 // ...a request @153 from `REMOTE_CANISTER` to `LOCAL_CANISTER`...
-                BuildRequest(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
                 // ...one request @154 to the migrated canister...
-                BuildRequest(*OTHER_REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
+                Request(*OTHER_REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
                 // ...one response @155 to the migrated canister...
-                BuildResponse(*OTHER_REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
+                Response(*OTHER_REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
                 // ...one request @156 between the two migrated canisters...
-                BuildRequest(*REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
+                Request(*REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
                 // ...one response @157 between the two migrated canisters...
-                BuildResponse(*REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
+                Response(*REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
             ],
             signals_end: 34,
             // ..and a reject signal for the response @33.
@@ -2875,9 +2873,9 @@ fn process_stream_slices_with_invalid_messages() {
         btreemap![REMOTE_SUBNET => StreamConfig {
             begin: 31,
             messages: vec![
-                BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildResponse(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                BuildRequest(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
+                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
             ],
             signals_end: 43,
             ..StreamConfig::default()
@@ -2886,8 +2884,8 @@ fn process_stream_slices_with_invalid_messages() {
         btreemap![REMOTE_SUBNET => StreamSliceConfig {
             messages_begin: 42,
             messages: vec![
-                BuildRequest(*REMOTE_CANISTER, *LOCAL_CANISTER),
-                BuildResponse(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
+                Response(*REMOTE_CANISTER, *LOCAL_CANISTER),
             ],
             signals_end: 33,
             ..StreamSliceConfig::default()
@@ -2991,9 +2989,9 @@ fn with_test_setup_and_config(
                 .into_iter()
                 .map(|builder| {
                     let (respondent, originator) = match builder {
-                        BuildRequest(sender, receiver) => (receiver, sender),
-                        BuildResponse(respondent, originator) => (respondent, originator),
-                        BuildRejectResponse(respondent, originator, _) => (respondent, originator),
+                        Request(sender, receiver) => (receiver, sender),
+                        Response(respondent, originator) => (respondent, originator),
+                        RejectResponse(respondent, originator, _) => (respondent, originator),
                     };
 
                     // Register a callback and make an input queue reservation if `msg_config`
@@ -3190,7 +3188,10 @@ fn stream_slice_from_config(config: StreamSliceConfig<Vec<RequestOrResponse>>) -
 /// Returns a reference to a request in a stream at `stream_index`.
 ///
 /// Panics if no such request exists.
-fn request_ref_in_stream(opt_stream: Option<&Stream>, stream_index: u64) -> &Request {
+fn request_ref_in_stream(
+    opt_stream: Option<&Stream>,
+    stream_index: u64,
+) -> &ic_types::messages::Request {
     match opt_stream.and_then(|stream| stream.messages().get(stream_index.into())) {
         Some(RequestOrResponse::Request(request)) => request,
         _ => unreachable!(),
@@ -3200,7 +3201,10 @@ fn request_ref_in_stream(opt_stream: Option<&Stream>, stream_index: u64) -> &Req
 /// Returns a reference to a request in a stream slice at `stream_index`.
 ///
 /// Panics if no such request exists.
-fn request_ref_in_slice(opt_slice: Option<&StreamSlice>, stream_index: u64) -> &Request {
+fn request_ref_in_slice(
+    opt_slice: Option<&StreamSlice>,
+    stream_index: u64,
+) -> &ic_types::messages::Request {
     match opt_slice.and_then(|slice| {
         slice
             .messages()
@@ -3214,7 +3218,10 @@ fn request_ref_in_slice(opt_slice: Option<&StreamSlice>, stream_index: u64) -> &
 /// Returns a reference to a response in a stream at `stream_index`.
 ///
 /// Panics if no such response exists.
-fn response_ref_in_stream(opt_stream: Option<&Stream>, stream_index: u64) -> &Response {
+fn response_ref_in_stream(
+    opt_stream: Option<&Stream>,
+    stream_index: u64,
+) -> &ic_types::messages::Response {
     match opt_stream.and_then(|stream| stream.messages().get(stream_index.into())) {
         Some(RequestOrResponse::Response(response)) => response,
         _ => unreachable!(),
@@ -3224,7 +3231,10 @@ fn response_ref_in_stream(opt_stream: Option<&Stream>, stream_index: u64) -> &Re
 /// Returns a reference to a response in the stream slice at `stream_index`.
 ///
 /// Panics if no such response exists.
-fn response_ref_in_slice(opt_slice: Option<&StreamSlice>, stream_index: u64) -> &Response {
+fn response_ref_in_slice(
+    opt_slice: Option<&StreamSlice>,
+    stream_index: u64,
+) -> &ic_types::messages::Response {
     match opt_slice.and_then(|slice| {
         slice
             .messages()
@@ -3317,42 +3327,39 @@ fn push_inputs<'a>(
 
 /// Instructions for building various kinds of messages; essentially a wrapper for
 /// `RequestBuilder`, `ResponseBuilder`.
-#[allow(clippy::enum_variant_names)]
 #[derive(Copy, Clone)]
 enum MessageBuilder {
     // `(sender, receiver)`.
-    BuildRequest(CanisterId, CanisterId),
+    Request(CanisterId, CanisterId),
     // `(respondent, originator)`
-    BuildResponse(CanisterId, CanisterId),
+    Response(CanisterId, CanisterId),
     // `(respondent, originator, reason)`
-    BuildRejectResponse(CanisterId, CanisterId, RejectReason),
+    RejectResponse(CanisterId, CanisterId, RejectReason),
 }
 
 impl MessageBuilder {
     fn build_with(self, callback_id: CallbackId) -> RequestOrResponse {
         match self {
-            Self::BuildRequest(sender, receiver) => RequestBuilder::new()
+            Self::Request(sender, receiver) => RequestBuilder::new()
                 .sender(sender)
                 .receiver(receiver)
                 .sender_reply_callback(callback_id)
                 .build()
                 .into(),
-            Self::BuildResponse(respondent, originator) => ResponseBuilder::new()
+            Self::Response(respondent, originator) => ResponseBuilder::new()
                 .respondent(respondent)
                 .originator(originator)
                 .originator_reply_callback(callback_id)
                 .build()
                 .into(),
-            Self::BuildRejectResponse(respondent, originator, reason) => {
-                generate_reject_response_for(
-                    reason,
-                    &RequestBuilder::new()
-                        .sender(originator)
-                        .receiver(respondent)
-                        .sender_reply_callback(callback_id)
-                        .build(),
-                )
-            }
+            Self::RejectResponse(respondent, originator, reason) => generate_reject_response_for(
+                reason,
+                &RequestBuilder::new()
+                    .sender(originator)
+                    .receiver(respondent)
+                    .sender_reply_callback(callback_id)
+                    .build(),
+            ),
         }
     }
 }
