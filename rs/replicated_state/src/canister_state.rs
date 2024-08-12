@@ -415,11 +415,11 @@ impl CanisterState {
         self.system_state.wasm_chunk_store.memory_usage()
     }
 
-    /// Returns the memory usage of a newly created snapshot based on the current canister's state.
+    /// Returns the snapshot size estimation in bytes based on the current canister's state.
     ///
     /// It represents the memory usage of a snapshot that would be created at the time of the call
     /// and would return a different value if the canister's state changes after the call.
-    pub fn snapshot_memory_usage(&self) -> NumBytes {
+    pub fn snapshot_size_bytes(&self) -> NumBytes {
         let execution_usage = self
             .execution_state
             .as_ref()

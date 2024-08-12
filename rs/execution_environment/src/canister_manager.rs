@@ -1829,7 +1829,7 @@ impl CanisterManager {
             });
         }
 
-        let new_snapshot_size = canister.snapshot_memory_usage();
+        let new_snapshot_size = canister.snapshot_size_bytes();
 
         {
             // Run the following checks on memory usage and return an error
@@ -1916,8 +1916,20 @@ impl CanisterManager {
         if let Some(replace_snapshot) = replace_snapshot {
             let old_snapshot = state.canister_snapshots.remove(replace_snapshot);
             // Already confirmed that `replace_snapshot` exists.
-            debug_assert!(old_snapshot.is_some());
-            canister.system_state.snapshots_memory_usage -= old_snapshot.unwrap().size();
+            let old_snapshot_size = old_snapshot.unwrap().size();
+            canister.system_state.snapshots_memory_usage = canister
+                .system_state
+                .snapshots_memory_usage
+                .get()
+                .saturating_sub(old_snapshot_size.get())
+                .into();
+            // Confirm that `snapshots_memory_usage` is updated correctly.
+            debug_assert_eq!(
+                canister.system_state.snapshots_memory_usage,
+                state
+                    .canister_snapshots
+                    .compute_memory_usage_by_canister(canister.canister_id()),
+            );
         }
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
@@ -2153,9 +2165,21 @@ impl CanisterManager {
             }
         }
         let old_snapshot = state.canister_snapshots.remove(delete_snapshot_id);
-        // `old_snapshot` should be `Some` since we checked above.
-        debug_assert!(old_snapshot.is_some());
-        canister.system_state.snapshots_memory_usage -= old_snapshot.unwrap().size();
+        // Already confirmed that `replace_snapshot` exists.
+        let old_snapshot_size = old_snapshot.unwrap().size();
+        canister.system_state.snapshots_memory_usage = canister
+            .system_state
+            .snapshots_memory_usage
+            .get()
+            .saturating_sub(old_snapshot_size.get())
+            .into();
+        // Confirm that `snapshots_memory_usage` is updated correctly.
+        debug_assert_eq!(
+            canister.system_state.snapshots_memory_usage,
+            state
+                .canister_snapshots
+                .compute_memory_usage_by_canister(canister.canister_id()),
+        );
         Ok(())
     }
 }

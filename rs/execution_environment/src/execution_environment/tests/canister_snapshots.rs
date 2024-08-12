@@ -402,7 +402,7 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
             .snapshots_memory_usage,
         test.state()
             .canister_snapshots
-            .memory_usage_by_canister(canister_id),
+            .compute_memory_usage_by_canister(canister_id),
     );
 
     // Grow the canister's memory before taking another snapshot.
@@ -437,7 +437,7 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
             .snapshots_memory_usage,
         test.state()
             .canister_snapshots
-            .memory_usage_by_canister(canister_id),
+            .compute_memory_usage_by_canister(canister_id),
     );
 }
 
@@ -946,7 +946,7 @@ fn delete_canister_snapshot_succeeds() {
             .snapshots_memory_usage,
         test.state()
             .canister_snapshots
-            .memory_usage_by_canister(canister_id),
+            .compute_memory_usage_by_canister(canister_id),
     );
 
     // Deletes canister snapshot successfully.
@@ -964,7 +964,7 @@ fn delete_canister_snapshot_succeeds() {
             .snapshots_memory_usage,
         test.state()
             .canister_snapshots
-            .memory_usage_by_canister(canister_id),
+            .compute_memory_usage_by_canister(canister_id),
     );
 }
 
