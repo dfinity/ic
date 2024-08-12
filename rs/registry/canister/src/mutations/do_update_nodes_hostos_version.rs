@@ -11,7 +11,15 @@ use serde::Serialize;
 
 impl Registry {
     pub fn do_update_nodes_hostos_version(&mut self, payload: UpdateNodesHostosVersionPayload) {
-        println!("{}do_update_node_hostos_version: {:?}", LOG_PREFIX, payload);
+        let payload = DeployHostosToSomeNodes::from(payload);
+        self.do_deploy_hostos_to_some_nodes(payload)
+    }
+
+    pub fn do_deploy_hostos_to_some_nodes(&mut self, payload: DeployHostosToSomeNodes) {
+        println!(
+            "{}do_deploy_hostos_to_some_nodes: {:?}",
+            LOG_PREFIX, payload
+        );
 
         let mut mutations = Vec::new();
         for node_id in payload.node_ids {
@@ -32,14 +40,37 @@ impl Registry {
     }
 }
 
-/// The argument of a command to update the HostOS version of a single
-/// node to a specific version.
-///
-/// The record will be mutated only if the given version exists.
+/// Deprecated; please use `DeployHostosToSomeNodes` instead.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UpdateNodesHostosVersionPayload {
     /// The node to update.
     pub node_ids: Vec<NodeId>,
     /// The new HostOS version to use.
     pub hostos_version_id: Option<String>,
+}
+
+/// The argument of a command to update the HostOS version of a single
+/// node to a specific version.
+///
+/// The record will be mutated only if the given version exists.
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct DeployHostosToSomeNodes {
+    /// The node to update.
+    pub node_ids: Vec<NodeId>,
+    /// The new HostOS version to use.
+    pub hostos_version_id: Option<String>,
+}
+
+impl From<UpdateNodesHostosVersionPayload> for DeployHostosToSomeNodes {
+    fn from(src: UpdateNodesHostosVersionPayload) -> Self {
+        let UpdateNodesHostosVersionPayload {
+            node_ids,
+            hostos_version_id,
+        } = src;
+
+        Self {
+            node_ids,
+            hostos_version_id,
+        }
+    }
 }
