@@ -5516,7 +5516,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-types",
  "indoc",
- "instant-acme 0.4.3",
+ "instant-acme 0.7.1",
  "lazy_static",
  "little-loadshedder",
  "maxminddb",
@@ -13599,13 +13599,19 @@ dependencies = [
 
 [[package]]
 name = "instant-acme"
-version = "0.4.3"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51e78737dbac1bae14cb5556c9cd7c604886095c59cdb5af71f12a4c59be2b05"
+checksum = "71bc444149bab1b339ba7e92e81d7615227feba7fd635b8551a3a170021598d0"
 dependencies = [
+ "async-trait",
  "base64 0.21.5",
- "hyper 0.14.26",
- "hyper-rustls 0.24.2",
+ "bytes",
+ "http 1.1.0",
+ "http-body 1.0.0",
+ "http-body-util",
+ "hyper 1.4.1",
+ "hyper-rustls 0.27.1",
+ "hyper-util",
  "ring 0.17.8",
  "rustls-pki-types",
  "serde",

@@ -387,8 +387,7 @@ fn extract_cert_validity(name: &str, data: &[u8]) -> Result<Option<Validity>, Er
 pub async fn load_or_create_acme_account(
     path: &PathBuf,
     acme_provider_url: &str,
-    http_client: Box<dyn instant_acme::HttpClient>,
-) -> Result<(Account, AccountCredentials), Error> {
+) -> Result<Account, Error> {
     let f = File::open(path).context("failed to open credentials file for reading");
 
     // Credentials already exist
@@ -400,16 +399,12 @@ pub async fn load_or_create_acme_account(
             .await
             .context("failed to load account from credentials")?;
 
-        // no Clone on AccountCredentials
-        let creds: AccountCredentials =
-            serde_json::from_reader(f).context("failed to json parse existing acme credentials")?;
-
-        return Ok((account, creds));
+        return Ok(account);
     }
 
     // Create new account
     warn!("TLS: Creating new ACME account");
-    let (account, credentials) = Account::create_with_http(
+    let (account, credentials) = Account::create(
         &NewAccount {
             contact: &[],
             terms_of_service_agreed: true,
@@ -417,7 +412,6 @@ pub async fn load_or_create_acme_account(
         },
         acme_provider_url,
         None,
-        http_client,
     )
     .await
     .context("failed to create acme account")?;
@@ -428,7 +422,7 @@ pub async fn load_or_create_acme_account(
     serde_json::to_writer_pretty(f, &credentials)
         .context("failed to serialize acme credentials")?;
 
-    Ok((account, credentials))
+    Ok(account)
 }
 
 pub async fn acme_challenge(State(token): State<Arc<TokenOwner>>) -> impl IntoResponse {
@@ -461,24 +455,9 @@ async fn prepare_acme_provisioner(
 ) -> Result<Box<dyn Provision>, Error> {
     warn!("TLS: Using ACME provisioner");
 
-    // ACME client
-    let acme_http_client = hyper::Client::builder()
-        .http2_keep_alive_interval(Some(Duration::from_secs(30)))
-        .http2_keep_alive_while_idle(true)
-        .build(
-            hyper_rustls::HttpsConnectorBuilder::new()
-                .https_only()
-                .enable_all_versions()
-                .build(),
-        );
-
-    let (acme_account, _) = load_or_create_acme_account(
-        acme_credentials,
-        LetsEncrypt::Production.url(),
-        Box::new(acme_http_client),
-    )
-    .await
-    .context("failed to load acme credentials")?;
+    let acme_account = load_or_create_acme_account(acme_credentials, LetsEncrypt::Production.url())
+        .await
+        .context("failed to load acme credentials")?;
 
     warn!("TLS: Trying to provision certificate");
     let acme_client = Acme::new(acme_account);
