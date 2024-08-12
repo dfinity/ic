@@ -389,7 +389,7 @@ mod test {
         },
     };
     use bytes::{Buf, BufMut};
-    use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron};
+    use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
     use ic_stable_structures::{vec_mem::VectorMemory, Memory};
     use prost::Message;
 

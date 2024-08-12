@@ -10,7 +10,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::{pb::v1::NeuronId as ProtoNeuronId, types::UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     add_or_remove_node_provider::Change,
     manage_neuron_response::Command as CommandResponse,
     proposal::Action,

@@ -1,9 +1,9 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES")
+load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-system_test(
+system_test_nns(
     name = "tecdsa_complaint_test",
     flaky = True,
     malicious = True,
@@ -14,7 +14,7 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
     uses_guestos_dev_test = True,
-    runtime_deps = ["//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh"] + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = ["//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh"],
     deps = [
         # Keep sorted.
         "//rs/nns/constants",
@@ -29,7 +29,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "tecdsa_add_nodes_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -37,11 +37,11 @@ system_test(
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/nns/constants",
-        "//rs/nns/governance",
+        "//rs/nns/governance/api",
         "//rs/registry/canister",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
@@ -56,7 +56,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "tschnorr_message_sizes_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -64,7 +64,7 @@ system_test(
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/config",
@@ -79,7 +79,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "tecdsa_remove_nodes_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -87,7 +87,7 @@ system_test(
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/nns/constants",
@@ -104,7 +104,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "tecdsa_key_rotation_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -112,7 +112,7 @@ system_test(
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/nns/constants",
@@ -126,7 +126,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "tecdsa_signature_fails_without_cycles_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -136,7 +136,7 @@ system_test(
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/config",
@@ -152,7 +152,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "tecdsa_signature_from_nns_without_cycles_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -162,7 +162,7 @@ system_test(
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/nns/constants",
@@ -174,7 +174,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "tecdsa_signature_from_other_subnet_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -184,7 +184,7 @@ system_test(
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/nns/constants",
@@ -197,7 +197,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "tecdsa_two_signing_subnets_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -207,7 +207,7 @@ system_test(
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/config",
@@ -226,7 +226,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "tecdsa_signature_life_cycle_test",
     # Remove when CON-937 is resolved
     flaky = True,
@@ -235,7 +235,7 @@ system_test(
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/config",
@@ -254,7 +254,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "tecdsa_signature_same_subnet_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -264,7 +264,7 @@ system_test(
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/nns/constants",
@@ -276,7 +276,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "tecdsa_signature_timeout_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -284,7 +284,7 @@ system_test(
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/config",
@@ -298,7 +298,7 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "tecdsa_performance_test",
     additional_colocate_tags = [
         "system_test_benchmark",
@@ -321,7 +321,7 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_features",

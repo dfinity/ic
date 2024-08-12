@@ -7,7 +7,7 @@ use ic_management_canister_types::{
     self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, CanisterStatusType,
     DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, FetchCanisterLogsRequest, HttpMethod,
-    LogVisibility, MasterPublicKeyId, Method, Payload as Ic00Payload,
+    LogVisibilityV2, MasterPublicKeyId, Method, Payload as Ic00Payload,
     ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SchnorrAlgorithm,
     SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext, TransformFunc, IC_00,
 };
@@ -1300,12 +1300,12 @@ fn canister_snapshots_after_split() {
         .with_caller(subnet_a, caller_canister)
         .build();
 
-    // Create two canisters.
+    // Create two universal canisters.
     let canister_id_1 = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000_000))
         .unwrap();
     let canister_id_2 = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000_000))
         .unwrap();
 
     // Set controllers.
@@ -1363,6 +1363,13 @@ fn canister_snapshots_after_split() {
             .len(),
         1
     );
+
+    // Simulate that there's a checkpoint right before starting the subnet split.
+    // For the purpose of this test, we need to clear heap_delta_estimate and
+    // expected_compiled_wasms cache (a subnet split assumes it happens after a
+    // checkpoint round where these two happen among other things).
+    test.state_mut().metadata.heap_delta_estimate = NumBytes::from(0);
+    test.state_mut().metadata.expected_compiled_wasms.clear();
 
     // Retain canister 1 on subnet A, migrate canister 2 to subnet B.
     let routing_table = RoutingTable::try_from(btreemap! {
@@ -3517,7 +3524,7 @@ fn test_canister_settings_log_visibility_default_controllers() {
     // Assert.
     assert_eq!(
         canister_status.settings().log_visibility(),
-        LogVisibility::Controllers
+        &LogVisibilityV2::Controllers
     );
 }
 
@@ -3530,7 +3537,7 @@ fn test_canister_settings_log_visibility_create_with_settings() {
         .create_canister_with_settings(
             Cycles::new(1_000_000_000),
             ic00::CanisterSettingsArgsBuilder::new()
-                .with_log_visibility(LogVisibility::Public)
+                .with_log_visibility(LogVisibilityV2::Public)
                 .build(),
         )
         .unwrap();
@@ -3539,7 +3546,7 @@ fn test_canister_settings_log_visibility_create_with_settings() {
     // Assert.
     assert_eq!(
         canister_status.settings().log_visibility(),
-        LogVisibility::Public
+        &LogVisibilityV2::Public
     );
 }
 
@@ -3549,14 +3556,14 @@ fn test_canister_settings_log_visibility_set_to_public() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000));
     // Act.
-    test.set_log_visibility(canister_id, LogVisibility::Public)
+    test.set_log_visibility(canister_id, LogVisibilityV2::Public)
         .unwrap();
     let result = test.canister_status(canister_id);
     let canister_status = CanisterStatusResultV2::decode(&get_reply(result)).unwrap();
     // Assert.
     assert_eq!(
         canister_status.settings().log_visibility(),
-        LogVisibility::Public
+        &LogVisibilityV2::Public
     );
 }
 
@@ -3567,7 +3574,7 @@ fn test_fetch_canister_logs_should_accept_ingress_message() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
     let not_a_controller = user_test_id(42);
-    test.set_log_visibility(canister_id, LogVisibility::Public)
+    test.set_log_visibility(canister_id, LogVisibilityV2::Public)
         .unwrap();
     // Act.
     test.set_user_id(not_a_controller);
