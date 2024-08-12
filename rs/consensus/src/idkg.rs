@@ -253,6 +253,7 @@ pub struct IDkgImpl {
     complaint_handler: Box<dyn IDkgComplaintHandler>,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     crypto: Arc<dyn ConsensusCrypto>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     schedule: RoundRobin,
     last_transcript_purge_ts: RefCell<Instant>,
     metrics: IDkgClientMetrics,
@@ -283,7 +284,7 @@ impl IDkgImpl {
             node_id,
             consensus_block_cache.clone(),
             crypto.clone(),
-            state_reader,
+            state_reader.clone(),
             metrics_registry.clone(),
             logger.clone(),
         ));
@@ -299,6 +300,7 @@ impl IDkgImpl {
             signer,
             complaint_handler,
             crypto,
+            state_reader,
             consensus_block_cache,
             schedule: RoundRobin::default(),
             last_transcript_purge_ts: RefCell::new(Instant::now()),
@@ -346,7 +348,17 @@ impl IDkgImpl {
             return;
         }
 
-        // TODO: also retain transcripts in certified state
+        if let Some(state) = self.state_reader.get_certified_state_snapshot() {
+            for transcript in state
+                .get_state()
+                .signature_request_contexts()
+                .values()
+                .flat_map(|context| context.iter_idkg_transcripts())
+            {
+                active_transcripts.insert(transcript.clone());
+            }
+        }
+
         match IDkgProtocol::retain_active_transcripts(&*self.crypto, &active_transcripts) {
             Err(IDkgRetainKeysError::TransientInternalError { internal_error }) => {
                 warn!(

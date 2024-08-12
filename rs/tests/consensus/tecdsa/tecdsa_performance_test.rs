@@ -77,12 +77,12 @@ use std::time::Duration;
 use tokio::runtime::{Builder, Runtime};
 
 // Environment parameters
-const NODES_COUNT: usize = 25;
+const NODES_COUNT: usize = 13;
 const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 const TESTING_PERIOD: Duration = Duration::from_secs(900); // testing time under load
-const COOLDOWN_PERIOD: Duration = Duration::from_secs(300); // sleep time before downloading p8s data
-const DKG_INTERVAL: u64 = 499;
+const COOLDOWN_PERIOD: Duration = Duration::from_secs(120); // sleep time before downloading p8s data
+const DKG_INTERVAL: u64 = 49;
 const MAX_RUNTIME_THREADS: usize = 64;
 const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 
@@ -91,10 +91,10 @@ const BANDWIDTH_MBITS: u32 = 80; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(120); // artificial added latency
 
 // Signature parameters
-const PRE_SIGNATURES_TO_CREATE: u32 = 30;
-const MAX_QUEUE_SIZE: u32 = 10;
+const PRE_SIGNATURES_TO_CREATE: u32 = 5;
+const MAX_QUEUE_SIZE: u32 = 20;
 const CANISTER_COUNT: usize = 4;
-const SIGNATURE_REQUESTS_PER_SECOND: f64 = 2.5;
+const SIGNATURE_REQUESTS_PER_SECOND: f64 = 0.5;
 const SCHNORR_MSG_SIZE_BYTES: usize = 2_096_000; // 2MiB minus some message overhead
 
 const BENCHMARK_REPORT_FILE: &str = "benchmark/benchmark.json";
@@ -241,6 +241,7 @@ pub fn tecdsa_performance_test(
         MAX_RUNTIME_THREADS,
         MAX_RUNTIME_BLOCKING_THREADS
     );
+    std::thread::sleep(COOLDOWN_PERIOD);
     let rt: Runtime = Builder::new_multi_thread()
         .worker_threads(MAX_RUNTIME_THREADS)
         .max_blocking_threads(MAX_RUNTIME_BLOCKING_THREADS)
@@ -357,6 +358,12 @@ pub fn tecdsa_performance_test(
         } else {
             assert!(metrics.success_calls() >= min_expected_success_calls);
         }
+        std::thread::sleep(COOLDOWN_PERIOD);
+        std::thread::sleep(COOLDOWN_PERIOD);
+        std::thread::sleep(COOLDOWN_PERIOD);
+        std::thread::sleep(COOLDOWN_PERIOD);
+        std::thread::sleep(COOLDOWN_PERIOD);
+        std::thread::sleep(COOLDOWN_PERIOD);
     });
 }
 

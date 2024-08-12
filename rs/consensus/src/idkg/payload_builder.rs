@@ -276,6 +276,17 @@ fn create_summary_payload_helper(
     }
 
     let mut idkg_summary = idkg_payload.clone();
+
+    for (key_id, key_transcript) in &idkg_summary.key_transcripts {
+        if new_key_transcripts.contains(key_id) {
+            if let Some(current) = &key_transcript.current {
+                idkg_summary
+                    .prev_key_transcript_refs
+                    .insert(*current.as_ref());
+            }
+        }
+    }
+
     idkg_summary.key_transcripts = key_transcripts;
     // Start creating key transcripts for all new key ids.
     for key_id in key_ids {
@@ -289,8 +300,7 @@ fn create_summary_payload_helper(
     }
 
     idkg_summary.idkg_transcripts.clear();
-    // TODO: only purge pre-sigs once they appear in state
-    idkg_payload.available_pre_signatures.clear();
+    idkg_summary.available_pre_signatures.clear();
 
     // We purge the pre-signatures in creation for changed key transcripts.
     idkg_summary
@@ -545,6 +555,12 @@ pub(crate) fn create_data_payload_helper(
         .map(|(key_id, (_, stash))| (key_id.clone(), stash.len()))
         .collect::<BTreeMap<_, _>>();
 
+    let certified_height = if context.certified_height >= summary_block.height() {
+        CertifiedHeight::ReachedSummaryHeight
+    } else {
+        CertifiedHeight::BelowSummaryHeight
+    };
+
     create_data_payload_helper_2(
         &mut idkg_payload,
         height,
@@ -552,6 +568,7 @@ pub(crate) fn create_data_payload_helper(
         &chain_key_config,
         &valid_keys,
         next_interval_registry_version,
+        certified_height,
         &receivers,
         all_signing_requests,
         idkg_dealings_contexts,
@@ -573,6 +590,7 @@ pub(crate) fn create_data_payload_helper_2(
     chain_key_config: &ChainKeyConfig,
     valid_keys: &BTreeSet<MasterPublicKeyId>,
     next_interval_registry_version: RegistryVersion,
+    certified_height: CertifiedHeight,
     receivers: &[NodeId],
     all_signing_requests: &BTreeMap<CallbackId, SignWithThresholdContext>,
     idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingsContext>,
@@ -591,7 +609,6 @@ pub(crate) fn create_data_payload_helper_2(
         }
     }
 
-    // TODO: only purge pre-sigs once they appear in state, and consider them when creating new ones
     idkg_payload.available_pre_signatures.clear();
     idkg_payload.uid_generator.update_height(height)?;
 
@@ -607,6 +624,10 @@ pub(crate) fn create_data_payload_helper_2(
         valid_keys,
         idkg_payload_metrics,
     );
+
+    if matches!(certified_height, CertifiedHeight::ReachedSummaryHeight) {
+        idkg_payload.prev_key_transcript_refs.clear();
+    }
 
     let new_transcripts = [
         pre_signatures::update_pre_signatures_in_creation(

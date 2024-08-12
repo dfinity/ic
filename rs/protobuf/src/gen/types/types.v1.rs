@@ -402,6 +402,8 @@ pub struct IDkgPayload {
     pub available_pre_signatures: ::prost::alloc::vec::Vec<AvailablePreSignature>,
     #[prost(message, repeated, tag = "15")]
     pub pre_signatures_in_creation: ::prost::alloc::vec::Vec<PreSignatureInProgress>,
+    #[prost(message, repeated, tag = "17")]
+    pub prev_key_transcript_refs: ::prost::alloc::vec::Vec<TranscriptRef>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -614,6 +616,8 @@ pub struct EcdsaDeliveredPreSignature {
     pub height: u64,
     #[prost(message, optional, tag = "3")]
     pub pre_signature: ::core::option::Option<PreSignatureQuadruple>,
+    #[prost(message, optional, tag = "4")]
+    pub key_transcript: ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -624,6 +628,8 @@ pub struct SchnorrDeliveredPreSignature {
     pub height: u64,
     #[prost(message, optional, tag = "3")]
     pub pre_signature: ::core::option::Option<PreSignatureTranscript>,
+    #[prost(message, optional, tag = "4")]
+    pub key_transcript: ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

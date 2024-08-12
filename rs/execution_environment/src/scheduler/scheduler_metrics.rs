@@ -232,7 +232,7 @@ impl SchedulerMetrics {
             delivered_pre_signatures: metrics_registry.histogram_vec(
                 "execution_idkg_delivered_pre_signatures",
                 "Number of IDkg pre-signatures delivered to execution by key ID",
-                vec![0.0, 1.0, 2.0, 5.0, 10.0, 15.0, 20.0],
+                vec![0.0, 1.0, 2.0, 5.0, 10.0, 15.0, 20.0, 50.0, 75.0, 100.0, 125.0, 150.0, 175.0, 200.0],
                 &["key_id"],
             ),
             completed_signature_request_contexts: metrics_registry.int_counter_vec(

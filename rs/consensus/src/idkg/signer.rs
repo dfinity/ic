@@ -128,7 +128,6 @@ impl ThresholdSignerImpl {
         &self,
         idkg_pool: &dyn IDkgPool,
         transcript_loader: &dyn IDkgTranscriptLoader,
-        block_reader: &dyn IDkgBlockReader,
         state_snapshot: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
     ) -> IDkgChangeSet {
         state_snapshot
@@ -136,7 +135,7 @@ impl ThresholdSignerImpl {
             .signature_request_contexts()
             .values()
             .flat_map(|context| {
-                build_signature_inputs(context, block_reader).map_err(|err| {
+                build_signature_inputs(context).map_err(|err| {
                     if err.is_fatal() {
                         warn!(every_n_seconds => 15, self.log,
                             "send_signature_shares(): failed to build signature inputs: {:?}",
@@ -146,25 +145,11 @@ impl ThresholdSignerImpl {
                     }
                 })
             })
-            .filter(|(request_id, inputs_ref)| {
-                !self.signer_has_issued_share(
-                    idkg_pool,
-                    &self.node_id,
-                    request_id,
-                    inputs_ref.scheme(),
-                )
+            .filter(|(request_id, inputs)| {
+                !self.signer_has_issued_share(idkg_pool, &self.node_id, request_id, inputs.scheme())
             })
-            .flat_map(|(request_id, sig_inputs_ref)| {
-                self.resolve_ref(&sig_inputs_ref, block_reader, "send_signature_shares")
-                    .map(|sig_inputs| {
-                        self.create_signature_share(
-                            idkg_pool,
-                            transcript_loader,
-                            &request_id,
-                            &sig_inputs,
-                        )
-                    })
-                    .unwrap_or_default()
+            .flat_map(|(request_id, sig_inputs)| {
+                self.create_signature_share(idkg_pool, transcript_loader, &request_id, &sig_inputs)
             })
             .collect()
     }
@@ -173,7 +158,6 @@ impl ThresholdSignerImpl {
     fn validate_signature_shares(
         &self,
         idkg_pool: &dyn IDkgPool,
-        block_reader: &dyn IDkgBlockReader,
         state_snapshot: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
     ) -> IDkgChangeSet {
         let sig_inputs_map = state_snapshot
@@ -181,7 +165,7 @@ impl ThresholdSignerImpl {
             .signature_request_contexts()
             .values()
             .map(|c| {
-                let inputs = build_signature_inputs(c, block_reader).map_err(|err| if err.is_fatal() {
+                let inputs = build_signature_inputs(c).map_err(|err| if err.is_fatal() {
                     warn!(every_n_seconds => 15, self.log,
                         "validate_signature_shares(): failed to build signatures inputs: {:?}", 
                         err
@@ -215,14 +199,8 @@ impl ThresholdSignerImpl {
                 &share.request_id(),
                 state_snapshot.get_height(),
             ) {
-                Action::Process(sig_inputs_ref) => {
-                    let action = self.validate_signature_share(
-                        idkg_pool,
-                        block_reader,
-                        id,
-                        share,
-                        sig_inputs_ref,
-                    );
+                Action::Process(sig_inputs) => {
+                    let action = self.validate_signature_share(idkg_pool, id, share, sig_inputs);
                     if let Some(IDkgChangeAction::MoveToValidated(_)) = action {
                         validated_sig_shares.insert(key);
                     }
@@ -238,10 +216,9 @@ impl ThresholdSignerImpl {
     fn validate_signature_share(
         &self,
         idkg_pool: &dyn IDkgPool,
-        block_reader: &dyn IDkgBlockReader,
         id: IDkgMessageId,
         share: SigShare,
-        inputs_ref: &ThresholdSigInputsRef,
+        inputs: &ThresholdSigInputs,
     ) -> Option<IDkgChangeAction> {
         if self.signer_has_issued_share(
             idkg_pool,
@@ -257,15 +234,8 @@ impl ThresholdSignerImpl {
             ));
         }
 
-        let Some(inputs) = self.resolve_ref(inputs_ref, block_reader, "validate_sig_share") else {
-            return Some(IDkgChangeAction::HandleInvalid(
-                id,
-                format!("validate_signature_share(): failed to translate: {}", share),
-            ));
-        };
-
         let share_string = share.to_string();
-        match self.crypto_verify_sig_share(&inputs, share, idkg_pool.stats()) {
+        match self.crypto_verify_sig_share(inputs, share, idkg_pool.stats()) {
             Err(error) if error.is_reproducible() => {
                 self.metrics.sign_errors_inc("verify_sig_share_permanent");
                 Some(IDkgChangeAction::HandleInvalid(
@@ -543,7 +513,6 @@ impl ThresholdSigner for ThresholdSignerImpl {
             return IDkgChangeSet::new();
         };
 
-        let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let metrics = self.metrics.clone();
 
         let active_requests = snapshot
@@ -569,21 +538,14 @@ impl ThresholdSigner for ThresholdSignerImpl {
         let send_signature_shares = || {
             timed_call(
                 "send_signature_shares",
-                || {
-                    self.send_signature_shares(
-                        idkg_pool,
-                        transcript_loader,
-                        &block_reader,
-                        snapshot.as_ref(),
-                    )
-                },
+                || self.send_signature_shares(idkg_pool, transcript_loader, snapshot.as_ref()),
                 &metrics.on_state_change_duration,
             )
         };
         let validate_signature_shares = || {
             timed_call(
                 "validate_signature_shares",
-                || self.validate_signature_shares(idkg_pool, &block_reader, snapshot.as_ref()),
+                || self.validate_signature_shares(idkg_pool, snapshot.as_ref()),
                 &metrics.on_state_change_duration,
             )
         };
@@ -677,7 +639,7 @@ impl<'a> ThresholdSignatureBuilder for ThresholdSignatureBuilderImpl<'a> {
         context: &SignWithThresholdContext,
     ) -> Option<CombinedSignature> {
         // Find the sig inputs for the request and translate the refs.
-        let (request_id, sig_inputs_ref) = build_signature_inputs(context, self.block_reader)
+        let (request_id, sig_inputs) = build_signature_inputs(context)
             .map_err(|err| {
                 if err.is_fatal() {
                     warn!(every_n_seconds => 15, self.log,
@@ -689,20 +651,6 @@ impl<'a> ThresholdSignatureBuilder for ThresholdSignatureBuilderImpl<'a> {
                 }
             })
             .ok()?;
-
-        let sig_inputs = match sig_inputs_ref.translate(self.block_reader) {
-            Ok(sig_inputs) => sig_inputs,
-            Err(error) => {
-                warn!(
-                    self.log,
-                    "get_completed_signature(): translate failed: sig_inputs_ref = {:?}, error = {:?}",
-                    sig_inputs_ref,
-                    error
-                );
-                self.metrics.payload_errors_inc("sig_inputs_translate");
-                return None;
-            }
-        };
 
         match self.crypto_combine_sig_shares(&request_id, &sig_inputs, self.idkg_pool.stats()) {
             Ok(signature) => {
@@ -724,12 +672,11 @@ impl<'a> ThresholdSignatureBuilder for ThresholdSignatureBuilderImpl<'a> {
 }
 
 /// Specifies how to handle a received share
-#[derive(Eq, PartialEq)]
 enum Action<'a> {
     /// The message is relevant to our current state, process it
     /// immediately. The transcript params for this transcript
     /// (as specified by the finalized block) is the argument
-    Process(&'a ThresholdSigInputsRef),
+    Process(&'a ThresholdSigInputs),
 
     /// Keep it to be processed later (e.g) this is from a node
     /// ahead of us
@@ -742,7 +689,7 @@ enum Action<'a> {
 impl<'a> Action<'a> {
     /// Decides the action to take on a received message with the given height/RequestId
     fn new(
-        requested_signatures: &'a BTreeMap<[u8; 32], Option<(RequestId, ThresholdSigInputsRef)>>,
+        requested_signatures: &'a BTreeMap<[u8; 32], Option<(RequestId, ThresholdSigInputs)>>,
         request_id: &RequestId,
         certified_height: Height,
     ) -> Action<'a> {

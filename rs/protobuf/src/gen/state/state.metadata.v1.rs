@@ -163,10 +163,18 @@ pub struct PreSignatureStashTree {
     pub key_id:
         ::core::option::Option<super::super::super::registry::crypto::v1::MasterPublicKeyId>,
     #[prost(message, optional, tag = "2")]
-    pub key_transcript_id:
-        ::core::option::Option<super::super::super::registry::subnet::v1::IDkgTranscriptId>,
+    pub key_transcript:
+        ::core::option::Option<super::super::super::registry::subnet::v1::IDkgTranscript>,
     #[prost(message, repeated, tag = "3")]
-    pub pre_signatures: ::prost::alloc::vec::Vec<super::super::super::types::v1::PreSignature>,
+    pub pre_signatures: ::prost::alloc::vec::Vec<PreSignatureIdPair>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignatureIdPair {
+    #[prost(uint64, tag = "1")]
+    pub pre_sig_id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub pre_signature: ::core::option::Option<super::super::super::types::v1::PreSignature>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

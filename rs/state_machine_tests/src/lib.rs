@@ -1983,26 +1983,7 @@ impl StateMachine {
         }));
         let requires_full_state_hash =
             batch_number.get() % checkpoint_interval_length_plus_one == 0;
-        let idkg_data = self
-            .idkg_subnet_public_keys
-            .iter()
-            .cloned()
-            .enumerate()
-            .map(|(id, (key_id, public_key))| {
-                (
-                    key_id,
-                    IDkgData {
-                        public_key,
-                        key_transcript_id: IDkgTranscriptId::new(
-                            self.subnet_id,
-                            id,
-                            Height::from(0),
-                        ),
-                        pre_signatures: vec![],
-                    },
-                )
-            })
-            .collect();
+        let idkg_data = BTreeMap::new();
 
         let batch = Batch {
             batch_number,

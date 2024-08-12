@@ -19,7 +19,7 @@ pub use self::{
 };
 use crate::{
     consensus::idkg::{common::PreSignature, PreSigId},
-    crypto::canister_threshold_sig::{idkg::IDkgTranscriptId, MasterPublicKey},
+    crypto::canister_threshold_sig::{idkg::IDkgTranscript, MasterPublicKey},
     messages::{CallbackId, Payload, SignedIngress},
     xnet::CertifiedStreamSlice,
     Height, Randomness, RegistryVersion, SubnetId, Time,
@@ -36,7 +36,7 @@ use std::{collections::BTreeMap, convert::TryInto, hash::Hash};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IDkgData {
     pub public_key: MasterPublicKey,
-    pub key_transcript_id: IDkgTranscriptId,
+    pub key_transcript: IDkgTranscript,
     pub pre_signatures: Vec<(PreSigId, PreSignature)>,
 }
 

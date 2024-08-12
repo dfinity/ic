@@ -1215,6 +1215,22 @@ pub enum ThresholdSigInputs {
     Schnorr(ThresholdSchnorrSigInputs),
 }
 
+impl ThresholdSigInputs {
+    pub fn scheme(&self) -> SignatureScheme {
+        match self {
+            ThresholdSigInputs::Ecdsa(_) => SignatureScheme::Ecdsa,
+            ThresholdSigInputs::Schnorr(_) => SignatureScheme::Schnorr,
+        }
+    }
+
+    pub fn caller(&self) -> PrincipalId {
+        match self {
+            ThresholdSigInputs::Ecdsa(inputs) => inputs.derivation_path().caller,
+            ThresholdSigInputs::Schnorr(inputs) => inputs.derivation_path().caller,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CombinedSignature {
     Ecdsa(ThresholdEcdsaCombinedSignature),

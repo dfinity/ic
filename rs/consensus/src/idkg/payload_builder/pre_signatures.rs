@@ -301,6 +301,8 @@ pub(super) fn make_new_pre_signatures_if_needed(
             .unwrap_or_default();
 
         let node_ids: Vec<_> = key_transcript.receivers().iter().copied().collect();
+        let pre_sigs_in_creation = idkg_payload.pre_sigs_in_creation_count(key_id);
+        let available_pre_sigs = idkg_payload.available_pre_sigs_count(key_id);
         let new_pre_signatures = make_new_pre_signatures_if_needed_helper(
             &node_ids,
             key_transcript.registry_version(),
@@ -308,8 +310,8 @@ pub(super) fn make_new_pre_signatures_if_needed(
             key_id,
             &mut idkg_payload.uid_generator,
             stashed_pre_signatures,
-            idkg_payload.pre_sigs_in_creation_count(key_id),
-            idkg_payload.available_pre_sigs_count(key_id),
+            pre_sigs_in_creation,
+            available_pre_sigs,
         );
 
         idkg_payload
@@ -346,7 +348,7 @@ fn make_new_pre_signatures_if_needed_helper(
     // There is capacity in the current block to start the creation of more pre-sigs for this key
     for _ in 0..(pre_signatures_to_create - pre_sigs_in_creation_count) {
         if stashed_pre_signatures_count + available_pre_sigs_count + pre_sigs_in_creation_count
-            >= 100
+            >= 200
         {
             break;
         }

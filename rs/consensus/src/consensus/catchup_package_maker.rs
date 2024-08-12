@@ -209,7 +209,7 @@ impl CatchUpPackageMaker {
             }
             Ok(state_hash) => {
                 let summary = start_block.payload.as_ref().as_summary();
-                let registry_version = if let Some(idkg) = summary.idkg.as_ref() {
+                let registry_version = if summary.idkg.is_some() {
                     // Should succeed as we already got the hash above
                     let state = self
                         .state_manager
@@ -224,7 +224,7 @@ impl CatchUpPackageMaker {
                             )
                         })
                         .ok()?;
-                    get_oldest_idkg_state_registry_version(idkg, state.get_ref())
+                    get_oldest_idkg_state_registry_version(state.get_ref())
                 } else {
                     None
                 };

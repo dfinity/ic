@@ -106,8 +106,13 @@ message SignWithThresholdContextTree {
 
 message PreSignatureStashTree {
   registry.crypto.v1.MasterPublicKeyId key_id = 1;
-  registry.subnet.v1.IDkgTranscriptId key_transcript_id = 2;
-  repeated types.v1.PreSignature pre_signatures = 3;
+  registry.subnet.v1.IDkgTranscript key_transcript = 2;
+  repeated PreSignatureIdPair pre_signatures = 3;
+}
+
+message PreSignatureIdPair {
+  uint64 pre_sig_id = 1;
+  types.v1.PreSignature pre_signature = 2;
 }
 
 enum HttpMethod {

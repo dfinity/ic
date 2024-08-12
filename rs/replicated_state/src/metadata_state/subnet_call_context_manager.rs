@@ -4,6 +4,7 @@ use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrKeyId};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::crypto::v1 as pb_crypto,
+    registry::subnet::v1 as pb_subnet,
     state::queues::v1 as pb_queues,
     state::system_metadata::v1 as pb_metadata,
     types::v1 as pb_types,
@@ -13,7 +14,7 @@ use ic_types::{
     consensus::idkg::{common::PreSignature, PreSigId},
     crypto::{
         canister_threshold_sig::{
-            idkg::IDkgTranscriptId, EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript,
+            idkg::IDkgTranscript, EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript,
         },
         threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgTargetId},
     },
@@ -224,7 +225,7 @@ pub struct SubnetCallContextManager {
     canister_management_calls: CanisterManagementCalls,
     pub raw_rand_contexts: VecDeque<RawRandContext>,
     pub pre_signature_stash:
-        BTreeMap<MasterPublicKeyId, (IDkgTranscriptId, Vec<(PreSigId, PreSignature)>)>,
+        BTreeMap<MasterPublicKeyId, (IDkgTranscript, Vec<(PreSigId, PreSignature)>)>,
 }
 
 impl SubnetCallContextManager {
@@ -487,6 +488,23 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                     },
                 )
                 .collect(),
+            pre_signatures: item
+                .pre_signature_stash
+                .iter()
+                .map(
+                    |(key_id, (key_transcript, pre_sigs))| pb_metadata::PreSignatureStashTree {
+                        key_id: Some(key_id.into()),
+                        key_transcript: Some(key_transcript.into()),
+                        pre_signatures: pre_sigs
+                            .iter()
+                            .map(|(id, pre_sig)| pb_metadata::PreSignatureIdPair {
+                                pre_sig_id: id.0,
+                                pre_signature: Some(pre_sig.into()),
+                            })
+                            .collect(),
+                    },
+                )
+                .collect(),
             canister_http_request_contexts: item
                 .canister_http_request_contexts
                 .iter()
@@ -587,6 +605,31 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             sign_with_threshold_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
+        let mut pre_signature_stash =
+            BTreeMap::<MasterPublicKeyId, (IDkgTranscript, Vec<(PreSigId, PreSignature)>)>::new();
+        for entry in item.pre_signatures {
+            let key_id: MasterPublicKeyId = try_from_option_field(
+                entry.key_id,
+                "SystemMetadata::PreSignatureStash::MasterPublicKeyId",
+            )?;
+            let key_transcript: IDkgTranscript = try_from_option_field(
+                entry.key_transcript.as_ref(),
+                "SystemMetadata::PreSignatureStash::IDkgTranscript",
+            )?;
+            let mut pre_signatures = vec![];
+            for pre_signature in entry.pre_signatures {
+                pre_signatures.push((
+                    PreSigId(pre_signature.pre_sig_id),
+                    try_from_option_field(
+                        pre_signature.pre_signature.as_ref(),
+                        "SystemMetadata::PreSignatureStash::PreSignature",
+                    )?,
+                ));
+            }
+
+            pre_signature_stash.insert(key_id, (key_transcript, pre_signatures));
+        }
+
         let mut canister_http_request_contexts =
             BTreeMap::<CallbackId, CanisterHttpRequestContext>::new();
         for entry in item.canister_http_request_contexts {
@@ -676,6 +719,7 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             },
             raw_rand_contexts,
             idkg_dealings_contexts,
+            pre_signature_stash,
         })
     }
 }
@@ -765,6 +809,7 @@ pub struct EcdsaDeliveredPreSignature {
     pub id: PreSigId,
     pub height: Height,
     pub pre_signature: EcdsaPreSignatureQuadruple,
+    pub key_transcript: IDkgTranscript,
 }
 
 impl From<&EcdsaDeliveredPreSignature> for pb_types::EcdsaDeliveredPreSignature {
@@ -773,6 +818,7 @@ impl From<&EcdsaDeliveredPreSignature> for pb_types::EcdsaDeliveredPreSignature 
             pre_signature_id: value.id.0,
             height: value.height.get(),
             pre_signature: Some(pb_types::PreSignatureQuadruple::from(&value.pre_signature)),
+            key_transcript: Some(pb_subnet::IDkgTranscript::from(&value.key_transcript)),
         }
     }
 }
@@ -786,6 +832,10 @@ impl TryFrom<pb_types::EcdsaDeliveredPreSignature> for EcdsaDeliveredPreSignatur
             pre_signature: try_from_option_field(
                 proto.pre_signature.as_ref(),
                 "EcdsaDeliveredPreSignature::pre_signature",
+            )?,
+            key_transcript: try_from_option_field(
+                proto.key_transcript.as_ref(),
+                "EcdsaDeliveredPreSignature::key_transcript",
             )?,
         })
     }
@@ -830,6 +880,7 @@ pub struct SchnorrDeliveredPreSignature {
     pub id: PreSigId,
     pub height: Height,
     pub pre_signature: SchnorrPreSignatureTranscript,
+    pub key_transcript: IDkgTranscript,
 }
 
 impl From<&SchnorrDeliveredPreSignature> for pb_types::SchnorrDeliveredPreSignature {
@@ -838,6 +889,7 @@ impl From<&SchnorrDeliveredPreSignature> for pb_types::SchnorrDeliveredPreSignat
             pre_signature_id: value.id.0,
             height: value.height.get(),
             pre_signature: Some(pb_types::PreSignatureTranscript::from(&value.pre_signature)),
+            key_transcript: Some(pb_subnet::IDkgTranscript::from(&value.key_transcript)),
         }
     }
 }
@@ -851,6 +903,10 @@ impl TryFrom<pb_types::SchnorrDeliveredPreSignature> for SchnorrDeliveredPreSign
             pre_signature: try_from_option_field(
                 proto.pre_signature.as_ref(),
                 "SchnorrDeliveredPreSignature::pre_signature",
+            )?,
+            key_transcript: try_from_option_field(
+                proto.key_transcript.as_ref(),
+                "EcdsaDeliveredPreSignature::key_transcript",
             )?,
         })
     }
@@ -960,14 +1016,16 @@ impl SignWithThresholdContext {
     }
 
     /// Returns the height at which this context was matched with a pre-signature
-    pub fn matched_height(&self) -> Option<Height> {
+    pub fn matched_pre_sig_height(&self) -> Option<(PreSigId, Height)> {
         match &self.args {
-            ThresholdArguments::Ecdsa(args) => {
-                args.pre_signature.as_ref().map(|pre_sig| pre_sig.height)
-            }
-            ThresholdArguments::Schnorr(args) => {
-                args.pre_signature.as_ref().map(|pre_sig| pre_sig.height)
-            }
+            ThresholdArguments::Ecdsa(args) => args
+                .pre_signature
+                .as_ref()
+                .map(|pre_sig| (pre_sig.id, pre_sig.height)),
+            ThresholdArguments::Schnorr(args) => args
+                .pre_signature
+                .as_ref()
+                .map(|pre_sig| (pre_sig.id, pre_sig.height)),
         }
     }
 
@@ -989,6 +1047,35 @@ impl SignWithThresholdContext {
             ThresholdArguments::Ecdsa(args) => args,
             _ => panic!("ECDSA arguments not found."),
         }
+    }
+
+    pub fn iter_idkg_transcripts(&self) -> impl Iterator<Item = &IDkgTranscript> {
+        let refs = match &self.args {
+            ThresholdArguments::Ecdsa(args) => {
+                if let Some(pre_sig) = &args.pre_signature {
+                    vec![
+                        pre_sig.pre_signature.kappa_unmasked(),
+                        pre_sig.pre_signature.lambda_masked(),
+                        pre_sig.pre_signature.kappa_times_lambda(),
+                        pre_sig.pre_signature.key_times_lambda(),
+                        &pre_sig.key_transcript,
+                    ]
+                } else {
+                    vec![]
+                }
+            }
+            ThresholdArguments::Schnorr(args) => {
+                if let Some(pre_sig) = &args.pre_signature {
+                    vec![
+                        pre_sig.pre_signature.blinder_unmasked(),
+                        &pre_sig.key_transcript,
+                    ]
+                } else {
+                    vec![]
+                }
+            }
+        };
+        refs.into_iter()
     }
 }
 
