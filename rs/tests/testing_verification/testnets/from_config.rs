@@ -1,4 +1,5 @@
-// Set up a testnet from json files:
+// Set up a testnet from json files, mostly useful for scripting and automating outside of system tests
+//
 // Example file:
 // {
 //   "subnets": [
