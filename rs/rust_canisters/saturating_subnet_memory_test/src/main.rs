@@ -3,7 +3,6 @@ use dfn_core::api::{call_bytes, Funds};
 use downstream_calls_test::RequestsConfig;
 use ic_cdk_macros::update;
 
-
 const FAUST: &str = "Ich bin der Geist der stets verneint! Und das mit Recht; denn alles was entsteht \
 ist werth daß es zu Grunde geht; Drum besser wär's daß nichts entstünde. So ist denn alles was ihr Sünde, \
 Zerstörung, kurz das Böse nennt, Mein eigentliches Element."
@@ -15,7 +14,10 @@ Zerstörung, kurz das Böse nennt, Mein eigentliches Element."
 /// num bytes is decreased in length by 1 and queue is rotated to the left by 1. This way a request
 /// is sent out to each receiving canister with a given payload num bytes in a round robin fashion.
 thread_local! {
-    static REQUEST_CONFIGS: std::cell::Cell<VecDeque<RequestConfig>>;
+    static REQUESTS_CONFIGS: std::cell::Cell<VecDeque<RequestsConfig>>;
+    static REQUESTS_PER_HEARTBEAT: std::cell:::Cell<u64>;
+    static NUM_BYTES_SENT: std::cell::Cell<u64>;
+    static NUM_REQUESTS_SENT: std::cell::Cell<u64>;
 }
 
 fn next() -> Option<(CanisterId, u32)> {
@@ -32,8 +34,37 @@ fn next() -> Option<(CanisterId, u32)> {
     None
 }
 
-
+#[export_name = "canister_init"]
 fn main() {}
+
+#[candid_method(update)]
+#[update]
+async fn start(requests_per_heartbeat: u64, requests_config: Vec<RequestsConfig>) -> String {
+    let mut num_requests_total = 0;
+    let mut num_bytes_total = 0;
+    for cfg in requests_config.iter() {
+        num_requests_total += cfg.payload_num_bytes.len();
+        num_bytes_total += cfg.payload_num_bytes.iter().sum();
+    }
+    let msg = format!(
+        "Sending {} bytes in {} requests, {} requests per round",
+        num_bytes_total,
+        num_requests_total,
+        requests_per_round,
+    );
+
+    REQUESTS_PER_HEARTBEAT.set(requests_per_heartbeat);
+    REQUESTS_CONFIG.set(requests_config.into());
+
+    msg
+}
+
+async fn echo(
+
+fn heartbeat() {
+    if REQUESTS_PER_HEARTBEAT.get() > 0 {
+    }
+}
 
 /// Replies to or defers to another canister a list of actions (call or response commands),
 /// along with counters keeping track of:
