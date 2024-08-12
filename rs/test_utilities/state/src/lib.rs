@@ -1,8 +1,8 @@
 use ic_base_types::NumSeconds;
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
 use ic_management_canister_types::{
-    CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibility, MasterPublicKeyId, SchnorrAlgorithm,
-    SchnorrKeyId,
+    CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId,
+    SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
@@ -221,7 +221,7 @@ pub struct CanisterStateBuilder {
     inputs: Vec<RequestOrResponse>,
     time_of_last_allocation_charge: Time,
     certified_data: Vec<u8>,
-    log_visibility: LogVisibility,
+    log_visibility: LogVisibilityV2,
 }
 
 impl CanisterStateBuilder {
@@ -310,7 +310,7 @@ impl CanisterStateBuilder {
         self
     }
 
-    pub fn with_log_visibility(mut self, log_visibility: LogVisibility) -> Self {
+    pub fn with_log_visibility(mut self, log_visibility: LogVisibilityV2) -> Self {
         self.log_visibility = log_visibility;
         self
     }
@@ -427,7 +427,7 @@ impl Default for CanisterStateBuilder {
             inputs: Vec::default(),
             time_of_last_allocation_charge: UNIX_EPOCH,
             certified_data: vec![],
-            log_visibility: LogVisibility::default(),
+            log_visibility: Default::default(),
         }
     }
 }

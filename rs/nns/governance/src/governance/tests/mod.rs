@@ -1672,3 +1672,49 @@ fn test_node_provider_rewards_read_from_correct_sources() {
     let result_2 = governance.get_most_recent_monthly_node_provider_rewards();
     assert_eq!(result_2.unwrap(), rewards_2);
 }
+
+#[cfg(feature = "test")]
+#[test]
+fn test_update_neuron_errors_out_expectedly() {
+    fn build_neuron_proto(account: Vec<u8>) -> NeuronProto {
+        NeuronProto {
+            account,
+            id: Some(NeuronId { id: 1 }),
+            controller: Some(PrincipalId::new_user_test_id(1)),
+            followees: hashmap! {
+                2 => Followees {
+                    followees: vec![NeuronId { id : 3}]
+                }
+            },
+            aging_since_timestamp_seconds: 1,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(42)),
+            ..Default::default()
+        }
+    }
+
+    let neuron1_subaccount_blob = vec![1; 32];
+    let neuron1_subaccount = Subaccount::try_from(neuron1_subaccount_blob.as_slice()).unwrap();
+    let neuron1 = build_neuron_proto(neuron1_subaccount_blob.clone());
+    let neurons = btreemap! { 1 => neuron1 };
+    let governance_proto = GovernanceProto {
+        neurons,
+        ..Default::default()
+    };
+    let mut governance = Governance::new(
+        governance_proto,
+        Box::<MockEnvironment>::default(),
+        Box::new(StubIcpLedger {}),
+        Box::new(StubCMC {}),
+    );
+
+    assert_eq!(
+        governance.update_neuron(build_neuron_proto(vec![0; 32])),
+        Err(GovernanceError::new_with_message(
+            ErrorType::PreconditionFailed,
+            format!(
+                "Cannot change the subaccount {} of a neuron.",
+                neuron1_subaccount
+            ),
+        )),
+    );
+}
