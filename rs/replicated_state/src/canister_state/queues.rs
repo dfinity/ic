@@ -153,7 +153,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
 
         let msg = self.pool.get(item.id());
         assert!(msg.is_some(), "stale reference at the head of output queue");
-        return msg;
+        msg
     }
 
     /// Pops the first message from the next queue.
@@ -173,7 +173,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
         }
         debug_assert_eq!(Self::compute_size(&self.queues), self.size);
 
-        return Some(msg);
+        Some(msg)
     }
 
     /// Permanently excludes from iteration the next queue (i.e. all messages
@@ -1277,9 +1277,10 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
                     )?;
                     if let Some(item) = iq.peek() {
                         if pool.get(item.id()).is_none() {
-                            metrics.observe_broken_soft_invariant(format!(
+                            metrics.observe_broken_soft_invariant(
                                 "CanisterQueues: Stale message at the head of input queue"
-                            ));
+                                    .to_string(),
+                            );
                         }
                         iq.pop_while(|item| pool.get(item.id()).is_none());
                     }
@@ -1289,9 +1290,10 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
                     )?;
                     if let Some(item) = oq.peek() {
                         if pool.get(item.id()).is_none() {
-                            metrics.observe_broken_soft_invariant(format!(
+                            metrics.observe_broken_soft_invariant(
                                 "CanisterQueues: Stale message at the head of output queue"
-                            ));
+                                    .to_string(),
+                            );
                         }
                         oq.pop_while(|item| pool.get(item.id()).is_none());
                     }
@@ -1479,7 +1481,7 @@ impl QueueStats {
 ///  * `Ok(())` if `msg` is a guaranteed response `Request` and
 ///    `available_memory` is sufficient.
 ///  * `Err(msg.count_bytes())` if `msg` is a guaranteed response `Request` and
-///   `msg.count_bytes() > available_memory`.
+///    `msg.count_bytes() > available_memory`.
 pub fn can_push(msg: &RequestOrResponse, available_memory: i64) -> Result<(), usize> {
     match msg {
         RequestOrResponse::Request(req) => {
