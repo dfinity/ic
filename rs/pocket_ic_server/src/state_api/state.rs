@@ -383,11 +383,10 @@ fn received_stop_signal(rx: &mut Receiver<()>) -> bool {
 
 use axum::{
     extract::{Request as AxumRequest, State},
+    middleware::Next,
     response::{IntoResponse, Response},
     Extension,
 };
-//use bytes::Bytes;
-use axum::middleware::Next;
 use candid::Principal;
 use fqdn::FQDN;
 use http::{
@@ -558,15 +557,10 @@ pub trait ResolvesDomain: Send + Sync {
 pub struct DomainResolver {
     domains_base: Vec<Domain>,
     domains_all: BTreeMap<FQDN, DomainLookup>,
-    custom_domains: Arc<dyn ResolvesDomain>,
 }
 
 impl DomainResolver {
-    pub fn new(
-        domains_base: Vec<FQDN>,
-        domains_api: Vec<FQDN>,
-        custom_domains: Arc<dyn ResolvesDomain>,
-    ) -> Self {
+    pub fn new(domains_base: Vec<FQDN>) -> Self {
         fn domain(f: &Fqdn, http: bool) -> Domain {
             Domain {
                 name: f.into(),
@@ -581,31 +575,21 @@ impl DomainResolver {
             .map(|x| domain(&x, true))
             .collect::<Vec<_>>();
 
-        let domains_api = domains_api
-            .into_iter()
-            .map(|x| domain(&x, false))
-            .collect::<Vec<_>>();
-
         // Combine all domains
-        let domains_all = domains_base
-            .clone()
-            .into_iter()
-            .chain(domains_api)
-            .map(|x| {
-                (
-                    x.name.clone(),
-                    DomainLookup {
-                        domain: x,
-                        canister_id: None,
-                        verify: true,
-                    },
-                )
-            });
+        let domains_all = domains_base.clone().into_iter().map(|x| {
+            (
+                x.name.clone(),
+                DomainLookup {
+                    domain: x,
+                    canister_id: None,
+                    verify: true,
+                },
+            )
+        });
 
         Self {
             domains_all: domains_all.collect::<BTreeMap<_, _>>(),
             domains_base,
-            custom_domains,
         }
     }
 
@@ -659,9 +643,7 @@ impl DomainResolver {
 
 impl ResolvesDomain for DomainResolver {
     fn resolve(&self, host: &Fqdn) -> Option<DomainLookup> {
-        // Try to resolve canister using different sources
         self.resolve_domain(host)
-            .or_else(|| self.custom_domains.resolve(host))
     }
 }
 
@@ -907,7 +889,7 @@ pub async fn validate_middleware(
     Ok(response)
 }
 
-// END ADAPTER from ic-gateway
+// END ADAPTED from ic-gateway
 
 impl ApiState {
     // Helper function for auto progress mode.
@@ -1159,14 +1141,6 @@ impl ApiState {
                 .unwrap();
             let state_handler = Arc::new(HandlerState::new(client));
 
-            struct NoopCustomDomainResolver;
-
-            impl ResolvesDomain for NoopCustomDomainResolver {
-                fn resolve(&self, _host: &Fqdn) -> Option<DomainLookup> {
-                    None
-                }
-            }
-
             let domain_resolver = Arc::new(DomainResolver::new(
                 http_gateway_config
                     .domains
@@ -1174,8 +1148,6 @@ impl ApiState {
                     .iter()
                     .map(|d| fqdn!(d))
                     .collect(),
-                vec![],
-                Arc::new(NoopCustomDomainResolver),
             )) as Arc<dyn ResolvesDomain>;
 
             let router = Router::new()
