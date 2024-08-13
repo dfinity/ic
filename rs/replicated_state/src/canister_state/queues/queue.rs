@@ -117,9 +117,6 @@ pub(crate) struct CanisterQueue {
 }
 
 impl CanisterQueue {
-    /// The memory overhead of an empty `CanisterQueue`, in bytes.
-    pub const EMPTY_SIZE_BYTES: usize = size_of::<CanisterQueue>();
-
     /// Creates a new `CanisterQueue` with the given capacity.
     pub(super) fn new(capacity: usize) -> Self {
         Self {

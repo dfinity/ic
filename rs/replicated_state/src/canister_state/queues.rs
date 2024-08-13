@@ -260,15 +260,10 @@ impl CanisterQueues {
         for (canister_id, (_, queue)) in self.canister_queues.iter_mut() {
             while let Some(item) = queue.peek() {
                 let id = item.id();
-                let msg = match self.pool.get(id) {
-                    // Actual message.
-                    Some(msg) => msg,
-
+                let Some(msg) = self.pool.get(id) else {
                     // Expired / dropped message. Pop it and advance.
-                    None => {
-                        assert_eq!(Some(*item), queue.pop());
-                        continue;
-                    }
+                    assert_eq!(Some(*item), queue.pop());
+                    continue;
                 };
 
                 match f(canister_id, msg) {
@@ -408,11 +403,9 @@ impl CanisterQueues {
         // input queue if  all messages in said queue have expired / were shed since it
         // was scheduled. Meaning that iteration may be required.
         while let Some(sender) = input_schedule.pop_front() {
-            let input_queue = match self.canister_queues.get_mut(&sender) {
-                Some((input_queue, _)) => input_queue,
-
+            let Some((input_queue, _)) = self.canister_queues.get_mut(&sender) else {
                 // Queue pair was garbage collected.
-                None => continue,
+                continue;
             };
             let msg = pop_and_advance(input_queue, &mut self.pool);
 
@@ -757,7 +750,7 @@ impl CanisterQueues {
     /// messages).
     pub fn input_queues_size_bytes(&self) -> usize {
         self.pool.message_stats().inbound_size_bytes
-            + self.canister_queues.len() * CanisterQueue::EMPTY_SIZE_BYTES
+            + self.canister_queues.len() * size_of::<CanisterQueue>()
     }
 
     /// Returns the number of non-stale requests enqueued in input queues.
