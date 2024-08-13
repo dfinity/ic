@@ -30,8 +30,18 @@ pub(crate) fn latest_node_provider_rewards() -> Option<ArchivedMonthlyNodeProvid
     })
 }
 
-pub(crate) fn list_node_provider_rewards() -> Vec<ArchivedMonthlyNodeProviderRewards> {
-    with_node_provider_rewards_log(|log| log.iter().collect())
+pub(crate) fn list_node_provider_rewards(limit: u64) -> Vec<ArchivedMonthlyNodeProviderRewards> {
+    use dfn_core::println;
+    // limit try_into is safe because of u32 is always equal or smaller than usize
+    with_node_provider_rewards_log(|log| {
+        let len = log.len();
+        let skip = if len >= limit { len - limit } else { 0 };
+        println!("len: {}, skip: {}, limit: {}", len, skip, limit);
+        log.iter()
+            .skip(skip.try_into().unwrap())
+            .take(limit.try_into().unwrap())
+            .collect()
+    })
 }
 
 #[cfg(test)]

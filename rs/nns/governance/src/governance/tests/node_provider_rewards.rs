@@ -88,7 +88,7 @@ fn test_list_minted_node_provider_rewards_api() {
 
     governance.update_most_recent_monthly_node_provider_rewards(rewards_2.clone());
 
-    let result = governance.list_node_provider_rewards();
+    let result = governance.list_node_provider_rewards(2);
 
     assert_eq!(result, vec![rewards_1, rewards_2]);
 }
@@ -124,6 +124,36 @@ fn test_list_minted_node_provider_rewards_api_with_paging_and_filters() {
         node_providers: vec![],
     };
 
+    let rewards_4 = MonthlyNodeProviderRewards {
+        timestamp: 1729041067, // oct 15 2024
+        rewards: vec![],
+        xdr_conversion_rate: None,
+        minimum_xdr_permyriad_per_icp: None,
+        maximum_node_provider_rewards_e8s: None,
+        registry_version: None,
+        node_providers: vec![],
+    };
+
+    let rewards_5 = MonthlyNodeProviderRewards {
+        timestamp: 1731707475, // nov 15 2024
+        rewards: vec![],
+        xdr_conversion_rate: None,
+        minimum_xdr_permyriad_per_icp: None,
+        maximum_node_provider_rewards_e8s: None,
+        registry_version: None,
+        node_providers: vec![],
+    };
+
+    let rewards_6 = MonthlyNodeProviderRewards {
+        timestamp: 1734373883, // dec 15 2024
+        rewards: vec![],
+        xdr_conversion_rate: None,
+        minimum_xdr_permyriad_per_icp: None,
+        maximum_node_provider_rewards_e8s: None,
+        registry_version: None,
+        node_providers: vec![],
+    };
+
     let mut governance = Governance::new(
         GovernanceProto {
             ..Default::default()
@@ -134,12 +164,18 @@ fn test_list_minted_node_provider_rewards_api_with_paging_and_filters() {
     );
 
     governance.update_most_recent_monthly_node_provider_rewards(rewards_1.clone());
-
     governance.update_most_recent_monthly_node_provider_rewards(rewards_2.clone());
-
     governance.update_most_recent_monthly_node_provider_rewards(rewards_3.clone());
+    governance.update_most_recent_monthly_node_provider_rewards(rewards_4.clone());
+    governance.update_most_recent_monthly_node_provider_rewards(rewards_5.clone());
+    governance.update_most_recent_monthly_node_provider_rewards(rewards_6.clone());
 
-    let result = governance.list_node_provider_rewards(limit, filter);
+    let result = governance.list_node_provider_rewards(6);
 
-    assert_eq!(result, vec![rewards_1, rewards_2]);
+    // limit of 5
+    assert_eq!(result.len(), 5);
+    assert_eq!(
+        result,
+        vec![rewards_2, rewards_3, rewards_4, rewards_5, rewards_6]
+    );
 }
