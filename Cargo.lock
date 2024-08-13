@@ -1399,20 +1399,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "btc-kyt-canister"
-version = "0.9.0"
-dependencies = [
- "assert_matches",
- "bitcoin 0.28.2",
- "candid",
- "candid_parser",
- "futures",
- "ic-cdk 0.13.2",
- "ic-state-machine-tests",
- "ic-test-utilities-load-wasm",
-]
-
-[[package]]
 name = "build-info"
 version = "0.0.27"
 source = "git+https://github.com/dfinity-lab/build-info?rev=701a696844fba5c87df162fbbc1ccef96f27c9d7#701a696844fba5c87df162fbbc1ccef96f27c9d7"
@@ -5632,6 +5618,20 @@ dependencies = [
  "candid",
  "serde",
  "serde_bytes",
+]
+
+[[package]]
+name = "ic-btc-kyt"
+version = "0.9.0"
+dependencies = [
+ "assert_matches",
+ "bitcoin 0.28.2",
+ "candid",
+ "candid_parser",
+ "futures",
+ "ic-cdk 0.13.2",
+ "ic-state-machine-tests",
+ "ic-test-utilities-load-wasm",
 ]
 
 [[package]]
