@@ -1434,11 +1434,6 @@ pub struct ProposalData {
     /// This is populated when an OpenSnsTokenSwap proposal is first made.
     #[prost(uint64, optional, tag = "17")]
     pub original_total_community_fund_maturity_e8s_equivalent: ::core::option::Option<u64>,
-    /// This is populated when OpenSnsTokenSwap is executed. It is used when our
-    /// conclude_community_fund_participation Candid method is called to either
-    /// mint ICP, or restore CF neuron maturity.
-    #[prost(message, repeated, tag = "18")]
-    pub cf_participants: ::prost::alloc::vec::Vec<::ic_sns_swap::pb::v1::CfParticipant>,
     /// This gets set to one of the terminal values (i.e. Committed or Aborted)
     /// when the swap canister calls our conclude_community_fund_participation
     /// Candid method. Initially, it is set to Open, because swap is supposed to
