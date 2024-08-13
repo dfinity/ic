@@ -8,7 +8,6 @@ LIB_DEPENDENCIES = [
     # Keep sorted.
     "//packages/pocket-ic:pocket-ic",
     "//rs/boundary_node/ic_boundary",
-    "//rs/boundary_node/icx_proxy:icx_proxy_dev",
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
     "//rs/crypto/ed25519",
