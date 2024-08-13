@@ -9,6 +9,7 @@ load("//ic-os/setupos:defs.bzl", "image_deps")
 icos_build(
     name = "prod",
     image_deps_func = image_deps,
+    build_local_base_image = True,
     upgrades = False,
     upload_prefix = "setup-os",
     vuln_scan = False,
