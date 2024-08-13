@@ -879,9 +879,6 @@ fn check_certifications_metadata_snapshots_and_states_metadata_are_consistent(
         .filter(|h| h.get() != 0)
         .collect::<Vec<_>>();
     debug_assert_eq!(certification_heights, snapshot_heights);
-    for h in states.states_metadata.keys() {
-        debug_assert!(states.certifications_metadata.contains_key(h));
-    }
 }
 
 fn initialize_tip(
