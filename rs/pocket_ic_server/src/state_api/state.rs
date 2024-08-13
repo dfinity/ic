@@ -453,22 +453,10 @@ fn layer(methods: &[Method]) -> CorsLayer {
         .max_age(10 * MINUTE)
 }
 
-/// Domain entity with certain metadata
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct Domain {
-    pub name: FQDN,
-    // Whether it's custom domain
-    pub custom: bool,
-    // Whether we serve HTTP on this domain
-    pub http: bool,
-    // Whether we serve IC API on this domain
-    pub api: bool,
-}
-
 /// Result of a domain lookup
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct DomainLookup {
-    pub domain: Domain,
+    pub domain: FQDN,
     pub canister_id: Option<Principal>,
     pub verify: bool,
 }
@@ -478,33 +466,26 @@ trait ResolvesDomain: Send + Sync {
     fn resolve(&self, host: &Fqdn) -> Option<DomainLookup>;
 }
 
-/// Finds the domains by the hostname among base, api domains and aliases.
-/// Also checks custom domain storage.
 struct DomainResolver {
-    domains_base: Vec<Domain>,
+    domains_base: Vec<FQDN>,
     domains_all: BTreeMap<FQDN, DomainLookup>,
 }
 
 impl DomainResolver {
     fn new(domains_base: Vec<FQDN>) -> Self {
-        fn domain(f: &Fqdn, http: bool) -> Domain {
-            Domain {
-                name: f.into(),
-                custom: false,
-                http,
-                api: true,
-            }
+        fn domain(f: &Fqdn) -> FQDN {
+            f.into()
         }
 
         let domains_base = domains_base
             .into_iter()
-            .map(|x| domain(&x, true))
+            .map(|x| domain(&x))
             .collect::<Vec<_>>();
 
         // Combine all domains
         let domains_all = domains_base.clone().into_iter().map(|x| {
             (
-                x.name.clone(),
+                x.clone(),
                 DomainLookup {
                     domain: x,
                     canister_id: None,
@@ -522,7 +503,7 @@ impl DomainResolver {
     // Tries to find the base domain that corresponds to the given host and resolve a canister id
     fn resolve_domain(&self, host: &Fqdn) -> Option<DomainLookup> {
         // First try to find an exact match
-        // This covers base domains and their aliases, plus API domains
+        // This covers base domains
         if let Some(v) = self.domains_all.get(host) {
             return Some(v.clone());
         }
@@ -532,11 +513,11 @@ impl DomainResolver {
         let domain = self
             .domains_base
             .iter()
-            .find(|&x| host.is_subdomain_of(&x.name))?;
+            .find(|&x| host.is_subdomain_of(x))?;
 
         // Host can be 1 or 2 levels below base domain only: <id>.<domain> or <id>.raw.<domain>
         // Fail the lookup if it's deeper.
-        let depth = host.labels().count() - domain.name.labels().count();
+        let depth = host.labels().count() - domain.labels().count();
         if depth > 2 {
             return None;
         }
@@ -618,7 +599,6 @@ impl fmt::Display for ErrorCause {
 // Creates the response from ErrorCause and injects itself into extensions to be visible by middleware
 impl IntoResponse for ErrorCause {
     fn into_response(self) -> Response {
-        // Return the HTML reply if it exists, otherwise textual
         let body = self
             .details()
             .map_or_else(|| self.to_string(), |x| format!("{self}: {x}\n"));
@@ -670,7 +650,6 @@ async fn handler(
         canister_id: *canister_id,
     };
 
-    // Pass headers in/out the IC request
     let resp = {
         // Execute the request
         let mut req = state.client.request(args);
