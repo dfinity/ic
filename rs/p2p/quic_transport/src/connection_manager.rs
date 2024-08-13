@@ -63,6 +63,13 @@ use crate::{
 };
 use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor};
 
+/// The value of 25MB is chosen from experiments and the BDP product shown below to support
+/// around 2Gb/s.
+/// Bandwidth-Delay Product
+/// 2Gb/s * 100ms ≈ 200M bits = 25MB
+/// To this only on to avoid unnecessary error in dfx on MacOS
+const UDP_BUFFER_SIZE: usize = 25_000_000; // 25MB
+
 /// Interval of quic heartbeats. They are only sent if the connection is idle for more than 200ms.
 const KEEP_ALIVE_INTERVAL: Duration = Duration::from_millis(200);
 /// Timeout after which quic marks connections as broken. This timeout is used to detect connections
@@ -237,18 +244,13 @@ pub(crate) fn start_connection_manager(
                 .expect("Failed to create udp socket");
 
             // Set socket send/recv buffer size. Setting these explicitly makes sure that a
-            // sufficiently large value is used. Increasing these buffers can help with high packetloss.
-            // The value of 25MB isch chosen from experiments and the BDP product shown below to support
-            // around 2Gb/s.
-            // Bandwidth-Delay Product
-            // 2Gb/s * 100ms ~ 200M bits = 25MB
-            // To this only on to avoid unecessary error in dfx on MacOS
+            // sufficiently large value is used. Increasing these buffers can help with high packet loss.
             #[cfg(target_os = "linux")]
-            if let Err(e) = socket2.set_recv_buffer_size(25_000_000) {
+            if let Err(e) = socket2.set_recv_buffer_size(UDP_BUFFER_SIZE) {
                 info!(log, "Failed to set receive udp buffer. {}", e)
             }
             #[cfg(target_os = "linux")]
-            if let Err(e) = socket2.set_send_buffer_size(25_000_000) {
+            if let Err(e) = socket2.set_send_buffer_size(UDP_BUFFER_SIZE) {
                 info!(log, "Failed to set send udp buffer. {}", e)
             }
             info!(
