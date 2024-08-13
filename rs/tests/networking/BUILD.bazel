@@ -231,6 +231,9 @@ system_test_nns(
 
 system_test(
     name = "cloner_canister_workload",
+    env = {
+        "CLONER_CANISTER_WASM_PATH": "$(rootpath //rs/tests/networking/canisters:cloner_canister)",
+    },
     tags = [
         "manual",
     ],
