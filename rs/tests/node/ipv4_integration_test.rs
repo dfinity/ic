@@ -393,10 +393,11 @@ fn wait_for_expected_node_ipv4_config(
             vm.block_on_bash_script(r#"ip route | awk '/default/ {print $3}'"#)?;
         let actual_gateway_address = default_gateway.trim().to_string();
 
-        Some(
-            IPv4Config::try_new(actual_address, actual_gateway_address, actual_prefix_length)
-                .unwrap(),
-        )
+        Some(IPv4Config::try_new(
+            actual_address,
+            actual_gateway_address,
+            actual_prefix_length,
+        )?)
     };
 
     // then, compare the expected and actual configuration
