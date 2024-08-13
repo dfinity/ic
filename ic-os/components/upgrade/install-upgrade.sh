@@ -10,4 +10,6 @@ trap "rm -rf ${TMPDIR}" exit
 
 tar -xaf "$1" -C "${TMPDIR}"
 
-/opt/ic/bin/manageboot.sh install "${TMPDIR}"/boot.img "${TMPDIR}"/root.img
+/opt/ic/bin/manageboot.sh hostos upgrade-install "${TMPDIR}"/boot.img "${TMPDIR}"/root.img
+
+/opt/ic/bin/manageboot.sh hostos upgrade-commit

@@ -169,9 +169,9 @@ pub fn encode_decode_stream_test<
 /// `CertifiedStreamSlice`, and checks that:
 ///
 ///  1. the payload is the same as that of a `CertifiedStreamSlice` with both
-/// witness and payload beginning at `msg_begin` and the same limits; and
+///     witness and payload beginning at `msg_begin` and the same limits; and
 ///  2. the witness is the same as that of a `CertifiedStreamSlice` with both
-/// witness and payload beginning at `witness_begin` and matching message limit.
+///     witness and payload beginning at `witness_begin` and matching message limit.
 ///
 /// # Panics
 /// Whenever encoding and/or decoding would under normal circumstances return an

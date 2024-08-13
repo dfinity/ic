@@ -305,7 +305,7 @@ impl UncachedConsensusPoolImpl {
                     log,
                 ),
             ) as Box<_>,
-            #[cfg(feature = "rocksdb_backend")]
+            #[cfg(target_os = "macos")]
             PersistentPoolBackend::RocksDB(config) => Box::new(
                 crate::rocksdb_pool::PersistentHeightIndexedPool::new_consensus_pool(config, log),
             ) as Box<_>,
@@ -2190,18 +2190,18 @@ mod tests {
             check_iterator(&pool, pool.as_cache().finalized_block(), vec![2, 1, 0]);
 
             // Two notarized rounds added
+            pool.insert_validated(pool.make_next_beacon());
             let block = pool.make_next_block();
             pool.insert_validated(block.clone());
             pool.notarize(&block);
 
+            pool.insert_validated(pool.make_next_beacon());
             let block = pool.make_next_block();
             pool.insert_validated(block.clone());
             pool.notarize(&block);
             check_iterator(&pool, block.clone().into(), vec![4, 3, 2, 1, 0]);
 
             pool.finalize(&block);
-            pool.insert_validated(pool.make_next_beacon());
-            pool.insert_validated(pool.make_next_beacon());
             pool.insert_validated(pool.make_next_tape());
             pool.insert_validated(pool.make_next_tape());
             check_iterator(&pool, block.into(), vec![4, 3, 2, 1, 0]);

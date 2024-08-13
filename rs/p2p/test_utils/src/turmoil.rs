@@ -18,6 +18,7 @@ use axum::Router;
 use bytes::BytesMut;
 use either::Either;
 use futures::{future::BoxFuture, FutureExt};
+use ic_artifact_downloader::FetchArtifact;
 use ic_artifact_manager::run_artifact_processor;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
@@ -377,11 +378,18 @@ pub fn add_transport_to_sim<F>(
                         consensus.clone().read().unwrap().clone(),
                     );
                 let pfn_producer = Arc::new(consensus.clone().read().unwrap().clone());
-                consensus_builder.add_client(
-                    artifact_manager_event_rx,
+
+                let downloader = FetchArtifact::new(
+                    log.clone(),
+                    tokio::runtime::Handle::current(),
                     consensus,
                     pfn_producer,
+                    MetricsRegistry::default(),
+                );
+                consensus_builder.add_client(
+                    artifact_manager_event_rx,
                     artifact_sender,
+                    downloader,
                 );
                 router = Some(router.unwrap_or_default().merge(consensus_builder.router()));
 

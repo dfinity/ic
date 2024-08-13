@@ -325,6 +325,7 @@ pub type HashedBlock = Hashed<CryptoHashOf<Block>, Block>;
 
 /// BlockMetadata contains the version, height and hash of a block
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct BlockMetadata {
     version: ReplicaVersion,
     height: Height,
@@ -374,15 +375,11 @@ impl From<&BlockProposal> for pb::BlockProposal {
 
 impl TryFrom<pb::BlockProposal> for BlockProposal {
     type Error = ProxyDecodeError;
+
     fn try_from(block_proposal: pb::BlockProposal) -> Result<Self, Self::Error> {
         Ok(Signed {
             content: Hashed {
-                value: Block::try_from(
-                    block_proposal
-                        .value
-                        .ok_or_else(|| ProxyDecodeError::MissingField("BlockProposal::value"))?,
-                )
-                .map_err(ProxyDecodeError::Other)?,
+                value: try_from_option_field(block_proposal.value, "BlockProposal::value")?,
                 hash: CryptoHashOf::from(CryptoHash(block_proposal.hash)),
             },
             signature: BasicSignature {
@@ -407,6 +404,7 @@ impl AsRef<Block> for BlockProposal {
 
 /// NotarizationContent holds the values that are signed in a notarization
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct NotarizationContent {
     pub version: ReplicaVersion,
     pub height: Height,
@@ -507,6 +505,7 @@ impl TryFrom<pb::NotarizationShare> for NotarizationShare {
 
 /// FinalizationContent holds the values that are signed in a finalization
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct FinalizationContent {
     pub version: ReplicaVersion,
     pub height: Height,
@@ -657,11 +656,11 @@ impl From<&RandomBeacon> for pb::RandomBeacon {
 
 impl TryFrom<pb::RandomBeacon> for RandomBeacon {
     type Error = ProxyDecodeError;
+
     fn try_from(beacon: pb::RandomBeacon) -> Result<Self, Self::Error> {
         Ok(Signed {
             content: RandomBeaconContent {
-                version: ReplicaVersion::try_from(beacon.version.as_str())
-                    .map_err(|e| ProxyDecodeError::ReplicaVersionParseError(Box::new(e)))?,
+                version: ReplicaVersion::try_from(beacon.version)?,
                 height: Height::from(beacon.height),
                 parent: CryptoHashOf::from(CryptoHash(beacon.parent)),
             },
@@ -693,11 +692,11 @@ impl From<&RandomBeaconShare> for pb::RandomBeaconShare {
 
 impl TryFrom<pb::RandomBeaconShare> for RandomBeaconShare {
     type Error = ProxyDecodeError;
+
     fn try_from(beacon: pb::RandomBeaconShare) -> Result<Self, Self::Error> {
         Ok(Signed {
             content: RandomBeaconContent {
-                version: ReplicaVersion::try_from(beacon.version.as_str())
-                    .map_err(|e| ProxyDecodeError::ReplicaVersionParseError(Box::new(e)))?,
+                version: ReplicaVersion::try_from(beacon.version)?,
                 height: Height::from(beacon.height),
                 parent: CryptoHashOf::from(CryptoHash(beacon.parent)),
             },
@@ -712,6 +711,7 @@ impl TryFrom<pb::RandomBeaconShare> for RandomBeaconShare {
 /// which is the height and the replica version used to create the random
 /// tape.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RandomTapeContent {
     pub version: ReplicaVersion,
     pub height: Height,
@@ -751,10 +751,11 @@ impl From<&RandomTape> for pb::RandomTape {
 
 impl TryFrom<pb::RandomTape> for RandomTape {
     type Error = ProxyDecodeError;
+
     fn try_from(tape: pb::RandomTape) -> Result<Self, Self::Error> {
         Ok(Signed {
             content: RandomTapeContent {
-                version: ReplicaVersion::try_from(tape.version.as_str())?,
+                version: ReplicaVersion::try_from(tape.version)?,
                 height: Height::from(tape.height),
             },
             signature: ThresholdSignature {
@@ -783,10 +784,11 @@ impl From<&RandomTapeShare> for pb::RandomTapeShare {
 
 impl TryFrom<pb::RandomTapeShare> for RandomTapeShare {
     type Error = ProxyDecodeError;
+
     fn try_from(tape_share: pb::RandomTapeShare) -> Result<Self, Self::Error> {
         Ok(Signed {
             content: RandomTapeContent {
-                version: ReplicaVersion::try_from(tape_share.version.as_str())?,
+                version: ReplicaVersion::try_from(tape_share.version)?,
                 height: Height::from(tape_share.height),
             },
             signature: ThresholdSignatureShare {
@@ -799,6 +801,7 @@ impl TryFrom<pb::RandomTapeShare> for RandomTapeShare {
 
 /// A proof that shows a block maker has produced equivocating blocks.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct EquivocationProof {
     pub signer: NodeId,
     pub version: ReplicaVersion,
@@ -869,10 +872,10 @@ impl TryFrom<pb::EquivocationProof> for EquivocationProof {
     type Error = ProxyDecodeError;
     fn try_from(proof: pb::EquivocationProof) -> Result<Self, Self::Error> {
         Ok(Self {
-            signer: node_id_try_from_option(proof.signer.clone())?,
-            version: ReplicaVersion::try_from(proof.version.as_str())?,
+            signer: node_id_try_from_option(proof.signer)?,
+            version: ReplicaVersion::try_from(proof.version)?,
             height: Height::new(proof.height),
-            subnet_id: subnet_id_try_from_option(proof.subnet_id.clone())?,
+            subnet_id: subnet_id_try_from_option(proof.subnet_id)?,
             hash1: CryptoHashOf::new(CryptoHash(proof.hash1)),
             signature1: BasicSigOf::new(BasicSig(proof.signature1)),
             hash2: CryptoHashOf::new(CryptoHash(proof.hash2)),
@@ -884,6 +887,7 @@ impl TryFrom<pb::EquivocationProof> for EquivocationProof {
 /// The enum encompassing all of the consensus artifacts exchanged between
 /// replicas.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum ConsensusMessage {
     RandomBeacon(RandomBeacon),
     Finalization(Finalization),
@@ -1326,13 +1330,11 @@ impl From<&Block> for pb::Block {
 }
 
 impl TryFrom<pb::Block> for Block {
-    type Error = String;
+    type Error = ProxyDecodeError;
+
     fn try_from(block: pb::Block) -> Result<Self, Self::Error> {
-        let dkg_payload = dkg::Payload::try_from(
-            block
-                .dkg_payload
-                .ok_or_else(|| String::from("Error: Block missing dkg_payload"))?,
-        )?;
+        let dkg_payload = try_from_option_field(block.dkg_payload, "Block::dkg_payload")?;
+
         let batch = BatchPayload {
             ingress: block
                 .ingress_payload
@@ -1352,12 +1354,15 @@ impl TryFrom<pb::Block> for Block {
             canister_http: block.canister_http_payload_bytes,
             query_stats: block.query_stats_payload_bytes,
         };
+
         let payload = match dkg_payload {
             dkg::Payload::Summary(summary) => {
-                assert!(
-                    batch.is_empty(),
-                    "Error: Summary block has non-empty batch payload."
-                );
+                if !batch.is_empty() {
+                    return Err(ProxyDecodeError::Other(String::from(
+                        "Summary block has non-empty batch payload.",
+                    )));
+                }
+
                 // Convert the idkg summary. Note that the summary may contain
                 // transcript references, and here we are NOT checking if these
                 // references are valid. Such checks, if required, should be done
@@ -1370,8 +1375,7 @@ impl TryFrom<pb::Block> for Block {
                     .idkg_payload
                     .as_ref()
                     .map(|idkg| idkg.try_into())
-                    .transpose()
-                    .map_err(|e: ProxyDecodeError| e.to_string())?;
+                    .transpose()?;
 
                 BlockPayload::Summary(SummaryPayload { dkg: summary, idkg })
             }
@@ -1380,8 +1384,7 @@ impl TryFrom<pb::Block> for Block {
                     .idkg_payload
                     .as_ref()
                     .map(|idkg| idkg.try_into())
-                    .transpose()
-                    .map_err(|e: ProxyDecodeError| e.to_string())?;
+                    .transpose()?;
 
                 BlockPayload::Data(DataPayload {
                     batch,
@@ -1391,8 +1394,7 @@ impl TryFrom<pb::Block> for Block {
             }
         };
         Ok(Block {
-            version: ReplicaVersion::try_from(block.version.as_str())
-                .map_err(|e| format!("Block replica version failed to parse {:?}", e))?,
+            version: ReplicaVersion::try_from(block.version)?,
             parent: CryptoHashOf::from(CryptoHash(block.parent)),
             height: Height::from(block.height),
             rank: Rank(block.rank),

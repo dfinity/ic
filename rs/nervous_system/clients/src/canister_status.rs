@@ -43,6 +43,15 @@ impl std::fmt::Display for CanisterStatusType {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, CandidType, Default)]
+pub enum LogVisibility {
+    #[default]
+    #[serde(rename = "controllers")]
+    Controllers = 1,
+    #[serde(rename = "public")]
+    Public = 2,
+}
+
 /// Partial copy-paste of ic-types::ic_00::DefiniteCanisterSettings.
 ///
 /// Only the fields that we need are copied.
@@ -55,6 +64,8 @@ pub struct DefiniteCanisterSettings {
     pub memory_allocation: Option<candid::Nat>,
     pub freezing_threshold: Option<candid::Nat>,
     pub reserved_cycles_limit: Option<candid::Nat>,
+    pub wasm_memory_limit: Option<candid::Nat>,
+    pub log_visibility: Option<LogVisibility>,
 }
 
 /// Partial copy-paste of ic-types::ic_00::CanisterStatusResult.
@@ -98,6 +109,8 @@ pub struct DefiniteCanisterSettingsFromManagementCanister {
     pub memory_allocation: candid::Nat,
     pub freezing_threshold: candid::Nat,
     pub reserved_cycles_limit: candid::Nat,
+    pub wasm_memory_limit: candid::Nat,
+    pub log_visibility: LogVisibility,
 }
 
 impl From<CanisterStatusResultFromManagementCanister> for CanisterStatusResult {
@@ -137,12 +150,16 @@ impl From<DefiniteCanisterSettingsFromManagementCanister> for DefiniteCanisterSe
             memory_allocation,
             freezing_threshold,
             reserved_cycles_limit,
+            wasm_memory_limit,
+            log_visibility,
         } = value;
 
         let compute_allocation = Some(compute_allocation);
         let memory_allocation = Some(memory_allocation);
         let freezing_threshold = Some(freezing_threshold);
         let reserved_cycles_limit = Some(reserved_cycles_limit);
+        let wasm_memory_limit = Some(wasm_memory_limit);
+        let log_visibility = Some(log_visibility);
 
         DefiniteCanisterSettings {
             controllers,
@@ -150,6 +167,8 @@ impl From<DefiniteCanisterSettingsFromManagementCanister> for DefiniteCanisterSe
             memory_allocation,
             freezing_threshold,
             reserved_cycles_limit,
+            wasm_memory_limit,
+            log_visibility,
         }
     }
 }
@@ -172,6 +191,8 @@ impl CanisterStatusResultFromManagementCanister {
                 memory_allocation: candid::Nat::from(45_u32),
                 freezing_threshold: candid::Nat::from(46_u32),
                 reserved_cycles_limit: candid::Nat::from(47_u32),
+                wasm_memory_limit: candid::Nat::from(48_u32),
+                log_visibility: LogVisibility::Controllers,
             },
             cycles: candid::Nat::from(47_u32),
             idle_cycles_burned_per_day: candid::Nat::from(48_u32),
@@ -351,6 +372,8 @@ impl From<CanisterStatusResultFromManagementCanister> for CanisterStatusResultV2
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use crate::canister_status::{
         CanisterStatusResult, CanisterStatusResultFromManagementCanister, CanisterStatusType,
         DefiniteCanisterSettings, DefiniteCanisterSettingsFromManagementCanister,
@@ -371,6 +394,8 @@ mod tests {
                 memory_allocation: candid::Nat::from(98_u32),
                 freezing_threshold: candid::Nat::from(97_u32),
                 reserved_cycles_limit: candid::Nat::from(96_u32),
+                wasm_memory_limit: candid::Nat::from(95_u32),
+                log_visibility: LogVisibility::Controllers,
             },
             cycles: candid::Nat::from(999_u32),
             idle_cycles_burned_per_day: candid::Nat::from(998_u32),
@@ -387,6 +412,8 @@ mod tests {
                 memory_allocation: Some(candid::Nat::from(98_u32)),
                 freezing_threshold: Some(candid::Nat::from(97_u32)),
                 reserved_cycles_limit: Some(candid::Nat::from(96_u32)),
+                wasm_memory_limit: Some(candid::Nat::from(95_u32)),
+                log_visibility: Some(LogVisibility::Controllers),
             },
             cycles: candid::Nat::from(999_u32),
             idle_cycles_burned_per_day: Some(candid::Nat::from(998_u32)),

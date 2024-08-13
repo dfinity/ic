@@ -14,6 +14,7 @@ pub struct OrchestratorMetrics {
     pub key_rotation_status: IntGaugeVec,
     pub master_public_key_changed_errors: IntCounterVec,
     pub failed_consecutive_upgrade_checks: IntCounter,
+    pub critical_error_cup_deserialization_failed: IntCounter,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
@@ -69,13 +70,17 @@ impl OrchestratorMetrics {
                 &["status"],
             ),
             master_public_key_changed_errors: metrics_registry.int_counter_vec(
-                "orchestrator_tecdsa_key_changed_errors_total",
+                "orchestrator_master_public_key_changed_errors_total",
                 "Critical error counter monitoring changed threshold master public keys",
                 &["key_id"],
             ),
             failed_consecutive_upgrade_checks: metrics_registry.int_counter(
                 "orchestrator_failed_consecutive_upgrade_checks_total",
                 "Number of times the upgrade check failed consecutively",
+            ),
+            critical_error_cup_deserialization_failed: metrics_registry.int_counter(
+                "orchestrator_cup_deserialization_failed_total",
+                "Number of times the deserialization of the locally persisted CUP failed",
             ),
         }
     }

@@ -7,8 +7,8 @@ edition = "2021"
 default-run = "ic-rosetta-api"
 
 [dependencies]
-actix-rt = "2.2.0"
-actix-web = "4.0.1"
+actix-rt = "2.10.0"
+actix-web = "4.9.0"
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
@@ -30,7 +30,7 @@ ic-ledger-core = { path = "ledger_core" }
 ic-ledger-hash-of = { path = "../../packages/ic-ledger-hash-of" }
 ic-nns-common = { path = "../nns/common" }
 ic-nns-constants = { path = "../nns/constants" }
-ic-nns-governance = { path = "../nns/governance" }
+ic-nns-governance-api = { path = "../nns/governance/api" }
 ic-types = { path = "../types/types" }
 icp-ledger = { path = "icp_ledger" }
 lazy_static = { workspace = true }
@@ -62,3 +62,6 @@ ic-rosetta-test-utils = { path = "test_utils" }
 ic-types = { path = "../types/types" }
 proptest = "1.0"
 rand_chacha = { workspace = true }
+
+[features]
+rosetta-blocks = []
