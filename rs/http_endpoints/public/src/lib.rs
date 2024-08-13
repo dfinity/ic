@@ -212,8 +212,6 @@ fn start_server_initialization(
         )
         .await;
         if let Some(delegation) = loaded_delegation {
-            // TODO: Should we unwrap here since we expect the cell not to be set?
-            // In tests it might be usefull to already set it.
             let _ = delegation_from_nns.set(delegation);
         }
         metrics
