@@ -41,10 +41,11 @@ use registry_canister::{
         do_recover_subnet::RecoverSubnetPayload,
         do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
-        do_retire_replica_version::RetireReplicaVersionPayload,
         do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
-        do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
+        do_update_api_boundary_nodes_version::{
+            DeployGuestosToSomeApiBoundaryNodes, UpdateApiBoundaryNodesVersionPayload,
+        },
         do_update_elected_hostos_versions::{
             ReviseElectedHostosVersionsPayload, UpdateElectedHostosVersionsPayload,
         },
@@ -355,22 +356,6 @@ fn atomic_mutate() {
     reply(&bytes)
 }
 
-#[export_name = "canister_update retire_replica_version"]
-fn retire_replica_version() {
-    check_caller_is_governance_and_log("retire_replica_version");
-    over(candid_one, |payload: RetireReplicaVersionPayload| {
-        retire_replica_version_(payload)
-    });
-}
-
-#[candid_method(update, rename = "retire_replica_version")]
-fn retire_replica_version_(_payload: RetireReplicaVersionPayload) {
-    panic!(
-        "{}retire_replica_version is deprecated and should no longer be used!",
-        LOG_PREFIX
-    );
-}
-
 #[export_name = "canister_update revise_elected_guestos_versions"]
 fn revise_elected_guestos_versions() {
     check_caller_is_governance_and_log("revise_elected_guestos_versions");
@@ -577,6 +562,8 @@ fn remove_api_boundary_nodes_(payload: RemoveApiBoundaryNodesPayload) {
     recertify_registry();
 }
 
+// TODO[NNS1-3000]: Remove this endpoint once mainnet NNS Governance starts calling the new
+// TODO[NNS1-3000]: `deploy_guestos_to_some_api_boundary_nodes` endpoint.
 #[export_name = "canister_update update_api_boundary_nodes_version"]
 fn update_api_boundary_nodes_version() {
     check_caller_is_governance_and_log("update_api_boundary_nodes_version");
@@ -586,6 +573,18 @@ fn update_api_boundary_nodes_version() {
 #[candid_method(update, rename = "update_api_boundary_nodes_version")]
 fn update_api_boundary_nodes_version_(payload: UpdateApiBoundaryNodesVersionPayload) {
     registry_mut().do_update_api_boundary_nodes_version(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update deploy_guestos_to_some_api_boundary_nodes"]
+fn deploy_guestos_to_some_api_boundary_nodes() {
+    check_caller_is_governance_and_log("deploy_guestos_to_some_api_boundary_nodes");
+    over(candid_one, deploy_guestos_to_some_api_boundary_nodes_);
+}
+
+#[candid_method(update, rename = "deploy_guestos_to_some_api_boundary_nodes")]
+fn deploy_guestos_to_some_api_boundary_nodes_(payload: DeployGuestosToSomeApiBoundaryNodes) {
+    registry_mut().do_deploy_guestos_to_some_api_boundary_nodes(payload);
     recertify_registry();
 }
 
