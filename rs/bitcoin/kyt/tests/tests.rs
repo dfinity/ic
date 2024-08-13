@@ -8,7 +8,7 @@ const MAX_TICKS: usize = 10;
 fn kyt_wasm() -> Vec<u8> {
     load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "btc-kyt-canister",
+        "ic-btc-kyt-canister",
         &[],
     )
 }
