@@ -1,5 +1,5 @@
 {
-  "checksum": "a86ae2e1c6963fce9df463a4dc36d250145ecf6a55fbec46e2db1d3519764a2c",
+  "checksum": "ebc5d10026b949a377a4953ec431a944fb684e9844b380b74a74db114f173357",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17486,7 +17486,7 @@
               "target": "insta"
             },
             {
-              "id": "instant-acme 0.3.2",
+              "id": "instant-acme 0.7.1",
               "target": "instant_acme"
             },
             {
@@ -31979,14 +31979,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "instant-acme 0.3.2": {
+    "instant-acme 0.7.1": {
       "name": "instant-acme",
-      "version": "0.3.2",
+      "version": "0.7.1",
       "package_url": "https://github.com/instant-labs/instant-acme",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/instant-acme/0.3.2/download",
-          "sha256": "d8b94f62e8dd2b561e7646bd0cc92e4c9d940859fc1c146ad8ab6e5d3e6f7c03"
+          "url": "https://static.crates.io/crates/instant-acme/0.7.1/download",
+          "sha256": "71bc444149bab1b339ba7e92e81d7615227feba7fd635b8551a3a170021598d0"
         }
       },
       "targets": [
@@ -32011,7 +32011,8 @@
         "crate_features": {
           "common": [
             "default",
-            "hyper-rustls"
+            "hyper-rustls",
+            "ring"
           ],
           "selects": {}
         },
@@ -32022,16 +32023,40 @@
               "target": "base64"
             },
             {
-              "id": "hyper 0.14.27",
+              "id": "bytes 1.7.1",
+              "target": "bytes"
+            },
+            {
+              "id": "http 1.1.0",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.1",
+              "target": "http_body"
+            },
+            {
+              "id": "http-body-util 0.1.2",
+              "target": "http_body_util"
+            },
+            {
+              "id": "hyper 1.4.1",
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.24.2",
+              "id": "hyper-rustls 0.27.2",
               "target": "hyper_rustls"
             },
             {
-              "id": "ring 0.16.20",
+              "id": "hyper-util 0.1.7",
+              "target": "hyper_util"
+            },
+            {
+              "id": "ring 0.17.7",
               "target": "ring"
+            },
+            {
+              "id": "rustls-pki-types 1.7.0",
+              "target": "rustls_pki_types"
             },
             {
               "id": "serde 1.0.203",
@@ -32049,7 +32074,16 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.2"
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.81",
+              "target": "async_trait"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.7.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -52425,8 +52459,7 @@
             "alloc",
             "default",
             "dev_urandom_fallback",
-            "once_cell",
-            "std"
+            "once_cell"
           ],
           "selects": {}
         },
@@ -78650,7 +78683,7 @@
     "indoc 1.0.9",
     "inferno 0.11.19",
     "insta 1.31.0",
-    "instant-acme 0.3.2",
+    "instant-acme 0.7.1",
     "intmap 1.1.0",
     "ipnet 2.8.0",
     "isocountry 0.3.2",
