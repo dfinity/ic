@@ -12,7 +12,7 @@ use ic_protobuf::registry::{
     node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload},
     node_rewards::v2::UpdateNodeRewardsTableProposalPayload,
 };
-use ic_registry_canister_types::{
+use ic_registry_canister_api::{
     AddNodePayload, UpdateNodeDirectlyPayload, UpdateNodeIPv4ConfigDirectlyPayload,
 };
 use ic_registry_transport::{

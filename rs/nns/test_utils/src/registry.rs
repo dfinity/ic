@@ -24,7 +24,7 @@ use ic_protobuf::registry::{
     routing_table::v1::RoutingTable as RoutingTablePB,
     subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord},
 };
-use ic_registry_canister_types::AddNodePayload;
+use ic_registry_canister_api::AddNodePayload;
 use ic_registry_keys::{
     make_blessed_replica_versions_key, make_catch_up_package_contents_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,

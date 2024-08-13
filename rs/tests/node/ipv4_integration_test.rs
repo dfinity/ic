@@ -38,7 +38,7 @@ use ic_registry_subnet_type::SubnetType;
 
 use ic_base_types::PrincipalId;
 
-use ic_registry_canister_types::{IPv4Config, UpdateNodeIPv4ConfigDirectlyPayload};
+use ic_registry_canister_api::{IPv4Config, UpdateNodeIPv4ConfigDirectlyPayload};
 use registry_canister::mutations::node_management::do_remove_node_directly::RemoveNodeDirectlyPayload;
 
 use slog::info;

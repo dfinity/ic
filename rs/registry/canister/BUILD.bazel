@@ -32,7 +32,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
-    "//rs/types/registry_canister_types",
+    "//rs/registry/canister/api",
     "//rs/types/types",
     "@crate_index//:build-info",
     "@crate_index//:candid",

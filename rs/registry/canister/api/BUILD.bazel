@@ -11,14 +11,14 @@ DEPENDENCIES = [
 ]
 
 rust_library(
-    name = "registry_canister_types",
+    name = "registry_canister_api",
     srcs = glob(["src/**"]),
-    crate_name = "ic_registry_canister_types",
+    crate_name = "registry_canister_api",
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
 rust_test(
-    name = "registry_canister_types_test",
-    crate = ":registry_canister_types",
+    name = "registry_canister_api_test",
+    crate = ":registry_canister_api",
 )

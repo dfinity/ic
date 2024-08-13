@@ -21,7 +21,7 @@ use crate::mutations::node_management::{
     },
     do_remove_node_directly::RemoveNodeDirectlyPayload,
 };
-use ic_registry_canister_types::AddNodePayload;
+use ic_registry_canister_api::AddNodePayload;
 use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::time::Time;
 use prost::Message;
@@ -265,7 +265,7 @@ mod tests {
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
     use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-    use ic_registry_canister_types::IPv4Config;
+    use ic_registry_canister_api::IPv4Config;
     use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
     use ic_registry_transport::insert;
     use lazy_static::lazy_static;

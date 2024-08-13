@@ -11,7 +11,7 @@ use ic_base_types::NodeId;
 use ic_crypto_node_key_validation::ValidIDkgDealingEncryptionPublicKey;
 use ic_nns_common::registry::get_subnet_ids_from_subnet_list;
 use ic_protobuf::registry::{crypto::v1::PublicKey, subnet::v1::SubnetRecord};
-use ic_registry_canister_types::UpdateNodeDirectlyPayload;
+use ic_registry_canister_api::UpdateNodeDirectlyPayload;
 use ic_registry_keys::{make_crypto_node_key, make_node_record_key};
 use ic_registry_transport::update;
 use ic_types::{crypto::KeyPurpose, PrincipalId};

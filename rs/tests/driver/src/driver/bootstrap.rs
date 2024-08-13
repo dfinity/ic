@@ -28,7 +28,7 @@ use ic_prep_lib::{
     node::{InitializedNode, NodeConfiguration, NodeIndex},
     subnet_configuration::SubnetConfig,
 };
-use ic_registry_canister_types::IPv4Config;
+use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;

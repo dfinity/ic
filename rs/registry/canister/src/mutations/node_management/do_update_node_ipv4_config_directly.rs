@@ -4,7 +4,7 @@ use crate::mutations::node_management::common::{
 use crate::{common::LOG_PREFIX, mutations::common::node_exists_or_panic, registry::Registry};
 
 use ic_protobuf::registry::node::v1::IPv4InterfaceConfig;
-use ic_registry_canister_types::UpdateNodeIPv4ConfigDirectlyPayload;
+use ic_registry_canister_api::UpdateNodeIPv4ConfigDirectlyPayload;
 use ic_registry_keys::make_node_record_key;
 use ic_registry_transport::update;
 use prost::Message;
@@ -105,7 +105,7 @@ mod tests {
         mutations::common::test::TEST_NODE_ID,
     };
     use ic_base_types::{NodeId, PrincipalId};
-    use ic_registry_canister_types::IPv4Config;
+    use ic_registry_canister_api::IPv4Config;
 
     fn init_ipv4_config() -> IPv4Config {
         IPv4Config::try_new("193.118.59.140".into(), "193.118.59.137".into(), 29).unwrap()
