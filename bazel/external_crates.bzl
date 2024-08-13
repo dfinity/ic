@@ -1377,11 +1377,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "tracing-flame": crate.spec(
                 version = "^0.2.0",
             ),
-            "tracing-core": crate.spec(
-                version = "^0.1.32",
-            ),
             "tracing-opentelemetry": crate.spec(
-                version = "^0.25.0",
+                version = "^0.24.0",
             ),
             "tracing-serde": crate.spec(
                 version = "^0.1.3",

@@ -31,7 +31,7 @@ fn put_field_wellformed(buf: &mut Vec<u8>, name: &str, value: &[u8]) {
     put_value(buf, value);
 }
 
-fn put_priority(buf: &mut Vec<u8>, meta: &tracing_core::Metadata) {
+fn put_priority(buf: &mut Vec<u8>, meta: &tracing::Metadata) {
     put_field_wellformed(
         buf,
         "PRIORITY",
