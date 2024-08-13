@@ -229,7 +229,6 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
                 )),
                 ..Default::default()
             }),
-            cf_participants: vec![],
             neurons_fund_data: Some(NeuronsFundData {
                 initial_neurons_fund_participation: Some(initial_neurons_fund_participation),
                 final_neurons_fund_participation: None,
