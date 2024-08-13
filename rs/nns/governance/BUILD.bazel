@@ -289,6 +289,11 @@ rust_test(
     ],
 )
 
+filegroup(
+    name = "tla_models",
+    srcs = glob(["tla/**/*.tla"]),
+)
+
 rust_test(
     name = "governance_test",
     srcs = glob(["src/**/*.rs"]),
@@ -340,7 +345,7 @@ rust_test_suite_with_extra_srcs(
     ),
     aliases = ALIASES,
     crate_features = ["test"],
-    data = ["tests/neurons.csv"],
+    data = ["tests/neurons.csv", "@tla_apalache//:contents", ":tla_models"],
     env = {
         "NEURON_CSV_PATH": "rs/nns/governance/tests/neurons.csv",
     },

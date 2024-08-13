@@ -252,6 +252,8 @@ impl IcpLedger for FakeDriver {
         to_account: AccountIdentifier,
         _: u64,
     ) -> Result<u64, NervousSystemError> {
+        #[cfg(feature = "test")]
+        use ic_nns_governance::governance::tla;
         // Minting operations (sending ICP from Gov main account) should just create ICP.
         let is_minting_operation = from_subaccount.is_none();
 
@@ -266,23 +268,15 @@ impl IcpLedger for FakeDriver {
         // TODO(oggy): don't do the to_tla_value conversion in the macro,
         //       can't distinguish between functions and records now - though maybe not necessary?
         tla_log_request!(
+            "WaitForTransfer",
             Destination::new("ledger"),
-            BTreeMap::from([
-                ("method", "transfer".to_tla_value()),
-                (
-                    "args",
-                    BTreeMap::from([
-                        ("amount", amount_e8s.to_tla_value()),
-                        ("fee", fee_e8s.to_tla_value()),
-                        ("from", account_to_tla(from_account)),
-                        ("to", account_to_tla(to_account)),
-                    ])
-                    .to_tla_value()
-                ) // TODO(oggy): what to do with options?
-                  // ("from_subaccount", ...),
-                  // TODO(oggy): what to do with this?
-                  // ("to", ...),
-            ])
+            "Transfer",
+            tla::TlaValue::Record(BTreeMap::from([
+                ("amount".to_string(), amount_e8s.to_tla_value()),
+                ("fee".to_string(), fee_e8s.to_tla_value()),
+                ("from".to_string(), account_to_tla(from_account)),
+                ("to".to_string(), account_to_tla(to_account)),
+            ]))
         );
 
         let accounts = &mut self.state.try_lock().unwrap().accounts;
@@ -304,7 +298,13 @@ impl IcpLedger for FakeDriver {
         }
 
         *accounts.entry(to_account).or_default() += amount_e8s;
-        tla_log_response!(Destination::new("ledger"), false);
+        tla_log_response!(
+            Destination::new("ledger"),
+            tla::TlaValue::Variant {
+                tag: "TransferOk".to_string(),
+                value: Box::new(tla::TlaValue::Constant("UNIT".to_string()))
+            }
+        );
 
         Ok(0)
     }
