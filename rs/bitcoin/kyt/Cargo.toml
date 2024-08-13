@@ -6,8 +6,18 @@ edition.workspace = true
 description.workspace = true
 documentation.workspace = true
 
+[[bin]]
+name = "btc-kyt-canister"
+path = "src/main.rs"
+
 [dependencies]
-bitcoin = { workspace = true }
+bitcoin = "0.28.1"
 candid = { workspace = true }
 futures = { workspace = true }
 ic-cdk = { workspace = true }
+
+[dev-dependencies]
+assert_matches = { workspace = true }
+candid_parser = { workspace = true }
+ic-state-machine-tests = { path = "../../state_machine_tests" }
+ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }

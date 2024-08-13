@@ -1,6 +1,20 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "btc_kyt",
+    srcs = ["src/lib.rs"],
+    crate_name = "ic_btc_kyt",
+    deps = [
+        "@crate_index//:bitcoin",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:ic-cdk",
+    ],
+)
 
 rust_canister(
     name = "btc_kyt_canister",
@@ -14,5 +28,23 @@ rust_canister(
         "@crate_index//:candid",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
+    ],
+)
+
+rust_ic_test(
+    name = "btc_kyt_integration_test",
+    src = ["tests/tests.rs"],
+    data = [":btc_kyt_canister"],
+    env = {
+       "CARGO_MANIFEST_DIR": "rs/bitcoin/kyt",
+       "IC_BTC_KYT_WASM_PATH": "$(rootpath :btc_kyt_canister)",
+    },
+    deps = [
+        # Keep sorted.
+        ":kyt",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities/load_wasm",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
     ],
 )
