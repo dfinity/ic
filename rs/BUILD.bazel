@@ -80,3 +80,13 @@ package_group(
         "//rs/state_tool/...",
     ],
 )
+
+# Boundary node code.
+# Can depend on: ic-protocol package groups
+# Dependants: //rs:release-pkg.
+package_group(
+    name = "boundary-node-pkg",
+    packages = [
+        "//rs/boundary_node/...",
+    ],
+)

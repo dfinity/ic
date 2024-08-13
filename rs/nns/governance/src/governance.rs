@@ -432,6 +432,8 @@ impl NnsFunction {
                 | NnsFunction::UpdateUnassignedNodesConfig
                 | NnsFunction::UpdateElectedHostosVersions
                 | NnsFunction::UpdateNodesHostosVersion
+                | NnsFunction::BlessReplicaVersion
+                | NnsFunction::RetireReplicaVersion
         )
     }
 }
@@ -612,10 +614,22 @@ impl NnsFunction {
                 (REGISTRY_CANISTER_ID, "deploy_guestos_to_all_subnet_nodes")
             }
             NnsFunction::UpdateElectedHostosVersions => {
-                (REGISTRY_CANISTER_ID, "update_elected_hostos_versions")
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "{:?} is an obsolete NnsFunction. Use ReviseElectedHostosVersions instead",
+                        self
+                    ),
+                ));
             }
             NnsFunction::UpdateNodesHostosVersion => {
-                (REGISTRY_CANISTER_ID, "update_nodes_hostos_version")
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "{:?} is an obsolete NnsFunction. Use DeployHostosToSomeNodes instead",
+                        self
+                    ),
+                ));
             }
             NnsFunction::ReviseElectedHostosVersions => {
                 // TODO[NNS1-3000]: Rename Registry API ednpoints callable only by NNS Governance.
@@ -675,12 +689,10 @@ impl NnsFunction {
             }
             NnsFunction::BitcoinSetConfig => (ROOT_CANISTER_ID, "call_canister"),
             NnsFunction::BlessReplicaVersion | NnsFunction::RetireReplicaVersion => {
-                // Bless and retire replica version proposals are deprecated and
-                // can no longer be used.
                 return Err(GovernanceError::new_with_message(
                     ErrorType::InvalidProposal,
                     format!(
-                        "{:?} is a deprecated NnsFunction. Use ReviseElectedGuestosVersions instead",
+                        "{:?} is an obsolete NnsFunction. Use ReviseElectedGuestosVersions instead",
                         self
                     ),
                 ));
@@ -690,7 +702,14 @@ impl NnsFunction {
                 (REGISTRY_CANISTER_ID, "remove_api_boundary_nodes")
             }
             NnsFunction::UpdateApiBoundaryNodesVersion => {
-                (REGISTRY_CANISTER_ID, "update_api_boundary_nodes_version")
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "{:?} is an obsolete NnsFunction. Use DeployGuestosToSomeApiBoundaryNodes \
+                        instead",
+                        self
+                    ),
+                ));
             }
             NnsFunction::DeployGuestosToSomeApiBoundaryNodes => {
                 // TODO[NNS1-3000]: Rename Registry API for consistency.
@@ -754,8 +773,6 @@ impl Proposal {
                             | NnsFunction::RemoveNodeOperators
                             | NnsFunction::RemoveNodes
                             | NnsFunction::UpdateUnassignedNodesConfig
-                            | NnsFunction::UpdateElectedHostosVersions
-                            | NnsFunction::UpdateNodesHostosVersion
                             | NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes => {
                                 Topic::NodeAdmin
                             }
@@ -798,6 +815,8 @@ impl Proposal {
                             NnsFunction::UpdateAllowedPrincipals => Topic::SnsAndCommunityFund,
                             NnsFunction::UpdateSnsWasmSnsSubnetIds => Topic::SubnetManagement,
                             // Retired NnsFunctions
+                            NnsFunction::UpdateNodesHostosVersion
+                            | NnsFunction::UpdateElectedHostosVersions => Topic::NodeAdmin,
                             NnsFunction::BlessReplicaVersion
                             | NnsFunction::RetireReplicaVersion => Topic::IcOsVersionElection,
                             NnsFunction::AddApiBoundaryNodes
