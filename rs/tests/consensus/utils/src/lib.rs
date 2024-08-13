@@ -1,4 +1,4 @@
-use std::{path::PathBuf, time::Duration};
+use std::path::PathBuf;
 
 use ic_system_test_driver::driver::test_env_api::set_var_to_path;
 
