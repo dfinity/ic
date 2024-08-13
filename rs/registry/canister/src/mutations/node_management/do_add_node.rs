@@ -95,15 +95,14 @@ impl Registry {
             .transpose()?;
 
         // 5. If there is an IPv4 config, make sure that the IPv4 is not used by anyone else
-        let ipv4_intf_config =
-            payload
-                .public_ipv4_config
-                .clone()
-                .map(|ipv4_config| IPv4InterfaceConfig {
-                    ip_addr: ipv4_config.ip_addr().to_string(),
-                    gateway_ip_addr: vec![ipv4_config.gateway_ip_addr().to_string()],
-                    prefix_length: ipv4_config.prefix_length(),
-                });
+        let ipv4_intf_config = payload.public_ipv4_config.clone().map(|ipv4_config| {
+            assert!(ipv4_config.is_valid(), "Invalid IPv4 config");
+            IPv4InterfaceConfig {
+                ip_addr: ipv4_config.ip_addr().to_string(),
+                gateway_ip_addr: vec![ipv4_config.gateway_ip_addr().to_string()],
+                prefix_length: ipv4_config.prefix_length(),
+            }
+        });
         if let Some(ipv4_config) = ipv4_intf_config.clone() {
             if node_exists_with_ipv4(self, &ipv4_config.ip_addr) {
                 return Err(format!(
