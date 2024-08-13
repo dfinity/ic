@@ -429,15 +429,6 @@ struct RequestCtx {
     pub verify: bool,
 }
 
-#[derive(Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
-struct RouterCanisterId(pub Principal);
-
-impl From<RouterCanisterId> for Principal {
-    fn from(value: RouterCanisterId) -> Self {
-        value.0
-    }
-}
-
 fn layer(methods: &[Method]) -> CorsLayer {
     CorsLayer::new()
         .allow_origin(Any)
@@ -652,13 +643,11 @@ impl HandlerState {
 // Main HTTP->IC request handler
 async fn handler(
     State(state): State<Arc<HandlerState>>,
-    canister_id: Option<Extension<RouterCanisterId>>,
+    canister_id: Option<Extension<Principal>>,
     Extension(ctx): Extension<Arc<RequestCtx>>,
     request: AxumRequest,
 ) -> Result<Response, ErrorCause> {
-    let canister_id = canister_id
-        .map(|x| (x.0).0)
-        .ok_or(ErrorCause::CanisterIdNotFound)?;
+    let canister_id = canister_id.ok_or(ErrorCause::CanisterIdNotFound)?;
 
     let (parts, body) = request.into_parts();
 
@@ -678,7 +667,7 @@ async fn handler(
 
     let args = HttpGatewayRequestArgs {
         canister_request: CanisterRequest::from_parts(parts, body),
-        canister_id,
+        canister_id: *canister_id,
     };
 
     // Pass headers in/out the IC request
@@ -713,7 +702,7 @@ async fn validate_middleware(
 
     // Inject canister_id separately if it was resolved
     if let Some(v) = lookup.canister_id {
-        request.extensions_mut().insert(RouterCanisterId(v));
+        request.extensions_mut().insert(v);
     }
 
     // Inject request context
@@ -729,7 +718,7 @@ async fn validate_middleware(
     // Inject the same into the response
     response.extensions_mut().insert(ctx);
     if let Some(v) = lookup.canister_id {
-        response.extensions_mut().insert(RouterCanisterId(v));
+        response.extensions_mut().insert(v);
     }
 
     Ok(response)
