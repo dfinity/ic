@@ -316,10 +316,14 @@ fn create_init_payloads(args: &CliArgs) -> NnsInitPayloads {
     );
 
     println!("{}Initialized governance.", LOG_PREFIX);
-    init_payloads_builder.ledger.init_args()
-    .unwrap().minting_account = AccountIdentifier::new(
-        PrincipalId::from_text("iowfl-yzooa-br3dt-77erl-nlm7f-kplhq-php75-hw3an-aeqn2-swh4t-3qe").unwrap(),
-        None
+    init_payloads_builder
+        .ledger
+        .init_args()
+        .unwrap()
+        .minting_account = AccountIdentifier::new(
+        PrincipalId::from_text("iowfl-yzooa-br3dt-77erl-nlm7f-kplhq-php75-hw3an-aeqn2-swh4t-3qe")
+            .unwrap(),
+        None,
     );
     init_payloads_builder.build()
 }
