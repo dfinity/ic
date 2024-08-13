@@ -5,17 +5,32 @@ use crate::pocket_ic::{
     AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, GetCanisterHttp, MockCanisterHttp,
     PocketIc,
 };
-use crate::InstanceId;
-use crate::{OpId, Operation};
+use crate::{InstanceId, OpId, Operation};
+use axum::{
+    extract::{Request as AxumRequest, State},
+    middleware::Next,
+    response::{IntoResponse, Response},
+    Extension,
+};
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
 use base64;
-use fqdn::{fqdn, Fqdn};
+use candid::Principal;
+use fqdn::{fqdn, Fqdn, FQDN};
 use futures::future::Shared;
+use http::{
+    header::{
+        ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, COOKIE, DNT,
+        IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
+    },
+    HeaderName, Method, StatusCode,
+};
+use http_body_util::{BodyExt, LengthLimitError, Limited};
 use hyper_legacy::{client::connect::HttpConnector, Client};
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_socks2::SocksConnector;
 use ic_http_endpoints_public::cors_layer;
+use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
 use ic_https_outcalls_adapter::CanisterHttp;
 use ic_https_outcalls_adapter_client::grpc_status_code_to_reject;
 use ic_https_outcalls_service::{
@@ -25,8 +40,10 @@ use ic_https_outcalls_service::{
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_state_machine_tests::RejectCode;
-use ic_types::canister_http::CanisterHttpRequestId;
-use ic_types::{canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES, CanisterId, SubnetId};
+use ic_types::{
+    canister_http::{CanisterHttpRequestId, MAX_CANISTER_HTTP_RESPONSE_BYTES},
+    CanisterId, SubnetId,
+};
 use pocket_ic::common::rest::{
     CanisterHttpHeader, CanisterHttpMethod, CanisterHttpReject, CanisterHttpReply,
     CanisterHttpRequest, CanisterHttpResponse, HttpGatewayBackend, HttpGatewayConfig,
@@ -34,7 +51,10 @@ use pocket_ic::common::rest::{
 };
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeMap, collections::HashMap, fmt, path::PathBuf, str::FromStr, sync::Arc,
+    time::Duration,
+};
 use tokio::{
     sync::mpsc::error::TryRecvError,
     sync::mpsc::Receiver,
@@ -43,6 +63,7 @@ use tokio::{
     time::{self, sleep, Instant},
 };
 use tonic::Request;
+use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, info, trace};
 
 // The maximum wait time for a computation to finish synchronously.
@@ -381,92 +402,9 @@ fn received_stop_signal(rx: &mut Receiver<()>) -> bool {
 
 // ADAPTED from ic-gateway
 
-use axum::{
-    extract::{Request as AxumRequest, State},
-    middleware::Next,
-    response::{IntoResponse, Response},
-    Extension,
-};
-use candid::Principal;
-use fqdn::FQDN;
-use http::{
-    header::{
-        ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, COOKIE, DNT,
-        IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
-    },
-    Method,
-};
-use http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
-use http_body_util::Either;
-use http_body_util::{BodyExt, LengthLimitError, Limited};
-use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
-use ic_http_gateway::{HttpGatewayResponse, HttpGatewayResponseMetadata};
-use std::cell::RefCell;
-use std::collections::BTreeMap;
-use std::fmt::{self};
-use std::str::FromStr;
-use tokio::task_local;
-use tower_http::cors::{Any, CorsLayer};
-
-const MINUTE: Duration = Duration::from_secs(60);
-
+const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
 const MAX_REQUEST_BODY_SIZE: usize = 10 * 1_048_576;
-
-pub const HEADER_IC_CACHE_STATUS: HeaderName = HeaderName::from_static("x-ic-cache-status");
-pub const HEADER_IC_CACHE_BYPASS_REASON: HeaderName =
-    HeaderName::from_static("x-ic-cache-bypass-reason");
-pub const HEADER_IC_SUBNET_ID: HeaderName = HeaderName::from_static("x-ic-subnet-id");
-pub const HEADER_IC_NODE_ID: HeaderName = HeaderName::from_static("x-ic-node-id");
-pub const HEADER_IC_SUBNET_TYPE: HeaderName = HeaderName::from_static("x-ic-subnet-type");
-pub const HEADER_IC_CANISTER_ID_CBOR: HeaderName = HeaderName::from_static("x-ic-canister-id-cbor");
-pub const HEADER_IC_METHOD_NAME: HeaderName = HeaderName::from_static("x-ic-method-name");
-pub const HEADER_IC_SENDER: HeaderName = HeaderName::from_static("x-ic-sender");
-pub const HEADER_IC_RETRIES: HeaderName = HeaderName::from_static("x-ic-retries");
-pub const HEADER_IC_ERROR_CAUSE: HeaderName = HeaderName::from_static("x-ic-error-cause");
-pub const HEADER_IC_REQUEST_TYPE: HeaderName = HeaderName::from_static("x-ic-request-type");
-pub const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
-pub const HEADER_IC_COUNTRY_CODE: http::HeaderName =
-    http::HeaderName::from_static("x-ic-country-code");
-
-impl From<&mut HeaderMap> for BNResponseMetadata {
-    fn from(v: &mut HeaderMap) -> Self {
-        let mut extract = |h: &HeaderName| -> String {
-            v.remove(h)
-                // It seems there's no way to get the inner Bytes from HeaderValue,
-                // so we'll have to accept the allocation
-                .and_then(|x| x.to_str().ok().map(|x| x.to_string()))
-                .unwrap_or_default()
-        };
-
-        Self {
-            node_id: extract(&HEADER_IC_NODE_ID),
-            subnet_id: extract(&HEADER_IC_SUBNET_ID),
-            subnet_type: extract(&HEADER_IC_SUBNET_TYPE),
-            canister_id_cbor: extract(&HEADER_IC_CANISTER_ID_CBOR),
-            sender: extract(&HEADER_IC_SENDER),
-            method_name: extract(&HEADER_IC_METHOD_NAME),
-            error_cause: extract(&HEADER_IC_ERROR_CAUSE),
-            retries: extract(&HEADER_IC_RETRIES),
-            cache_status: extract(&HEADER_IC_CACHE_STATUS),
-            cache_bypass_reason: extract(&HEADER_IC_CACHE_BYPASS_REASON),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct IcResponseStatus {
-    pub streaming: bool,
-    pub metadata: HttpGatewayResponseMetadata,
-}
-
-impl From<&HttpGatewayResponse> for IcResponseStatus {
-    fn from(value: &HttpGatewayResponse) -> Self {
-        Self {
-            streaming: matches!(value.canister_response.body(), Either::Left(_)),
-            metadata: value.metadata.clone(),
-        }
-    }
-}
+const MINUTE: Duration = Duration::from_secs(60);
 
 // Attempts to extract host from HTTP2 "authority" pseudo-header or from HTTP/1.1 "Host" header
 fn extract_authority(request: &AxumRequest) -> Option<FQDN> {
@@ -487,15 +425,12 @@ fn extract_authority(request: &AxumRequest) -> Option<FQDN> {
 }
 
 #[derive(Clone)]
-pub struct RequestCtx {
-    // HTTP2 authority or HTTP1 Host header
-    pub authority: FQDN,
-    pub domain: Domain,
+struct RequestCtx {
     pub verify: bool,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
-pub struct RouterCanisterId(pub Principal);
+struct RouterCanisterId(pub Principal);
 
 impl From<RouterCanisterId> for Principal {
     fn from(value: RouterCanisterId) -> Self {
@@ -503,7 +438,7 @@ impl From<RouterCanisterId> for Principal {
     }
 }
 
-pub fn layer(methods: &[Method]) -> CorsLayer {
+fn layer(methods: &[Method]) -> CorsLayer {
     CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(methods.to_vec())
@@ -529,7 +464,7 @@ pub fn layer(methods: &[Method]) -> CorsLayer {
 
 /// Domain entity with certain metadata
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Domain {
+struct Domain {
     pub name: FQDN,
     // Whether it's custom domain
     pub custom: bool,
@@ -541,26 +476,26 @@ pub struct Domain {
 
 /// Result of a domain lookup
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DomainLookup {
+struct DomainLookup {
     pub domain: Domain,
     pub canister_id: Option<Principal>,
     pub verify: bool,
 }
 
 // Resolves hostname to a canister id
-pub trait ResolvesDomain: Send + Sync {
+trait ResolvesDomain: Send + Sync {
     fn resolve(&self, host: &Fqdn) -> Option<DomainLookup>;
 }
 
 /// Finds the domains by the hostname among base, api domains and aliases.
 /// Also checks custom domain storage.
-pub struct DomainResolver {
+struct DomainResolver {
     domains_base: Vec<Domain>,
     domains_all: BTreeMap<FQDN, DomainLookup>,
 }
 
 impl DomainResolver {
-    pub fn new(domains_base: Vec<FQDN>) -> Self {
+    fn new(domains_base: Vec<FQDN>) -> Self {
         fn domain(f: &Fqdn, http: bool) -> Domain {
             Domain {
                 name: f.into(),
@@ -647,95 +582,31 @@ impl ResolvesDomain for DomainResolver {
     }
 }
 
-/// Metadata about the request by a Boundary Node (ic-boundary)
-#[derive(Clone)]
-pub struct BNResponseMetadata {
-    pub node_id: String,
-    pub subnet_id: String,
-    pub subnet_type: String,
-    pub canister_id_cbor: String,
-    pub sender: String,
-    pub method_name: String,
-    pub error_cause: String,
-    pub retries: String,
-    pub cache_status: String,
-    pub cache_bypass_reason: String,
-}
-
-pub struct PassHeaders {
-    pub headers_in: HeaderMap<HeaderValue>,
-    pub headers_out: HeaderMap<HeaderValue>,
-}
-
-impl PassHeaders {
-    pub fn new() -> RefCell<Self> {
-        RefCell::new(Self {
-            headers_in: HeaderMap::new(),
-            headers_out: HeaderMap::new(),
-        })
-    }
-}
-
-task_local! {
-    pub static PASS_HEADERS: RefCell<PassHeaders>;
-}
-
 // Categorized possible causes for request processing failures
 // Not using Error as inner type since it's not cloneable
 #[derive(Debug, Clone)]
-pub enum ErrorCause {
+enum ErrorCause {
     UnableToReadBody(String),
-    LoadShed,
     RequestTooLarge,
-    IncorrectPrincipal,
-    MalformedRequest(String),
     NoAuthority,
     UnknownDomain,
     CanisterIdNotFound,
-    DomainCanisterMismatch,
-    Denylisted,
-    AgentError(String),
-    BackendErrorDNS(String),
-    BackendErrorConnect,
-    BackendTimeout,
-    BackendTLSErrorOther(String),
-    BackendTLSErrorCert(String),
-    Other(String),
 }
 
 impl ErrorCause {
-    pub const fn status_code(&self) -> StatusCode {
+    const fn status_code(&self) -> StatusCode {
         match self {
-            Self::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Self::UnableToReadBody(_) => StatusCode::REQUEST_TIMEOUT,
-            Self::LoadShed => StatusCode::TOO_MANY_REQUESTS,
             Self::RequestTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
-            Self::IncorrectPrincipal => StatusCode::BAD_REQUEST,
-            Self::MalformedRequest(_) => StatusCode::BAD_REQUEST,
             Self::NoAuthority => StatusCode::BAD_REQUEST,
             Self::UnknownDomain => StatusCode::BAD_REQUEST,
             Self::CanisterIdNotFound => StatusCode::BAD_REQUEST,
-            Self::AgentError(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::DomainCanisterMismatch => StatusCode::FORBIDDEN,
-            Self::Denylisted => StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS,
-            Self::BackendErrorDNS(_) => StatusCode::SERVICE_UNAVAILABLE,
-            Self::BackendErrorConnect => StatusCode::SERVICE_UNAVAILABLE,
-            Self::BackendTimeout => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::BackendTLSErrorOther(_) => StatusCode::SERVICE_UNAVAILABLE,
-            Self::BackendTLSErrorCert(_) => StatusCode::SERVICE_UNAVAILABLE,
         }
     }
 
-    pub fn details(&self) -> Option<String> {
+    fn details(&self) -> Option<String> {
         match self {
-            Self::Other(x) => Some(x.clone()),
             Self::UnableToReadBody(x) => Some(x.clone()),
-            Self::LoadShed => Some("Overloaded".into()),
-            Self::MalformedRequest(x) => Some(x.clone()),
-            Self::BackendErrorDNS(x) => Some(x.clone()),
-            Self::BackendTLSErrorOther(x) => Some(x.clone()),
-            Self::BackendTLSErrorCert(x) => Some(x.clone()),
-            Self::AgentError(x) => Some(x.clone()),
             _ => None,
         }
     }
@@ -744,23 +615,11 @@ impl ErrorCause {
 impl fmt::Display for ErrorCause {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Other(_) => write!(f, "general_error"),
             Self::UnableToReadBody(_) => write!(f, "unable_to_read_body"),
-            Self::LoadShed => write!(f, "load_shed"),
             Self::RequestTooLarge => write!(f, "request_too_large"),
-            Self::IncorrectPrincipal => write!(f, "incorrect_principal"),
-            Self::MalformedRequest(_) => write!(f, "malformed_request"),
+            Self::NoAuthority => write!(f, "no_authority"),
             Self::UnknownDomain => write!(f, "unknown_domain"),
             Self::CanisterIdNotFound => write!(f, "canister_id_not_found"),
-            Self::DomainCanisterMismatch => write!(f, "domain_canister_mismatch"),
-            Self::Denylisted => write!(f, "denylisted"),
-            Self::NoAuthority => write!(f, "no_authority"),
-            Self::AgentError(_) => write!(f, "agent_error"),
-            Self::BackendErrorDNS(_) => write!(f, "backend_error_dns"),
-            Self::BackendErrorConnect => write!(f, "backend_error_connect"),
-            Self::BackendTimeout => write!(f, "backend_timeout"),
-            Self::BackendTLSErrorOther(_) => write!(f, "backend_tls_error"),
-            Self::BackendTLSErrorCert(_) => write!(f, "backend_tls_error_cert"),
         }
     }
 }
@@ -780,7 +639,7 @@ impl IntoResponse for ErrorCause {
     }
 }
 
-pub struct HandlerState {
+struct HandlerState {
     client: HttpGatewayClient,
 }
 
@@ -791,7 +650,7 @@ impl HandlerState {
 }
 
 // Main HTTP->IC request handler
-pub async fn handler(
+async fn handler(
     State(state): State<Arc<HandlerState>>,
     canister_id: Option<Extension<RouterCanisterId>>,
     Extension(ctx): Extension<Arc<RequestCtx>>,
@@ -823,32 +682,21 @@ pub async fn handler(
     };
 
     // Pass headers in/out the IC request
-    let (resp, bn_metadata) = PASS_HEADERS
-        .scope(PassHeaders::new(), async {
-            // Execute the request
-            let mut req = state.client.request(args);
-            // Skip verification if it's disabled globally or if it is a "raw" request.
-            req.unsafe_set_skip_verification(!ctx.verify);
-            let resp = req.send().await;
-
-            let bn_metadata =
-                PASS_HEADERS.with(|x| BNResponseMetadata::from(&mut x.borrow_mut().headers_in));
-
-            (resp, bn_metadata)
-        })
-        .await;
-
-    let ic_status = IcResponseStatus::from(&resp);
+    let resp = {
+        // Execute the request
+        let mut req = state.client.request(args);
+        // Skip verification if it's disabled globally or if it is a "raw" request.
+        req.unsafe_set_skip_verification(!ctx.verify);
+        req.send().await
+    };
 
     // Convert it into Axum response
-    let mut response = resp.canister_response.into_response();
-    response.extensions_mut().insert(ic_status);
-    response.extensions_mut().insert(bn_metadata);
+    let response = resp.canister_response.into_response();
 
     Ok(response)
 }
 
-pub async fn validate_middleware(
+async fn validate_middleware(
     State(resolver): State<Arc<dyn ResolvesDomain>>,
     mut request: AxumRequest,
     next: Next,
@@ -871,8 +719,6 @@ pub async fn validate_middleware(
     // Inject request context
     // TODO remove Arc?
     let ctx = Arc::new(RequestCtx {
-        authority,
-        domain: lookup.domain.clone(),
         verify: lookup.verify,
     });
     request.extensions_mut().insert(ctx.clone());
