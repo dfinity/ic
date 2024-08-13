@@ -18,7 +18,9 @@ use crate::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
         PolynomialNeuronsFundParticipation, SwapParticipationLimits,
     },
-    node_provider_rewards::{latest_node_provider_rewards, record_node_provider_rewards},
+    node_provider_rewards::{
+        latest_node_provider_rewards, list_node_provider_rewards, record_node_provider_rewards,
+    },
     pb::v1::{
         add_or_remove_node_provider::Change,
         archived_monthly_node_provider_rewards,
@@ -4306,6 +4308,18 @@ impl Governance {
     ) {
         record_node_provider_rewards(most_recent_rewards.clone());
         self.heap_data.most_recent_monthly_node_provider_rewards = Some(most_recent_rewards);
+    }
+
+    pub fn list_node_provider_rewards(&self) -> Vec<MonthlyNodeProviderRewards> {
+        list_node_provider_rewards()
+            .into_iter()
+            .map(|archived| match archived.version {
+                Some(archived_monthly_node_provider_rewards::Version::Version1(v1)) => {
+                    v1.rewards.unwrap()
+                }
+                _ => panic!("Should not be possible!"),
+            })
+            .collect()
     }
 
     pub fn get_most_recent_monthly_node_provider_rewards(

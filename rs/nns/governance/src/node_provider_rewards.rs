@@ -30,6 +30,10 @@ pub(crate) fn latest_node_provider_rewards() -> Option<ArchivedMonthlyNodeProvid
     })
 }
 
+pub(crate) fn list_node_provider_rewards() -> Vec<ArchivedMonthlyNodeProviderRewards> {
+    with_node_provider_rewards_log(|log| log.iter().collect())
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

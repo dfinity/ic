@@ -49,7 +49,8 @@ use ic_nns_governance_api::{
             ClaimOrRefresh, NeuronIdOrSubaccount, RegisterVote,
         },
         manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
-        ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
+        ClaimOrRefreshNeuronFromAccountResponse, GetMintedNodeProviderRewardsRequest,
+        GetMintedNodeProviderRewardsResponse, GetNeuronsFundAuditInfoRequest,
         GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
         ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProvidersResponse,
         ListProposalInfo, ListProposalInfoResponse, ManageNeuronCommandRequest,
@@ -59,7 +60,6 @@ use ic_nns_governance_api::{
         SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
         UpdateNodeProvider, Vote,
     },
-    subnet_rental::{SubnetRentalProposalPayload, SubnetRentalRequest},
 };
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
 use prost::Message;
@@ -734,6 +734,24 @@ async fn get_monthly_node_provider_rewards_() -> Result<RewardNodeProviders, Gov
         rewards,
         use_registry_derived_rewards: Some(true),
     })
+}
+
+#[export_name = "canister_query list_minted_node_provider_rewards"]
+fn list_minted_node_provider_rewards() {
+    debug_log("get_minted_node_provider_rewards");
+    over(candid, |()| list_minted_node_provider_rewards_())
+}
+
+#[candid_method(query, rename = "list_minted_node_provider_rewards")]
+fn list_minted_node_provider_rewards_(
+    _req: GetMintedNodeProviderRewardsRequest,
+) -> GetMintedNodeProviderRewardsResponse {
+    let rewards = governance().list_node_provider_rewards();
+
+    GetMintedNodeProviderRewardsResponse {
+        rewards: rewards.into_iter().map(RewardNodeProvider::from).collect(),
+        next_page: None,
+    }
 }
 
 #[export_name = "canister_query list_known_neurons"]
