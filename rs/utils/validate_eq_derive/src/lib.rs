@@ -43,7 +43,7 @@ fn find_validate_eq_attr(field: &syn::Field) -> syn::Result<Option<&syn::Attribu
     }
 }
 
-// Given the field of a named struct to derive ValidateEq for, return the attribute
+/// Given the field of a named struct to derive ValidateEq for, return the attribute.
 fn parse_validate_eq_attr(field: &syn::Field) -> syn::Result<ValidateEqFieldAttr> {
     let attr = find_validate_eq_attr(field)?;
 
