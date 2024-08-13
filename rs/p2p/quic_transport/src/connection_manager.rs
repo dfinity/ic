@@ -225,10 +225,6 @@ pub(crate) fn start_connection_manager(
 
     let mut transport_config = quinn::TransportConfig::default();
 
-    // defaults:
-    // STREAM_RWN 1_250_000
-    // stream_receive_window: STREAM_RWND.into(),
-    // send_window: (8 * STREAM_RWND).into()
     transport_config
         .max_idle_timeout(Some(IDLE_TIMEOUT.try_into().unwrap()))
         .keep_alive_interval(Some(KEEP_ALIVE_INTERVAL))
