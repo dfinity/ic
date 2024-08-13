@@ -2685,7 +2685,7 @@ impl Governance {
         })?;
 
         let now = self.env.now();
-        tla_log_locals! { amount : split.amount_e8s };
+        tla_log_locals! { sn_amount : split.amount_e8s };
         let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(
@@ -2696,7 +2696,6 @@ impl Governance {
                 now,
             )
             .await;
-        tla_log_locals! { amount : split.amount_e8s };
 
         if let Err(error) = result {
             let error = GovernanceError::from(error);

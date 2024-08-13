@@ -142,7 +142,9 @@ impl IcpLedger for IcpLedgerCanister {
         // TODO(oggy): don't do the to_tla_value conversion in the macro,
         //       can't distinguish between functions and records now - though maybe not necessary?
         tla_log_request!(
+            "WaitForTransfer",
             Destination::new("ledger"),
+            "Transfer",
             BTreeMap::from([
                 ("amount", amount_e8s),
                 ("fee", fee_e8s),
