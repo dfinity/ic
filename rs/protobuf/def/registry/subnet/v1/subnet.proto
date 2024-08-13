@@ -6,8 +6,7 @@ import "types/v1/types.proto";
 
 // A subnet: A logical group of nodes that run consensus
 message SubnetRecord {
-  // The the list of node_ids that represent the set of nodes
-  // that are part of this subnet.
+  // The IDs of the nodes that are part of this subnet.
   repeated bytes membership = 3;
 
   // Maximum amount of bytes per message. This is a hard cap, which means
