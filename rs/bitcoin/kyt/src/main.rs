@@ -1,4 +1,4 @@
-use btc_kyt_canister::get_inputs_internal;
+use ic_btc_kyt::get_inputs_internal;
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
 
 #[ic_cdk::update]
