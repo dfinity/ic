@@ -266,8 +266,6 @@ type InitialTokenDistribution = record {
   swap_distribution : opt SwapDistribution;
 };
 type InstallCode = record {
-  arg : opt blob;
-  wasm_module : opt blob;
   skip_stopping_before_installing : opt bool;
   wasm_module_hash : opt blob;
   canister_id : opt principal;

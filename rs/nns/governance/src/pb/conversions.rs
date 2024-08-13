@@ -2890,10 +2890,7 @@ impl From<pb::InstallCode> for pb_api::InstallCode {
         Self {
             canister_id: item.canister_id,
             install_mode: item.install_mode,
-            wasm_module: None,
-            arg: None,
             skip_stopping_before_installing: item.skip_stopping_before_installing,
-
             wasm_module_hash,
             arg_hash,
         }
@@ -2904,9 +2901,11 @@ impl From<pb_api::InstallCode> for pb::InstallCode {
         Self {
             canister_id: item.canister_id,
             install_mode: item.install_mode,
-            wasm_module: item.wasm_module,
-            arg: item.arg,
             skip_stopping_before_installing: item.skip_stopping_before_installing,
+            // Note: the api->internal conversion here only happens when decoding from protobuf in
+            // canister_init.
+            wasm_module: None,
+            arg: None,
         }
     }
 }

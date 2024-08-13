@@ -2415,14 +2415,6 @@ pub struct InstallCode {
     /// The install mode. Either install, reinstall, or upgrade. Required.
     #[prost(enumeration = "install_code::CanisterInstallMode", optional, tag = "2")]
     pub install_mode: ::core::option::Option<i32>,
-    /// The wasm module to install. required.
-    #[prost(bytes = "vec", optional, tag = "3")]
-    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
-    pub wasm_module: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
-    /// The arg to pass to the canister. Optional.
-    #[prost(bytes = "vec", optional, tag = "4")]
-    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
-    pub arg: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 
     /// Whether to skip stopping the canister before installing. Optional. Default is false.
     #[prost(bool, optional, tag = "5")]
