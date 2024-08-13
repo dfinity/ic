@@ -24,7 +24,7 @@ enum ValidateEqFieldAttr {
     Skip,
 }
 
-// Find #[validate_eq(...)] attribute if any.
+/// Find #[validate_eq(...)] attribute if any.
 fn find_validate_eq_attr(field: &syn::Field) -> syn::Result<Option<&syn::Attribute>> {
     let matching_attrs = field
         .attrs
