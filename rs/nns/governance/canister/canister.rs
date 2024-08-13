@@ -49,16 +49,16 @@ use ic_nns_governance_api::{
             ClaimOrRefresh, NeuronIdOrSubaccount, RegisterVote,
         },
         manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
-        ClaimOrRefreshNeuronFromAccountResponse, GetMintedNodeProviderRewardsRequest,
-        GetMintedNodeProviderRewardsResponse, GetNeuronsFundAuditInfoRequest,
+        ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
         GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
-        ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProvidersResponse,
-        ListProposalInfo, ListProposalInfoResponse, ManageNeuronCommandRequest,
-        ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
-        Neuron, NeuronInfo, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
-        RewardNodeProvider, RewardNodeProviders, SettleCommunityFundParticipation,
-        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
-        UpdateNodeProvider, Vote,
+        ListKnownNeuronsResponse, ListMintedNodeProviderRewardsRequest,
+        ListMintedNodeProviderRewardsResponse, ListNeurons, ListNeuronsResponse,
+        ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
+        ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
+        MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo, NodeProvider, Proposal,
+        ProposalInfo, RestoreAgingSummary, RewardEvent, RewardNodeProvider, RewardNodeProviders,
+        SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
+        SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
     },
 };
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
@@ -744,12 +744,15 @@ fn list_minted_node_provider_rewards() {
 
 #[candid_method(query, rename = "list_minted_node_provider_rewards")]
 fn list_minted_node_provider_rewards_(
-    _req: GetMintedNodeProviderRewardsRequest,
-) -> GetMintedNodeProviderRewardsResponse {
+    _req: ListMintedNodeProviderRewardsRequest,
+) -> ListMintedNodeProviderRewardsResponse {
     let rewards = governance().list_node_provider_rewards();
 
-    GetMintedNodeProviderRewardsResponse {
-        rewards: rewards.into_iter().map(RewardNodeProvider::from).collect(),
+    ListMintedNodeProviderRewardsResponse {
+        rewards: rewards
+            .into_iter()
+            .map(MonthlyNodeProviderRewards::from)
+            .collect(),
         next_page: None,
     }
 }
