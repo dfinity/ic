@@ -5094,10 +5094,16 @@ fn test_neuron_split_fails() {
     //  There is still only one ledger account.
     driver.assert_num_neuron_accounts_exist(1);
     // TODO(oggy): check something sensible
-    use ic_nervous_system_common::tla::TLA_TRACES;
-    let traces = TLA_TRACES.read().unwrap();
-    println!("TLA Traces: {:?}", traces);
-    assert!(traces.is_empty());
+    let traces = {
+        use ic_nervous_system_common::tla::TLA_TRACES;
+        let mut traces = TLA_TRACES.write().unwrap();
+        std::mem::take(&mut (*traces))
+    };
+    for trace in traces {
+        println!("TLA Constants: {:#?}", trace.constants);
+        println!("TLA Trace: {:#?}", trace.state_pairs);
+        assert!(trace.state_pairs.is_empty());
+    }
 }
 
 #[test]
@@ -5202,10 +5208,16 @@ fn test_neuron_split() {
     expected_neuron_ids.sort_unstable();
     assert_eq!(neuron_ids, expected_neuron_ids);
     // TODO(oggy): check something sensible
-    use ic_nervous_system_common::tla::TLA_TRACES;
-    let traces = TLA_TRACES.read().unwrap();
-    println!("TLA Traces: {:?}", traces);
-    assert!(traces.is_empty());
+    let traces = {
+        use ic_nervous_system_common::tla::TLA_TRACES;
+        let mut traces = TLA_TRACES.write().unwrap();
+        std::mem::take(&mut (*traces))
+    };
+    for trace in traces {
+        println!("TLA Constants: {:#?}", trace.constants);
+        println!("TLA Trace: {:#?}", trace.state_pairs);
+        assert!(trace.state_pairs.is_empty());
+    }
 }
 
 #[test]
