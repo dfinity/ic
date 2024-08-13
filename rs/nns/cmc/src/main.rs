@@ -831,9 +831,7 @@ fn get_default_subnets() -> Vec<PrincipalId> {
 /// Returns the list of default subnets to which anyone can deploy canisters to.
 #[export_name = "canister_query get_default_subnets"]
 fn get_default_subnets_() {
-    over(candid_one, |_: ()| {
-        get_default_subnets()
-    })
+    over(candid_one, |_: ()| get_default_subnets())
 }
 
 /// Constructs a hash tree that can be used to certify requests for the
