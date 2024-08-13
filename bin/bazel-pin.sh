@@ -16,7 +16,7 @@ Usage:
   $0 [--force] [PACKAGE...]
 
 Options:
-  --force       when specified, will repin even if repin is not deemed necessary
+  --force       will repin even if repin is not deemed necessary
 EOF
 }
 
