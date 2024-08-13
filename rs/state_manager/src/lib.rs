@@ -2392,7 +2392,7 @@ impl StateManagerImpl {
 
             debug_assert!(extra_inmemory_heights_to_keep
                 .iter()
-                .all(|h| certified_state_heights.contains(h)));
+                .all(|h| certified_state_heights.contains(h) || *h == Self::INITIAL_STATE_HEIGHT));
 
             debug_assert!(state_heights.contains(&latest_state_height));
             debug_assert!(state_heights.contains(&latest_certified_height));
