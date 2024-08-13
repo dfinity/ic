@@ -14,7 +14,7 @@ fn kyt_wasm() -> Vec<u8> {
 }
 
 #[test]
-fn test_key_recovery() {
+fn test_get_inputs() {
     let env = StateMachine::new();
     let p2 = Principal::anonymous();
 
