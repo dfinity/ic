@@ -11,14 +11,14 @@ axum-extra = { version = "^0.9", features = ["typed-header"] }
 axum-server = { version = "0.6.0", features = ["tls-rustls"] }
 backoff = { workspace = true }
 base64 = { workspace = true }
-bytes = "1.6"
+bytes = { workspace = true }
 candid = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 flate2 = { workspace = true }
 fqdn = "0.3.11"
 futures = { workspace = true }
 hex = { workspace = true }
-http = "1.1"
+http = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-legacy = { package = "hyper", version = "0.14.18", features = ["full"] }

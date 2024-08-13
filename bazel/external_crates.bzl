@@ -431,7 +431,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "form_urlencoded": crate.spec(
                 version = "^1.0.0",
             ),
-            "fqdn": crate.spec (
+            "fqdn": crate.spec(
                 version = "0.3.11",
             ),
             "fs_extra": crate.spec(
