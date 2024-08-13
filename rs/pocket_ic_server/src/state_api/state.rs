@@ -379,6 +379,536 @@ fn received_stop_signal(rx: &mut Receiver<()>) -> bool {
     }
 }
 
+// ADAPTED from ic-gateway
+
+use axum::{
+    extract::{Request as AxumRequest, State},
+    response::{IntoResponse, Response},
+    Extension,
+};
+//use bytes::Bytes;
+use axum::middleware::Next;
+use candid::Principal;
+use fqdn::FQDN;
+use http::{
+    header::{
+        ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, COOKIE, DNT,
+        IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
+    },
+    Method,
+};
+use http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
+use http_body_util::Either;
+use http_body_util::{BodyExt, LengthLimitError, Limited};
+use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
+use ic_http_gateway::{HttpGatewayResponse, HttpGatewayResponseMetadata};
+use std::cell::RefCell;
+use std::collections::BTreeMap;
+use std::fmt::{self};
+use std::str::FromStr;
+use tokio::task_local;
+use tower_http::cors::{Any, CorsLayer};
+
+const MINUTE: Duration = Duration::from_secs(60);
+
+const MAX_REQUEST_BODY_SIZE: usize = 10 * 1_048_576;
+
+pub const HEADER_IC_CACHE_STATUS: HeaderName = HeaderName::from_static("x-ic-cache-status");
+pub const HEADER_IC_CACHE_BYPASS_REASON: HeaderName =
+    HeaderName::from_static("x-ic-cache-bypass-reason");
+pub const HEADER_IC_SUBNET_ID: HeaderName = HeaderName::from_static("x-ic-subnet-id");
+pub const HEADER_IC_NODE_ID: HeaderName = HeaderName::from_static("x-ic-node-id");
+pub const HEADER_IC_SUBNET_TYPE: HeaderName = HeaderName::from_static("x-ic-subnet-type");
+pub const HEADER_IC_CANISTER_ID_CBOR: HeaderName = HeaderName::from_static("x-ic-canister-id-cbor");
+pub const HEADER_IC_METHOD_NAME: HeaderName = HeaderName::from_static("x-ic-method-name");
+pub const HEADER_IC_SENDER: HeaderName = HeaderName::from_static("x-ic-sender");
+pub const HEADER_IC_RETRIES: HeaderName = HeaderName::from_static("x-ic-retries");
+pub const HEADER_IC_ERROR_CAUSE: HeaderName = HeaderName::from_static("x-ic-error-cause");
+pub const HEADER_IC_REQUEST_TYPE: HeaderName = HeaderName::from_static("x-ic-request-type");
+pub const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
+pub const HEADER_IC_COUNTRY_CODE: http::HeaderName =
+    http::HeaderName::from_static("x-ic-country-code");
+
+impl From<&mut HeaderMap> for BNResponseMetadata {
+    fn from(v: &mut HeaderMap) -> Self {
+        let mut extract = |h: &HeaderName| -> String {
+            v.remove(h)
+                // It seems there's no way to get the inner Bytes from HeaderValue,
+                // so we'll have to accept the allocation
+                .and_then(|x| x.to_str().ok().map(|x| x.to_string()))
+                .unwrap_or_default()
+        };
+
+        Self {
+            node_id: extract(&HEADER_IC_NODE_ID),
+            subnet_id: extract(&HEADER_IC_SUBNET_ID),
+            subnet_type: extract(&HEADER_IC_SUBNET_TYPE),
+            canister_id_cbor: extract(&HEADER_IC_CANISTER_ID_CBOR),
+            sender: extract(&HEADER_IC_SENDER),
+            method_name: extract(&HEADER_IC_METHOD_NAME),
+            error_cause: extract(&HEADER_IC_ERROR_CAUSE),
+            retries: extract(&HEADER_IC_RETRIES),
+            cache_status: extract(&HEADER_IC_CACHE_STATUS),
+            cache_bypass_reason: extract(&HEADER_IC_CACHE_BYPASS_REASON),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct IcResponseStatus {
+    pub streaming: bool,
+    pub metadata: HttpGatewayResponseMetadata,
+}
+
+impl From<&HttpGatewayResponse> for IcResponseStatus {
+    fn from(value: &HttpGatewayResponse) -> Self {
+        Self {
+            streaming: matches!(value.canister_response.body(), Either::Left(_)),
+            metadata: value.metadata.clone(),
+        }
+    }
+}
+
+// Attempts to extract host from HTTP2 "authority" pseudo-header or from HTTP/1.1 "Host" header
+fn extract_authority(request: &AxumRequest) -> Option<FQDN> {
+    // Try HTTP2 first, then Host header
+    request
+        .uri()
+        .authority()
+        .map(|x| x.host())
+        .or_else(|| {
+            request
+                .headers()
+                .get(http::header::HOST)
+                .and_then(|x| x.to_str().ok())
+                // Split if it has a port
+                .and_then(|x| x.split(':').next())
+        })
+        .and_then(|x| FQDN::from_str(x).ok())
+}
+
+#[derive(Clone)]
+pub struct RequestCtx {
+    // HTTP2 authority or HTTP1 Host header
+    pub authority: FQDN,
+    pub domain: Domain,
+    pub verify: bool,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
+pub struct RouterCanisterId(pub Principal);
+
+impl From<RouterCanisterId> for Principal {
+    fn from(value: RouterCanisterId) -> Self {
+        value.0
+    }
+}
+
+pub fn layer(methods: &[Method]) -> CorsLayer {
+    CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(methods.to_vec())
+        .expose_headers([
+            ACCEPT_RANGES,
+            CONTENT_LENGTH,
+            CONTENT_RANGE,
+            HEADER_IC_CANISTER_ID,
+        ])
+        .allow_headers([
+            USER_AGENT,
+            DNT,
+            IF_NONE_MATCH,
+            IF_MODIFIED_SINCE,
+            CACHE_CONTROL,
+            CONTENT_TYPE,
+            RANGE,
+            COOKIE,
+            HEADER_IC_CANISTER_ID,
+        ])
+        .max_age(10 * MINUTE)
+}
+
+/// Domain entity with certain metadata
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Domain {
+    pub name: FQDN,
+    // Whether it's custom domain
+    pub custom: bool,
+    // Whether we serve HTTP on this domain
+    pub http: bool,
+    // Whether we serve IC API on this domain
+    pub api: bool,
+}
+
+/// Result of a domain lookup
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DomainLookup {
+    pub domain: Domain,
+    pub canister_id: Option<Principal>,
+    pub verify: bool,
+}
+
+// Resolves hostname to a canister id
+pub trait ResolvesDomain: Send + Sync {
+    fn resolve(&self, host: &Fqdn) -> Option<DomainLookup>;
+}
+
+/// Finds the domains by the hostname among base, api domains and aliases.
+/// Also checks custom domain storage.
+pub struct DomainResolver {
+    domains_base: Vec<Domain>,
+    domains_all: BTreeMap<FQDN, DomainLookup>,
+    custom_domains: Arc<dyn ResolvesDomain>,
+}
+
+impl DomainResolver {
+    pub fn new(
+        domains_base: Vec<FQDN>,
+        domains_api: Vec<FQDN>,
+        custom_domains: Arc<dyn ResolvesDomain>,
+    ) -> Self {
+        fn domain(f: &Fqdn, http: bool) -> Domain {
+            Domain {
+                name: f.into(),
+                custom: false,
+                http,
+                api: true,
+            }
+        }
+
+        let domains_base = domains_base
+            .into_iter()
+            .map(|x| domain(&x, true))
+            .collect::<Vec<_>>();
+
+        let domains_api = domains_api
+            .into_iter()
+            .map(|x| domain(&x, false))
+            .collect::<Vec<_>>();
+
+        // Combine all domains
+        let domains_all = domains_base
+            .clone()
+            .into_iter()
+            .chain(domains_api)
+            .map(|x| {
+                (
+                    x.name.clone(),
+                    DomainLookup {
+                        domain: x,
+                        canister_id: None,
+                        verify: true,
+                    },
+                )
+            });
+
+        Self {
+            domains_all: domains_all.collect::<BTreeMap<_, _>>(),
+            domains_base,
+            custom_domains,
+        }
+    }
+
+    // Tries to find the base domain that corresponds to the given host and resolve a canister id
+    fn resolve_domain(&self, host: &Fqdn) -> Option<DomainLookup> {
+        // First try to find an exact match
+        // This covers base domains and their aliases, plus API domains
+        if let Some(v) = self.domains_all.get(host) {
+            return Some(v.clone());
+        }
+
+        // Next we try to lookup dynamic subdomains like <canister>.ic0.app or <canister>.raw.ic0.app
+        // Check if the host is a subdomain of any of our base domains.
+        let domain = self
+            .domains_base
+            .iter()
+            .find(|&x| host.is_subdomain_of(&x.name))?;
+
+        // Host can be 1 or 2 levels below base domain only: <id>.<domain> or <id>.raw.<domain>
+        // Fail the lookup if it's deeper.
+        let depth = host.labels().count() - domain.name.labels().count();
+        if depth > 2 {
+            return None;
+        }
+
+        // Check if it's a raw domain
+        let raw = depth == 2;
+        if raw && host.labels().nth(1) != Some("raw") {
+            return None;
+        }
+
+        // Strip the optional prefix if any
+        let label = host.labels().next()?.split("--").last()?;
+
+        // Do not allow cases like <id>.foo.ic0.app where
+        // the base subdomain is not raw or <id>.
+        // TODO discuss
+        let canister_id = if depth == 1 || raw {
+            Principal::from_text(label).ok()
+        } else {
+            None
+        };
+
+        Some(DomainLookup {
+            domain: domain.clone(),
+            canister_id,
+            verify: !raw,
+        })
+    }
+}
+
+impl ResolvesDomain for DomainResolver {
+    fn resolve(&self, host: &Fqdn) -> Option<DomainLookup> {
+        // Try to resolve canister using different sources
+        self.resolve_domain(host)
+            .or_else(|| self.custom_domains.resolve(host))
+    }
+}
+
+/// Metadata about the request by a Boundary Node (ic-boundary)
+#[derive(Clone)]
+pub struct BNResponseMetadata {
+    pub node_id: String,
+    pub subnet_id: String,
+    pub subnet_type: String,
+    pub canister_id_cbor: String,
+    pub sender: String,
+    pub method_name: String,
+    pub error_cause: String,
+    pub retries: String,
+    pub cache_status: String,
+    pub cache_bypass_reason: String,
+}
+
+pub struct PassHeaders {
+    pub headers_in: HeaderMap<HeaderValue>,
+    pub headers_out: HeaderMap<HeaderValue>,
+}
+
+impl PassHeaders {
+    pub fn new() -> RefCell<Self> {
+        RefCell::new(Self {
+            headers_in: HeaderMap::new(),
+            headers_out: HeaderMap::new(),
+        })
+    }
+}
+
+task_local! {
+    pub static PASS_HEADERS: RefCell<PassHeaders>;
+}
+
+// Categorized possible causes for request processing failures
+// Not using Error as inner type since it's not cloneable
+#[derive(Debug, Clone)]
+pub enum ErrorCause {
+    UnableToReadBody(String),
+    LoadShed,
+    RequestTooLarge,
+    IncorrectPrincipal,
+    MalformedRequest(String),
+    NoAuthority,
+    UnknownDomain,
+    CanisterIdNotFound,
+    DomainCanisterMismatch,
+    Denylisted,
+    AgentError(String),
+    BackendErrorDNS(String),
+    BackendErrorConnect,
+    BackendTimeout,
+    BackendTLSErrorOther(String),
+    BackendTLSErrorCert(String),
+    Other(String),
+}
+
+impl ErrorCause {
+    pub const fn status_code(&self) -> StatusCode {
+        match self {
+            Self::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::UnableToReadBody(_) => StatusCode::REQUEST_TIMEOUT,
+            Self::LoadShed => StatusCode::TOO_MANY_REQUESTS,
+            Self::RequestTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::IncorrectPrincipal => StatusCode::BAD_REQUEST,
+            Self::MalformedRequest(_) => StatusCode::BAD_REQUEST,
+            Self::NoAuthority => StatusCode::BAD_REQUEST,
+            Self::UnknownDomain => StatusCode::BAD_REQUEST,
+            Self::CanisterIdNotFound => StatusCode::BAD_REQUEST,
+            Self::AgentError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::DomainCanisterMismatch => StatusCode::FORBIDDEN,
+            Self::Denylisted => StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS,
+            Self::BackendErrorDNS(_) => StatusCode::SERVICE_UNAVAILABLE,
+            Self::BackendErrorConnect => StatusCode::SERVICE_UNAVAILABLE,
+            Self::BackendTimeout => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::BackendTLSErrorOther(_) => StatusCode::SERVICE_UNAVAILABLE,
+            Self::BackendTLSErrorCert(_) => StatusCode::SERVICE_UNAVAILABLE,
+        }
+    }
+
+    pub fn details(&self) -> Option<String> {
+        match self {
+            Self::Other(x) => Some(x.clone()),
+            Self::UnableToReadBody(x) => Some(x.clone()),
+            Self::LoadShed => Some("Overloaded".into()),
+            Self::MalformedRequest(x) => Some(x.clone()),
+            Self::BackendErrorDNS(x) => Some(x.clone()),
+            Self::BackendTLSErrorOther(x) => Some(x.clone()),
+            Self::BackendTLSErrorCert(x) => Some(x.clone()),
+            Self::AgentError(x) => Some(x.clone()),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for ErrorCause {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Other(_) => write!(f, "general_error"),
+            Self::UnableToReadBody(_) => write!(f, "unable_to_read_body"),
+            Self::LoadShed => write!(f, "load_shed"),
+            Self::RequestTooLarge => write!(f, "request_too_large"),
+            Self::IncorrectPrincipal => write!(f, "incorrect_principal"),
+            Self::MalformedRequest(_) => write!(f, "malformed_request"),
+            Self::UnknownDomain => write!(f, "unknown_domain"),
+            Self::CanisterIdNotFound => write!(f, "canister_id_not_found"),
+            Self::DomainCanisterMismatch => write!(f, "domain_canister_mismatch"),
+            Self::Denylisted => write!(f, "denylisted"),
+            Self::NoAuthority => write!(f, "no_authority"),
+            Self::AgentError(_) => write!(f, "agent_error"),
+            Self::BackendErrorDNS(_) => write!(f, "backend_error_dns"),
+            Self::BackendErrorConnect => write!(f, "backend_error_connect"),
+            Self::BackendTimeout => write!(f, "backend_timeout"),
+            Self::BackendTLSErrorOther(_) => write!(f, "backend_tls_error"),
+            Self::BackendTLSErrorCert(_) => write!(f, "backend_tls_error_cert"),
+        }
+    }
+}
+
+// Creates the response from ErrorCause and injects itself into extensions to be visible by middleware
+impl IntoResponse for ErrorCause {
+    fn into_response(self) -> Response {
+        // Return the HTML reply if it exists, otherwise textual
+        let body = self
+            .details()
+            .map_or_else(|| self.to_string(), |x| format!("{self}: {x}\n"));
+
+        let mut resp = (self.status_code(), body).into_response();
+
+        resp.extensions_mut().insert(self);
+        resp
+    }
+}
+
+pub struct HandlerState {
+    client: HttpGatewayClient,
+}
+
+impl HandlerState {
+    fn new(client: HttpGatewayClient) -> Self {
+        Self { client }
+    }
+}
+
+// Main HTTP->IC request handler
+pub async fn handler(
+    State(state): State<Arc<HandlerState>>,
+    canister_id: Option<Extension<RouterCanisterId>>,
+    Extension(ctx): Extension<Arc<RequestCtx>>,
+    request: AxumRequest,
+) -> Result<Response, ErrorCause> {
+    let canister_id = canister_id
+        .map(|x| (x.0).0)
+        .ok_or(ErrorCause::CanisterIdNotFound)?;
+
+    let (parts, body) = request.into_parts();
+
+    // Collect the request body up to the limit
+    let body = Limited::new(body, MAX_REQUEST_BODY_SIZE)
+        .collect()
+        .await
+        .map_err(|e| {
+            // TODO improve the inferring somehow
+            e.downcast_ref::<LengthLimitError>().map_or_else(
+                || ErrorCause::UnableToReadBody(e.to_string()),
+                |_| ErrorCause::RequestTooLarge,
+            )
+        })?
+        .to_bytes()
+        .to_vec();
+
+    let args = HttpGatewayRequestArgs {
+        canister_request: CanisterRequest::from_parts(parts, body),
+        canister_id,
+    };
+
+    // Pass headers in/out the IC request
+    let (resp, bn_metadata) = PASS_HEADERS
+        .scope(PassHeaders::new(), async {
+            // Execute the request
+            let mut req = state.client.request(args);
+            // Skip verification if it's disabled globally or if it is a "raw" request.
+            req.unsafe_set_skip_verification(!ctx.verify);
+            let resp = req.send().await;
+
+            let bn_metadata =
+                PASS_HEADERS.with(|x| BNResponseMetadata::from(&mut x.borrow_mut().headers_in));
+
+            (resp, bn_metadata)
+        })
+        .await;
+
+    let ic_status = IcResponseStatus::from(&resp);
+
+    // Convert it into Axum response
+    let mut response = resp.canister_response.into_response();
+    response.extensions_mut().insert(ic_status);
+    response.extensions_mut().insert(bn_metadata);
+
+    Ok(response)
+}
+
+pub async fn validate_middleware(
+    State(resolver): State<Arc<dyn ResolvesDomain>>,
+    mut request: AxumRequest,
+    next: Next,
+) -> Result<impl IntoResponse, ErrorCause> {
+    // Extract the authority
+    let Some(authority) = extract_authority(&request) else {
+        return Err(ErrorCause::NoAuthority);
+    };
+
+    // Resolve the domain
+    let lookup = resolver
+        .resolve(&authority)
+        .ok_or(ErrorCause::UnknownDomain)?;
+
+    // Inject canister_id separately if it was resolved
+    if let Some(v) = lookup.canister_id {
+        request.extensions_mut().insert(RouterCanisterId(v));
+    }
+
+    // Inject request context
+    // TODO remove Arc?
+    let ctx = Arc::new(RequestCtx {
+        authority,
+        domain: lookup.domain.clone(),
+        verify: lookup.verify,
+    });
+    request.extensions_mut().insert(ctx.clone());
+
+    // Execute the request
+    let mut response = next.run(request).await;
+
+    // Inject the same into the response
+    response.extensions_mut().insert(ctx);
+    if let Some(v) = lookup.canister_id {
+        response.extensions_mut().insert(RouterCanisterId(v));
+    }
+
+    Ok(response)
+}
+
+// END ADAPTER from ic-gateway
+
 impl ApiState {
     // Helper function for auto progress mode.
     // Executes an operation to completion and returns its `OpOut`
@@ -627,22 +1157,26 @@ impl ApiState {
                 .with_agent(agent)
                 .build()
                 .unwrap();
-            let state_handler = Arc::new(ic_gateway::HandlerState::new(client, true));
+            let state_handler = Arc::new(HandlerState::new(client));
 
             struct NoopCustomDomainResolver;
 
-            impl ic_gateway::ResolvesDomain for NoopCustomDomainResolver {
-                fn resolve(&self, _host: &Fqdn) -> Option<ic_gateway::DomainLookup> {
+            impl ResolvesDomain for NoopCustomDomainResolver {
+                fn resolve(&self, _host: &Fqdn) -> Option<DomainLookup> {
                     None
                 }
             }
 
-            let domain_resolver = Arc::new(ic_gateway::DomainResolver::new(
-                vec![fqdn!("localhost")],
-                vec![],
+            let domain_resolver = Arc::new(DomainResolver::new(
+                http_gateway_config
+                    .domains
+                    .unwrap_or(vec!["localhost".to_string()])
+                    .iter()
+                    .map(|d| fqdn!(d))
+                    .collect(),
                 vec![],
                 Arc::new(NoopCustomDomainResolver),
-            )) as Arc<dyn ic_gateway::ResolvesDomain>;
+            )) as Arc<dyn ResolvesDomain>;
 
             let router = Router::new()
                 .route("/api/v2/status", get(handler_status))
@@ -667,11 +1201,11 @@ impl ApiState {
                         .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
                 .fallback(
-                    post(ic_gateway::handler)
-                        .get(ic_gateway::handler)
-                        .put(ic_gateway::handler)
-                        .delete(ic_gateway::handler)
-                        .layer(ic_gateway::layer(&[
+                    post(handler)
+                        .get(handler)
+                        .put(handler)
+                        .delete(handler)
+                        .layer(layer(&[
                             Method::HEAD,
                             Method::GET,
                             Method::POST,
@@ -682,10 +1216,7 @@ impl ApiState {
                 )
                 .layer(DefaultBodyLimit::disable())
                 .layer(cors_layer())
-                .layer(from_fn_with_state(
-                    domain_resolver,
-                    ic_gateway::validate_middleware,
-                ))
+                .layer(from_fn_with_state(domain_resolver, validate_middleware))
                 .with_state(replica_url.trim_end_matches('/').to_string())
                 .into_make_service();
 
