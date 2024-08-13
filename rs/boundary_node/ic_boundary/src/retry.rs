@@ -9,7 +9,7 @@ use ic_types::{CanisterId, SubnetId};
 use crate::{
     http::AxumResponse,
     persist::RouteSubnet,
-    routes::{ApiError, ErrorCause, RequestContext, RequestType},
+    routes::{ApiError, ErrorCause, RequestContext},
     snapshot::Node,
 };
 
@@ -76,9 +76,12 @@ fn request_clone(parts: &Parts, body: &Bytes) -> Request<Body> {
 
     if let Some(canister_id) = parts.extensions.get::<CanisterId>().cloned() {
         request.extensions_mut().insert(canister_id);
-    };
+    }
     if let Some(subnet_id) = parts.extensions.get::<SubnetId>().cloned() {
         request.extensions_mut().insert(subnet_id);
+    }
+    if let Some(route_subnet) = parts.extensions.get::<Arc<RouteSubnet>>().cloned() {
+        request.extensions_mut().insert(route_subnet);
     }
 
     request
@@ -93,9 +96,7 @@ pub async fn retry_request(
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Select up to 1+retry_count nodes from the subnet if there are any
-    let nodes = if !params.disable_latency_routing
-        && (ctx.request_type == RequestType::Call || ctx.request_type == RequestType::CallV3)
-    {
+    let nodes = if !params.disable_latency_routing && (ctx.request_type.is_call()) {
         let factor = subnet.fault_tolerance_factor() + 1;
         subnet.pick_n_out_of_m_closest(1 + params.retry_count, factor)?
     } else {
@@ -103,9 +104,7 @@ pub async fn retry_request(
     };
 
     // Skip retrying in certain cases
-    if params.retry_count == 0
-        || (ctx.request_type == RequestType::Call && !params.retry_update_call)
-    {
+    if params.retry_count == 0 || (ctx.request_type.is_call() && !params.retry_update_call) {
         // Pick one node and pass the request down the stack
         // At this point there would be at least one node in the vector
         let node = nodes[0].clone();

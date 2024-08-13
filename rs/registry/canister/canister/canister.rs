@@ -41,7 +41,6 @@ use registry_canister::{
         do_recover_subnet::RecoverSubnetPayload,
         do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
-        do_retire_replica_version::RetireReplicaVersionPayload,
         do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
         do_update_api_boundary_nodes_version::{
@@ -355,22 +354,6 @@ fn atomic_mutate() {
 
     let bytes = serialize_atomic_mutate_response(response_pb).expect("Error serializing response");
     reply(&bytes)
-}
-
-#[export_name = "canister_update retire_replica_version"]
-fn retire_replica_version() {
-    check_caller_is_governance_and_log("retire_replica_version");
-    over(candid_one, |payload: RetireReplicaVersionPayload| {
-        retire_replica_version_(payload)
-    });
-}
-
-#[candid_method(update, rename = "retire_replica_version")]
-fn retire_replica_version_(_payload: RetireReplicaVersionPayload) {
-    panic!(
-        "{}retire_replica_version is deprecated and should no longer be used!",
-        LOG_PREFIX
-    );
 }
 
 #[export_name = "canister_update revise_elected_guestos_versions"]
