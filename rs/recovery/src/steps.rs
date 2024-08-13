@@ -899,7 +899,10 @@ impl Step for UploadCUPAndTar {
                 rsync(
                     &self.logger,
                     Vec::<String>::default(),
-                    &format!("{}/ic_registry_local_store.tar.zst", self.work_dir.display()),
+                    &format!(
+                        "{}/ic_registry_local_store.tar.zst",
+                        self.work_dir.display()
+                    ),
                     &target,
                     self.require_confirmation,
                     self.key_file.as_ref(),
