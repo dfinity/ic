@@ -19,7 +19,10 @@ use ic_nns_test_utils::{
     },
 };
 
-fn test_update_canister_settings(canister_id: CanisterId, controller_canister_id: CanisterId) {
+fn test_update_canister_settings_proposal(
+    target_canister_id: CanisterId,
+    controller_canister_id: CanisterId,
+) {
     // Step 1: Set up the NNS canisters and get the neuron.
     let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
@@ -40,7 +43,7 @@ fn test_update_canister_settings(canister_id: CanisterId, controller_canister_id
         get_canister_status(
             &state_machine,
             controller_canister_id.get(),
-            canister_id,
+            target_canister_id,
             CanisterId::ic_00(),
         )
         .unwrap()
@@ -75,7 +78,7 @@ fn test_update_canister_settings(canister_id: CanisterId, controller_canister_id
         &Proposal {
             title: Some("Update canister settings".to_string()),
             action: Some(Action::UpdateCanisterSettings(UpdateCanisterSettings {
-                canister_id: Some(canister_id.get()),
+                canister_id: Some(target_canister_id.get()),
                 settings: Some(CanisterSettings {
                     controllers: Some(Controllers {
                         controllers: target_controllers.clone(),
@@ -119,11 +122,11 @@ fn test_update_canister_settings(canister_id: CanisterId, controller_canister_id
 }
 
 #[test]
-fn test_update_canister_settings_non_root() {
-    test_update_canister_settings(REGISTRY_CANISTER_ID, ROOT_CANISTER_ID);
+fn test_update_canister_settings_proposal_non_root() {
+    test_update_canister_settings_proposal(REGISTRY_CANISTER_ID, ROOT_CANISTER_ID);
 }
 
 #[test]
-fn test_update_canister_settings_root() {
-    test_update_canister_settings(ROOT_CANISTER_ID, LIFELINE_CANISTER_ID);
+fn test_update_canister_settings_proposal_root() {
+    test_update_canister_settings_proposal(ROOT_CANISTER_ID, LIFELINE_CANISTER_ID);
 }

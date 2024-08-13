@@ -135,8 +135,13 @@ mod tests {
     use crate::pb::v1::governance_error::ErrorType;
     #[cfg(feature = "test")]
     use crate::pb::v1::update_canister_settings::{CanisterSettings, Controllers};
-
+    #[cfg(feature = "test")]
+    use candid::Decode;
+    #[cfg(feature = "test")]
+    use ic_base_types::CanisterId;
     use ic_nns_constants::LEDGER_CANISTER_ID;
+    #[cfg(feature = "test")]
+    use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 
     #[cfg(not(feature = "test"))]
     #[test]
@@ -234,9 +239,6 @@ mod tests {
     #[cfg(feature = "test")]
     #[test]
     fn test_update_ledger_canister_settings() {
-        use candid::Decode;
-        use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-
         let update_ledger_canister_settings = UpdateCanisterSettings {
             canister_id: Some(LEDGER_CANISTER_ID.get()),
             // The value of the settings are arbitrary and do not have any meaning.
@@ -287,8 +289,6 @@ mod tests {
     #[cfg(feature = "test")]
     #[test]
     fn test_update_root_canister_settings() {
-        use candid::Decode;
-
         let update_root_canister_settings = UpdateCanisterSettings {
             canister_id: Some(ROOT_CANISTER_ID.get()),
             // The value of the settings are arbitrary and do not have any meaning.
@@ -336,9 +336,6 @@ mod tests {
     #[cfg(feature = "test")]
     #[test]
     fn test_update_canister_settings_topic_mapping() {
-        use ic_base_types::CanisterId;
-        use ic_nns_constants::SNS_WASM_CANISTER_ID;
-
         let test_cases = vec![
             (LEDGER_CANISTER_ID, Topic::ProtocolCanisterManagement),
             (SNS_WASM_CANISTER_ID, Topic::ServiceNervousSystemManagement),

@@ -13,11 +13,16 @@ actor {
       module_arg : Blob;
       stop_upgrade_start : Bool;
     };
+
     type HardResetRootToVersionPayload = {
       wasm_module : Blob;
       init_arg : Blob;
     };
+
     type CanisterIdRecord = { canister_id : Principal };
+
+    type LogVisibility = {#controllers; #public_};
+
     type CanisterSettings = {
       controllers : ?[Principal];
       compute_allocation: ?Nat;
@@ -25,7 +30,7 @@ actor {
       freezing_threshold: ?Nat;
       reserved_cycles_limit: ?Nat;
       wasm_memory_limit: ?Nat;
-      log_visibility: ? {#controllers; #public_};
+      log_visibility: ?LogVisibility;
     };
 
     // IC00 is the management canister. We rely on it for the four
