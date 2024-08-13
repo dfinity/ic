@@ -2333,12 +2333,22 @@ impl StateManagerImpl {
         #[cfg(debug_assertions)]
         {
             use ic_interfaces_state_manager::CERT_ANY;
-            let checkpoint_heights = self.checkpoint_heights();
+            let unfiltered_checkpoint_heights = self
+                .state_layout
+                .unfiltered_checkpoint_heights()
+                .unwrap_or_else(|err| {
+                    fatal!(
+                        &self.log,
+                        "Failed to retrieve unfiltered checkpoint heights: {:?}",
+                        err
+                    )
+                });
+
             let state_heights = self.list_state_heights(CERT_ANY);
 
-            debug_assert!(heights_to_keep
-                .iter()
-                .all(|h| checkpoint_heights.contains(h) || *h == latest_certified_height));
+            debug_assert!(heights_to_keep.iter().all(|h| unfiltered_checkpoint_heights
+                .contains(h)
+                || *h == latest_certified_height));
 
             debug_assert!(state_heights.contains(&latest_state_height));
             debug_assert!(state_heights.contains(&latest_certified_height));

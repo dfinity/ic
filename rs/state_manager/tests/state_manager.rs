@@ -1636,6 +1636,7 @@ fn can_keep_latest_verified_checkpoint_after_removal_with_unverified_checkpoints
             state_manager.commit_and_certify(state, height(i), scope.clone(), None);
         }
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
+        state_manager.flush_tip_channel();
 
         let mutable_cp_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
             state_manager
@@ -1651,7 +1652,6 @@ fn can_keep_latest_verified_checkpoint_after_removal_with_unverified_checkpoints
             .create_unverified_checkpoint_marker()
             .unwrap();
 
-        state_manager.flush_tip_channel();
         state_manager.remove_states_below(height(10));
 
         for h in (1..=5).chain(7..=7) {
