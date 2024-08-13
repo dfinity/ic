@@ -762,6 +762,7 @@ impl StateLayout {
         if !path.exists() {
             return Err(LayoutError::NotFound(height));
         }
+        // An untracked checkpoint layout is acceptable for temporary use here, as it’s only needed briefly to verify the existence of the marker.
         let cp = CheckpointLayout::<ReadOnly>::new_untracked(path, height)?;
         Ok(cp.is_checkpoint_verified())
     }

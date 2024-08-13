@@ -357,6 +357,9 @@ fn test_last_removal_panics_in_debug() {
 
 #[test]
 fn test_can_remove_unverified_marker_file_twice() {
+    // Double removal of the marker file could happen when the state sync and `commit_and_certify` try to promote a scratchpad
+    // to the checkpoint folder at the same height.
+    // It should be fine that both threads are verifying the checkpoint and try to remove the marker file.
     with_test_replica_logger(|log| {
         let tempdir = tmpdir("state_layout");
         let root_path = tempdir.path().to_path_buf();
