@@ -33,12 +33,12 @@ rust_canister(
 )
 
 rust_ic_test(
-    name = "btc_kyt_integration_test",
+    name = "integration_test",
     srcs = ["tests/tests.rs"],
     data = [":btc_kyt_canister"],
     env = {
        "CARGO_MANIFEST_DIR": "rs/bitcoin/kyt",
-       "IC_BTC_KYT_WASM_PATH": "$(rootpath :btc_kyt_canister)",
+       "IC_BTC_KYT_CANISTER_WASM_PATH": "$(rootpath :btc_kyt_canister)",
     },
     deps = [
         ":btc_kyt",
