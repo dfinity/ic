@@ -49,7 +49,7 @@ fn is_global_ipv4_address(ipv4_address: &str) -> bool {
         && !ip_address.is_unspecified()
 }
 
-// Check that the given IPv4 addresses are all in the same subnet with respect to the subnet mask
+// Check that the given IPv4 addresses are all in the same subnet with respect to the IPv4 subnet mask
 fn are_in_the_same_subnet(ipv4_addresses: Vec<String>, prefix_length: u32) -> bool {
     let bitmask: u32 = !0 << (32 - prefix_length);
     let bitmask: [u8; 4] = bitmask.to_be_bytes();
@@ -63,7 +63,7 @@ fn are_in_the_same_subnet(ipv4_addresses: Vec<String>, prefix_length: u32) -> bo
     subnet_prefixes.len() == 1
 }
 
-// Helper function to extract the subnet bytes of the given IP address
+// Helper function to extract the IPv4 subnet bytes of the given IP address
 fn extract_subnet_bytes(ipv4_address: &str, subnet_mask: Ipv4Addr) -> Vec<u8> {
     Ipv4Addr::from_str(ipv4_address)
         .unwrap_or_else(|_| panic!("Failed to parse IP address: {}", ipv4_address))
@@ -82,7 +82,7 @@ pub struct IPv4Config {
 }
 
 impl IPv4Config {
-    pub fn new(
+    pub fn try_new(
         ip_addr: String,
         gateway_ip_addr: String,
         prefix_length: u32,
@@ -117,6 +117,15 @@ impl IPv4Config {
             gateway_ip_addr,
             prefix_length,
         })
+    }
+
+    pub fn is_valid(&self) -> bool {
+        IPv4Config::try_new(
+            self.ip_addr.clone(),
+            self.gateway_ip_addr.clone(),
+            self.prefix_length,
+        )
+        .is_ok()
     }
 
     // TODO: either remove this method or return std::net::IpAddr to signal that the ip addr is valid
@@ -190,14 +199,16 @@ mod tests {
     #[test]
     fn succeeds_if_ipv4_config_is_valid() {
         assert!(
-            IPv4Config::new("204.153.51.58".to_string(), "204.153.51.1".to_string(), 24,).is_ok()
+            IPv4Config::try_new("204.153.51.58".to_string(), "204.153.51.1".to_string(), 24,)
+                .is_ok()
         );
     }
 
     #[test]
     fn fails_if_ipv4_config_is_invalid() {
         assert!(
-            IPv4Config::new("204.153.51.58".to_string(), "204.153.49.1".to_string(), 24,).is_err()
+            IPv4Config::try_new("204.153.51.58".to_string(), "204.153.49.1".to_string(), 24,)
+                .is_err()
         );
     }
 

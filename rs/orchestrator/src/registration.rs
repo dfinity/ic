@@ -639,7 +639,7 @@ fn process_ipv4_config(
             ))
         })?;
 
-        let ipv4_config = IPv4Config::new(
+        let ipv4_config = IPv4Config::try_new(
             node_ip_address.to_string(),
             ipv4_config.public_gateway.clone(),
             prefix_length,

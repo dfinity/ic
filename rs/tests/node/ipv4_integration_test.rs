@@ -75,7 +75,7 @@ fn main() -> Result<()> {
 
 pub fn config(env: TestEnv) {
     let domain = "api-example.com".to_string();
-    let ipv4_config = IPv4Config::new(
+    let ipv4_config = IPv4Config::try_new(
         "193.118.59.142".to_string(),
         "193.118.59.137".to_string(),
         29,
@@ -131,7 +131,7 @@ pub fn test(env: TestEnv) {
         info!(log, "Configuring node's IPv4 address by directly updating the registry record");
         let payload = UpdateNodeIPv4ConfigDirectlyPayload {
             node_id: app_node.node_id,
-            ipv4_config: Some(IPv4Config::new(
+            ipv4_config: Some(IPv4Config::try_new(
                 "193.118.59.140".into(),
                 "193.118.59.137".into(),
                 29,
@@ -213,7 +213,7 @@ EOT
             CONFIG_CHECK_TIMEOUT,
             CONFIG_CHECK_SLEEP,
             || {
-                wait_for_expected_node_ipv4_config(unassigned_node.clone(), Some(IPv4Config::new(
+                wait_for_expected_node_ipv4_config(unassigned_node.clone(), Some(IPv4Config::try_new(
                     "193.118.59.142".into(),
                     "193.118.59.137".into(),
                     29,
@@ -227,7 +227,7 @@ EOT
             CONFIG_CHECK_TIMEOUT,
             CONFIG_CHECK_SLEEP,
             || {
-                wait_for_expected_node_ipv4_config(app_node.clone(), Some(IPv4Config::new(
+                wait_for_expected_node_ipv4_config(app_node.clone(), Some(IPv4Config::try_new(
                     "193.118.59.140".into(),
                     "193.118.59.137".into(),
                     29).unwrap()
@@ -238,7 +238,7 @@ EOT
         info!(log, "Modifying the IPv4 configuration on the unassigned node ...");
         let payload = UpdateNodeIPv4ConfigDirectlyPayload {
             node_id: unassigned_node.node_id,
-            ipv4_config: Some(IPv4Config::new(
+            ipv4_config: Some(IPv4Config::try_new(
                 "196.156.107.201".into(),
                 "196.156.107.193".into(),
                 28,
@@ -270,7 +270,7 @@ EOT
             CONFIG_CHECK_TIMEOUT,
             CONFIG_CHECK_SLEEP,
             || {
-                wait_for_expected_node_ipv4_config(unassigned_node.clone(), Some(IPv4Config::new(
+                wait_for_expected_node_ipv4_config(unassigned_node.clone(), Some(IPv4Config::try_new(
                     "196.156.107.201".into(),
                     "196.156.107.193".into(),
                     28,
@@ -393,7 +393,7 @@ fn wait_for_expected_node_ipv4_config(
             vm.block_on_bash_script(r#"ip route | awk '/default/ {print $3}'"#)?;
         let actual_gateway_address = default_gateway.trim().to_string();
 
-        Some(IPv4Config::new(actual_address, actual_gateway_address, actual_prefix_length).unwrap())
+        Some(IPv4Config::try_new(actual_address, actual_gateway_address, actual_prefix_length).unwrap())
     };
 
     // then, compare the expected and actual configuration

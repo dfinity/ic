@@ -685,7 +685,8 @@ mod tests {
 
         // create an IPv4 config
         let ipv4_config = Some(
-            IPv4Config::new("204.153.51.58".to_string(), "204.153.51.1".to_string(), 24).unwrap(),
+            IPv4Config::try_new("204.153.51.58".to_string(), "204.153.51.1".to_string(), 24)
+                .unwrap(),
         );
 
         // create two node payloads with the same IPv4 config

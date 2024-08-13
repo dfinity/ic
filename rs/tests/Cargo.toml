@@ -85,7 +85,6 @@ ic-nns-test-utils = { path = "../nns/test_utils" }
 ic-prep = { path = "../prep" }
 ic-protobuf = { path = "../protobuf" }
 ic-recovery = { path = "../recovery" }
-ic-subnet-splitting = { path = "../recovery/subnet_splitting" }
 ic-registry-canister-types = { path = "../types/registry_canister_types" }
 ic-regedit = { path = "../registry/regedit" }
 ic-registry-client = { path = "../registry/client" }
