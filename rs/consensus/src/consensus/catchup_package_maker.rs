@@ -2,20 +2,20 @@
 //! The requirements of when we should create a CatchUpPackage are given below:
 //!
 //! 1. CatchUpPackage has to include (the block of) a DKG summary that is
-//! considered finalized.
+//!    considered finalized.
 //!
 //! 2. DKG has to traverse blocks to lookup DKG payloads, therefore the interval
-//! between CatchUpPackages has to be bigger than or equal to the DKG interval.
+//!    between CatchUpPackages has to be bigger than or equal to the DKG interval.
 //!
 //! 3. The block in the CatchUpPackage has been executed, and its execution
-//! state is known.
+//!    state is known.
 //!
 //! At the moment, we will start to make a CatchUpPackage once a DKG summary
 //! block is considered finalized.
 
 use ic_consensus_utils::{
     active_high_threshold_transcript, crypto::ConsensusCrypto,
-    get_oldest_ecdsa_state_registry_version, membership::Membership, pool_reader::PoolReader,
+    get_oldest_idkg_state_registry_version, membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_interfaces_state_manager::{
@@ -209,7 +209,7 @@ impl CatchUpPackageMaker {
             }
             Ok(state_hash) => {
                 let summary = start_block.payload.as_ref().as_summary();
-                let registry_version = if let Some(ecdsa) = summary.ecdsa.as_ref() {
+                let registry_version = if let Some(idkg) = summary.idkg.as_ref() {
                     // Should succeed as we already got the hash above
                     let state = self
                         .state_manager
@@ -217,14 +217,14 @@ impl CatchUpPackageMaker {
                         .map_err(|err| {
                             error!(
                                 self.log,
-                                "Cannot make ECDSA CUP at height {}: `get_state_hash_at` \
+                                "Cannot make IDKG CUP at height {}: `get_state_hash_at` \
                                 succeeded but `get_state_at` failed with {}. Will retry",
                                 height,
                                 err,
                             )
                         })
                         .ok()?;
-                    get_oldest_ecdsa_state_registry_version(ecdsa, state.get_ref())
+                    get_oldest_idkg_state_registry_version(idkg, state.get_ref())
                 } else {
                     None
                 };
@@ -439,18 +439,18 @@ mod tests {
             let block = proposal.content.as_mut();
             block.context.certified_height = block.height();
 
-            let mut ecdsa = empty_idkg_payload(subnet_test_id(0));
+            let mut idkg = empty_idkg_payload(subnet_test_id(0));
             // Add the three quadruples using registry version 3, 1 and 2 in order
-            add_available_quadruple_to_payload(&mut ecdsa, pre_sig_id1, RegistryVersion::from(3));
-            add_available_quadruple_to_payload(&mut ecdsa, pre_sig_id2, RegistryVersion::from(1));
-            add_available_quadruple_to_payload(&mut ecdsa, pre_sig_id3, RegistryVersion::from(2));
+            add_available_quadruple_to_payload(&mut idkg, pre_sig_id1, RegistryVersion::from(3));
+            add_available_quadruple_to_payload(&mut idkg, pre_sig_id2, RegistryVersion::from(1));
+            add_available_quadruple_to_payload(&mut idkg, pre_sig_id3, RegistryVersion::from(2));
 
             let dkg = block.payload.as_ref().as_summary().dkg.clone();
             block.payload = Payload::new(
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(SummaryPayload {
                     dkg,
-                    ecdsa: Some(ecdsa),
+                    idkg: Some(idkg),
                 }),
             );
             proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());

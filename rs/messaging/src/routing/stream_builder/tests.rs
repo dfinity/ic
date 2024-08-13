@@ -23,7 +23,7 @@ use ic_types::{
         CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE,
     },
-    time::UNIX_EPOCH,
+    time::{CoarseTime, UNIX_EPOCH},
     xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, Cycles, SubnetId, Time,
 };
@@ -90,19 +90,14 @@ fn reject_local_request() {
 
         // With a reservation on an input queue.
         let payment = Cycles::new(100);
+        let callback_id = register_callback(&mut canister_state, sender, receiver, NO_DEADLINE);
         let msg = generate_message_for_test(
             sender,
             receiver,
-            CallbackId::from(1),
+            callback_id,
             "method".to_string(),
             payment,
-        );
-        register_callback(
-            &mut canister_state,
-            msg.sender,
-            msg.receiver,
-            msg.sender_reply_callback,
-            msg.deadline,
+            NO_DEADLINE,
         );
 
         canister_state
@@ -174,6 +169,7 @@ fn reject_local_request_for_subnet() {
             CallbackId::from(1),
             "method".to_string(),
             payment,
+            NO_DEADLINE,
         );
 
         state
@@ -649,6 +645,7 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
             CallbackId::from(1),
             Method::CanisterStatus.to_string(),
             Cycles::new(0),
+            NO_DEADLINE,
         )];
 
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
@@ -1014,6 +1011,7 @@ fn generate_messages_for_test(senders: u64, receivers: u64) -> Vec<Request> {
                     CallbackId::from(next_callback_id),
                     format!("req_{}_{}_{}", snd, rcv, i),
                     payment,
+                    NO_DEADLINE,
                 ));
             }
         }
@@ -1027,6 +1025,7 @@ fn generate_message_for_test(
     callback_id: CallbackId,
     method_name: String,
     payment: Cycles,
+    deadline: CoarseTime,
 ) -> Request {
     RequestBuilder::default()
         .sender(sender)
@@ -1034,6 +1033,7 @@ fn generate_message_for_test(
         .sender_reply_callback(callback_id)
         .method_name(method_name)
         .payment(payment)
+        .deadline(deadline)
         .build()
 }
 
@@ -1056,14 +1056,12 @@ fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
 
         match msg {
             RequestOrResponse::Request(req) => {
-                // Create a matching callback, so that enqueuing any reject response will succeed.
-                register_callback(
-                    canister_state,
-                    req.sender,
-                    req.receiver,
-                    req.sender_reply_callback,
-                    req.deadline,
-                );
+                let callback_id =
+                    register_callback(canister_state, req.sender, req.receiver, req.deadline);
+                // Check the implicit assumption that the test messages were generated with a
+                // `sender_reply_callback` that is consistent with the callback IDs that the
+                // `CallContextManager` generates and registers.
+                assert_eq!(req.sender_reply_callback, callback_id);
 
                 canister_state.push_output_request(req, UNIX_EPOCH).unwrap();
             }
@@ -1076,6 +1074,7 @@ fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
                     rep.originator_reply_callback,
                     "".to_string(),
                     Cycles::new(0),
+                    NO_DEADLINE,
                 );
                 push_input(canister_state, req.into());
                 canister_state

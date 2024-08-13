@@ -10,14 +10,14 @@
 //! 1. Unvalidated artifacts below the next expected batch height can be purged.
 //!
 //! 2. Validated artifacts below the latest CatchUpPackage height can be purged.
-//! But we also want to keep a minimum chain length that is older than the
-//! CatchUpPackage to help peers catch up.
+//!    But we also want to keep a minimum chain length that is older than the
+//!    CatchUpPackage to help peers catch up.
 //!
 //! 3. Validated Finalization and Notarization shares below the latest finalized
-//! height can be purged from the pool.
+//!    height can be purged from the pool.
 //!
 //! 4. Replicated states below the certified height recorded in the block
-//! in the latest CatchUpPackage can be purged.
+//!    in the latest CatchUpPackage can be purged.
 use crate::consensus::metrics::PurgerMetrics;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
@@ -167,17 +167,17 @@ impl Purger {
     ///
     /// There are two important exceptions:
     /// 1. we do not purge unvalidated pool when expected_batch_height >
-    /// finalized_height + 1. This is because under normal condition,
-    /// expected_batch_height <= finalized_height + 1. The only time it
-    /// might become greater than finalized_height + 1 is when
-    /// we just finished a state sync. In this case we may not have moved
-    /// CatchUpPackage to the validated pool. So we should not purge the
-    /// unvalidated pool.
+    ///    finalized_height + 1. This is because under normal condition,
+    ///    expected_batch_height <= finalized_height + 1. The only time it
+    ///    might become greater than finalized_height + 1 is when
+    ///    we just finished a state sync. In this case we may not have moved
+    ///    CatchUpPackage to the validated pool. So we should not purge the
+    ///    unvalidated pool.
     ///
     /// 2. We do not purge unvalidated pool when there exists unvalidated
-    /// CatchUpPackage or share with height higher than catch_up_height
-    /// but lower than the expected batch height. This is to ensure we do not
-    /// miss processing unvalidated CatchUpPackages or shares.
+    ///    CatchUpPackage or share with height higher than catch_up_height
+    ///    but lower than the expected batch height. This is to ensure we do not
+    ///    miss processing unvalidated CatchUpPackages or shares.
     fn purge_unvalidated_pool_by_expected_batch_height(
         &self,
         pool_reader: &PoolReader<'_>,
@@ -638,7 +638,7 @@ mod tests {
                 replica_config,
                 registry,
                 ..
-            } = dependencies(pool_config, 1);
+            } = dependencies(pool_config, 10);
             state_manager
                 .get_mut()
                 .expect_latest_state_height()
@@ -658,6 +658,7 @@ mod tests {
 
             // Height 1 - two block proposals, one notarization, one finalization.
             // We will later instruct purger not to consider this height.
+            pool.insert_validated(pool.make_next_beacon());
             let finalized_block_proposal_1 = pool.make_next_block_with_rank(Rank(0));
             let non_finalized_block_proposal_1 = pool.make_next_block_with_rank(Rank(1));
             pool.insert_validated(finalized_block_proposal_1.clone());
@@ -665,6 +666,7 @@ mod tests {
             pool.notarize(&finalized_block_proposal_1);
             pool.finalize(&finalized_block_proposal_1);
             // Height 2 - three block proposals, two notarizations, one finalization
+            pool.insert_validated(pool.make_next_beacon());
             let finalized_block_proposal_2 = pool.make_next_block_with_rank(Rank(0));
             let non_finalized_block_proposal_2_0 = pool.make_next_block_with_rank(Rank(1));
             let non_finalized_block_proposal_2_1 = pool.make_next_block_with_rank(Rank(2));
@@ -676,6 +678,7 @@ mod tests {
             pool.finalize(&finalized_block_proposal_2);
             // Height 3 - two block proposals, two notarizations, no finalizations.
             // The purger should not consider this height as it hasn't been finalized yet.
+            pool.insert_validated(pool.make_next_beacon());
             let finalized_block_proposal_3_0 = pool.make_next_block_with_rank(Rank(0));
             let finalized_block_proposal_3_1 = pool.make_next_block_with_rank(Rank(1));
             pool.insert_validated(finalized_block_proposal_3_0.clone());

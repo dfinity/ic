@@ -33,7 +33,7 @@ fn reject_response(
 ///   in the previous round, the context will be removed when the previous block is
 ///   finalized)
 /// - rejecting signature contexts that are expired or request an invalid key.
-/// - adding new agreements as "Unreported" by combining shares in the ECDSA pool.
+/// - adding new agreements as "Unreported" by combining shares in the IDKG pool.
 pub(crate) fn update_signature_agreements(
     all_requests: &BTreeMap<CallbackId, SignWithThresholdContext>,
     signature_builder: &dyn ThresholdSignatureBuilder,

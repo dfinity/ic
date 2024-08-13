@@ -306,7 +306,7 @@ pub mod node {
         IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
         IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
         IDkgVerifyInitialDealingsError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
-        ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+        ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
         ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
         ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
         ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
@@ -558,11 +558,11 @@ pub mod node {
     }
 
     impl ThresholdEcdsaSigner for Node {
-        fn sign_share(
+        fn create_sig_share(
             &self,
             inputs: &ThresholdEcdsaSigInputs,
-        ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
-            ThresholdEcdsaSigner::sign_share(self.crypto_component.as_ref(), inputs)
+        ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaCreateSigShareError> {
+            ThresholdEcdsaSigner::create_sig_share(&*self.crypto_component, inputs)
         }
     }
 
@@ -611,7 +611,7 @@ pub mod node {
             &self,
             inputs: &ThresholdSchnorrSigInputs,
         ) -> Result<ThresholdSchnorrSigShare, ThresholdSchnorrCreateSigShareError> {
-            ThresholdSchnorrSigner::create_sig_share(self.crypto_component.as_ref(), inputs)
+            ThresholdSchnorrSigner::create_sig_share(&*self.crypto_component, inputs)
         }
     }
 
@@ -1170,6 +1170,7 @@ pub enum IDkgParticipants {
     /// Choose dealers and receivers randomly:
     /// - Choose a random subset with at least one node to be dealers.
     /// - Choose a random subset with at least one node to be receivers.
+    ///
     /// Both dealers and receivers are chosen independently of each other and it could be the case
     /// that some nodes are neither dealers nor receivers. It could also be the case that some
     /// nodes are both dealers and receivers.
@@ -1179,6 +1180,7 @@ pub enum IDkgParticipants {
     /// Choose dealers and receivers randomly:
     /// - Choose a random subset with at least `min_num_dealers` nodes to be dealers.
     /// - Choose a random subset with at least `min_num_receivers` nodes to be receivers.
+    ///
     /// Both dealers and receivers are chosen independently of each other and it could be the case
     /// that some nodes are neither dealers nor receivers. It could also be the case that some
     /// nodes are both dealers and receivers.
@@ -2010,7 +2012,7 @@ pub fn ecdsa_sig_share_from_each_receiver(
         .filter_by_receivers(&inputs)
         .map(|receiver| {
             receiver.load_tecdsa_sig_transcripts(inputs);
-            let sig_share = ThresholdEcdsaSigner::sign_share(receiver, inputs)
+            let sig_share = ThresholdEcdsaSigner::create_sig_share(receiver, inputs)
                 .expect("failed to create sig share");
             (receiver.id(), sig_share)
         })

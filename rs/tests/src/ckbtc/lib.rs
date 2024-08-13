@@ -1,7 +1,4 @@
-use crate::{
-    icrc1_agent_test::install_icrc1_ledger,
-    tecdsa::{get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature},
-};
+use crate::icrc1_agent_test::install_icrc1_ledger;
 use candid::{Encode, Principal};
 use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
 use dfn_candid::candid;
@@ -19,6 +16,9 @@ use ic_config::{
     execution_environment::{BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID},
     subnet_config::ECDSA_SIGNATURE_FEE,
 };
+use ic_consensus_threshold_sig_system_test_utils::{
+    get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature,
+};
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_management_canister_types::{
     CanisterIdRecord, MasterPublicKeyId, ProvisionalCreateCanisterWithCyclesArgs,
@@ -26,7 +26,7 @@ use ic_management_canister_types::{
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
+use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
     governance::submit_external_update_proposal, itest_helpers::install_rust_canister_from_path,
 };
@@ -36,8 +36,8 @@ use ic_system_test_driver::{
     driver::{
         test_env::TestEnv,
         test_env_api::{
-            HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-            NnsInstallationBuilder, SubnetSnapshot,
+            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            IcNodeSnapshot, NnsInstallationBuilder, SubnetSnapshot,
         },
     },
     nns::vote_and_execute_proposal,
@@ -47,7 +47,7 @@ use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::ArchiveOptions;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{debug, info, Logger};
-use std::{str::FromStr, time::Duration};
+use std::{env, str::FromStr, time::Duration};
 
 pub(crate) const TEST_KEY_LOCAL: &str = "dfx_test_key";
 
@@ -195,9 +195,6 @@ fn empty_subnet_update() -> UpdateSubnetPayload {
         subnet_type: None,
         is_halted: None,
         halt_at_cup_height: None,
-        max_instructions_per_message: None,
-        max_instructions_per_round: None,
-        max_instructions_per_install_code: None,
         features: None,
         ecdsa_config: None,
         ecdsa_key_signing_enable: None,
@@ -258,7 +255,6 @@ pub(crate) async fn create_canister(runtime: &Runtime) -> Canister<'_> {
 }
 
 pub(crate) async fn install_ledger(
-    env: &TestEnv,
     canister: &mut Canister<'_>,
     minting_user: PrincipalId,
     logger: &Logger,
@@ -281,12 +277,11 @@ pub(crate) async fn install_ledger(
             })
             .build(),
     );
-    install_icrc1_ledger(env, canister, &init_args).await;
+    install_icrc1_ledger(canister, &init_args).await;
     canister.canister_id()
 }
 
 pub(crate) async fn install_minter(
-    env: &TestEnv,
     canister: &mut Canister<'_>,
     ledger_id: CanisterId,
     logger: &Logger,
@@ -313,7 +308,9 @@ pub(crate) async fn install_minter(
 
     install_rust_canister_from_path(
         canister,
-        env.get_dependency_path("rs/bitcoin/ckbtc/minter/ckbtc_minter_debug.wasm"),
+        get_dependency_path(
+            env::var("IC_CKBTC_MINTER_WASM_PATH").expect("IC_CKBTC_MINTER_WASM_PATH not set"),
+        ),
         Some(Encode!(&minter_arg).unwrap()),
     )
     .await;
@@ -323,7 +320,6 @@ pub(crate) async fn install_minter(
 pub(crate) async fn install_kyt(
     kyt_canister: &mut Canister<'_>,
     logger: &Logger,
-    env: &TestEnv,
     minter_id: Principal,
     maintainers: Vec<Principal>,
 ) -> CanisterId {
@@ -336,7 +332,9 @@ pub(crate) async fn install_kyt(
 
     install_rust_canister_from_path(
         kyt_canister,
-        env.get_dependency_path("rs/bitcoin/ckbtc/kyt/kyt_canister.wasm"),
+        get_dependency_path(
+            env::var("IC_CKBTC_KYT_WASM_PATH").expect("IC_CKBTC_KYT_WASM_PATH not set"),
+        ),
         Some(Encode!(&kyt_init_args).unwrap()),
     )
     .await;
@@ -370,18 +368,13 @@ pub(crate) async fn upgrade_kyt(kyt_canister: &mut Canister<'_>, mode: KytMode) 
     kyt_canister.canister_id()
 }
 
-pub(crate) async fn install_bitcoin_canister(
-    runtime: &Runtime,
-    logger: &Logger,
-    env: &TestEnv,
-) -> CanisterId {
-    install_bitcoin_canister_with_network(runtime, logger, env, Network::Regtest).await
+pub(crate) async fn install_bitcoin_canister(runtime: &Runtime, logger: &Logger) -> CanisterId {
+    install_bitcoin_canister_with_network(runtime, logger, Network::Regtest).await
 }
 
 pub(crate) async fn install_bitcoin_canister_with_network(
     runtime: &Runtime,
     logger: &Logger,
-    env: &TestEnv,
     network: Network,
 ) -> CanisterId {
     info!(&logger, "Installing bitcoin canister ...");
@@ -407,15 +400,20 @@ pub(crate) async fn install_bitcoin_canister_with_network(
             get_current_fee_percentiles_maximum: 0,
             send_transaction_base: 0,
             send_transaction_per_byte: 0,
+            get_block_headers_base: 0,
+            get_block_headers_cycles_per_ten_instructions: 0,
+            get_block_headers_maximum: 0,
         },
         api_access: Flag::Enabled,
         disable_api_if_not_fully_synced: Flag::Disabled,
         watchdog_canister: None,
+        burn_cycles: Flag::Enabled,
+        lazily_evaluate_fee_percentiles: Flag::Enabled,
     };
 
     install_rust_canister_from_path(
         &mut bitcoin_canister,
-        env.get_dependency_path("external/btc_canister/file/ic-btc-canister.wasm.gz"),
+        get_dependency_path("external/btc_canister/file/ic-btc-canister.wasm.gz"),
         Some(Encode!(&args).unwrap()),
     )
     .await;

@@ -70,6 +70,7 @@ mod check;
 mod cloudflare;
 mod dns;
 mod encode;
+mod headers;
 mod metrics;
 mod registration;
 mod verification;
@@ -411,7 +412,8 @@ async fn main() -> Result<(), Error> {
                     .with_description("Duration of requests")
                     .init(),
             }))
-            .layer(middleware::from_fn(metrics_mw)),
+            .layer(middleware::from_fn(metrics_mw))
+            .layer(middleware::from_fn(headers::middleware)),
     );
 
     // ACME

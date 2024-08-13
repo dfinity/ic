@@ -637,10 +637,6 @@ fn test_mul_n_vartime_naf() -> CanisterThresholdResult<()> {
                 }
 
                 // create refs of pairs
-
-                // False positive `map_identity` warning.
-                // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
-                #[allow(clippy::map_identity)]
                 let refs_of_pairs: Vec<_> = pairs.iter().map(|(p, s)| (p, s)).collect();
 
                 // compute the result using an optimized algorithm, which is to be tested

@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 rust_library(
     name = "ic_mainnet_nns_recovery",
@@ -16,7 +16,7 @@ rust_library(
         "//rs/nervous_system/common/test_keys",
         "//rs/nns/cmc",
         "//rs/nns/common",
-        "//rs/nns/governance",
+        "//rs/nns/governance/api",
         "//rs/nns/sns-wasm",
         "//rs/nns/test_utils",
         "//rs/registry/subnet_type",

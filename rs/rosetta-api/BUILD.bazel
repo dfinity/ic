@@ -19,7 +19,7 @@ DEPENDENCIES = [
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/nns/common",
     "//rs/nns/constants",
-    "//rs/nns/governance",
+    "//rs/nns/governance/api",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_canister_blocks_synchronizer:ledger_canister_blocks_synchronizer_lib",
     "//rs/rosetta-api/ledger_canister_core",
@@ -205,6 +205,9 @@ container_image(
     name = "rosetta_image_base",
     base = "@rust_base//image",
     tags = ["manual"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     tars = [
         ":passwd_tar",
         ":data_tar",
@@ -225,6 +228,9 @@ container_image(
     ],
     ports = ["8080"],
     tags = ["manual"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     user = "rosetta",
     workdir = "/home/rosetta",
 )

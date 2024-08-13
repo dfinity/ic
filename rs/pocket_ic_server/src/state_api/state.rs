@@ -2,13 +2,15 @@
 /// Axum handlers operate on a global state of type ApiState, whose
 /// interface guarantees consistency and determinism.
 use crate::pocket_ic::{
-    AdvanceTimeAndTick, EffectivePrincipal, GetCanisterHttp, MockCanisterHttp, PocketIc,
+    AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, GetCanisterHttp, MockCanisterHttp,
+    PocketIc,
 };
 use crate::InstanceId;
 use crate::{OpId, Operation};
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
 use base64;
+use futures::future::Shared;
 use hyper::header::{HeaderValue, HOST};
 use hyper::Version;
 use hyper_legacy::{client::connect::HttpConnector, Client};
@@ -29,16 +31,11 @@ use ic_types::{canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES, CanisterId, Subn
 use pocket_ic::common::rest::{
     CanisterHttpHeader, CanisterHttpMethod, CanisterHttpReject, CanisterHttpReply,
     CanisterHttpRequest, CanisterHttpResponse, HttpGatewayBackend, HttpGatewayConfig,
-    MockCanisterHttpResponse, Topology,
+    HttpGatewayDetails, HttpGatewayInfo, MockCanisterHttpResponse, Topology,
 };
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{BTreeMap, HashMap},
-    path::PathBuf,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use tokio::{
     sync::mpsc::error::TryRecvError,
     sync::mpsc::Receiver,
@@ -106,8 +103,8 @@ pub struct ApiState {
     sync_wait_time: Duration,
     // PocketIC server port
     port: Option<u16>,
-    // status of HTTP gateway (true = running, false = stopped)
-    http_gateways: Arc<RwLock<Vec<bool>>>,
+    // HTTP gateway infos (`None` = stopped)
+    http_gateways: Arc<RwLock<Vec<Option<HttpGatewayDetails>>>>,
 }
 
 #[derive(Default)]
@@ -175,7 +172,7 @@ impl PocketIcApiStateBuilder {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone)]
 pub enum OpOut {
     NoOutput,
     Time(u64),
@@ -186,7 +183,7 @@ pub enum OpOut {
     StableMemBytes(Vec<u8>),
     MaybeSubnetId(Option<SubnetId>),
     Error(PocketIcError),
-    RawResponse((u16, BTreeMap<String, Vec<u8>>, Vec<u8>)),
+    RawResponse(Shared<ApiResponse>),
     Pruned,
     MessageId((EffectivePrincipal, Vec<u8>)),
     Topology(Topology),
@@ -272,13 +269,16 @@ impl std::fmt::Debug for OpOut {
             OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
             OpOut::MaybeSubnetId(Some(subnet_id)) => write!(f, "SubnetId({})", subnet_id),
             OpOut::MaybeSubnetId(None) => write!(f, "NoSubnetId"),
-            OpOut::RawResponse((status, headers, bytes)) => {
+            OpOut::RawResponse(fut) => {
                 write!(
                     f,
-                    "ApiV2Resp({}:{:?}:{})",
-                    status,
-                    headers,
-                    base64::encode(bytes)
+                    "ApiResp({:?})",
+                    fut.peek().map(|(status, headers, bytes)| format!(
+                        "{}:{:?}:{}",
+                        status,
+                        headers,
+                        base64::encode(bytes)
+                    ))
                 )
             }
             OpOut::Pruned => write!(f, "Pruned"),
@@ -327,7 +327,7 @@ pub type UpdateResult = std::result::Result<UpdateReply, UpdateError>;
 /// returned directly.
 /// If the computation can be run and takes longer, a Started variant is returned, containing the
 /// requested op and the initial state.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum UpdateReply {
     /// The requested instance is busy executing another update.
     Busy {
@@ -357,6 +357,20 @@ impl UpdateReply {
 /// This trait lets us put a mock of the pocket_ic into the PocketIcApiState.
 pub trait HasStateLabel {
     fn get_state_label(&self) -> StateLabel;
+}
+
+enum ApiVersion {
+    V2,
+    V3,
+}
+
+impl std::fmt::Display for ApiVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ApiVersion::V2 => write!(f, "v2"),
+            ApiVersion::V3 => write!(f, "v3"),
+        }
+    }
 }
 
 fn received_stop_signal(rx: &mut Receiver<()>) -> bool {
@@ -456,7 +470,7 @@ impl ApiState {
     pub async fn create_http_gateway(
         &self,
         http_gateway_config: HttpGatewayConfig,
-    ) -> (InstanceId, u16) {
+    ) -> HttpGatewayInfo {
         use crate::state_api::routes::verify_cbor_content_header;
         use axum::extract::{DefaultBodyLimit, Path, Request as AxumRequest, State};
         use axum::handler::Handler;
@@ -489,7 +503,8 @@ impl ApiState {
             (resp.status(), resp)
         }
 
-        async fn handler_api_v2_canister(
+        async fn handler_api_canister(
+            api_version: ApiVersion,
             replica_url: String,
             effective_canister_id: CanisterId,
             endpoint: &str,
@@ -498,8 +513,8 @@ impl ApiState {
             let client =
                 Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
             let url = format!(
-                "{}/api/v2/canister/{}/{}",
-                replica_url, effective_canister_id, endpoint
+                "{}/api/{}/canister/{}/{}",
+                replica_url, api_version, effective_canister_id, endpoint
             );
             let req = Request::builder()
                 .method(Method::POST)
@@ -512,12 +527,34 @@ impl ApiState {
             (resp.status(), resp)
         }
 
-        async fn handler_call(
+        async fn handler_call_v2(
             State(replica_url): State<String>,
             Path(effective_canister_id): Path<CanisterId>,
             bytes: Bytes,
         ) -> (StatusCode, Response<Incoming>) {
-            handler_api_v2_canister(replica_url, effective_canister_id, "call", bytes).await
+            handler_api_canister(
+                ApiVersion::V2,
+                replica_url,
+                effective_canister_id,
+                "call",
+                bytes,
+            )
+            .await
+        }
+
+        async fn handler_call_v3(
+            State(replica_url): State<String>,
+            Path(effective_canister_id): Path<CanisterId>,
+            bytes: Bytes,
+        ) -> (StatusCode, Response<Incoming>) {
+            handler_api_canister(
+                ApiVersion::V3,
+                replica_url,
+                effective_canister_id,
+                "call",
+                bytes,
+            )
+            .await
         }
 
         async fn handler_query(
@@ -525,7 +562,14 @@ impl ApiState {
             Path(effective_canister_id): Path<CanisterId>,
             bytes: Bytes,
         ) -> (StatusCode, Response<Incoming>) {
-            handler_api_v2_canister(replica_url, effective_canister_id, "query", bytes).await
+            handler_api_canister(
+                ApiVersion::V2,
+                replica_url,
+                effective_canister_id,
+                "query",
+                bytes,
+            )
+            .await
         }
 
         async fn handler_read_state(
@@ -533,7 +577,14 @@ impl ApiState {
             Path(effective_canister_id): Path<CanisterId>,
             bytes: Bytes,
         ) -> (StatusCode, Response<Incoming>) {
-            handler_api_v2_canister(replica_url, effective_canister_id, "read_state", bytes).await
+            handler_api_canister(
+                ApiVersion::V2,
+                replica_url,
+                effective_canister_id,
+                "read_state",
+                bytes,
+            )
+            .await
         }
 
         // converts an HTTP request to an HTTP/1.1 request required by icx-proxy
@@ -559,19 +610,32 @@ impl ApiState {
             next.run(request).await
         }
 
-        let port = http_gateway_config.listen_at.unwrap_or_default();
-        let addr = format!("[::]:{}", port);
+        let ip_addr = http_gateway_config
+            .ip_addr
+            .unwrap_or("127.0.0.1".to_string());
+        let port = http_gateway_config.port.unwrap_or_default();
+        let addr = format!("{}:{}", ip_addr, port);
         let listener = std::net::TcpListener::bind(&addr)
             .unwrap_or_else(|_| panic!("Failed to start HTTP gateway on port {}", port));
         let real_port = listener.local_addr().unwrap().port();
 
         let mut http_gateways = self.http_gateways.write().await;
-        http_gateways.push(true);
-        let instance_id = http_gateways.len() - 1;
+        let instance_id = http_gateways.len();
+        let http_gateway_details = HttpGatewayDetails {
+            instance_id,
+            port: real_port,
+            forward_to: http_gateway_config.forward_to.clone(),
+            domains: http_gateway_config.domains.clone(),
+            https_config: http_gateway_config.https_config.clone(),
+        };
+        http_gateways.push(Some(http_gateway_details));
         drop(http_gateways);
 
         let http_gateways = self.http_gateways.clone();
         let pocket_ic_server_port = self.port.unwrap();
+        let handle = Handle::new();
+        let shutdown_handle = handle.clone();
+        let axum_handle = handle.clone();
         spawn(async move {
             let replica_url = match http_gateway_config.forward_to {
                 HttpGatewayBackend::Replica(replica_url) => replica_url,
@@ -605,7 +669,13 @@ impl ApiState {
                 .route("/api/v2/status", get(handler_status))
                 .route(
                     "/api/v2/canister/:ecid/call",
-                    post(handler_call).layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                    post(handler_call_v2)
+                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                )
+                .route(
+                    "/api/v3/canister/:ecid/call",
+                    post(handler_call_v3)
+                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
                 .route(
                     "/api/v2/canister/:ecid/query",
@@ -624,13 +694,11 @@ impl ApiState {
                 .with_state(replica_url.trim_end_matches('/').to_string())
                 .into_make_service();
 
-            let handle = Handle::new();
-            let shutdown_handle = handle.clone();
             let http_gateways_for_shutdown = http_gateways.clone();
             tokio::spawn(async move {
                 loop {
                     let guard = http_gateways_for_shutdown.read().await;
-                    if !guard[instance_id] {
+                    if guard[instance_id].is_none() {
                         shutdown_handle.shutdown();
                         break;
                     }
@@ -647,7 +715,7 @@ impl ApiState {
                 match config {
                     Ok(config) => {
                         axum_server::from_tcp_rustls(listener, config)
-                            .handle(handle)
+                            .handle(axum_handle)
                             .serve(router)
                             .await
                             .unwrap();
@@ -655,13 +723,13 @@ impl ApiState {
                     Err(e) => {
                         error!("TLS config could not be created: {:?}", e);
                         let mut guard = http_gateways.write().await;
-                        guard[instance_id] = false;
+                        guard[instance_id] = None;
                         return;
                     }
                 }
             } else {
                 axum_server::from_tcp(listener)
-                    .handle(handle)
+                    .handle(axum_handle)
                     .serve(router)
                     .await
                     .unwrap();
@@ -669,13 +737,20 @@ impl ApiState {
 
             info!("Terminating HTTP gateway.");
         });
-        (instance_id, real_port)
+
+        // Wait until the HTTP gateway starts listening.
+        while handle.listening().await.is_none() {}
+
+        HttpGatewayInfo {
+            instance_id,
+            port: real_port,
+        }
     }
 
     pub async fn stop_http_gateway(&self, instance_id: InstanceId) {
         let mut http_gateways = self.http_gateways.write().await;
         if instance_id < http_gateways.len() {
-            http_gateways[instance_id] = false;
+            http_gateways[instance_id] = None;
         }
     }
 
@@ -893,17 +968,27 @@ impl ApiState {
         res
     }
 
+    pub async fn list_http_gateways(&self) -> Vec<HttpGatewayDetails> {
+        self.http_gateways
+            .read()
+            .await
+            .clone()
+            .into_iter()
+            .flatten()
+            .collect()
+    }
+
     /// An operation bound to an instance (a Computation) can update the PocketIC state.
     ///
     /// * If the instance is busy executing an operation, the call returns [UpdateReply::Busy]
-    /// immediately. In that case, the state label and operation id contained in the result
-    /// indicate that the instance is busy with a previous operation.
+    ///   immediately. In that case, the state label and operation id contained in the result
+    ///   indicate that the instance is busy with a previous operation.
     ///
     /// * If the instance is available and the computation exceeds a (short) timeout,
-    /// [UpdateReply::Busy] is returned.
+    ///   [UpdateReply::Busy] is returned.
     ///
     /// * If the computation finished within the timeout, [UpdateReply::Output] is returned
-    /// containing the result.
+    ///   containing the result.
     ///
     /// Operations are _not_ queued by default. Thus, if the instance is busy with an existing operation,
     /// the client has to retry until the operation is done. Some operations for which the client

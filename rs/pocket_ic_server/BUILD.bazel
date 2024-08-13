@@ -2,8 +2,6 @@ load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_ic_test")
 
-package(default_visibility = ["//visibility:public"])
-
 BUILD_DEPENDENCIES = []
 
 LIB_DEPENDENCIES = [
@@ -69,6 +67,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:tempfile",
     "@crate_index//:time",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
     "@crate_index//:tonic",
     "@crate_index//:tower",
     "@crate_index//:tower-http",
@@ -83,6 +82,7 @@ TEST_DEPENDENCIES = [
     "//packages/pocket-ic:pocket-ic",
     "//rs/registry/proto_data_provider",
     "//rs/registry/routing_table",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:hex",
@@ -117,6 +117,8 @@ rust_binary(
     testonly = True,
     srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
+    # TODO: restrict the visibility
+    visibility = ["//visibility:public"],
     deps = LIB_DEPENDENCIES + [":pocket-ic-server-lib"],
 )
 
@@ -134,7 +136,7 @@ rust_library(
     },
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "4.0.0",
+    version = "5.0.0",
     deps = LIB_DEPENDENCIES + [":build_script"],
 )
 
@@ -155,6 +157,7 @@ rust_test(
         "tests/common.rs",
         "tests/test.rs",
     ],
+    aliases = {},
     data = [
         ":pocket-ic-server",
         "@ii_dev_canister//file",
