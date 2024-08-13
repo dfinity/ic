@@ -19,6 +19,7 @@ members = [
     "rs/bitcoin/ckbtc/minter",
     "rs/bitcoin/ckbtc/kyt",
     "rs/bitcoin/consensus",
+    "rs/bitcoin/kyt",
     "rs/bitcoin/mock",
     "rs/bitcoin/replica_types",
     "rs/boundary_node/canary_proxy",
