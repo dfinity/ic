@@ -68,6 +68,7 @@ use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor}
 /// Bandwidth-Delay Product
 /// 2Gb/s * 100ms ≈ 200M bits = 25MB
 /// To this only on to avoid unnecessary error in dfx on MacOS
+#[cfg(target_os = "linux")]
 const UDP_BUFFER_SIZE: usize = 25_000_000; // 25MB
 
 const RECEIVE_WINDOW: VarInt = VarInt::from_u32(200_000_000);
