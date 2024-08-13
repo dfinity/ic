@@ -140,6 +140,7 @@ pub fn get_updatesubnetpayload_with_keys(
         subnet_type: None,
         is_halted: None,
         halt_at_cup_height: None,
+        create_checkpoint: None,
         features: None,
         ecdsa_config: None,
         ecdsa_key_signing_enable: None,

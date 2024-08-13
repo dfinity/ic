@@ -120,6 +120,13 @@ pub trait SubnetRegistry {
         version: RegistryVersion,
     ) -> RegistryClientResult<bool>;
 
+    /// Returns whether the subnet record instructs the subnet to halt at the next cup height
+    fn get_create_checkpoint(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<bool>;
+
     /// Return the [ReplicaVersion] as recorded in the subnet record
     /// at the given height.
     fn get_replica_version(
@@ -324,6 +331,16 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
         Ok(deserialize_registry_value::<SubnetRecord>(bytes)?
             .map(|subnet| subnet.halt_at_cup_height))
+    }
+
+    fn get_create_checkpoint(
+        &self,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<bool> {
+        let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
+        Ok(deserialize_registry_value::<SubnetRecord>(bytes)?
+            .map(|subnet| subnet.create_checkpoint))
     }
 
     fn get_replica_version(

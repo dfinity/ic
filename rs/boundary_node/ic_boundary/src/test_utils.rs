@@ -119,6 +119,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         subnet_type: SubnetType::Application.into(),
         is_halted: false,
         halt_at_cup_height: false,
+        create_checkpoint: false,
         features: Some(Default::default()),
         max_number_of_canisters: 0,
         ssh_readonly_access: vec![],

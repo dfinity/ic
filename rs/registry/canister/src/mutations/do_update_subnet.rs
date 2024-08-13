@@ -337,6 +337,7 @@ pub struct UpdateSubnetPayload {
 
     pub is_halted: Option<bool>,
     pub halt_at_cup_height: Option<bool>,
+    pub create_checkpoint: Option<bool>,
 
     pub features: Option<SubnetFeaturesPb>,
 
@@ -540,6 +541,7 @@ fn merge_subnet_record(
         subnet_type,
         is_halted,
         halt_at_cup_height,
+        create_checkpoint,
         features,
         ecdsa_config,
         chain_key_config,
@@ -581,6 +583,7 @@ fn merge_subnet_record(
 
     maybe_set!(subnet_record, is_halted);
     maybe_set!(subnet_record, halt_at_cup_height);
+    maybe_set!(subnet_record, create_checkpoint);
 
     maybe_set_option!(subnet_record, features);
 
@@ -648,6 +651,7 @@ mod tests {
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: None,
+            create_checkpoint: None,
             features: None,
             ecdsa_config: None,
             ecdsa_key_signing_enable: None,
@@ -687,6 +691,7 @@ mod tests {
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
             halt_at_cup_height: false,
+            create_checkpoint: false,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
@@ -724,6 +729,7 @@ mod tests {
             subnet_type: None,
             is_halted: Some(true),
             halt_at_cup_height: Some(false),
+            create_checkpoint: Some(false),
             features: Some(
                 SubnetFeatures {
                     canister_sandboxing: false,
@@ -769,6 +775,7 @@ mod tests {
                 subnet_type: SubnetType::Application.into(),
                 is_halted: true,
                 halt_at_cup_height: false,
+                create_checkpoint: false,
                 features: Some(
                     SubnetFeatures {
                         canister_sandboxing: false,
@@ -802,6 +809,7 @@ mod tests {
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
             halt_at_cup_height: false,
+            create_checkpoint: false,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
@@ -828,6 +836,7 @@ mod tests {
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: Some(true),
+            create_checkpoint: Some(true),
             features: None,
             ecdsa_config: None,
             ecdsa_key_signing_enable: None,
@@ -865,6 +874,7 @@ mod tests {
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
                 halt_at_cup_height: true,
+                create_checkpoint: true,
                 features: None,
                 max_number_of_canisters: 50,
                 ssh_readonly_access: vec![],

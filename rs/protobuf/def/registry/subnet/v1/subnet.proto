@@ -103,6 +103,8 @@ message SubnetRecord {
   // to `Some`. To remove a key, the list of `key_configs` can be set to not include a particular
   // key. If the removed key is not held by another subnet, it will be lost.
   optional ChainKeyConfig chain_key_config = 29;
+
+  bool create_checkpoint = 30;
 }
 
 message EcdsaInitialization {
