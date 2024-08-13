@@ -1619,6 +1619,70 @@ fn can_keep_last_checkpoint_and_higher_states_after_removal() {
 }
 
 #[test]
+fn can_keep_latest_verified_checkpoint_after_removal_with_unverified_checkpoints_present() {
+    use ic_state_layout::RwPolicy;
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let mut heights = vec![height(0)];
+        for i in 1..10 {
+            let (_height, state) = state_manager.take_tip();
+            heights.push(height(i));
+
+            let scope = if i % 2 == 0 {
+                CertificationScope::Full
+            } else {
+                CertificationScope::Metadata
+            };
+
+            state_manager.commit_and_certify(state, height(i), scope.clone(), None);
+        }
+        assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
+
+        let mutable_cp_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
+            state_manager
+                .state_layout()
+                .checkpoint_verified(height(8))
+                .unwrap()
+                .raw_path()
+                .to_path_buf(),
+            height(8),
+        )
+        .unwrap();
+        mutable_cp_layout
+            .create_unverified_checkpoint_marker()
+            .unwrap();
+
+        state_manager.flush_tip_channel();
+        state_manager.remove_states_below(height(10));
+
+        for h in (1..=5).chain(7..=7) {
+            assert_eq!(
+                state_manager.get_state_at(height(h)),
+                Err(StateManagerError::StateRemoved(height(h)))
+            );
+        }
+
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![height(0), height(6), height(8), height(9)],
+        );
+
+        assert_eq!(height(9), state_manager.latest_state_height());
+        let latest_state = state_manager.get_latest_state();
+        assert_eq!(height(9), latest_state.height());
+
+        let state_manager = restart_fn(state_manager, Some(height(10)));
+
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![height(0), height(6),],
+        );
+        assert_eq!(height(6), state_manager.latest_state_height());
+        let latest_state = state_manager.get_latest_state();
+        assert_eq!(height(6), latest_state.height());
+    });
+}
+
+#[test]
 fn should_restart_from_the_latest_checkpoint_requested_to_remove() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let mut heights = vec![height(0)];
