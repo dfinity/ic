@@ -3,7 +3,7 @@ use ic_crypto_internal_bls12_381_vetkd::*;
 use rand::prelude::SliceRandom;
 use rand::Rng;
 
-fn transport_key_bench(c: &mut Criterion) {
+fn _transport_key_bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_transport_key");
 
     let mut rng = rand::thread_rng();
@@ -67,7 +67,7 @@ fn vetkd_bench(c: &mut Criterion) {
     let did = rng.gen::<[u8; 32]>();
 
     // for (nodes, threshold) in [(13, 5), (13, 9), (40, 14), (100, 34)] {
-    for (nodes, threshold) in [(13, 5)] {
+    for (nodes, threshold) in [(13, 5), (13, 9), (40, 14), (100, 34)] {
         let mut group =
             c.benchmark_group(format!("crypto_bls12_381_vetkd_{}_{}", nodes, threshold));
 
@@ -116,7 +116,7 @@ fn vetkd_bench(c: &mut Criterion) {
 
         let mut node_info = Vec::with_capacity(nodes);
 
-        for node in 0..nodes {
+        for node in 0..threshold {
             let node_sk = poly.evaluate_at(&Scalar::from_node_index(node as u32));
             let node_pk = G2Affine::from(G2Affine::generator() * &node_sk);
 
@@ -139,7 +139,10 @@ fn vetkd_bench(c: &mut Criterion) {
         assert_eq!(node_info.len(), threshold);
 
         group.bench_function(
-            format!("EncryptedKey::combine_unchecked (n={})", nodes),
+            format!(
+                "EncryptedKey::combine_unchecked (optimistically combining {})",
+                threshold
+            ),
             |b| b.iter(|| EncryptedKey::combine_unchecked(&node_info, threshold).unwrap()),
         );
 
@@ -153,13 +156,13 @@ fn vetkd_bench(c: &mut Criterion) {
         )
         .unwrap();
 
-        group.bench_function("EncryptedKey::deserialize", |b| {
-            b.iter_batched(
-                || ek.serialize(),
-                |bytes| EncryptedKey::deserialize(bytes),
-                BatchSize::SmallInput,
-            )
-        });
+        // group.bench_function("EncryptedKey::deserialize", |b| {
+        //     b.iter_batched(
+        //         || ek.serialize(),
+        //         |bytes| EncryptedKey::deserialize(bytes),
+        //         BatchSize::SmallInput,
+        //     )
+        // });
 
         assert!(tsk.decrypt(&ek, &dpk, &did).is_some());
 
