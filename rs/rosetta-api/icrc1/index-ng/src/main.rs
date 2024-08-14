@@ -1,6 +1,5 @@
 use candid::{candid_method, CandidType, Decode, Encode, Nat, Principal};
-use ic_canister_log::{export as export_logs, log};
-use ic_canister_profiler::{measure_span, SpanName, SpanStats};
+use ic_canister_profiler::{measure_span, ProfilerSink, SpanName, SpanStats};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::trap;
 use ic_cdk_macros::{init, post_upgrade, query};
@@ -103,9 +102,6 @@ thread_local! {
         RefCell::new(AccountDataMap::init(memory_manager.get(ACCOUNT_DATA_MEMORY_ID)))
     });
 
-    /// Profiling data to understand cycles usage
-    static PROFILING_DATA: RefCell<SpanStats> = RefCell::new(SpanStats::default());
-
     /// Cache of the canister, i.e. ephemeral data that doesn't need to be
     /// persistent between upgrades
     static CACHE: RefCell<Cache> = RefCell::new(Cache::default());
@@ -159,6 +155,13 @@ impl Storable for State {
     }
 
     const BOUND: Bound = Bound::Unbounded;
+}
+
+#[derive(Default)]
+struct NullSink {}
+
+impl ProfilerSink for NullSink {
+    fn record(self, span: SpanName, instructions: u64) {}
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -317,11 +320,6 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
     if let Ok(old_state) = ciborium::de::from_reader::<LegacyIndexState, _>(
         ic_cdk::api::stable::StableReader::default().take(MAX_LEGACY_STATE_BYTES),
     ) {
-        log!(
-            P1,
-            "Found the state of the old index. ledger-id: {}",
-            old_state.ledger_id
-        );
         mutate_state(|state| {
             state.ledger_id = old_state.ledger_id.into();
         })
@@ -330,11 +328,6 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
     match index_arg {
         Some(IndexArg::Upgrade(arg)) => {
             if let Some(ledger_id) = arg.ledger_id {
-                log!(
-                    P1,
-                    "Found ledger_id in the upgrade arguments. ledger-id: {}",
-                    ledger_id
-                );
                 mutate_state(|state| {
                     state.ledger_id = ledger_id;
                 });
@@ -350,10 +343,6 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
 
 async fn get_supported_standards_from_ledger() -> Vec<String> {
     let ledger_id = with_state(|state| state.ledger_id);
-    log!(
-        P1,
-        "[get_supported_standards_from_ledger]: making the call..."
-    );
     let res = ic_cdk::api::call::call::<_, (Vec<StandardRecord>,)>(
         ledger_id,
         "icrc1_supported_standards",
@@ -363,21 +352,10 @@ async fn get_supported_standards_from_ledger() -> Vec<String> {
     match res {
         Ok((res,)) => {
             let supported_standard_names = res.into_iter().map(|s| s.name).collect::<Vec<_>>();
-            log!(
-                P1,
-                "[get_supported_standards_from_ledger]: ledger {} supports {:?}",
-                ledger_id,
-                supported_standard_names,
-            );
             supported_standard_names
         }
         Err((code, msg)) => {
             // log the error but do not propagate it
-            log!(
-                P0,
-                "[get_supported_standards_from_ledger]: failed to call get_supported_standards_from_ledger on ledger {}. Error code: {:?} message: {}",
-                ledger_id, code, msg
-            );
             vec![]
         }
     }
@@ -394,12 +372,14 @@ where
     I: CandidType + Debug,
     O: CandidType + Debug + for<'a> Deserialize<'a>,
 {
-    let req = measure_span(&PROFILING_DATA, encode_span_name, || Encode!(i))
+    let sink = NullSink {};
+    let req = measure_span(sink, encode_span_name, || Encode!(i))
         .map_err(|err| format!("failed to candid encode the input {:?}: {}", i, err))?;
     let res = ic_cdk::api::call::call_raw(id, method, &req, 0)
         .await
         .map_err(|(code, str)| format!("code: {:#?} message: {}", code, str))?;
-    measure_span(&PROFILING_DATA, decode_span_name, || Decode!(&res, O))
+    let sink = NullSink {};
+    measure_span(sink, decode_span_name, || Decode!(&res, O))
         .map_err(|err| format!("failed to candid decode the output: {}", err))
 }
 
@@ -409,7 +389,6 @@ async fn get_blocks_from_ledger(start: u64) -> Option<GetBlocksResponse> {
         start: Nat::from(start),
         length: Nat::from(length),
     };
-    log!(P1, "[get_blocks_from_ledger]: making the call...");
     let res = measured_call(
         "build_index.get_blocks_from_ledger.encode",
         "build_index.get_blocks_from_ledger.decode",
@@ -420,10 +399,7 @@ async fn get_blocks_from_ledger(start: u64) -> Option<GetBlocksResponse> {
     .await;
     match res {
         Ok(res) => Some(res),
-        Err(err) => {
-            log!(P0, "[get_blocks_from_ledger] failed to get blocks: {}", err);
-            None
-        }
+        Err(err) => None,
     }
 }
 
@@ -444,14 +420,7 @@ async fn get_blocks_from_archive(
     .await;
     match res {
         Ok(res) => Some(res),
-        Err(err) => {
-            log!(
-                P0,
-                "[get_blocks_from_archive] failed to get blocks: {}",
-                err
-            );
-            None
-        }
+        Err(err) => None,
     }
 }
 
@@ -461,7 +430,6 @@ async fn icrc3_get_blocks_from_ledger(start: u64) -> Option<GetBlocksResult> {
         start: Nat::from(start),
         length: Nat::from(length),
     }];
-    log!(P1, "[icrc3_get_blocks_from_ledger]: making the call...");
     let res = measured_call(
         "build_index.icrc3_get_blocks_from_ledger.encode",
         "build_index.icrc3_get_blocks_from_ledger.decode",
@@ -472,14 +440,7 @@ async fn icrc3_get_blocks_from_ledger(start: u64) -> Option<GetBlocksResult> {
     .await;
     match res {
         Ok(res) => Some(res),
-        Err(err) => {
-            log!(
-                P0,
-                "[icrc3_get_blocks_from_ledger] failed to get blocks: {}",
-                err
-            );
-            None
-        }
+        Err(err) => None,
     }
 }
 
@@ -494,14 +455,7 @@ async fn icrc3_get_blocks_from_archive(archived: &ArchivedBlocks) -> Option<GetB
     .await;
     match res {
         Ok(res) => Some(res),
-        Err(err) => {
-            log!(
-                P0,
-                "[icrc3_get_blocks_from_archive] failed to get blocks: {}",
-                err
-            );
-            None
-        }
+        Err(err) => None,
     }
 }
 
@@ -519,29 +473,29 @@ async fn find_get_blocks_method() -> GetBlocksMethod {
     get_blocks_method
 }
 
-pub async fn build_index() -> Option<()> {
-    if with_state(|state| state.is_build_index_running) {
-        return None;
+pub async fn build_index() {
+    // if with_state(|state| state.is_build_index_running) {
+    //     return None;
+    // }
+    // mutate_state(|state| {
+    //     state.is_build_index_running = true;
+    // });
+    // let _reset_is_build_index_running_flag_guard = guard((), |_| {
+    //     mutate_state(|state| {
+    //         state.is_build_index_running = false;
+    //     });
+    // });
+    // // fetch_blocks_via_icrc3().await?;
+    // let num_indexed = match find_get_blocks_method().await {
+    //     GetBlocksMethod::GetBlocks => fetch_blocks_via_get_blocks().await?,
+    //     GetBlocksMethod::ICRC3GetBlocks => fetch_blocks_via_icrc3().await?,
+    // };
+    for _ in 0..100 {
+        find_get_blocks_method().await;
     }
-    mutate_state(|state| {
-        state.is_build_index_running = true;
-    });
-    let _reset_is_build_index_running_flag_guard = guard((), |_| {
-        mutate_state(|state| {
-            state.is_build_index_running = false;
-        });
-    });
-    let num_indexed = match find_get_blocks_method().await {
-        GetBlocksMethod::GetBlocks => fetch_blocks_via_get_blocks().await?,
-        GetBlocksMethod::ICRC3GetBlocks => fetch_blocks_via_icrc3().await?,
-    };
-    log!(
-        P1,
-        "Indexed: {} waiting : {:?}",
-        num_indexed,
-        DEFAULT_MAX_WAIT_TIME
-    );
-    Some(())
+    // // with_blocks(|blocks| ic_cdk::eprintln!("{}", format!("num blocks {}", blocks.len())));
+    // // let stable_mem = dfn_core::api::stable_memory_size_in_pages() * 64 * 1024;
+    // // ic_cdk::eprintln!("{}", format!("stable memory {}", stable_mem));
 }
 
 async fn fetch_blocks_via_get_blocks() -> Option<u64> {
@@ -594,12 +548,6 @@ async fn fetch_blocks_via_icrc3() -> Option<u64> {
             // one, i.e. next_id + num_indexed
             let expected_id = with_blocks(|blocks| blocks.len());
             if arg.start != expected_id {
-                log!(
-                    P0,
-                    "[fetch_blocks_via_icrc3]: wrong start index in archive args. Expected: {} actual: {}",
-                    expected_id,
-                    arg.start,
-                );
                 return None;
             }
 
@@ -611,13 +559,6 @@ async fn fetch_blocks_via_icrc3() -> Option<u64> {
 
             // sanity check: the index does not support nested archives
             if !res.archived_blocks.is_empty() {
-                log!(
-                    P0,
-                    "[fetch_blocks_via_icrc3]: The archive callback {:?} with arg {:?} returned one or more archived blocks and the index is currently not supporting nested archived blocks. Archived blocks returned are {:?}",
-                    callback.clone(),
-                    arg.clone(),
-                    res.archived_blocks,
-                );
                 return None;
             }
 
@@ -638,15 +579,12 @@ async fn fetch_blocks_via_icrc3() -> Option<u64> {
 }
 
 fn set_build_index_timer(after: Duration) -> TimerId {
-    ic_cdk_timers::set_timer_interval(after, || {
-        ic_cdk::spawn(async {
-            let _ = build_index().await;
-        })
-    })
+    ic_cdk_timers::set_timer_interval(after, || ic_cdk::spawn(async {}))
 }
 
 fn append_block(block_index: BlockIndex64, block: GenericBlock) {
-    measure_span(&PROFILING_DATA, "append_blocks", move || {
+    let sink = NullSink {};
+    measure_span(sink, "append_blocks", move || {
         let block = generic_block_to_encoded_block_or_trap(block_index, block);
 
         // append the encoded block to the block log
@@ -690,12 +628,6 @@ fn append_icrc3_blocks(new_blocks: Vec<BlockWithId>) -> Option<()> {
         // sanity check
         let expected_id = start_id + blocks.len() as u64;
         if id != expected_id {
-            log!(
-                P0,
-                "[fetch_blocks_via_icrc3]: wrong block index returned by ledger. Expected: {} actual: {}",
-                expected_id,
-                id,
-            );
             return None;
         }
         // This conversion is safe as `Value`
@@ -737,8 +669,9 @@ fn push_block(block_ranges: &mut Vec<Range<BlockIndex64>>, block_index: BlockInd
 }
 
 fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
+    let sink = NullSink {};
     measure_span(
-        &PROFILING_DATA,
+        sink,
         "append_blocks.process_balance_changes",
         move || match block.transaction.operation {
             Operation::Burn { from, amount, .. } => debit(block_index, from, amount),
@@ -782,10 +715,6 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                     // that don't have their fee fields populated.
                     None => match with_state(|state| state.last_fee) {
                         Some(last_fee) => {
-                            log!(
-                                P1,
-                                "fee and effective_fee aren't set in block {block_index}, using last transfer fee {last_fee}"
-                            );
                             last_fee
                         }
                         None => ic_cdk::trap(&format!("bug: index is stuck because block with index {block_index} doesn't contain a fee and no fee has been recorded before")),
@@ -1056,14 +985,6 @@ fn http_request(req: HttpRequest) -> HttpResponse {
     } else if req.path() == "/logs" {
         use serde_json;
         let mut entries: Log = Default::default();
-        for entry in export_logs(&P0) {
-            entries.entries.push(LogEntry {
-                timestamp: entry.timestamp,
-                file: entry.file.to_string(),
-                line: entry.line,
-                message: entry.message,
-            });
-        }
         HttpResponseBuilder::ok()
             .header("Content-Type", "application/json; charset=utf-8")
             .with_body_and_content_length(serde_json::to_string(&entries).unwrap_or_default())
@@ -1106,13 +1027,6 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
             .min(f64::MAX as u128) as f64,
         "Last amount of time waited between two transactions fetch.",
     )?;
-    PROFILING_DATA.with(|cell| -> std::io::Result<()> {
-        cell.borrow().record_metrics(w.histogram_vec(
-            "index_ng_profile_instructions",
-            "Statistics for how many instructions index-ng operations require.",
-        )?)?;
-        Ok(())
-    })?;
     Ok(())
 }
 

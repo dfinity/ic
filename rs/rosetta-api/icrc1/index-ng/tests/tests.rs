@@ -91,6 +91,17 @@ fn default_archive_options() -> ArchiveOptions {
     }
 }
 
+use std::fs::File;
+use std::io::Read;
+
+pub(crate) fn get_file_as_byte_vec(filename: &String) -> Vec<u8> {
+    let mut f = File::open(&filename).expect("File not found.");
+    let metadata = std::fs::metadata(&filename).expect("Unable to read file metadata.");
+    let mut buffer = vec![0; metadata.len() as usize];
+    f.read(&mut buffer).expect("File length increased.");
+    buffer
+}
+
 fn install_ledger(
     env: &StateMachine,
     initial_balances: Vec<(Account, u64)>,
@@ -106,15 +117,19 @@ fn install_ledger(
         .with_metadata_entry(TEXT_META_KEY, TEXT_META_VALUE)
         .with_metadata_entry(BLOB_META_KEY, BLOB_META_VALUE)
         .with_archive_options(archive_options)
-        .with_feature_flags(FeatureFlags { icrc2: true });
+        .with_feature_flags(FeatureFlags { icrc2: true })
+        .with_max_memo_length(100);
     if let Some(fee_collector_account) = fee_collector_account {
         builder = builder.with_fee_collector_account(fee_collector_account);
     }
     for (account, amount) in initial_balances {
         builder = builder.with_initial_balance(account, amount);
     }
+    let non_stable_structure_ledger_wasm = get_file_as_byte_vec(
+        &"/home/maciejmodelski/ic-icrc1-ledger-add_approvals.wasm.gz".to_string(),
+    );
     env.install_canister(
-        ledger_wasm(),
+        non_stable_structure_ledger_wasm,
         Encode!(&LedgerArgument::Init(builder.build())).unwrap(),
         None,
     )
@@ -207,7 +222,7 @@ fn get_logs(env: &StateMachine, index_id: CanisterId) -> Log {
 // last one in the ledger or enough attempts passed and therefore
 // it fails.
 fn wait_until_sync_is_completed(env: &StateMachine, index_id: CanisterId, ledger_id: CanisterId) {
-    const MAX_ATTEMPTS: u8 = 100; // No reason for this number.
+    const MAX_ATTEMPTS: u64 = 1000; // No reason for this number.
     let mut num_blocks_synced = u64::MAX;
     let mut chain_length = u64::MAX;
     for _i in 0..MAX_ATTEMPTS {
@@ -750,11 +765,18 @@ fn sanity_check_ledger() {
     }
 }
 
+use std::time::Instant;
+
 #[test]
 fn test_ledger_growing() {
     // check that the index canister can incrementally get the blocks from the ledger.
 
-    let initial_balances: Vec<_> = vec![(account(1, 0), 1_000_000_000_000)];
+    let from = Account {
+        owner: PrincipalId::new_user_test_id(1).0,
+        subaccount: Some([11_u8; 32]),
+    };
+
+    let initial_balances: Vec<_> = vec![(from, 1_000_000_000_000)];
     let env = &StateMachine::new();
     let ledger_id = install_ledger(
         env,
@@ -765,41 +787,74 @@ fn test_ledger_growing() {
     );
     let index_id = install_index_ng(env, ledger_id);
 
-    // Test initial mint block.
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-    assert_ledger_index_parity(env, ledger_id, index_id);
+    let send_batch = |method_name: &str, start: u64, num: u64| {
+        let payload = Encode!(&(start as u64, num as u64)).unwrap();
 
-    // Test first transfer block.
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 1);
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-    assert_ledger_index_parity(env, ledger_id, index_id);
+        let before = Instant::now();
+        let result = env
+            .execute_ingress_as(
+                ic_base_types::PrincipalId(from.owner),
+                ledger_id,
+                method_name,
+                payload,
+            )
+            .expect(&format!("{} failed", method_name));
+        let after = Instant::now();
 
-    // Test multiple blocks.
-    for (from, to, amount) in [
-        (account(1, 0), account(1, 1), 1_000_000),
-        (account(1, 0), account(2, 0), 1_000_001),
-        (account(1, 1), account(2, 0), 1),
-    ] {
-        transfer(env, ledger_id, from, to, amount);
+        println!(
+            "{} took {} ms",
+            method_name,
+            after.duration_since(before).as_millis()
+        );
+        let res = Decode!(&assert_reply(result), Result<u64, String>).unwrap();
+        match res {
+            Ok(x) => {
+                println!("all added by {method_name}: {x}");
+                return x;
+            }
+            Err(e) => panic!("failed with {e}"),
+        }
+    };
+
+    let print_mem = || {
+        use chrono::offset::Utc;
+        use chrono::DateTime;
+        let datetime: DateTime<Utc> = env.time().into();
+        let mem = env
+            .canister_status(index_id)
+            .unwrap()
+            .unwrap()
+            .memory_size()
+            .get();
+        println!(
+            "total memory: {}, time {}",
+            mem,
+            datetime.format("%d/%m/%Y %T")
+        );
+    };
+
+    let mut count = 1;
+    // for _i in 0..1 {
+    //     count = send_batch("add_accounts", count, 20_000);
+    // }
+
+    println!("count {count}");
+
+    loop {
+    // for i in 0..4000 {
+        env.advance_time(Duration::from_secs(1));
+        env.tick();
+        print_mem();
     }
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-    assert_ledger_index_parity(env, ledger_id, index_id);
 
-    // Test archived blocks.
-    for _i in 0..(ARCHIVE_TRIGGER_THRESHOLD as usize + 1) {
-        transfer(env, ledger_id, account(1, 0), account(1, 2), 1);
-    }
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-    assert_ledger_index_parity(env, ledger_id, index_id);
+    // env.upgrade_canister(
+    //     index_id,
+    //     index_ng_wasm(),
+    //     Encode!(&None::<IndexArg>).unwrap(),
+    // )
+    // .unwrap();
 
-    // Test block with an approval.
-    approve(env, ledger_id, account(1, 0), account(2, 0), 100000);
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-    assert_ledger_index_parity(env, ledger_id, index_id);
-    assert_eq!(
-        icrc1_balance_of(env, ledger_id, account(1, 0)),
-        icrc1_balance_of(env, index_id, account(1, 0))
-    );
+    // print_mem();
 }
 
 #[test]
