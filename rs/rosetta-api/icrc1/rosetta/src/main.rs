@@ -317,6 +317,15 @@ async fn main() -> Result<()> {
 
     let metadata = load_metadata(&args, &icrc1_agent, &storage).await?;
 
+    info!(
+        "ICRC Rosetta is connected to the ICRC-1 ledger: {}",
+        args.ledger_id
+    );
+    info!(
+        "The token symbol of the ICRC-1 ledger is: {}",
+        metadata.symbol
+    );
+
     let shared_state = Arc::new(AppState {
         icrc1_agent: icrc1_agent.clone(),
         ledger_id: args.ledger_id,
