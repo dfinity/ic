@@ -650,6 +650,13 @@ mod tests {
                 pool.advance_round_normal_operation();
             }
 
+            // Add an additional equivocation proof above the finalized height
+            pool.insert_validated(pool.make_next_beacon());
+            let block = pool.make_next_block();
+            pool.insert_validated(block.clone());
+            pool.notarize(&block);
+            pool.insert_validated(pool.make_equivocation_proof(Rank(0), Height::new(11)));
+
             // We expect to purge equivocation proofs below AND at the finalized height.
             let pool_reader = PoolReader::new(&pool);
             let changeset = purger.on_state_change(&pool_reader);
