@@ -1,4 +1,5 @@
 use super::*;
+
 use anyhow::Error;
 use axum::{
     body::Body,
@@ -11,10 +12,16 @@ use axum::{
     Router,
 };
 use http::StatusCode;
+use ic_types::{
+    messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope},
+    CanisterId,
+};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tower::Service;
 
-use crate::{routes::test::test_route_subnet_with_id, socket::TcpConnectInfo};
+use crate::{
+    routes::test::test_route_subnet_with_id, socket::TcpConnectInfo, test_utils::setup_test_router,
+};
 
 async fn dummy_call(_request: Request<Body>) -> Result<impl IntoResponse, ApiError> {
     Ok("foo".into_response())
@@ -132,6 +139,114 @@ async fn test_subnet_rate_limit() -> Result<(), Error> {
     assert_eq!(response4.status(), StatusCode::OK);
     assert_eq!(response5.status(), StatusCode::TOO_MANY_REQUESTS);
     assert_eq!(response6.status(), StatusCode::TOO_MANY_REQUESTS);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_subnet_rate_limit_with_router() -> Result<(), Error> {
+    let (mut app, _) = setup_test_router(false, false, 10, 1, 1024, Some(1));
+
+    let sender = Principal::from_text("sqjm4-qahae-aq").unwrap();
+    let canister_id = CanisterId::from_u64(100);
+
+    let content = HttpCallContent::Call {
+        update: HttpCanisterUpdate {
+            canister_id: Blob(canister_id.get().as_slice().to_vec()),
+            method_name: "foobar".to_string(),
+            arg: Blob(vec![]),
+            sender: Blob(sender.as_slice().to_vec()),
+            nonce: None,
+            ingress_expiry: 1234,
+        },
+    };
+
+    let envelope = HttpRequestEnvelope::<HttpCallContent> {
+        content,
+        sender_delegation: None,
+        sender_pubkey: None,
+        sender_sig: None,
+    };
+
+    let body = serde_cbor::to_vec(&envelope).unwrap();
+
+    // Test call #1 (should work)
+    let request = Request::builder()
+        .method("POST")
+        .uri(format!(
+            "http://localhost/api/v2/canister/{canister_id}/call"
+        ))
+        .body(Body::from(body.clone()))
+        .unwrap();
+
+    let resp = app.call(request).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::ACCEPTED);
+
+    // Test call #2 (should fail)
+    let request = Request::builder()
+        .method("POST")
+        .uri(format!(
+            "http://localhost/api/v2/canister/{canister_id}/call"
+        ))
+        .body(Body::from(body))
+        .unwrap();
+
+    let resp = app.call(request).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_subnet_rate_limit_with_router_v3() -> Result<(), Error> {
+    let (mut app, _) = setup_test_router(false, false, 10, 1, 1024, Some(1));
+
+    let sender = Principal::from_text("sqjm4-qahae-aq").unwrap();
+    let canister_id = CanisterId::from_u64(100);
+
+    let content = HttpCallContent::Call {
+        update: HttpCanisterUpdate {
+            canister_id: Blob(canister_id.get().as_slice().to_vec()),
+            method_name: "foobar".to_string(),
+            arg: Blob(vec![]),
+            sender: Blob(sender.as_slice().to_vec()),
+            nonce: None,
+            ingress_expiry: 1234,
+        },
+    };
+
+    let envelope = HttpRequestEnvelope::<HttpCallContent> {
+        content,
+        sender_delegation: None,
+        sender_pubkey: None,
+        sender_sig: None,
+    };
+
+    let body = serde_cbor::to_vec(&envelope).unwrap();
+
+    // Test call #1 (should work)
+    let request = Request::builder()
+        .method("POST")
+        .uri(format!(
+            "http://localhost/api/v3/canister/{canister_id}/call"
+        ))
+        .body(Body::from(body.clone()))
+        .unwrap();
+
+    let resp = app.call(request).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::ACCEPTED);
+
+    // Test call #2 (should fail)
+    let request = Request::builder()
+        .method("POST")
+        .uri(format!(
+            "http://localhost/api/v3/canister/{canister_id}/call"
+        ))
+        .body(Body::from(body))
+        .unwrap();
+
+    let resp = app.call(request).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
 
     Ok(())
 }
