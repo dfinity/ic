@@ -148,11 +148,7 @@ impl CustomServer {
                 error
             )
         }
-        if let Ok(mut stream) = result {
-            stream.write(b"thing").await.unwrap();
-            stream.shutdown().await.unwrap();
-        }
-        Ok(())
+        result.map(|_tls_stream| ())
     }
 
     /// Returns the port this server is running on.
