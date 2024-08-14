@@ -352,7 +352,7 @@ impl Default for Config {
             query_stats_aggregation: FlagStatus::Enabled,
             query_stats_epoch_length: QUERY_STATS_EPOCH_LENGTH,
             stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
-            canister_snapshots: FlagStatus::Disabled,
+            canister_snapshots: FlagStatus::Enabled,
             dirty_page_logging: FlagStatus::Disabled,
             max_canister_http_requests_in_flight: MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
             default_wasm_memory_limit: DEFAULT_WASM_MEMORY_LIMIT,
