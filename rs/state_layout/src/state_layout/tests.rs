@@ -392,12 +392,12 @@ fn test_can_remove_unverified_marker_file_twice() {
         checkpoint.remove_unverified_checkpoint_marker().unwrap();
 
         // The checkpoint already exists, therefore promoting the tip to checkpoint should fail.
-        // However, it can still access the checkpoint and try to remove the marker file again from its perspective.
+        // However, it can still access the checkpoint and try to remove the marker file again from its side.
         let checkpoint_result = state_layout.scratchpad_to_checkpoint(tip, height, None);
         assert!(checkpoint_result.is_err());
 
         let res = state_layout
-            .checkpoint(height)
+            .checkpoint_in_verification(height)
             .unwrap()
             .remove_unverified_checkpoint_marker();
         assert!(res.is_ok());

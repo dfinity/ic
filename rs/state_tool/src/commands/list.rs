@@ -3,7 +3,7 @@
 use crate::commands::utils;
 use std::path::PathBuf;
 
-/// Types of persisted state: checkpoints, diverged checkpoints and backups.
+/// Types of persisted state: verified checkpoints, unverified checkpoints, diverged checkpoints and backups.
 enum CheckpointStatus {
     Verified,
     Unverified,
