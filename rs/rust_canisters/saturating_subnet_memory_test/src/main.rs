@@ -1,124 +1,169 @@
-use candid::{candid_method, Decode, Encode};
-use dfn_core::api::{call_bytes, Funds};
-use downstream_calls_test::RequestsConfig;
-use ic_cdk_macros::update;
+use candid::{Decode, Encode};
+use dfn_core::api;
+use saturating_subnet_memory_test::{RequestConfig, Config, Metrics};
+use ic_base_types::CanisterId;
+use std::cell::{Cell, RefCell};
+use std::collections::VecDeque;
 
-const FAUST: &str = "Ich bin der Geist der stets verneint! Und das mit Recht; denn alles was entsteht \
-ist werth daß es zu Grunde geht; Drum besser wär's daß nichts entstünde. So ist denn alles was ihr Sünde, \
-Zerstörung, kurz das Böse nennt, Mein eigentliches Element."
-
-/// Internal state of the canister. This holds a queue of `RequestConfig`, i.e. a canister ID to
-/// which a request should be sent and a vector of payload num bytes.
-///
-/// Each time a request is sent to the canister at the front of the queue, the vector of payload
-/// num bytes is decreased in length by 1 and queue is rotated to the left by 1. This way a request
-/// is sent out to each receiving canister with a given payload num bytes in a round robin fashion.
 thread_local! {
-    static REQUESTS_CONFIGS: std::cell::Cell<VecDeque<RequestsConfig>>;
-    static REQUESTS_PER_HEARTBEAT: std::cell:::Cell<u64>;
-    static NUM_BYTES_SENT: std::cell::Cell<u64>;
-    static NUM_REQUESTS_SENT: std::cell::Cell<u64>;
+    /// A queue of canister ID and a vector of payload sizes for requests.
+    static REQUEST_CONFIGS: RefCell<VecDeque<RequestConfig>> = RefCell::default();
+    /// A buffer for failed calls, such that the call can be attempted again.
+    static RETRY: Cell<Option<(CanisterId, u32)>> = Cell::default();
+    /// A queue of payload sizes for responses.
+    static RESPONSE_PAYLOADS: RefCell<VecDeque<u32>> = RefCell::default();
+    /// The number of requests we try to send per round.
+    static REQUESTS_PER_ROUND: Cell<u32> = Cell::default();
+    /// Sending/Receiving stats.
+    static METRICS: RefCell<Metrics> = RefCell::default();
 }
 
-fn next() -> Option<(CanisterId, u32)> {
-    let configs = REQUEST_CONFIGS.get_mut();
-
-    while let Some(config) = configs.pop_front() {
-        if let Some(num_bytes) = config.payload_num_bytes.pop() {
-            let canister_id = config.canister_id;
-            configs.push_back(config);
-            return (canister_id, num_bytes);
+/// Extracts the next canister ID and payload size from the queue. Each time a payload size and
+/// canister ID is returned, the queue is rotated to the left by 1; the total number of payload
+/// sizes shrinks by 1 each time until the queue is eventually empty.
+fn next_request() -> Option<(CanisterId, u32)> {
+    REQUEST_CONFIGS.with_borrow_mut(|configs| {
+        while let Some(mut config) = configs.pop_front() {
+            if let Some(num_bytes) = config.payload_bytes.pop() {
+                let receiver = config.receiver;
+                configs.push_back(config);
+                return Some((receiver, num_bytes));
+            }
         }
-    }
+        None
+    })
+}
 
-    None
+/// Extracts the next payload size for the next response from the queue. Each time a payload size
+/// is returned, the queue is rotated the left by 1. Since we always have to be able to send a
+/// response, the queue never shrinks and just rotates forever.
+fn next_response() -> u32 {
+    RESPONSE_PAYLOADS.with_borrow_mut(|payloads| {
+        match payloads.pop_front() {
+            Some(payload) => {
+                payloads.push_back(payload);
+                payload
+            },
+            None => 0,
+        }
+    })
 }
 
 #[export_name = "canister_init"]
 fn main() {}
 
-#[candid_method(update)]
-#[update]
-async fn start(requests_per_heartbeat: u64, requests_config: Vec<RequestsConfig>) -> String {
-    let mut num_requests_total = 0;
-    let mut num_bytes_total = 0;
-    for cfg in requests_config.iter() {
-        num_requests_total += cfg.payload_num_bytes.len();
-        num_bytes_total += cfg.payload_num_bytes.iter().sum();
+/// Sets the request and response payload sizes. Returns a message including basic stats of the
+/// request payloads sent to the canister.
+#[export_name = "canister_update start"]
+fn start() {
+    let config = Decode!(&api::arg_data()[..], Config).expect("failed to decode request");
+
+    let mut num_requests_total = 0_u32;
+    let mut num_bytes_total = 0_u32;
+    for cfg in config.request_configs.iter() {
+        num_requests_total += cfg.payload_bytes.len() as u32;
+        num_bytes_total += cfg.payload_bytes.iter().sum::<u32>();
     }
-    let msg = format!(
+    let msg = Encode!(&format!(
         "Sending {} bytes in {} requests, {} requests per round",
         num_bytes_total,
         num_requests_total,
-        requests_per_round,
-    );
+        config.requests_per_round,
+    )).unwrap();
 
-    REQUESTS_PER_HEARTBEAT.set(requests_per_heartbeat);
-    REQUESTS_CONFIG.set(requests_config.into());
+    REQUESTS_PER_ROUND.set(config.requests_per_round);
+    REQUEST_CONFIGS.set(config.request_configs.into());
+    RESPONSE_PAYLOADS.set(config.response_bytes.into());
 
-    msg
+    api::reply(&msg[..]);
 }
 
-async fn echo(
+/// Returns stats tracked by the canister.
+#[export_name = "canister_query metrics"]
+fn metrics() {
+    let msg = METRICS.with_borrow(|metrics| Encode!(metrics).unwrap());
+    api::reply(&msg[..]);
+}
 
-fn heartbeat() {
-    if REQUESTS_PER_HEARTBEAT.get() > 0 {
+/// Receives a payload, tracks stats, then sends a different payload back.
+#[export_name = "canister_update rebound"]
+fn rebound() {
+    let request_payload = Decode!(&api::arg_data()[..], Vec<u8>).expect("failed to decode request");
+    let response_payload = vec![0_u8; next_response() as usize];
+    
+    METRICS.with_borrow_mut(|metrics| {
+        // Record the received request.
+        metrics.received_request_count += 1;
+        metrics.request_bytes_received += request_payload.len() as u32;
+        // Record the sent response.
+        metrics.sent_response_count += 1;
+        metrics.response_bytes_sent += response_payload.len() as u32;
+    });
+    
+    let msg = Encode!(&response_payload).expect("failed to encode response");
+    api::reply(&msg[..]);
+}
+
+/// Callback for handling replies from "rebound".
+fn on_reply(_env: *mut ()) {                  
+    let reply =
+        candid::Decode!(&api::arg_data()[..], Vec<u8>).expect("failed to decode response");
+    
+    METRICS.with_borrow_mut(|metrics| {
+        metrics.received_response_count += 1;
+        metrics.response_bytes_received += reply.len() as u32;
+    });
+}
+
+/// Callback for handling reject responses from "handle_request".
+fn on_reject(_env: *mut ()) {
+    METRICS.with_borrow_mut(|metrics| { metrics.send_request_success_count += 1; });
+}
+
+/// Tries to send a request. Increments an error counter on failure.
+fn send_request(receiver: CanisterId, bytes: u32) -> Result<(), (CanisterId, u32)> {
+    let msg = Encode!(&vec![0_u8; bytes as usize]).expect("failed to encode payload");
+    let error_code = api::call_raw(
+        api::CanisterId::try_from(receiver).unwrap(),
+        "rebound",
+        &msg[..],
+        on_reply,
+        on_reject,
+        None,
+        std::ptr::null_mut(),
+        api::Funds::zero(),
+    );
+
+    match error_code {
+        0 => Ok(()),
+        _ => {
+            METRICS.with_borrow_mut(|metrics| {
+                metrics.send_request_error_count += 1;
+            });
+            Err((receiver, bytes))
+        }
     }
 }
 
-/// Replies to or defers to another canister a list of actions (call or response commands),
-/// along with counters keeping track of:
-///  - The current call depth in the call tree.
-///  - The total number of calls made.
-///  - The sum of call tree depths at which these calls were made.
-///
-/// At each step, the first command in the actions list is extracted and executed. Therefore
-/// the actions list becomes shorter at each step and traverses the call tree that it's elements
-/// describe.
-///
-/// Once the list has exhausted all commands anywhere in the call tree, response commands are
-/// executed until the tree is concluded and a response to the initiating ingress message is
-/// formed.
-///
-/// The tree may also be concluded by sufficiently many response commands in a sequence in the
-/// action list itself (even if the list is not empty at the time of conclusion).
-///
-/// Any action list will produce a finite call tree, provided the canister IDs it contains
-/// correspond to running 'downstream-call-test-canisters'.
-///
-/// See `test_linear_sequence_call_tree_depth` and `test_multiple_branches_call_tree_depth` in
-/// 'rs/messaging/tests/call_tree_tests.rs' for examples on how to use this canister.
-#[candid_method(update)]
-#[update]
-async fn reply_or_defer(mut state: State) -> State {
-    loop {
-        match state.actions.pop_front() {
-            Some(CallOrResponse::Call(canister_id)) => {
-                let response = call_bytes(
-                    canister_id,
-                    "reply_or_defer",
-                    &Encode!(&State {
-                        actions: state.actions,
-                        call_count: state.call_count + 1,
-                        current_depth: state.current_depth + 1,
-                        depth_total: state.depth_total + state.current_depth,
-                    })
-                    .unwrap(),
-                    Funds::zero(),
-                )
-                .await
-                .expect("calling other canister failed");
+/// Arrempts to send requests to other canisters.
+#[export_name = "canister_heartbeat"]
+fn heartbeat() {
+    // Tries to send a request using `RETRY` first, otherwise using the next config for a
+    // request.
+    fn try_send_request() -> Result<(), (CanisterId, u32)> {
+        match RETRY.take() {
+            Some((receiver, bytes)) => send_request(receiver, bytes),
+            None => match next_request() {
+                Some((receiver, bytes)) => send_request(receiver, bytes),
+                None => Ok(()),
+            }
+        }
+    }
 
-                state = Decode!(&response, State).expect("decoding response failed");
-            }
-            Some(CallOrResponse::Response) | None => {
-                return State {
-                    actions: state.actions,
-                    call_count: state.call_count,
-                    current_depth: state.current_depth.saturating_sub(1),
-                    depth_total: state.depth_total,
-                }
-            }
+    for _ in 0..REQUESTS_PER_ROUND.get() {
+        if let Err((receiver, bytes)) = try_send_request() {
+            RETRY.set(Some((receiver, bytes)));
+            return;
         }
     }
 }
