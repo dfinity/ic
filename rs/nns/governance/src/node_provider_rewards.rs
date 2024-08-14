@@ -36,7 +36,7 @@ pub(crate) fn list_node_provider_rewards(limit: u64) -> Vec<ArchivedMonthlyNodeP
     with_node_provider_rewards_log(|log| {
         let len = log.len();
         let skip = if len >= limit { len - limit } else { 0 };
-        println!("len: {}, skip: {}, limit: {}", len, skip, limit);
+
         log.iter()
             .skip(skip.try_into().unwrap())
             .take(limit.try_into().unwrap())
