@@ -139,7 +139,7 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
         peer_pool.values_mut().for_each(|x| x.remove(*id));
     }
 
-    fn apply_changes(&mut self, change_set: Self::ChangeSet) -> ChangeResult<U64Artifact> {
+    fn apply_changes(&mut self, mut change_set: Self::ChangeSet) -> ChangeResult<U64Artifact> {
         let mut poll_immediately = false;
         if !change_set.0.is_empty() {
             poll_immediately = true;
@@ -156,9 +156,8 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
         }))
         .collect();
 
-        for id in change_set.1 {
-            mutations.push(ArtifactMutation::Remove(id));
-        }
+        mutations.extend(change_set.1.drain(..).into_iter().map(|id| 
+            ArtifactMutation::Remove(id)));
         ChangeResult {
             mutations,
             poll_immediately,

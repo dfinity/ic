@@ -376,12 +376,18 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
             }
         }
         let mut mutations = Vec::with_capacity(artifacts_with_opt.len() + purged.len());
-        for i in artifacts_with_opt {
-            mutations.push(ArtifactMutation::Insert(i));
-        }
-        for i in purged {
-            mutations.push(ArtifactMutation::Remove(i));
-        }
+        mutations.extend(
+            artifacts_with_opt
+                .drain(..)
+                .into_iter()
+                .map(|v| ArtifactMutation::Insert(v)),
+        );
+        mutations.extend(
+            purged
+                .drain(..)
+                .into_iter()
+                .map(|v| ArtifactMutation::Remove(v)),
+        );
         ChangeResult {
             mutations,
             poll_immediately: false,
@@ -729,7 +735,12 @@ mod tests {
 
                 let changeset = vec![ChangeAction::PurgeBelowExpiry(cutoff_time)];
                 let result = ingress_pool.apply_changes(changeset);
-                assert!(result.artifacts_with_opt.is_empty());
+                assert!(result
+                    .mutations
+                    .iter()
+                    .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
+                    .next()
+                    .is_none());
                 assert_eq!(result.purged.len(), initial_count - non_expired_count);
                 assert!(!result.poll_immediately);
                 assert_eq!(ingress_pool.validated().size(), non_expired_count);

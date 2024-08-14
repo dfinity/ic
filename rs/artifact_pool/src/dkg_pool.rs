@@ -139,12 +139,18 @@ impl MutablePool<dkg::Message> for DkgPoolImpl {
             }
         }
         let mut mutations = Vec::with_capacity(artifacts_with_opt.len() + purged.len());
-        for i in artifacts_with_opt {
-            mutations.push(ArtifactMutation::Insert(i));
-        }
-        for i in purged {
-            mutations.push(ArtifactMutation::Remove(i));
-        }
+        mutations.extend(
+            artifacts_with_opt
+                .drain(..)
+                .into_iter()
+                .map(|v| ArtifactMutation::Insert(v)),
+        );
+        mutations.extend(
+            purged
+                .drain(..)
+                .into_iter()
+                .map(|v| ArtifactMutation::Remove(v)),
+        );
         ChangeResult {
             mutations,
             poll_immediately: changed,
@@ -281,7 +287,12 @@ mod test {
         // are purged from the validated and unvalidated sections
         let result = pool.apply_changes(vec![ChangeAction::Purge(current_dkg_id_start_height)]);
         assert_eq!(result.purged.len(), 1);
-        assert!(result.artifacts_with_opt.is_empty());
+        assert!(result
+            .mutations
+            .iter()
+            .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
+            .next()
+            .is_none());
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 1);
         assert_eq!(pool.get_unvalidated().count(), 1);
@@ -291,7 +302,12 @@ mod test {
             current_dkg_id_start_height.increment(),
         )]);
         assert_eq!(result.purged.len(), 1);
-        assert!(result.artifacts_with_opt.is_empty());
+        assert!(result
+            .mutations
+            .iter()
+            .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
+            .next()
+            .is_none());
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 0);
         assert_eq!(pool.get_unvalidated().count(), 0);

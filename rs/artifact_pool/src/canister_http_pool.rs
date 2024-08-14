@@ -155,12 +155,18 @@ impl MutablePool<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
             }
         }
         let mut mutations = Vec::with_capacity(artifacts_with_opt.len() + purged.len());
-        for i in artifacts_with_opt {
-            mutations.push(ArtifactMutation::Insert(i));
-        }
-        for i in purged {
-            mutations.push(ArtifactMutation::Remove(i));
-        }
+        mutations.extend(
+            artifacts_with_opt
+                .drain(..)
+                .into_iter()
+                .map(|v| ArtifactMutation::Insert(v)),
+        );
+        mutations.extend(
+            purged
+                .drain(..)
+                .into_iter()
+                .map(|v| ArtifactMutation::Remove(v)),
+        );
         ChangeResult {
             mutations,
             poll_immediately: changed,
@@ -260,9 +266,16 @@ mod tests {
             CanisterHttpChangeAction::AddToValidated(fake_share(456), fake_response(456)),
         ]);
 
-        assert_eq!(result.artifacts_with_opt[0].artifact.id(), id);
+        assert!(
+            matches!(result.mutations[0], ArtifactMutation::Insert(artifact) if artifact.artifact.id() == id)
+        );
         assert!(result.poll_immediately);
-        assert!(result.purged.is_empty());
+        assert!(result
+            .mutations
+            .iter()
+            .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
+            .next()
+            .is_none());
         assert_eq!(share, pool.lookup_validated(&id).unwrap());
         assert_eq!(share, pool.get(&id).unwrap());
         assert_eq!(
@@ -275,7 +288,12 @@ mod tests {
             CanisterHttpChangeAction::RemoveContent(content_hash.clone()),
         ]);
 
-        assert!(result.artifacts_with_opt.is_empty());
+        assert!(result
+            .mutations
+            .iter()
+            .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
+            .next()
+            .is_none());
         assert!(result.poll_immediately);
         assert_eq!(result.purged[0], id);
         assert!(pool.lookup_validated(&id).is_none());
@@ -321,7 +339,12 @@ mod tests {
         assert!(pool.lookup_unvalidated(&id).is_none());
         assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
-        assert!(result.artifacts_with_opt.is_empty());
+        assert!(result
+            .mutations
+            .iter()
+            .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
+            .next()
+            .is_none());
     }
 
     #[test]
@@ -341,6 +364,11 @@ mod tests {
         assert!(pool.lookup_unvalidated(&id).is_none());
         assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
-        assert!(result.artifacts_with_opt.is_empty());
+        assert!(result
+            .mutations
+            .iter()
+            .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
+            .next()
+            .is_none());
     }
 }

@@ -790,7 +790,7 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
             .max_height()
             .unwrap_or_default();
         self.apply_changes_unvalidated(unvalidated_ops);
-        let purged = self.apply_changes_validated(validated_ops);
+        let mut purged = self.apply_changes_validated(validated_ops);
 
         if let Some(backup) = &self.backup {
             self.backup_artifacts(backup, latest_finalization_height, artifacts_for_backup);
@@ -801,12 +801,18 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
         }
 
         let mut mutations = Vec::with_capacity(artifacts_with_opt.len() + purged.len());
-        for i in artifacts_with_opt {
-            mutations.push(ArtifactMutation::Insert(i));
-        }
-        for i in purged {
-            mutations.push(ArtifactMutation::Remove(i));
-        }
+        mutations.extend(
+            artifacts_with_opt
+                .drain(..)
+                .into_iter()
+                .map(|v| ArtifactMutation::Insert(v)),
+        );
+        mutations.extend(
+            purged
+                .drain(..)
+                .into_iter()
+                .map(|v| ArtifactMutation::Remove(v)),
+        );
         ChangeResult {
             mutations,
             poll_immediately: changed,
@@ -1204,7 +1210,12 @@ mod tests {
 
             let result =
                 pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
-            assert!(result.artifacts_with_opt.is_empty());
+            assert!(result
+                .mutations
+                .iter()
+                .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
+                .next()
+                .is_none());
             // purging genesis CUP & beacon + validated beacon at height 2
             assert_eq!(result.purged.len(), 3);
             assert!(result.purged.contains(&random_beacon_2.get_id()));
@@ -1212,7 +1223,12 @@ mod tests {
 
             let result =
                 pool.apply_changes(vec![ChangeAction::PurgeUnvalidatedBelow(Height::from(3))]);
-            assert!(result.artifacts_with_opt.is_empty());
+            assert!(result
+                .mutations
+                .iter()
+                .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
+                .next()
+                .is_none());
             assert!(result.purged.is_empty());
             assert!(result.poll_immediately);
 
@@ -1282,7 +1298,12 @@ mod tests {
 
             let result =
                 pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
-            assert!(result.artifacts_with_opt.is_empty());
+            assert!(result
+                .mutations
+                .iter()
+                .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
+                .next()
+                .is_none());
             // purging genesis CUP & beacon + 2 validated beacon shares
             assert_eq!(result.purged.len(), 4);
             assert!(result.purged.contains(&random_beacon_share_2.get_id()));

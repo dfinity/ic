@@ -487,12 +487,18 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
         self.unvalidated.mutate(unvalidated_ops);
         self.validated.mutate(validated_ops);
         let mut mutations = Vec::with_capacity(artifacts_with_opt.len() + purged.len());
-        for i in artifacts_with_opt {
-            mutations.push(ArtifactMutation::Insert(i));
-        }
-        for i in purged {
-            mutations.push(ArtifactMutation::Remove(i));
-        }
+        mutations.extend(
+            artifacts_with_opt
+                .drain(..)
+                .into_iter()
+                .map(|v| ArtifactMutation::Insert(v)),
+        );
+        mutations.extend(
+            purged
+                .drain(..)
+                .into_iter()
+                .map(|v| ArtifactMutation::Remove(v)),
+        );
         ChangeResult {
             mutations,
             poll_immediately: changed,
@@ -923,7 +929,12 @@ mod tests {
                 ]);
                 assert!(result.purged.is_empty());
                 // No artifacts_with_opt are created for moved dealings and dealing support
-                assert!(result.artifacts_with_opt.is_empty());
+                assert!(result
+                    .mutations
+                    .iter()
+                    .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
+                    .next()
+                    .is_none());
                 assert!(result.poll_immediately);
                 check_state(&idkg_pool, &[], &[msg_id_1, msg_id_2]);
             })
@@ -971,14 +982,24 @@ mod tests {
 
                 let result = idkg_pool
                     .apply_changes(vec![IDkgChangeAction::RemoveValidated(msg_id_1.clone())]);
-                assert!(result.artifacts_with_opt.is_empty());
+                assert!(result
+                    .mutations
+                    .iter()
+                    .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
+                    .next()
+                    .is_none());
                 assert_eq!(result.purged, vec![msg_id_1]);
                 assert!(result.poll_immediately);
                 check_state(&idkg_pool, &[msg_id_3.clone()], &[msg_id_2.clone()]);
 
                 let result = idkg_pool
                     .apply_changes(vec![IDkgChangeAction::RemoveValidated(msg_id_2.clone())]);
-                assert!(result.artifacts_with_opt.is_empty());
+                assert!(result
+                    .mutations
+                    .iter()
+                    .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
+                    .next()
+                    .is_none());
                 assert_eq!(result.purged, vec![msg_id_2]);
                 assert!(result.poll_immediately);
                 check_state(&idkg_pool, &[msg_id_3], &[]);
@@ -1009,7 +1030,12 @@ mod tests {
                 let result =
                     idkg_pool.apply_changes(vec![IDkgChangeAction::RemoveUnvalidated(msg_id)]);
                 assert!(result.purged.is_empty());
-                assert!(result.artifacts_with_opt.is_empty());
+                assert!(result
+                    .mutations
+                    .iter()
+                    .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
+                    .next()
+                    .is_none());
                 assert!(result.poll_immediately);
                 check_state(&idkg_pool, &[], &[]);
             })

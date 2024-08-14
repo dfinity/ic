@@ -271,12 +271,18 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
         }
 
         let mut mutations = Vec::with_capacity(artifacts_with_opt.len() + purged.len());
-        for i in artifacts_with_opt {
-            mutations.push(ArtifactMutation::Insert(i));
-        }
-        for i in purged {
-            mutations.push(ArtifactMutation::Remove(i));
-        }
+        mutations.extend(
+            artifacts_with_opt
+                .drain(..)
+                .into_iter()
+                .map(|v| ArtifactMutation::Insert(v)),
+        );
+        mutations.extend(
+            purged
+                .drain(..)
+                .into_iter()
+                .map(|v| ArtifactMutation::Remove(v)),
+        );
         ChangeResult {
             mutations,
             poll_immediately: changed,
@@ -691,7 +697,12 @@ mod tests {
                     panic!("Purging couldn't finish in more than 6 seconds.")
                 }
             }
-            assert!(result.artifacts_with_opt.is_empty());
+            assert!(result
+                .mutations
+                .iter()
+                .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
+                .next()
+                .is_none());
             assert_eq!(result.purged.len(), 2);
             assert!(result.poll_immediately);
             assert_eq!(pool.all_heights_with_artifacts().len(), 0);
@@ -734,7 +745,12 @@ mod tests {
                 share_msg,
                 "Testing the removal of invalid artifacts".to_string(),
             )]);
-            assert!(result.artifacts_with_opt.is_empty());
+            assert!(result
+                .mutations
+                .iter()
+                .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
+                .next()
+                .is_none());
             assert!(result.purged.is_empty());
             assert!(result.poll_immediately);
             assert_eq!(
