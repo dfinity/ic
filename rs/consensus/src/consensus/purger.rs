@@ -100,6 +100,10 @@ impl Purger {
                 self.check_advertised_pool_bounds(pool);
             }
             self.purge_validated_shares_by_finalized_height(new_finalized_height, &mut changeset);
+            self.purge_equivocation_proofs_by_finalized_height(
+                new_finalized_height,
+                &mut changeset,
+            );
             self.purge_non_finalized_blocks(
                 pool,
                 previous_finalized_height,
@@ -266,8 +270,6 @@ impl Purger {
 
     /// Validated Finalization and Notarization shares at and below the latest
     /// finalized height can be purged from the pool.
-    ///
-    /// Return true if a purge action is taken.
     fn purge_validated_shares_by_finalized_height(
         &self,
         finalized_height: Height,
@@ -284,6 +286,23 @@ impl Purger {
         trace!(
             self.log,
             "Purge validated shares at and below {finalized_height:?}"
+        );
+    }
+
+    /// Equivocation proofs at and below the latest finalized height can
+    /// be purged from the pool.
+    fn purge_equivocation_proofs_by_finalized_height(
+        &self,
+        finalized_height: Height,
+        changeset: &mut ChangeSet,
+    ) {
+        changeset.push(ChangeAction::PurgeValidatedOfTypeBelow(
+            PurgeableArtifactType::EquivocationProof,
+            finalized_height.increment(),
+        ));
+        trace!(
+            self.log,
+            "Purge validated equivocation proofs at and below {finalized_height:?}"
         );
     }
 
@@ -599,6 +618,44 @@ mod tests {
             assert!(changeset.contains(&ChangeAction::PurgeValidatedOfTypeBelow(
                 PurgeableArtifactType::FinalizationShare,
                 Height::new(31),
+            )));
+        })
+    }
+
+    #[test]
+    fn test_purge_equivocation_proofs() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies {
+                mut pool,
+                state_manager,
+                replica_config,
+                registry,
+                ..
+            } = dependencies(pool_config, 3);
+            state_manager
+                .get_mut()
+                .expect_latest_state_height()
+                .returning(|| Height::new(0));
+            let purger = Purger::new(
+                replica_config,
+                state_manager,
+                Arc::new(FakeMessageRouting::new()),
+                registry,
+                no_op_logger(),
+                MetricsRegistry::new(),
+            );
+
+            for i in 1..10 {
+                pool.insert_validated(pool.make_equivocation_proof(Rank(0), Height::new(i)));
+                pool.advance_round_normal_operation();
+            }
+
+            // We expect to purge equivocation proofs below AND at the finalized height.
+            let pool_reader = PoolReader::new(&pool);
+            let changeset = purger.on_state_change(&pool_reader);
+            assert!(changeset.contains(&ChangeAction::PurgeValidatedOfTypeBelow(
+                PurgeableArtifactType::EquivocationProof,
+                Height::new(10),
             )));
         })
     }
