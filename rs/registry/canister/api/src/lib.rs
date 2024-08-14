@@ -133,7 +133,8 @@ impl IPv4Config {
             self.ip_addr.clone(),
             self.gateway_ip_addr.clone(),
             self.prefix_length,
-        ).unwrap();
+        )
+        .unwrap();
     }
 
     // TODO: either remove this method or return std::net::IpAddr to signal that the ip addr is valid
