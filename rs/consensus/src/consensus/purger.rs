@@ -536,6 +536,10 @@ mod tests {
                     ChangeAction::PurgeValidatedOfTypeBelow(
                         PurgeableArtifactType::FinalizationShare,
                         purge_height.increment()
+                    ),
+                    ChangeAction::PurgeValidatedOfTypeBelow(
+                        PurgeableArtifactType::EquivocationProof,
+                        purge_height.increment()
                     )
                 ]
             );
@@ -572,6 +576,10 @@ mod tests {
                     ),
                     ChangeAction::PurgeValidatedOfTypeBelow(
                         PurgeableArtifactType::FinalizationShare,
+                        pool_reader.get_finalized_height().increment()
+                    ),
+                    ChangeAction::PurgeValidatedOfTypeBelow(
+                        PurgeableArtifactType::EquivocationProof,
                         pool_reader.get_finalized_height().increment()
                     ),
                     ChangeAction::PurgeValidatedBelow(get_purge_height(&pool_reader).unwrap()),
