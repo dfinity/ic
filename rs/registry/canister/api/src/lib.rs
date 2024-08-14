@@ -179,7 +179,7 @@ pub struct AddNodePayload {
     pub prometheus_metrics_endpoint: String,
 }
 
-/// The payload of an request to update keys of the existing node.
+/// The payload of a request to update keys of the existing node.
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UpdateNodeDirectlyPayload {
     pub idkg_dealing_encryption_pk: Option<Vec<u8>>,
