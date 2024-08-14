@@ -22,7 +22,8 @@ const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 const OVERALL_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 // Network topology
 const NETWORK_SIMULATION: Option<NetworkSimulation> =
-    Some(NetworkSimulation::Subnet(ProductionSubnetTopology::IO67));
+    // Some(NetworkSimulation::Subnet(ProductionSubnetTopology::IO67));
+    Some(NetworkSimulation::FixedRtt(Duration::from_millis(100)));
 
 fn main() -> Result<()> {
     let per_task_timeout: Duration = WORKLOAD_RUNTIME + TASK_TIMEOUT_DELTA;

@@ -27,7 +27,10 @@ pub fn simulate_network(logger: Logger, subnet: SubnetSnapshot, topology: &Netwo
             for source_node in 0..13 {
                 let mut tc_command =
                     String::from("sudo tc qdisc del dev enp1s0 root 2> /dev/null || true \n");
-                tc_command.push_str("sudo tc qdisc add dev enp1s0 root handle 1: prio bands 14 priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 \n");
+                tc_command.push_str("sudo tc qdisc add dev enp1s0 root handle 1: htb \n");
+                tc_command.push_str(
+                    "sudo tc class add dev enp1s0 parent 1: classid 1:1 htb rate 2000Mbps \n",
+                );
 
                 let source_ip = nodes[source_node].get_ip_addr();
                 for destination_node in 0..13 {
@@ -37,16 +40,25 @@ pub fn simulate_network(logger: Logger, subnet: SubnetSnapshot, topology: &Netwo
                     let destination_ip = nodes[destination_node].get_ip_addr();
 
                     tc_command.push_str(&format!(
-                        "sudo tc qdisc add dev enp1s0 parent 1:{} handle {}: netem limit 10000000 loss {:.3}% delay {}ms \n",
-                        destination_node+1,
-                        (destination_node+1)*10,
+                        "sudo tc class add dev enp1s0 parent 1:1 classid 1:{} htb rate 2000Mbps \n",
+                        destination_node + 2,
+                    ));
+                    tc_command.push_str(&format!(
+                        "sudo tc qdisc add dev enp1s0 handle {}: parent 1:{} netem limit 10000000 loss {:.3}% delay {}ms \n",
+                        destination_node+2,
+                        destination_node+2,
                         packet_loss[(12) * source_node + destination_node].2 * 100.0,
                         (rtt[(12) * source_node + destination_node].2 * 1000.0 / 2.0) as u64
                     ));
-                    tc_command.push_str(&format!("sudo tc filter add dev enp1s0 protocol ipv6 parent 1: prio 1 u32 match ip6 dst {destination_ip} flowid 1:{} \n", destination_node+1));
+                    tc_command.push_str(&format!("sudo tc filter add dev enp1s0 protocol ipv6 parent 1: pref {} u32 match ip6 dst {destination_ip} flowid 1:{} \n",destination_node+2, destination_node+2));
                 }
-                tc_command.push_str("sudo tc qdisc add dev enp1s0 parent 1:14 handle 140: netem delay 0ms loss 0% \n");
-                tc_command.push_str("sudo tc filter add dev enp1s0 protocol ipv6 parent 1: prio 2 u32 match ip6 dst ::/0 flowid 1:14 \n");
+                tc_command.push_str(
+                    "sudo tc class add dev enp1s0 parent 1:1 classid 1:999 htb rate 2000Mbps \n",
+                );
+                tc_command.push_str(
+                    "sudo tc qdisc add dev enp1s0 parent 1:999 handle 999: netem limit 10000000 \n",
+                );
+                tc_command.push_str("sudo tc filter add dev enp1s0 protocol ipv6 parent 1: pref 999 u32 match ip6 dst ::/0 flowid 1:999 \n");
 
                 info!(logger, "tc command \n: {}", tc_command);
                 tc_commands[source_node] = tc_command;
