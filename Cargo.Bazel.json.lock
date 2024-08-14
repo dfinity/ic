@@ -1,5 +1,5 @@
 {
-  "checksum": "b55d9374f3d43fc01877e7f52721bded5551747a4d3816a65eb3639cec5b6d00",
+  "checksum": "9c9efb19707355f8b827d4e5419d9958219de1a93d299ec5946bf8a5b1a230de",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17275,6 +17275,10 @@
               "target": "form_urlencoded"
             },
             {
+              "id": "fqdn 0.3.11",
+              "target": "fqdn"
+            },
+            {
               "id": "fs_extra 1.3.0",
               "target": "fs_extra"
             },
@@ -17433,6 +17437,10 @@
             {
               "id": "ic-http-certification 2.6.0",
               "target": "ic_http_certification"
+            },
+            {
+              "id": "ic-http-gateway 0.0.0",
+              "target": "ic_http_gateway"
             },
             {
               "id": "ic-metrics-encoder 1.1.1",
@@ -22420,6 +22428,51 @@
         "ISC"
       ],
       "license_file": "LICENSE.txt"
+    },
+    "fqdn 0.3.11": {
+      "name": "fqdn",
+      "version": "0.3.11",
+      "package_url": "https://github.com/Orange-OpenSource/fqdn",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/fqdn/0.3.11/download",
+          "sha256": "08b1eaa7dfddeab6036292995620bf0435712e619db6d7690605897e76975eb0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "fqdn",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "fqdn",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "domain-label-cannot-start-or-end-with-hyphen"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.3.11"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": null
     },
     "fragile 2.0.0": {
       "name": "fragile",
@@ -29009,6 +29062,96 @@
         },
         "edition": "2021",
         "version": "2.6.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-http-gateway 0.0.0": {
+      "name": "ic-http-gateway",
+      "version": "0.0.0",
+      "package_url": "https://github.com/dfinity/http-gateway",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/http-gateway",
+          "commitish": {
+            "Rev": "a1f63eb17b0a89f7fadcab67b3a0afe1720ef9b3"
+          },
+          "strip_prefix": "packages/ic-http-gateway"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_http_gateway",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_http_gateway",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bytes 1.6.1",
+              "target": "bytes"
+            },
+            {
+              "id": "candid 0.10.6",
+              "target": "candid"
+            },
+            {
+              "id": "futures 0.3.30",
+              "target": "futures"
+            },
+            {
+              "id": "http 1.1.0",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.0",
+              "target": "http_body"
+            },
+            {
+              "id": "http-body-util 0.1.2",
+              "target": "http_body_util"
+            },
+            {
+              "id": "ic-agent 0.37.1",
+              "target": "ic_agent"
+            },
+            {
+              "id": "ic-http-certification 2.6.0",
+              "target": "ic_http_certification"
+            },
+            {
+              "id": "ic-response-verification 2.6.0",
+              "target": "ic_response_verification"
+            },
+            {
+              "id": "ic-utils 0.37.0",
+              "target": "ic_utils"
+            },
+            {
+              "id": "thiserror 1.0.62",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.0.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -78815,6 +78958,7 @@
     "ff 0.12.1",
     "flate2 1.0.30",
     "form_urlencoded 1.2.1",
+    "fqdn 0.3.11",
     "fs_extra 1.3.0",
     "futures 0.3.30",
     "futures-util 0.3.30",
@@ -78855,6 +78999,7 @@
     "ic-certification 2.6.0",
     "ic-certified-map 0.3.4",
     "ic-http-certification 2.6.0",
+    "ic-http-gateway 0.0.0",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 2.6.0",
     "ic-stable-structures 0.6.5",
