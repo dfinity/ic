@@ -1037,7 +1037,6 @@ fn process_mock_canister_https_response(
                 pic.runtime.handle().clone(),
                 grpc_channel,
                 query_handler.clone(),
-                1,
                 MetricsRegistry::new(),
                 subnet.get_subnet_type(),
             );

@@ -67,6 +67,10 @@ use std::{
 };
 use strum_macros::EnumIter;
 
+/// To support 100 req/s with a worst case request latency of 30s the queue size needs buffer 100 req/s * 30s = 3000 req.
+/// The worst case request latency used here should be equivalent to the request timeout in the adapter.
+pub const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 3000;
+
 /// Time after which a response is considered timed out and a timeout error will be returned to execution
 pub const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(60);
 

@@ -24,11 +24,7 @@ use ic_types::{
 use std::time::Instant;
 use tokio::{
     runtime::Handle,
-    sync::mpsc::{
-        channel,
-        error::{TryRecvError, TrySendError},
-        Receiver, Sender,
-    },
+    sync::mpsc::{error::TryRecvError, unbounded_channel, UnboundedReceiver, UnboundedSender},
 };
 use tonic::{transport::Channel, Code};
 use tower::util::Oneshot;
@@ -55,8 +51,8 @@ impl NonBlockingChannel<CanisterHttpRequest> for BrokenCanisterHttpClient {
 pub struct CanisterHttpAdapterClientImpl {
     rt_handle: Handle,
     grpc_channel: Channel,
-    tx: Sender<CanisterHttpResponse>,
-    rx: Receiver<CanisterHttpResponse>,
+    tx: UnboundedSender<CanisterHttpResponse>,
+    rx: UnboundedReceiver<CanisterHttpResponse>,
     query_service: QueryExecutionService,
     metrics: Metrics,
     subnet_type: SubnetType,
@@ -67,11 +63,10 @@ impl CanisterHttpAdapterClientImpl {
         rt_handle: Handle,
         grpc_channel: Channel,
         query_service: QueryExecutionService,
-        inflight_requests: usize,
         metrics_registry: MetricsRegistry,
         subnet_type: SubnetType,
     ) -> Self {
-        let (tx, rx) = channel(inflight_requests);
+        let (tx, rx) = unbounded_channel();
         let metrics = Metrics::new(&metrics_registry);
         Self {
             rt_handle,
@@ -87,28 +82,13 @@ impl CanisterHttpAdapterClientImpl {
 
 impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
     type Response = CanisterHttpResponse;
-    /// Enqueues a request that will be send to the canister http adapter iff we don't have
-    /// more than 'inflight_requests' requests waiting to be consumed by the
-    /// client.
+    /// Enqueues a request that will be send to the canister http adapter.
     #[instrument(skip_all)]
     fn send(
         &self,
         canister_http_request: CanisterHttpRequest,
     ) -> Result<(), SendError<CanisterHttpRequest>> {
-        // Accept the request iff we can secure capacity for sending the response back.
-        let permit = match self.tx.clone().try_reserve_owned() {
-            Ok(permit) => permit,
-            Err(err) => {
-                return match err {
-                    TrySendError::Full(_) => Err(SendError::Full(canister_http_request)),
-                    // In the code we never close the channel and we always have at receiver as data member of self.
-                    TrySendError::Closed(_) => {
-                        panic!("Consensus<->Canister Http client channel should never be closed")
-                    }
-                };
-            }
-        };
-
+        let tx = self.tx.clone();
         // Tonic clients use &mut self and can only send one request at a time.
         // It is suggested to clone the underlying channel which is cheap.
         // https://docs.rs/tonic/latest/tonic/transport/struct.Channel.html
@@ -234,7 +214,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 });
 
             // Drive created future to completion and make response available on the channel.
-            permit.send(CanisterHttpResponse {
+            tx.send(CanisterHttpResponse {
                 id: request_id,
                 timeout: request_timeout,
                 canister_id: request_sender,
@@ -250,7 +230,8 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         message,
                     })},
                 }
-            });
+            }).expect("couldn't submit the http outcall response");
+
         });
         Ok(())
     }
@@ -552,7 +533,6 @@ mod tests {
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
             svc,
-            100,
             MetricsRegistry::default(),
             SubnetType::Application,
         );
@@ -604,7 +584,6 @@ mod tests {
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
             svc,
-            100,
             MetricsRegistry::default(),
             SubnetType::Application,
         );
@@ -664,7 +643,6 @@ mod tests {
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
             svc,
-            100,
             MetricsRegistry::default(),
             SubnetType::Application,
         );
@@ -722,7 +700,6 @@ mod tests {
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
             svc,
-            100,
             MetricsRegistry::default(),
             SubnetType::Application,
         );
@@ -805,7 +782,6 @@ mod tests {
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
             svc,
-            100,
             MetricsRegistry::default(),
             SubnetType::Application,
         );
@@ -877,7 +853,6 @@ mod tests {
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
             svc,
-            100,
             MetricsRegistry::default(),
             SubnetType::Application,
         );
@@ -903,108 +878,6 @@ mod tests {
                             UNIX_EPOCH,
                             RejectCode::SysTransient,
                             QueryExecutionError::CertifiedStateUnavailable.to_string(),
-                        )
-                    );
-                    break;
-                }
-            }
-        }
-        assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));
-    }
-
-    // Test client capacity. The capicity of the client is specified by the channel size.
-    #[tokio::test]
-    async fn test_client_at_capacity() {
-        // Adapter mock setup. Not relevant for client response in this test case.
-        let mock_grpc_channel =
-            setup_adapter_mock(Err((Code::Unavailable, "adapter unavailable".to_string()))).await;
-        // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
-        let (svc, mut handle) = setup_anonymous_query_mock();
-
-        tokio::spawn(async move {
-            let (_, rsp) = handle.next_request().await.unwrap();
-            rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
-        });
-
-        // Create a client with a capacity of 2.
-        let mut client = CanisterHttpAdapterClientImpl::new(
-            tokio::runtime::Handle::current(),
-            mock_grpc_channel,
-            svc,
-            2,
-            MetricsRegistry::default(),
-            SubnetType::Application,
-        );
-
-        assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));
-        assert_eq!(
-            client.send(build_mock_canister_http_request(420, UNIX_EPOCH, None)),
-            Ok(())
-        );
-        assert_eq!(
-            client.send(build_mock_canister_http_request(421, UNIX_EPOCH, None)),
-            Ok(())
-        );
-        // Make a request on a already full channel.
-        assert_eq!(
-            client.send(build_mock_canister_http_request(422, UNIX_EPOCH, None)),
-            Err(SendError::Full(build_mock_canister_http_request(
-                422, UNIX_EPOCH, None
-            )))
-        );
-
-        // We must yield in order to allow the client to execute the request.
-        loop {
-            match client.try_receive() {
-                Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
-                Ok(r) => {
-                    assert_eq!(
-                        r,
-                        build_mock_canister_http_response_reject(
-                            420,
-                            UNIX_EPOCH,
-                            RejectCode::SysTransient,
-                            "adapter unavailable".to_string()
-                        )
-                    );
-                    break;
-                }
-            }
-        }
-
-        assert_eq!(
-            client.send(build_mock_canister_http_request(423, UNIX_EPOCH, None)),
-            Ok(())
-        );
-        // We must yield in order to allow the client to execute the request.
-        loop {
-            match client.try_receive() {
-                Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
-                Ok(r) => {
-                    assert_eq!(
-                        r,
-                        build_mock_canister_http_response_reject(
-                            421,
-                            UNIX_EPOCH,
-                            RejectCode::SysTransient,
-                            "adapter unavailable".to_string()
-                        )
-                    );
-                    break;
-                }
-            }
-        }
-        loop {
-            match client.try_receive() {
-                Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
-                Ok(r) => {
-                    assert_eq!(
-                        r,
-                        build_mock_canister_http_response_reject(
-                            423,
-                            UNIX_EPOCH,
-                            RejectCode::SysTransient,
-                            "adapter unavailable".to_string()
                         )
                     );
                     break;
