@@ -3,18 +3,8 @@ use futures_util::{
     future::{Either as EitherFut, Map, Ready},
     FutureExt,
 };
-use http_body_util::BodyExt;
-use hyper::{
-    // client::{
-    //     connect::dns::{self, GaiResolver},
-    //     HttpConnector as HyperConnector, ResponseFuture as HyperFuture,
-    // },
-    header::CONTENT_TYPE,
-    // service::Service,
-    Method,
-    StatusCode,
-    Uri as HyperUri,
-};
+use http_body_util::{BodyExt, Full};
+use hyper::{body::Bytes, header::CONTENT_TYPE, Method, StatusCode, Uri as HyperUri};
 use hyper_rustls::HttpsConnector as HyperTlsConnector;
 use hyper_util::{
     client::legacy::{
@@ -60,13 +50,10 @@ impl Default for HttpClientConfig {
     }
 }
 
-// type HyperBody = hyper::body::Bytes;
-type HyperBody = http_body_util::Full<hyper::body::Bytes>; //, Infallible>;
-
 /// An HTTP Client to communicate with a replica.
 #[derive(Clone)]
 pub struct HttpClient {
-    hyper: HyperClient<HyperTlsConnector<HyperConnector<DnsResolverWithOverrides>>, HyperBody>,
+    hyper: HyperClient<HyperTlsConnector<HyperConnector<DnsResolverWithOverrides>>, Full<Bytes>>,
 }
 
 #[derive(Clone)]
@@ -187,7 +174,6 @@ impl HttpClient {
 
         let mut rustls_config = rustls::ClientConfig::builder()
             .dangerous()
-            // .with_safe_defaults()
             .with_custom_certificate_verifier(Arc::new(DangerAcceptInvalidCerts {}))
             .with_no_client_auth();
         rustls_config.enable_sni = false;
@@ -205,7 +191,7 @@ impl HttpClient {
             .pool_idle_timeout(config.pool_idle_timeout)
             .pool_max_idle_per_host(config.pool_max_idle_per_host)
             .http2_only(config.http2_only)
-            .build::<_, HyperBody>(https_connector);
+            .build::<_, Full<Bytes>>(https_connector);
 
         Self { hyper }
     }
@@ -232,9 +218,7 @@ impl HttpClient {
             .method(Method::POST)
             .uri(uri.clone())
             .header(CONTENT_TYPE, "application/cbor")
-            .body(http_body_util::Full::new(hyper::body::Bytes::from(
-                http_body,
-            )))
+            .body(Full::new(Bytes::from(http_body)))
             .map_err(|e| {
                 format!(
                     "HttpClient: Failed to create POST request for {:?}: {:?}",
@@ -326,9 +310,7 @@ impl HttpClient {
             .method(Method::POST)
             .uri(uri.clone())
             .header(CONTENT_TYPE, "application/cbor")
-            .body(http_body_util::Full::new(hyper::body::Bytes::from(
-                http_body,
-            )))
+            .body(Full::new(Bytes::from(http_body)))
             .map_err(|e| format!("HttpClient: Failed to fill body {:?}: {:?}", url, e))?;
         let response_future = self.hyper.request(req);
 

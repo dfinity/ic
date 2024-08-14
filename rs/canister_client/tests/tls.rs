@@ -24,7 +24,7 @@ async fn should_perform_tls_1_2_handshake_with_server_with_bogus_cert() {
     );
 
     assert!(server_result.is_ok());
-    // The server closes the channel after successful TLS handshake, so the agent returns this error:
+    // The test server closes the channel without responding after successful TLS handshake, so the agent's client will time out:
     assert!(client_result.err().unwrap().contains("Elapsed(())"));
 }
 
