@@ -218,6 +218,7 @@ impl Orchestrator {
             Arc::clone(&registry),
             args.cup_dir.clone(),
             Arc::clone(&crypto) as _,
+            Arc::clone(&crypto) as _,
             logger.clone(),
             node_id,
         ));

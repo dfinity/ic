@@ -64,6 +64,7 @@ url = { workspace = true }
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
+ic-crypto-test-utils-tls = { path = "../crypto/test_utils/tls" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-test-utilities = { path = "../test_utilities" }

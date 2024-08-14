@@ -5,7 +5,8 @@ use futures_util::{
 };
 use http_body_util::{BodyExt, Full};
 use hyper::{body::Bytes, header::CONTENT_TYPE, Method, StatusCode, Uri as HyperUri};
-use hyper_rustls::HttpsConnector as HyperTlsConnector;
+use hyper_rustls::{HttpsConnector as HyperTlsConnector, HttpsConnectorBuilder};
+// use hyper_util::client::legacy::Client;
 use hyper_util::{
     client::legacy::{
         connect::{
@@ -166,10 +167,6 @@ impl rustls::client::danger::ServerCertVerifier for DangerAcceptInvalidCerts {
         ]
     }
 }
-use http_body_util::Full;
-use hyper::body::Bytes;
-use hyper_rustls::HttpsConnectorBuilder;
-use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 
 impl HttpClient {
     pub fn new_with_config(config: HttpClientConfig) -> Self {
@@ -182,7 +179,7 @@ impl HttpClient {
             .with_custom_certificate_verifier(Arc::new(DangerAcceptInvalidCerts {}))
             .with_no_client_auth();
         rustls_config.enable_sni = false;
-        let https_connector = hyper_rustls::HttpsConnectorBuilder::new()
+        let https_connector = HttpsConnectorBuilder::new()
             .with_tls_config(rustls_config)
             .https_or_http();
         let https_connector = if config.http2_only {
@@ -201,24 +198,30 @@ impl HttpClient {
         Self { hyper }
     }
 
-    pub fn new_with_tls_config(client_config: ClientConfig) -> Self {
-        let https = HttpsConnectorBuilder::new()
-            .with_tls_config(client_config)
-            .https_only()
-            .enable_all_versions()
-            .build();
+    pub fn new_with_tls_config(tls_config: ClientConfig) -> Self {
+        let config = HttpClientConfig::default();
 
-        let hyper = Client::builder(TokioExecutor::new())
-            .http2_only(true)
-            .pool_idle_timeout(tokio::time::Duration::from_secs(600))
-            .pool_max_idle_per_host(1)
-            .build::<_, Full<Bytes>>(https);
+        let mut http_connector =
+            HyperConnector::new_with_resolver(DnsResolverWithOverrides::new(config.overrides));
+        http_connector.enforce_http(false);
 
-        // let hyper = HyperClient::builder()
-        //     .pool_idle_timeout(config.pool_idle_timeout)
-        //     .pool_max_idle_per_host(config.pool_max_idle_per_host)
-        //     .http2_only(config.http2_only)
-        //     .build::<_, hyper::Body>(https_connector);
+        let https_connector = HttpsConnectorBuilder::new()
+            .with_tls_config(tls_config)
+            .https_only();
+
+        let https_connector = if config.http2_only {
+            https_connector.enable_http2()
+        } else {
+            https_connector.enable_http1().enable_http2()
+        };
+        let https_connector: HyperTlsConnector<HyperConnector<DnsResolverWithOverrides>> =
+            https_connector.wrap_connector(http_connector);
+
+        let hyper = HyperClient::builder(TokioExecutor::new())
+            .pool_idle_timeout(config.pool_idle_timeout)
+            .pool_max_idle_per_host(config.pool_max_idle_per_host)
+            .http2_only(config.http2_only)
+            .build::<_, Full<Bytes>>(https_connector);
 
         Self { hyper }
     }

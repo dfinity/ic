@@ -229,19 +229,7 @@ impl CatchUpPackageProvider {
             .map_err(|e| warn!(self.logger, "Failed to create tls client config: {:?}", e))
             .ok()?;
 
-        let https = HttpsConnectorBuilder::new()
-            .with_tls_config(client_config)
-            .https_only()
-            .enable_all_versions()
-            .build();
-
-        let client = Client::builder(TokioExecutor::new())
-            .http2_only(true)
-            .pool_idle_timeout(tokio::time::Duration::from_secs(600))
-            .pool_max_idle_per_host(1)
-            .build::<_, Full<Bytes>>(https);
-
-        Agent::new_with_client(client, url, Sender::Anonymous)
+        Agent::new_with_tls_config(url, Sender::Anonymous, client_config)
             .query_cup_endpoint(param)
             .await
             .map_err(|e| warn!(self.logger, "Failed to query CUP endpoint: {:?}", e))
