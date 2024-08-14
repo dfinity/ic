@@ -47,7 +47,7 @@ lazy_static! {
         CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
 }
 
-/// Tests a message for a reject response does not exceed an upper bounds.
+/// Tests that a message for a reject response does not exceed an upper bounds.
 #[test]
 fn oversized_reject_message_is_truncated() {
     fn assert_correct_truncation(msg_len: usize, len_after_truncation: usize) {
@@ -155,7 +155,7 @@ fn induct_loopback_stream_empty_loopback_stream() {
     );
 }
 
-/// Tests inducting a loopback stream containing a request to a non-existant canister produces a
+/// Tests that inducting a loopback stream containing a request to a non-existant canister produces a
 /// corresponding reject response in the loopback stream.
 #[test]
 fn induct_loopback_stream_reject_response() {
@@ -332,7 +332,7 @@ fn induct_loopback_stream_reroute_response() {
     );
 }
 
-/// Tests inducting a loopback stream containing a valid request and a valid response to and from
+/// Tests that inducting a loopback stream containing a valid request and a valid response to and from
 /// `LOCAL_CANISTER` results in both messages inducted successfully.
 #[test]
 fn induct_loopback_stream_success() {
@@ -806,7 +806,7 @@ fn garbage_collect_signals_in_wrong_order() {
     );
 }
 
-/// Tests garbage collecting signals with a `StreamSlice` whose `message_begin` does not correspond
+/// Tests that garbage collecting signals with a `StreamSlice` whose `message_begin` does not correspond
 /// to the `signals_end` of the Stream panics.
 #[test]
 #[should_panic(
@@ -848,7 +848,7 @@ fn garbage_collect_signals_with_invalid_slice_messages() {
     );
 }
 
-/// Tests garbage collecting signals with an empty `StreamSlice` whose `message_begin` does not correspond
+/// Tests that garbage collecting signals with an empty `StreamSlice` whose `message_begin` does not correspond
 /// to the `signals_end` of the Stream panics.
 #[test]
 #[should_panic(
@@ -886,7 +886,7 @@ fn garbage_collect_signals_with_invalid_empty_slice() {
     );
 }
 
-/// Tests garbage collecting messages with a `signals_end` in an incoming slice before the `begin`
+/// Tests that garbage collecting messages with a `signals_end` in an incoming slice before the `begin`
 /// of the Stream panics.
 #[test]
 #[should_panic(
@@ -929,7 +929,7 @@ fn assert_garbage_collect_messages_last_signal_before_first_message() {
     );
 }
 
-/// Tests garbage collecting messages with a `signals_end` in an incoming slice after the index
+/// Tests that garbage collecting messages with a `signals_end` in an incoming slice after the index
 /// of the last message in the Stream panics.
 #[test]
 #[should_panic(
@@ -1101,8 +1101,10 @@ fn garbage_collect_local_state_success() {
 /// Tests that garbage collecting a provided `ReplicatedState` results in all
 /// messages with matching signals being garbage collected or rerouted, as
 /// appropriate.
-#[test]
-fn garbage_collect_local_state_with_reject_signals_for_response_success() {
+fn garbage_collect_local_state_with_reject_signals_for_response_success_impl(
+    reason: RejectReason,
+    expected_critical_error_counts: CriticalErrorCounts,
+) {
     with_test_setup(
         // A stream with 4 messages, responses @32 and @33.
         btreemap![REMOTE_SUBNET => StreamConfig {
@@ -1119,10 +1121,7 @@ fn garbage_collect_local_state_with_reject_signals_for_response_success() {
         // A stream slice with a reject signal for the response @33.
         btreemap![REMOTE_SUBNET => StreamSliceConfig {
             signals_end: 34,
-            reject_signals: vec![RejectSignal::new(
-                RejectReason::CanisterMigrating,
-                33.into(),
-            )],
+            reject_signals: vec![RejectSignal::new(reason, 33.into())],
             messages_begin: 43,
             ..StreamSliceConfig::default()
         }],
@@ -1165,46 +1164,34 @@ fn garbage_collect_local_state_with_reject_signals_for_response_success() {
                 Some(0),
                 metrics.fetch_int_counter(METRIC_GCED_XNET_REJECT_SIGNALS),
             );
-            // No critical errors raised.
-            metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
+            metrics.assert_eq_critical_errors(expected_critical_error_counts);
         },
     );
 }
 
-/// Tests that garbage collecting a provided `ReplicatedState` against
-/// a bad reject signal for a response causes a critical error.
+/// Tests that garbage collecting with a legal reject signal does not raise a critical error.
 #[test]
-fn garbage_collect_local_state_with_bad_reject_signal_for_response() {
-    with_test_setup(
-        // An outgoing stream with a request @31 and a response @32.
-        btreemap![REMOTE_SUBNET => StreamConfig {
-            begin: 31,
-            messages: vec![
-                Request(*LOCAL_CANISTER, *REMOTE_CANISTER),
-                Response(*LOCAL_CANISTER, *REMOTE_CANISTER),
-            ],
-            signals_end: 43,
-            ..StreamConfig::default()
-        }],
-        // An incoming stream slice with a bad reject signal for the response @32.
-        btreemap![REMOTE_SUBNET => StreamSliceConfig {
-            messages_begin: 43,
-            signals_end: 33,
-            reject_signals: vec![RejectSignal::new(RejectReason::QueueFull, 32.into())],
-            ..StreamSliceConfig::default()
-        }],
-        |stream_handler, state, slices, metrics| {
-            stream_handler.garbage_collect_local_state(state, &mut (i64::MAX / 2), &slices);
+fn garbage_collect_local_state_with_legal_reject_signal_for_response_success() {
+    garbage_collect_local_state_with_reject_signals_for_response_success_impl(
+        RejectReason::CanisterMigrating,
+        // No critical errors raised.
+        CriticalErrorCounts::default(),
+    );
+}
 
-            metrics.assert_eq_critical_errors(CriticalErrorCounts {
-                bad_reject_signal_for_response: 1,
-                ..CriticalErrorCounts::default()
-            });
+/// Tests that garbage collecting with a legal reject signal does raise a critical error.
+#[test]
+fn garbage_collect_local_state_with_illegal_reject_signal_for_response_success() {
+    garbage_collect_local_state_with_reject_signals_for_response_success_impl(
+        RejectReason::CanisterNotFound,
+        CriticalErrorCounts {
+            bad_reject_signal_for_response: 1,
+            ..CriticalErrorCounts::default()
         },
     );
 }
 
-/// Tests an incoming reject signal for a request from `LOCAL_CANISTER` in the stream to
+/// Tests tha tan incoming reject signal for a request from `LOCAL_CANISTER` in the stream to
 /// `REMOTE_SUBNET` triggers locally generating and successfully inducting a corresponding
 /// reject response.
 #[test]
@@ -1264,8 +1251,8 @@ fn garbage_collect_local_state_with_reject_signals_for_request_success() {
     );
 }
 
-/// Tests an incoming reject signal for a request from `OTHER_LOCAL_CANISTER` in the stream to
-/// `REMOTE_SUBNET` triggers locally generating a reject response but raises a critical error
+/// Tests that an incoming reject signal for a request from `OTHER_LOCAL_CANISTER` in the stream
+/// to `REMOTE_SUBNET` triggers locally generating a reject response but raises a critical error
 /// due to induction failure because no such canister is installed on `LOCAL_SUBNET`.
 #[test]
 fn garbage_collect_local_state_with_reject_signals_for_request_from_absent_canister() {
@@ -1321,8 +1308,8 @@ fn garbage_collect_local_state_with_reject_signals_for_request_from_absent_canis
     );
 }
 
-/// Tests an incoming reject signal for a request to and from `LOCAL_CANISTER` in the stream to
-/// `REMOTE_SUBNET` triggers locally generating a reject response that is successfully inducted
+/// Tests that an incoming reject signal for a request to and from `LOCAL_CANISTER` in the stream
+/// to `REMOTE_SUBNET` triggers locally generating a reject response that is successfully inducted
 /// but the misrouted request (it should be in the loopback stream) raises a critical error.
 #[test]
 fn garbage_collect_local_state_with_reject_signals_for_misrouted_request() {
@@ -1383,8 +1370,8 @@ fn garbage_collect_local_state_with_reject_signals_for_misrouted_request() {
     );
 }
 
-/// Tests an incoming reject signal for a request from `LOCAL_CANISTER` in the stream to
-/// `REMOTE_SUBNET` triggers locally generating a reject response that is rerouted into
+/// Tests that an incoming reject signal for a request from `LOCAL_CANISTER` in the stream
+/// to `REMOTE_SUBNET` triggers locally generating a reject response that is rerouted into
 /// the stream to `CANISTER_MIGRATION_SUBNET` when `LOCAL_CANISTER` has since been migrated.
 #[test]
 fn garbage_collect_local_state_with_reject_signals_for_request_from_migrating_canister() {
