@@ -74,7 +74,7 @@ impl Registry {
 
         // Ensure validity of IPv4 config (if it is present)
         if let Some(ipv4_config) = &payload.ipv4_config {
-            assert!(ipv4_config.is_valid(), "Invalid IPv4 config");
+            ipv4_config.panic_on_invalid();
             // Ensure that the IPv4 address is not used by any other node
             if node_exists_with_ipv4(self, ipv4_config.ip_addr()) {
                 panic!("There is already at least one other node with the same IPv4 address",);
@@ -183,7 +183,7 @@ mod tests {
 
         // create IPv4 config with invalid IP address
         let ipv4_config =
-            IPv4Config::try_new("193.118.256.140".into(), "193.118.59.137".into(), 29).unwrap();
+            IPv4Config::maybe_invalid_new("193.118.256.140".into(), "193.118.59.137".into(), 29);
 
         let payload = UpdateNodeIPv4ConfigDirectlyPayload {
             node_id,
@@ -216,7 +216,7 @@ mod tests {
 
         // create IPv4 config with invalid gateway IP
         let ipv4_config =
-            IPv4Config::try_new("193.118.59.140".into(), "193.118.999.137".into(), 29).unwrap();
+            IPv4Config::maybe_invalid_new("193.118.59.140".into(), "193.118.999.137".into(), 29);
 
         let payload = UpdateNodeIPv4ConfigDirectlyPayload {
             node_id,
@@ -249,7 +249,7 @@ mod tests {
 
         // create IPv4 config with invalid gateway IP
         let ipv4_config =
-            IPv4Config::try_new("193.118.59.140".into(), "193.105.231.137".into(), 29).unwrap();
+            IPv4Config::maybe_invalid_new("193.118.59.140".into(), "193.105.231.137".into(), 29);
 
         let payload = UpdateNodeIPv4ConfigDirectlyPayload {
             node_id,
@@ -282,7 +282,7 @@ mod tests {
 
         // create IPv4 config with private IP addresses
         let ipv4_config =
-            IPv4Config::try_new("192.168.178.6".into(), "192.168.178.1".into(), 29).unwrap();
+            IPv4Config::maybe_invalid_new("192.168.178.6".into(), "192.168.178.1".into(), 29);
 
         let payload = UpdateNodeIPv4ConfigDirectlyPayload {
             node_id,
@@ -315,7 +315,7 @@ mod tests {
 
         // create IPv4 config with an invalid prefix length
         let ipv4_config =
-            IPv4Config::try_new("193.118.59.140".into(), "193.118.59.137".into(), 34).unwrap();
+            IPv4Config::maybe_invalid_new("193.118.59.140".into(), "193.118.59.137".into(), 34);
 
         let payload = UpdateNodeIPv4ConfigDirectlyPayload {
             node_id,

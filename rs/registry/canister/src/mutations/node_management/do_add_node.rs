@@ -96,7 +96,7 @@ impl Registry {
 
         // 5. If there is an IPv4 config, make sure that the IPv4 is not used by anyone else
         let ipv4_intf_config = payload.public_ipv4_config.clone().map(|ipv4_config| {
-            assert!(ipv4_config.is_valid(), "Invalid IPv4 config");
+            ipv4_config.panic_on_invalid();
             IPv4InterfaceConfig {
                 ip_addr: ipv4_config.ip_addr().to_string(),
                 gateway_ip_addr: vec![ipv4_config.gateway_ip_addr().to_string()],
@@ -683,10 +683,11 @@ mod tests {
         )]);
 
         // create an IPv4 config
-        let ipv4_config = Some(
-            IPv4Config::try_new("204.153.51.58".to_string(), "204.153.51.1".to_string(), 24)
-                .unwrap(),
-        );
+        let ipv4_config = Some(IPv4Config::maybe_invalid_new(
+            "204.153.51.58".to_string(),
+            "204.153.51.1".to_string(),
+            24,
+        ));
 
         // create two node payloads with the same IPv4 config
         let (mut payload_1, _) = prepare_add_node_payload(1);

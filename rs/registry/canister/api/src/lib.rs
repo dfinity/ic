@@ -82,6 +82,15 @@ pub struct IPv4Config {
 }
 
 impl IPv4Config {
+    // TODO: it is not ideal to have this constructor if we try to always construct a valid IPv4Config.
+    pub fn maybe_invalid_new(ip_addr: String, gateway_ip_addr: String, prefix_length: u32) -> Self {
+        Self {
+            ip_addr,
+            gateway_ip_addr,
+            prefix_length,
+        }
+    }
+
     pub fn try_new(
         ip_addr: String,
         gateway_ip_addr: String,
@@ -119,13 +128,12 @@ impl IPv4Config {
         })
     }
 
-    pub fn is_valid(&self) -> bool {
+    pub fn panic_on_invalid(&self) {
         IPv4Config::try_new(
             self.ip_addr.clone(),
             self.gateway_ip_addr.clone(),
             self.prefix_length,
-        )
-        .is_ok()
+        ).unwrap();
     }
 
     // TODO: either remove this method or return std::net::IpAddr to signal that the ip addr is valid
