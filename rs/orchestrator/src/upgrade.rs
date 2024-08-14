@@ -338,7 +338,7 @@ impl Upgrade {
                     .expect("temporary location for local store download could not be created")
                     .into_path();
                 downloader
-                    .download_and_extract_tar_gz(
+                    .download_and_extract_tar(
                         &registry_store_uri.uri,
                         &local_store_location,
                         Some(registry_store_uri.hash),
