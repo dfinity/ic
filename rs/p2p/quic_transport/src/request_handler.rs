@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use axum::Router;
 use ic_base_types::NodeId;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{error, info, ReplicaLogger};
 use quinn::{Connection, RecvStream, SendStream};
 use tower::ServiceExt;
 use tracing::instrument;
@@ -217,14 +217,19 @@ async fn handle_uni_stream(
     request.extensions_mut().insert::<NodeId>(peer_id);
     request.extensions_mut().insert::<ConnId>(conn_id);
 
+    let response = router.oneshot(request).await.expect("Infallible");
     // Record application level errors.
-    if !router
-        .oneshot(request)
-        .await
-        .expect("Infallible")
-        .status()
-        .is_success()
-    {
+    if !response.status().is_success() {
+        let status = response.status();
+        let error = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .map(|b| String::from_utf8_lossy(&b).to_string())
+            .unwrap_or("Failed to get error string".to_string());
+
+        error!(
+            log,
+            "Application error for uni stream: status {} error {}", status, error
+        );
         metrics
             .request_handle_errors_total
             .with_label_values(&[STREAM_TYPE_UNI, ERROR_TYPE_APP])

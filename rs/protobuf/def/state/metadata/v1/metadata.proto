@@ -245,7 +245,8 @@ message SubnetMetrics {
   types.v1.NominalCycles consumed_cycles_by_deleted_canisters = 1;
   types.v1.NominalCycles consumed_cycles_http_outcalls = 2;
   types.v1.NominalCycles consumed_cycles_ecdsa_outcalls = 3;
-  optional uint64 ecdsa_signature_agreements = 4;
+  reserved 4;
+  reserved "ecdsa_signature_agreements";
   repeated canister_state_bits.v1.ConsumedCyclesByUseCase consumed_cycles_by_use_case = 5;
   optional uint64 num_canisters = 6;
   reserved 7;

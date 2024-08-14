@@ -9,12 +9,12 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-ic-async-utils = { path = "../../async_utils" }
 axum = { workspace = true }
 clap = { workspace = true }
 http = { workspace = true }
+ic-async-utils = { path = "../../async_utils" }
 itertools = { workspace = true }
 reqwest = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-url = "2.4.0"
+url = { workspace = true }

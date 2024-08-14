@@ -20,7 +20,6 @@ The following commands are supported:
 | detach-hsm            |           | Request that the HostOS detach the HSM from the GuestOS virtual machine. Note that the attach and detach-hsm commands are being phased out in favor of the virtual-hsm onboarding, which does not use the vsock. |
 | get-hostos-version    |           | Request that the HostOS return its version.  |
 | upgrade               | URL, hash | Request that the HostOS download and apply a given HostOS upgrade, then trigger a reboot of HostOS. Upgrades are triggered by NNS proposals. Unlike guestOS upgrades, which are triggered at a subnet level, the HostOS upgrades occur by datacenter or by individual nodes to avoid subnet downtime, as rebooting the HostOS typically takes several minutes. |
-| set-node-id           | Node ID   | Request that the HostOS adds the provided node-ID to its hostname as a way to identify which node-ids corresponds to which machines. Note that set-node-id is not currently called by the orchestrator, but we would like this functionality, eventually.  |
 | notify                | message   | Request that the HostOS output a given message a certain number of times to the host terminal. The command is used to log info on the HostOS (e.g., "orchestrator started," "replica starting up").  |
 
 ## Compatibility

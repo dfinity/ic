@@ -54,7 +54,6 @@ impl Currency {
 /// all future calls for that same BlockIdentifier must return the same block
 /// contents.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct Block {
     /// The block_identifier uniquely identifies a block in a particular network.
     pub block_identifier: BlockIdentifier,
@@ -92,7 +91,6 @@ impl Block {
 /// They are always one-sided (only affect 1 AccountIdentifier) and can succeed
 /// or fail independently from a Transaction.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct Operation {
     /// The operation_identifier uniquely identifies an operation within a transaction.
     pub operation_identifier: OperationIdentifier,
@@ -164,7 +162,6 @@ impl Operation {
 /// transfers on the same blockchain (when a transfer is account-based, don't
 /// populate this model).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct CoinChange {
     /// CoinIdentifier uniquely identifies a Coin.
     pub coin_identifier: CoinIdentifier,
@@ -191,7 +188,6 @@ impl CoinChange {
 #[allow(non_camel_case_types)]
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGenericEnum))]
 pub enum CoinAction {
     /// CoinAction indicating a Coin was created.
     #[serde(rename = "coin_created")]
@@ -223,7 +219,6 @@ impl ::std::str::FromStr for CoinAction {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct RelatedTransaction {
     /// The network_identifier specifies which network a particular object is associated with..
     pub network_identifier: NetworkIdentifier,
@@ -237,7 +232,6 @@ pub struct RelatedTransaction {
 #[allow(non_camel_case_types)]
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGenericEnum))]
 pub enum Direction {
     /// CoinAction indicating a Coin was created.
     #[serde(rename = "forward")]
@@ -271,7 +265,6 @@ impl ::std::str::FromStr for Direction {
 /// Transactions contain an array of Operations that are attributable to the
 /// same TransactionIdentifier.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct Transaction {
     /// The transaction_identifier uniquely identifies a transaction in a particular network and block or in the mempool.
     pub transaction_identifier: TransactionIdentifier,
@@ -299,7 +292,6 @@ impl Transaction {
 // Amount is some Value of a Currency. It is considered invalid to specify a
 /// Value without a Currency.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct Amount {
     /// Value of the transaction in atomic units represented as an
     /// arbitrary-sized signed integer.  For example, 1 BTC would be represented
@@ -484,7 +476,6 @@ pub enum Case {
 /// encoded in hex.  Note that there is no PrivateKey struct as this is NEVER
 /// the concern of an implementation.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct PublicKey {
     /// Hex-encoded public key bytes in the format specified by the CurveType.
     pub hex_bytes: String,
@@ -541,7 +532,6 @@ where
 #[allow(non_camel_case_types)]
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGenericEnum))]
 pub enum CurveType {
     /// https://secg.org/sec1-v2.pdf#subsubsection.2.3.3
     #[serde(rename = "secp256k1")]
@@ -595,7 +585,6 @@ impl ::std::str::FromStr for CurveType {
 /// optionally populated if there is a restriction on the signature scheme that
 /// can be used to sign the payload.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct SigningPayload {
     /// [DEPRECATED by `account_identifier` in `v1.4.4`] The network-specific
     /// address of the account that should sign the payload.
@@ -633,7 +622,6 @@ impl SigningPayload {
 #[allow(non_camel_case_types)]
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGenericEnum))]
 pub enum SignatureType {
     #[serde(rename = "ecdsa")]
     Ecdsa,
@@ -690,7 +678,6 @@ impl ::std::str::FromStr for SignatureType {
 /// the SignatureType.  PublicKey is often times not known during construction
 /// of the signing payloads but may be needed to combine signatures properly.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct Signature {
     /// SigningPayload is signed by the client with the keypair associated with an AccountIdentifier using the specified SignatureType. SignatureType can be optionally populated if there is a restriction on the signature scheme that can be used to sign the payload.
     pub signing_payload: SigningPayload,
@@ -706,7 +693,6 @@ pub struct Signature {
 
 /// BlockTransaction contains a populated Transaction and the BlockIdentifier that contains it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct BlockTransaction {
     /// The block_identifier uniquely identifies a block in a particular network.
     pub block_identifier: BlockIdentifier,
@@ -720,7 +706,6 @@ pub struct BlockTransaction {
 /// used.
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGenericEnum))]
 pub enum Operator {
     /// If any condition is satisfied, it is considered a match.
     #[serde(rename = "or")]

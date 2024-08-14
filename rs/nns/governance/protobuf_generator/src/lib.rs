@@ -125,6 +125,14 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         );
     }
 
+    let option_blob_fields = vec!["InstallCode.wasm_module", "InstallCode.arg"];
+    for field in option_blob_fields {
+        config.field_attribute(
+            format!(".ic_nns_governance.pb.v1.{}", field),
+            "#[serde(deserialize_with = \"ic_utils::deserialize::deserialize_option_blob\")]",
+        );
+    }
+
     // END type_attribute.
 
     let src_file = proto

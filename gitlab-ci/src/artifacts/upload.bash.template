@@ -31,6 +31,18 @@ if [ "$(basename $f)" == "SHA256SUMS" ]; then
     cat "$f" >&2
 fi
 
+# XXX: for historical reasons, artifacts are uploaded during a build step, expecting
+# AWS credentials to be present in $HOME. Unfortunately that makes the build non-portable
+# to machines without AWS credentials.
+# Until the upload is moved out of the build itself, this is a  workaround for
+# https://namespace.so runners: if the runner is from namespace (inferring from the presence
+# of /opt/namespace) we simply skip the upload.
+if [ -d /opt/namespace ]; then
+    touch "$2"
+    touch "$3"
+    exit 0
+fi
+
 # Multipart upload does not work trough the proxy for some reasons. Just disabling it for now.
 "@@RCLONE@@" \
     --config="@@RCLONE_CONFIG@@" \

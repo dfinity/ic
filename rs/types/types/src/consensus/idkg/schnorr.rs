@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::{AsMut, AsRef, TryFrom, TryInto};
 use std::fmt;
 use std::hash::Hash;
+use std::sync::Arc;
 
 use super::{
     IDkgBlockReader, IDkgTranscriptParamsRef, RandomUnmaskedTranscriptParams,
@@ -200,11 +201,11 @@ impl TryFrom<&pb::PreSignatureTranscriptRef> for PreSignatureTranscriptRef {
 
 /// Counterpart of ThresholdSchnorrSigInputs that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ThresholdSchnorrSigInputsRef {
     pub derivation_path: ExtendedDerivationPath,
-    pub message: Vec<u8>,
+    pub message: Arc<Vec<u8>>,
     pub nonce: Randomness,
     pub presig_transcript_ref: PreSignatureTranscriptRef,
 }
@@ -230,7 +231,7 @@ pub enum ThresholdSchnorrSigInputsError {
 impl ThresholdSchnorrSigInputsRef {
     pub fn new(
         derivation_path: ExtendedDerivationPath,
-        message: Vec<u8>,
+        message: Arc<Vec<u8>>,
         nonce: Randomness,
         presig_transcript_ref: PreSignatureTranscriptRef,
     ) -> Self {
@@ -242,7 +243,7 @@ impl ThresholdSchnorrSigInputsRef {
         }
     }
 
-    /// Resolves the refs to get the ThresholdEcdsaSigInputs.
+    /// Resolves the refs to get the ThresholdSchnorrSigInputs.
     pub fn translate(
         &self,
         resolver: &dyn IDkgBlockReader,
