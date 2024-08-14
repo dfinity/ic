@@ -42,7 +42,6 @@ impl SubnetPairProxy {
 
     /// Generates a new proxy of new subnets using default subnet ids.
     fn with_new_subnets() -> Self {
-
         let routing_table = Self::make_routing_table();
         let wasm = Project::cargo_bin_maybe_from_env("xnet-test-canister", &[]).bytes();
 
