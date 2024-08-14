@@ -51,15 +51,16 @@ def icos_build(
         srcs = [k for k, v in image_deps["component_files"].items()],
         outs = [name + "_pre_check_result.txt"],
         cmd = """
-      echo "Running pre_check for {name}"
-      for file in $(SRCS); do
-        if [ ! -f "$file" ]; then
-          echo "Error: $file does not exist" >&2
-          exit 1
-        fi
-      done
-      echo "All paths exist" > $@
-    """.format(name = name),
+        echo "Running pre_check for {name}" > $@
+        for file in $(SRCS); do
+            if [ ! -f "$file" ]; then
+                echo "Error: $file does not exist" >&2
+                echo "Error: $file does not exist" >> $@
+                exit 1
+            fi
+        done
+        echo "All paths exist" >> $@
+        """.format(name = name),
     )
 
     # -------------------- Version management --------------------
