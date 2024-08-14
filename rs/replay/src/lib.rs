@@ -103,9 +103,9 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             let question = format!("The checkpoint created at height {} ", h)
                 + "cannot be used for deterministic state computation if it is not a CUP height.\n"
                 + "Continue?";
-            if !consent_given(&question) {
-                return;
-            }
+            // if !consent_given(&question) {
+            //     return;
+            // }
         }
 
         if let Some(SubCommand::RestoreFromBackup(cmd)) = subcmd {

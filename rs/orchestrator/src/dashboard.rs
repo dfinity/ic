@@ -50,6 +50,7 @@ impl Dashboard for OrchestratorDashboard {
              host os version: {}\n\
              scheduled upgrade: {}\n\
              {}\n\
+             last checkpoint height: {}\n\
              firewall config registry version: {}\n\
              ipv4 config registry version: {}\n\
              {}\n\
@@ -68,6 +69,12 @@ impl Dashboard for OrchestratorDashboard {
                 .unwrap_or_else(|| "None".to_string()),
             self.get_scheduled_upgrade().await,
             self.get_local_cup_info(),
+            self.cup_provider
+                .get_checkpoint_heights()
+                .map(|res| res.max().map(|res| res.to_string()))
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| "None".to_string()),
             *self.last_applied_firewall_version.read().await,
             *self.last_applied_ipv4_config_version.read().await,
             self.display_last_applied_ssh_parameters().await,

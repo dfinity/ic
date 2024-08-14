@@ -276,7 +276,6 @@ impl Upgrade {
     }
 
     async fn do_create_checkpoint(&self, subnet_id: SubnetId) -> OrchestratorResult<()> {
-        let checkpoints = "/var/lib/ic/data/ic_state/checkpoints";
         let config_str = "/run/ic-node/config/ic.json5";
         let replay = "/opt/ic/bin/ic-replay";
 
@@ -320,16 +319,9 @@ impl Upgrade {
             "Found highest certification at height {height}",
         );
 
-        let checkpoint_exists = std::fs::read_dir(checkpoints)
-            .map_err(|err| {
-                OrchestratorError::IoError("Couldn't create a checkpoints directory".into(), err)
-            })?
-            .flatten()
-            .flat_map(|entry| {
-                let file_name = entry.file_name();
-                let file_name = file_name.to_string_lossy();
-                u64::from_str_radix(&file_name, 16)
-            })
+        let checkpoint_exists = self
+            .cup_provider
+            .get_checkpoint_heights()?
             .any(|h| h == height.get());
 
         if checkpoint_exists {
@@ -349,7 +341,10 @@ impl Upgrade {
         info!(self.logger, "Executing ic-replay: {replay:?}",);
         match replay.output().await {
             Ok(output) => {
-                info!(self.logger, "{output:?}");
+                let stdout = String::from_utf8(output.stdout).unwrap_or_default();
+                let stderr = String::from_utf8(output.stderr).unwrap_or_default();
+                info!(self.logger, "{stdout}");
+                info!(self.logger, "{stderr}");
             }
             Err(err) => {
                 error!(self.logger, "{err:?}");
