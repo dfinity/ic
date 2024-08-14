@@ -1092,6 +1092,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.23.11",
                 features = [
                     "ring",
+                    "std",
                 ],
             ),
             "rustls-native-certs": crate.spec(
