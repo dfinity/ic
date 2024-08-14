@@ -40,5 +40,4 @@ pub struct Metrics {
     pub sent_response_count: u32,
     /// Counter for the number of bytes sent in response payloads.
     pub response_bytes_sent: u32,
-    
 }
