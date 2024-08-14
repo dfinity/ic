@@ -13,8 +13,8 @@ use ic_interfaces::{
         UnvalidatedIngressArtifact, ValidatedIngressArtifact,
     },
     p2p::consensus::{
-        ArtifactWithOpt, ChangeResult, MutablePool, Priority, PriorityFn, PriorityFnFactory,
-        UnvalidatedArtifact, ValidatedPoolReader,
+        ArtifactMutation, ArtifactWithOpt, ChangeResult, MutablePool, Priority, PriorityFn,
+        PriorityFnFactory, UnvalidatedArtifact, ValidatedPoolReader,
     },
     time_source::TimeSource,
 };
@@ -375,9 +375,15 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                 }
             }
         }
+        let mut mutations = Vec::with_capacity(artifacts_with_opt.len() + purged.len());
+        for i in artifacts_with_opt {
+            mutations.push(ArtifactMutation::Insert(i));
+        }
+        for i in purged {
+            mutations.push(ArtifactMutation::Remove(i));
+        }
         ChangeResult {
-            purged,
-            artifacts_with_opt,
+            mutations,
             poll_immediately: false,
         }
     }

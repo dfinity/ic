@@ -16,7 +16,7 @@ use ic_interfaces::{
         ConsensusPoolCache, ConsensusTime, HeightIndexedPool, HeightRange, PoolSection,
         PurgeableArtifactType, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
-    p2p::consensus::{ChangeResult, MutablePool, ValidatedPoolReader},
+    p2p::consensus::{ArtifactMutation, ChangeResult, MutablePool, ValidatedPoolReader},
     time_source::TimeSource,
 };
 use ic_logger::{warn, ReplicaLogger};
@@ -800,9 +800,15 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
             self.cache.update(self, updates);
         }
 
+        let mut mutations = Vec::with_capacity(artifacts_with_opt.len() + purged.len());
+        for i in artifacts_with_opt {
+            mutations.push(ArtifactMutation::Insert(i));
+        }
+        for i in purged {
+            mutations.push(ArtifactMutation::Remove(i));
+        }
         ChangeResult {
-            purged,
-            artifacts_with_opt,
+            mutations,
             poll_immediately: changed,
         }
     }

@@ -7,7 +7,7 @@ use std::{
 
 use ic_interfaces::p2p::consensus::{
     ArtifactWithOpt, ChangeResult, ChangeSetProducer, MutablePool, Priority, PriorityFnFactory,
-    UnvalidatedArtifact, ValidatedPoolReader,
+    UnvalidatedArtifact, ValidatedPoolReader, ArtifactMutation,
 };
 use ic_logger::ReplicaLogger;
 use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
@@ -147,16 +147,20 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
         if !change_set.1.is_empty() {
             poll_immediately = true;
         }
+        let mut mutations: Vec<_> = change_set
+        .0
+        .into_iter()
+        .map(|m| ArtifactMutation::Insert(ArtifactWithOpt {
+            artifact: self.id_to_msg(m).into(),
+            is_latency_sensitive: self.latency_sensitive,
+        }))
+        .collect();
+
+        for id in change_set.1 {
+            mutations.push(ArtifactMutation::Remove(id));
+        }
         ChangeResult {
-            purged: change_set.1,
-            artifacts_with_opt: change_set
-                .0
-                .into_iter()
-                .map(|m| ArtifactWithOpt {
-                    artifact: self.id_to_msg(m).into(),
-                    is_latency_sensitive: self.latency_sensitive,
-                })
-                .collect(),
+            mutations,
             poll_immediately,
         }
     }

@@ -13,7 +13,8 @@ use crate::{
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::p2p::consensus::{
-    ArtifactWithOpt, ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+    ArtifactMutation, ArtifactWithOpt, ChangeResult, MutablePool, UnvalidatedArtifact,
+    ValidatedPoolReader,
 };
 use ic_interfaces::{
     idkg::{
@@ -485,9 +486,15 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
 
         self.unvalidated.mutate(unvalidated_ops);
         self.validated.mutate(validated_ops);
+        let mut mutations = Vec::with_capacity(artifacts_with_opt.len() + purged.len());
+        for i in artifacts_with_opt {
+            mutations.push(ArtifactMutation::Insert(i));
+        }
+        for i in purged {
+            mutations.push(ArtifactMutation::Remove(i));
+        }
         ChangeResult {
-            purged,
-            artifacts_with_opt,
+            mutations,
             poll_immediately: changed,
         }
     }

@@ -6,7 +6,9 @@ use ic_interfaces::p2p::consensus::ArtifactWithOpt;
 use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, ChangeSet},
     consensus_pool::HeightIndexedPool,
-    p2p::consensus::{ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
+    p2p::consensus::{
+        ArtifactMutation, ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+    },
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -268,9 +270,15 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
             self.update_metrics();
         }
 
+        let mut mutations = Vec::with_capacity(artifacts_with_opt.len() + purged.len());
+        for i in artifacts_with_opt {
+            mutations.push(ArtifactMutation::Insert(i));
+        }
+        for i in purged {
+            mutations.push(ArtifactMutation::Remove(i));
+        }
         ChangeResult {
-            purged,
-            artifacts_with_opt,
+            mutations,
             poll_immediately: changed,
         }
     }
