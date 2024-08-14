@@ -14670,6 +14670,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "manifest_tool"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "clap 4.4.6",
+]
+
+[[package]]
 name = "maplit"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,0 +1,35 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:anyhow",
+    "@crate_index//:clap",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+]
+
+ALIASES = {}
+
+rust_binary(
+    name = "manifest_tool",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "manifest_tool",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "test",
+    size = "small",
+    crate = ":manifest_tool",
+    deps = DEPENDENCIES,
+)

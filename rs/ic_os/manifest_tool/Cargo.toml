@@ -1,0 +1,13 @@
+[package]
+name = "manifest_tool"
+version = "1.0.0"
+edition = "2021"
+
+[[bin]]
+name = "manifest_tool"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+
