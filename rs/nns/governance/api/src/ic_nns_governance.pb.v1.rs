@@ -4690,11 +4690,27 @@ impl ProposalRewardStatus {
     }
 }
 
+/// A closed range of dates (i.e. includes both start and end dates)
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq)]
+pub struct DateRangeFilter {
+    /// The start date of the range as seconds since epoch
+    start_timestamp_seconds: Option<u64>,
+    /// The end date of the range
+    end_timestamp_seconds: Option<u64>,
+}
+
 /// A Request to list minted node provider rewards
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq)]
-pub struct ListNodeProviderRewardsRequest {}
+pub struct ListNodeProviderRewardsRequest {
+    /// The next page - a token used to get the next set of results.
+    page: Option<u32>,
+    /// Filter for the dates of the rewards
+    date_filter: Option<DateRangeFilter>,
+}
 
 /// A Response to list minted node provider rewards.
 /// Includes optional paging information to get next set of results.
