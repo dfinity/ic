@@ -2,22 +2,20 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use canister_test::Project;
 use ic_base_types::{CanisterId, SubnetId};
-use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
+use ic_config::{
+    execution_environment::Config as HypervisorConfig,
+    subnet_config::SubnetConfig,
+};
 use ic_interfaces_certified_stream_store::EncodeStreamError;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    replicated_state::ReplicatedStateMessageRouting, testing::CanisterQueuesTesting,
-    ReplicatedState,
-};
-use ic_state_machine_tests::{
-    StateMachine, StateMachineBuilder, StateMachineConfig, UserError, WasmResult,
-};
+use ic_replicated_state::{testing::CanisterQueuesTesting, ReplicatedState, replicated_state::ReplicatedStateMessageRouting};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError, WasmResult};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_test_utilities_types::{
-    ids::{SUBNET_0, SUBNET_1, SUBNET_2},
     messages::RequestBuilder,
+    ids::{SUBNET_0, SUBNET_1, SUBNET_2},
 };
 use ic_types::{
     messages::{CallbackId, Payload, RequestOrResponse},
@@ -30,7 +28,7 @@ use std::sync::Arc;
 use xnet_test::Metrics;
 
 const MAX_TICKS: u64 = 100;
-
+    
 /// Generates a routing table with canister ranges for `subnet_ids.len()` subnets.
 fn make_routing_table(subnet_ids: &[SubnetId]) -> RoutingTable {
     let mut routing_table = RoutingTable::new();
@@ -62,7 +60,10 @@ impl SubnetPairProxy {
     /// Generates a new proxy of new subnets using default subnet ids, default
     /// `StateMachineConfigs` and the XNet tets canister wasm.
     fn with_new_subnets() -> Self {
-        Self::with_new_subnets_and_configs(None, None)
+        Self::with_new_subnets_and_configs(
+            None,
+            None,
+        )
     }
 
     /// Generates a new proxy of new subnets using default subnet ids and `StateMachineConfigs`
@@ -109,11 +110,7 @@ impl SubnetPairProxy {
 
     /// Generates a routing table with canister ranges for 3 subnets.
     fn make_routing_table() -> RoutingTable {
-        make_routing_table(&[
-            Self::LOCAL_SUBNET_ID,
-            Self::REMOTE_SUBNET_ID,
-            Self::DESTINATION_SUBNET_ID,
-        ])
+        make_routing_table(&[Self::LOCAL_SUBNET_ID, Self::REMOTE_SUBNET_ID, Self::DESTINATION_SUBNET_ID])
     }
 
     /// Generate the payload for the 'start' method on an XNet canister.
@@ -1087,13 +1084,13 @@ fn state_machine_subnet_memory_test() {
     let config = StateMachineConfig::new(
         SubnetConfig::new(SubnetType::Application),
         HypervisorConfig {
-            //            subnet_memory_threshold: NumBytes::new(90 * MB),
+//            subnet_memory_threshold: NumBytes::new(90 * MB),
             subnet_memory_capacity: NumBytes::new(10000 * KB),
             subnet_message_memory_capacity: NumBytes::new(10000 * KB),
-            //            ingress_history_memory_capacity: NumBytes::new(10 * MB),
-            //            subnet_wasm_custom_sections_memory_capacity: NumBytes::new(10 * MB),
-            //            subnet_memory_reservation: NumBytes::new(10 * MB),
-            //            max_canister_memory_size: NumBytes::new(10 * MB),
+//            ingress_history_memory_capacity: NumBytes::new(10 * MB),
+//            subnet_wasm_custom_sections_memory_capacity: NumBytes::new(10 * MB),
+//            subnet_memory_reservation: NumBytes::new(10 * MB),
+//            max_canister_memory_size: NumBytes::new(10 * MB),
             ..HypervisorConfig::default()
         },
     );
@@ -1109,12 +1106,11 @@ fn state_machine_subnet_memory_test() {
         .with_subnet_type(SubnetType::Application)
         .build();
 
-    let local_canister_id =
-        local_env.create_canister_with_cycles(None, Cycles::new(100_000_000_000_u128), None);
+    let local_canister_id = local_env.create_canister_with_cycles(None, Cycles::new(100_000_000_000_u128), None);
     let remote_canister_id = remote_env.create_canister(None);
 
     let (h, mut state) = remote_env.state_manager.take_tip();
-
+    
     // Push 20 requests with 10kb payloads into the streams to `LOCAL_SUBNET_ID` on `remote_env`.
     let mut streams = state.take_streams();
     for index in 0..20 {
@@ -1127,7 +1123,7 @@ fn state_machine_subnet_memory_test() {
         streams.push(LOCAL_SUBNET_ID, msg.into());
     }
     state.put_streams(streams);
-
+    
     remote_env.state_manager.commit_and_certify(
         state,
         h.increment(),
@@ -1136,18 +1132,17 @@ fn state_machine_subnet_memory_test() {
     );
 
     // Induct these messages into `local_env`.
-    let xnet_payload = remote_env
-        .generate_xnet_payload(
-            LOCAL_SUBNET_ID,
-            None, // witness_begin
-            None, // msg_begin
-            None, // msg_limit,
-            None, // byte_limit,
-        )
-        .unwrap();
+    let xnet_payload = remote_env.generate_xnet_payload(
+        LOCAL_SUBNET_ID,
+        None, // witness_begin
+        None, // msg_begin
+        None, // msg_limit,
+        None, // byte_limit,
+    )
+    .unwrap();
     local_env.execute_block_with_xnet_payload(xnet_payload);
 
-    //    assert_eq!(None, Some(local_env.get_latest_state().canister_states.get(&local_canister_id)));
+//    assert_eq!(None, Some(local_env.get_latest_state().canister_states.get(&local_canister_id)));
     assert_eq!(0, 1, "{:#?}", local_env.get_latest_state());
 
     //let memory_taken = local_env.get_latest_state().memory_taken();
@@ -1156,3 +1151,4 @@ fn state_machine_subnet_memory_test() {
     //assert_eq!(None, Some(memory_taken.wasm_custom_sections()));
     //assert_eq!(None, Some(memory_taken.canister_history()));
 }
+
