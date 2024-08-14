@@ -400,7 +400,7 @@ impl CanisterQueues {
         };
 
         // It is possible for an input schedule to contain an empty or garbage collected
-        // input queue if  all messages in said queue have expired / were shed since it
+        // input queue if all messages in said queue have expired / were shed since it
         // was scheduled. Meaning that iteration may be required.
         while let Some(sender) = input_schedule.pop_front() {
             let Some((input_queue, _)) = self.canister_queues.get_mut(&sender) else {
@@ -1479,7 +1479,7 @@ pub fn can_push(msg: &RequestOrResponse, available_memory: i64) -> Result<(), us
     match msg {
         RequestOrResponse::Request(req) => {
             let required = memory_required_to_push_request(req);
-            if required as i64 <= available_memory {
+            if required as i64 <= available_memory || required == 0 {
                 Ok(())
             } else {
                 Err(required)
