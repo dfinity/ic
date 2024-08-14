@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
-use std::fs;
 use regex::Regex;
+use std::fs;
 
 #[derive(Debug)]
 pub struct Components {
@@ -10,7 +10,10 @@ pub struct Components {
 
 impl Components {
     pub fn new(name: String, path: String) -> Self {
-        Components { source: name, destination: path }
+        Components {
+            source: name,
+            destination: path,
+        }
     }
 }
 
@@ -37,7 +40,8 @@ pub fn get_all_components() -> Result<Vec<Components>> {
     let guestos_components = get_components_from_bzl("../../../ic-os/components/guestos.bzl")?;
     let hostos_components = get_components_from_bzl("../../../ic-os/components/hostos.bzl")?;
     let setupos_components = get_components_from_bzl("../../../ic-os/components/setupos.bzl")?;
-    let boundary_guestos_components = get_components_from_bzl("../../../ic-os/components/boundary-guestos.bzl")?;
+    let boundary_guestos_components =
+        get_components_from_bzl("../../../ic-os/components/boundary-guestos.bzl")?;
 
     let mut all_components = Vec::new();
     all_components.extend(guestos_components);

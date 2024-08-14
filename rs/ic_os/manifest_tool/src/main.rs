@@ -32,7 +32,6 @@ pub fn main() -> Result<()> {
             let components = get_all_components()?;
             println!("Found {} components:", components.len());
 
-            
             for component in &components {
                 dbg!(component);
             }
