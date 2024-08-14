@@ -431,6 +431,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "form_urlencoded": crate.spec(
                 version = "^1.0.0",
             ),
+            "fqdn": crate.spec(
+                version = "0.3.11",
+            ),
             "fs_extra": crate.spec(
                 version = "^1.2.0",
             ),
@@ -606,6 +609,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-http-certification": crate.spec(
                 version = "2.6.0",
+            ),
+            "ic-http-gateway": crate.spec(
+                git = "https://github.com/dfinity/http-gateway",
+                rev = "a1f63eb17b0a89f7fadcab67b3a0afe1720ef9b3",
             ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
