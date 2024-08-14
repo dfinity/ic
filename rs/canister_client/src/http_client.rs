@@ -14,6 +14,7 @@ use hyper::{
 };
 use hyper_rustls::HttpsConnector as HyperTlsConnector;
 use itertools::Either;
+use rustls::ClientConfig;
 use serde_cbor::Value;
 use std::sync::Arc;
 use std::{
@@ -125,6 +126,10 @@ impl rustls::client::ServerCertVerifier for DangerAcceptInvalidCerts {
         Ok(rustls::client::ServerCertVerified::assertion())
     }
 }
+use http_body_util::Full;
+use hyper::body::Bytes;
+use hyper_rustls::HttpsConnectorBuilder;
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 
 impl HttpClient {
     pub fn new_with_config(config: HttpClientConfig) -> Self {
@@ -152,6 +157,28 @@ impl HttpClient {
             .pool_max_idle_per_host(config.pool_max_idle_per_host)
             .http2_only(config.http2_only)
             .build::<_, hyper::Body>(https_connector);
+
+        Self { hyper }
+    }
+
+    pub fn new_with_tls_config(client_config: ClientConfig) -> Self {
+        let https = HttpsConnectorBuilder::new()
+            .with_tls_config(client_config)
+            .https_only()
+            .enable_all_versions()
+            .build();
+
+        let hyper = Client::builder(TokioExecutor::new())
+            .http2_only(true)
+            .pool_idle_timeout(tokio::time::Duration::from_secs(600))
+            .pool_max_idle_per_host(1)
+            .build::<_, Full<Bytes>>(https);
+
+        // let hyper = HyperClient::builder()
+        //     .pool_idle_timeout(config.pool_idle_timeout)
+        //     .pool_max_idle_per_host(config.pool_max_idle_per_host)
+        //     .http2_only(config.http2_only)
+        //     .build::<_, hyper::Body>(https_connector);
 
         Self { hyper }
     }

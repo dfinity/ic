@@ -35,7 +35,12 @@ use crate::{
     registry_helper::RegistryHelper,
     utils::http_endpoint_to_url,
 };
+use http_body_util::Full;
+use hyper::body::Bytes;
+use hyper_rustls::HttpsConnectorBuilder;
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_canister_client::{Agent, HttpClient, Sender};
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::{registry::node::v1::NodeRecord, types::v1 as pb};
@@ -60,8 +65,8 @@ use url::Url;
 pub(crate) struct CatchUpPackageProvider {
     registry: Arc<RegistryHelper>,
     cup_dir: PathBuf,
-    client: HttpClient,
     crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
+    crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
     logger: ReplicaLogger,
     node_id: NodeId,
 }
@@ -72,6 +77,7 @@ impl CatchUpPackageProvider {
         registry: Arc<RegistryHelper>,
         cup_dir: PathBuf,
         crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
+        crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
         logger: ReplicaLogger,
         node_id: NodeId,
     ) -> Self {
@@ -79,7 +85,7 @@ impl CatchUpPackageProvider {
             node_id,
             registry,
             cup_dir,
-            client: HttpClient::new(),
+            crypto_tls_config,
             crypto,
             logger,
         }
@@ -140,9 +146,9 @@ impl CatchUpPackageProvider {
             .map(CatchUpPackageParam::try_from)
             .and_then(Result::ok);
 
-        for (_, node_record) in peers.iter() {
+        for (node_id, node_record) in peers.iter() {
             if let Some((proto, cup)) = self
-                .fetch_and_verify_catch_up_package(node_record, param, subnet_id)
+                .fetch_and_verify_catch_up_package(node_id, node_record, param, subnet_id)
                 .await
             {
                 // Note: None is < Some(_)
@@ -163,6 +169,7 @@ impl CatchUpPackageProvider {
     // Also checks the signature of the downloaded catch up package.
     async fn fetch_and_verify_catch_up_package(
         &self,
+        node_id: &NodeId,
         node_record: &NodeRecord,
         param: Option<CatchUpPackageParam>,
         subnet_id: SubnetId,
@@ -176,7 +183,9 @@ impl CatchUpPackageProvider {
         })?;
         let url = http_endpoint_to_url(&http, &self.logger)?;
 
-        let protobuf = self.fetch_catch_up_package(url.clone(), param).await?;
+        let protobuf = self
+            .fetch_catch_up_package(node_id, url.clone(), param)
+            .await?;
         let cup = CatchUpPackage::try_from(&protobuf)
             .map_err(|e| {
                 warn!(
@@ -210,10 +219,29 @@ impl CatchUpPackageProvider {
     // caller.
     async fn fetch_catch_up_package(
         &self,
+        node_id: &NodeId,
         url: Url,
         param: Option<CatchUpPackageParam>,
     ) -> Option<pb::CatchUpPackage> {
-        Agent::new_with_client(self.client.clone(), url, Sender::Anonymous)
+        let client_config = self
+            .crypto_tls_config
+            .client_config(*node_id, self.registry.get_latest_version())
+            .map_err(|e| warn!(self.logger, "Failed to create tls client config: {:?}", e))
+            .ok()?;
+
+        let https = HttpsConnectorBuilder::new()
+            .with_tls_config(client_config)
+            .https_only()
+            .enable_all_versions()
+            .build();
+
+        let client = Client::builder(TokioExecutor::new())
+            .http2_only(true)
+            .pool_idle_timeout(tokio::time::Duration::from_secs(600))
+            .pool_max_idle_per_host(1)
+            .build::<_, Full<Bytes>>(https);
+
+        Agent::new_with_client(client, url, Sender::Anonymous)
             .query_cup_endpoint(param)
             .await
             .map_err(|e| warn!(self.logger, "Failed to query CUP endpoint: {:?}", e))
