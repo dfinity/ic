@@ -7,7 +7,7 @@ use super::{
 use slog::{info, Logger};
 use std::time::Duration;
 
-pub fn simulate_network(logger: Logger, subnet: SubnetSnapshot, topology: &NetworkSimulation) {
+pub fn simulate_network(subnet: SubnetSnapshot, topology: &NetworkSimulation) {
     let nodes: Vec<_> = subnet.nodes().collect();
 
     match topology {
@@ -59,8 +59,6 @@ pub fn simulate_network(logger: Logger, subnet: SubnetSnapshot, topology: &Netwo
                     "sudo tc qdisc add dev enp1s0 parent 1:999 handle 999: netem limit 10000000 \n",
                 );
                 tc_command.push_str("sudo tc filter add dev enp1s0 protocol ipv6 parent 1: pref 999 u32 match ip6 dst ::/0 flowid 1:999 \n");
-
-                info!(logger, "tc command \n: {}", tc_command);
                 tc_commands[source_node] = tc_command;
             }
 
@@ -762,11 +760,11 @@ const IO67_PACKET_LOSS: [(u64, u64, f64); 156] = [
     (12, 10, 0.000050966344544268),
     (12, 11, 0.004995221578124113),
     (12, 13, 0.000001358177454882406),
-    (13, 1, 0.9906337791868513416),
-    (13, 2, 0.9900009519790678842553),
-    (13, 3, 0.990003302281817464143),
-    (13, 4, 0.99148074982778491),
-    (13, 5, 0.9900014964488140247861),
+    (13, 1, 0.006337791868513416),
+    (13, 2, 0.0000009519790678842553),
+    (13, 3, 0.000003302281817464143),
+    (13, 4, 0.00148074982778491),
+    (13, 5, 0.0000014964488140247861),
     (13, 6, 0.0005996316225352878),
     (13, 7, 0.0011227127562902584),
     (13, 8, 0.00018202700190020091),

@@ -120,7 +120,7 @@ pub fn config(
         env.topology_snapshot()
             .subnets()
             .filter(|s| s.subnet_type() == SubnetType::Application)
-            .for_each(|s| simulate_network(env.logger(), s, &network_simulation));
+            .for_each(|s| simulate_network(s, &network_simulation));
     }
 }
 
