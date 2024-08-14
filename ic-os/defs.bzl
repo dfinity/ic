@@ -45,8 +45,8 @@ def icos_build(
     image_deps = image_deps_func(mode, malicious)
 
     # -------------------- Pre-check --------------------
-    # Verify that all the referenced components exist
 
+    # Verify that all the referenced components exist
     native.genrule(
         name = name + "_pre_check",
         srcs = [k for k, v in image_deps["component_files"].items()],
