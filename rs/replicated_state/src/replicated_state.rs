@@ -369,16 +369,16 @@ impl MemoryTaken {
 #[derive(Clone, Debug, PartialEq, ValidateEq)]
 pub struct ReplicatedState {
     /// States of all canisters, indexed by canister ids.
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     pub canister_states: BTreeMap<CanisterId, CanisterState>,
 
     /// Deterministic processing metadata.
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     pub metadata: SystemMetadata,
 
     /// Queues for holding messages sent/received by the subnet.
     // Must remain private.
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     subnet_queues: CanisterQueues,
 
     /// Queue for holding responses arriving from Consensus.
@@ -393,7 +393,7 @@ pub struct ReplicatedState {
     pub epoch_query_stats: RawQueryStats,
 
     /// Manages the canister snapshots.
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     pub canister_snapshots: CanisterSnapshots,
 }
 

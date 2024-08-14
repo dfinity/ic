@@ -192,7 +192,7 @@ pub fn compute_total_canister_change_size(changes: &VecDeque<Arc<CanisterChange>
 #[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
 pub struct CanisterHistory {
     /// The canister changes stored in the order from the oldest to the most recent.
-    #[validate_eq(Skip)]
+    #[validate_eq(Ignore)]
     changes: Arc<VecDeque<Arc<CanisterChange>>>,
     /// The `total_num_changes` records the total number of canister changes
     /// that have ever been recorded. In particular, if the system drops some canister changes,
@@ -274,7 +274,7 @@ pub struct SystemState {
     pub canister_id: CanisterId,
     // This must remain private, in order to properly enforce system states (running, stopping,
     // stopped) when enqueuing inputs; and to ensure message memory reservations are accurate.
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     queues: CanisterQueues,
     /// The canister's memory allocation.
     pub memory_allocation: MemoryAllocation,
@@ -341,10 +341,11 @@ pub struct SystemState {
     pub canister_version: u64,
 
     /// Canister history.
+    #[validate_eq(CompareWithValidateEq)]
     canister_history: CanisterHistory,
 
     /// Store of Wasm chunks to support installation of large Wasm modules.
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     pub wasm_chunk_store: WasmChunkStore,
 
     /// Log visibility of the canister.

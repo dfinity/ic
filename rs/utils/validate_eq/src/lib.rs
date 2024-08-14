@@ -106,12 +106,12 @@ mod tests {
     struct A {
         a: u64,
         #[allow(dead_code)]
-        #[validate_eq(Skip)]
+        #[validate_eq(Ignore)]
         b: u64,
     }
     #[derive(ValidateEq)]
     struct C {
-        #[validate_eq(Recursive)]
+        #[validate_eq(CompareWithValidateEq)]
         a: A,
         c: u64,
     }
@@ -181,7 +181,7 @@ mod tests {
         #[derive(ValidateEq)]
         #[allow(dead_code)]
         struct A<T> {
-            #[validate_eq(Skip)]
+            #[validate_eq(Ignore)]
             a: std::collections::VecDeque<T>,
             b: u64,
         }

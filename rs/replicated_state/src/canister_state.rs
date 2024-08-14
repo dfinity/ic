@@ -114,7 +114,7 @@ impl SchedulerState {
 #[derive(Clone, Debug, PartialEq, ValidateEq)]
 pub struct CanisterState {
     /// See `SystemState` for documentation.
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     pub system_state: SystemState,
 
     /// See `ExecutionState` for documentation.
@@ -123,11 +123,11 @@ pub struct CanisterState {
     /// an actual wasm module. A valid canister is not required to contain a
     /// Wasm module. Canisters without Wasm modules can exist as a store of
     /// ICP; temporarily when they are being upgraded, etc.
-    #[validate_eq(Skip)]
+    #[validate_eq(Ignore)]
     pub execution_state: Option<ExecutionState>,
 
     /// See `SchedulerState` for documentation.
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     pub scheduler_state: SchedulerState,
 }
 

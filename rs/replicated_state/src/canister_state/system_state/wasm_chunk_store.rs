@@ -38,7 +38,7 @@ struct ChunkInfo {
 /// It is cheap to clone because the data is stored in a [`PageMap`].
 #[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
 pub struct WasmChunkStore {
-    #[validate_eq(Skip)]
+    #[validate_eq(Ignore)]
     data: PageMap,
     metadata: WasmChunkStoreMetadata,
 }

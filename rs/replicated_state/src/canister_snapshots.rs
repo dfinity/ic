@@ -20,7 +20,7 @@ use std::{
 /// since the last flush to the disk.
 #[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
 pub struct CanisterSnapshots {
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
     /// Snapshot operations are consumed by the `StateManager` in order to
     /// correctly represent backups and restores in the next checkpoint.
@@ -239,7 +239,7 @@ impl CanisterSnapshots {
 #[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
 pub struct PageMemory {
     /// The contents of this memory.
-    #[validate_eq(Skip)]
+    #[validate_eq(Ignore)]
     pub page_map: PageMap,
     /// The size of the memory in wasm pages. This does not indicate how much
     /// data is stored in the `page_map`, only the number of pages the memory
@@ -266,13 +266,13 @@ impl From<&PageMemory> for Memory {
 #[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
 pub struct ExecutionStateSnapshot {
     /// The raw canister module.
-    #[validate_eq(Skip)]
+    #[validate_eq(Ignore)]
     pub wasm_binary: CanisterModule,
     /// Snapshot of stable memory.
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     pub stable_memory: PageMemory,
     /// Snapshot of wasm memory.
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     pub wasm_memory: PageMemory,
 }
 
@@ -290,9 +290,9 @@ pub struct CanisterSnapshot {
     /// The certified data blob belonging to the canister.
     certified_data: Vec<u8>,
     /// Snapshot of chunked store.
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     chunk_store: WasmChunkStore,
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     execution_snapshot: ExecutionStateSnapshot,
 }
 

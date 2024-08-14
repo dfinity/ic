@@ -438,7 +438,7 @@ impl<'a> MemoryInstructions<'a> {
 pub struct PageMap {
     /// The checkpoint that is used for all the pages that can not be found in
     /// the `page_delta`.
-    #[validate_eq(Skip)]
+    #[validate_eq(Ignore)]
     storage: Storage,
 
     /// The height of the checkpoint that backs the page map.
@@ -447,21 +447,21 @@ pub struct PageMap {
     /// The map containing pages overriding pages from `storage`.
     /// We need these pages to be able to reconstruct the full heap.
     /// It is reset when `strip_all_deltas()` method is called.
-    #[validate_eq(Skip)]
+    #[validate_eq(Ignore)]
     page_delta: PageDelta,
 
     /// The map containing deltas accumulated since the last flush to disk.
     /// It is reset when `strip_unflushed_delta()` or `strip_all_deltas()` methods are called.
     ///
     /// Invariant: unflushed_delta ⊆ page_delta
-    #[validate_eq(Skip)]
+    #[validate_eq(Ignore)]
     unflushed_delta: PageDelta,
 
     has_stripped_unflushed_deltas: bool,
 
     /// The allocator for PageDelta pages.
     /// It is reset when `strip_all_deltas()` method is called.
-    #[validate_eq(Skip)]
+    #[validate_eq(Ignore)]
     page_allocator: PageAllocator,
 }
 

@@ -75,11 +75,11 @@ impl CanisterQueuesLoopDetector {
 #[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
 pub struct CanisterQueues {
     /// Queue of ingress (user) messages.
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     ingress_queue: IngressQueue,
 
     /// Per remote canister input and output queues.
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     canister_queues: BTreeMap<CanisterId, (InputQueue, OutputQueue)>,
 
     /// FIFO queue of local subnet sender canister IDs ensuring round-robin
@@ -112,7 +112,7 @@ pub struct CanisterQueues {
     memory_usage_stats: MemoryUsageStats,
 
     /// Round-robin across ingress and cross-net input queues for pop_input().
-    #[validate_eq(Skip)]
+    #[validate_eq(Ignore)]
     next_input_queue: NextInputQueue,
 }
 
@@ -129,16 +129,16 @@ pub struct CanisterQueues {
 #[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
 pub struct NewCanisterQueues {
     /// Queue of ingress (user) messages.
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     ingress_queue: IngressQueue,
 
     /// Per remote canister input and output queues.
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     canister_queues: BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
 
     /// Pool holding all messages in `canister_queues`, with support for time-based
     /// expiration and load shedding.
-    #[validate_eq(Skip)]
+    #[validate_eq(Ignore)]
     pool: MessagePool,
 
     /// Slot and memory reservation stats. Message count and size stats are
@@ -166,7 +166,7 @@ pub struct NewCanisterQueues {
     remote_subnet_input_schedule: VecDeque<CanisterId>,
 
     /// Round-robin across ingress and cross-net input queues for `pop_input()`.
-    #[validate_eq(Skip)]
+    #[validate_eq(Ignore)]
     next_input_queue: NextInputQueue,
 }
 

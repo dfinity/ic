@@ -364,7 +364,7 @@ pub struct Ingress {
     pub effective_canister_id: Option<CanisterId>,
     pub method_name: String,
     #[serde(with = "serde_bytes")]
-    #[validate_eq(Skip)]
+    #[validate_eq(Ignore)]
     pub method_payload: Vec<u8>,
     pub message_id: MessageId,
     pub expiry_time: Time,

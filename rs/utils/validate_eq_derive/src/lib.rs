@@ -8,20 +8,20 @@ use syn::Data::Struct;
 
 /// Derive of ValidateEq trait.
 /// Derived implementation compares fields of lhs and rhs and returns the first divergence if any.
-/// A field can have one #[validate_eq(Recursive|Skip)] attribute.
-///   - Recursive calls .validate_eq() and returns path + its error in case of divergence
-///   - Skip ignores the field.
+/// A field can have one #[validate_eq(CompareWithValidateEq|Ignore)] attribute.
+///   - CompareWithValidateEq calls .validate_eq() and returns path + its error in case of divergence
+///   - Ignore ignores the field.
 ///   - None (default) compares fields using PartialEq and reports their name in case of
 ///     divergence.
 
 enum ValidateEqFieldAttr {
     /// Compare using .eq() and return field name if diverges.
-    PartialEq,
+    CompareWithPartialEq,
     /// Call .validate_eq(); in case of deivergence return the field name and the underlying
     /// divergence error string.
-    Recursive,
+    CompareWithValidateEq,
     /// Ignore for ValidateEq
-    Skip,
+    Ignore,
 }
 
 // Find #[validate_eq(...)] attribute if any.
@@ -48,15 +48,15 @@ fn parse_validate_eq_attr(field: &syn::Field) -> syn::Result<ValidateEqFieldAttr
     let attr = find_validate_eq_attr(field)?;
 
     match attr {
-        None => Ok(ValidateEqFieldAttr::PartialEq),
+        None => Ok(ValidateEqFieldAttr::CompareWithPartialEq),
         Some(attr) => {
             let ident: syn::Ident = attr.parse_args()?;
             match ident.to_string().as_str() {
-                "Recursive" => Ok(ValidateEqFieldAttr::Recursive),
-                "Skip" => Ok(ValidateEqFieldAttr::Skip),
+                "CompareWithValidateEq" => Ok(ValidateEqFieldAttr::CompareWithValidateEq),
+                "Ignore" => Ok(ValidateEqFieldAttr::Ignore),
                 _ => Err(syn::Error::new_spanned(
                     ident,
-                    "Expected value for validate_eq(...): Recursive | Skip",
+                    "Expected value for validate_eq(...): CompareWithValidateEq | Ignore",
                 )),
             }
         }
@@ -86,7 +86,7 @@ pub fn derive_validate_eq_impl(item: TokenStream) -> TokenStream {
                 Err(err) => {
                     return err.into_compile_error().into();
                 }
-                Ok(ValidateEqFieldAttr::PartialEq) => {
+                Ok(ValidateEqFieldAttr::CompareWithPartialEq) => {
                     impl_body.extend(quote! {
                         // This block of magic breaks if the type of the field implements
                         // ValidateEq, yet we requested ParitalEq. This is taken from static_assertions
@@ -118,14 +118,14 @@ pub fn derive_validate_eq_impl(item: TokenStream) -> TokenStream {
                         }
                     });
                 }
-                Ok(ValidateEqFieldAttr::Recursive) => {
+                Ok(ValidateEqFieldAttr::CompareWithValidateEq) => {
                     impl_body.extend(quote! {
                         if let Err(err) = self.#ident.validate_eq(&rhs.#ident) {
                             return Err(format!("{}.{}", stringify!(#ident), err));
                         }
                     });
                 }
-                Ok(ValidateEqFieldAttr::Skip) => (),
+                Ok(ValidateEqFieldAttr::Ignore) => (),
             }
         }
         let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();

@@ -569,7 +569,7 @@ struct QueueWithReservation<T: QueueItem<T> + std::clone::Clone + ValidateEq> {
     /// at arbitrary points in time, response reservations cannot be explicitly
     /// represented in `queue`. They only exist as the difference between
     /// `num_responses + num_requests` and `queue.len()`.
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     queue: VecDeque<T>,
     /// Maximum number of requests; or responses + reservations; allowed by the
     /// queue at any one time.
@@ -827,7 +827,7 @@ impl TryFrom<pb_queues::InputOutputQueue> for QueueWithReservation<Option<Reques
 /// the number of messages it can store.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, ValidateEq)]
 pub(super) struct InputQueue {
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     queue: QueueWithReservation<RequestOrResponse>,
 }
 
@@ -955,7 +955,7 @@ impl TryFrom<pb_queues::InputOutputQueue> for InputQueue {
 /// any subsequent `None` items.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, ValidateEq)]
 pub(crate) struct OutputQueue {
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     queue: QueueWithReservation<Option<RequestOrResponse>>,
     /// Queue begin index.
     ///
@@ -1341,7 +1341,7 @@ pub(super) struct IngressQueue {
     // the same type is used for entries `schedule` and keys in `queues`.
     schedule: VecDeque<Option<CanisterId>>,
     // Per canister queue of Ingress messages.
-    #[validate_eq(Recursive)]
+    #[validate_eq(CompareWithValidateEq)]
     queues: BTreeMap<Option<CanisterId>, VecDeque<Arc<Ingress>>>,
     // Total number of Ingress messages that are waiting to be executed.
     total_ingress_count: usize,

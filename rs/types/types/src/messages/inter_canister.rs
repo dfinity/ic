@@ -99,7 +99,7 @@ pub struct Request {
     pub payment: Cycles,
     pub method_name: String,
     #[serde(with = "serde_bytes")]
-    #[validate_eq(Skip)]
+    #[validate_eq(Ignore)]
     pub method_payload: Vec<u8>,
     pub metadata: Option<RequestMetadata>,
     /// If non-zero, this is a best-effort call.
@@ -419,7 +419,7 @@ pub struct Response {
     pub respondent: CanisterId,
     pub originator_reply_callback: CallbackId,
     pub refund: Cycles,
-    #[validate_eq(Skip)]
+    #[validate_eq(Ignore)]
     pub response_payload: Payload,
     /// If non-zero, this is a best-effort call.
     pub deadline: CoarseTime,
