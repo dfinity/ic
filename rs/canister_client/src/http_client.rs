@@ -3,16 +3,29 @@ use futures_util::{
     future::{Either as EitherFut, Map, Ready},
     FutureExt,
 };
+use http_body_util::BodyExt;
 use hyper::{
-    client::{
-        connect::dns::{self, GaiResolver},
-        HttpConnector as HyperConnector, ResponseFuture as HyperFuture,
-    },
+    // client::{
+    //     connect::dns::{self, GaiResolver},
+    //     HttpConnector as HyperConnector, ResponseFuture as HyperFuture,
+    // },
     header::CONTENT_TYPE,
-    service::Service,
-    Client as HyperClient, Method, StatusCode, Uri as HyperUri,
+    // service::Service,
+    Method,
+    StatusCode,
+    Uri as HyperUri,
 };
 use hyper_rustls::HttpsConnector as HyperTlsConnector;
+use hyper_util::{
+    client::legacy::{
+        connect::{
+            dns::{self, GaiResolver},
+            HttpConnector as HyperConnector,
+        },
+        Client as HyperClient, ResponseFuture as HyperFuture,
+    },
+    rt::TokioExecutor,
+};
 use itertools::Either;
 use serde_cbor::Value;
 use std::sync::Arc;
@@ -25,6 +38,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
+use tower::Service;
 use url::Url;
 
 #[derive(Clone)]
@@ -46,10 +60,13 @@ impl Default for HttpClientConfig {
     }
 }
 
+// type HyperBody = hyper::body::Bytes;
+type HyperBody = http_body_util::Full<hyper::body::Bytes>; //, Infallible>;
+
 /// An HTTP Client to communicate with a replica.
 #[derive(Clone)]
 pub struct HttpClient {
-    hyper: HyperClient<HyperTlsConnector<HyperConnector<DnsResolverWithOverrides>>>,
+    hyper: HyperClient<HyperTlsConnector<HyperConnector<DnsResolverWithOverrides>>, HyperBody>,
 }
 
 #[derive(Clone)]
@@ -111,18 +128,54 @@ impl Service<dns::Name> for DnsResolverWithOverrides {
     }
 }
 
+#[derive(Debug)]
 struct DangerAcceptInvalidCerts {}
-impl rustls::client::ServerCertVerifier for DangerAcceptInvalidCerts {
+impl rustls::client::danger::ServerCertVerifier for DangerAcceptInvalidCerts {
     fn verify_server_cert(
         &self,
-        _end_entity: &rustls::Certificate,
-        _intermediates: &[rustls::Certificate],
-        _server_name: &rustls::ServerName,
-        _scts: &mut dyn Iterator<Item = &[u8]>,
+        _end_entity: &rustls::pki_types::CertificateDer,
+        _intermediates: &[rustls::pki_types::CertificateDer],
+        _server_name: &rustls::pki_types::ServerName,
         _ocsp_response: &[u8],
-        _now: std::time::SystemTime,
-    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
-        Ok(rustls::client::ServerCertVerified::assertion())
+        _now: rustls::pki_types::UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::danger::ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &rustls::pki_types::CertificateDer<'_>,
+        _dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &rustls::pki_types::CertificateDer<'_>,
+        _dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        vec![
+            rustls::SignatureScheme::RSA_PKCS1_SHA1,
+            rustls::SignatureScheme::ECDSA_SHA1_Legacy,
+            rustls::SignatureScheme::RSA_PKCS1_SHA256,
+            rustls::SignatureScheme::ECDSA_NISTP256_SHA256,
+            rustls::SignatureScheme::RSA_PKCS1_SHA384,
+            rustls::SignatureScheme::ECDSA_NISTP384_SHA384,
+            rustls::SignatureScheme::RSA_PKCS1_SHA512,
+            rustls::SignatureScheme::ECDSA_NISTP521_SHA512,
+            rustls::SignatureScheme::RSA_PSS_SHA256,
+            rustls::SignatureScheme::RSA_PSS_SHA384,
+            rustls::SignatureScheme::RSA_PSS_SHA512,
+            rustls::SignatureScheme::ED25519,
+            rustls::SignatureScheme::ED448,
+        ]
     }
 }
 
@@ -133,7 +186,8 @@ impl HttpClient {
         http_connector.enforce_http(false);
 
         let mut rustls_config = rustls::ClientConfig::builder()
-            .with_safe_defaults()
+            .dangerous()
+            // .with_safe_defaults()
             .with_custom_certificate_verifier(Arc::new(DangerAcceptInvalidCerts {}))
             .with_no_client_auth();
         rustls_config.enable_sni = false;
@@ -147,11 +201,11 @@ impl HttpClient {
         };
         let https_connector = https_connector.wrap_connector(http_connector);
 
-        let hyper = HyperClient::builder()
+        let hyper = HyperClient::builder(TokioExecutor::new())
             .pool_idle_timeout(config.pool_idle_timeout)
             .pool_max_idle_per_host(config.pool_max_idle_per_host)
             .http2_only(config.http2_only)
-            .build::<_, hyper::Body>(https_connector);
+            .build::<_, HyperBody>(https_connector);
 
         Self { hyper }
     }
@@ -178,7 +232,9 @@ impl HttpClient {
             .method(Method::POST)
             .uri(uri.clone())
             .header(CONTENT_TYPE, "application/cbor")
-            .body(hyper::Body::from(http_body))
+            .body(http_body_util::Full::new(hyper::body::Bytes::from(
+                http_body,
+            )))
             .map_err(|e| {
                 format!(
                     "HttpClient: Failed to create POST request for {:?}: {:?}",
@@ -198,7 +254,7 @@ impl HttpClient {
             .map_err(|e| format!("HttpClient: Request timed out for {:?}: {:?}", uri, e))?;
         let response = result.map_err(|e| format!("Request failed for {:?}: {:?}", uri, e))?;
         let status = response.status();
-        let parsed_body = tokio::time::timeout_at(deadline, hyper::body::to_bytes(response))
+        let parsed_body = tokio::time::timeout_at(deadline, response.collect())
             .await
             .map_err(|e| {
                 format!(
@@ -206,7 +262,7 @@ impl HttpClient {
                     uri, e, status.canonical_reason().unwrap_or("empty status"),
                 )
             })?
-            .map(|bytes| bytes.to_vec())
+            .map(|collected| collected.to_bytes().to_vec())
             .map_err(|e| {
                 format!(
                     "HttpClient: Request to {:?} failed to get bytes: {:?}. Returned status: {:?}.",
@@ -270,7 +326,9 @@ impl HttpClient {
             .method(Method::POST)
             .uri(uri.clone())
             .header(CONTENT_TYPE, "application/cbor")
-            .body(hyper::Body::from(http_body))
+            .body(http_body_util::Full::new(hyper::body::Bytes::from(
+                http_body,
+            )))
             .map_err(|e| format!("HttpClient: Failed to fill body {:?}: {:?}", url, e))?;
         let response_future = self.hyper.request(req);
 
@@ -280,12 +338,11 @@ impl HttpClient {
         let response_body = response
             .map_err(|e| format!("HttpClient: Request failed out for {:?}: {:?}", uri, e))?;
         let status_code = response_body.status();
-        let response_bytes =
-            tokio::time::timeout_at(deadline, hyper::body::to_bytes(response_body))
-                .await
-                .map_err(|e| format!("HttpClient: Request timed out for {:?}: {:?}", uri, e))?
-                .map(|bytes| bytes.to_vec())
-                .map_err(|e| format!("HttpClient: Failed to get bytes for {:?}: {:?}", uri, e))?;
+        let response_bytes = tokio::time::timeout_at(deadline, response_body.collect())
+            .await
+            .map_err(|e| format!("HttpClient: Request timed out for {:?}: {:?}", uri, e))?
+            .map(|collected| collected.to_bytes().to_vec())
+            .map_err(|e| format!("HttpClient: Failed to get bytes for {:?}: {:?}", uri, e))?;
 
         Ok((response_bytes, status_code))
     }

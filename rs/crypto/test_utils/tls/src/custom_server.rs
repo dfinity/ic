@@ -13,6 +13,7 @@ use rustls::{
     SupportedCipherSuite, SupportedProtocolVersion,
 };
 use std::sync::Arc;
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio_rustls::{rustls::ServerConfig, TlsAcceptor};
 
@@ -147,7 +148,11 @@ impl CustomServer {
                 error
             )
         }
-        result.map(|_tls_stream| ())
+        if let Ok(mut stream) = result {
+            stream.write(b"thing").await.unwrap();
+            stream.shutdown().await.unwrap();
+        }
+        Ok(())
     }
 
     /// Returns the port this server is running on.
