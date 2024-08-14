@@ -54,7 +54,7 @@ fn test_node_provider_rewards_read_from_correct_sources() {
 }
 
 #[test]
-fn test_list_minted_node_provider_rewards_api() {
+fn test_list_node_provider_rewards_api() {
     let rewards_1 = MonthlyNodeProviderRewards {
         timestamp: 1721029451, // july 15 2024
         rewards: vec![],
@@ -94,7 +94,7 @@ fn test_list_minted_node_provider_rewards_api() {
 }
 
 #[test]
-fn test_list_minted_node_provider_rewards_api_with_paging_and_filters() {
+fn test_list_node_provider_rewards_api_with_paging_and_filters() {
     let rewards_1 = MonthlyNodeProviderRewards {
         timestamp: 1721029451, // july 15 2024
         rewards: vec![],

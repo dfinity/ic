@@ -51,14 +51,14 @@ use ic_nns_governance_api::{
         manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
         ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
         GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
-        ListKnownNeuronsResponse, ListMintedNodeProviderRewardsRequest,
-        ListMintedNodeProviderRewardsResponse, ListNeurons, ListNeuronsResponse,
-        ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-        ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
-        MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo, NodeProvider, Proposal,
-        ProposalInfo, RestoreAgingSummary, RewardEvent, RewardNodeProvider, RewardNodeProviders,
-        SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
-        SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
+        ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProviderRewardsRequest,
+        ListNodeProviderRewardsResponse, ListNodeProvidersResponse, ListProposalInfo,
+        ListProposalInfoResponse, ManageNeuron, ManageNeuronCommandRequest, ManageNeuronRequest,
+        ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo,
+        NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent, RewardNodeProvider,
+        RewardNodeProviders, SettleCommunityFundParticipation,
+        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
+        UpdateNodeProvider, Vote,
     },
 };
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
@@ -736,19 +736,19 @@ async fn get_monthly_node_provider_rewards_() -> Result<RewardNodeProviders, Gov
     })
 }
 
-#[export_name = "canister_query list_minted_node_provider_rewards"]
-fn list_minted_node_provider_rewards() {
+#[export_name = "canister_query list_node_provider_rewards"]
+fn list_node_provider_rewards() {
     debug_log("get_minted_node_provider_rewards");
-    over(candid, |()| list_minted_node_provider_rewards_())
+    over(candid, |()| list_node_provider_rewards_())
 }
 
-#[candid_method(query, rename = "list_minted_node_provider_rewards")]
-fn list_minted_node_provider_rewards_(
-    _req: ListMintedNodeProviderRewardsRequest,
-) -> ListMintedNodeProviderRewardsResponse {
+#[candid_method(query, rename = "list_node_provider_rewards")]
+fn list_node_provider_rewards_(
+    _req: ListNodeProviderRewardsRequest,
+) -> ListNodeProviderRewardsResponse {
     let rewards = governance().list_node_provider_rewards();
 
-    ListMintedNodeProviderRewardsResponse {
+    ListNodeProviderRewardsResponse {
         rewards: rewards
             .into_iter()
             .map(MonthlyNodeProviderRewards::from)
