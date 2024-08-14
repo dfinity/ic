@@ -694,6 +694,9 @@ pub struct CanisterStateBits {
     /// The next local snapshot ID.
     #[prost(uint64, tag = "46")]
     pub next_snapshot_id: u64,
+    /// Captures the memory usage of all snapshots associated with a canister.
+    #[prost(uint64, tag = "52")]
+    pub snapshots_memory_usage: u64,
     #[prost(int64, tag = "48")]
     pub priority_credit: i64,
     #[prost(enumeration = "LongExecutionMode", tag = "49")]

@@ -15,10 +15,10 @@ dfn_core = { path = "../dfn_core" }
 dfn_json = { path = "../dfn_json" }
 dfn_macro = { path = "../dfn_macro" }
 lazy_static = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
 rand = { workspace = true }
 rand_pcg = "0.3.1"
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 canister-test = { path = "../../rust_canisters/canister_test" }

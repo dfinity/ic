@@ -1,7 +1,7 @@
 use candid::Nat;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_clients::canister_status::{DefiniteCanisterSettings, LogVisibility};
-use ic_nns_constants::{REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::pb::v1::{
     manage_neuron_response::Command,
     proposal::Action,
@@ -19,8 +19,10 @@ use ic_nns_test_utils::{
     },
 };
 
-#[test]
-fn test_update_canister_settings() {
+fn test_update_canister_settings_proposal(
+    target_canister_id: CanisterId,
+    controller_canister_id: CanisterId,
+) {
     // Step 1: Set up the NNS canisters and get the neuron.
     let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
@@ -28,7 +30,10 @@ fn test_update_canister_settings() {
     let n1 = get_neuron_1();
 
     // Step 2: Define the target settings and make sure they are different from the current ones.
-    let target_controllers = vec![ROOT_CANISTER_ID.get(), PrincipalId::new_user_test_id(1)];
+    let target_controllers = vec![
+        controller_canister_id.get(),
+        PrincipalId::new_user_test_id(1),
+    ];
     let target_memory_allocation = 1u64 << 33;
     let target_compute_allocation = 10u64;
     let target_freezing_threshold = 100_000u64;
@@ -37,8 +42,8 @@ fn test_update_canister_settings() {
     let canister_settings = || -> DefiniteCanisterSettings {
         get_canister_status(
             &state_machine,
-            ROOT_CANISTER_ID.get(),
-            REGISTRY_CANISTER_ID,
+            controller_canister_id.get(),
+            target_canister_id,
             CanisterId::ic_00(),
         )
         .unwrap()
@@ -73,7 +78,7 @@ fn test_update_canister_settings() {
         &Proposal {
             title: Some("Update canister settings".to_string()),
             action: Some(Action::UpdateCanisterSettings(UpdateCanisterSettings {
-                canister_id: Some(REGISTRY_CANISTER_ID.get()),
+                canister_id: Some(target_canister_id.get()),
                 settings: Some(CanisterSettings {
                     controllers: Some(Controllers {
                         controllers: target_controllers.clone(),
@@ -114,4 +119,14 @@ fn test_update_canister_settings() {
         Some(Nat::from(target_wasm_memory_limit))
     );
     assert_eq!(updated_settings.log_visibility, target_log_visibility);
+}
+
+#[test]
+fn test_update_canister_settings_proposal_non_root() {
+    test_update_canister_settings_proposal(REGISTRY_CANISTER_ID, ROOT_CANISTER_ID);
+}
+
+#[test]
+fn test_update_canister_settings_proposal_root() {
+    test_update_canister_settings_proposal(ROOT_CANISTER_ID, LIFELINE_CANISTER_ID);
 }

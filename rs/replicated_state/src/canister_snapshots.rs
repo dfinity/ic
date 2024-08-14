@@ -160,6 +160,22 @@ impl CanisterSnapshots {
         }
     }
 
+    /// Computes the total memory usage of all of the specified canister's snapshots.
+    ///
+    /// Used for testing that `SystemState::snapshots_memory_usage` is updated as needed
+    /// whenever taking or deleting a snapshot.
+    #[doc(hidden)]
+    pub fn compute_memory_usage_by_canister(&self, canister_id: CanisterId) -> NumBytes {
+        let mut memory_size = NumBytes::new(0);
+        if let Some(snapshot_ids) = self.snapshot_ids.get(&canister_id) {
+            for snapshot_id in snapshot_ids {
+                debug_assert!(self.snapshots.contains_key(snapshot_id));
+                memory_size += self.snapshots.get(snapshot_id).unwrap().size();
+            }
+        }
+        memory_size
+    }
+
     /// Adds a new restore snapshot operation in the unflushed changes.
     pub fn add_restore_operation(&mut self, canister_id: CanisterId, snapshot_id: SnapshotId) {
         self.unflushed_changes
@@ -331,7 +347,7 @@ impl CanisterSnapshot {
             certified_data: canister.system_state.certified_data.clone(),
             chunk_store: canister.system_state.wasm_chunk_store.clone(),
             execution_snapshot,
-            size: canister.snapshot_memory_usage(),
+            size: canister.snapshot_size_bytes(),
         })
     }
 
@@ -537,9 +553,17 @@ mod tests {
             snapshot_manager.memory_taken(),
             NumBytes::from(snapshot1_size)
         );
+        assert_eq!(
+            snapshot_manager.compute_memory_usage_by_canister(canister_id),
+            NumBytes::from(snapshot1_size)
+        );
 
         let other_canister_id = canister_test_id(1);
         let (second_snapshot_id, second_snapshot) = fake_canister_snapshot(other_canister_id, 2);
+        assert_eq!(
+            snapshot_manager.compute_memory_usage_by_canister(other_canister_id),
+            NumBytes::from(0)
+        );
 
         // Pushing another snapshot updates the `memory_usage`.
         let snapshot2_size = second_snapshot.size();
@@ -551,6 +575,10 @@ mod tests {
             snapshot_manager.memory_taken(),
             NumBytes::from(snapshot1_size + snapshot2_size)
         );
+        assert_eq!(
+            snapshot_manager.compute_memory_usage_by_canister(other_canister_id),
+            NumBytes::from(snapshot2_size)
+        );
 
         // Deleting a snapshot updates the `memory_usage`.
         snapshot_manager.remove(first_snapshot_id);
@@ -558,9 +586,17 @@ mod tests {
             snapshot_manager.memory_taken(),
             NumBytes::from(snapshot2_size)
         );
+        assert_eq!(
+            snapshot_manager.compute_memory_usage_by_canister(canister_id),
+            NumBytes::from(0)
+        );
 
         // Deleting the second snapshot brings us back to 0 memory taken.
         snapshot_manager.remove(second_snapshot_id);
         assert_eq!(snapshot_manager.memory_taken(), NumBytes::from(0));
+        assert_eq!(
+            snapshot_manager.compute_memory_usage_by_canister(other_canister_id),
+            NumBytes::from(0)
+        );
     }
 }

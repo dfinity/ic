@@ -120,7 +120,7 @@ pub fn sign(msg: &[u8], sk: &types::SecretKeyBytes) -> CryptoResult<types::Signa
                 }
             })?;
 
-    if let Some(sig_bytes) = signing_key.sign_digest(msg) {
+    if let Some(sig_bytes) = signing_key.sign_digest_with_ecdsa(msg) {
         Ok(types::SignatureBytes(sig_bytes))
     } else {
         Err(CryptoError::InvalidArgument {
@@ -155,7 +155,7 @@ pub fn verify(
 
     // Previously this crate was implemented using OpenSSL, which does not
     // check s-normalization, so we use the malleable verification here
-    match pubkey.verify_signature_prehashed_with_malleability(msg, &sig.0) {
+    match pubkey.verify_ecdsa_signature_prehashed_with_malleability(msg, &sig.0) {
         true => Ok(()),
         false => Err(CryptoError::SignatureVerification {
             algorithm: AlgorithmId::EcdsaSecp256k1,

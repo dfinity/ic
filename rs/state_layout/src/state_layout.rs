@@ -170,10 +170,11 @@ pub struct CanisterStateBits {
     pub canister_history: CanisterHistory,
     pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
     pub total_query_stats: TotalQueryStats,
-    pub log_visibility: LogVisibility,
+    pub log_visibility: LogVisibilityV2,
     pub canister_log: CanisterLog,
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
+    pub snapshots_memory_usage: NumBytes,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
@@ -2164,12 +2165,12 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             canister_history: Some((&item.canister_history).into()),
             wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
             total_query_stats: Some((&item.total_query_stats).into()),
-            log_visibility: pb_canister_state_bits::LogVisibility::from(&item.log_visibility)
-                .into(),
-            log_visibility_v2: pb_canister_state_bits::LogVisibilityV2::from(
-                &LogVisibilityV2::from(item.log_visibility),
-            )
+            log_visibility: pb_canister_state_bits::LogVisibility::from(&LogVisibility::from(
+                item.log_visibility.clone(),
+            ))
             .into(),
+            log_visibility_v2: pb_canister_state_bits::LogVisibilityV2::from(&item.log_visibility)
+                .into(),
             canister_log_records: item
                 .canister_log
                 .records()
@@ -2179,6 +2180,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             next_canister_log_record_idx: item.canister_log.next_idx(),
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
             next_snapshot_id: item.next_snapshot_id,
+            snapshots_memory_usage: item.snapshots_memory_usage.get(),
         }
     }
 }
@@ -2252,7 +2254,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
         // TODO(EXC-1670): remove after migration to `pb_canister_state_bits::LogVisibilityV2`.
         // First try to decode `log_visibility_v2` and if it fails, fallback to `log_visibility`.
         // This should populate `allowed_viewers` correctly with the list of principals.
-        let log_visibility: LogVisibility = match try_from_option_field::<
+        let log_visibility: LogVisibilityV2 = match try_from_option_field::<
             pb_canister_state_bits::LogVisibilityV2,
             LogVisibilityV2,
             _,
@@ -2260,7 +2262,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             value.log_visibility_v2,
             "CanisterStateBits::log_visibility_v2",
         ) {
-            Ok(log_visibility_v2) => LogVisibility::from(log_visibility_v2),
+            Ok(log_visibility_v2) => log_visibility_v2,
             Err(_) => {
                 let pb_log_visibility = pb_canister_state_bits::LogVisibility::try_from(
                     value.log_visibility,
@@ -2272,7 +2274,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                         value.log_visibility
                     ),
                 })?;
-                LogVisibility::from(pb_log_visibility)
+                LogVisibilityV2::from(LogVisibility::from(pb_log_visibility))
             }
         };
 
@@ -2353,6 +2355,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             ),
             wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
             next_snapshot_id: value.next_snapshot_id,
+            snapshots_memory_usage: NumBytes::from(value.snapshots_memory_usage),
         })
     }
 }
