@@ -1447,19 +1447,18 @@ fn garbage_collect_local_state_with_reject_signals_for_request_from_migrating_ca
 /// Calls `induct_stream_slices()` with one stream slice coming from `CANISTER_MIGRATION_SUBNET`
 /// as input containing 3 messages:
 /// - a reject response for a request sent to `REMOTE_CANISTER` from `LOCAL_CANISTER`,
-/// - a normal response with the same recipients.
+/// - a data response with the same recipients.
 /// - and a request with the same recipients.
 ///
 /// `LOCAL_CANISTER` is marked as having migrated from `CANISTER_MIGRATION_SUBNET` to
 /// `LOCAL_SUBNET`.
 ///
-/// Tests that this results in the reject response accepted and inducted due to the exception in
-/// `StreamHandler::should_accept_message_from()` and the normal response and request are accepted
-/// but dropped.
+/// All of these messages are apparently misrouted, but since we cannot migrate reject signals,
+/// there is an exception for reject responses (but only reject responses) coming from a former
+/// host-subnet of a migrating canister.
 ///
-/// Note that all of these messages are apparently misrouted; the point of this test is to ensure
-/// that the exception due to the rules for canister migration with reject signals for requests
-/// holds, but only for reject responses.
+/// The purpose of this test is to ensure that reject responses are accepted and inducted and
+/// everything else is treated as a misrouted message, i.e. accepted but dropped.
 #[test]
 fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
     with_test_setup(
