@@ -1442,4 +1442,49 @@ mod test {
             }
         });
     }
+
+    #[test]
+    #[should_panic(expected = "compute manifest for unverified checkpoint")]
+    fn should_crash_handle_compute_manifest_request() {
+        with_test_replica_logger(|log| {
+            let tempdir = tmpdir("state_layout");
+            let root_path = tempdir.path().to_path_buf();
+            let metrics_registry = ic_metrics::MetricsRegistry::new();
+            let state_layout =
+                StateLayout::try_new(log.clone(), root_path, &metrics_registry).unwrap();
+            let metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
+
+            let height = Height::new(42);
+            let mut tip_handler = state_layout.capture_tip_handler();
+            let tip = tip_handler.tip(height).unwrap();
+
+            // Create a marker in the tip and promote it to a checkpoint.
+            tip.create_unverified_checkpoint_marker().unwrap();
+            let checkpoint_layout = state_layout
+                .scratchpad_to_checkpoint(tip, height, None)
+                .unwrap();
+
+            let dummy_states = Arc::new(parking_lot::RwLock::new(SharedState {
+                certifications_metadata: Default::default(),
+                states_metadata: Default::default(),
+                snapshots: Default::default(),
+                last_advertised: Height::new(0),
+                fetch_state: None,
+                tip: None,
+            }));
+
+            // Trying to compute manifest for an unverified checkpoint should crash.
+            handle_compute_manifest_request(
+                &mut scoped_threadpool::Pool::new(1),
+                &metrics,
+                &log,
+                &dummy_states,
+                &state_layout,
+                &checkpoint_layout,
+                None,
+                &Default::default(),
+                &Default::default(),
+            );
+        });
+    }
 }
