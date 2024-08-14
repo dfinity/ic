@@ -10,6 +10,7 @@ load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:boundary-guestos.bzl", boundary_component_files = "component_files")
 load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "inject_files", "sha256sum", "tar_extract", "tree_hash", "upgrade_image")
 
+
 def icos_build(
         name,
         upload_prefix,
@@ -43,6 +44,17 @@ def icos_build(
         mode = name
 
     image_deps = image_deps_func(mode, malicious)
+
+    # Run a pre check to verify that all the referenced components do in fact exist
+    native.genrule(
+      name = name + "_pre_check",
+      srcs = [k for k, v in image_deps["component_files"].items()],
+      outs = [name + "_pre_check_result.txt"],
+      cmd = """
+        echo "Running pre_check for %s"
+        echo "all paths exist" > $@
+      """
+    )
 
     # -------------------- Version management --------------------
 
