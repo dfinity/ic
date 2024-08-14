@@ -5,7 +5,7 @@ use ic_base_types::NumSeconds;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::messaging::LABEL_VALUE_CANISTER_NOT_FOUND;
 use ic_metrics::MetricsRegistry;
-use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, RoutingTable, WellFormedError};
+use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     metadata_state::StreamMap, replicated_state::LABEL_VALUE_OUT_OF_MEMORY,
@@ -247,20 +247,18 @@ fn induct_loopback_stream_reroute_response() {
                 *OTHER_LOCAL_CANISTER,
                 LOCAL_SUBNET,
                 CANISTER_MIGRATION_SUBNET,
-            )
-            .unwrap();
+            );
 
             let mut expected_state = state.clone();
             // The request @21 is expected to be inducted successfully.
             push_input(
                 &mut expected_state,
                 message_in_stream(state.get_stream(&LOCAL_SUBNET), 21).clone(),
-            )
-            .unwrap();
+            );
             // The response @22 is expected to be inducted successfully.
             let inducted_response = message_in_stream(state.get_stream(&LOCAL_SUBNET), 22).clone();
             let inducted_response_count_bytes = inducted_response.count_bytes();
-            push_input(&mut expected_state, inducted_response).unwrap();
+            push_input(&mut expected_state, inducted_response);
 
             // The request @23 is expected to trigger a reject response in the loopback stream.
             let reject_response = generate_reject_response(
@@ -356,8 +354,7 @@ fn induct_loopback_stream_success() {
             push_inputs(
                 &mut expected_state,
                 messages_in_stream(loopback_stream, 21..=22),
-            )
-            .unwrap();
+            );
             let response_count_bytes = response_in_stream(loopback_stream, 22).count_bytes();
 
             // The loopback stream should be empty with `begin` and `signals_end` advanced.
@@ -463,7 +460,7 @@ fn system_subnet_induct_loopback_stream_ignores_subnet_wasm_custom_sections_memo
 
 /// Common initial state setup for `StreamHandlerImpl::induct_loopback_stream()`
 /// memory limit tests.
-fn with_induct_loopback_stream_with_memory_limit_setup(
+fn with_induct_loopback_stream_setup(
     config: HypervisorConfig,
     subnet_type: SubnetType,
     test_impl: impl FnOnce(StreamHandlerImpl, ReplicatedState, MetricsFixture),
@@ -495,7 +492,7 @@ fn with_induct_loopback_stream_with_memory_limit_setup(
 /// induct the loopback stream and expects the first request to be inducted; and
 /// the second request to fail to be inducted due to lack of memory.
 fn induct_loopback_stream_with_memory_limit_impl(config: HypervisorConfig) {
-    with_induct_loopback_stream_with_memory_limit_setup(
+    with_induct_loopback_stream_setup(
         config,
         SubnetType::Application,
         |stream_handler, state, metrics| {
@@ -504,8 +501,7 @@ fn induct_loopback_stream_with_memory_limit_impl(config: HypervisorConfig) {
             push_input(
                 &mut expected_state,
                 message_in_stream(state.get_stream(&LOCAL_SUBNET), 21).clone(),
-            )
-            .unwrap();
+            );
             // ...and a loopback stream with indices advanced and a reject response for the request @22.
             let loopback_stream = stream_from_config(StreamConfig {
                 begin: 23,
@@ -553,7 +549,7 @@ fn induct_loopback_stream_with_memory_limit_impl(config: HypervisorConfig) {
 /// induct the loopback stream and expects both requests to be inducted
 /// successfully.
 fn induct_loopback_stream_ignores_memory_limit_impl(config: HypervisorConfig) {
-    with_induct_loopback_stream_with_memory_limit_setup(
+    with_induct_loopback_stream_setup(
         config,
         SubnetType::System,
         |stream_handler, state, metrics| {
@@ -562,8 +558,7 @@ fn induct_loopback_stream_ignores_memory_limit_impl(config: HypervisorConfig) {
             push_inputs(
                 &mut expected_state,
                 messages_in_stream(state.get_stream(&LOCAL_SUBNET), 21..=22),
-            )
-            .unwrap();
+            );
             // ...and an empty loopback stream with begin indices advanced.
             let loopback_stream = stream_from_config(StreamConfig {
                 begin: 23,
@@ -1137,8 +1132,7 @@ fn garbage_collect_local_state_with_reject_signals_for_response_success() {
                 *REMOTE_CANISTER,
                 REMOTE_SUBNET,
                 CANISTER_MIGRATION_SUBNET,
-            )
-            .unwrap();
+            );
 
             let outgoing_stream = state.get_stream(&REMOTE_SUBNET);
             // The expected stream has indices advanced and the first 3 messages gc'ed.
@@ -1235,7 +1229,7 @@ fn garbage_collect_local_state_with_reject_signals_for_request_success() {
                 RejectReason::QueueFull,
                 request_in_stream(state.get_stream(&REMOTE_SUBNET), 21),
             );
-            push_input(&mut expected_state, reject_response).unwrap();
+            push_input(&mut expected_state, reject_response);
             // The expected outgoing stream is empty with `begin` avanced.
             let expected_stream = stream_from_config(StreamConfig {
                 begin: 22,
@@ -1352,7 +1346,7 @@ fn garbage_collect_local_state_with_reject_signals_for_misrouted_request() {
                 RejectReason::CanisterStopping,
                 request_in_stream(state.get_stream(&REMOTE_SUBNET), 21),
             );
-            push_input(&mut expected_state, reject_response).unwrap();
+            push_input(&mut expected_state, reject_response);
             // The expected outgoing stream is empty with `begin` avanced.
             let expected_stream = stream_from_config(StreamConfig {
                 begin: 22,
@@ -1414,8 +1408,7 @@ fn garbage_collect_local_state_with_reject_signals_for_request_from_migrating_ca
                 *LOCAL_CANISTER,
                 LOCAL_SUBNET,
                 CANISTER_MIGRATION_SUBNET,
-            )
-            .unwrap();
+            );
 
             let mut expected_state = state.clone();
             // The expected outgoing stream is empty with `begin` avanced.
@@ -1490,9 +1483,9 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
             messages: vec![
                 // ...a reject response for a request sent to `REMOTE_CANISTER` @0...
                 RejectResponse(*REMOTE_CANISTER, *LOCAL_CANISTER, RejectReason::QueueFull),
-                // ...a normal response @1...
+                // ...a data response @1...
                 Response(*REMOTE_CANISTER, *LOCAL_CANISTER),
-                // ...a request from @2.
+                // ...and a request from @2.
                 Request(*REMOTE_CANISTER, *LOCAL_CANISTER),
             ],
             ..StreamSliceConfig::default()
@@ -1504,16 +1497,14 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
                 *LOCAL_CANISTER,
                 CANISTER_MIGRATION_SUBNET,
                 LOCAL_SUBNET,
-            )
-            .unwrap();
+            );
 
             // Expect a state, where the reject response was successfully inducted...
             let mut expected_state = state.clone();
             push_input(
                 &mut expected_state,
                 message_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 0).clone(),
-            )
-            .unwrap();
+            );
             // ...and a stream to `CANISTER_MIGRATION_SUBNET` with all 3 messages accepted.
             let expected_stream = stream_from_config(StreamConfig {
                 begin: 0,
@@ -1597,7 +1588,7 @@ fn check_stream_handler_locally_generated_reject_response_impl(
 
             // The expected state has this reject response inducted.
             let mut expected_state = state.clone();
-            push_input(&mut expected_state, reject_response.into()).unwrap();
+            push_input(&mut expected_state, reject_response.into());
 
             // The expected stream is gc'ed.
             let expected_stream = stream_from_config(StreamConfig {
@@ -1783,9 +1774,9 @@ fn check_stream_handler_generated_reject_response_queue_full() {
         i64::MAX / 2, // `available_guaranteed_response_memory`
         &|state| {
             let mut callback_id = 2;
-            while let Ok(()) = push_input(
-                state,
+            while let Ok(()) = state.push_input(
                 Request(*LOCAL_CANISTER, *LOCAL_CANISTER).build_with(CallbackId::new(callback_id)),
+                &mut (i64::MAX / 2),
             ) {
                 callback_id += 1;
             }
@@ -1818,8 +1809,7 @@ fn check_stream_handler_generated_reject_response_canister_migrating() {
                 *LOCAL_CANISTER,
                 LOCAL_SUBNET,
                 CANISTER_MIGRATION_SUBNET,
-            )
-            .unwrap();
+            );
         },
         RejectCode::SysTransient,
         StateError::CanisterMigrating {
@@ -1876,8 +1866,7 @@ fn induct_stream_slices_partial_success() {
             push_inputs(
                 &mut expected_state,
                 messages_in_slice(slices.get(&REMOTE_SUBNET), 43..=45),
-            )
-            .unwrap();
+            );
             let response_count_bytes =
                 response_in_slice(slices.get(&REMOTE_SUBNET), 45).count_bytes();
 
@@ -2002,8 +1991,7 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
                 *OTHER_REMOTE_CANISTER,
                 REMOTE_SUBNET,
                 CANISTER_MIGRATION_SUBNET,
-            )
-            .unwrap();
+            );
 
             // The expected state should be unchanged...
             let mut expected_state = state.clone();
@@ -2088,15 +2076,13 @@ fn induct_stream_slices_with_messages_to_migrating_canister() {
             // `REMOTE_CANISTER` is hosted by `CANISTER_MIGRATION_SUBNET` but in the process
             // of being migrated to `LOCAL_SUBNET`.
             let state =
-                complete_canister_migration(state, *REMOTE_CANISTER, CANISTER_MIGRATION_SUBNET)
-                    .unwrap();
+                complete_canister_migration(state, *REMOTE_CANISTER, CANISTER_MIGRATION_SUBNET);
             let state = prepare_canister_migration(
                 state,
                 *REMOTE_CANISTER,
                 CANISTER_MIGRATION_SUBNET,
                 LOCAL_SUBNET,
-            )
-            .unwrap();
+            );
 
             let reject_response = generate_reject_response(
                 request_in_slice(slices.get(&REMOTE_SUBNET), 43),
@@ -2200,8 +2186,7 @@ fn induct_stream_slices_with_messages_to_migrated_canister() {
                 *LOCAL_CANISTER,
                 LOCAL_SUBNET,
                 CANISTER_MIGRATION_SUBNET,
-            )
-            .unwrap();
+            );
 
             let reject_response = generate_reject_response(
                 request_in_slice(slices.get(&REMOTE_SUBNET), 43),
@@ -2305,16 +2290,14 @@ fn induct_stream_slices_with_messages_from_migrating_canister() {
                 *REMOTE_CANISTER,
                 REMOTE_SUBNET,
                 CANISTER_MIGRATION_SUBNET,
-            )
-            .unwrap();
+            );
 
             let mut expected_state = state.clone();
             // The expected state has the two messages inducted...
             push_inputs(
                 &mut expected_state,
                 messages_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 43..=44),
-            )
-            .unwrap();
+            );
             // ...and a stream with...
             let migration_stream = state.get_stream(&CANISTER_MIGRATION_SUBNET);
             let expected_stream = stream_from_config(StreamConfig {
@@ -2398,8 +2381,7 @@ fn induct_stream_slices_with_memory_limit_impl(subnet_type: SubnetType) {
             push_inputs(
                 &mut expected_state,
                 messages_in_slice(slices.get(&REMOTE_SUBNET), 44..=45),
-            )
-            .unwrap();
+            );
             // The expected stream has...
             let expected_stream = stream_from_config(StreamConfig {
                 begin: 31,
@@ -2535,22 +2517,19 @@ fn process_stream_slices_with_reject_signals_partial_success() {
                 *REMOTE_CANISTER,
                 REMOTE_SUBNET,
                 CANISTER_MIGRATION_SUBNET,
-            )
-            .unwrap();
+            );
 
             let mut expected_state = state.clone();
             // The expected state has the 3 loopback messages inducted...
             push_inputs(
                 &mut expected_state,
                 messages_in_stream(state.get_stream(&LOCAL_SUBNET), 21..=23),
-            )
-            .unwrap();
+            );
             // ...and the first request from the incoming slice (the 2nd is dropped).
             push_input(
                 &mut expected_state,
                 message_in_slice(slices.get(&REMOTE_SUBNET), 153).clone(),
-            )
-            .unwrap();
+            );
 
             // The expected loopback stream is gc'ed.
             let expected_loopback_stream = stream_from_config(StreamConfig {
@@ -2714,8 +2693,7 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
                 *OTHER_LOCAL_CANISTER,
                 LOCAL_SUBNET,
                 CANISTER_MIGRATION_SUBNET,
-            )
-            .unwrap();
+            );
 
             // `REMOTE_CANISTER` is marked as migrating from `REMOTE_SUBNET` to `CANISTER_MIGRATION_SUBNET`.
             let state = simulate_canister_migration(
@@ -2723,22 +2701,19 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
                 *REMOTE_CANISTER,
                 REMOTE_SUBNET,
                 CANISTER_MIGRATION_SUBNET,
-            )
-            .unwrap();
+            );
 
             let mut expected_state = state.clone();
             // The expected state has the first 5 loopback messages @21..=25 inducted...
             push_inputs(
                 &mut expected_state,
                 messages_in_stream(state.get_stream(&LOCAL_SUBNET), 21..=25),
-            )
-            .unwrap();
+            );
             // ...and the first incoming message @153.
             push_input(
                 &mut expected_state,
                 message_in_slice(slices.get(&REMOTE_SUBNET), 153).clone(),
-            )
-            .unwrap();
+            );
 
             // The expected loopback stream has all initial messages gc'ed...
             let expected_loopback_stream = stream_from_config(StreamConfig {
@@ -3236,7 +3211,7 @@ fn response_in_slice(
     }
 }
 
-/// Returns a clone of the message in a stream at `stream_index`.
+/// Returns a reference to the message at `stream_index` in the stream.
 ///
 /// Panics if no such message exists.
 fn message_in_stream(opt_stream: Option<&Stream>, stream_index: u64) -> &RequestOrResponse {
@@ -3245,7 +3220,7 @@ fn message_in_stream(opt_stream: Option<&Stream>, stream_index: u64) -> &Request
         .unwrap()
 }
 
-/// Returns a clone of the message in a stream slice at `stream_index`.
+/// Returns a reference to the message at `stream_index` in the stream slice.
 ///
 /// Panics if no such message exists.
 fn message_in_slice(opt_slice: Option<&StreamSlice>, stream_index: u64) -> &RequestOrResponse {
@@ -3259,11 +3234,8 @@ fn message_in_slice(opt_slice: Option<&StreamSlice>, stream_index: u64) -> &Requ
 }
 
 /// Pushes a message into the `state` using an infinite memory pool.
-fn push_input(
-    state: &mut ReplicatedState,
-    msg: RequestOrResponse,
-) -> Result<(), (StateError, RequestOrResponse)> {
-    state.push_input(msg, &mut (i64::MAX / 2))
+fn push_input(state: &mut ReplicatedState, msg: RequestOrResponse) {
+    state.push_input(msg, &mut (i64::MAX / 2)).unwrap();
 }
 
 /// Returns an iterator over messages in a stream over the `stream_index_range`.
@@ -3301,14 +3273,10 @@ fn messages_in_slice(
 }
 
 /// Pushes the messages yielded by `iter` into the `state`.
-fn push_inputs<'a>(
-    state: &mut ReplicatedState,
-    iter: impl Iterator<Item = &'a RequestOrResponse>,
-) -> Result<(), (StateError, RequestOrResponse)> {
+fn push_inputs<'a>(state: &mut ReplicatedState, iter: impl Iterator<Item = &'a RequestOrResponse>) {
     for msg in iter {
-        state.push_input(msg.clone(), &mut (i64::MAX / 2))?;
+        state.push_input(msg.clone(), &mut (i64::MAX / 2)).unwrap();
     }
-    Ok(())
 }
 
 /// Instructions for building various kinds of messages; essentially a wrapper for
@@ -3465,17 +3433,20 @@ fn prepare_canister_migration(
     migrated_canister: CanisterId,
     from_subnet: SubnetId,
     to_subnet: SubnetId,
-) -> Result<ReplicatedState, WellFormedError> {
+) -> ReplicatedState {
     let canister_id_ranges = CanisterIdRanges::try_from(vec![CanisterIdRange {
         start: migrated_canister,
         end: migrated_canister,
-    }])?;
+    }])
+    .unwrap();
 
     let mut canister_migrations = (*state.metadata.network_topology.canister_migrations).clone();
-    canister_migrations.insert_ranges(canister_id_ranges, from_subnet, to_subnet)?;
+    canister_migrations
+        .insert_ranges(canister_id_ranges, from_subnet, to_subnet)
+        .unwrap();
     state.metadata.network_topology.canister_migrations = Arc::new(canister_migrations);
 
-    Ok(state)
+    state
 }
 
 /// Updates the routing table in `state` to assign the given canister to the
@@ -3484,17 +3455,20 @@ fn complete_canister_migration(
     mut state: ReplicatedState,
     migrated_canister: CanisterId,
     destination: SubnetId,
-) -> Result<ReplicatedState, WellFormedError> {
+) -> ReplicatedState {
     let canister_id_ranges = CanisterIdRanges::try_from(vec![CanisterIdRange {
         start: migrated_canister,
         end: migrated_canister,
-    }])?;
+    }])
+    .unwrap();
 
     let mut routing_table = (*state.metadata.network_topology.routing_table).clone();
-    routing_table.assign_ranges(canister_id_ranges, destination)?;
+    routing_table
+        .assign_ranges(canister_id_ranges, destination)
+        .unwrap();
     state.metadata.network_topology.routing_table = Arc::new(routing_table);
 
-    Ok(state)
+    state
 }
 
 /// Simulates the migration of the given canister between `from_subnet` and
@@ -3505,7 +3479,7 @@ fn simulate_canister_migration(
     migrated_canister: CanisterId,
     from_subnet: SubnetId,
     to_subnet: SubnetId,
-) -> Result<ReplicatedState, WellFormedError> {
-    let state = prepare_canister_migration(state, migrated_canister, from_subnet, to_subnet)?;
+) -> ReplicatedState {
+    let state = prepare_canister_migration(state, migrated_canister, from_subnet, to_subnet);
     complete_canister_migration(state, migrated_canister, to_subnet)
 }
