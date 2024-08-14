@@ -364,7 +364,7 @@ impl Default for Config {
             query_stats_aggregation: FlagStatus::Enabled,
             query_stats_epoch_length: QUERY_STATS_EPOCH_LENGTH,
             stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
-            canister_snapshots: FlagStatus::Disabled,
+            canister_snapshots: FlagStatus::Enabled,
             dirty_page_logging: FlagStatus::Disabled,
             ic00_compute_initial_i_dkg_dealings: FlagStatus::Enabled,
             ic00_schnorr_public_key: FlagStatus::Enabled,
