@@ -739,14 +739,14 @@ async fn get_monthly_node_provider_rewards_() -> Result<RewardNodeProviders, Gov
 #[export_name = "canister_query list_node_provider_rewards"]
 fn list_node_provider_rewards() {
     debug_log("get_minted_node_provider_rewards");
-    over(candid, |()| list_node_provider_rewards_())
+    over(candid, |req| list_node_provider_rewards_(req))
 }
 
 #[candid_method(query, rename = "list_node_provider_rewards")]
 fn list_node_provider_rewards_(
     _req: ListNodeProviderRewardsRequest,
 ) -> ListNodeProviderRewardsResponse {
-    let rewards = governance().list_node_provider_rewards();
+    let rewards = governance().list_node_provider_rewards(5);
 
     ListNodeProviderRewardsResponse {
         rewards: rewards
