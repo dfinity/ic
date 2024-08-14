@@ -4,9 +4,10 @@ use super::{
     super::driver::test_env_api::SshSession,
     test_env_api::{IcNodeContainer, SubnetSnapshot},
 };
+use slog::{info, Logger};
 use std::time::Duration;
 
-pub fn simulate_network(subnet: SubnetSnapshot, topology: &NetworkSimulation) {
+pub fn simulate_network(logger: Logger, subnet: SubnetSnapshot, topology: &NetworkSimulation) {
     let nodes: Vec<_> = subnet.nodes().collect();
 
     match topology {
@@ -26,7 +27,7 @@ pub fn simulate_network(subnet: SubnetSnapshot, topology: &NetworkSimulation) {
             for source_node in 0..13 {
                 let mut tc_command =
                     String::from("sudo tc qdisc del dev enp1s0 root 2> /dev/null || true \n");
-                tc_command.push_str("sudo tc qdisc add dev enp1s0 root handle 1: prio \n");
+                tc_command.push_str("sudo tc qdisc add dev enp1s0 root handle 1: prio bands 14 priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 \n");
 
                 let source_ip = nodes[source_node].get_ip_addr();
                 for destination_node in 0..13 {
@@ -36,12 +37,18 @@ pub fn simulate_network(subnet: SubnetSnapshot, topology: &NetworkSimulation) {
                     let destination_ip = nodes[destination_node].get_ip_addr();
 
                     tc_command.push_str(&format!(
-                        "sudo tc qdisc add dev enp1s0 parent 1:{destination_node} handle {destination_node}0: netem limit 10000000 loss {:.3}% delay {}ms \n",
+                        "sudo tc qdisc add dev enp1s0 parent 1:{} handle {}: netem limit 10000000 loss {:.3}% delay {}ms \n",
+                        destination_node+1,
+                        (destination_node+1)*10,
                         packet_loss[(12) * source_node + destination_node].2 * 100.0,
                         (rtt[(12) * source_node + destination_node].2 * 1000.0 / 2.0) as u64
                     ));
-                    tc_command.push_str(&format!("sudo tc filter add dev enp1s0 protocol ip parent 1:0 prio {destination_node} u32 match ip6 src {source_ip} match ip6 dst {destination_ip} flowid 1:{destination_node} \n"));
+                    tc_command.push_str(&format!("sudo tc filter add dev enp1s0 protocol ipv6 parent 1: prio 1 u32 match ip6 dst {destination_ip} flowid 1:{} \n", destination_node+1));
                 }
+                tc_command.push_str("sudo tc qdisc add dev enp1s0 parent 1:14 handle 140: netem delay 0ms loss 0% \n");
+                tc_command.push_str("sudo tc filter add dev enp1s0 protocol ipv6 parent 1: prio 2 u32 match ip6 dst ::/0 flowid 1:14 \n");
+
+                info!(logger, "tc command \n: {}", tc_command);
                 tc_commands[source_node] = tc_command;
             }
 
@@ -743,12 +750,12 @@ const IO67_PACKET_LOSS: [(u64, u64, f64); 156] = [
     (12, 10, 0.000050966344544268),
     (12, 11, 0.004995221578124113),
     (12, 13, 0.000001358177454882406),
-    (13, 1, 0.0006337791868513416),
-    (13, 2, 0.0000009519790678842553),
-    (13, 3, 0.000003302281817464143),
-    (13, 4, 0.00148074982778491),
-    (13, 5, 0.0000014964488140247861),
-    (13, 6, 0.000005996316225352878),
+    (13, 1, 0.9906337791868513416),
+    (13, 2, 0.9900009519790678842553),
+    (13, 3, 0.990003302281817464143),
+    (13, 4, 0.99148074982778491),
+    (13, 5, 0.9900014964488140247861),
+    (13, 6, 0.0005996316225352878),
     (13, 7, 0.0011227127562902584),
     (13, 8, 0.00018202700190020091),
     (13, 9, 0.000006003484178758085),
