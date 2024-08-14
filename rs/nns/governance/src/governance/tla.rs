@@ -185,7 +185,7 @@ pub fn split_neuron_desc() -> Update {
         default_start_locals: default_locals.clone(),
         default_end_locals: default_locals,
         start_label: Label::new("SplitNeuron1"),
-        end_label: Label::new("SplitNeuron1"),
+        end_label: Label::new("Done"),
         process_id: PID.to_string(),
         canister_name: "governance".to_string(),
         constants_extractor: |trace| {

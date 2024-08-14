@@ -2678,7 +2678,7 @@ impl Governance {
         })?;
 
         let now = self.env.now();
-        tla_log_locals! { sn_amount : split.amount_e8s };
+        tla_log_locals! { sn_amount : split.amount_e8s, sn_child_neuron_id: child_nid.id, sn_parent_neuron_id: id.id, sn_child_account_id: tla::account_to_tla(neuron_subaccount(to_subaccount)) };
         let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(
