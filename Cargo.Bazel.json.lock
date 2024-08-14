@@ -1,5 +1,5 @@
 {
-  "checksum": "17fbdc1f578d8231682b84d3b4c4a08f8de34816a57801f80b4c4546ea33667f",
+  "checksum": "9c9efb19707355f8b827d4e5419d9958219de1a93d299ec5946bf8a5b1a230de",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4343,7 +4343,7 @@
               "target": "http_body"
             },
             {
-              "id": "http-body-util 0.1.0",
+              "id": "http-body-util 0.1.2",
               "target": "http_body_util"
             },
             {
@@ -4637,7 +4637,7 @@
               "target": "http_body"
             },
             {
-              "id": "http-body-util 0.1.0",
+              "id": "http-body-util 0.1.2",
               "target": "http_body_util"
             },
             {
@@ -4766,7 +4766,7 @@
               "target": "http_body"
             },
             {
-              "id": "http-body-util 0.1.0",
+              "id": "http-body-util 0.1.2",
               "target": "http_body_util"
             },
             {
@@ -5125,7 +5125,7 @@
               "target": "http_body"
             },
             {
-              "id": "http-body-util 0.1.0",
+              "id": "http-body-util 0.1.2",
               "target": "http_body_util"
             },
             {
@@ -17345,7 +17345,7 @@
               "target": "http_body"
             },
             {
-              "id": "http-body-util 0.1.0",
+              "id": "http-body-util 0.1.2",
               "target": "http_body_util"
             },
             {
@@ -17515,7 +17515,7 @@
               "target": "insta"
             },
             {
-              "id": "instant-acme 0.3.2",
+              "id": "instant-acme 0.7.1",
               "target": "instant_acme"
             },
             {
@@ -25999,7 +25999,7 @@
               "target": "http_body"
             },
             {
-              "id": "http-body-util 0.1.0",
+              "id": "http-body-util 0.1.2",
               "target": "http_body_util"
             }
           ],
@@ -26015,14 +26015,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "http-body-util 0.1.0": {
+    "http-body-util 0.1.2": {
       "name": "http-body-util",
-      "version": "0.1.0",
+      "version": "0.1.2",
       "package_url": "https://github.com/hyperium/http-body",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/http-body-util/0.1.0/download",
-          "sha256": "41cb79eb393015dadd30fc252023adb0b2400a0caee0fa2a077e6e21a551e840"
+          "url": "https://static.crates.io/crates/http-body-util/0.1.2/download",
+          "sha256": "793429d76616a256bcb62c2a2ec2bed781c8307e797e2598c50010f2bee2544f"
         }
       },
       "targets": [
@@ -26070,13 +26070,13 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.1.0"
+        "version": "0.1.2"
       },
       "license": "MIT",
       "license_ids": [
         "MIT"
       ],
-      "license_file": null
+      "license_file": "LICENSE"
     },
     "http-range-header 0.3.0": {
       "name": "http-range-header",
@@ -27494,7 +27494,7 @@
               "target": "hex"
             },
             {
-              "id": "http-body-util 0.1.0",
+              "id": "http-body-util 0.1.2",
               "target": "http_body_util"
             },
             {
@@ -27860,7 +27860,7 @@
                 "target": "http_body_to_bytes"
               },
               {
-                "id": "http-body-util 0.1.0",
+                "id": "http-body-util 0.1.2",
                 "target": "http_body_util"
               },
               {
@@ -29124,7 +29124,7 @@
               "target": "http_body"
             },
             {
-              "id": "http-body-util 0.1.0",
+              "id": "http-body-util 0.1.2",
               "target": "http_body_util"
             },
             {
@@ -32197,14 +32197,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "instant-acme 0.3.2": {
+    "instant-acme 0.7.1": {
       "name": "instant-acme",
-      "version": "0.3.2",
+      "version": "0.7.1",
       "package_url": "https://github.com/instant-labs/instant-acme",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/instant-acme/0.3.2/download",
-          "sha256": "d8b94f62e8dd2b561e7646bd0cc92e4c9d940859fc1c146ad8ab6e5d3e6f7c03"
+          "url": "https://static.crates.io/crates/instant-acme/0.7.1/download",
+          "sha256": "71bc444149bab1b339ba7e92e81d7615227feba7fd635b8551a3a170021598d0"
         }
       },
       "targets": [
@@ -32229,7 +32229,8 @@
         "crate_features": {
           "common": [
             "default",
-            "hyper-rustls"
+            "hyper-rustls",
+            "ring"
           ],
           "selects": {}
         },
@@ -32240,16 +32241,40 @@
               "target": "base64"
             },
             {
-              "id": "hyper 0.14.27",
+              "id": "bytes 1.6.1",
+              "target": "bytes"
+            },
+            {
+              "id": "http 1.1.0",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.0",
+              "target": "http_body"
+            },
+            {
+              "id": "http-body-util 0.1.2",
+              "target": "http_body_util"
+            },
+            {
+              "id": "hyper 1.4.1",
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.24.2",
+              "id": "hyper-rustls 0.27.2",
               "target": "hyper_rustls"
             },
             {
-              "id": "ring 0.16.20",
+              "id": "hyper-util 0.1.6",
+              "target": "hyper_util"
+            },
+            {
+              "id": "ring 0.17.7",
               "target": "ring"
+            },
+            {
+              "id": "rustls-pki-types 1.7.0",
+              "target": "rustls_pki_types"
             },
             {
               "id": "serde 1.0.203",
@@ -32267,7 +32292,16 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.2"
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.73",
+              "target": "async_trait"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.7.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -37832,7 +37866,7 @@
               "target": "http_body"
             },
             {
-              "id": "http-body-util 0.1.0",
+              "id": "http-body-util 0.1.2",
               "target": "http_body_util"
             },
             {
@@ -52357,7 +52391,7 @@
                 "target": "http_body"
               },
               {
-                "id": "http-body-util 0.1.0",
+                "id": "http-body-util 0.1.2",
                 "target": "http_body_util"
               },
               {
@@ -52723,8 +52757,7 @@
             "alloc",
             "default",
             "dev_urandom_fallback",
-            "once_cell",
-            "std"
+            "once_cell"
           ],
           "selects": {}
         },
@@ -66774,7 +66807,7 @@
               "target": "http_body"
             },
             {
-              "id": "http-body-util 0.1.0",
+              "id": "http-body-util 0.1.2",
               "target": "http_body_util"
             },
             {
@@ -78942,7 +78975,7 @@
     "http 1.1.0",
     "http-body 0.4.6",
     "http-body 1.0.0",
-    "http-body-util 0.1.0",
+    "http-body-util 0.1.2",
     "httptest 0.15.4",
     "humantime 2.1.0",
     "humantime-serde 1.1.1",
@@ -78986,7 +79019,7 @@
     "indoc 1.0.9",
     "inferno 0.11.19",
     "insta 1.31.0",
-    "instant-acme 0.3.2",
+    "instant-acme 0.7.1",
     "intmap 1.1.0",
     "ipnet 2.8.0",
     "isocountry 0.3.2",

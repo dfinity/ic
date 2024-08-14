@@ -12,6 +12,7 @@ use crate::{
 use axum::{
     extract::{DefaultBodyLimit, State},
     http::StatusCode,
+    response::IntoResponse,
     routing::any,
     Extension, Router,
 };
@@ -22,7 +23,7 @@ use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::p2p::v1 as pb;
 use ic_quic_transport::{ConnId, SubnetTopology};
 use ic_types::artifact::{IdentifiableArtifact, PbArtifact, UnvalidatedArtifactMutation};
-use prost::Message;
+use prost::{DecodeError, Message};
 use tokio::{
     runtime::Handle,
     select,
@@ -53,13 +54,41 @@ pub fn build_axum_router<Artifact: PbArtifact>(
     (router, update_rx)
 }
 
+enum UpdateHandlerError<Artifact: PbArtifact> {
+    SlotUpdateDecoding(DecodeError),
+    IdDecoding(DecodeError),
+    IdPbConversion(Artifact::PbIdError),
+    AttrDecoding(DecodeError),
+    AttrPbConversion(Artifact::PbAttributeError),
+    MessageDecoding(DecodeError),
+    MessagePbConversion(Artifact::PbMessageError),
+    MissingUpdate,
+}
+
+impl<Artifact: PbArtifact> IntoResponse for UpdateHandlerError<Artifact> {
+    fn into_response(self) -> axum::response::Response {
+        let r = match self {
+            Self::SlotUpdateDecoding(e) => (StatusCode::BAD_REQUEST, e.to_string()),
+            Self::IdDecoding(e) => (StatusCode::BAD_REQUEST, e.to_string()),
+            Self::IdPbConversion(e) => (StatusCode::BAD_REQUEST, e.to_string()),
+            Self::AttrDecoding(e) => (StatusCode::BAD_REQUEST, e.to_string()),
+            Self::AttrPbConversion(e) => (StatusCode::BAD_REQUEST, e.to_string()),
+            Self::MessageDecoding(e) => (StatusCode::BAD_REQUEST, e.to_string()),
+            Self::MessagePbConversion(e) => (StatusCode::BAD_REQUEST, e.to_string()),
+            Self::MissingUpdate => (StatusCode::BAD_REQUEST, "Missing update field".to_string()),
+        };
+        r.into_response()
+    }
+}
+
 async fn update_handler<Artifact: PbArtifact>(
     State((log, sender)): State<(ReplicaLogger, ReceivedAdvertSender<Artifact>)>,
     Extension(peer): Extension<NodeId>,
     Extension(conn_id): Extension<ConnId>,
     payload: Bytes,
-) -> Result<(), StatusCode> {
-    let pb_slot_update = pb::SlotUpdate::decode(payload).map_err(|_| StatusCode::BAD_REQUEST)?;
+) -> Result<(), UpdateHandlerError<Artifact>> {
+    let pb_slot_update = pb::SlotUpdate::decode(payload)
+        .map_err(|e| UpdateHandlerError::SlotUpdateDecoding::<Artifact>(e))?;
 
     let update = SlotUpdate {
         commit_id: CommitId::from(pb_slot_update.commit_id),
@@ -67,21 +96,33 @@ async fn update_handler<Artifact: PbArtifact>(
         update: match pb_slot_update.update {
             Some(pb::slot_update::Update::Advert(advert)) => {
                 let id: Artifact::Id = Artifact::PbId::decode(advert.id.as_slice())
-                    .map(|pb_id| pb_id.try_into().map_err(|_| StatusCode::BAD_REQUEST))
-                    .map_err(|_| StatusCode::BAD_REQUEST)??;
+                    .map_err(|e| UpdateHandlerError::IdDecoding(e))
+                    .and_then(|pb_id| {
+                        pb_id
+                            .try_into()
+                            .map_err(|e| UpdateHandlerError::IdPbConversion(e))
+                    })?;
                 let attr: Artifact::Attribute =
                     Artifact::PbAttribute::decode(advert.attribute.as_slice())
-                        .map(|pb_attr| pb_attr.try_into().map_err(|_| StatusCode::BAD_REQUEST))
-                        .map_err(|_| StatusCode::BAD_REQUEST)??;
+                        .map_err(|e| UpdateHandlerError::AttrDecoding(e))
+                        .and_then(|pb_attr| {
+                            pb_attr
+                                .try_into()
+                                .map_err(|e| UpdateHandlerError::AttrPbConversion(e))
+                        })?;
                 Update::Advert((id, attr))
             }
             Some(pb::slot_update::Update::Artifact(artifact)) => {
                 let message: Artifact = Artifact::PbMessage::decode(artifact.as_slice())
-                    .map(|pb_msg| pb_msg.try_into().map_err(|_| StatusCode::BAD_REQUEST))
-                    .map_err(|_| StatusCode::BAD_REQUEST)??;
+                    .map_err(|e| UpdateHandlerError::MessageDecoding(e))
+                    .and_then(|pb_msg| {
+                        pb_msg
+                            .try_into()
+                            .map_err(|e| UpdateHandlerError::MessagePbConversion(e))
+                    })?;
                 Update::Artifact(message)
             }
-            None => return Err(StatusCode::BAD_REQUEST),
+            None => return Err(UpdateHandlerError::MissingUpdate),
         },
     };
 
