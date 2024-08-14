@@ -77,7 +77,7 @@ mod database_access {
             } => {
                 from_account = Some(from.to_hex());
                 allowance = Some(al.get_e8s().to_string());
-                expected_allowance = eal.map(|a| a.get_e8s().to_string());
+                expected_allowance = eal.map(|eal| eal.get_e8s().to_string());
                 spender_account = Some(spender.to_hex());
                 expires_at = ea.map(timestamp_to_iso8601);
                 fee = Some(f.get_e8s().to_string());
