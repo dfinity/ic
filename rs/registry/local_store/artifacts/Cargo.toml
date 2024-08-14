@@ -1,4 +1,7 @@
 [package]
 name = "ic-registry-local-store-artifacts"
-edition = "2021"
-version = "0.8.0"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true

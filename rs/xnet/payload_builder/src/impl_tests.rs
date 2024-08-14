@@ -3,17 +3,16 @@
 use super::test_fixtures::*;
 use super::*;
 use assert_matches::assert_matches;
+use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_interfaces_certified_stream_store::DecodeStreamError;
+use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
 use ic_interfaces_state_manager::StateReader;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::ReplicatedStateTesting;
-use ic_test_utilities::{
-    certified_stream_store::MockCertifiedStreamStore,
-    crypto::fake_tls_handshake::FakeTlsHandshake,
-    state_manager::FakeStateManager,
-    types::ids::{SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_42, SUBNET_5},
-};
+use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_42, SUBNET_5};
+use ic_types::xnet::RejectReason;
 use maplit::btreemap;
 
 const OWN_SUBNET_ID: SubnetId = SUBNET_42;
@@ -51,7 +50,7 @@ async fn expected_stream_indices() {
 
         // A registry that has entries for `SUBNET_1` through `SUBNET_5`.
         let (registry, _urls) = get_registry_and_urls_for_test(5, expected_indices.clone());
-        let tls_handshake = Arc::new(FakeTlsHandshake::new());
+        let tls_handshake = Arc::new(MockTlsConfig::new());
         let state_manager = Arc::new(state_manager);
         let xnet_payload_builder = XNetPayloadBuilderImpl::new(
             Arc::clone(&state_manager) as Arc<_>,
@@ -196,21 +195,6 @@ async fn validate_signals_invalid_reject_signals() {
         let state_manager = FakeStateManager::new();
         let xnet_payload_builder = get_xnet_payload_builder_for_test(state_manager, log);
 
-        // Shortcut for `xnet_payload_builder.validate_signals(SUBNET_1, _, _, _)`.
-        let validate_signals = |signals_end, reject_signals: Vec<u64>, expected, state| {
-            let reject_signals: VecDeque<StreamIndex> = reject_signals
-                .iter()
-                .map(|x| StreamIndex::new(*x))
-                .collect();
-            xnet_payload_builder.validate_signals(
-                SUBNET_1,
-                StreamIndex::new(signals_end),
-                &reject_signals,
-                StreamIndex::new(expected),
-                state,
-            )
-        };
-
         // State with `messages.end() == 77` for `SUBNET_1`.
         let mut state = ReplicatedState::new(OWN_SUBNET_ID, SubnetType::Application);
         state.with_streams(btreemap! {
@@ -224,31 +208,51 @@ async fn validate_signals_invalid_reject_signals() {
         // Out-of-order signals are invalid.
         assert_eq!(
             Invalid,
-            validate_signals(
-                70, // Signals end of incoming stream slice
-                vec![10, 20, 50, 40],
-                5, // Expected signal index
-                &state
+            xnet_payload_builder.validate_signals(
+                SUBNET_1,
+                70.into(), // Signals end of incoming stream slice.
+                &vec![
+                    RejectSignal::new(RejectReason::CanisterMigrating, 10.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 20.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 50.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 40.into()),
+                ]
+                .into(),
+                5.into(), // Expected signal index.
+                &state,
             )
         );
-
         // Signals larger than or equal to `signals_end` are invalid.
         assert_eq!(
             Invalid,
-            validate_signals(
-                70, // Signals end of incoming stream slice
-                vec![10, 20, 40, 80],
-                5, // Expected signal index
-                &state
+            xnet_payload_builder.validate_signals(
+                SUBNET_1,
+                70.into(), // Signals end of incoming stream slice.
+                &vec![
+                    RejectSignal::new(RejectReason::CanisterMigrating, 10.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 20.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 40.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 80.into()),
+                ]
+                .into(),
+                5.into(), // Expected signal index.
+                &state,
             )
         );
         assert_eq!(
             Invalid,
-            validate_signals(
-                80, // Signals end of incoming stream slice
-                vec![10, 20, 40, 80],
-                5, // Expected signal index
-                &state
+            xnet_payload_builder.validate_signals(
+                SUBNET_1,
+                80.into(), // Signals end of incoming stream slice.
+                &vec![
+                    RejectSignal::new(RejectReason::CanisterMigrating, 10.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 20.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 40.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 80.into()),
+                ]
+                .into(),
+                5.into(), // Expected signal index.
+                &state,
             )
         );
     });
@@ -366,7 +370,7 @@ async fn validate_slice_invalid_signature() {
 
         let state_manager = FakeStateManager::new();
         let state_manager = Arc::new(state_manager);
-        let tls_handshake = Arc::new(FakeTlsHandshake::new());
+        let tls_handshake = Arc::new(MockTlsConfig::new());
         let registry = get_empty_registry_for_test();
         let xnet_payload_builder = XNetPayloadBuilderImpl::new(
             state_manager,
@@ -612,7 +616,7 @@ fn get_xnet_payload_builder_for_test(
 ) -> XNetPayloadBuilderImpl {
     let registry = get_empty_registry_for_test();
     let state_manager = Arc::new(state_manager);
-    let tls_handshake = Arc::new(FakeTlsHandshake::new());
+    let tls_handshake = Arc::new(MockTlsConfig::new());
     XNetPayloadBuilderImpl::new(
         Arc::clone(&state_manager) as Arc<_>,
         state_manager,

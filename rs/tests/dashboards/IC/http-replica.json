@@ -5,8 +5,8 @@
         "$$hashKey": "object:55",
         "builtIn": 1,
         "datasource": {
-          "type": "datasource",
-          "uid": "grafana"
+          "type": "prometheus",
+          "uid": "000000001"
         },
         "enable": true,
         "hide": true,
@@ -129,7 +129,7 @@
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Percentage of erronerous responses (4xx/5xx)",
+      "title": "Percentage of erroneous responses (4xx/5xx)",
       "tooltip": {
         "shared": true,
         "sort": 2,

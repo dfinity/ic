@@ -1,4 +1,3 @@
-use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::ledger_client::LedgerClient;
 use crate::rosetta_tests::lib::{
     create_ledger_client, do_multiple_txn, do_multiple_txn_external, one_day_from_now_nanos,
@@ -7,17 +6,18 @@ use crate::rosetta_tests::lib::{
 use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use crate::rosetta_tests::setup::setup;
 use crate::rosetta_tests::test_neurons::TestNeurons;
-use crate::util::block_on;
-use ic_rosetta_api::models::Object;
 use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{NeuronInfo, Spawn, Status};
 use ic_rosetta_test_utils::RequestInfo;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::util::block_on;
+use rosetta_core::objects::ObjectMap;
 use std::collections::HashMap;
 use std::sync::Arc;
 
 const PORT: u32 = 8106;
-const VM_NAME: &str = "rosetta-test-neuron-spawn";
+const VM_NAME: &str = "rosetta-neuron-spawn";
 
 pub fn test(env: TestEnv) {
     let _logger = env.logger();
@@ -28,15 +28,12 @@ pub fn test(env: TestEnv) {
     let mut neurons = TestNeurons::new(2000, &mut ledger_balances);
 
     let neuron1 = neurons.create(|neuron| {
-        neuron.dissolve_state = None;
         neuron.maturity_e8s_equivalent = 500_000_000;
     });
     let neuron2 = neurons.create(|neuron| {
-        neuron.dissolve_state = None;
         neuron.maturity_e8s_equivalent = 4_000;
     });
     let neuron3 = neurons.create(|neuron| {
-        neuron.dissolve_state = None;
         neuron.maturity_e8s_equivalent = 500_000_000;
     });
 
@@ -64,7 +61,7 @@ async fn test_spawn(
     percentage_to_spawn: Option<u32>,
 ) {
     let account = neuron_info.account_id;
-    let key_pair = Arc::new(neuron_info.key_pair);
+    let key_pair = Arc::new(neuron_info.key_pair.clone());
     let neuron_index = neuron_info.neuron_subaccount_identifier;
 
     let neuron_acc = neuron_info.neuron_account;
@@ -126,9 +123,9 @@ async fn test_spawn(
     .expect("Failed to retrieve neuron info");
 
     assert_eq!(1, res.operations.len());
-    let metadata: &Object = res
+    let metadata: &ObjectMap = res
         .operations
-        .get(0)
+        .first()
         .unwrap()
         .metadata
         .as_ref()
@@ -146,7 +143,7 @@ async fn test_spawn(
 
 async fn test_spawn_invalid(ros: &RosettaApiClient, neuron_info: &NeuronDetails) {
     let account = neuron_info.account_id;
-    let key_pair = Arc::new(neuron_info.key_pair);
+    let key_pair = Arc::new(neuron_info.key_pair.clone());
     let neuron_index = neuron_info.neuron_subaccount_identifier;
 
     // the nonce used to generate spawned neuron.
@@ -187,6 +184,6 @@ async fn test_spawn_invalid(ros: &RosettaApiClient, neuron_info: &NeuronDetails)
     );
 
     let err = res.unwrap_err();
-    assert_eq!(err.code, 770);
-    assert_eq!(err.message, "Operation failed".to_string());
+    assert_eq!(err.0.code, 770);
+    assert_eq!(err.0.message, "Operation failed".to_string());
 }

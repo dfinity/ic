@@ -1,33 +1,36 @@
 //! Payload creation/validation subcomponent
 
 use crate::consensus::{
-    metrics::{PayloadBuilderMetrics, CRITICAL_ERROR_SUBNET_RECORD_ISSUE},
+    metrics::{
+        PayloadBuilderMetrics, CRITICAL_ERROR_PAYLOAD_TOO_LARGE, CRITICAL_ERROR_SUBNET_RECORD_ISSUE,
+    },
     payload::BatchPayloadSectionBuilder,
 };
 use ic_consensus_utils::get_subnet_record;
 use ic_interfaces::{
-    batch_payload::BatchPayloadBuilder,
-    consensus::{PayloadBuilder, PayloadPermanentError, PayloadValidationError},
+    batch_payload::{BatchPayloadBuilder, ProposalContext},
+    consensus::{InvalidPayloadReason, PayloadBuilder, PayloadValidationError},
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
     self_validating_payload::SelfValidatingPayloadBuilder,
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_types::{
     batch::{BatchPayload, ValidationContext, MAX_BITCOIN_PAYLOAD_IN_BYTES},
     consensus::{block_maker::SubnetRecords, Payload},
     messages::MAX_XNET_PAYLOAD_IN_BYTES,
-    Height, NumBytes, SubnetId, Time,
+    Height, NodeId, NumBytes, SubnetId, Time,
 };
 use std::sync::Arc;
 
 /// Implementation of PayloadBuilder.
 pub struct PayloadBuilderImpl {
     subnet_id: SubnetId,
+    node_id: NodeId,
     registry_client: Arc<dyn RegistryClient>,
     section_builder: Vec<BatchPayloadSectionBuilder>,
     metrics: PayloadBuilderMetrics,
@@ -38,11 +41,13 @@ impl PayloadBuilderImpl {
     /// Helper to create PayloadBuilder
     pub fn new(
         subnet_id: SubnetId,
+        node_id: NodeId,
         registry_client: Arc<dyn RegistryClient>,
         ingress_selector: Arc<dyn IngressSelector>,
         xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
         self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
         metrics: MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
@@ -51,10 +56,41 @@ impl PayloadBuilderImpl {
             BatchPayloadSectionBuilder::SelfValidating(self_validating_payload_builder),
             BatchPayloadSectionBuilder::XNet(xnet_payload_builder),
             BatchPayloadSectionBuilder::CanisterHttp(canister_http_payload_builder),
+            BatchPayloadSectionBuilder::QueryStats(query_stats_payload_builder),
         ];
 
         Self {
             subnet_id,
+            node_id,
+            registry_client,
+            section_builder,
+            metrics: PayloadBuilderMetrics::new(metrics),
+            logger,
+        }
+    }
+
+    /// Helper to create PayloadBuilder for testing
+    pub fn new_for_testing(
+        subnet_id: SubnetId,
+        node_id: NodeId,
+        registry_client: Arc<dyn RegistryClient>,
+        ingress_selector: Arc<dyn IngressSelector>,
+        xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
+        canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        metrics: MetricsRegistry,
+        logger: ReplicaLogger,
+    ) -> Self {
+        let section_builder = vec![
+            BatchPayloadSectionBuilder::Ingress(ingress_selector),
+            BatchPayloadSectionBuilder::XNet(xnet_payload_builder),
+            BatchPayloadSectionBuilder::CanisterHttp(canister_http_payload_builder),
+            BatchPayloadSectionBuilder::QueryStats(query_stats_payload_builder),
+        ];
+
+        Self {
+            subnet_id,
+            node_id,
             registry_client,
             section_builder,
             metrics: PayloadBuilderMetrics::new(metrics),
@@ -78,7 +114,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
 
         // To call the section builders in a somewhat fair manner,
         // we call them in a rotation. Note that this is not really fair,
-        // as payload builders that yield a lot always give precendence to the
+        // as payload builders that yield a lot always give precedence to the
         // same next payload builder. This might give an advantage to a particular
         // payload builder.
         let num_sections = self.section_builder.len();
@@ -92,18 +128,22 @@ impl PayloadBuilder for PayloadBuilderImpl {
         let mut batch_payload = BatchPayload::default();
         let mut accumulated_size = 0;
 
-        for section_id in section_select {
+        for (priority, section_id) in section_select.into_iter().enumerate() {
             accumulated_size += self.section_builder[section_id]
                 .build_payload(
                     &mut batch_payload,
                     height,
-                    context,
+                    &ProposalContext {
+                        proposer: self.node_id,
+                        validation_context: context,
+                    },
                     NumBytes::new(
                         max_block_payload_size
                             .get()
                             .saturating_sub(accumulated_size),
                     ),
                     past_payloads,
+                    priority,
                     &self.metrics,
                     &self.logger,
                 )
@@ -116,16 +156,16 @@ impl PayloadBuilder for PayloadBuilderImpl {
     fn validate_payload(
         &self,
         height: Height,
+        proposal_context: &ProposalContext,
         payload: &Payload,
         past_payloads: &[(Height, Time, Payload)],
-        context: &ValidationContext,
     ) -> ValidationResult<PayloadValidationError> {
         let _timer = self.metrics.validate_payload_duration.start_timer();
         if payload.is_summary() {
             return Ok(());
         }
         let batch_payload = &payload.as_ref().as_data().batch;
-        let subnet_record = self.get_subnet_record(context)?;
+        let subnet_record = self.get_subnet_record(proposal_context.validation_context)?;
 
         // Retrieve max_block_payload_size from subnet
         let max_block_payload_size = self.get_max_block_payload_size_bytes(&subnet_record);
@@ -133,16 +173,29 @@ impl PayloadBuilder for PayloadBuilderImpl {
         let mut accumulated_size = NumBytes::new(0);
         for builder in &self.section_builder {
             accumulated_size +=
-                builder.validate_payload(height, batch_payload, context, past_payloads)?;
-            if accumulated_size > max_block_payload_size {
-                return Err(ValidationError::Permanent(
-                    PayloadPermanentError::PayloadTooBig {
-                        expected: max_block_payload_size,
-                        received: accumulated_size,
-                    },
-                ));
-            }
+                builder.validate_payload(height, batch_payload, proposal_context, past_payloads)?;
         }
+
+        // Check the combined size of the payloads using a 2x safety margin.
+        // We allow payloads that are bigger than the maximum size but log an error.
+        // And reject outright payloads that are more than twice the maximum size.
+        if accumulated_size > max_block_payload_size {
+            error!(
+                self.logger,
+                "The overall block size is too large, even though the individual payloads are valid: {}",
+                CRITICAL_ERROR_PAYLOAD_TOO_LARGE
+            );
+            self.metrics.critical_error_payload_too_large.inc();
+        }
+        if accumulated_size > max_block_payload_size * 2 {
+            return Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::PayloadTooBig {
+                    expected: max_block_payload_size,
+                    received: accumulated_size,
+                },
+            ));
+        }
+
         Ok(())
     }
 }
@@ -189,28 +242,30 @@ impl PayloadBuilderImpl {
 #[cfg(test)]
 pub(crate) mod test {
     use super::*;
-    use ic_btc_types_internal::{
+    use ic_btc_replica_types::{
         BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsResponseComplete,
     };
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
-        consensus::fake::Fake,
         ingress_selector::FakeIngressSelector,
-        mock_time,
         self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
-        types::ids::{node_test_id, subnet_test_id},
-        types::messages::SignedIngressBuilder,
         xnet_payload_builder::FakeXNetPayloadBuilder,
     };
+    use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, fake::Fake};
     use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_test_utilities_types::{
+        ids::{node_test_id, subnet_test_id},
+        messages::SignedIngressBuilder,
+    };
     use ic_types::{
         canister_http::CanisterHttpResponseWithConsensus,
         consensus::certification::{Certification, CertificationContent},
         crypto::{CryptoHash, Signed},
         messages::SignedIngress,
         signature::ThresholdSignature,
+        time::UNIX_EPOCH,
         xnet::CertifiedStreamSlice,
         CryptoHashOfPartialState, RegistryVersion,
     };
@@ -218,7 +273,7 @@ pub(crate) mod test {
 
     #[cfg(feature = "proptest")]
     impl PayloadBuilderImpl {
-        /// Return the number of critical errors that have occured.
+        /// Return the number of critical errors that have occurred.
         ///
         /// This is useful for proptests.
         pub(crate) fn count_critical_errors(&self) -> u64 {
@@ -247,14 +302,17 @@ pub(crate) mod test {
             FakeSelfValidatingPayloadBuilder::new().with_responses(responses_from_adapter);
         let canister_http_payload_builder =
             FakeCanisterHttpPayloadBuilder::new().with_responses(canister_http_responses);
+        let query_stats_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
 
         PayloadBuilderImpl::new(
             subnet_test_id(0),
+            node_test_id(0),
             registry,
             Arc::new(ingress_selector),
             Arc::new(xnet_payload_builder),
             Arc::new(self_validating_payload_builder),
             Arc::new(canister_http_payload_builder),
+            Arc::new(query_stats_payload_builder),
             MetricsRegistry::new(),
             no_op_logger(),
         )
@@ -304,7 +362,7 @@ pub(crate) mod test {
             let context = ValidationContext {
                 certified_height: Height::from(0),
                 registry_version: RegistryVersion::from(1),
-                time: mock_time(),
+                time: UNIX_EPOCH,
             };
             let subnet_record = SubnetRecordBuilder::from(&[node_test_id(0)]).build();
             let subnet_records = SubnetRecords {

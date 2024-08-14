@@ -6,42 +6,37 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait = "0.1.36"
-axum = "0.6.12"
-bincode = "1.2.1"
-bytes = "1.0.1"
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
+bytes = { workspace = true }
 either = "1.6.0"
-futures = "0.3.10"
-http = "0.2.9"
-http-serde = "1.1.2"
+futures = { workspace = true }
 ic-async-utils = { path = "../../async_utils" }
+ic-base-types = { path = "../../types/base_types" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }
-ic-icos-sev-interfaces = { path = "../../ic_os/sev_interfaces" }
-ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-types = { path = "../../types/types" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
-ic-peer-manager = { path = "../../p2p/peer_manager" }
-ic-registry-client-helpers = { path = "../../registry/helpers" }
-prometheus = { version = "0.12.0", features = ["process"] }
-quinn = { version = "0.10.0", features = ["ring"] }
-serde = { version = "1.0.99", features = ["derive"] }
-slog = { version = "2.5.2", features = [
-    "nested-values",
-    "release_max_level_debug",
-] }
-socket2 = { version = "0.5", features = ["all"] }
-tokio = { version = "1.15.0", features = ["full"] }
-tokio-metrics = "0.2.2"
-tokio-rustls = "0.24.0"
-tokio-util = { version = "0.7.4", features = ["codec", "time"] }
-tower = { version = "0.4.12", features = ["reconnect"] }
+ic-protobuf = { path = "../../protobuf" }
+phantom_newtype = { path = "../../phantom_newtype" }
+prometheus = { workspace = true }
+prost = { workspace = true }
+quinn = { workspace = true }
+quinn-udp = { workspace = true }
+rustls = { workspace = true }
+slog = { workspace = true }
+socket2 = { workspace = true }
+tokio = { workspace = true }
+tokio-metrics = { workspace = true }
+tokio-util = { workspace = true }
+tower = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
-ic-icos-sev = { path = "../../ic_os/sev" }
+criterion = { workspace = true }
 ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-turmoil = "0.5"
+turmoil = { workspace = true }

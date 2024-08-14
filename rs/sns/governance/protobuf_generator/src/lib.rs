@@ -4,7 +4,8 @@ use std::path::Path;
 pub struct ProtoPaths<'a> {
     pub governance: &'a Path,
     pub base_types: &'a Path,
-    pub ic00_types: &'a Path,
+    pub nervous_system: &'a Path,
+    pub management_canister_types: &'a Path,
     pub ledger: &'a Path,
 }
 
@@ -23,6 +24,10 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
     config.extern_path(".ic_ledger.pb.v1", "::ledger-canister::protobuf");
     config.extern_path(".types.v1", "::ic-protobuf::types::v1");
+    config.extern_path(
+        ".ic_nervous_system.pb.v1",
+        "::ic-nervous-system-proto::pb::v1",
+    );
 
     // Make all PB types also Candid types.
     config.type_attribute(
@@ -73,6 +78,34 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         ],
     );
 
+    // Add serde_bytes for efficiently parsing blobs.
+    let blob_fields = vec![
+        "NeuronId.id",
+        "ExecuteGenericNervousSystemFunction.payload",
+        "UpgradeSnsControlledCanister.new_canister_wasm",
+        "Governance.Version.root_wasm_hash",
+        "Governance.Version.governance_wasm_hash",
+        "Governance.Version.ledger_wasm_hash",
+        "Governance.Version.swap_wasm_hash",
+        "Governance.Version.archive_wasm_hash",
+        "Governance.Version.index_wasm_hash",
+        "ManageNeuron.subaccount",
+        "Subaccount.subaccount",
+    ];
+    for field in blob_fields {
+        config.field_attribute(
+            format!(".ic_sns_governance.pb.v1.{}", field),
+            "#[serde(with = \"serde_bytes\")]",
+        );
+    }
+    let option_blob_fields = vec!["UpgradeSnsControlledCanister.canister_upgrade_arg"];
+    for field in option_blob_fields {
+        config.field_attribute(
+            format!(".ic_sns_governance.pb.v1.{}", field),
+            "#[serde(deserialize_with = \"ic_utils::deserialize::deserialize_option_blob\")]",
+        );
+    }
+
     std::fs::create_dir_all(out).expect("failed to create output directory");
     config.out_dir(out);
 
@@ -82,7 +115,8 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
             &[
                 proto.governance,
                 proto.base_types,
-                proto.ic00_types,
+                proto.nervous_system,
+                proto.management_canister_types,
                 proto.ledger,
             ],
         )

@@ -1,30 +1,31 @@
 [package]
 name = "ic-interfaces"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-async-trait = "0.1.36"
-derive_more = { git = "https://github.com/dfinity-lab/derive_more", branch = "master" }
 ic-base-types = { path = "../types/base_types" }
-ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
+ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
 ic-error-types = { path = "../types/error_types" }
-ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces-state-manager = { path = "./state_manager" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
-ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
-prost = "0.11.0"
-rand = "0.8"
-serde = { version = "1.0.99", features = ["derive"] }
-serde_bytes = "0.11"
-tower = { version = "0.4.11", features = ["util", "limit"] }
-thiserror = "1.0"
+phantom_newtype = { path = "../phantom_newtype" }
+prost = { workspace = true }
+serde = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+thiserror = { workspace = true }
+tower = { workspace = true }
 
 [dev-dependencies]
-ic-crypto-internal-csp-proptest-utils = {path = "../crypto/internal/crypto_service_provider/csp_proptest_utils"}
+ic-crypto-internal-csp-proptest-utils = { path = "../crypto/internal/crypto_service_provider/csp_proptest_utils" }
 proptest = "1.0"

@@ -1,8 +1,10 @@
 [package]
 name = "ic-crypto-test-utils-csp"
-version = "0.8.0"
-edition = "2021"
 description = "Test utilities for crypto service provider"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-base-types = { path = "../../../types/base_types" }
@@ -12,5 +14,6 @@ ic-crypto-internal-threshold-sig-ecdsa = { path = "../../internal/crypto_lib/thr
 ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
 ic-crypto-node-key-validation = { path = "../../../crypto/node_key_validation" }
 ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
+ic-protobuf = { path = "../../../protobuf" }
 ic-types = { path = "../../../types/types" }
-mockall = "0.7.2"
+mockall = { workspace = true }

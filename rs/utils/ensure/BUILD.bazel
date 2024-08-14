@@ -1,0 +1,10 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "ensure",
+    srcs = ["src/lib.rs"],
+    crate_name = "ic_utils_ensure",
+    version = "0.9.0",
+)

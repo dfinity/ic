@@ -1,5 +1,5 @@
 """
-The module fetches trivy binary to be used by docker_vulnerabilites_scanning
+The module fetches trivy binary to be used by docker_vulnerabilities_scanning
 """
 
 TRIVY_BUILD = """

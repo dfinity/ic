@@ -4,17 +4,16 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use ic_tests::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::networking::network_reliability::{setup, test, Config};
-use ic_tests::systest;
 
 // Test parameters
 const CONFIG: Config = Config {
     nodes_system_subnet: 4,
-    nodes_app_subnet: 4,
+    nodes_app_subnet: 7,
     runtime: Duration::from_secs(180),
-    rps: 100,
-    max_failures_ratio: 0.05,
+    rps: 20,
 };
 // Timeout parameters
 const TASK_TIMEOUT: Duration = Duration::from_secs(320 * 60);

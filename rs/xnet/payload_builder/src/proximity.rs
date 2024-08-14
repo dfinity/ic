@@ -184,7 +184,7 @@ impl ProximityMap {
         let node = nodes[node_index];
         let node_record = self
             .registry
-            .get_transport_info(node, version)
+            .get_node_record(node, version)
             .map_err(|e| Error::RegistryGetNodeInfoFailed(node, e))?;
 
         match node_record {
@@ -197,7 +197,7 @@ impl ProximityMap {
     /// observed `duration`.
     pub fn observe_roundtrip_time(&self, node: NodeId, duration: Duration) {
         // Bound durations to between 1µs and 1s (specifically avoiding 0).
-        let duration_nanos = (duration.as_nanos() as u64).max(1_000).min(NANOS_PER_SEC);
+        let duration_nanos = (duration.as_nanos() as u64).clamp(1_000, NANOS_PER_SEC);
 
         let version = self.registry.get_latest_version();
         if let Some(node_operator) =

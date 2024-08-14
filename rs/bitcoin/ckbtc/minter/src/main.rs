@@ -1,5 +1,5 @@
-use candid::candid_method;
 use candid::Principal;
+use ic_btc_interface::Utxo;
 use ic_canister_log::export as export_logs;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, query, update};
@@ -8,9 +8,14 @@ use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
 use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
-use ic_ckbtc_minter::state::{read_state, RetrieveBtcStatus};
+use ic_ckbtc_minter::state::{
+    read_state, BtcRetrievalStatusV2, RetrieveBtcStatus, RetrieveBtcStatusV2,
+};
 use ic_ckbtc_minter::tasks::{schedule_now, TaskType};
-use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk};
+use ic_ckbtc_minter::updates::retrieve_btc::{
+    RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk, RetrieveBtcWithApprovalArgs,
+    RetrieveBtcWithApprovalError,
+};
 use ic_ckbtc_minter::updates::{
     self,
     get_btc_address::GetBtcAddressArgs,
@@ -22,6 +27,7 @@ use ic_ckbtc_minter::{
     storage, {Log, LogEntry, Priority},
 };
 use icrc_ledger_types::icrc1::account::Account;
+use std::str::FromStr;
 
 #[init]
 fn init(args: MinterArg) {
@@ -74,7 +80,6 @@ fn check_invariants() -> Result<(), String> {
 }
 
 #[cfg(feature = "self_check")]
-#[candid_method(update)]
 #[update]
 async fn distribute_kyt_fee() {
     let _guard = match ic_ckbtc_minter::guard::DistributeKytFeeGuard::new() {
@@ -85,7 +90,6 @@ async fn distribute_kyt_fee() {
 }
 
 #[cfg(feature = "self_check")]
-#[candid_method(update)]
 #[update]
 async fn refresh_fee_percentiles() {
     let _ = ic_ckbtc_minter::estimate_fee_per_vbyte().await;
@@ -126,41 +130,75 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
     schedule_now(TaskType::DistributeKytFee);
 }
 
-#[candid_method(update)]
 #[update]
 async fn get_btc_address(args: GetBtcAddressArgs) -> String {
     check_anonymous_caller();
     updates::get_btc_address::get_btc_address(args).await
 }
 
-#[candid_method(update)]
 #[update]
 async fn get_withdrawal_account() -> Account {
     check_anonymous_caller();
     updates::get_withdrawal_account::get_withdrawal_account().await
 }
 
-#[candid_method(update)]
 #[update]
 async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, RetrieveBtcError> {
     check_anonymous_caller();
     check_postcondition(updates::retrieve_btc::retrieve_btc(args).await)
 }
 
-#[candid_method(query)]
+#[update]
+async fn retrieve_btc_with_approval(
+    args: RetrieveBtcWithApprovalArgs,
+) -> Result<RetrieveBtcOk, RetrieveBtcWithApprovalError> {
+    check_anonymous_caller();
+    check_postcondition(updates::retrieve_btc::retrieve_btc_with_approval(args).await)
+}
+
 #[query]
 fn retrieve_btc_status(req: RetrieveBtcStatusRequest) -> RetrieveBtcStatus {
     read_state(|s| s.retrieve_btc_status(req.block_index))
 }
 
-#[candid_method(update)]
+#[query]
+fn retrieve_btc_status_v2(req: RetrieveBtcStatusRequest) -> RetrieveBtcStatusV2 {
+    read_state(|s| s.retrieve_btc_status_v2(req.block_index))
+}
+
+#[query]
+fn retrieve_btc_status_v2_by_account(target: Option<Account>) -> Vec<BtcRetrievalStatusV2> {
+    read_state(|s| s.retrieve_btc_status_v2_by_account(target))
+}
+
+#[query]
+fn get_known_utxos(args: UpdateBalanceArgs) -> Vec<Utxo> {
+    read_state(|s| {
+        s.known_utxos_for_account(&Account {
+            owner: args.owner.unwrap_or(ic_cdk::caller()),
+            subaccount: args.subaccount,
+        })
+    })
+}
+
 #[update]
 async fn update_balance(args: UpdateBalanceArgs) -> Result<Vec<UtxoStatus>, UpdateBalanceError> {
     check_anonymous_caller();
     check_postcondition(updates::update_balance::update_balance(args).await)
 }
 
-#[candid_method(query)]
+#[update]
+async fn get_canister_status() -> ic_cdk::api::management_canister::main::CanisterStatusResponse {
+    ic_cdk::api::management_canister::main::canister_status(
+        ic_cdk::api::management_canister::main::CanisterIdRecord {
+            canister_id: ic_cdk::id(),
+        },
+    )
+    .await
+    .expect("failed to fetch canister status")
+    .0
+}
+
 #[query]
 fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
     read_state(|s| {
@@ -173,7 +211,6 @@ fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
     })
 }
 
-#[candid_method(query)]
 #[query]
 fn get_minter_info() -> MinterInfo {
     read_state(|s| MinterInfo {
@@ -183,15 +220,17 @@ fn get_minter_info() -> MinterInfo {
     })
 }
 
-#[candid_method(query)]
 #[query]
 fn get_deposit_fee() -> u64 {
     read_state(|s| s.kyt_fee)
 }
 
-#[candid_method(query)]
-#[query]
+#[query(hidden = true)]
 fn http_request(req: HttpRequest) -> HttpResponse {
+    if ic_cdk::api::data_certificate().is_none() {
+        ic_cdk::trap("update call rejected");
+    }
+
     if req.path() == "/metrics" {
         let mut writer =
             ic_metrics_encoder::MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
@@ -207,14 +246,26 @@ fn http_request(req: HttpRequest) -> HttpResponse {
             }
         }
     } else if req.path() == "/dashboard" {
-        let dashboard: Vec<u8> = build_dashboard();
+        let account_to_utxos_start = match req.raw_query_param("account_to_utxos_start") {
+            Some(arg) => match u64::from_str(arg) {
+                Ok(value) => value,
+                Err(_) => {
+                    return HttpResponseBuilder::bad_request()
+                        .with_body_and_content_length(
+                            "failed to parse the 'account_to_utxos_start' parameter",
+                        )
+                        .build()
+                }
+            },
+            None => 0,
+        };
+        let dashboard: Vec<u8> = build_dashboard(account_to_utxos_start);
         HttpResponseBuilder::ok()
             .header("Content-Type", "text/html; charset=utf-8")
             .with_body_and_content_length(dashboard)
             .build()
     } else if req.path() == "/logs" {
         use serde_json;
-        use std::str::FromStr;
 
         let max_skip_timestamp = match req.raw_query_param("time") {
             Some(arg) => match u64::from_str(arg) {
@@ -261,7 +312,6 @@ fn http_request(req: HttpRequest) -> HttpResponse {
     }
 }
 
-#[candid_method(query)]
 #[query]
 fn get_events(args: GetEventsArg) -> Vec<Event> {
     const MAX_EVENTS_PER_QUERY: usize = 2000;
@@ -278,7 +328,7 @@ fn self_check() -> Result<(), String> {
     check_invariants()
 }
 
-#[query]
+#[query(hidden = true)]
 fn __get_candid_interface_tmp_hack() -> &'static str {
     include_str!(env!("CKBTC_MINTER_DID_PATH"))
 }
@@ -288,24 +338,19 @@ fn main() {}
 /// Checks the real candid interface against the one declared in the did file
 #[test]
 fn check_candid_interface_compatibility() {
-    fn source_to_str(source: &candid::utils::CandidSource) -> String {
+    use candid_parser::utils::{service_equal, CandidSource};
+
+    fn source_to_str(source: &CandidSource) -> String {
         match source {
-            candid::utils::CandidSource::File(f) => {
-                std::fs::read_to_string(f).unwrap_or_else(|_| "".to_string())
-            }
-            candid::utils::CandidSource::Text(t) => t.to_string(),
+            CandidSource::File(f) => std::fs::read_to_string(f).unwrap_or_else(|_| "".to_string()),
+            CandidSource::Text(t) => t.to_string(),
         }
     }
 
-    fn check_service_compatible(
-        new_name: &str,
-        new: candid::utils::CandidSource,
-        old_name: &str,
-        old: candid::utils::CandidSource,
-    ) {
+    fn check_service_equal(new_name: &str, new: CandidSource, old_name: &str, old: CandidSource) {
         let new_str = source_to_str(&new);
         let old_str = source_to_str(&old);
-        match candid::utils::service_compatible(new, old) {
+        match service_equal(new, old) {
             Ok(_) => {}
             Err(e) => {
                 eprintln!(
@@ -329,10 +374,10 @@ fn check_candid_interface_compatibility() {
     let old_interface = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
         .join("ckbtc_minter.did");
 
-    check_service_compatible(
+    check_service_equal(
         "actual ledger candid interface",
-        candid::utils::CandidSource::Text(&new_interface),
+        candid_parser::utils::CandidSource::Text(&new_interface),
         "declared candid interface in ckbtc_minter.did file",
-        candid::utils::CandidSource::File(old_interface.as_path()),
+        candid_parser::utils::CandidSource::File(old_interface.as_path()),
     );
 }

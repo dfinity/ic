@@ -1,178 +1,334 @@
 /* tag::catalog[]
-Title:: Upgradability to/from oldest prod replica version.
+Title:: Upgradability from/to the mainnet replica version.
 
 Goal:: Ensure the upgradability of the branch version against the oldest used replica version
 
 Runbook::
-. Setup an IC with 4-nodes NNS and 4-nodes app subnet using the code from the branch.
-. Downgrade each type of subnet to the mainnet version and back.
+. Setup an IC with 4-nodes (App/NNS) subnet under test using the mainnet replica version.
+. Upgrade each type of subnet to the branch version, and downgrade again.
 . During both upgrades simulate a disconnected node and make sure it catches up.
 
 Success:: Upgrades work into both directions for all subnet types.
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_check_progress;
-use crate::{
+use candid::Principal;
+use futures::future::join_all;
+use ic_agent::Agent;
+use ic_consensus_system_test_utils::rw_message::{
+    can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
+    install_nns_and_check_progress, store_message,
+};
+use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
+use ic_consensus_system_test_utils::upgrade::{
+    assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
+    UpdateImageType,
+};
+use ic_consensus_threshold_sig_system_test_utils::{
+    make_key_ids_for_all_schemes, run_chain_key_signature_test, ChainSignatureRequest,
+};
+use ic_management_canister_types::MasterPublicKeyId;
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::generic_workload_engine::metrics::LoadTestMetricsProvider;
+use ic_system_test_driver::generic_workload_engine::metrics::RequestOutcome;
+use ic_system_test_driver::{
+    canister_agent::HasCanisterAgentCapability,
+    canister_requests,
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::*,
     },
-    orchestrator::utils::{
-        rw_message::{can_read_msg, can_read_msg_with_retries, store_message},
-        subnet_recovery::{enable_ecdsa_signing_on_subnet, run_ecdsa_signature_test},
-        upgrade::*,
-    },
-    tecdsa::tecdsa_signature_test::{
-        add_ecdsa_key_with_timeout_and_rotation_period, make_key, KEY_ID1,
-    },
-    util::{block_on, runtime_from_url, MessageCanister},
+    generic_workload_engine::engine::Engine,
+    util::{block_on, get_app_subnet_and_node, MessageCanister},
 };
-use canister_test::Canister;
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, SubnetId};
-use k256::ecdsa::VerifyingKey;
 use slog::{info, Logger};
+use std::collections::BTreeMap;
 use std::time::Duration;
-
-pub const MIN_HASH_LENGTH: usize = 8; // in bytes
+use tokio::runtime::{Builder, Runtime};
 
 const DKG_INTERVAL: u64 = 9;
 
 const ALLOWED_FAILURES: usize = 1;
 const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
+const SCHNORR_MSG_SIZE_BYTES: usize = 2_096_000; // 2MiB minus some message overhead
 
-// Pre-master tests should not run for more than 5..6 minutes. The Upgrade/Downgrade tests run on
-// pre-master and are a known exception to this rule. The test itself takes around 10 minutes,
-// while the setup takes a little more than one minute to complete.
-pub const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(18 * 60);
-pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 
-pub fn config(env: TestEnv) {
-    InternetComputer::new()
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .add_nodes(SUBNET_SIZE)
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
-        )
-        .add_subnet(
-            Subnet::new(SubnetType::Application)
-                .add_nodes(SUBNET_SIZE)
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
-        )
+pub const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);
+pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(20 * 60);
+
+pub fn config(env: TestEnv, subnet_type: SubnetType, mainnet_version: bool) {
+    let mut ic = InternetComputer::new();
+    if mainnet_version {
+        ic = ic.with_mainnet_config();
+    }
+
+    let mut subnet_under_test = Subnet::new(subnet_type)
+        .add_nodes(SUBNET_SIZE)
+        .with_dkg_interval_length(Height::from(DKG_INTERVAL));
+
+    // Activate ecdsa if we are testing the app subnet
+    if subnet_type == SubnetType::Application {
+        ic = ic.add_subnet(Subnet::fast_single_node(SubnetType::System));
+        subnet_under_test = subnet_under_test.with_chain_key_config(ChainKeyConfig {
+            key_configs: make_key_ids_for_all_schemes()
+                .into_iter()
+                .map(|key_id| KeyConfig {
+                    max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+                    pre_signatures_to_create_in_advance: 5,
+                    key_id,
+                })
+                .collect(),
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+        });
+    }
+
+    ic.add_subnet(subnet_under_test)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
-// Tests a downgrade of the nns subnet to the mainnet version and an upgrade back to the branch version
+// Tests an upgrade of the NNS subnet to the branch version and a downgrade back to the mainnet version
 pub fn upgrade_downgrade_nns_subnet(env: TestEnv) {
-    upgrade_downgrade(env, SubnetType::System);
+    let nns_node = env.get_first_healthy_system_node_snapshot();
+    let branch_version = bless_branch_version(&env, &nns_node);
+    let (faulty_node, can_id, msg) =
+        upgrade(&env, &nns_node, &branch_version, SubnetType::System, None);
+    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt").unwrap();
+    upgrade(&env, &nns_node, &mainnet_version, SubnetType::System, None);
+    // Make sure we can still read the message stored before the first upgrade
+    assert!(can_read_msg_with_retries(
+        &env.logger(),
+        &faulty_node.get_public_url(),
+        can_id,
+        &msg,
+        /*retries=*/ 3
+    ));
 }
 
-// Tests a downgrade of the app subnet to the mainnet version and an upgrade back to the branch version
+// Tests an upgrade of the app subnet to the branch version and a downgrade back to the mainnet version
 pub fn upgrade_downgrade_app_subnet(env: TestEnv) {
-    upgrade_downgrade(env, SubnetType::Application);
-}
-
-// Downgrades a subnet to $TARGET_VERSION and back to branch version
-fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
-    let logger = env.logger();
-
-    let mainnet_version = env
-        .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
-        .unwrap();
-
-    // we expect to get a hash value here, so checking that is a hash number of at least 64 bits size
-    assert!(mainnet_version.len() >= 2 * MIN_HASH_LENGTH);
-    assert!(hex::decode(&mainnet_version).is_ok());
-
-    // choose a node from the nns subnet
-    let nns_node = env
-        .topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap();
-
+    let nns_node = env.get_first_healthy_system_node_snapshot();
+    let branch_version = bless_branch_version(&env, &nns_node);
     let agent = nns_node.with_default_agent(|agent| async move { agent });
-    let nns_canister = block_on(MessageCanister::new(
+    let key_ids = make_key_ids_for_all_schemes();
+    get_chain_key_canister_and_public_key(
+        &env,
+        &nns_node,
         &agent,
-        nns_node.effective_canister_id(),
-    ));
+        SubnetType::Application,
+        key_ids.clone(),
+    );
 
-    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
-    let subnet_id = env
-        .topology_snapshot()
-        .subnets()
-        .find(|s| s.subnet_type() == subnet_type)
-        .unwrap()
-        .subnet_id;
-    info!(logger, "Enabling ECDSA signatures on {subnet_id}.");
-    block_on(add_ecdsa_key_with_timeout_and_rotation_period(
-        &governance,
-        subnet_id,
-        make_key(KEY_ID1),
+    let logger = env.logger();
+    let (app_subnet, app_node) = get_app_subnet_and_node(&env.topology_snapshot());
+    let app_agent = app_node.with_default_agent(|agent| async move { agent });
+
+    let principal = block_on(MessageCanister::new_with_cycles(
+        &app_agent,
+        app_node.effective_canister_id(),
+        u128::MAX,
+    ))
+    .canister_id();
+
+    let requests = key_ids
+        .iter()
+        .map(|key_id| ChainSignatureRequest::new(principal, key_id.clone(), SCHNORR_MSG_SIZE_BYTES))
+        .collect::<Vec<_>>();
+
+    let rt: Runtime = Builder::new_multi_thread()
+        .worker_threads(16)
+        .max_blocking_threads(16)
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.spawn(start_workload(app_subnet, requests, logger));
+
+    let (faulty_node, can_id, msg) = upgrade(
+        &env,
+        &nns_node,
+        &branch_version,
+        SubnetType::Application,
         None,
-        None,
-    ));
-    let key = enable_ecdsa_signing_on_subnet(&nns_node, &nns_canister, subnet_id, &logger);
-    run_ecdsa_signature_test(&nns_canister, &logger, key);
-
-    let original_branch_version = get_assigned_replica_version(&nns_node).unwrap();
-    // We have to upgrade to `<VERSION>-test` because the original version is stored without the
-    // download URL in the registry.
-    let branch_version = format!("{}-test", original_branch_version);
-
-    // Check that the two versions do not initially match, which could hide failures.
-    assert!(mainnet_version != original_branch_version);
-
-    // Bless both replica versions
-    block_on(bless_public_replica_version(
+    );
+    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt").unwrap();
+    upgrade(
+        &env,
         &nns_node,
         &mainnet_version,
-        UpdateImageType::Image,
-        UpdateImageType::Image,
-        &logger,
+        SubnetType::Application,
+        None,
+    );
+    // Make sure we can still read the message stored before the first upgrade
+    assert!(can_read_msg_with_retries(
+        &env.logger(),
+        &faulty_node.get_public_url(),
+        can_id,
+        &msg,
+        /*retries=*/ 3
     ));
+}
 
-    let sha256 = env.get_ic_os_update_img_test_sha256().unwrap();
-    let upgrade_url = env.get_ic_os_update_img_test_url().unwrap();
-    block_on(bless_replica_version(
+// Tests a downgrade of the app subnet to the mainnet version
+pub fn downgrade_app_subnet(env: TestEnv) {
+    let nns_node = env.get_first_healthy_system_node_snapshot();
+    let mainnet_version = bless_mainnet_version(&env, &nns_node);
+    let agent = nns_node.with_default_agent(|agent| async move { agent });
+    let ecdsa_state = get_chain_key_canister_and_public_key(
+        &env,
         &nns_node,
+        &agent,
+        SubnetType::Application,
+        make_key_ids_for_all_schemes(),
+    );
+
+    upgrade(
+        &env,
+        &nns_node,
+        &mainnet_version,
+        SubnetType::Application,
+        Some(&ecdsa_state),
+    );
+}
+
+// Tests an upgrade of the app subnet to the branch version
+pub fn upgrade_app_subnet(env: TestEnv) {
+    let nns_node = env.get_first_healthy_system_node_snapshot();
+    let branch_version = bless_branch_version(&env, &nns_node);
+    let agent = nns_node.with_default_agent(|agent| async move { agent });
+    let ecdsa_state = get_chain_key_canister_and_public_key(
+        &env,
+        &nns_node,
+        &agent,
+        SubnetType::Application,
+        make_key_ids_for_all_schemes(),
+    );
+
+    upgrade(
+        &env,
+        &nns_node,
+        &branch_version,
+        SubnetType::Application,
+        Some(&ecdsa_state),
+    );
+}
+
+async fn start_workload(subnet: SubnetSnapshot, requests: Vec<ChainSignatureRequest>, log: Logger) {
+    let agents = join_all(
+        subnet
+            .nodes()
+            .map(|n| async move { n.build_canister_agent().await }),
+    )
+    .await;
+
+    let generator = move |idx: usize| {
+        let request = requests[idx % requests.len()].clone();
+        let agent = agents[idx % agents.len()].clone();
+        async move {
+            let request_outcome = canister_requests![
+                idx,
+                1 * agent => request,
+            ];
+            request_outcome.into_test_outcome()
+        }
+    };
+
+    Engine::new(log.clone(), generator, 4.0, UP_DOWNGRADE_OVERALL_TIMEOUT)
+        .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT)
+        .execute_simply(log.clone())
+        .await;
+}
+
+fn bless_branch_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
+    let logger = env.logger();
+
+    let original_branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
+        .expect("tip-of-branch IC version");
+    let branch_version = format!("{}-test", original_branch_version);
+
+    // Bless branch version
+    let sha256 = get_ic_os_update_img_test_sha256().unwrap();
+    let upgrade_url = get_ic_os_update_img_test_url().unwrap();
+    block_on(bless_replica_version(
+        nns_node,
         &original_branch_version,
         UpdateImageType::ImageTest,
         &logger,
         &sha256,
         vec![upgrade_url.to_string()],
     ));
-    info!(&logger, "Blessed all versions");
-
-    downgrade_upgrade_roundtrip(
-        env,
-        &nns_node,
-        &mainnet_version,
-        &branch_version,
-        subnet_type,
-        &nns_canister,
-        key,
-    );
+    info!(&logger, "Blessed branch version");
+    branch_version
 }
 
-// Downgrades and upgrades a subnet with one faulty node.
-fn downgrade_upgrade_roundtrip(
-    env: TestEnv,
+fn bless_mainnet_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
+    let logger = env.logger();
+
+    let mainnet_version =
+        read_dependency_to_string("testnet/mainnet_nns_revision.txt").expect("mainnet IC version");
+
+    // Bless mainnet version
+    let sha256 = env.get_mainnet_ic_os_update_img_sha256().unwrap();
+    let upgrade_url = get_mainnet_ic_os_update_img_url().unwrap();
+    block_on(bless_replica_version(
+        nns_node,
+        &mainnet_version,
+        UpdateImageType::Image,
+        &logger,
+        &sha256,
+        vec![upgrade_url.to_string()],
+    ));
+    info!(&logger, "Blessed mainnet version");
+    mainnet_version
+}
+
+// Enable ECDSA signing on the first subnet of the given type, and
+// return a canister on that subnet together with its tECDSA public key
+fn get_chain_key_canister_and_public_key<'a>(
+    env: &TestEnv,
     nns_node: &IcNodeSnapshot,
-    target_version: &str,
-    branch_version: &str,
+    agent: &'a Agent,
     subnet_type: SubnetType,
-    nns_canister: &MessageCanister,
-    key: VerifyingKey,
-) {
+    key_ids: Vec<MasterPublicKeyId>,
+) -> (MessageCanister<'a>, BTreeMap<MasterPublicKeyId, Vec<u8>>) {
+    let logger = env.logger();
+    let nns_canister = block_on(MessageCanister::new(
+        agent,
+        nns_node.effective_canister_id(),
+    ));
+    let subnet_id = env
+        .topology_snapshot()
+        .subnets()
+        .find(|s| s.subnet_type() == subnet_type)
+        .unwrap()
+        .subnet_id;
+    info!(logger, "Enabling ECDSA signing on {subnet_id}.");
+    let public_keys =
+        enable_chain_key_signing_on_subnet(nns_node, &nns_canister, subnet_id, key_ids, &logger);
+
+    for (key_id, public_key) in &public_keys {
+        run_chain_key_signature_test(&nns_canister, &logger, key_id, public_key.clone());
+    }
+
+    (nns_canister, public_keys)
+}
+
+// Upgrades a subnet with one faulty node.
+// Return the faulty node and the message (canister) stored before the upgrade.
+fn upgrade(
+    env: &TestEnv,
+    nns_node: &IcNodeSnapshot,
+    upgrade_version: &str,
+    subnet_type: SubnetType,
+    ecdsa_canister_key: Option<&(MessageCanister, BTreeMap<MasterPublicKeyId, Vec<u8>>)>,
+) -> (IcNodeSnapshot, Principal, String) {
     let logger = env.logger();
     let (subnet_id, subnet_node, faulty_node, redundant_nodes) =
         if subnet_type == SubnetType::System {
@@ -202,18 +358,16 @@ fn downgrade_upgrade_roundtrip(
             }
             (subnet.subnet_id, subnet_node, faulty_node, redundant_nodes)
         };
-    info!(
-        logger,
-        "downgrade_upgrade_roundtrip: subnet_node = {:?}", subnet_node.node_id
-    );
+    info!(logger, "upgrade: subnet_node = {:?}", subnet_node.node_id);
     subnet_node.await_status_is_healthy().unwrap();
     faulty_node.await_status_is_healthy().unwrap();
 
-    let msg = "hello world!";
+    let msg = &format!("hello before upgrade to {upgrade_version}");
     let can_id = store_message(
         &subnet_node.get_public_url(),
         subnet_node.effective_canister_id(),
         msg,
+        &logger,
     );
     assert!(can_read_msg(
         &logger,
@@ -225,14 +379,25 @@ fn downgrade_upgrade_roundtrip(
 
     stop_node(&logger, &faulty_node);
 
-    upgrade_to(nns_node, subnet_id, &subnet_node, target_version, &logger);
+    info!(logger, "Upgrade to version {}", upgrade_version);
+    upgrade_to(nns_node, subnet_id, &subnet_node, upgrade_version, &logger);
 
-    // Killing redundant nodes should not prevent the `faulty_node` downgrading to mainnet version and catching up after restarting.
+    // Killing redundant nodes should not prevent the `faulty_node` from upgrading
+    // and catching up after restarting.
     for redundant_node in &redundant_nodes {
         stop_node(&logger, redundant_node);
     }
     start_node(&logger, &faulty_node);
-    assert_assigned_replica_version(&faulty_node, target_version, env.logger());
+    assert_assigned_replica_version(&faulty_node, upgrade_version, env.logger());
+
+    // make sure that state sync is completed
+    cert_state_makes_progress_with_retries(
+        &faulty_node.get_public_url(),
+        faulty_node.effective_canister_id(),
+        &logger,
+        secs(600),
+        secs(10),
+    );
 
     assert!(can_read_msg(
         &logger,
@@ -242,11 +407,12 @@ fn downgrade_upgrade_roundtrip(
     ));
     info!(logger, "After upgrade could read message '{}'", msg);
 
-    let msg_2 = "hello world after downgrade!";
+    let msg_2 = &format!("hello after upgrade to {upgrade_version}");
     let can_id_2 = store_message(
         &faulty_node.get_public_url(),
         faulty_node.effective_canister_id(),
         msg_2,
+        &logger,
     );
     assert!(can_read_msg(
         &logger,
@@ -255,41 +421,19 @@ fn downgrade_upgrade_roundtrip(
         msg_2
     ));
     info!(logger, "Could store and read message '{}'", msg_2);
-    run_ecdsa_signature_test(nns_canister, &logger, key);
 
-    // Start redundant nodes for upgrading to the branch version.
+    if let Some((canister, public_keys)) = ecdsa_canister_key {
+        for (key_id, public_key) in public_keys {
+            run_chain_key_signature_test(canister, &logger, key_id, public_key.clone());
+        }
+    }
+
+    // Start redundant nodes.
     for redundant_node in &redundant_nodes {
         start_node(&logger, redundant_node);
     }
 
-    stop_node(&logger, &faulty_node);
-    upgrade_to(nns_node, subnet_id, &subnet_node, branch_version, &logger);
-
-    let msg_3 = "hello world after upgrade!";
-    let can_id_3 = store_message(
-        &subnet_node.get_public_url(),
-        subnet_node.effective_canister_id(),
-        msg_3,
-    );
-
-    for redundant_node in &redundant_nodes {
-        stop_node(&logger, redundant_node);
-    }
-    start_node(&logger, &faulty_node);
-    assert_assigned_replica_version(&faulty_node, branch_version, env.logger());
-
-    for (can_id, msg) in &[(can_id, msg), (can_id_2, msg_2), (can_id_3, msg_3)] {
-        assert!(can_read_msg_with_retries(
-            &logger,
-            &faulty_node.get_public_url(),
-            *can_id,
-            msg,
-            /*retries=*/ 3
-        ));
-    }
-
-    info!(logger, "Could read all previously stored messages!");
-    run_ecdsa_signature_test(nns_canister, &logger, key);
+    (faulty_node.clone(), can_id, msg.into())
 }
 
 fn upgrade_to(
@@ -303,7 +447,7 @@ fn upgrade_to(
         logger,
         "Upgrading subnet {} to {}", subnet_id, target_version
     );
-    block_on(update_subnet_replica_version(
+    block_on(deploy_guestos_to_all_subnet_nodes(
         nns_node,
         &ic_types::ReplicaVersion::try_from(target_version).unwrap(),
         subnet_id,

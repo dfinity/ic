@@ -4,6 +4,7 @@ load("//bazel:defs.bzl", "rust_bench")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig",
     "//rs/crypto/utils/threshold_sig_der",
@@ -15,18 +16,21 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/canonical_state",
     "//rs/certification/test-utils",
     "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/test_utils/reproducible_rng",
     "//rs/types/base_types",
     "@crate_index//:assert_matches",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
 ]
 
 rust_library(
     name = "certification",
     srcs = glob(["src/**"]),
     crate_name = "ic_certification",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -41,7 +45,7 @@ rust_bench(
     srcs = ["benches/certification.rs"],
     crate_root = "benches/certification.rs",
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
-        "@crate_index//:criterion",
         ":certification",
+        "@crate_index//:criterion",
     ],
 )

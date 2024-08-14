@@ -1,52 +1,43 @@
 //! Module that deals with requests to /_/catch_up_package
 
-use crate::{
-    body::BodyReceiverLayer, common, types::ApiReqType, EndpointService, HttpHandlerMetrics,
-    LABEL_UNKNOWN,
-};
-use http::Request;
-use hyper::{Body, Response, StatusCode};
-use ic_config::http_handler::Config;
+use crate::common;
+use crate::verify_cbor_content_header;
+
+use axum::body::Body;
+use axum::extract::State;
+use axum::response::IntoResponse;
+use axum::Router;
+use bytes::Bytes;
+use http_body_util::{BodyExt, Full};
+use hyper::{Response, StatusCode};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_types::consensus::catchup::CatchUpPackageParam;
 use ic_types::consensus::CatchUpPackage;
 use prost::Message;
-use std::convert::Infallible;
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
-use tower::{
-    limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder,
-};
+use tower::{BoxError, ServiceBuilder};
 
 #[derive(Clone)]
 pub(crate) struct CatchUpPackageService {
-    metrics: HttpHandlerMetrics,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
 }
 
 impl CatchUpPackageService {
-    pub(crate) fn new_service(
-        config: Config,
-        metrics: HttpHandlerMetrics,
-        consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-    ) -> EndpointService {
-        let base_service = BoxCloneService::new(
-            ServiceBuilder::new()
-                .layer(GlobalConcurrencyLimitLayer::new(
-                    config.max_catch_up_package_concurrent_requests,
-                ))
-                .service(Self {
-                    metrics,
-                    consensus_pool_cache,
-                }),
-        );
+    pub(crate) fn route() -> &'static str {
+        "/_/catch_up_package"
+    }
+}
 
-        BoxCloneService::new(
-            ServiceBuilder::new()
-                .layer(BodyReceiverLayer::new(&config))
-                .service(base_service),
+impl CatchUpPackageService {
+    pub(crate) fn new_router(consensus_pool_cache: Arc<dyn ConsensusPoolCache>) -> Router {
+        let state = Self {
+            consensus_pool_cache,
+        };
+        Router::new().route_service(
+            Self::route(),
+            axum::routing::post(cup).with_state(state).layer(
+                ServiceBuilder::new().layer(axum::middleware::from_fn(verify_cbor_content_header)),
+            ),
         )
     }
 }
@@ -58,9 +49,8 @@ fn protobuf_response<R: Message>(r: &R) -> Response<Body> {
     let mut buf = Vec::<u8>::new();
     r.encode(&mut buf)
         .expect("impossible: Serialization failed");
-    let mut response = Response::new(Body::from(buf));
+    let mut response = Response::new(Body::new(Full::from(buf).map_err(BoxError::from)));
     *response.status_mut() = StatusCode::OK;
-    *response.headers_mut() = common::get_cors_headers();
     response.headers_mut().insert(
         header::CONTENT_TYPE,
         header::HeaderValue::from_static(common::CONTENT_TYPE_PROTOBUF),
@@ -68,43 +58,78 @@ fn protobuf_response<R: Message>(r: &R) -> Response<Body> {
     response
 }
 
-impl Service<Request<Vec<u8>>> for CatchUpPackageService {
-    type Response = Response<Body>;
-    type Error = Infallible;
-    #[allow(clippy::type_complexity)]
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
-        self.metrics
-            .request_body_size_bytes
-            .with_label_values(&[ApiReqType::CatchUpPackage.into(), LABEL_UNKNOWN])
-            .observe(request.body().len() as f64);
-
-        let body = request.into_body();
-        let cup_proto = self.consensus_pool_cache.cup_as_protobuf();
-        let res = if body.is_empty() {
-            Ok(protobuf_response(&cup_proto))
-        } else {
-            match serde_cbor::from_slice::<CatchUpPackageParam>(&body) {
-                Ok(param) => {
-                    let cup: CatchUpPackage =
-                        (&cup_proto).try_into().expect("deserializing CUP failed");
-                    if CatchUpPackageParam::from(&cup) > param {
-                        Ok(protobuf_response(&cup_proto))
-                    } else {
-                        Ok(common::empty_response())
-                    }
+async fn cup(
+    State(CatchUpPackageService {
+        consensus_pool_cache,
+    }): State<CatchUpPackageService>,
+    body: Bytes,
+) -> impl IntoResponse {
+    let cup_proto = consensus_pool_cache.cup_as_protobuf();
+    if body.is_empty() {
+        protobuf_response(&cup_proto)
+    } else {
+        match serde_cbor::from_slice::<CatchUpPackageParam>(&body) {
+            Ok(param) => {
+                let cup: CatchUpPackage =
+                    (&cup_proto).try_into().expect("deserializing CUP failed");
+                if CatchUpPackageParam::from(&cup) > param {
+                    protobuf_response(&cup_proto)
+                } else {
+                    StatusCode::NO_CONTENT.into_response()
                 }
-                Err(e) => Ok(common::make_plaintext_response(
-                    StatusCode::BAD_REQUEST,
-                    format!("Could not parse body as CatchUpPackage param: {}", e),
-                )),
             }
-        };
-        Box::pin(async move { res })
+            Err(e) => {
+                let code = StatusCode::BAD_REQUEST;
+                let text = format!("Could not parse body as CatchUpPackage param: {}", e);
+                (code, text).into_response()
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use http::{header::CONTENT_TYPE, Method, Request};
+    use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
+    use tower::ServiceExt;
+
+    use crate::{common::CONTENT_TYPE_PROTOBUF, CONTENT_TYPE_CBOR};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn return_cup_empty_request() {
+        use ic_protobuf::types::v1 as pb;
+        let mut mock_cache = MockConsensusPoolCache::default();
+        mock_cache
+            .expect_cup_as_protobuf()
+            .returning(|| pb::CatchUpPackage {
+                ..Default::default()
+            });
+
+        let cup_router = CatchUpPackageService::new_router(Arc::new(mock_cache));
+
+        let resp = cup_router
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(CatchUpPackageService::route())
+                    .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
+                    .body(Full::new(Bytes::new()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let (parts, body) = resp.into_parts();
+        let resceived_cup =
+            pb::CatchUpPackage::decode(axum::body::to_bytes(body, usize::MAX).await.unwrap())
+                .unwrap();
+
+        assert_eq!(parts.status, StatusCode::OK);
+        assert_eq!(
+            parts.headers.get(CONTENT_TYPE).unwrap(),
+            CONTENT_TYPE_PROTOBUF
+        );
+        assert_eq!(resceived_cup, pb::CatchUpPackage::default());
     }
 }

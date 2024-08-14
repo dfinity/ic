@@ -4,8 +4,14 @@
 // but it doesn't seem like making this always available creates much risk. A
 // the same time, trying to hide this behind "test" would create more hurdles.
 use super::*;
+use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1 as pb;
+use ic_neurons_fund::{
+    NeuronsFundParticipationLimits, PolynomialMatchingFunction, SerializableFunction,
+};
+use ic_sns_swap::pb::v1::{IdealMatchedParticipationFunction, LinearScalingCoefficient};
 use lazy_static::lazy_static;
+use rust_decimal_macros::dec;
 
 // Alias types from crate::pb::v1::...
 //
@@ -19,7 +25,7 @@ mod src {
             TreasuryDistribution,
         },
         swap_parameters::NeuronBasketConstructionParameters,
-        GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
+        GovernanceParameters, InitialTokenDistribution, SwapParameters,
     };
 } // end mod src
 
@@ -41,12 +47,12 @@ lazy_static! {
                 developer_neurons: vec![src::NeuronDistribution {
                     controller: Some(PrincipalId::new_user_test_id(830947)),
                     dissolve_delay: Some(pb::Duration {
-                        seconds: Some(691793),
+                        seconds: Some(ONE_MONTH_SECONDS * 6),
                     }),
                     memo: Some(763535),
                     stake: Some(pb::Tokens { e8s: Some(756575) }),
                     vesting_period: Some(pb::Duration {
-                        seconds: Some(785490),
+                        seconds: Some(0),
                     }),
                 }],
             }),
@@ -59,7 +65,7 @@ lazy_static! {
                 }),
             }),
         }),
-        ledger_parameters: Some(src::LedgerParameters {
+        ledger_parameters: Some(LedgerParameters {
             transaction_fee: Some(pb::Tokens { e8s: Some(11143) }),
             token_name: Some("Most valuable SNS of all time.".to_string()),
             token_symbol: Some("Kanye".to_string()),
@@ -86,7 +92,7 @@ lazy_static! {
                 seconds: Some(482538),
             }),
             neuron_maximum_dissolve_delay: Some(pb::Duration {
-                seconds: Some(927391),
+                seconds: Some(ONE_MONTH_SECONDS * 12),
             }),
             neuron_maximum_dissolve_delay_bonus: Some(pb::Percentage {
                 basis_points: Some(18_00),
@@ -122,11 +128,11 @@ lazy_static! {
             }),
 
             minimum_participants: Some(50),
-            minimum_icp: Some(pb::Tokens {
-                e8s: Some(12_300_000_000),
+            minimum_direct_participation_icp: Some(pb::Tokens {
+                e8s: Some(12_300_000_000-6_100_000_000), // Subtract neurons_fund_investment_icp
             }),
-            maximum_icp: Some(pb::Tokens {
-                e8s: Some(25_000_000_000),
+            maximum_direct_participation_icp: Some(pb::Tokens {
+                e8s: Some(25_000_000_000-6_100_000_000), // Subtract neurons_fund_investment_icp
             }),
             minimum_participant_icp: Some(pb::Tokens {
                 e8s:  Some(100_000_000)
@@ -140,16 +146,81 @@ lazy_static! {
                     seconds: Some(10_001),
                 })
             }),
-            start_time: Some(pb::GlobalTimeOfDay {
+            start_time: Some(GlobalTimeOfDay {
                seconds_after_utc_midnight: Some(0),
             }),
             duration: Some(pb::Duration {
                 seconds: Some(604_800),
             }),
 
-            neurons_fund_investment: Some(pb::Tokens {
+            neurons_fund_investment_icp: Some(pb::Tokens {
                 e8s: Some(6_100_000_000),
             }),
+            neurons_fund_participation: Some(false),
+
+            // Deprecated fields must not be set.
+            minimum_icp: None,
+            maximum_icp: None,
         })
+    };
+
+    pub static ref CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING: CreateServiceNervousSystem = {
+        let swap_parameters = CREATE_SERVICE_NERVOUS_SYSTEM
+            .swap_parameters
+            .clone()
+            .unwrap();
+        CreateServiceNervousSystem {
+            swap_parameters: Some(src::SwapParameters {
+                minimum_direct_participation_icp: Some(pb::Tokens {
+                    e8s: Some(36_000 * E8),
+                }),
+                maximum_direct_participation_icp: Some(pb::Tokens {
+                    e8s: Some(90_000 * E8),
+                }),
+                minimum_participant_icp: Some(pb::Tokens {
+                    e8s: Some(50 * E8),
+                }),
+                maximum_participant_icp: Some(pb::Tokens {
+                    e8s: Some(1_000 * E8),
+                }),
+                neurons_fund_participation: Some(true),
+
+                // Unset legacy fields
+                minimum_icp: None,
+                maximum_icp: None,
+                neurons_fund_investment_icp: None,
+                ..swap_parameters
+            }),
+            ..CREATE_SERVICE_NERVOUS_SYSTEM.clone()
+        }
+    };
+
+    pub static ref NEURONS_FUND_PARTICIPATION_CONSTRAINTS: NeuronsFundParticipationConstraints = NeuronsFundParticipationConstraints {
+        min_direct_participation_threshold_icp_e8s: Some(
+            36_000 * E8,
+        ),
+        max_neurons_fund_participation_icp_e8s: Some(
+            45_000 * E8,
+        ),
+        coefficient_intervals: vec![LinearScalingCoefficient {
+            from_direct_participation_icp_e8s: Some(0),
+            to_direct_participation_icp_e8s: Some(u64::MAX),
+            slope_numerator: Some(1),
+            slope_denominator: Some(1),
+            intercept_icp_e8s: Some(0),
+        }],
+        ideal_matched_participation_function: Some(IdealMatchedParticipationFunction {
+            serialized_representation: Some(
+                PolynomialMatchingFunction::new(
+                    u64::MAX,
+                    NeuronsFundParticipationLimits {
+                        max_theoretical_neurons_fund_participation_amount_icp: dec!(333_000.0),
+                        contribution_threshold_icp: dec!(33_000.0),
+                        one_third_participation_milestone_icp: dec!(100_000.0),
+                        full_participation_milestone_icp: dec!(167_000.0),
+                    },
+                ).unwrap().serialize(),
+            ),
+        }),
     };
 }

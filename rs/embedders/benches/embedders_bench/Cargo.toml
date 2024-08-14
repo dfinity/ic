@@ -1,12 +1,14 @@
 [package]
 name = "embedders_bench"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }
-criterion = { version = "0.3", features = ["html_reports"] }
-ic-test-utilities = { path = "../../../test_utilities" }
+criterion = { workspace = true }
 ic-test-utilities-execution-environment = { path = "../../../test_utilities/execution_environment" }
 ic-types = { path = "../../../types/types" }

@@ -1,6 +1,6 @@
 //! Threshold signature implementation for the CSP
 use crate::api::{CspThresholdSignError, ThresholdSignatureCspClient};
-use crate::key_id::KeyId;
+use crate::key_id::{KeyId, KeyIdInstantiationError};
 use crate::types::{CspPublicCoefficients, CspSignature, ThresBls12_381_Signature};
 use crate::Csp;
 use ic_crypto_internal_threshold_sig_bls12381 as clib;
@@ -23,15 +23,22 @@ impl ThresholdSignatureCspClient for Csp {
     fn threshold_sign(
         &self,
         algorithm_id: AlgorithmId,
-        message: &[u8],
+        message: Vec<u8>,
         public_coefficients: CspPublicCoefficients,
     ) -> Result<CspSignature, CspThresholdSignError> {
-        let key_id = KeyId::from(&public_coefficients);
+        let key_id =
+            KeyId::try_from(&public_coefficients).map_err(|key_id_instantiation_error| {
+                match key_id_instantiation_error {
+                    KeyIdInstantiationError::InvalidArguments(internal_error) => {
+                        CspThresholdSignError::KeyIdInstantiationError(internal_error)
+                    }
+                }
+            })?;
         let message_len = message.len();
         let result = self.csp_vault.threshold_sign(algorithm_id, message, key_id);
         self.metrics.observe_parameter_size(
-            MetricsDomain::MultiSignature,
-            "sign_multi",
+            MetricsDomain::ThresholdSignature,
+            "threshold_sign",
             "message",
             message_len,
             MetricsResult::from(&result),

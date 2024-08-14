@@ -1,4 +1,5 @@
 use crate::pb::v1::Ticket;
+use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
@@ -28,7 +29,7 @@ thread_local! {
     /// The `BUYERS_LIST_INDEX` gives an ordered list index of the Swap::buyers map. This is used to
     /// determine which Principals participated in what order, and allows for limit + offset
     /// pagination.
-    pub static BUYERS_LIST_INDEX: RefCell<StableVec<PrincipalId, VirtualMemory<DefaultMemoryImpl>>> =
+    pub static BUYERS_LIST_INDEX: RefCell<StableVec<Principal, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager|
             RefCell::new(
                 StableVec::init(

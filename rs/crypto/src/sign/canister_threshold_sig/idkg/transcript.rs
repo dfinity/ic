@@ -2,13 +2,16 @@
 use crate::sign::basic_sig::BasicSigVerifierInternal;
 use crate::sign::canister_threshold_sig::idkg::complaint::verify_complaint;
 use crate::sign::canister_threshold_sig::idkg::utils::{
-    index_and_dealing_of_dealer, retrieve_mega_public_key_from_registry,
+    index_and_batch_signed_dealing_of_dealer, index_and_dealing_of_dealer,
+    key_id_from_mega_public_key_or_panic, retrieve_mega_public_key_from_registry,
 };
-use ic_crypto_internal_csp::api::CspIDkgProtocol;
-use ic_crypto_internal_csp::api::CspSigner;
+use ic_crypto_internal_csp::api::{CspSigVerifier, CspSigner};
+use ic_crypto_internal_csp::vault::api::{CspVault, IDkgTranscriptInternalBytes};
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptOperationInternal,
+    create_transcript as idkg_create_transcript,
+    verify_dealing_opening as idkg_verify_dealing_opening,
+    verify_transcript as idkg_verify_transcript, CommitmentOpening, IDkgComplaintInternal,
+    IDkgDealingInternal, IDkgTranscriptInternal, IDkgTranscriptOperationInternal,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_types::crypto::canister_threshold_sig::error::{
@@ -24,11 +27,12 @@ use ic_types::{NodeId, NodeIndex, NumberOfNodes, RegistryVersion};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
+use std::sync::Arc;
 
 #[cfg(test)]
 mod tests;
 
-pub fn create_transcript<C: CspIDkgProtocol + CspSigner>(
+pub fn create_transcript<C: CspSigner + CspSigVerifier>(
     csp_client: &C,
     registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
@@ -62,12 +66,15 @@ pub fn create_transcript<C: CspIDkgProtocol + CspSigner>(
             }
         })?;
 
-    let internal_transcript = csp_client.idkg_create_transcript(
+    let internal_transcript = idkg_create_transcript(
         params.algorithm_id(),
         params.reconstruction_threshold(),
         &internal_dealings,
         &internal_operation_type,
-    )?;
+    )
+    .map_err(|e| IDkgCreateTranscriptError::InternalError {
+        internal_error: format!("{:?}", e),
+    })?;
 
     let internal_transcript_raw = internal_transcript.serialize().map_err(|e| {
         IDkgCreateTranscriptError::SerializationError {
@@ -88,7 +95,7 @@ pub fn create_transcript<C: CspIDkgProtocol + CspSigner>(
     })
 }
 
-pub fn verify_transcript<C: CspIDkgProtocol + CspSigner>(
+pub fn verify_transcript<C: CspSigner + CspSigVerifier>(
     csp_client: &C,
     registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
@@ -131,22 +138,22 @@ pub fn verify_transcript<C: CspIDkgProtocol + CspSigner>(
     let internal_dealings = internal_dealings_from_verified_dealings(&transcript.verified_dealings)
         .map_err(|e| IDkgVerifyTranscriptError::SerializationError(e.serde_error))?;
 
-    csp_client.idkg_verify_transcript(
+    Ok(idkg_verify_transcript(
         &internal_transcript,
         transcript.algorithm_id,
         params.reconstruction_threshold(),
         &internal_dealings,
         &internal_transcript_operation,
-    )
+    )?)
 }
 
-pub fn load_transcript<C: CspIDkgProtocol>(
-    csp_client: &C,
+pub fn load_transcript(
+    vault: &Arc<dyn CspVault>,
     self_node_id: &NodeId,
     registry: &dyn RegistryClient,
     transcript: &IDkgTranscript,
 ) -> Result<Vec<IDkgComplaint>, IDkgLoadTranscriptError> {
-    let self_index = match transcript.receivers.position(*self_node_id) {
+    let self_index = match transcript.index_for_signer_id(*self_node_id) {
         Some(index) => index,
         None => {
             return Ok(vec![]); // This is not a receiver: nothing to do.
@@ -159,35 +166,27 @@ pub fn load_transcript<C: CspIDkgProtocol>(
         transcript.registry_version,
     )?;
 
-    let internal_dealings = internal_dealings_from_verified_dealings(&transcript.verified_dealings)
-        .map_err(|e| IDkgLoadTranscriptError::SerializationError {
-            internal_error: e.serde_error,
-        })?;
-    let internal_transcript = IDkgTranscriptInternal::try_from(transcript).map_err(|e| {
-        IDkgLoadTranscriptError::SerializationError {
-            internal_error: format!("{:?}", e),
-        }
-    })?;
-    let internal_complaints = csp_client.idkg_load_transcript(
-        &internal_dealings,
-        &transcript.context_data(),
+    let internal_complaints = vault.idkg_load_transcript(
+        transcript.algorithm_id,
+        transcript.verified_dealings.clone(),
+        transcript.context_data(),
         self_index,
-        &self_mega_pubkey,
-        &internal_transcript,
+        key_id_from_mega_public_key_or_panic(&self_mega_pubkey),
+        IDkgTranscriptInternalBytes::from(transcript.transcript_to_bytes()),
     )?;
     let complaints = complaints_from_internal_complaints(&internal_complaints, transcript)?;
 
     Ok(complaints)
 }
 
-pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
-    csp_client: &C,
+pub fn load_transcript_with_openings(
+    vault: &Arc<dyn CspVault>,
     self_node_id: &NodeId,
     registry: &dyn RegistryClient,
     transcript: &IDkgTranscript,
     openings: &BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
 ) -> Result<(), IDkgLoadTranscriptError> {
-    let self_index = match transcript.receivers.position(*self_node_id) {
+    let self_index = match transcript.index_for_signer_id(*self_node_id) {
         Some(index) => index,
         None => {
             return Ok(()); // This is not a receiver: nothing to do.
@@ -202,21 +201,11 @@ pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
         transcript.registry_version,
     )?;
 
-    let internal_dealings = internal_dealings_from_verified_dealings(&transcript.verified_dealings)
-        .map_err(|e| IDkgLoadTranscriptError::SerializationError {
-            internal_error: e.serde_error,
-        })?;
-    let internal_transcript = IDkgTranscriptInternal::try_from(transcript).map_err(|e| {
-        IDkgLoadTranscriptError::SerializationError {
-            internal_error: format!("{:?}", e),
-        }
-    })?;
-
     let mut internal_openings = BTreeMap::new();
     for (complaint, openings_by_opener_id) in openings {
         let mut internal_openings_by_opener_index = BTreeMap::new();
         for (opener_id, opening) in openings_by_opener_id {
-            let opener_index = transcript.receivers.position(*opener_id).ok_or_else(|| {
+            let opener_index = transcript.index_for_signer_id(*opener_id).ok_or_else(|| {
                 IDkgLoadTranscriptError::InvalidArguments {
                     internal_error: format!(
                         "invalid opener: node with ID {:?} is not a receiver",
@@ -242,18 +231,19 @@ pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
         internal_openings.insert(dealer_index, internal_openings_by_opener_index);
     }
 
-    csp_client.idkg_load_transcript_with_openings(
-        &internal_dealings,
-        &internal_openings,
-        &transcript.context_data(),
+    vault.idkg_load_transcript_with_openings(
+        transcript.algorithm_id,
+        transcript.verified_dealings.clone(),
+        internal_openings,
+        transcript.context_data(),
         self_index,
-        &self_mega_pubkey,
-        &internal_transcript,
+        key_id_from_mega_public_key_or_panic(&self_mega_pubkey),
+        IDkgTranscriptInternalBytes::from(transcript.transcript_to_bytes()),
     )
 }
 
-pub fn open_transcript<C: CspIDkgProtocol>(
-    csp_idkg_client: &C,
+pub fn open_transcript(
+    vault: &Arc<dyn CspVault>,
     self_node_id: &NodeId,
     registry: &dyn RegistryClient,
     transcript: &IDkgTranscript,
@@ -261,15 +251,10 @@ pub fn open_transcript<C: CspIDkgProtocol>(
     complaint: &IDkgComplaint,
 ) -> Result<IDkgOpening, IDkgOpenTranscriptError> {
     // Verifies the complaint
-    verify_complaint(
-        csp_idkg_client,
-        registry,
-        transcript,
-        complaint,
-        complainer_id,
-    )
-    .map_err(|e| IDkgOpenTranscriptError::InternalError {
-        internal_error: format!("Complaint verification failed: {:?}", e),
+    verify_complaint(registry, transcript, complaint, complainer_id).map_err(|e| {
+        IDkgOpenTranscriptError::InternalError {
+            internal_error: format!("Complaint verification failed: {:?}", e),
+        }
     })?;
 
     // Get the MEGa-encryption public key.
@@ -280,10 +265,10 @@ pub fn open_transcript<C: CspIDkgProtocol>(
     )?;
 
     // Extract the accused dealing from the transcript.
-    let (dealer_index, internal_dealing) =
-        index_and_dealing_of_dealer(complaint.dealer_id, transcript)?;
+    let (dealer_index, signed_dealing) =
+        index_and_batch_signed_dealing_of_dealer(complaint.dealer_id, transcript)?;
     let context_data = transcript.context_data();
-    let opener_index = match transcript.receivers.position(*self_node_id) {
+    let opener_index = match transcript.index_for_signer_id(*self_node_id) {
         None => {
             return Err(IDkgOpenTranscriptError::InternalError {
                 internal_error: "This node is not a receiver of the given transcript".to_string(),
@@ -292,12 +277,13 @@ pub fn open_transcript<C: CspIDkgProtocol>(
         Some(index) => index,
     };
 
-    let internal_opening = csp_idkg_client.idkg_open_dealing(
-        internal_dealing,
+    let internal_opening = vault.idkg_open_dealing(
+        transcript.algorithm_id,
+        signed_dealing.clone(),
         dealer_index,
-        &context_data,
+        context_data,
         opener_index,
-        &opener_public_key,
+        key_id_from_mega_public_key_or_panic(&opener_public_key),
     )?;
     let internal_opening_raw =
         internal_opening
@@ -313,8 +299,7 @@ pub fn open_transcript<C: CspIDkgProtocol>(
     })
 }
 
-pub fn verify_opening<C: CspIDkgProtocol>(
-    csp_idkg_client: &C,
+pub fn verify_opening(
     transcript: &IDkgTranscript,
     opener_id: NodeId,
     opening: &IDkgOpening,
@@ -334,8 +319,7 @@ pub fn verify_opening<C: CspIDkgProtocol>(
     // Extract the accused dealing from the transcript
     let (_, internal_dealing) = index_and_dealing_of_dealer(complaint.dealer_id, transcript)?;
     let opener_index = transcript
-        .receivers
-        .position(opener_id)
+        .index_for_signer_id(opener_id)
         .ok_or(IDkgVerifyOpeningError::MissingOpenerInReceivers { opener_id })?;
     let internal_opening = CommitmentOpening::try_from(opening).map_err(|e| {
         IDkgVerifyOpeningError::InternalError {
@@ -343,7 +327,11 @@ pub fn verify_opening<C: CspIDkgProtocol>(
         }
     })?;
 
-    csp_idkg_client.idkg_verify_dealing_opening(internal_dealing, opener_index, internal_opening)
+    idkg_verify_dealing_opening(&internal_dealing, opener_index, &internal_opening).map_err(|e| {
+        IDkgVerifyOpeningError::InternalError {
+            internal_error: format!("{:?}", e),
+        }
+    })
 }
 
 fn ensure_sufficient_dealings_collected(
@@ -365,7 +353,7 @@ fn ensure_dealers_allowed_by_params(
     dealings: &BatchSignedIDkgDealings,
 ) -> Result<(), IDkgCreateTranscriptError> {
     for id in dealings.dealer_ids() {
-        if !params.dealers().get().contains(id) {
+        if !params.dealers().contains(*id) {
             return Err(IDkgCreateTranscriptError::DealerNotAllowed { node_id: *id });
         }
     }
@@ -379,7 +367,7 @@ fn ensure_signers_allowed_by_params(
 ) -> Result<(), IDkgCreateTranscriptError> {
     for dealing in dealings {
         for signer in dealing.signers() {
-            if !params.receivers().get().contains(&signer) {
+            if !params.receivers().contains(signer) {
                 return Err(IDkgCreateTranscriptError::SignerNotAllowed { node_id: signer });
             }
         }
@@ -596,7 +584,7 @@ fn signature_batch_err_to_verify_transcript_err(
     }
 }
 
-fn verify_signature_batch<C: CspSigner>(
+fn verify_signature_batch<C: CspSigner + CspSigVerifier>(
     csp_client: &C,
     registry: &dyn RegistryClient,
     dealing: &BatchSignedIDkgDealing,
@@ -612,25 +600,39 @@ fn verify_signature_batch<C: CspSigner>(
             },
         );
     }
-    for (signer, signature) in dealing.signature.signatures_map.iter() {
-        BasicSigVerifierInternal::verify_basic_sig(
-            csp_client,
-            registry,
-            signature,
-            dealing.signed_idkg_dealing(),
-            *signer,
-            registry_version,
-        )
-        .map_err(
-            |crypto_error| VerifySignatureBatchError::InvalidSignatureBatch {
-                error: format!(
-                    "Invalid basic signature batch on dealing from dealer with id {}: {}",
-                    dealing.dealer_id(),
-                    crypto_error
-                ),
-                crypto_error,
-            },
-        )?;
+
+    if BasicSigVerifierInternal::verify_basic_sig_batch(
+        csp_client,
+        registry,
+        &dealing.signature,
+        dealing.signed_idkg_dealing(),
+        registry_version,
+    )
+    .is_err()
+    {
+        // fall back to single signature verification to find the node whose
+        // signature didn't verify
+        for (signer, signature) in dealing.signature.signatures_map.iter() {
+            BasicSigVerifierInternal::verify_basic_sig(
+                csp_client,
+                registry,
+                signature,
+                dealing.signed_idkg_dealing(),
+                *signer,
+                registry_version,
+            )
+            .map_err(|crypto_error| {
+                VerifySignatureBatchError::InvalidSignatureBatch {
+                    error: format!(
+                        "Invalid basic signature batch on dealing from dealer with id {}: {}",
+                        dealing.dealer_id(),
+                        crypto_error
+                    ),
+                    crypto_error,
+                }
+            })?;
+        }
     }
+
     Ok(())
 }

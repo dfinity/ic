@@ -333,13 +333,15 @@ mod try_from {
         }
     }
 
-    mod query {
+    pub(super) mod query {
         use super::super::to_blob;
         use super::*;
         use crate::messages::http::{
             Authentication, HttpQueryContent, HttpRequestError, HttpUserQuery,
         };
-        use crate::messages::{Blob, HttpRequest, HttpRequestEnvelope, UserQuery, UserSignature};
+        use crate::messages::{
+            Blob, HttpRequest, HttpRequestEnvelope, Query, QuerySource, UserSignature,
+        };
         use crate::UserId;
         use assert_matches::assert_matches;
 
@@ -354,14 +356,16 @@ mod try_from {
             }
         }
 
-        fn default_user_query_content() -> UserQuery {
-            UserQuery {
-                source: UserId::from(fixed::principal_id()),
+        pub fn default_user_query_content() -> Query {
+            Query {
+                source: QuerySource::User {
+                    user_id: UserId::from(fixed::principal_id()),
+                    ingress_expiry: fixed::ingress_expiry(),
+                    nonce: Some(fixed::nonce()),
+                },
                 receiver: fixed::canister_id(),
                 method_name: fixed::method_name(),
                 method_payload: fixed::arg().0,
-                ingress_expiry: fixed::ingress_expiry(),
-                nonce: Some(fixed::nonce()),
             }
         }
 
@@ -551,14 +555,68 @@ mod try_from {
     pub use fixed_test_values as fixed;
 }
 
-mod cbor_serialization {
-
-    use crate::messages::http::btreemap;
-    use crate::messages::{
-        Blob, Delegation, HttpQueryResponse, HttpQueryResponseReply, HttpStatusResponse,
-        ReplicaHealthStatus, SignedDelegation,
+mod hashing {
+    use super::try_from::query;
+    use crate::{
+        messages::{Blob, HttpQueryResponse, HttpQueryResponseReply, QueryResponseHash},
+        Time,
     };
-    use crate::{time::UNIX_EPOCH, AmountOf};
+    use hex_literal::hex;
+
+    #[test]
+    fn hashing_query_response_reply() {
+        let time = 2614;
+        let query_response = HttpQueryResponse::Replied {
+            reply: HttpQueryResponseReply {
+                arg: Blob(b"some_bytes".to_vec()),
+            },
+        };
+        let user_query = query::default_user_query_content();
+        let query_response_hash = QueryResponseHash::new(
+            &query_response,
+            &user_query,
+            Time::from_nanos_since_unix_epoch(time),
+        );
+        assert_eq!(
+            query_response_hash.as_bytes(),
+            &hex!("7e94e73d1647506682a6300385bc99a63d1ef655222e5a3235f784ca3e80dca4")
+        );
+    }
+
+    #[test]
+    fn hashing_query_response_reject() {
+        let time = 2614;
+        let query_response = HttpQueryResponse::Rejected {
+            reject_code: 1,
+            reject_message: "system error".to_string(),
+            error_code: "IC500".to_string(),
+        };
+        let user_query = query::default_user_query_content();
+        let query_response_hash = QueryResponseHash::new(
+            &query_response,
+            &user_query,
+            Time::from_nanos_since_unix_epoch(time),
+        );
+        assert_eq!(
+            query_response_hash.as_bytes(),
+            &hex!("bd80f930dfd3eafdf2d5c03031da9b5ec62963701abcb217d31c84005bd8db87")
+        );
+    }
+}
+
+mod cbor_serialization {
+    use crate::{
+        messages::{
+            http::{btreemap, HttpSignedQueryResponse, NodeSignature},
+            Blob, Delegation, HttpQueryResponse, HttpQueryResponseReply, HttpStatusResponse,
+            ReplicaHealthStatus, SignedDelegation,
+        },
+        time::UNIX_EPOCH,
+        AmountOf, Time,
+    };
+
+    use candid::Principal;
+    use ic_base_types::{NodeId, PrincipalId};
     use pretty_assertions::assert_eq;
     use serde::Serialize;
     use serde_cbor::Value;
@@ -585,36 +643,85 @@ mod cbor_serialization {
         Value::Bytes(bs.to_vec())
     }
 
+    fn vec<const N: usize>(values: [Value; N]) -> Value {
+        Value::Array(Vec::from(values))
+    }
+
+    /// Returns a [`NodeId`] and its underlying byte array representation.
+    pub fn node_id_and_bytes_repr() -> (NodeId, [u8; 8]) {
+        let node_id_bytes: [u8; 8] = [15, 0, 0, 0, 0, 0, 0, 0];
+        let principal_id = PrincipalId(Principal::from_slice(&node_id_bytes));
+
+        let node_id = NodeId::from(principal_id);
+
+        (node_id, node_id_bytes)
+    }
+
     #[test]
     fn encoding_read_query_response() {
+        let (node_id, node_id_bytes) = node_id_and_bytes_repr();
+
+        let time = 2614;
         assert_cbor_ser_equal(
-            &HttpQueryResponse::Replied {
-                reply: HttpQueryResponseReply {
-                    arg: Blob(b"some_bytes".to_vec()),
+            &HttpSignedQueryResponse {
+                response: HttpQueryResponse::Replied {
+                    reply: HttpQueryResponseReply {
+                        arg: Blob(b"some_bytes".to_vec()),
+                    },
+                },
+                node_signature: NodeSignature {
+                    timestamp: Time::from_nanos_since_unix_epoch(time),
+                    signature: Blob(b"Some node signature bytes.".to_vec()),
+                    identity: node_id,
                 },
             },
             Value::Map(btreemap! {
                 text("status") => text("replied"),
                 text("reply") => Value::Map(btreemap!{
                     text("arg") => bytes(b"some_bytes")
-                })
+                }),
+                text("signatures") => vec([
+                    Value::Map(btreemap!{
+                        text("timestamp") => int(time),
+                        text("signature") => bytes(b"Some node signature bytes."),
+                        text("identity") => bytes(&node_id_bytes),
+                    })
+                ]),
             }),
         );
     }
 
     #[test]
     fn encoding_read_query_reject() {
+        let (node_id, node_id_bytes) = node_id_and_bytes_repr();
+
+        let time = 2614;
+
         assert_cbor_ser_equal(
-            &HttpQueryResponse::Rejected {
-                reject_code: 1,
-                reject_message: "system error".to_string(),
-                error_code: "IC500".to_string(),
+            &HttpSignedQueryResponse {
+                response: HttpQueryResponse::Rejected {
+                    reject_code: 1,
+                    reject_message: "system error".to_string(),
+                    error_code: "IC500".to_string(),
+                },
+                node_signature: NodeSignature {
+                    timestamp: Time::from_nanos_since_unix_epoch(time),
+                    signature: Blob(b"Some node signature bytes.".to_vec()),
+                    identity: node_id,
+                },
             },
             Value::Map(btreemap! {
                 text("status") => text("rejected"),
                 text("reject_code") => int(1),
                 text("reject_message") => text("system error"),
                 text("error_code") => text("IC500"),
+                text("signatures") => vec([
+                    Value::Map(btreemap!{
+                        text("timestamp") => int(time),
+                        text("signature") => bytes(b"Some node signature bytes."),
+                        text("identity") => bytes(&node_id_bytes),
+                    })
+                ]),
             }),
         );
     }
@@ -747,6 +854,135 @@ mod cbor_serialization {
                 text("signature") => bytes(&[4, 5, 6]),
             }),
         );
+    }
+}
+
+mod to_authentication {
+    use crate::messages::{
+        http::to_authentication, Authentication, Blob, Delegation, HttpQueryContent,
+        HttpRequestEnvelope, HttpRequestError, HttpUserQuery, SignedDelegation, UserSignature,
+    };
+    use crate::Time;
+    use assert_matches::assert_matches;
+
+    #[test]
+    fn should_successfully_convert_user_signature_with_delegation() {
+        let sender_delegation = dummy_delegation();
+        let setup = Setup::new(sender_delegation.clone());
+        let envelope = construct_envelope(
+            Some(setup.sender_pubkey),
+            Some(setup.sender_sig),
+            sender_delegation,
+        );
+
+        assert_eq!(to_authentication(&envelope), Ok(setup.authentication));
+    }
+
+    #[test]
+    fn should_successfully_convert_user_signature_without_delegation() {
+        let setup = Setup::new(None);
+        let envelope = construct_envelope(Some(setup.sender_pubkey), Some(setup.sender_sig), None);
+
+        assert_eq!(to_authentication(&envelope), Ok(setup.authentication));
+    }
+
+    #[test]
+    fn should_successfully_convert_anonymous_request() {
+        let envelope = construct_envelope(None, None, None);
+
+        assert_eq!(to_authentication(&envelope), Ok(Authentication::Anonymous));
+    }
+
+    #[test]
+    fn should_return_error_if_insufficient_subset_of_parameters_specified() {
+        for sender_pubkey in &[Some(dummy_sender_pubkey()), None] {
+            for sender_sig in &[Some(dummy_signature()), None] {
+                for sender_delegation in &[dummy_delegation(), None] {
+                    if !((sender_pubkey.is_some() && sender_sig.is_some())
+                        || (sender_pubkey.is_none()
+                            && sender_sig.is_none()
+                            && sender_delegation.is_none()))
+                    {
+                        let envelope = construct_envelope(
+                            sender_pubkey.clone(),
+                            sender_sig.clone(),
+                            sender_delegation.clone(),
+                        );
+
+                        assert_matches!(
+                            to_authentication(&envelope),
+                            Err(HttpRequestError::MissingPubkeyOrSignature(err))
+                            if err.starts_with("Got ")
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    struct Setup {
+        sender_pubkey: Blob,
+        sender_sig: Blob,
+        authentication: Authentication,
+    }
+
+    impl Setup {
+        fn new(sender_delegation: Option<Vec<SignedDelegation>>) -> Setup {
+            let signature = dummy_signature();
+            let signer_pubkey = dummy_sender_pubkey();
+            let authentication = Authentication::Authenticated(UserSignature {
+                signature: signature.to_vec(),
+                signer_pubkey: signer_pubkey.to_vec(),
+                sender_delegation: sender_delegation.clone(),
+            });
+            Setup {
+                sender_pubkey: signer_pubkey,
+                sender_sig: signature,
+                authentication,
+            }
+        }
+    }
+
+    fn construct_envelope(
+        sender_pubkey: Option<Blob>,
+        sender_sig: Option<Blob>,
+        sender_delegation: Option<Vec<SignedDelegation>>,
+    ) -> HttpRequestEnvelope<HttpQueryContent> {
+        HttpRequestEnvelope {
+            content: HttpQueryContent::Query {
+                query: HttpUserQuery {
+                    canister_id: Blob(vec![]),
+                    method_name: "query".to_string(),
+                    arg: Blob(vec![]),
+                    sender: Blob(vec![4]),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
+            },
+            sender_delegation,
+            sender_pubkey,
+            sender_sig,
+        }
+    }
+
+    fn dummy_signature() -> Blob {
+        Blob(vec![1, 2, 3])
+    }
+    fn dummy_sender_pubkey() -> Blob {
+        Blob(vec![4, 5, 6])
+    }
+
+    fn dummy_delegation() -> Option<Vec<SignedDelegation>> {
+        let delegation_pubkey = Blob(vec![7, 8, 9]);
+        let delegation_signature = Blob(vec![10, 11, 12]);
+        let expiration = 54378u64;
+        Some(vec![SignedDelegation::new(
+            Delegation::new(
+                delegation_pubkey.to_vec(),
+                Time::from_nanos_since_unix_epoch(expiration),
+            ),
+            delegation_signature.to_vec(),
+        )])
     }
 }
 

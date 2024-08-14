@@ -2,7 +2,7 @@
 //!
 //! The ingress selector, like all payload builders, has to fulfill the property that
 //! all payloads built by the payload builder have to be valid.
-//! Propterty tests can test this in the following way:
+//! Property tests can test this in the following way:
 //! 1. Prop up a bunch of ingress messages and put them into the pool
 //! 2. Run the payload builder on the pool
 //! 3. Check that the produced payload is valid
@@ -16,25 +16,20 @@
 use crate::tests::{access_ingress_pool, setup_with_params};
 use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
-    artifact_pool::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
     ingress_manager::IngressSelector,
     ingress_pool::ChangeAction,
-    time_source::{SysTimeSource, TimeSource},
+    p2p::consensus::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
+    time_source::TimeSource,
 };
-use ic_test_utilities::{
-    mock_time,
-    state::{CanisterStateBuilder, ReplicatedStateBuilder},
-    types::{
-        ids::{canister_test_id, node_test_id},
-        messages::SignedIngressBuilder,
-    },
-    FastForwardTimeSource,
+use ic_test_utilities_state::{CanisterStateBuilder, ReplicatedStateBuilder};
+use ic_test_utilities_time::FastForwardTimeSource;
+use ic_test_utilities_types::{
+    ids::{canister_test_id, node_test_id},
+    messages::SignedIngressBuilder,
 };
-use ic_types::crypto::crypto_hash;
 use ic_types::{
-    artifact::{IngressMessageAttribute, IngressMessageId, SignedIngress},
-    batch::ValidationContext,
-    CountBytes, Height, NumBytes, RegistryVersion,
+    artifact::IngressMessageId, batch::ValidationContext, messages::SignedIngress,
+    time::UNIX_EPOCH, CountBytes, Height, NumBytes, RegistryVersion,
 };
 use proptest::prelude::*;
 use std::collections::HashSet;
@@ -64,7 +59,7 @@ proptest! {
                     .build(),
             ),
             |ingress_manager, ingress_pool| {
-                let time = mock_time();
+                let time = UNIX_EPOCH;
                 let time_source = FastForwardTimeSource::new();
                 let validation_context = ValidationContext {
                     time: time + MAX_INGRESS_TTL,
@@ -76,22 +71,18 @@ proptest! {
 
                 for m in singed_ingress_vec.iter() {
                     let message_id = IngressMessageId::from(m);
-                    let attribute = IngressMessageAttribute::new(m);
-                    access_ingress_pool(&ingress_pool, |mut ingress_pool| {
+                    access_ingress_pool(&ingress_pool, |ingress_pool| {
                         ingress_pool.insert(UnvalidatedArtifact {
                             message: m.clone(),
                             peer_id: node_test_id(0),
                             timestamp: time_source.get_relative_time(),
                         });
-                        ingress_pool.apply_changes(&SysTimeSource::new(), vec![ChangeAction::MoveToValidated((
+                        ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                             message_id.clone(),
                             node_test_id(0),
-                            m.count_bytes(),
-                            attribute,
-                            crypto_hash(m.binary()).get(),
                         ))]);
                         // check that message is indeed in the pool
-                        assert!(ingress_pool.contains(&message_id));
+                        assert!(ingress_pool.get(&message_id).is_some());
                     });
                 }
 
@@ -108,10 +99,9 @@ proptest! {
                 // Check the size explicitly
                 assert!((payload.count_bytes() as u64) < MAX_BLOCK_SIZE);
 
-                // Any payload generated should pass verficiation.
+                // Any payload generated should pass verification.
                 // If not, we have an issue with the payload builder
                 assert!(ingress_manager.validate_ingress_payload(&payload, &HashSet::new(), &validation_context).is_ok());
-
             },
         )
     }
@@ -131,7 +121,7 @@ fn prop_signed_ingress_for_size_test(
             .canister_id(canister_test_id(0))
             .method_name("Size proptest")
             .method_payload(method_payload)
-            .expiry_time(mock_time() + MAX_INGRESS_TTL)
+            .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
             .build()
     })
 }

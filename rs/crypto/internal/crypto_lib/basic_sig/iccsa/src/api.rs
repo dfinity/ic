@@ -20,7 +20,7 @@ pub fn algorithm_identifier() -> der_utils::PkixAlgorithmIdentifier {
 
 /// Parse `pk_der` as DER-encoded public key with OID 1.3.6.1.4.1.56387.1.2, and
 /// returns the unwrapped public key bytes. See
-/// * https://sdk.dfinity.org/docs/interface-spec/index.html#canister-signatures
+/// * https://internetcomputer.org/docs/current/references/ic-interface-spec#canister-signatures
 /// * https://tools.ietf.org/html/rfc8410#section-4
 pub fn public_key_bytes_from_der(pk_der: &[u8]) -> CryptoResult<PublicKeyBytes> {
     let pk = der_utils::parse_public_key(
@@ -117,7 +117,11 @@ fn verify_certified_data(
         CertificateValidationError::InvalidSignature(_)
         | CertificateValidationError::CertifiedDataMismatch { .. }
         | CertificateValidationError::MultipleSubnetDelegationsNotAllowed
-        | CertificateValidationError::CanisterIdOutOfRange => CryptoError::SignatureVerification {
+        | CertificateValidationError::CanisterIdOutOfRange
+        | CertificateValidationError::SubnetIdMismatch {
+            provided_subnet_id: _,
+            delegation_subnet_id: _,
+        } => CryptoError::SignatureVerification {
             algorithm: AlgorithmId::IcCanisterSignature,
             public_key_bytes: pk.0.clone(),
             sig_bytes: sig.0.clone(),

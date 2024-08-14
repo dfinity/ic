@@ -3,20 +3,23 @@ use candid::candid_method;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_cdk::println;
 use ic_cdk_macros::{heartbeat, init, post_upgrade, pre_upgrade, query, update};
-use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
-use ic_nervous_system_clients::canister_status::CanisterStatusResult;
-use ic_nervous_system_clients::management_canister_client::ManagementCanisterClientImpl;
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
+    management_canister_client::ManagementCanisterClientImpl,
+};
 use ic_nervous_system_common::{
     dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
     serve_logs, serve_logs_v2, serve_metrics, NANO_SECONDS_PER_SECOND,
 };
-use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
+use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_sns_root::{
     logs::{ERROR, INFO},
     pb::v1::{
         CanisterCallError, ListSnsCanistersRequest, ListSnsCanistersResponse,
+        ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
         RegisterDappCanisterRequest, RegisterDappCanisterResponse, RegisterDappCanistersRequest,
         RegisterDappCanistersResponse, SetDappControllersRequest, SetDappControllersResponse,
         SnsRootCanister,
@@ -28,9 +31,12 @@ use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use prost::Message;
 use std::cell::RefCell;
 
+type CanisterRuntime = CdkRuntime;
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
 
-type CanisterRuntime = CdkRuntime;
+thread_local! {
+    static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
+}
 
 struct CanisterEnvironment {}
 
@@ -77,13 +83,9 @@ fn create_ledger_client() -> RealLedgerCanisterClient {
     let ledger_canister_id = STATE
         .with(|state| state.borrow().ledger_canister_id())
         .try_into()
-        .expect("Expected the ledger_canister_id to be convertable to a CanisterId");
+        .expect("Expected the ledger_canister_id to be convertible to a CanisterId");
 
     RealLedgerCanisterClient::new(ledger_canister_id)
-}
-
-thread_local! {
-    static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
 }
 
 #[candid_method(init)]
@@ -189,9 +191,10 @@ fn list_sns_canisters(_request: ListSnsCanistersRequest) -> ListSnsCanistersResp
     })
 }
 
+/// This function will return immediately, and the actual upgrade will be performed in the background.
 #[candid_method(update)]
 #[update]
-fn change_canister(proposal: ChangeCanisterProposal) {
+fn change_canister(request: ChangeCanisterRequest) {
     log!(INFO, "change_canister");
     assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
 
@@ -209,10 +212,24 @@ fn change_canister(proposal: ChangeCanisterProposal) {
     //
     // To implement "acknowledge without actually completing the work", we use
     // spawn to do the real work in the background.
-    assert_change_canister_proposal_is_valid(&proposal);
-    CanisterRuntime::spawn_future(ic_nervous_system_root::change_canister::change_canister::<
-        CanisterRuntime,
-    >(proposal));
+    CanisterRuntime::spawn_future(async move {
+        let change_canister_result =
+            ic_nervous_system_root::change_canister::change_canister::<CanisterRuntime>(request)
+                .await;
+        // We don't want to panic in here, or the log messages will be lost when
+        // the state rolls back.
+        match change_canister_result {
+            Ok(()) => {
+                log!(
+                    INFO,
+                    "change_canister: Canister change completed successfully."
+                );
+            }
+            Err(err) => {
+                log!(ERROR, "change_canister: Canister change failed: {err}");
+            }
+        };
+    });
 }
 
 /// This function is deprecated, and `register_dapp_canisters` should be used
@@ -307,19 +324,26 @@ async fn set_dapp_controllers(request: SetDappControllersRequest) -> SetDappCont
     .await
 }
 
+#[candid_method(update)]
+#[update]
+async fn manage_dapp_canister_settings(
+    request: ManageDappCanisterSettingsRequest,
+) -> ManageDappCanisterSettingsResponse {
+    log!(INFO, "manage_dapp_canister_settings");
+    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
+
+    STATE.with_borrow(|state| {
+        state.manage_dapp_canister_settings(
+            request,
+            ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
+        )
+    })
+}
+
 fn assert_state_is_valid(state: &SnsRootCanister) {
     assert!(state.governance_canister_id.is_some());
     assert!(state.ledger_canister_id.is_some());
     assert!(state.swap_canister_id.is_some());
-}
-
-fn assert_change_canister_proposal_is_valid(proposal: &ChangeCanisterProposal) {
-    assert!(
-        proposal.authz_changes.is_empty(),
-        "Invalid ChangeCanisterProposal: the authz_changes field is not supported \
-         and should be left empty, but was not. proposal: {:?}",
-        proposal
-    );
 }
 
 fn assert_eq_governance_canister_id(id: PrincipalId) {
@@ -343,7 +367,7 @@ async fn heartbeat() {
 }
 
 // Resources to serve for a given http_request
-#[query]
+#[query(hidden = true)]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),
@@ -370,7 +394,7 @@ fn encode_metrics(_w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::
 /// We include the .did file as committed, which means it is included verbatim in
 /// the .wasm; using `candid::export_service` here would involve unnecessary
 /// runtime computation.
-#[query]
+#[query(hidden = true)]
 fn __get_candid_interface_tmp_hack() -> String {
     include_str!("root.did").to_string()
 }
@@ -397,7 +421,6 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_nervous_system_common::MethodAuthzChange;
 
     /// A test that fails if the API was updated but the candid definition was not.
     #[test]
@@ -421,27 +444,5 @@ mod tests {
                  rs/sns/root to update canister/root.did."
             )
         }
-    }
-
-    #[test]
-    #[should_panic]
-    fn no_authz() {
-        let canister_id = CanisterId::from(1);
-
-        let mut proposal = ChangeCanisterProposal::new(
-            false, // stop before_installing
-            ic_ic00_types::CanisterInstallMode::Upgrade,
-            canister_id,
-        );
-
-        proposal.authz_changes.push(MethodAuthzChange {
-            canister: canister_id,
-            method_name: "foo".to_string(),
-            principal: None,
-            operation: ic_nervous_system_common::AuthzChangeOp::Deauthorize,
-        });
-
-        // This should panic.
-        assert_change_canister_proposal_is_valid(&proposal);
     }
 }

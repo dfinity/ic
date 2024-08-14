@@ -23,7 +23,7 @@ pub trait CspSigner {
     fn sign(
         &self,
         algorithm_id: AlgorithmId,
-        msg: &[u8],
+        msg: Vec<u8>,
         key_id: KeyId,
     ) -> CryptoResult<CspSignature>;
 
@@ -52,16 +52,16 @@ pub trait CspSigner {
         signer: CspPublicKey,
     ) -> CryptoResult<()>;
 
-    /// Verify a proof of posession (PoP).
+    /// Verify a proof of possession (PoP).
     ///
     /// # Arguments
-    /// * `pop` the proof of posession
+    /// * `pop` the proof of possession
     /// * `algorithm_id` the signature algorithm
     /// * `public_key` the public key of the signer
     /// # Errors
     /// * `CryptoError::PopVerification` if the algorithm used is not supported
-    /// by the trait implementation, or if the signature was checked and found
-    /// to be invalid.
+    ///    by the trait implementation, or if the signature was checked and found
+    ///    to be invalid.
     /// # Returns
     /// `Ok(())` if the PoP is valid or an `Err` otherwise
     fn verify_pop(
@@ -100,7 +100,7 @@ pub trait CspSigner {
     /// * `CryptoError::AlgorithmNotSupported` if the signature algorithm used
     ///   does not support multisignatures.
     /// * `CryptoError::SignatureVerification` if the multisignature was checked
-    /// and found to be invalid.
+    ///   and found to be invalid.
     /// * `CryptoError::MalformedSignature` if the multisignature is malformed.
     /// # Returns
     /// `Ok(())` if the signature is valid or an `Err` otherwise

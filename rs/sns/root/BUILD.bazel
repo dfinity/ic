@@ -1,7 +1,7 @@
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
-load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -11,36 +11,36 @@ filegroup(
 )
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
-    "//rs/nervous_system/clients",
-    "//rs/rosetta-api/icrc1",
     "//rs/rust_canisters/canister_log",
-    "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/http_types",
-    "//rs/types/base_types",
-    "//rs/types/ic00_types",
     "//rs/sns/swap",  # TODO[NNS1-2282]
+    "//rs/types/base_types",
+    "//rs/types/management_canister_types",
     "@crate_index//:build-info",
     "@crate_index//:candid",
     "@crate_index//:comparable",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-metrics-encoder",
-    "@crate_index//:num-traits",
     "@crate_index//:prost",
     "@crate_index//:serde",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
     "@crate_index//:async-trait",
     "@crate_index//:ic-cdk-macros",
 ]
 
 BUILD_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:build-info-build",
 ]
 
@@ -51,7 +51,7 @@ cargo_build_script(
     srcs = ["build.rs"],
     aliases = ALIASES,
     data = [],  # build script data (e.g. template files) goes here
-    version = "0.8.0",
+    version = "0.9.0",
     deps = BUILD_DEPENDENCIES,
 )
 
@@ -64,7 +64,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_sns_root",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES + [":build_script"],
 )
 
@@ -101,6 +101,7 @@ generated_files_check(
     ],
     manifest_dir = "rs/sns/root",
     deps = [
+        # Keep sorted.
         "//rs/sns/root/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",
@@ -108,9 +109,9 @@ generated_files_check(
 )
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/sns/root/protobuf_generator:lib",
-    "//rs/test_utilities/compare_dirs",
-    "@crate_index//:tempfile",
+    "@crate_index//:maplit",
     "@crate_index//:tokio",
 ]
 
@@ -136,6 +137,7 @@ rust_test(
     crate = ":_wasm_sns-root-canister",
     data = ["canister/root.did"],
     env = {"CARGO_MANIFEST_DIR": "rs/sns/root"},
+    deps = ["@crate_index//:candid_parser"],
 )
 
 rust_test_suite(

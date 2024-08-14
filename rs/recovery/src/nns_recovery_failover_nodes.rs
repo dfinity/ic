@@ -52,6 +52,10 @@ pub struct NNSRecoveryFailoverNodesArgs {
     #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
     pub replica_version: Option<ReplicaVersion>,
 
+    #[clap(long)]
+    /// The replay will stop at this height and make a checkpoint.
+    pub replay_until_height: Option<u64>,
+
     /// IP address of the auxiliary host the registry is uploaded to
     #[clap(long)]
     pub aux_ip: Option<IpAddr>,
@@ -87,6 +91,10 @@ pub struct NNSRecoveryFailoverNodesArgs {
     /// If present the tool will start execution for the provided step, skipping the initial ones
     #[clap(long = "resume")]
     pub next_step: Option<StepType>,
+
+    /// Which steps to skip
+    #[clap(long)]
+    pub skip: Option<Vec<StepType>>,
 }
 
 pub struct NNSRecoveryFailoverNodes {
@@ -95,7 +103,6 @@ pub struct NNSRecoveryFailoverNodes {
     pub params: NNSRecoveryFailoverNodesArgs,
     pub neuron_args: Option<NeuronArgs>,
     recovery: Recovery,
-    interactive: bool,
     logger: Logger,
     new_registry_local_store: PathBuf,
 }
@@ -106,7 +113,6 @@ impl NNSRecoveryFailoverNodes {
         recovery_args: RecoveryArgs,
         neuron_args: Option<NeuronArgs>,
         subnet_args: NNSRecoveryFailoverNodesArgs,
-        interactive: bool,
     ) -> Self {
         let recovery = Recovery::new(
             logger.clone(),
@@ -126,7 +132,6 @@ impl NNSRecoveryFailoverNodes {
             recovery,
             logger,
             new_registry_local_store,
-            interactive,
         }
     }
 
@@ -137,7 +142,7 @@ impl NNSRecoveryFailoverNodes {
     pub fn get_local_store_tar(&self) -> PathBuf {
         self.recovery
             .work_dir
-            .join(format!("{}.tar.gz", IC_REGISTRY_LOCAL_STORE))
+            .join(format!("{}.tar.zst", IC_REGISTRY_LOCAL_STORE))
     }
 }
 
@@ -155,7 +160,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
     }
 
     fn interactive(&self) -> bool {
-        self.interactive
+        !self.recovery_args.skip_prompts
+    }
+
+    fn get_skipped_steps(&self) -> Vec<StepType> {
+        self.params.skip.clone().unwrap_or_default()
     }
 
     fn read_step_params(&mut self, step_type: StepType) {
@@ -193,6 +202,13 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                         &self.logger,
                         "Enter parent NNS IP to download the registry store from:",
                     );
+                }
+            }
+
+            StepType::ICReplayWithRegistryContent => {
+                if self.params.replay_until_height.is_none() {
+                    self.params.replay_until_height =
+                        read_optional(&self.logger, "Replay until height: ");
                 }
             }
 
@@ -288,6 +304,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                     self.params.subnet_id,
                     self.new_registry_local_store.clone(),
                     CANISTER_CALLER_ID,
+                    self.params.replay_until_height,
                 )?,
             )),
 
@@ -319,7 +336,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
             StepType::ProposeCUP => {
                 let url = if let Some(aux_ip) = self.params.aux_ip {
                     let url_str = format!(
-                        "http://[{}]:8081/tmp/recovery_registry/{}.tar.gz",
+                        "http://[{}]:8081/tmp/recovery_registry/{}.tar.zst",
                         aux_ip, IC_REGISTRY_LOCAL_STORE
                     );
                     Some(Url::parse(&url_str).map_err(|e| {

@@ -1,12 +1,12 @@
 [package]
 name = "ic-crypto-temp-crypto-vault"
 description = "Test utility to instantiate a remote CSP vault"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-crypto-internal-csp = { path = "../../internal/crypto_service_provider" }
-ic-crypto-internal-logmon = { path = "../../internal/logmon" }
-ic-logger = { path = "../../../monitoring/logger" }
-tempfile = "3.1.0"
-tokio = { version = "1.15.0", features = ["full"] }
+tempfile = { workspace = true }
+tokio = { workspace = true }

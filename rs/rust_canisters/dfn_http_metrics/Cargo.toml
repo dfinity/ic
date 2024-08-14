@@ -1,11 +1,14 @@
 [package]
 name = "dfn_http_metrics"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 dfn_candid = { path = "../dfn_candid" }
 dfn_core = { path = "../dfn_core" }
 dfn_http = { path = "../dfn_http" }
 ic-metrics-encoder = "1"
-serde_bytes = "0.11"
+serde_bytes = { workspace = true }

@@ -1,8 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
-
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/artifact_pool",
     "//rs/config",
     "//rs/crypto/utils/threshold_sig_der",
@@ -10,7 +9,6 @@ DEPENDENCIES = [
     "//rs/http_utils",
     "//rs/interfaces",
     "//rs/interfaces/registry",
-    "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/orchestrator/registry_replicator",
     "//rs/protobuf",
@@ -24,10 +22,10 @@ DEPENDENCIES = [
     "//rs/replay",
     "//rs/state_manager",
     "//rs/types/base_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:base64",
-    "@crate_index//:clap",
+    "@crate_index//:clap_3_2_25",
     "@crate_index//:futures",
     "@crate_index//:hex",
     "@crate_index//:prost",
@@ -44,12 +42,15 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/test_utilities",
+    # Keep sorted.
+    "//rs/test_utilities/consensus",
     "//rs/test_utilities/tmpdir",
+    "//rs/test_utilities/types",
     "@crate_index//:tempfile",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:strum_macros",
 ]
 
@@ -57,24 +58,33 @@ ALIASES = {}
 
 rust_library(
     name = "recovery",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_recovery",
     data = ["ic_public_key.pem"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
+    visibility = [
+        "//rs:system-tests-pkg",
+        "//rs:tools-pkg",
+    ],
     deps = DEPENDENCIES,
 )
 
 rust_binary(
     name = "ic-recovery",
+    testonly = True,
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = [
+        "//rs:release-pkg",
+        "//rs:system-tests-pkg",
+    ],
     deps = DEPENDENCIES + [
-        "//rs/canister_sandbox/backend_lib",
-        "//rs/canister_sandbox/sandbox_launcher:sandbox_launcher_lib",
         ":recovery",
+        "//rs/canister_sandbox:backend_lib",
     ],
 )
 

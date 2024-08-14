@@ -1,31 +1,41 @@
 [package]
 name = "ic-icrc1"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
 description = "ICRC-1 compliant ledger library."
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
 ciborium = { workspace = true }
-hex = "0.4.2"
+hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
-icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
-num-traits = "0.2.12"
-num-bigint = "0.4"
-serde = "1.0"
-serde_bytes = "0.11"
-tempfile = "3.1.0"
-thiserror = "1.0"
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+num-bigint = { workspace = true }
+num-traits = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
+canister-test = { path = "../../rust_canisters/canister_test" }
+ic-icrc1-index-ng = { path = "index-ng" }
+ic-icrc1-ledger = { path = "ledger" }
+ic-icrc1-ledger-sm-tests = { path = "ledger/sm-tests" }
 ic-icrc1-test-utils = { path = "test_utils" }
-ic-icrc1-tokens-u64 = { path = "tokens_u64" }
 ic-icrc1-tokens-u256 = { path = "tokens_u256" }
+ic-icrc1-tokens-u64 = { path = "tokens_u64" }
+ic-nns-test-utils = { path = "../../nns/test_utils" }
+ic-nns-test-utils-golden-nns-state = { path = "../../nns/test_utils/golden_nns_state" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-state-machine-tests = { path = "../../state_machine_tests" }
+ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 leb128 = "0.2.4"
 proptest = "1.0"
-rand = "0.8"
+rand = { workspace = true }

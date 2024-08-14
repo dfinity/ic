@@ -29,6 +29,23 @@ pub enum CertificationVersion {
     V10 = 10,
     /// Producing `error_code` field in `request_status` subtree.
     V11 = 11,
+    /// Added `/subnet/<own_subnet_id>/node` subtree, with node public keys.
+    V12 = 12,
+    /// Dropped `/canister/<canister_id>/controller`.
+    V13 = 13,
+    /// Define optional `Request::metadata` field.
+    V14 = 14,
+    /// Added subnet metrics in `subnet` subtree.
+    V15 = 15,
+    /// Added `/api_boundary_nodes` subtree with domain, ipv4_address and ipv6_address for each API boundary node.
+    V16 = 16,
+    /// Added `flags` to `StreamHeader`. Defined `StreamHeaderFlagBits::ResponsesOnly` flag.
+    V17 = 17,
+    /// Added `deadline` fields to `Request` and `Response`.
+    V18 = 18,
+    /// Defined `reject_signals`, a struct containing 7 flavors of reject signals.
+    /// Deprecated `reject_signals_deltas`.
+    V19 = 19,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -61,13 +78,13 @@ impl std::convert::TryFrom<u32> for CertificationVersion {
 
 /// The Canonical State certification version that should be used for newly
 /// computed states.
-pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V11;
+pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V18;
 
 /// Maximum supported certification version.
 ///
 /// The replica will panic if requested to certify using a version higher than
 /// this.
-pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V11;
+pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V19;
 
 /// Returns a list of all certification versions up to [MAX_SUPPORTED_CERTIFICATION_VERSION].
 pub fn all_supported_versions() -> impl std::iter::Iterator<Item = CertificationVersion> {

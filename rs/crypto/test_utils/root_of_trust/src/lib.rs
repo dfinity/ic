@@ -6,6 +6,12 @@ use thiserror::Error;
 #[error("{0}")]
 pub struct MockRootOfTrustProviderError(String);
 
+impl MockRootOfTrustProviderError {
+    pub fn new(msg: &str) -> Self {
+        Self(msg.to_string())
+    }
+}
+
 mock! {
     pub RootOfTrustProvider {}
 

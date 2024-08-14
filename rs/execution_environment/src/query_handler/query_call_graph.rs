@@ -44,7 +44,7 @@ struct PendingCall(CanisterState, CallOrigin, VecDeque<Arc<Request>>);
 ///   response callbacks.
 ///
 /// A note on re-entrancy: currently re-entrant query calls are not allowed.
-/// In other words, if a canister is in the call stack, then an attemp to make a
+/// In other words, if a canister is in the call stack, then an attempt to make a
 /// new query call to that canister will result in an error. This restriction
 /// will be lifted soon.
 pub(super) fn evaluate_query_call_graph(
@@ -99,6 +99,8 @@ pub(super) fn evaluate_query_call_graph(
                 unreachable!("Unexpected user response for canister query call.");
             }
             Some(QueryResponse::CanisterResponse(response)) => {
+                // This catches both responses from `handle_response()` and `handle_request()`.
+                query_context.accumulate_transient_errors_from_payload(&response.response_payload);
                 match query_context.handle_response(canister, response, requests, measurement_scope)
                 {
                     ExecutionResult::Calls(canister, used_call_origin, requests) => {
@@ -145,7 +147,7 @@ pub(super) fn evaluate_query_call_graph(
         }
     }
 
-    // Each iteraton of the loop above either pushes an entry onto the call
+    // Each iteration of the loop above either pushes an entry onto the call
     // stack or sets the callee result. At this point the call stack is empty,
     // so the callee result must have been set and `unwrap` is safe here.
     callee_result.unwrap()

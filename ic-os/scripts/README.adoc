@@ -1,4 +1,0 @@
-= Scripts
-
-This folder contains build and utility scripts for the IC-OS. 
-

@@ -2,7 +2,7 @@ use crate::errors::ApiError;
 use crate::models::seconds::Seconds;
 use crate::request::Request;
 use crate::request_types::{
-    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, MergeMaturity, NeuronInfo,
+    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity, NeuronInfo,
     PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, SetDissolveTimestamp, Spawn, Stake,
     StakeMaturity, StartDissolve, StopDissolve,
 };
@@ -90,6 +90,7 @@ impl State {
         self.actions.push(Request::Transfer(Operation::Transfer {
             from,
             to,
+            spender: None,
             amount: cr_amount,
             fee: fee_amount,
         }));
@@ -355,6 +356,13 @@ impl State {
             controller,
             neuron_index,
         }));
+        Ok(())
+    }
+
+    pub fn list_neurons(&mut self, account: icp_ledger::AccountIdentifier) -> Result<(), ApiError> {
+        self.flush()?;
+        self.actions
+            .push(Request::ListNeurons(ListNeurons { account }));
         Ok(())
     }
 

@@ -19,7 +19,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                         input.sort_unstable();
                         input
                     },
-                    |input| FlatMap::from_key_values(input),
+                    FlatMap::from_key_values,
                     BatchSize::SmallInput,
                 );
             });
@@ -31,7 +31,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                         input.sort_unstable();
                         input
                     },
-                    |input| FlatMap::from_key_values(input),
+                    FlatMap::from_key_values,
                     BatchSize::SmallInput,
                 );
             });
@@ -39,7 +39,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             g.bench_function(BenchmarkId::new("unsorted", len), |b| {
                 b.iter_batched(
                     || random_inputs(len, INPUT_SIZE, rng),
-                    |input| FlatMap::from_key_values(input),
+                    FlatMap::from_key_values,
                     BatchSize::SmallInput,
                 );
             });

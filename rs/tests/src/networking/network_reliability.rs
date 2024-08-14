@@ -5,36 +5,38 @@ Runbook::
 0. Instantiate an IC with one System and one Application subnet.
 1. Install NNS canisters on the System subnet.
 2. Build and install one counter canister on each subnet.
-3. Instantiate and start one workload per subnet using a subset of 1/3 of the nodes as targets.
-   Workloads send update[canister_id, "write"] requests.
+3. Instantiate and start workload for the APP subnet using a subset of 1/3 of the nodes as targets.
+   Workload send update[canister_id, "write"] requests.
    Requests are equally distributed between this subset of 1/3 nodes.
 4. Stress (modify tc settings on) another disjoint subset of 1/3 of the nodes (during the workload execution).
    Stressing manifests in introducing randomness in: latency, bandwidth, packet drops percentage, stress duration.
-5. Collect metrics from both workloads and assert:
+5. Collect metrics from the workload and assert:
    - Ratio of requests with duration below DURATION_THRESHOLD should exceed MIN_REQUESTS_RATIO_BELOW_THRESHOLD.
 6. Perform assertions for both counter canisters (via query `read` call)
    - Counter value on the canisters should exceed the threshold = (1 - max_failures_ratio) * total_requests_count.
 
 end::catalog[] */
 
-use crate::canister_api::{CallMode, GenericRequest};
-use crate::driver::constants::DEVICE_NAME;
-use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
+use ic_base_types::NodeId;
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
+use ic_system_test_driver::driver::constants::DEVICE_NAME;
+use ic_system_test_driver::driver::ic::{
+    AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
+};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationBuilder,
     SshSession,
 };
-use crate::util::{
+use ic_system_test_driver::util::{
     self, agent_observes_canister_module, assert_canister_counter_with_retries, block_on,
     spawn_round_robin_workload_engine,
 };
-use ic_base_types::NodeId;
-use ic_registry_subnet_type::SubnetType;
 use rand::distributions::{Distribution, Uniform};
 use rand_chacha::ChaCha8Rng;
 use slog::{debug, info, Logger};
-use std::cmp::{max, min};
+use std::cmp::max;
 use std::io::{self};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -47,8 +49,6 @@ const RND_SEED: u64 = 42;
 const PAYLOAD_SIZE_BYTES: usize = 1024;
 // Duration of each request is placed into one of two categories - below or above this threshold.
 const DURATION_THRESHOLD: Duration = Duration::from_secs(20);
-// Ratio of requests with duration < DURATION_THRESHOLD should exceed this parameter.
-const MIN_REQUESTS_RATIO_BELOW_THRESHOLD: f64 = 0.9;
 // Parameters related to nodes stressing.
 const BANDWIDTH_MIN: u32 = 10;
 const BANDWIDTH_MAX: u32 = 100;
@@ -73,7 +73,6 @@ pub struct Config {
     pub nodes_app_subnet: usize,
     pub runtime: Duration,
     pub rps: usize,
-    pub max_failures_ratio: f64,
 }
 
 pub fn setup(env: TestEnv, config: Config) {
@@ -126,21 +125,11 @@ pub fn test(env: TestEnv, config: Config) {
         &log,
         "Step 2: Build and install one counter canisters on each subnet. ..."
     );
-    let subnet_nns = env
-        .topology_snapshot()
-        .subnets()
-        .find(|s| s.subnet_type() == SubnetType::System)
-        .unwrap();
     let subnet_app = env
         .topology_snapshot()
         .subnets()
         .find(|s| s.subnet_type() == SubnetType::Application)
         .unwrap();
-    let canister_nns = subnet_nns
-        .nodes()
-        .next()
-        .unwrap()
-        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
     let canister_app = subnet_app
         .nodes()
         .next()
@@ -148,29 +137,12 @@ pub fn test(env: TestEnv, config: Config) {
         .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
     info!(&log, "Installation of counter canisters has succeeded.");
     info!(&log, "Step 3: Instantiate and start one workload per subnet using a subset of 1/3 of the nodes as targets.");
-    let workload_nns_nodes_count = config.nodes_system_subnet / 3;
     let workload_app_nodes_count = config.nodes_app_subnet / 3;
-    assert!(
-        min(workload_nns_nodes_count, workload_app_nodes_count) > 0,
-        "Workloads need at least one node on both subnets."
-    );
     info!(
         &log,
         "Launching two workloads for both subnets in separate threads against {} node/s.",
-        workload_nns_nodes_count
+        workload_app_nodes_count
     );
-    // Workload sends messages to canisters via node agents, so we create them.
-    let agents_nns: Vec<_> = subnet_nns
-        .nodes()
-        .take(workload_nns_nodes_count)
-        .map(|node| {
-            debug!(
-                &log,
-                "Node with id={} from NNS will be used for the workload.", node.node_id
-            );
-            node.with_default_agent(|agent| async move { agent })
-        })
-        .collect();
     let agents_app: Vec<_> = subnet_app
         .nodes()
         .take(workload_app_nodes_count)
@@ -183,8 +155,7 @@ pub fn test(env: TestEnv, config: Config) {
         })
         .collect();
     assert!(
-        agents_nns.len() == workload_nns_nodes_count
-            && agents_app.len() == workload_app_nodes_count,
+        agents_app.len() == workload_app_nodes_count,
         "Number of nodes and agents do not match."
     );
     info!(
@@ -192,12 +163,6 @@ pub fn test(env: TestEnv, config: Config) {
         "Asserting all agents observe the installed canister ..."
     );
     block_on(async {
-        for agent in agents_nns.iter() {
-            assert!(
-                agent_observes_canister_module(agent, &canister_nns).await,
-                "Canister module not available"
-            );
-        }
         for agent in agents_app.iter() {
             assert!(
                 agent_observes_canister_module(agent, &canister_app).await,
@@ -210,23 +175,6 @@ pub fn test(env: TestEnv, config: Config) {
     let payload: Vec<u8> = vec![0; PAYLOAD_SIZE_BYTES];
     let start_time = Instant::now();
     let stop_time = start_time + config.runtime;
-    let handle_workload_nns = {
-        let requests = vec![GenericRequest::new(
-            canister_nns,
-            CANISTER_METHOD.to_string(),
-            payload.clone(),
-            CallMode::Update,
-        )];
-        spawn_round_robin_workload_engine(
-            log.clone(),
-            requests,
-            agents_nns,
-            config.rps,
-            config.runtime,
-            REQUESTS_DISPATCH_EXTRA_TIMEOUT,
-            vec![DURATION_THRESHOLD],
-        )
-    };
     let handle_workload_app = {
         let requests = vec![GenericRequest::new(
             canister_app,
@@ -248,36 +196,21 @@ pub fn test(env: TestEnv, config: Config) {
         &log,
         "Step 4: Stress another disjoint subset of 1/3 of the nodes (during the workload execution)."
     );
-    let stress_nns_nodes_count = config.nodes_system_subnet / 3;
     let stress_app_nodes_count = config.nodes_app_subnet / 3;
     assert!(
-        min(stress_nns_nodes_count, stress_app_nodes_count) > 0,
+        stress_app_nodes_count > 0,
         "At least one node needs to be stressed on each subnet."
     );
     // We stress (modify node's traffic) using random parameters.
     let rng: ChaCha8Rng = rand::SeedableRng::seed_from_u64(RND_SEED);
     // Stress function for each node is executed in a separate thread.
-    let stress_nns_handles: Vec<_> = subnet_nns
-        .nodes()
-        .skip(workload_nns_nodes_count)
-        .take(stress_nns_nodes_count)
-        .map(|node| stress_node_periodically(log.clone(), rng.clone(), node, stop_time))
-        .collect();
     let stress_app_handles: Vec<_> = subnet_app
         .nodes()
         .skip(workload_app_nodes_count)
         .take(stress_app_nodes_count)
         .map(|node| stress_node_periodically(log.clone(), rng.clone(), node, stop_time))
         .collect();
-    for h in stress_nns_handles {
-        let stress_info = h
-            .join()
-            .expect("Thread execution failed.")
-            .unwrap_or_else(|err| {
-                panic!("Node stressing failed err={}", err);
-            });
-        info!(&log, "{:?}", stress_info);
-    }
+
     for h in stress_app_handles {
         let stress_info = h
             .join()
@@ -291,49 +224,20 @@ pub fn test(env: TestEnv, config: Config) {
         &log,
         "Step 5: Collect metrics from both workloads and perform assertions ..."
     );
-    let load_metrics_nns = handle_workload_nns
-        .join()
-        .expect("Workload execution against NNS subnet failed.");
     let load_metrics_app = handle_workload_app
         .join()
         .expect("Workload execution against APP subnet failed.");
     info!(
         &log,
-        "Workload execution results for NNS: {load_metrics_nns}"
-    );
-    info!(
-        &log,
         "Workload execution results for APP: {load_metrics_app}"
     );
-    let requests_count_below_threshold_nns =
-        load_metrics_nns.requests_count_below_threshold(DURATION_THRESHOLD);
     let requests_count_below_threshold_app =
         load_metrics_app.requests_count_below_threshold(DURATION_THRESHOLD);
-    let requests_ratio_below_threshold_nns =
-        load_metrics_nns.requests_ratio_below_threshold(DURATION_THRESHOLD);
-    let requests_ratio_below_threshold_app =
-        load_metrics_app.requests_ratio_below_threshold(DURATION_THRESHOLD);
-    info!(
-        &log,
-        "Requests below {} sec:\nRequests_count: NNS={:?} APP={:?}\nRequests_ratio: NNS={:?} APP={:?}.",
-        DURATION_THRESHOLD.as_secs(),
-        requests_count_below_threshold_nns,
-        requests_count_below_threshold_app,
-        requests_ratio_below_threshold_nns,
-        requests_ratio_below_threshold_app,
-    );
-    assert!(requests_ratio_below_threshold_nns
+    let min_expected_success_count = config.rps * config.runtime.as_secs() as usize;
+    assert_eq!(load_metrics_app.failure_calls(), 0);
+    assert!(requests_count_below_threshold_app
         .iter()
-        .all(|(_, ratio)| *ratio > MIN_REQUESTS_RATIO_BELOW_THRESHOLD));
-    assert!(requests_ratio_below_threshold_app
-        .iter()
-        .all(|(_, ratio)| *ratio > MIN_REQUESTS_RATIO_BELOW_THRESHOLD));
-    // Create agents to read results from the counter canisters.
-    let agent_nns = subnet_nns
-        .nodes()
-        .next()
-        .map(|node| node.with_default_agent(|agent| async move { agent }))
-        .unwrap();
+        .all(|(_, count)| *count as usize == min_expected_success_count));
     let agent_app = subnet_app
         .nodes()
         .next()
@@ -343,22 +247,6 @@ pub fn test(env: TestEnv, config: Config) {
         &log,
         "Step 6: Assert min counter value on both canisters has been reached ... "
     );
-    let min_expected_success_count = {
-        let total_requests_count = config.rps * config.runtime.as_secs() as usize;
-        ((1.0 - config.max_failures_ratio) * total_requests_count as f64) as usize
-    };
-    block_on(async {
-        assert_canister_counter_with_retries(
-            &log,
-            &agent_nns,
-            &canister_nns,
-            payload.clone(),
-            min_expected_success_count,
-            MAX_CANISTER_READ_RETRIES,
-            CANISTER_READ_RETRY_WAIT,
-        )
-        .await;
-    });
     block_on(async {
         assert_canister_counter_with_retries(
             &log,

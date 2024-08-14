@@ -3,14 +3,10 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
-    "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
-    "//rs/crypto/internal/crypto_lib/types",
+    # Keep sorted.
+    "//rs/crypto/ed25519",
     "//rs/protobuf",
     "//rs/types/base_types",
-    "@crate_index//:base64",
-    "@crate_index//:ed25519-consensus",
-    "@crate_index//:simple_asn1",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -23,7 +19,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_crypto_utils_basic_sig",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -31,6 +27,7 @@ rust_test(
     name = "basic_sig_test",
     crate = ":basic_sig",
     deps = [
+        # Keep sorted.
         "@crate_index//:assert_matches",
         "@crate_index//:hex",
     ],

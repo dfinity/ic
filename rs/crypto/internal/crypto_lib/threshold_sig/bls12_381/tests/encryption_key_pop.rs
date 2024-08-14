@@ -23,15 +23,15 @@ fn assert_expected_scalar(scalar: &Scalar, expected: &'static str) {
 
 #[test]
 fn should_encryption_key_pop_be_stable() -> Result<(), EncryptionKeyPopError> {
-    let mut rng = rand_chacha::ChaCha20Rng::from_seed([74; 32]);
-    let (instance, witness) = setup_pop_instance_and_witness(&mut rng);
+    let rng = &mut rand_chacha::ChaCha20Rng::from_seed([74; 32]);
+    let (instance, witness) = setup_pop_instance_and_witness(rng);
 
     assert_expected_scalar(
         &witness,
         "52443431e6d5c54a2ca4abde6bd8a04f6cf5a0472a16243a2ceb315d64624e69",
     );
 
-    let pop = prove_pop(&instance, &witness, &mut rng)?;
+    let pop = prove_pop(&instance, &witness, rng)?;
     verify_pop(&instance, &pop)?;
 
     let pop = pop.serialize();
@@ -52,10 +52,10 @@ fn should_encryption_key_pop_be_stable() -> Result<(), EncryptionKeyPopError> {
 
 #[test]
 fn should_verify_encryption_key_pop() {
-    let mut rng = reproducible_rng();
-    let (instance, witness) = setup_pop_instance_and_witness(&mut rng);
+    let rng = &mut reproducible_rng();
+    let (instance, witness) = setup_pop_instance_and_witness(rng);
 
-    let pop = prove_pop(&instance, &witness, &mut rng);
+    let pop = prove_pop(&instance, &witness, rng);
 
     assert!(
         pop.is_ok(),
@@ -71,11 +71,11 @@ fn should_verify_encryption_key_pop() {
 
 #[test]
 fn prover_should_return_error_on_invalid_instance() {
-    let mut rng = reproducible_rng();
-    let (instance, _witness) = setup_pop_instance_and_witness(&mut rng);
-    let (_other_instance, other_witness) = setup_pop_instance_and_witness(&mut rng);
+    let rng = &mut reproducible_rng();
+    let (instance, _witness) = setup_pop_instance_and_witness(rng);
+    let (_other_instance, other_witness) = setup_pop_instance_and_witness(rng);
 
-    let pop = prove_pop(&instance, &other_witness, &mut rng);
+    let pop = prove_pop(&instance, &other_witness, rng);
 
     assert_eq!(
         pop.unwrap_err(),
@@ -86,11 +86,11 @@ fn prover_should_return_error_on_invalid_instance() {
 
 #[test]
 fn verifier_should_return_error_on_invalid_proof() {
-    let mut rng = reproducible_rng();
-    let (instance, _witness) = setup_pop_instance_and_witness(&mut rng);
-    let (other_instance, other_witness) = setup_pop_instance_and_witness(&mut rng);
+    let rng = &mut reproducible_rng();
+    let (instance, _witness) = setup_pop_instance_and_witness(rng);
+    let (other_instance, other_witness) = setup_pop_instance_and_witness(rng);
 
-    let wrong_pop = prove_pop(&other_instance, &other_witness, &mut rng);
+    let wrong_pop = prove_pop(&other_instance, &other_witness, rng);
 
     assert!(
         wrong_pop.is_ok(),

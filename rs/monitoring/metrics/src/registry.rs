@@ -1,5 +1,5 @@
 use crate::adapter_metrics_registry::AdapterMetricsRegistry;
-use ic_adapter_metrics::AdapterMetrics;
+use ic_adapter_metrics_client::AdapterMetrics;
 use prometheus::{
     core::Collector, Gauge, GaugeVec, Histogram, HistogramOpts, HistogramVec, IntCounter,
     IntCounterVec, IntGauge, IntGaugeVec, Opts,

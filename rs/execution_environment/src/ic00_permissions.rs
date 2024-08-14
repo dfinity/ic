@@ -1,7 +1,7 @@
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::Method as Ic00Method;
-use ic_interfaces::messages::CanisterCall;
+use ic_management_canister_types::Method as Ic00Method;
 use ic_replicated_state::ReplicatedState;
+use ic_types::messages::CanisterCall;
 use ic_types::{CanisterId, SubnetId};
 
 /// Keeps track of when an IC00 method is allowed to be executed.
@@ -63,14 +63,14 @@ impl Ic00MethodPermissions {
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
+            Ic00Method::InstallChunkedCode => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
             Ic00Method::RawRand => Self {
                 method,
                 allow_remote_subnet_sender: false,
-                allow_only_nns_subnet_sender: false,
-            },
-            Ic00Method::SetController => Self {
-                method,
-                allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
             Ic00Method::SetupInitialDKG => Self {
@@ -98,10 +98,20 @@ impl Ic00MethodPermissions {
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
-            Ic00Method::ComputeInitialEcdsaDealings => Self {
+            Ic00Method::ComputeInitialIDkgDealings => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: true,
+            },
+            Ic00Method::SchnorrPublicKey => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
+            Ic00Method::SignWithSchnorr => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
             },
             Ic00Method::BitcoinGetBalance => Self {
                 method,
@@ -109,6 +119,11 @@ impl Ic00MethodPermissions {
                 allow_only_nns_subnet_sender: false,
             },
             Ic00Method::BitcoinGetUtxos => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
+            Ic00Method::BitcoinGetBlockHeaders => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
@@ -133,12 +148,39 @@ impl Ic00MethodPermissions {
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
+            Ic00Method::NodeMetricsHistory => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
+            Ic00Method::FetchCanisterLogs => Self {
+                method,
+                // `FetchCanisterLogs` method is only allowed for messages sent by users,
+                // all inter-canister call permissions are irrelevant and therefore set to false.
+                allow_remote_subnet_sender: false,
+                allow_only_nns_subnet_sender: false,
+            },
             Ic00Method::ProvisionalCreateCanisterWithCycles => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
             Ic00Method::ProvisionalTopUpCanister => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
+            Ic00Method::UploadChunk | Ic00Method::StoredChunks | Ic00Method::ClearChunkStore => {
+                Self {
+                    method,
+                    allow_remote_subnet_sender: true,
+                    allow_only_nns_subnet_sender: false,
+                }
+            }
+            Ic00Method::TakeCanisterSnapshot
+            | Ic00Method::LoadCanisterSnapshot
+            | Ic00Method::ListCanisterSnapshots
+            | Ic00Method::DeleteCanisterSnapshot => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,

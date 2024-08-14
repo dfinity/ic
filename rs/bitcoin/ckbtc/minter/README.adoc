@@ -59,25 +59,72 @@ dfx canister --network ic call ledger icrc1_transfer "(record { from_subaccount 
 
 === ckBTC to Bitcoin
 ```
- ┌────┐                ┌──────┐┌────────────┐
- │User│                │Minter││ckBTC ledger│
- └─┬──┘                └──┬───┘└─────┬──────┘
-   │                      │          │       
-   │get_withdrawal_account│          │       
-   │─────────────────────>│          │       
-   │                      │          │       
-   │       account        │          │       
-   │<─────────────────────│          │       
-   │                      │          │       
-   │    icrc1_transfer to account    │       
-   │────────────────────────────────>│       
-   │                      │          │       
-   │     retrieve_btc     │          │       
-   │─────────────────────>│          │       
- ┌─┴──┐                ┌──┴───┐┌─────┴──────┐
- │User│                │Minter││ckBTC ledger│
- └────┘                └──────┘└────────────┘
+ ┌────┐    ┌────────────┐         ┌──────┐                  ┌───────────────┐
+ │User│    │ckBTC Ledger│         │Minter│                  │Bitcoin Network│
+ └─┬──┘    └─────┬──────┘         └──┬───┘                  └───────┬───────┘
+   │             │                   │                              │        
+   │icrc2_approve│                   │                              │        
+   │────────────>│                   │                              │        
+   │             │                   │                              │        
+   │   retrieve_btc_with_approval    │                              │        
+   │────────────────────────────────>│                              │        
+   │             │                   │                              │        
+   │             │icrc2_transfer_from│                              │        
+   │             │<──────────────────│                              │        
+   │             │                   │                              │        
+   │             │                   │Send BTC to withdrawal address│        
+   │             │                   │─────────────────────────────>│        
+ ┌─┴──┐    ┌─────┴──────┐         ┌──┴───┐                  ┌───────┴───────┐
+ │User│    │ckBTC Ledger│         │Minter│                  │Bitcoin Network│
+ └────┘    └────────────┘         └──────┘                  └───────────────┘
+```
+1. Approve the minter's principal:
++
+----
+dfx canister --network ic call ledger icrc2_approve "(record {spender=record{owner=principal \"mqygn-kiaaa-aaaar-qaadq-cai\"}; amount=AMOUNT})"
+----
++
+2. Call the `retrieve_btc_with_approval` endpoint with the desired BTC destination address where you want to receive your Bitcoin.
+   Replace BTC_ADDRESS with your BTC address (the minter supports all address formats).
+   Replace AMOUNT with the amount that you transferred minus the transfer fee of 0.0000001 ckBTC (the equivalent of 10 Satoshi).
++
+----
+dfx canister --network ic call minter retrieve_btc_with_approval "(record {address=\"BTC_ADDRESS\"; amount=AMOUNT;})"
+----
++
+You now have your BTC back on the Bitcoin network (caution: transaction finalization may take a while).
 
+[NOTE]
+====
+You can query the status of your `retrieve_btc_with_approval` request using the following command (replace `BLOCK_INDEX` with the block index you get when calling retrieve_btc): 
+----
+dfx canister --network ic call minter retrieve_btc_status "(record { block_index = BLOCK_INDEX; })"
+----
+====
+
+=== ckBTC to Bitcoin (old flow)
+```
+ ┌────┐                ┌──────┐┌────────────┐    ┌───────────────┐
+ │User│                │Minter││ckBTC ledger│    │Bitcoin Network│
+ └─┬──┘                └──┬───┘└─────┬──────┘    └───────┬───────┘
+   │                      │          │                   │        
+   │get_withdrawal_account│          │                   │        
+   │─────────────────────>│          │                   │        
+   │                      │          │                   │        
+   │       account        │          │                   │        
+   │<─────────────────────│          │                   │        
+   │                      │          │                   │        
+   │     icrc1_transfer(account)     │                   │        
+   │────────────────────────────────>│                   │        
+   │                      │          │                   │        
+   │     retrieve_btc     │          │                   │        
+   │─────────────────────>│          │                   │        
+   │                      │          │                   │        
+   │                      │Send BTC to withdrawal address│        
+   │                      │─────────────────────────────>│        
+ ┌─┴──┐                ┌──┴───┐┌─────┴──────┐    ┌───────┴───────┐
+ │User│                │Minter││ckBTC ledger│    │Bitcoin Network│
+ └────┘                └──────┘└────────────┘    └───────────────┘
 ```
 
 1. Obtain the withdrawal address and store it in a variable.
@@ -100,7 +147,7 @@ dfx canister --network ic call ledger icrc1_transfer "(record {from=null; to=$cl
 ----
 +
 4. Call the `retrieve_btc` endpoint with the desired BTC destination address where you want to receive your Bitcoin.
-   Replace BTC_ADDRESS with your BTC address (the minter supports P2WPKH, P2PKH, and P2SH addresses).
+   Replace BTC_ADDRESS with your BTC address (the minter supports all address formats).
    Replace AMOUNT with the amount that you transferred minus the transfer fee of 0.0000001 ckBTC (the equivalent of 10 Satoshi).
 +
 ----
@@ -109,10 +156,21 @@ dfx canister --network ic call minter retrieve_btc "(record {address=\"BTC_ADDRE
 
 You now have your BTC back on the Bitcoin network (caution: transaction finalization may take a while). 
 
-[NOTE]
+=== Ledger Memos
+
+All ckBTC transactions issued by the ckBTC minter and recorded on the ledger use a memo field to store additional information about the transaction. The ckBTC minter records a transaction on the ledger in the following cases:
+
+. minting ckBTC after a deposit of BTC,
+. burning ckBTC after a withdrawal request to BTC,
+. minting ckBTC to reimburse a failed withdrawal or to pay the kyt fees.
+
+=== Design
+The general idea is to encode the memo as a https://cbor.io/[CBOR] message and use the transaction type to select the message type. The messages will follow the compact encoding described in the https://twittner.gitlab.io/minicbor/minicbor_derive/index.html[minicbor] package documentation with the following https://datatracker.ietf.org/doc/html/rfc8610[CDDL] schema:
+
+.Example Implementation in Typescript
 ====
-You can query the status of your `retrieve_btc` request using the following command (replace `BLOCK_INDEX` with the block index you get when calling retrieve_btc): 
-----
-dfx canister --network ic call minter retrieve_btc_status "(record { block_index = BLOCK_INDEX; })"
-----
+There is an example implementation of how to decode the ckBTC ledger memos in Typescript in the https://github.com/dfinity/oisy-wallet/tree/main[Oisy Wallet] repository:
+
+* https://github.com/dfinity/oisy-wallet/blob/384013a67a994555b6bd1cd6baeba0a83c444839/src/frontend/src/icp/utils/ckbtc-memo.utils.ts[Decode ckBTC ledger burn and mint memo]
+* https://github.com/dfinity/oisy-wallet/blob/384013a67a994555b6bd1cd6baeba0a83c444839/src/frontend/src/tests/icp/utils/ckbtc-memo.utils.spec.ts[Tests to decode ckBTC ledger memo]
 ====

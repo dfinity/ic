@@ -26,7 +26,7 @@ from typing import Any, Dict
 
 from notify_slack import send_message
 
-ES_NODES = ["elasticsearch-node-%s.dfinity.systems" % i for i in range(3)]
+ES_NODES = ["elasticsearch.testnet.dfinity.network"]
 
 
 def get_data_from_files(data_dir: str, default_index: str) -> Dict[str, Dict[str, Any]]:
@@ -105,6 +105,7 @@ def get_env_data() -> Dict[str, str]:
         "GITLAB_USER_ID",
         "GITLAB_USER_LOGIN",
         "DISKIMG_BRANCH",
+        "NODE_NAME",
     ]:
         if os.environ.get(varname):
             data[varname] = os.environ[varname]
@@ -123,7 +124,7 @@ def post_data(index_name: str, data: Dict[str, str]) -> http.client:
     for i in range(5):
         node = ES_NODES[i % len(ES_NODES)]
         req = urllib.request.Request(
-            f"http://{node}:9200/{index_name}/_doc/",
+            f"https://{node}/{index_name}/_doc/",
             data=json.dumps(data).encode(),
             headers={"content-type": "application/json"},
         )

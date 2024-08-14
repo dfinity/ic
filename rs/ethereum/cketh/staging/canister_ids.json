@@ -1,0 +1,11 @@
+{
+  "ledger": {
+    "ic": "qgead-gyaaa-aaaar-qacaq-cai"
+  },
+  "minter": {
+    "ic": "qbfgx-laaaa-aaaar-qacaa-cai"
+  },
+  "orchestrator": {
+    "ic": "u5fmw-miaaa-aaaar-qafea-cai"
+  }
+}

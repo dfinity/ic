@@ -114,7 +114,7 @@ install_binary() {
     local DEST=$DEST_FOLDER/$DOWNLOAD_NAME
 
     PLATFORM=$(uname | tr '[[:upper:]]' '[[:lower:]]')
-    curl "https://download.dfinity.systems/ic/${GIT_HASH}/openssl-static-binaries/x86_64-${PLATFORM}/${DOWNLOAD_NAME}.gz" | zcat >"$DEST"
+    curl "https://download.dfinity.systems/ic/${GIT_HASH}/binaries/x86_64-${PLATFORM}/${DOWNLOAD_NAME}.gz" | zcat >"$DEST"
 
     chmod +x "$DEST"
 }

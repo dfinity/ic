@@ -6,6 +6,7 @@ use assert_matches::assert_matches;
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_temp_crypto::NodeKeysToGenerate;
 use ic_crypto_temp_crypto::TempCryptoComponent;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::SignableMock;
@@ -19,6 +20,7 @@ mod test_multi_sign {
         let crypto = TempCryptoComponent::builder()
             .with_keys_in_registry_version(NodeKeysToGenerate::only_committee_signing_key(), REG_V2)
             .with_node_id(NODE_1)
+            .with_rng(reproducible_rng())
             .build();
         let msg = SignableMock::new(b"Hello World!".to_vec());
 
@@ -47,6 +49,7 @@ mod test_multi_sig_verification {
         let crypto = TempCryptoComponent::builder()
             .with_keys_in_registry_version(NodeKeysToGenerate::only_committee_signing_key(), REG_V2)
             .with_node_id(NODE_1)
+            .with_rng(reproducible_rng())
             .build();
         let msg = SignableMock::new(b"Hello World!".to_vec());
         let signature = crypto.sign_multi(&msg, NODE_1, REG_V2).unwrap();
@@ -58,6 +61,7 @@ mod test_multi_sig_verification {
 
     #[test]
     fn should_combine_and_verify_multi_sig_individuals() {
+        let mut rng = reproducible_rng();
         let registry_data = Arc::new(ProtoRegistryDataProvider::new());
         let registry_client =
             Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
@@ -69,6 +73,7 @@ mod test_multi_sig_verification {
                 Arc::clone(&registry_data) as Arc<_>,
             )
             .with_node_id(NODE_1)
+            .with_rng(rng.fork())
             .build();
         let crypto_2 = TempCryptoComponent::builder()
             .with_keys_in_registry_version(NodeKeysToGenerate::only_committee_signing_key(), REG_V2)
@@ -77,6 +82,7 @@ mod test_multi_sig_verification {
                 Arc::clone(&registry_data) as Arc<_>,
             )
             .with_node_id(NODE_2)
+            .with_rng(rng)
             .build();
         registry_client.reload();
 

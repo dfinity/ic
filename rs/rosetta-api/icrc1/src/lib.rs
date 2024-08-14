@@ -7,7 +7,7 @@ pub(crate) mod known_tags;
 use ciborium::tag::Required;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
 use ic_ledger_core::{
-    approvals::Approvals,
+    approvals::{AllowanceTable, HeapAllowancesData},
     balances::Balances,
     block::{BlockType, EncodedBlock, FeeCollector},
     timestamp::TimeStamp,
@@ -18,7 +18,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use serde::{Deserialize, Serialize};
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(bound = "")]
@@ -72,18 +72,20 @@ pub enum Operation<Tokens: TokensType> {
         #[serde(skip_serializing_if = "Option::is_none")]
         expected_allowance: Option<Tokens>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        expires_at: Option<TimeStamp>,
+        expires_at: Option<u64>,
         #[serde(skip_serializing_if = "Option::is_none")]
         fee: Option<Tokens>,
     },
 }
 
-#[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
+// A [Transaction] but flattened meaning that [Operation]
+// fields are mixed with [Transaction] fields.
+// We have to flatten the structure as a workaround for
+// https://github.com/serde-rs/json/issues/625.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "")]
-pub struct Transaction<Tokens: TokensType> {
-    #[serde(flatten)]
-    pub operation: Operation<Tokens>,
-
+struct FlattenedTransaction<Tokens: TokensType> {
+    // [Transaction] fields.
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "ts")]
@@ -91,6 +93,147 @@ pub struct Transaction<Tokens: TokensType> {
 
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub memo: Option<Memo>,
+
+    // [Operation] fields.
+    pub op: String,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(with = "compact_account::opt")]
+    from: Option<Account>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(with = "compact_account::opt")]
+    to: Option<Account>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(with = "compact_account::opt")]
+    spender: Option<Account>,
+
+    #[serde(rename = "amt")]
+    amount: Tokens,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fee: Option<Tokens>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expected_allowance: Option<Tokens>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expires_at: Option<u64>,
+}
+
+impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<Tokens> {
+    type Error = String;
+
+    fn try_from(value: FlattenedTransaction<Tokens>) -> Result<Self, Self::Error> {
+        let operation = match value.op.as_str() {
+            "burn" => Operation::Burn {
+                from: value
+                    .from
+                    .ok_or("`from` field required for `burn` operation")?,
+                amount: value.amount,
+                spender: value.spender,
+            },
+            "mint" => Operation::Mint {
+                to: value.to.ok_or("`to` field required for `mint` operation")?,
+                amount: value.amount,
+            },
+            "xfer" => Operation::Transfer {
+                from: value
+                    .from
+                    .ok_or("`from` field required for `xfer` operation")?,
+                spender: value.spender,
+                to: value.to.ok_or("`to` field required for `xfer` operation")?,
+                amount: value.amount,
+                fee: value.fee,
+            },
+            "approve" => Operation::Approve {
+                from: value
+                    .from
+                    .ok_or("`from` field required for `approve` operation")?,
+                spender: value
+                    .spender
+                    .ok_or("`spender` field required for `approve` operation")?,
+                amount: value.amount,
+                expected_allowance: value.expected_allowance,
+                expires_at: value.expires_at,
+                fee: value.fee,
+            },
+            unknown_op => return Err(format!("Unknown operation name {}", unknown_op)),
+        };
+        Ok(Transaction {
+            operation,
+            created_at_time: value.created_at_time,
+            memo: value.memo,
+        })
+    }
+}
+
+impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Tokens> {
+    fn from(t: Transaction<Tokens>) -> Self {
+        use Operation::*;
+
+        FlattenedTransaction {
+            created_at_time: t.created_at_time,
+            memo: t.memo,
+            op: match &t.operation {
+                Burn { .. } => "burn",
+                Mint { .. } => "mint",
+                Transfer { .. } => "xfer",
+                Approve { .. } => "approve",
+            }
+            .into(),
+            from: match &t.operation {
+                Transfer { from, .. } | Burn { from, .. } | Approve { from, .. } => Some(*from),
+                _ => None,
+            },
+            to: match &t.operation {
+                Mint { to, .. } | Transfer { to, .. } => Some(*to),
+                _ => None,
+            },
+            spender: match &t.operation {
+                Transfer { spender, .. } | Burn { spender, .. } => spender.to_owned(),
+                Approve { spender, .. } => Some(*spender),
+                _ => None,
+            },
+            amount: match &t.operation {
+                Burn { amount, .. }
+                | Mint { amount, .. }
+                | Transfer { amount, .. }
+                | Approve { amount, .. } => amount.clone(),
+            },
+            fee: match &t.operation {
+                Transfer { fee, .. } | Approve { fee, .. } => fee.to_owned(),
+                _ => None,
+            },
+            expected_allowance: match &t.operation {
+                Approve {
+                    expected_allowance, ..
+                } => expected_allowance.to_owned(),
+                _ => None,
+            },
+            expires_at: match &t.operation {
+                Approve { expires_at, .. } => expires_at.to_owned(),
+                _ => None,
+            },
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(bound = "")]
+#[serde(try_from = "FlattenedTransaction<Tokens>")]
+#[serde(into = "FlattenedTransaction<Tokens>")]
+pub struct Transaction<Tokens: TokensType> {
+    pub operation: Operation<Tokens>,
+    pub created_at_time: Option<u64>,
     pub memo: Option<Memo>,
 }
 
@@ -176,11 +319,15 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                 amount,
                 fee,
             } => {
-                let fee = fee.unwrap_or(effective_fee);
+                let fee = fee.clone().unwrap_or(effective_fee);
                 if spender.is_none() || from == &spender.unwrap() {
-                    context
-                        .balances_mut()
-                        .transfer(from, to, *amount, fee, fee_collector)?;
+                    context.balances_mut().transfer(
+                        from,
+                        to,
+                        amount.clone(),
+                        fee,
+                        fee_collector,
+                    )?;
                     return Ok(());
                 }
 
@@ -189,7 +336,7 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                     amount
                         .checked_add(&fee)
                         .ok_or(TxApplyError::InsufficientAllowance {
-                            allowance: allowance.amount,
+                            allowance: allowance.amount.clone(),
                         })?;
                 if allowance.amount < used_allowance {
                     return Err(TxApplyError::InsufficientAllowance {
@@ -198,7 +345,7 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                 }
                 context
                     .balances_mut()
-                    .transfer(from, to, *amount, fee, fee_collector)?;
+                    .transfer(from, to, amount.clone(), fee, fee_collector)?;
                 context
                     .approvals_mut()
                     .use_allowance(from, &spender.unwrap(), used_allowance, now)
@@ -217,15 +364,15 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                         });
                     }
                 }
-                context.balances_mut().burn(from, *amount)?;
+                context.balances_mut().burn(from, amount.clone())?;
                 if spender.is_some() && from != &spender.unwrap() {
                     context
                         .approvals_mut()
-                        .use_allowance(from, &spender.unwrap(), *amount, now)
+                        .use_allowance(from, &spender.unwrap(), amount.clone(), now)
                         .expect("bug: cannot use allowance");
                 }
             }
-            Operation::Mint { to, amount } => context.balances_mut().mint(to, *amount)?,
+            Operation::Mint { to, amount } => context.balances_mut().mint(to, amount.clone())?,
             Operation::Approve {
                 from,
                 spender,
@@ -236,22 +383,22 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
             } => {
                 context
                     .balances_mut()
-                    .burn(from, fee.unwrap_or(effective_fee))?;
+                    .burn(from, fee.clone().unwrap_or(effective_fee.clone()))?;
                 let result = context
                     .approvals_mut()
                     .approve(
                         from,
                         spender,
-                        *amount,
-                        *expires_at,
+                        amount.clone(),
+                        expires_at.map(TimeStamp::from_nanos_since_unix_epoch),
                         now,
-                        *expected_allowance,
+                        expected_allowance.clone(),
                     )
                     .map_err(TxApplyError::from);
                 if let Err(e) = result {
                     context
                         .balances_mut()
-                        .mint(from, fee.unwrap_or(effective_fee))
+                        .mint(from, fee.clone().unwrap_or(effective_fee))
                         .expect("bug: failed to refund approval fee");
                     return Err(e);
                 }
@@ -448,10 +595,10 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
         effective_fee: Tokens,
         fee_collector: Option<FeeCollector<Self::AccountId>>,
     ) -> Self {
-        let effective_fee = if let Operation::Transfer { fee, .. } = &transaction.operation {
-            fee.is_none().then_some(effective_fee)
-        } else {
-            None
+        let effective_fee = match &transaction.operation {
+            Operation::Transfer { fee, .. } => fee.is_none().then_some(effective_fee),
+            Operation::Approve { fee, .. } => fee.is_none().then_some(effective_fee),
+            _ => None,
         };
         let (fee_collector, fee_collector_block_index) = match fee_collector {
             Some(FeeCollector {
@@ -472,4 +619,5 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
     }
 }
 
-pub type LedgerBalances<Tokens> = Balances<HashMap<Account, Tokens>>;
+pub type LedgerBalances<Tokens> = Balances<BTreeMap<Account, Tokens>>;
+pub type LedgerAllowances<Tokens> = AllowanceTable<HeapAllowancesData<Account, Tokens>>;

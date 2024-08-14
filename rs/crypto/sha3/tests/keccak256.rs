@@ -16,7 +16,7 @@ fn should_hash_test_vectors() {
 fn keccak256_test_vectors() -> impl Iterator<Item = TestVector> {
     keccak256_kat_test_vectors()
         .into_iter()
-        .chain(keccak256_other_test_vectors().into_iter())
+        .chain(keccak256_other_test_vectors())
 }
 
 /// Test vectors from Known-answer and Monte Carlo test results for Keccak-256

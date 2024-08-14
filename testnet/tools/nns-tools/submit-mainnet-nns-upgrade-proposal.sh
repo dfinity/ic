@@ -1,5 +1,5 @@
 #!/bin/bash
-set -euo pipefail
+set -Eeuo pipefail
 
 NNS_TOOLS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 source "$NNS_TOOLS_DIR/lib/include.sh"
@@ -88,13 +88,15 @@ submit_nns_upgrade_proposal_mainnet() {
 
     confirm_submit_proposal_command "${cmd[@]}"
 
-    "${cmd[@]}"
+    RESPONSE=$("${cmd[@]}")
+    echo "$RESPONSE"
+    PROPOSAL_ID=$(echo "${RESPONSE}" | grep -o 'proposal [0-9]*' | awk '{print $2}' | tr -d '[:space:]')
+    echo "https://dashboard.internetcomputer.org/proposal/${PROPOSAL_ID}"
 }
 
 if ! is_variable_set IC_ADMIN; then
     if [ ! -f "$MY_DOWNLOAD_DIR/ic-admin" ]; then
         PREVIOUS_VERSION=$(extract_previous_version "$PROPOSAL_FILE")
-
         install_binary ic-admin "$PREVIOUS_VERSION" "$MY_DOWNLOAD_DIR"
     fi
     IC_ADMIN=$MY_DOWNLOAD_DIR/ic-admin

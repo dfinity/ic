@@ -1,25 +1,35 @@
 use crate::common::LOG_PREFIX;
 use crate::invariants::{
     common::{
-        get_all_ecdsa_signing_subnet_list_records, get_node_records_from_snapshot,
+        get_node_records_from_snapshot, get_subnet_ids_from_snapshot, get_value_from_snapshot,
         InvariantCheckError, RegistrySnapshot,
     },
     subnet::get_subnet_records_map,
 };
-use ic_base_types::{subnet_id_try_from_protobuf, NodeId};
-use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
+use ic_base_types::{subnet_id_try_from_protobuf, NodeId, SubnetId};
+use ic_crypto_utils_ni_dkg::extract_subnet_threshold_sig_public_key;
+use ic_protobuf::registry::crypto::v1::{MasterPublicKeyId, PublicKey, X509PublicKeyCert};
+use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetRecord};
 use ic_registry_keys::{
-    get_ecdsa_key_id_from_signing_subnet_list_key, make_node_record_key, make_subnet_record_key,
+    get_master_public_key_id_from_signing_subnet_list_key, make_catch_up_package_contents_key,
+    make_crypto_threshold_signing_pubkey_key, make_node_record_key, make_subnet_record_key,
     maybe_parse_crypto_node_key, maybe_parse_crypto_tls_cert_key, CRYPTO_RECORD_KEY_PREFIX,
     CRYPTO_TLS_CERT_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
 };
+use ic_registry_subnet_features::ChainKeyConfig;
+use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::KeyPurpose;
 use prost::Message;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
+
+use super::common::get_all_chain_key_signing_subnet_list_records;
+
+#[cfg(test)]
+mod tests;
 
 // All crypto public keys found for the nodes or for the subnets in the
 // registry.
@@ -28,34 +38,42 @@ type AllPublicKeys = BTreeMap<(NodeId, KeyPurpose), PublicKey>;
 // All TLS certificates found for the nodes in the registry.
 type AllTlsCertificates = BTreeMap<NodeId, X509PublicKeyCert>;
 
-// Functions `check_node_crypto_keys_invariants` and `check_node_crypto_keys_soft_invariants`
-// check node invariants related to crypto keys:
-//  * every node has the required public keys, i.e.:
-//     - node signing public key
-//     - committee signing public key
-//     - DKG dealing encryption public key
-//     - TLS certificate
-//     - interactive DKG encryption public key
-//  * All public keys and TLS certificates have a corresponding node
-//  * every node's id (node_id) is correctly derived from its node signing
-//    public key
-//  * all the public keys and all the TLS certificates belonging to the all the
-//    nodes are unique
-//  * At most 1 subnet can be an ECDSA signing subnet for a given key_id (for now)
-//  * Subnets specified in ECDSA signing subnet lists exists and contain the equivalent key in their configs
-//
-// It is NOT CHECKED that the crypto keys are fully well-formed or valid, as these
-// checks are expensive in terms of computation (about 200 times more expensive then just parsing,
-// 400M instructions per node vs. 2M instructions), so for the mainnet state with 1K+ nodes
-// the full validation would go over the instruction limit per message.
-//
-// The "soft invariants" log the results of the checks, and report an error if one occurs,
-// but are meant as a non-blocking check, whose result is ignored by the caller.
-// The corresponding checks will eventually migrate to the regular, blocking version.
-pub(crate) fn check_node_crypto_keys_soft_invariants(
+/// Function `check_node_crypto_keys_invariants` checks node invariants related to crypto keys:
+///  * every node has the required public keys, i.e.:
+///     - node signing public key
+///     - committee signing public key
+///     - DKG dealing encryption public key
+///     - TLS certificate
+///     - interactive DKG encryption public key
+///  * All public keys and TLS certificates have a corresponding node
+///  * every node's id (node_id) is correctly derived from its node signing
+///    public key
+///  * all the public keys and all the TLS certificates belonging to the all the
+///    nodes are unique
+///  * At most 1 subnet can be an ECDSA signing subnet for a given key_id (for now)
+///  * Subnets specified in ECDSA signing subnet lists exists and contain the equivalent key in their configs
+///  * The high threshold signing public key stored explicitly for a subnet matches the one in the
+///    CUP of the subnet
+///
+/// It is NOT CHECKED that the crypto keys are fully well-formed or valid, as these
+/// checks are expensive in terms of computation (about 200 times more expensive then just parsing,
+/// 400M instructions per node vs. 2M instructions), so for the mainnet state with 1K+ nodes
+/// the full validation would go over the instruction limit per message.
+pub(crate) fn check_node_crypto_keys_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
-    println!("{}crypto_soft_invariants_check_start", LOG_PREFIX);
+    check_node_crypto_keys_exist_and_are_unique(snapshot)?;
+    check_no_orphaned_node_crypto_records(snapshot)?;
+    check_chain_key_configs(snapshot)?;
+    check_chain_key_signing_subnet_lists(snapshot)?;
+    check_high_threshold_public_key_matches_the_one_in_cup(snapshot)?;
+    Ok(())
+}
+
+fn check_node_crypto_keys_exist_and_are_unique(
+    snapshot: &RegistrySnapshot,
+) -> Result<(), InvariantCheckError> {
+    println!("{}node_crypto_keys_invariants_check_start", LOG_PREFIX);
     let nodes = get_node_records_from_snapshot(snapshot);
     let (pks, certs) = get_all_nodes_public_keys_and_certs(snapshot)?;
 
@@ -80,23 +98,15 @@ pub(crate) fn check_node_crypto_keys_soft_invariants(
 
     let result = maybe_error.unwrap_or(Ok(()));
     let label = if result.is_ok() {
-        "crypto_soft_invariants_check_success"
+        "node_crypto_keys_invariants_check_success"
     } else {
-        "crypto_soft_invariants_check_failure"
+        "node_crypto_keys_invariants_check_failure"
     };
     println!(
         "{}{}: # of ok nodes: {}, # of bad nodes: {}, result: {:?}",
         LOG_PREFIX, label, ok_node_count, bad_node_count, result
     );
     result
-}
-
-// See documentation of `check_node_crypto_keys_soft_invariants` above.
-pub(crate) fn check_node_crypto_keys_invariants(
-    snapshot: &RegistrySnapshot,
-) -> Result<(), InvariantCheckError> {
-    check_no_orphaned_node_crypto_records(snapshot)?;
-    check_ecdsa_signing_subnet_lists(snapshot)
 }
 
 fn node_has_all_keys_and_cert_and_valid_node_id(
@@ -252,45 +262,93 @@ fn get_all_nodes_public_keys_and_certs(
     Ok((pks, certs))
 }
 
-fn check_ecdsa_signing_subnet_lists(
-    snapshot: &RegistrySnapshot,
-) -> Result<(), InvariantCheckError> {
-    let subnet_records_map = get_subnet_records_map(snapshot);
+fn check_chain_key_configs(snapshot: &RegistrySnapshot) -> Result<(), InvariantCheckError> {
+    let mut subnet_records_map = get_subnet_records_map(snapshot);
+    let subnet_id_list = get_subnet_ids_from_snapshot(snapshot);
+    for subnet_id in subnet_id_list {
+        // Subnets in the subnet list have a subnet record
+        let subnet_record: SubnetRecord = subnet_records_map
+            .remove(&make_subnet_record_key(subnet_id).into_bytes())
+            .unwrap_or_else(|| {
+                panic!(
+                    "Subnet {:} is in subnet list but no record exists",
+                    subnet_id
+                )
+            });
 
-    get_all_ecdsa_signing_subnet_list_records(snapshot)
-        .iter()
-        .try_for_each(|(key_id, ecdsa_signing_subnet_list)| {
-            if ecdsa_signing_subnet_list.subnets.len() > 1 {
+        let Some(chain_key_config_pb) = subnet_record.chain_key_config else {
+            continue;
+        };
+
+        let chain_key_config =
+            ChainKeyConfig::try_from(chain_key_config_pb.clone()).map_err(|err| {
+                InvariantCheckError {
+                    msg: format!(
+                        "ChainKeyConfig {:?} of subnet {:} could not be deserialized: {}",
+                        chain_key_config_pb, subnet_id, err,
+                    ),
+                    source: None,
+                }
+            })?;
+
+        let mut key_ids = BTreeSet::new();
+        for key_config in chain_key_config.key_configs {
+            if key_config.pre_signatures_to_create_in_advance == 0 {
                 return Err(InvariantCheckError {
                     msg: format!(
-                        "key_id {} ended up with more than one ECDSA signing subnet",
-                        key_id
+                        "`pre_signatures_to_create_in_advance` of subnet {:} cannot be zero.",
+                        subnet_id,
                     ),
                     source: None,
                 });
             }
+            if !key_ids.insert(key_config.key_id.clone()) {
+                return Err(InvariantCheckError {
+                    msg: format!(
+                        "ChainKeyConfig of subnet {:} contains multiple entries for key ID {}.",
+                        subnet_id, key_config.key_id,
+                    ),
+                    source: None,
+                });
+            }
+        }
+    }
+    Ok(())
+}
 
-            let ecdsa_key_id =  match get_ecdsa_key_id_from_signing_subnet_list_key(key_id) {
-                Ok(ecdsa_key_id) => ecdsa_key_id,
-                Err(error) => {
-                    return Err(InvariantCheckError {
-                        msg: format!(
-                            "Registry key_id {} could not be converted to an ECDSA signature key id: {:?}",
-                            key_id,
-                            error,
-                        ),
-                        source: None,
-                    });
-                }
-            };
+/// Checks that the chain key signing subnet list is consistent with the chain key configurations
+///
+/// In particular, this function checks:
+/// - That every subnet refered to by the signing subnet list exists
+/// - That the subnet has a chain key configuration that contains the corresponding key
+fn check_chain_key_signing_subnet_lists(
+    snapshot: &RegistrySnapshot,
+) -> Result<(), InvariantCheckError> {
+    let subnet_records_map = get_subnet_records_map(snapshot);
 
-            ecdsa_signing_subnet_list
+    get_all_chain_key_signing_subnet_list_records(snapshot)
+        .iter()
+        .try_for_each(|(key_id, chain_key_signing_subnet_list)| {
+            let master_key_id =  get_master_public_key_id_from_signing_subnet_list_key(key_id)
+                .map_err(|err| InvariantCheckError {
+                    msg: format!(
+                        "Registry key_id {} could not be converted to an MasterPublicKeyId",
+                        key_id,
+                    ),
+                    source: Some(Box::new(err)),
+                })?;
+
+            chain_key_signing_subnet_list
                 .subnets
                 .iter()
                 .try_for_each(|subnet_id_bytes| {
-                    let subnet_id = subnet_id_try_from_protobuf(subnet_id_bytes.clone()).unwrap();
+                    let subnet_id = subnet_id_try_from_protobuf(subnet_id_bytes.clone())
+                    .map_err(|err| InvariantCheckError {
+                        msg: "Failed to deserialize subnet id from protobuf".to_string(),
+                        source: Some(Box::new(err)),
+                    })?;
 
-                    subnet_records_map
+                    if subnet_records_map
                         .get(&make_subnet_record_key(subnet_id).into_bytes())
                         .ok_or(InvariantCheckError {
                             msg: format!(
@@ -299,22 +357,26 @@ fn check_ecdsa_signing_subnet_lists(
                             ),
                             source: None,
                         })?
-                        .ecdsa_config
+                        .chain_key_config
                         .as_ref()
                         .ok_or(InvariantCheckError {
-                            msg: format!("The subnet {} does not have an ECDSA config", subnet_id),
+                            msg: format!("The subnet {} does not have a ChainKeyConfig", subnet_id),
                             source: None,
                         })?
-                        .key_ids
-                        .contains(&(&ecdsa_key_id).into())
-                        .then_some(())
-                        .ok_or(InvariantCheckError {
-                            msg: format!(
-                                "The subnet {} does not have the key with {} in its ecdsa configurations",
-                                subnet_id, key_id
-                            ),
-                            source: None,
-                        })
+                        .key_configs
+                        .iter()
+                        .filter_map(|config| config.key_id.clone())
+                        .any(|key| key == MasterPublicKeyId::from(&master_key_id)) {
+                            Ok(())
+                        } else {
+                            Err(InvariantCheckError {
+                                msg: format!(
+                                    "The subnet {} does not have the key with {} in its chain key configurations",
+                                    subnet_id, key_id
+                                ),
+                                source: None,
+                            })
+                        }
                 })
         })
 }
@@ -359,358 +421,117 @@ fn check_no_orphaned_node_crypto_records(
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use assert_matches::assert_matches;
-    use ic_config::crypto::CryptoConfig;
-    use ic_crypto_node_key_generation::generate_node_keys_once;
-    use ic_crypto_node_key_validation::ValidNodePublicKeys;
-    use ic_nns_common::registry::encode_or_panic;
-    use ic_nns_test_utils::registry::new_current_node_crypto_keys_mutations;
-    use ic_protobuf::registry::node::v1::NodeRecord;
-    use ic_registry_keys::make_node_record_key;
-    use ic_types::crypto::CurrentNodePublicKeys;
+fn check_high_threshold_public_key_matches_the_one_in_cup(
+    snapshot: &RegistrySnapshot,
+) -> Result<(), InvariantCheckError> {
+    println!(
+        "{}high_threshold_public_key_matches_the_one_in_cup_check_start",
+        LOG_PREFIX
+    );
 
-    fn insert_node_crypto_keys(
-        node_id: &NodeId,
-        node_pks: CurrentNodePublicKeys,
-        snapshot: &mut RegistrySnapshot,
-    ) {
-        let mutations = new_current_node_crypto_keys_mutations(*node_id, node_pks);
-        for m in mutations {
-            snapshot.insert(m.key, m.value);
+    let mut bad_subnets: Vec<SubnetId> = vec![];
+    let mut ok_subnet_count = 0;
+    let mut bad_subnet_count = 0;
+
+    for subnet_id in get_subnet_ids_from_snapshot(snapshot) {
+        let high_threshold_public_key_bytes: Option<PublicKey> = get_value_from_snapshot(
+            snapshot,
+            make_crypto_threshold_signing_pubkey_key(subnet_id),
+        );
+        let cup_contents_bytes: Option<CatchUpPackageContents> =
+            get_value_from_snapshot(snapshot, make_catch_up_package_contents_key(subnet_id));
+        if let (Some(high_threshold_public_key_proto), Some(cup_contents)) =
+            (high_threshold_public_key_bytes, cup_contents_bytes)
+        {
+            let high_threshold_public_key = match ThresholdSigPublicKey::try_from(
+                high_threshold_public_key_proto,
+            ) {
+                Ok(pk) => pk,
+                Err(e) => {
+                    bad_subnets.push(subnet_id);
+                    bad_subnet_count += 1;
+                    println!(
+                        "{}high_threshold_public_key_matches_the_one_in_cup_check: error converting high threshold public key proto to ThresholdSigPublicKey for subnet {}: {:?}",
+                        LOG_PREFIX, subnet_id, e
+                    );
+                    continue;
+                }
+            };
+            let separate_pk_bytes = high_threshold_public_key.into_bytes();
+
+            let initial_ni_dkg_transcript_high_threshold = match cup_contents
+                .initial_ni_dkg_transcript_high_threshold
+            {
+                Some(initial_ni_dkg_transcript_high_threshold) => {
+                    initial_ni_dkg_transcript_high_threshold
+                }
+                None => {
+                    bad_subnets.push(subnet_id);
+                    bad_subnet_count += 1;
+                    println!(
+                        "{}high_threshold_public_key_matches_the_one_in_cup_check: high threshold public key set, but no high threshold public key in cup contents for subnet {}",
+                        LOG_PREFIX, subnet_id
+                    );
+                    continue;
+                }
+            };
+            let public_key_bytes_from_cup = match extract_subnet_threshold_sig_public_key(
+                &initial_ni_dkg_transcript_high_threshold,
+            ) {
+                Ok(public_key_bytes_from_cup) => public_key_bytes_from_cup.into_bytes(),
+                Err(e) => {
+                    bad_subnets.push(subnet_id);
+                    bad_subnet_count += 1;
+                    println!(
+                        "{}high_threshold_public_key_matches_the_one_in_cup_check: error extracting high threshold public key bytes from cup contents for subnet {}: {:?}",
+                        LOG_PREFIX, subnet_id, e
+                    );
+                    continue;
+                }
+            };
+
+            if separate_pk_bytes != public_key_bytes_from_cup {
+                bad_subnets.push(subnet_id);
+                bad_subnet_count += 1;
+                println!(
+                    "{}high_threshold_public_key_matches_the_one_in_cup_check: explicitly set high threshold public key does not match the one in cup contents for subnet {}",
+                    LOG_PREFIX, subnet_id
+                );
+            } else {
+                ok_subnet_count += 1;
+            }
+        } else {
+            bad_subnets.push(subnet_id);
+            bad_subnet_count += 1;
+            println!(
+                "{}high_threshold_public_key_matches_the_one_in_cup_check: high threshold public key and/or cup contents not found for subnet {}",
+                LOG_PREFIX, subnet_id
+            );
         }
     }
-
-    fn valid_node_keys_and_node_id() -> (CurrentNodePublicKeys, NodeId) {
-        let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-        let node_pks =
-            generate_node_keys_once(&config, None).expect("error generating node public keys");
-        let node_id = node_pks.node_id();
-        (map_to_current_node_public_keys(node_pks), node_id)
-    }
-
-    fn map_to_current_node_public_keys(value: ValidNodePublicKeys) -> CurrentNodePublicKeys {
-        CurrentNodePublicKeys {
-            node_signing_public_key: Some(value.node_signing_key().clone()),
-            committee_signing_public_key: Some(value.committee_signing_key().clone()),
-            tls_certificate: Some(value.tls_certificate().clone()),
-            dkg_dealing_encryption_public_key: Some(value.dkg_dealing_encryption_key().clone()),
-            idkg_dealing_encryption_public_key: Some(value.idkg_dealing_encryption_key().clone()),
-        }
-    }
-
-    fn insert_dummy_node(node_id: &NodeId, snapshot: &mut RegistrySnapshot) {
-        snapshot.insert(
-            make_node_record_key(node_id.to_owned()).into_bytes(),
-            encode_or_panic::<NodeRecord>(&NodeRecord::default()),
-        );
-    }
-
-    #[test]
-    fn node_crypto_keys_invariants_valid_snapshot() {
-        // Crypto keys for the test.
-        let (node_pks_1, node_id_1) = valid_node_keys_and_node_id();
-        let (node_pks_2, node_id_2) = valid_node_keys_and_node_id();
-
-        // Generate and check a valid snapshot.
-        let mut snapshot = RegistrySnapshot::new();
-        insert_dummy_node(&node_id_1, &mut snapshot);
-        insert_dummy_node(&node_id_2, &mut snapshot);
-        insert_node_crypto_keys(&node_id_1, node_pks_1, &mut snapshot);
-        insert_node_crypto_keys(&node_id_2, node_pks_2, &mut snapshot);
-        assert!(check_node_crypto_keys_invariants(&snapshot).is_ok());
-        assert!(check_node_crypto_keys_soft_invariants(&snapshot).is_ok());
-    }
-
-    // TODO(CRP-1450): add tests for "missing" "invalid", and "duplicated" scenarios, so that
-    //   these scenarios are tested for all 5 keys of a node.
-    #[test]
-    fn node_crypto_keys_invariants_missing_committee_key() {
-        // Crypto keys for the test.
-        let (node_pks_1, node_id_1) = valid_node_keys_and_node_id();
-        let (node_pks_2, node_id_2) = valid_node_keys_and_node_id();
-
-        // Generate and check a valid snapshot.
-        let mut snapshot = RegistrySnapshot::new();
-        insert_dummy_node(&node_id_1, &mut snapshot);
-        insert_dummy_node(&node_id_2, &mut snapshot);
-        insert_node_crypto_keys(&node_id_1, node_pks_1, &mut snapshot);
-
-        let incomplete_node_public_keys = CurrentNodePublicKeys {
-            committee_signing_public_key: None,
-            ..node_pks_2
-        };
-        insert_node_crypto_keys(&node_id_2, incomplete_node_public_keys, &mut snapshot);
-        let result = check_node_crypto_keys_soft_invariants(&snapshot);
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.to_string().contains(&node_id_2.to_string()));
-        assert!(err.to_string().contains("has no key"));
-        assert!(err.to_string().contains("CommitteeSigning"));
-    }
-
-    #[test]
-    fn node_crypto_keys_invariants_missing_node_signing_key() {
-        // Crypto keys for the test.
-        let (node_pks_1, node_id_1) = valid_node_keys_and_node_id();
-        let (node_pks_2, node_id_2) = valid_node_keys_and_node_id();
-
-        // Generate and check a valid snapshot.
-        let mut snapshot = RegistrySnapshot::new();
-        insert_dummy_node(&node_id_1, &mut snapshot);
-        insert_dummy_node(&node_id_2, &mut snapshot);
-        insert_node_crypto_keys(&node_id_1, node_pks_1, &mut snapshot);
-
-        let incomplete_node_public_keys = CurrentNodePublicKeys {
-            node_signing_public_key: None,
-            ..node_pks_2
-        };
-        insert_node_crypto_keys(&node_id_2, incomplete_node_public_keys, &mut snapshot);
-        let result = check_node_crypto_keys_soft_invariants(&snapshot);
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.to_string().contains(&node_id_2.to_string()));
-        assert!(err.to_string().contains("has no key"));
-        assert!(err.to_string().contains("NodeSigning"));
-    }
-
-    #[test]
-    fn node_crypto_keys_invariants_missing_idkg_dealing_encryption_key() {
-        // Crypto keys for the test.
-        let (node_pks_1, node_id_1) = valid_node_keys_and_node_id();
-        let (node_pks_2, node_id_2) = valid_node_keys_and_node_id();
-
-        // Generate and check a valid snapshot.
-        let mut snapshot = RegistrySnapshot::new();
-        insert_dummy_node(&node_id_1, &mut snapshot);
-        insert_dummy_node(&node_id_2, &mut snapshot);
-        insert_node_crypto_keys(&node_id_1, node_pks_1, &mut snapshot);
-
-        let incomplete_node_public_keys = CurrentNodePublicKeys {
-            idkg_dealing_encryption_public_key: None,
-            ..node_pks_2
-        };
-        insert_node_crypto_keys(&node_id_2, incomplete_node_public_keys, &mut snapshot);
-        let result = check_node_crypto_keys_soft_invariants(&snapshot);
-
-        assert_matches!(result,
-                    Err(InvariantCheckError{msg: error_message, source: _})
-            if error_message.contains("has no key for purpose IDkgMEGaEncryption"));
-    }
-
-    #[test]
-    fn node_crypto_keys_invariants_missing_tls_cert() {
-        // Crypto keys for the test.
-        let (node_pks_1, node_id_1) = valid_node_keys_and_node_id();
-        let (node_pks_2, node_id_2) = valid_node_keys_and_node_id();
-
-        // Generate and check a valid snapshot.
-        let mut snapshot = RegistrySnapshot::new();
-        insert_dummy_node(&node_id_1, &mut snapshot);
-        insert_dummy_node(&node_id_2, &mut snapshot);
-        insert_node_crypto_keys(&node_id_1, node_pks_1, &mut snapshot);
-
-        let incomplete_node_public_keys = CurrentNodePublicKeys {
-            tls_certificate: None,
-            ..node_pks_2
-        };
-        insert_node_crypto_keys(&node_id_2, incomplete_node_public_keys, &mut snapshot);
-        let result = check_node_crypto_keys_soft_invariants(&snapshot);
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.to_string().contains(&node_id_2.to_string()));
-        assert!(err.to_string().contains("has no TLS cert"));
-    }
-
-    #[test]
-    fn node_crypto_keys_invariants_duplicated_committee_key() {
-        // Crypto keys for the test.
-        let (node_pks_1, node_id_1) = valid_node_keys_and_node_id();
-        let (node_pks_2, node_id_2) = valid_node_keys_and_node_id();
-
-        // Generate and check a valid snapshot.
-        let mut snapshot = RegistrySnapshot::new();
-        insert_dummy_node(&node_id_1, &mut snapshot);
-        insert_dummy_node(&node_id_2, &mut snapshot);
-        insert_node_crypto_keys(&node_id_1, node_pks_1.clone(), &mut snapshot);
-
-        let duplicated_key_node_pks = CurrentNodePublicKeys {
-            committee_signing_public_key: node_pks_1.committee_signing_public_key,
-            ..node_pks_2
-        };
-        insert_node_crypto_keys(&node_id_2, duplicated_key_node_pks, &mut snapshot);
-        let result = check_node_crypto_keys_soft_invariants(&snapshot);
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.to_string().contains(&node_id_1.to_string()));
-        assert!(err.to_string().contains(&node_id_2.to_string()));
-        assert!(err.to_string().contains("the same public key"));
-    }
-
-    #[test]
-    fn node_crypto_keys_invariants_duplicated_idkg_encryption_key() {
-        // Crypto keys for the test.
-        let (node_pks_1, node_id_1) = valid_node_keys_and_node_id();
-        let (node_pks_2, node_id_2) = valid_node_keys_and_node_id();
-
-        // Generate and check a valid snapshot.
-        let mut snapshot = RegistrySnapshot::new();
-        insert_dummy_node(&node_id_1, &mut snapshot);
-        insert_dummy_node(&node_id_2, &mut snapshot);
-        insert_node_crypto_keys(&node_id_1, node_pks_1.clone(), &mut snapshot);
-
-        let duplicated_key_node_pks = CurrentNodePublicKeys {
-            idkg_dealing_encryption_public_key: node_pks_1.idkg_dealing_encryption_public_key,
-            ..node_pks_2
-        };
-        insert_node_crypto_keys(&node_id_2, duplicated_key_node_pks, &mut snapshot);
-        let result = check_node_crypto_keys_soft_invariants(&snapshot);
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.to_string().contains(&node_id_1.to_string()));
-        assert!(err.to_string().contains(&node_id_2.to_string()));
-        assert!(err.to_string().contains("the same public key"));
-    }
-
-    #[test]
-    fn node_crypto_keys_invariants_duplicated_tls_cert() {
-        // Crypto keys for the test.
-        let (node_pks_1, node_id_1) = valid_node_keys_and_node_id();
-        let (node_pks_2, node_id_2) = valid_node_keys_and_node_id();
-
-        // Generate and check a valid snapshot.
-        let mut snapshot = RegistrySnapshot::new();
-        insert_dummy_node(&node_id_1, &mut snapshot);
-        insert_dummy_node(&node_id_2, &mut snapshot);
-        insert_node_crypto_keys(&node_id_1, node_pks_1.clone(), &mut snapshot);
-
-        let duplicated_cert_node_pks = CurrentNodePublicKeys {
-            tls_certificate: node_pks_1.tls_certificate,
-            ..node_pks_2
-        };
-        insert_node_crypto_keys(&node_id_2, duplicated_cert_node_pks, &mut snapshot);
-        let result = check_node_crypto_keys_soft_invariants(&snapshot);
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.to_string().contains(&node_id_1.to_string()));
-        assert!(err.to_string().contains(&node_id_2.to_string()));
-        assert!(err.to_string().contains("use the same certificate"));
-    }
-
-    #[test]
-    fn node_crypto_keys_invariants_inconsistent_node_id() {
-        // Crypto keys for the test.
-        let (node_pks_1, node_id_1) = valid_node_keys_and_node_id();
-        let (node_pks_2, node_id_2) = valid_node_keys_and_node_id();
-
-        // Generate and check a valid snapshot.
-        let mut snapshot = RegistrySnapshot::new();
-        insert_dummy_node(&node_id_1, &mut snapshot);
-        insert_dummy_node(&node_id_2, &mut snapshot);
-        insert_node_crypto_keys(&node_id_1, node_pks_1, &mut snapshot);
-
-        let (node_pks_3, _node_id_3) = valid_node_keys_and_node_id();
-        let inconsistent_signing_key_node_pks = CurrentNodePublicKeys {
-            node_signing_public_key: node_pks_3.node_signing_public_key,
-            ..node_pks_2
-        };
-        insert_node_crypto_keys(&node_id_2, inconsistent_signing_key_node_pks, &mut snapshot);
-        let result = check_node_crypto_keys_soft_invariants(&snapshot);
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.to_string().contains(&node_id_2.to_string()));
-        assert!(err.to_string().contains("inconsistent NodeSigning key"));
-    }
-
-    #[test]
-    fn orphaned_crypto_node_signing_pk() {
-        let (mut orphaned_keys, missing_node) = valid_node_keys_and_node_id();
-        // This leaves only node_signing_pk as orphan.
-        orphaned_keys.committee_signing_public_key = None;
-        orphaned_keys.tls_certificate = None;
-        orphaned_keys.dkg_dealing_encryption_public_key = None;
-        orphaned_keys.idkg_dealing_encryption_public_key = None;
-        run_test_orphaned_crypto_keys(missing_node, orphaned_keys);
-    }
-
-    #[test]
-    fn orphaned_crypto_committee_signing_pk() {
-        let (mut orphaned_keys, missing_node) = valid_node_keys_and_node_id();
-        orphaned_keys.node_signing_public_key = None;
-        // This leaves only committee_signing_pk as orphan.
-        orphaned_keys.tls_certificate = None;
-        orphaned_keys.dkg_dealing_encryption_public_key = None;
-        orphaned_keys.idkg_dealing_encryption_public_key = None;
-        run_test_orphaned_crypto_keys(missing_node, orphaned_keys);
-    }
-
-    #[test]
-    fn orphaned_crypto_tls_certificate() {
-        let (mut orphaned_keys, missing_node) = valid_node_keys_and_node_id();
-        orphaned_keys.node_signing_public_key = None;
-        orphaned_keys.committee_signing_public_key = None;
-        // This leaves only tls_certificate as orphan.
-        orphaned_keys.dkg_dealing_encryption_public_key = None;
-        orphaned_keys.idkg_dealing_encryption_public_key = None;
-        run_test_orphaned_crypto_keys(missing_node, orphaned_keys);
-    }
-
-    #[test]
-    fn orphaned_crypto_dkg_dealing_encryption_pk() {
-        let (mut orphaned_keys, missing_node) = valid_node_keys_and_node_id();
-        orphaned_keys.node_signing_public_key = None;
-        orphaned_keys.committee_signing_public_key = None;
-        orphaned_keys.tls_certificate = None;
-        // This leaves only dkg_dealing_encryption_pk as orphan.
-        orphaned_keys.idkg_dealing_encryption_public_key = None;
-        run_test_orphaned_crypto_keys(missing_node, orphaned_keys);
-    }
-
-    #[test]
-    fn orphaned_crypto_idkg_dealing_encryption_pk() {
-        let (mut orphaned_keys, missing_node) = valid_node_keys_and_node_id();
-        orphaned_keys.node_signing_public_key = None;
-        orphaned_keys.committee_signing_public_key = None;
-        orphaned_keys.tls_certificate = None;
-        orphaned_keys.dkg_dealing_encryption_public_key = None;
-        // This leaves only idkg_dealing_encryption_pk as orphan.
-        run_test_orphaned_crypto_keys(missing_node, orphaned_keys);
-    }
-
-    /// Ensures that if there are any missing keys, the InvariantCheck is triggered for the 'missing_node_id', which
-    /// is not given an entry in the nodes table but will have the public_key records created for it
-    /// This is useful so that we can run the same test on each individual missing key
-    fn run_test_orphaned_crypto_keys(
-        missing_node_id: NodeId,
-        node_pks_with_missing_entries: CurrentNodePublicKeys,
-    ) {
-        // Crypto keys for the test.
-        let (node_pks_1, node_id_1) = valid_node_keys_and_node_id();
-
-        // Generate and check a valid snapshot.
-        let mut snapshot = RegistrySnapshot::new();
-        insert_dummy_node(&node_id_1, &mut snapshot);
-        insert_node_crypto_keys(&node_id_1, node_pks_1, &mut snapshot);
-        insert_node_crypto_keys(
-            &missing_node_id,
-            node_pks_with_missing_entries,
-            &mut snapshot,
-        );
-
-        // TODO make this test more robust (all the cases 1 at a time)
-
-        let result = check_node_crypto_keys_invariants(&snapshot);
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.to_string().contains(&missing_node_id.to_string()));
-        assert_eq!(
-            err.to_string(),
-            format!(
-                "InvariantCheckError: There are {} or {} entries without a corresponding {} entry: [{}]",
-                CRYPTO_RECORD_KEY_PREFIX, CRYPTO_TLS_CERT_KEY_PREFIX, NODE_RECORD_KEY_PREFIX, missing_node_id
-            )
-        );
-    }
+    let result = if !bad_subnets.is_empty() {
+        Err(InvariantCheckError {
+            msg: format!(
+                "high_threshold_public_key and cup_contents are inconsistent for subnet(s) {}",
+                bad_subnets
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
+            source: None,
+        })
+    } else {
+        Ok(())
+    };
+    let label = if result.is_ok() {
+        "high_threshold_public_key_matches_the_one_in_cup_check_success"
+    } else {
+        "high_threshold_public_key_matches_the_one_in_cup_check_failure"
+    };
+    println!(
+        "{}{}: # of ok subnets: {}, # of bad subnets: {}, result: {:?}",
+        LOG_PREFIX, label, ok_subnet_count, bad_subnet_count, result
+    );
+    result
 }

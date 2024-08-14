@@ -1,4 +1,4 @@
-use candid::CandidType;
+use candid::{CandidType, Principal};
 use dfn_core::CanisterId;
 use ic_base_types::{CanisterIdError, PrincipalId, PrincipalIdError};
 use ic_crypto_sha2::Sha224;
@@ -10,7 +10,7 @@ use std::{
     str::FromStr,
 };
 
-use crate::protobuf as proto;
+use crate::{protobuf as proto, AccountIdBlob};
 
 /// While this is backed by an array of length 28, it's canonical representation
 /// is a hex string of length 64. The first 8 characters are the CRC-32 encoded
@@ -52,12 +52,12 @@ impl From<Account> for AccountIdentifier {
 }
 
 pub static SUB_ACCOUNT_ZERO: Subaccount = Subaccount([0; 32]);
-static ACCOUNT_DOMAIN_SEPERATOR: &[u8] = b"\x0Aaccount-id";
+static ACCOUNT_DOMAIN_SEPARATOR: &[u8] = b"\x0Aaccount-id";
 
 impl AccountIdentifier {
     pub fn new(account: PrincipalId, sub_account: Option<Subaccount>) -> AccountIdentifier {
         let mut hash = Sha224::new();
-        hash.write(ACCOUNT_DOMAIN_SEPERATOR);
+        hash.write(ACCOUNT_DOMAIN_SEPARATOR);
         hash.write(account.as_slice());
 
         let sub_account = sub_account.unwrap_or(SUB_ACCOUNT_ZERO);
@@ -112,7 +112,7 @@ impl AccountIdentifier {
 
     /// Converts this account identifier into a binary "address".
     /// The address is CRC32(identifier) . identifier.
-    pub fn to_address(&self) -> [u8; 32] {
+    pub fn to_address(&self) -> AccountIdBlob {
         let mut result = [0u8; 32];
         result[0..4].copy_from_slice(&self.generate_checksum());
         result[4..32].copy_from_slice(&self.hash);
@@ -120,7 +120,7 @@ impl AccountIdentifier {
     }
 
     /// Tries to parse an account identifier from a binary address.
-    pub fn from_address(blob: [u8; 32]) -> Result<Self, ChecksumError> {
+    pub fn from_address(blob: AccountIdBlob) -> Result<Self, ChecksumError> {
         check_sum(blob)
     }
 
@@ -167,6 +167,12 @@ impl<'de> Deserialize<'de> for AccountIdentifier {
     {
         let hex: [u8; 32] = hex::serde::deserialize(deserializer)?;
         check_sum(hex).map_err(D::Error::custom)
+    }
+}
+
+impl From<Principal> for AccountIdentifier {
+    fn from(pid: Principal) -> Self {
+        AccountIdentifier::new(PrincipalId(pid), None)
     }
 }
 
@@ -260,7 +266,7 @@ impl TryFrom<&Subaccount> for CanisterId {
     type Error = CanisterIdError;
 
     fn try_from(subaccount: &Subaccount) -> Result<Self, Self::Error> {
-        CanisterId::new(subaccount.try_into()?)
+        Ok(CanisterId::unchecked_from_principal(subaccount.try_into()?))
     }
 }
 

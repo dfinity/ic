@@ -1,12 +1,15 @@
 [package]
 name = "ic-registry-nns-data-provider-wrappers"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-registry-nns-data-provider = { path = "../nns_data_provider" }
 ic-types = { path = "../../types/types" }
-tokio = { version = "1.15.0", features = ["full"] }
-url = { version = "2.1.1", features = ["serde"] }
+tokio = { workspace = true }
+url = { workspace = true }
 

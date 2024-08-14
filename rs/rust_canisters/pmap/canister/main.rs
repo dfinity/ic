@@ -1,5 +1,6 @@
 use dfn_core::api::print;
 use dfn_macro::{query, update};
+use std::ptr::{addr_of, addr_of_mut};
 
 static mut MYVEC: Vec<u8> = Vec::new();
 const ARRAYSIZE: usize = 10;
@@ -26,7 +27,7 @@ async fn increment_array() -> Result<String, String> {
 
             print(format!("Before increment hi {} lo {}", hi, lo));
 
-            for v in &mut MYVEC {
+            for v in &mut *addr_of_mut!(MYVEC) {
                 *v += 1;
             }
 
@@ -57,7 +58,7 @@ async fn compute_sum() -> Result<u32, String> {
 
             let mut sum: u32 = 0;
 
-            for v in &MYVEC {
+            for v in &*addr_of!(MYVEC) {
                 sum += *v as u32;
             }
 

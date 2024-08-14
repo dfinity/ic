@@ -176,7 +176,7 @@ impl Scalar {
 
     /// Randomly generate a scalar in a way that is compatible with MIRACL
     ///
-    /// This should not be used for new code but only for compatability in
+    /// This should not be used for new code but only for compatibility in
     /// situations where MIRACL's BIG::randomnum was previously used
     pub fn miracl_random<R: RngCore + CryptoRng>(rng: &mut R) -> Self {
         /*
@@ -874,7 +874,7 @@ macro_rules! define_affine_and_projective_types {
 
                         tbl_i[0] = accum;
                         for j in 1..Self::WINDOW_ELEMENTS {
-                            // Our table indexes are off by one due to the ommitted
+                            // Our table indexes are off by one due to the omitted
                             // identity element. So here we are checking if we are
                             // about to compute a point that is a doubling of a point
                             // we have previously computed. If so we can compute it
@@ -1060,7 +1060,7 @@ macro_rules! define_affine_and_projective_types {
             /// BLS12381G2_XMD:SHA-256_SSWU_RO_ suite.
             ///
             /// # Arguments
-            /// * `domain_sep` - some protocol specific domain seperator
+            /// * `domain_sep` - some protocol specific domain separator
             /// * `input` - the input which will be hashed
             pub fn hash(domain_sep: &[u8], input: &[u8]) -> Self {
                 $projective::hash(domain_sep, input).into()
@@ -1073,7 +1073,7 @@ macro_rules! define_affine_and_projective_types {
             /// BLS12381G2_XMD:SHA-256_SSWU_RO_ suite.
             ///
             /// # Arguments
-            /// * `domain_sep` - some protocol specific domain seperator
+            /// * `domain_sep` - some protocol specific domain separator
             /// * `input` - the input which will be hashed
             pub fn hash_with_precomputation(domain_sep: &[u8], input: &[u8]) -> Self {
                 let mut pt = Self::hash(domain_sep, input);
@@ -1321,7 +1321,7 @@ macro_rules! define_affine_and_projective_types {
             /// BLS12381G2_XMD:SHA-256_SSWU_RO_ suite.
             ///
             /// # Arguments
-            /// * `domain_sep` - some protocol specific domain seperator
+            /// * `domain_sep` - some protocol specific domain separator
             /// * `input` - the input which will be hashed
             pub fn hash(domain_sep: &[u8], input: &[u8]) -> Self {
                 let pt =

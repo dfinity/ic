@@ -1,5 +1,5 @@
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    DerivationPath as DerivationPathImpl, EccCurveType, EccPoint, EccScalar, ThresholdEcdsaError,
+    CanisterThresholdError, DerivationPath as DerivationPathImpl, EccCurveType, EccPoint, EccScalar,
 };
 
 #[derive(Debug, Clone)]
@@ -7,7 +7,7 @@ pub enum ExtendedBip32DerivationError {
     InvalidChainCodeLength,
     InvalidDerivationPath,
     InvalidPublicKeyEncoding,
-    InternalError(ThresholdEcdsaError),
+    InternalError(CanisterThresholdError),
 }
 
 const CURVE_TYPE: EccCurveType = EccCurveType::K256;
@@ -16,10 +16,10 @@ pub type ExtendedBip32DerivationResult<T> = std::result::Result<T, ExtendedBip32
 
 pub use ic_crypto_internal_threshold_sig_ecdsa::DerivationIndex;
 
-impl From<ThresholdEcdsaError> for ExtendedBip32DerivationError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ExtendedBip32DerivationError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::InvalidPoint => Self::InvalidPublicKeyEncoding,
+            CanisterThresholdError::InvalidPoint => Self::InvalidPublicKeyEncoding,
             e => Self::InternalError(e),
         }
     }
@@ -115,7 +115,7 @@ impl DerivationPath {
             .path
             .derive_tweak_with_chain_code(&public_key, chain_code)?;
 
-        let new_key = public_key.add_points(&EccPoint::mul_by_g(&offset)?)?;
+        let new_key = public_key.add_points(&EccPoint::mul_by_g(&offset))?;
 
         Ok(ExtendedBip32DerivationOutput::new(new_key, chain_code))
     }
@@ -144,7 +144,7 @@ impl DerivationPath {
 
         let private_key = EccScalar::deserialize(CURVE_TYPE, private_key).unwrap();
 
-        let public_key = EccPoint::mul_by_g(&private_key)?;
+        let public_key = EccPoint::mul_by_g(&private_key);
 
         let (offset, derived_chain_key) = self
             .path

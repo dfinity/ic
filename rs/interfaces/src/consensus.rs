@@ -1,16 +1,18 @@
 //! The consensus public interface.
 use crate::{
+    batch_payload::ProposalContext,
     canister_http::{
-        CanisterHttpPayloadValidationError, CanisterHttpPermanentValidationError,
-        CanisterHttpTransientValidationError,
+        CanisterHttpPayloadValidationError, CanisterHttpPayloadValidationFailure,
+        InvalidCanisterHttpPayloadReason,
     },
     ingress_manager::{
-        IngressPayloadValidationError, IngressPermanentError, IngressTransientError,
+        IngressPayloadValidationError, IngressPayloadValidationFailure, InvalidIngressPayloadReason,
     },
-    messaging::{InvalidXNetPayload, XNetPayloadValidationError, XNetTransientValidationError},
+    messaging::{InvalidXNetPayload, XNetPayloadValidationError, XNetPayloadValidationFailure},
+    query_stats::{InvalidQueryStatsPayloadReason, QueryStatsPayloadValidationFailure},
     self_validating_payload::{
-        InvalidSelfValidatingPayload, SelfValidatingPayloadValidationError,
-        SelfValidatingTransientValidationError,
+        InvalidSelfValidatingPayloadReason, SelfValidatingPayloadValidationError,
+        SelfValidatingPayloadValidationFailure,
     },
     validation::{ValidationError, ValidationResult},
 };
@@ -47,42 +49,45 @@ pub trait PayloadBuilder: Send + Sync {
     fn validate_payload(
         &self,
         height: Height,
+        proposal_context: &ProposalContext,
         payload: &Payload,
         past_payloads: &[(Height, Time, Payload)],
-        context: &ValidationContext,
     ) -> ValidationResult<PayloadValidationError>;
 }
 
 #[derive(Debug)]
-pub enum PayloadPermanentError {
-    XNetPayloadValidationError(InvalidXNetPayload),
-    IngressPayloadValidationError(IngressPermanentError),
+pub enum InvalidPayloadReason {
+    InvalidXNetPayload(InvalidXNetPayload),
+    InvalidIngressPayload(InvalidIngressPayloadReason),
+    InvalidSelfValidatingPayload(InvalidSelfValidatingPayloadReason),
+    InvalidCanisterHttpPayload(InvalidCanisterHttpPayloadReason),
+    InvalidQueryStatsPayload(InvalidQueryStatsPayloadReason),
+    /// The overall block size is too large, even though the individual payloads are valid
     PayloadTooBig {
         expected: NumBytes,
         received: NumBytes,
     },
-    SelfValidatingPayloadValidationError(InvalidSelfValidatingPayload),
-    CanisterHttpPayloadValidationError(CanisterHttpPermanentValidationError),
 }
 
 #[derive(Debug)]
-pub enum PayloadTransientError {
-    XNetPayloadValidationError(XNetTransientValidationError),
-    IngressPayloadValidationError(IngressTransientError),
+pub enum PayloadValidationFailure {
+    XNetPayloadValidationFailed(XNetPayloadValidationFailure),
+    IngressPayloadValidationFailed(IngressPayloadValidationFailure),
+    SelfValidatingPayloadValidationFailed(SelfValidatingPayloadValidationFailure),
+    CanisterHttpPayloadValidationFailed(CanisterHttpPayloadValidationFailure),
+    QueryStatsPayloadValidationFailed(QueryStatsPayloadValidationFailure),
     RegistryUnavailable(RegistryClientError),
     SubnetNotFound(SubnetId),
-    SelfValidatingPayloadValidationError(SelfValidatingTransientValidationError),
-    CanisterHttpPayloadValidationError(CanisterHttpTransientValidationError),
 }
 
 /// Payload validation error
-pub type PayloadValidationError = ValidationError<PayloadPermanentError, PayloadTransientError>;
+pub type PayloadValidationError = ValidationError<InvalidPayloadReason, PayloadValidationFailure>;
 
 impl From<IngressPayloadValidationError> for PayloadValidationError {
     fn from(err: IngressPayloadValidationError) -> Self {
         err.map(
-            PayloadPermanentError::IngressPayloadValidationError,
-            PayloadTransientError::IngressPayloadValidationError,
+            InvalidPayloadReason::InvalidIngressPayload,
+            PayloadValidationFailure::IngressPayloadValidationFailed,
         )
     }
 }
@@ -90,8 +95,8 @@ impl From<IngressPayloadValidationError> for PayloadValidationError {
 impl From<XNetPayloadValidationError> for PayloadValidationError {
     fn from(err: XNetPayloadValidationError) -> Self {
         err.map(
-            PayloadPermanentError::XNetPayloadValidationError,
-            PayloadTransientError::XNetPayloadValidationError,
+            InvalidPayloadReason::InvalidXNetPayload,
+            PayloadValidationFailure::XNetPayloadValidationFailed,
         )
     }
 }
@@ -99,8 +104,8 @@ impl From<XNetPayloadValidationError> for PayloadValidationError {
 impl From<SelfValidatingPayloadValidationError> for PayloadValidationError {
     fn from(err: SelfValidatingPayloadValidationError) -> Self {
         err.map(
-            PayloadPermanentError::SelfValidatingPayloadValidationError,
-            PayloadTransientError::SelfValidatingPayloadValidationError,
+            InvalidPayloadReason::InvalidSelfValidatingPayload,
+            PayloadValidationFailure::SelfValidatingPayloadValidationFailed,
         )
     }
 }
@@ -108,8 +113,8 @@ impl From<SelfValidatingPayloadValidationError> for PayloadValidationError {
 impl From<CanisterHttpPayloadValidationError> for PayloadValidationError {
     fn from(err: CanisterHttpPayloadValidationError) -> Self {
         err.map(
-            PayloadPermanentError::CanisterHttpPayloadValidationError,
-            PayloadTransientError::CanisterHttpPayloadValidationError,
+            InvalidPayloadReason::InvalidCanisterHttpPayload,
+            PayloadValidationFailure::CanisterHttpPayloadValidationFailed,
         )
     }
 }

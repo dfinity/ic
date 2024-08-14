@@ -15,7 +15,7 @@ use std::convert::{TryFrom, TryInto};
 
 /// The point of this file is to validate protobufs as they're received and turn
 /// them into a validated data type
-/// ENDPOINTS
+/// ENDPOINTS.
 impl ToProto for TotalSupplyArgs {
     type Proto = protobuf::TotalSupplyRequest;
     fn from_proto(_: Self::Proto) -> Result<Self, String> {
@@ -150,7 +150,7 @@ impl ToProto for GetBlocksArgs {
         let length = pb
             .length
             .try_into()
-            .map_err(|_| format!("{} count not be convered to a usize", pb.length))?;
+            .map_err(|_| format!("{} count not be converted to a usize", pb.length))?;
         Ok(GetBlocksArgs {
             start: pb.start,
             length,
@@ -171,7 +171,7 @@ impl ToProto for GetBlocksRes {
     fn from_proto(pb: Self::Proto) -> Result<Self, String> {
         match pb
             .get_blocks_content
-            .expect("get_blocks() reponse with no content")
+            .expect("get_blocks() response with no content")
         {
             protobuf::get_blocks_response::GetBlocksContent::Blocks(protobuf::EncodedBlocks {
                 blocks,
@@ -221,11 +221,11 @@ impl ToProto for IterBlocksArgs {
         let start = pb
             .start
             .try_into()
-            .map_err(|_| format!("{} count not be convered to a usize", pb.start))?;
+            .map_err(|_| format!("{} count not be converted to a usize", pb.start))?;
         let length = pb
             .length
             .try_into()
-            .map_err(|_| format!("{} count not be convered to a usize", pb.length))?;
+            .map_err(|_| format!("{} count not be converted to a usize", pb.length))?;
         Ok(IterBlocksArgs { start, length })
     }
 
@@ -284,9 +284,9 @@ impl ToProto for BlockRes {
             Some(protobuf::block_response::BlockContent::Block(protobuf::EncodedBlock {
                 block,
             })) => Ok(BlockRes(Some(Ok(EncodedBlock::from(block))))),
-            Some(protobuf::block_response::BlockContent::CanisterId(canister_id)) => {
-                Ok(BlockRes(Some(Err(CanisterId::new(canister_id).unwrap()))))
-            }
+            Some(protobuf::block_response::BlockContent::CanisterId(canister_id)) => Ok(BlockRes(
+                Some(Err(CanisterId::unchecked_from_principal(canister_id))),
+            )),
             None => Ok(BlockRes(None)),
         }
     }
@@ -578,9 +578,14 @@ impl ToProto for Transaction {
             PTransfer::Burn(protobuf::Burn {
                 from: Some(from),
                 amount: Some(amount),
+                spender,
             }) => Operation::Burn {
                 from: AccountIdentifier::from_proto(from)?,
                 amount: tokens_from_proto(amount),
+                spender: match spender {
+                    Some(spender) => Some(AccountIdentifier::from_proto(spender)?),
+                    None => None,
+                },
             },
             PTransfer::Mint(protobuf::Mint {
                 to: Some(to),
@@ -599,6 +604,7 @@ impl ToProto for Transaction {
                 None => Operation::Transfer {
                     to: AccountIdentifier::from_proto(to)?,
                     from: AccountIdentifier::from_proto(from)?,
+                    spender: None,
                     amount: tokens_from_proto(amount),
                     fee: match max_fee {
                         Some(fee) => tokens_from_proto(fee),
@@ -609,10 +615,10 @@ impl ToProto for Transaction {
                     let spender = spender.ok_or_else(|| {
                         "Transfer from transaction: missing field `spender`".to_string()
                     })?;
-                    Operation::TransferFrom {
+                    Operation::Transfer {
                         from: AccountIdentifier::from_proto(from)?,
                         to: AccountIdentifier::from_proto(to)?,
-                        spender: AccountIdentifier::from_proto(spender)?,
+                        spender: Some(AccountIdentifier::from_proto(spender)?),
                         amount: tokens_from_proto(amount),
                         fee: match max_fee {
                             Some(fee) => tokens_from_proto(fee),
@@ -661,9 +667,14 @@ impl ToProto for Transaction {
         } = self;
         let icrc1_memo_proto = icrc1_memo.map(|b| protobuf::Icrc1Memo { memo: b.to_vec() });
         let transfer = match operation {
-            Operation::Burn { from, amount } => PTransfer::Burn(protobuf::Burn {
+            Operation::Burn {
+                from,
+                amount,
+                spender,
+            } => PTransfer::Burn(protobuf::Burn {
                 from: Some(from.into_proto()),
                 amount: Some(tokens_into_proto(amount)),
+                spender: spender.map(|s| s.into_proto()),
             }),
 
             Operation::Mint { to, amount } => PTransfer::Mint(protobuf::Mint {
@@ -676,27 +687,17 @@ impl ToProto for Transaction {
                 amount,
                 from,
                 fee,
-            } => PTransfer::Send(protobuf::Send {
-                to: Some(to.into_proto()),
-                amount: Some(tokens_into_proto(amount)),
-                from: Some(from.into_proto()),
-                max_fee: Some(tokens_into_proto(fee)),
-                extension: None,
-            }),
-            Operation::TransferFrom {
-                from,
-                to,
-                amount,
-                fee,
                 spender,
             } => PTransfer::Send(protobuf::Send {
-                from: Some(from.into_proto()),
                 to: Some(to.into_proto()),
                 amount: Some(tokens_into_proto(amount)),
+                from: Some(from.into_proto()),
                 max_fee: Some(tokens_into_proto(fee)),
-                extension: Some(PExt::TransferFrom(protobuf::TransferFrom {
-                    spender: Some(spender.into_proto()),
-                })),
+                extension: spender.map(|spender| {
+                    PExt::TransferFrom(protobuf::TransferFrom {
+                        spender: Some(spender.into_proto()),
+                    })
+                }),
             }),
             Operation::Approve {
                 from,

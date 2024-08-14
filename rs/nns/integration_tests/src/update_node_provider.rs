@@ -3,17 +3,17 @@ use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
 };
-use ic_nns_governance::pb::v1::{GovernanceError, NodeProvider, UpdateNodeProvider};
+use ic_nns_governance_api::pb::v1::{GovernanceError, NodeProvider, UpdateNodeProvider};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::add_node_provider,
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
 };
 use icp_ledger::AccountIdentifier;
 
 #[test]
 fn test_update_node_provider() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_invariant_compliant_mutations()
             .with_test_neurons()

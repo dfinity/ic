@@ -1,12 +1,4 @@
-#[cfg(not(target_arch = "wasm32"))]
-mod openssl_sha224;
-#[cfg(target_arch = "wasm32")]
-mod rust_sha224;
-
-#[cfg(not(target_arch = "wasm32"))]
-pub(crate) use openssl_sha224::{hash, InternalSha224};
-#[cfg(target_arch = "wasm32")]
-pub(crate) use rust_sha224::{hash, InternalSha224};
+use sha2::Digest;
 
 /// Hasher with fixed algorithm that is guaranteed not to change in the future
 /// or across registry versions. The algorithm used to generate the hash is
@@ -17,7 +9,7 @@ pub(crate) use rust_sha224::{hash, InternalSha224};
 
 #[derive(Default)]
 pub struct Sha224 {
-    sha224: InternalSha224,
+    sha224: sha2::Sha224,
 }
 
 impl Sha224 {
@@ -28,17 +20,19 @@ impl Sha224 {
 
     /// Hashes some data and returns the digest
     pub fn hash(data: &[u8]) -> [u8; 28] {
-        hash(data)
+        let mut hash = Self::new();
+        hash.write(data);
+        hash.finish()
     }
 
     /// Incrementally update the current hash
     pub fn write(&mut self, data: &[u8]) {
-        self.sha224.write(data);
+        self.sha224.update(data);
     }
 
     /// Finishes computing a hash, returning the digest
     pub fn finish(self) -> [u8; 28] {
-        self.sha224.finish()
+        self.sha224.finalize().into()
     }
 }
 

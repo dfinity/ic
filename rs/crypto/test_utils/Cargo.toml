@@ -1,25 +1,16 @@
 [package]
 name = "ic-crypto-test-utils"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
+ic-crypto-ed25519 = { path = "../ed25519" }
 ic-crypto-internal-csp-test-utils = { path = "../internal/csp_test_utils" }
-ic-crypto-internal-types = { path = "../internal/crypto_lib/types" }
-ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
-ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-fake = { path = "../../registry/fake" }
-ic-registry-client-helpers = { path = "../../registry/helpers" }
-ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-types = { path = "../../types/types" }
-ic-types-test-utils = { path = "../../types/types_test_utils" }
-ed25519-consensus = "2.0.1"
-openssl = "0.10.55"
-rand = "0.8"
-serde = { version = "1.0.99", features = [ "derive" ] }
-strum_macros = "0.23.0"
-tokio = { version = "1.15.0", features = ["net"] }
-tokio-openssl = "0.6.0"
+rand = { workspace = true }

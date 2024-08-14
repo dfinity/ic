@@ -10,6 +10,7 @@ use ic_metrics::MetricsRegistry;
 use ic_types::{
     consensus::{certification::CertificationMessage, CatchUpPackage, ConsensusMessageHashable},
     time::current_time,
+    NodeId, PrincipalId,
 };
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -121,7 +122,8 @@ fn open_certification_pool(path: &str, read_only: bool) -> CertificationPoolImpl
     let path = PathBuf::from(path);
     let mut config = ArtifactPoolConfig::new(path);
     config.persistent_pool_read_only = read_only;
-    CertificationPoolImpl::new(config, log, MetricsRegistry::new())
+    let node_id = NodeId::from(PrincipalId::new_node_test_id(0));
+    CertificationPoolImpl::new(node_id, config, log, MetricsRegistry::new())
 }
 
 fn from_str<'a, T: Deserialize<'a>>(json: &'a str) -> Result<T, serde_json::Error> {

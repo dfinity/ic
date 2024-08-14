@@ -1,22 +1,31 @@
 [package]
 name = "ic-http-endpoints-public"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-askama = "0.11.1"
-async-trait = "0.1.68"
+askama = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
 byte-unit = "4.0.14"
-crossbeam = "0.8.2"
-hex = "0.4.2"
-http = "0.2.5"
-futures = "0.3.13"
-futures-util = "0.3.13"
-hyper = { version = "0.14.18", features = ["full"] }
-hyper-tls = "0.5.0"
+bytes = { workspace = true }
+cfg-if = "1.0.0"
+crossbeam = "0.8.4"
+futures = { workspace = true }
+futures-util = { workspace = true }
+hex = { workspace = true }
+http = { workspace = true }
+http-body = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
 ic-async-utils = { path = "../../async_utils" }
 ic-certification = { path = "../../certification" }
 ic-config = { path = "../../config" }
+ic-crypto-interfaces-sig-verification = { path = "../../crypto/interfaces/sig_verification" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
@@ -31,45 +40,57 @@ ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-provisional-whitelist = { path = "../../registry/provisional_whitelist" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replicated-state = { path = "../../replicated_state" }
+ic-tracing = { path = "../../monitoring/tracing" }
 ic-types = { path = "../../types/types" }
 ic-validator = { path = "../../validator" }
-native-tls = { version = "0.2.7", features = ["alpn"] }
-prometheus = { version = "0.12.0", features = ["process"] }
-prost = "0.11.0"
-rand = "0.8.3"
-serde = "1.0.99"
-serde_cbor = "0.11.1"
-slog = { version = "2.5.2", features = [
-  "nested-values",
-  "release_max_level_debug",
-] }
-strum = { version = "0.24", features = ["derive"] }
-tempfile = "3.1.0"
-threadpool = "1.8.1"
-tokio = { version = "1.15.0", features = ["full"] }
+inferno = "0.11.19"
+prometheus = { workspace = true }
+prost = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+slog = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
 tokio-io-timeout = "1.2.0"
-tower = { version = "0.4.8", features = ["load-shed", "limit", "steer"] }
-url = "2.1.1"
+tokio-rustls = { workspace = true }
+tokio-util = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tracing-flame = "0.2.0"
+tracing-subscriber = { workspace = true }
+
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # this library uses libunwind, which is only applicable to Linux
 ic-backtrace = { path = "../../monitoring/backtrace" }
 
 [dev-dependencies]
-bytes = "1.0.1"
-ic-agent = { workspace = true }
+ic-canister-client = { path = "../../canister_client" }
+ic-canister-client-sender = { path = "../../canister_client/sender" }
+ic-canonical-state = { path = "../../canonical_state" }
+ic-certification-test-utils = { path = "../../certification/test-utils" }
+ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
 ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
+ic-interfaces-mocks = { path = "../../interfaces/mocks" }
 ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
 ic-interfaces-state-manager-mocks = { path = "../../interfaces/state_manager/mocks" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-test-utilities = { path = "../../test_utilities" }
-mockall = "0.11.4"
+ic-test-utilities-state = { path = "../../test_utilities/state" }
+ic-test-utilities-time = { path = "../../test_utilities/time" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
 maplit = "1.0.2"
-pretty_assertions = "0.7.1"
+mockall = { workspace = true }
+pretty_assertions = { workspace = true }
 proptest = "1.0.0"
+reqwest = { workspace = true }
+rstest = { workspace = true }
+rustls = { workspace = true }
+serde_bytes = { workspace = true }
 tower-test = "0.4.0"
 
 [features]
-malicious_code = ["ic-validator/malicious_code"]
+fuzzing_code = []

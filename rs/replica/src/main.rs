@@ -3,29 +3,33 @@
 use ic_async_utils::{abort_on_panic, shutdown_signal};
 use ic_config::Config;
 use ic_crypto_sha2::Sha256;
-use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
-use ic_onchain_observability_server::spawn_onchain_observability_grpc_server_and_register_metrics;
 use ic_replica::setup;
 use ic_sys::PAGE_SIZE;
-use ic_types::consensus::CatchUpPackage;
-use ic_types::{replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion, SubnetId};
+use ic_tracing::ReloadHandles;
+use ic_types::{
+    consensus::CatchUpPackage, replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion,
+    SubnetId,
+};
 use nix::unistd::{setpgid, Pid};
-use static_assertions::assert_eq_size;
+use opentelemetry::KeyValue;
+use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::{trace, Resource};
 use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::signal::unix::{signal, SignalKind};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::Layer;
 
 #[cfg(target_os = "linux")]
 mod jemalloc_metrics;
 
 // On mac jemalloc causes lmdb to segfault
 #[cfg(target_os = "linux")]
-use jemallocator::Jemalloc;
+use tikv_jemallocator::Jemalloc;
 #[cfg(target_os = "linux")]
 #[global_allocator]
-#[cfg(target_os = "linux")]
 static ALLOC: Jemalloc = Jemalloc;
 
 #[cfg(feature = "profiler")]
@@ -56,7 +60,8 @@ fn get_replica_binary_hash() -> Result<(PathBuf, String), String> {
 
 fn main() -> io::Result<()> {
     // We do not support 32 bits architectures and probably never will.
-    assert_eq_size!(usize, u64);
+    #[cfg(not(target_pointer_width = "64"))]
+    compile_error!("compilation is only allowed for 64-bit targets");
     // Ensure that the hardcoded constant matches the OS page size.
     assert_eq!(ic_sys::sysconf_page_size(), PAGE_SIZE);
 
@@ -82,27 +87,47 @@ fn main() -> io::Result<()> {
     #[cfg(feature = "profiler")]
     let guard = pprof::ProfilerGuard::new(100).unwrap();
 
-    // We create 3 separate Tokio runtimes. The main one is for the most important
-    // IC operations (e.g. transport). Then the `http` is for serving user requests.
-    // This is also crucial because IC upgrades go through this code path.
-    // The 3rd one is for XNet.
-    // In a bug-free system with quotas in place we would use just a single runtime.
-    // We do have 3 currently as risk management measure. We don't want to risk
+    // We create 4 separate Tokio runtimes. The main one is for the most important
+    // IC operations (crypto).
+
+    // In a bug-free system with we would use just a single runtime.
+    // We do have 4 currently as risk management measure. We don't want to risk
     // a potential bug (e.g. blocking some thread) in one component to yield the
     // Tokio scheduler irresponsive and block progress on other components.
-    let rt_main = tokio::runtime::Runtime::new().unwrap();
+
+    // Until NET-1559 is not resolved there must be separate runtimes for the different compoenents as risk mitigation.
+
+    // Async components usually spend most of their time awaiting for I/O operations.
+    // Ideally async components are not CPU intensive so they should not need many OS threads.
+    let rt_worker_threads = std::cmp::max(num_cpus::get() / 4, 2);
+
+    // The runtime is use for inter process communication - crypto, networking adapters, etc.
+    let rt_main = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(rt_worker_threads)
+        .thread_name("Main_Thread".to_string())
+        .enable_all()
+        .build()
+        .unwrap();
+
+    // The runtime is used for P2P.
+    let rt_p2p = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(rt_worker_threads)
+        .thread_name("P2P_Thread".to_string())
+        .enable_all()
+        .build()
+        .unwrap();
+
     // Runtime used for serving user requests.
-    let http_rt_worker_threads = std::cmp::max(num_cpus::get() / 2, 1);
     let rt_http = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(http_rt_worker_threads)
+        .worker_threads(rt_worker_threads)
         .thread_name("HTTP_Thread".to_string())
         .enable_all()
         .build()
         .unwrap();
 
-    let xnet_rt_worker_threads = std::cmp::max(num_cpus::get() / 4, 1);
+    // Runtime used for XNet.
     let rt_xnet = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(xnet_rt_worker_threads)
+        .worker_threads(rt_worker_threads)
         .thread_name("XNet_Thread".to_string())
         .enable_all()
         .build()
@@ -159,11 +184,12 @@ fn main() -> io::Result<()> {
     #[cfg(target_os = "linux")]
     metrics_registry.register(jemalloc_metrics::JemallocMetrics::new());
 
-    let cup = setup::get_catch_up_package(&replica_args, &logger)
+    let cup_proto = setup::get_catch_up_package(&replica_args, &logger);
+    let cup = cup_proto
         .as_ref()
-        .map(|c| CatchUpPackage::try_from(c).expect("deserializing CUP failed"));
+        .map(|proto| CatchUpPackage::try_from(proto).expect("deserializing CUP failed"));
 
-    // Set the replica verison and report as metric
+    // Set the replica version and report as metric
     setup::set_replica_version(&replica_args, &logger);
     {
         let g = metrics_registry.int_gauge_vec(
@@ -209,6 +235,54 @@ fn main() -> io::Result<()> {
     context.subnet_id = format!("{}", subnet_id.get());
     let logger = logger.with_new_context(context);
 
+    // Set up tracing
+    let mut tracing_layers = vec![];
+
+    // TODO: the replica config has empty string instead of a None value for the 'jaeger_addr'. It needs to be fixed.
+    match config.tracing.jaeger_addr.as_ref() {
+        Some(jaeger_collector_addr) if !jaeger_collector_addr.is_empty() => {
+            let _rt_guard = rt_main.enter();
+
+            let span_exporter = opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_endpoint(jaeger_collector_addr)
+                .with_protocol(opentelemetry_otlp::Protocol::Grpc);
+
+            match opentelemetry_otlp::new_pipeline()
+                .tracing()
+                .with_trace_config(
+                    trace::config()
+                        .with_sampler(opentelemetry_sdk::trace::Sampler::TraceIdRatioBased(0.01))
+                        .with_resource(Resource::new(vec![KeyValue::new(
+                            "service.name",
+                            "replica",
+                        )])),
+                )
+                .with_exporter(span_exporter)
+                .install_batch(opentelemetry_sdk::runtime::Tokio)
+            {
+                Ok(tracer) => {
+                    let otel_layer = tracing_opentelemetry::OpenTelemetryLayer::new(tracer);
+                    tracing_layers.push(otel_layer.boxed());
+                }
+                Err(err) => {
+                    tracing::warn!("Failed to create the opentelemetry tracer: {:#?}", err);
+                }
+            }
+        }
+        _ => {}
+    }
+
+    let (reload_layer, reload_handle) = tracing_subscriber::reload::Layer::new(vec![]);
+    let tracing_handle = ReloadHandles::new(reload_handle);
+    tracing_layers.push(reload_layer.boxed());
+
+    let subscriber = tracing_subscriber::Registry::default().with(tracing_layers);
+
+    if let Err(err) = tracing::subscriber::set_global_default(subscriber) {
+        tracing::warn!("Failed to set global subscriber: {:#?}", err);
+    }
+
     info!(logger, "Replica Started");
     info!(logger, "Running in subnetwork {:?}", subnet_id);
     if let Ok((path, hash)) = get_replica_binary_hash() {
@@ -221,43 +295,28 @@ fn main() -> io::Result<()> {
         rt_http.handle().clone(),
         config.metrics.clone(),
         metrics_registry.clone(),
-        registry.clone(),
-        Arc::clone(&crypto) as Arc<dyn TlsHandshake + Send + Sync>,
         &logger.inner_logger.root,
     );
 
     info!(logger, "Constructing IC stack");
-    let (_, _, _p2p_thread_joiner, _, _xnet_endpoint) =
+    let (_, _, _, _p2p_thread_joiner, _xnet_endpoint) =
         ic_replica::setup_ic_stack::construct_ic_stack(
             &logger,
             &metrics_registry,
-            rt_main.handle().clone(),
-            rt_http.handle().clone(),
-            rt_xnet.handle().clone(),
+            rt_main.handle(),
+            rt_p2p.handle(),
+            rt_http.handle(),
+            rt_xnet.handle(),
             config.clone(),
             node_id,
             subnet_id,
             registry,
             crypto,
-            cup,
+            cup_proto,
+            tracing_handle,
         )?;
 
     info!(logger, "Constructed IC stack");
-
-    // TODO(NET-1366) - remove this flag once confident that starting gRPC is stable
-    if config
-        .adapters_config
-        .onchain_observability_enable_grpc_server
-    {
-        // Spawns a new grpc server in a new task. This will continue to run until the Runtime shuts down.
-        spawn_onchain_observability_grpc_server_and_register_metrics(
-            metrics_registry,
-            rt_main.handle().clone(),
-            config
-                .adapters_config
-                .onchain_observability_uds_metrics_path,
-        );
-    }
 
     std::thread::sleep(Duration::from_millis(5000));
 

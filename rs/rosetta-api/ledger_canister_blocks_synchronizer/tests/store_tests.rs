@@ -1,34 +1,31 @@
 use ic_ledger_canister_blocks_synchronizer::{
     balance_book::{BalanceBook, ClientBalancesStore},
     blocks::{BlockStoreError, Blocks},
+    timestamp_to_iso8601,
 };
-use ic_ledger_canister_blocks_synchronizer_test_utils::{
-    create_tmp_dir, init_test_logger, sample_data::Scribe,
-};
+use ic_ledger_canister_blocks_synchronizer_test_utils::{create_tmp_dir, sample_data::Scribe};
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction};
 use ic_ledger_core::{
-    approvals::AllowanceTable, balances::BalancesStore, block::BlockType, timestamp::TimeStamp,
-    tokens::CheckedAdd, Tokens,
+    approvals::AllowanceTable, approvals::HeapAllowancesData, balances::BalancesStore,
+    block::BlockType, timestamp::TimeStamp, tokens::CheckedAdd, Tokens,
 };
-use icp_ledger::{apply_operation, AccountIdentifier, ApprovalKey, Block, Operation};
+use icp_ledger::{apply_operation, AccountIdentifier, Block, Operation};
 use rusqlite::params;
 use std::path::Path;
 
 pub(crate) fn sqlite_on_disk_store(path: &Path) -> Blocks {
-    Blocks::new_persistent(path).unwrap()
+    Blocks::new_persistent(path, false).unwrap()
 }
-
-type Approvals = AllowanceTable<ApprovalKey, AccountIdentifier, Tokens>;
 
 #[derive(Default)]
 struct TestContext {
     pub balance_book: BalanceBook,
-    pub approvals: Approvals,
+    pub approvals: AllowanceTable<HeapAllowancesData<AccountIdentifier, Tokens>>,
 }
 
 impl LedgerContext for TestContext {
     type AccountId = AccountIdentifier;
-    type Approvals = Approvals;
+    type AllowancesData = HeapAllowancesData<AccountIdentifier, Tokens>;
     type BalancesStore = ClientBalancesStore;
     type Tokens = Tokens;
 
@@ -40,11 +37,11 @@ impl LedgerContext for TestContext {
         &mut self.balance_book
     }
 
-    fn approvals(&self) -> &Approvals {
+    fn approvals(&self) -> &AllowanceTable<Self::AllowancesData> {
         &self.approvals
     }
 
-    fn approvals_mut(&mut self) -> &mut Approvals {
+    fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData> {
         &mut self.approvals
     }
 
@@ -55,7 +52,6 @@ impl LedgerContext for TestContext {
 
 #[actix_rt::test]
 async fn store_smoke_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let mut store = sqlite_on_disk_store(tmpdir.path());
     let scribe = Scribe::new_with_sample_data(10, 100);
@@ -73,7 +69,7 @@ async fn store_smoke_test() {
     }
     assert_eq!(
         store.get_first_hashed_block().unwrap(),
-        *scribe.blockchain.get(0).unwrap()
+        *scribe.blockchain.front().unwrap()
     );
     assert_eq!(
         store.get_latest_hashed_block().unwrap(),
@@ -87,8 +83,7 @@ async fn store_smoke_test() {
 }
 
 #[actix_rt::test]
-async fn store_coherance_test() {
-    init_test_logger();
+async fn store_coherence_test() {
     let tmpdir = create_tmp_dir();
 
     let location = tmpdir.path();
@@ -100,10 +95,16 @@ async fn store_coherance_test() {
     for hb in &scribe.blockchain {
         let hash = hb.hash.into_bytes().to_vec();
         let parent_hash = hb.parent_hash.map(|ph| ph.into_bytes().to_vec());
-        let command = "INSERT INTO blocks (hash, block, parent_hash, idx, verified) VALUES (?1, ?2, ?3, ?4, FALSE)";
+        let command = "INSERT INTO blocks (hash, block, parent_hash, idx, verified, timestamp) VALUES (?1, ?2, ?3, ?4, FALSE, ?5)";
         con.execute(
             command,
-            params![hash, hb.block.clone().into_vec(), parent_hash, hb.index],
+            params![
+                hash,
+                hb.block.clone().into_vec(),
+                parent_hash,
+                hb.index,
+                timestamp_to_iso8601(hb.timestamp)
+            ],
         )
         .unwrap();
     }
@@ -126,7 +127,6 @@ async fn store_coherance_test() {
 
 #[actix_rt::test]
 async fn store_account_balances_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let mut store = sqlite_on_disk_store(tmpdir.path());
     let scribe = Scribe::new_with_sample_data(10, 100);
@@ -136,14 +136,16 @@ async fn store_account_balances_test() {
         let tx = Block::decode(hb.block.clone()).unwrap().transaction;
         let operation = tx.operation;
         context.balance_book.store.transaction_context = Some(hb.index);
-        apply_operation(&mut context, &operation, now).ok();
+        apply_operation(&mut context, &operation, now).unwrap();
         context.balance_book.store.transaction_context = None;
         store.push(hb).unwrap();
         store.set_hashed_block_to_verified(&hb.index).unwrap();
         let to_account: Option<String>;
         let from_account: Option<String>;
         match operation {
-            Operation::Burn { from, amount: _ } => {
+            Operation::Burn {
+                from, amount: _, ..
+            } => {
                 from_account = Some(from.to_hex());
                 to_account = None;
             }
@@ -159,21 +161,17 @@ async fn store_account_balances_test() {
                 from_account = Some(from.to_hex());
                 to_account = Some(spender.to_hex());
             }
-            Operation::TransferFrom { from, to, .. } => {
-                from_account = Some(from.to_hex());
-                to_account = Some(to.to_hex());
-            }
         }
         if let Some(acc_str) = from_account {
             let id = AccountIdentifier::from_hex(acc_str.as_str()).unwrap();
             let amount_from = store.get_account_balance(&id, &hb.index).unwrap();
-            let amount_local = *context.balance_book.store.get_balance(&id).unwrap();
+            let amount_local = context.balance_book.store.get_balance(&id).unwrap();
             assert_eq!(amount_from, amount_local);
         }
         if let Some(acc_str) = to_account {
             let id = AccountIdentifier::from_hex(acc_str.as_str()).unwrap();
             let amount_to = store.get_account_balance(&id, &hb.index).unwrap();
-            let amount_local = *context.balance_book.store.get_balance(&id).unwrap();
+            let amount_local = context.balance_book.store.get_balance(&id).unwrap();
             assert_eq!(amount_to, amount_local);
         }
     }
@@ -187,7 +185,6 @@ async fn store_account_balances_test() {
 
 #[actix_rt::test]
 async fn store_prune_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let mut store = sqlite_on_disk_store(tmpdir.path());
     let scribe = Scribe::new_with_sample_data(10, 100);
@@ -206,7 +203,6 @@ async fn store_prune_test() {
 
 #[actix_rt::test]
 async fn store_prune_corner_cases_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let mut store = sqlite_on_disk_store(tmpdir.path());
     let scribe = Scribe::new_with_sample_data(10, 100);
@@ -229,7 +225,6 @@ async fn store_prune_corner_cases_test() {
 
 #[actix_rt::test]
 async fn store_prune_first_balance_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let mut store = sqlite_on_disk_store(tmpdir.path());
     let scribe = Scribe::new_with_sample_data(10, 100);
@@ -250,7 +245,6 @@ async fn store_prune_first_balance_test() {
 
 #[actix_rt::test]
 async fn store_prune_and_load_test() {
-    init_test_logger();
     let tmpdir = create_tmp_dir();
     let mut store = sqlite_on_disk_store(tmpdir.path());
 
@@ -300,7 +294,7 @@ fn verify_pruned(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
         // Genesis block (at idx 0) should still be accessible
         assert_eq!(
             store.get_hashed_block(&0).unwrap(),
-            *scribe.blockchain.get(0).unwrap()
+            *scribe.blockchain.front().unwrap()
         );
     }
 

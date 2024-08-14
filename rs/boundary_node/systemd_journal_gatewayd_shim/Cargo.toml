@@ -1,0 +1,20 @@
+[package]
+name = "systemd-journal-gatewayd-shim"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
+clap = { workspace = true }
+http = { workspace = true }
+ic-async-utils = { path = "../../async_utils" }
+itertools = { workspace = true }
+reqwest = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+url = { workspace = true }

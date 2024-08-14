@@ -212,6 +212,7 @@ fn eval(ops_bytes: OpsBytes) {
             Ops::DebugPrint => api::print(&stack.pop_blob()),
             Ops::Trap => api::trap_with_blob(&stack.pop_blob()),
             Ops::SetGlobal => set_global(stack.pop_blob()),
+            Ops::AppendGlobal => append_global(stack.pop_blob()),
             Ops::GetGlobal => stack.push_blob(get_global()),
             Ops::BadPrint => api::bad_print(),
             Ops::SetPreUpgrade => set_pre_upgrade(stack.pop_blob()),
@@ -396,6 +397,45 @@ fn eval(ops_bytes: OpsBytes) {
                 let data = stack.pop_blob();
                 stack.push_int(api::is_controller(&data));
             }
+            Ops::CyclesBurn128 => {
+                let amount_low = stack.pop_int64();
+                let amount_high = stack.pop_int64();
+                stack.push_blob(api::cycles_burn128(amount_high, amount_low))
+            }
+            Ops::BlobLength => {
+                let data = stack.pop_blob();
+                stack.push_int(data.len() as u32);
+            }
+            Ops::PushEqualBytes => {
+                let length = stack.pop_int();
+                let byte = stack.pop_int();
+                let data = vec![byte as u8; length as usize];
+                stack.push_blob(data);
+            }
+            Ops::InReplicatedExecution => stack.push_int(api::in_replicated_execution()),
+            Ops::CallWithBestEffortResponse => api::call_with_best_effort_response(stack.pop_int()),
+            Ops::MsgDeadline => stack.push_int64(api::msg_deadline()),
+            Ops::MemorySizeIsAtLeast => {
+                #[cfg(target_arch = "wasm32")]
+                let current_memory_size = || {
+                    let wasm_page_size = wee_alloc::PAGE_SIZE.0;
+                    core::arch::wasm32::memory_size::<0>() * wasm_page_size
+                };
+
+                #[cfg(not(target_arch = "wasm32"))]
+                let current_memory_size = || usize::MAX;
+
+                let target_memory_size = stack.pop_int64() as usize;
+                let mut a = vec![];
+                loop {
+                    if current_memory_size() > target_memory_size {
+                        break;
+                    }
+                    // Allocate a megabyte more.
+                    a.push(vec![13u8; 1024 * 1024]);
+                }
+                std::hint::black_box(a);
+            }
         }
     }
 }
@@ -465,6 +505,9 @@ lazy_static! {
 }
 fn set_global(data: Vec<u8>) {
     *GLOBAL.lock().unwrap() = data;
+}
+fn append_global(mut data: Vec<u8>) {
+    GLOBAL.lock().unwrap().append(&mut data);
 }
 fn get_global() -> Vec<u8> {
     GLOBAL.lock().unwrap().clone()

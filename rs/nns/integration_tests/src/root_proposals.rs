@@ -1,7 +1,7 @@
 use canister_test::{Canister, Project};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
-use ic_ic00_types::CanisterInstallMode;
+use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };
@@ -10,11 +10,12 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER2_PRINCIPAL, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR, TEST_USER5_KEYPAIR,
     TEST_USER6_KEYPAIR,
 };
-use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
+use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_test_utils::{
-    common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters,
+    common::NnsInitPayloadsBuilder,
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     registry::initial_mutations_for_a_multinode_nns_subnet,
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
@@ -73,7 +74,7 @@ fn governance_canister_sha() -> [u8; 32] {
 
 #[test]
 fn test_upgrade_governance_through_root_proposal() {
-    ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_mutations(vec![RegistryAtomicMutateRequest {
                 mutations: initial_mutations_for_a_multinode_nns_subnet(),
@@ -88,8 +89,8 @@ fn test_upgrade_governance_through_root_proposal() {
         let proposer_pid = *TEST_USER1_PRINCIPAL;
 
         // Build and submit a root proposal
-        let root_proposal =
-            ChangeCanisterProposal::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
+        let change_canister_request =
+            ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
                 .with_memory_allocation(ic_nns_constants::memory_allocation_of(
                     GOVERNANCE_CANISTER_ID,
                 ))
@@ -106,7 +107,7 @@ fn test_upgrade_governance_through_root_proposal() {
             .update_from_sender(
                 "submit_root_proposal_to_upgrade_governance_canister",
                 dfn_candid::candid,
-                (governance_canister_sha(), root_proposal),
+                (governance_canister_sha(), change_canister_request),
                 &proposer,
             )
             .await
@@ -176,7 +177,7 @@ fn test_upgrade_governance_through_root_proposal() {
 // submit a root proposal.
 #[test]
 fn test_unauthorized_user_cant_submit_on_root_proposals() {
-    ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_mutations(vec![RegistryAtomicMutateRequest {
                 mutations: initial_mutations_for_a_multinode_nns_subnet(),
@@ -190,8 +191,8 @@ fn test_unauthorized_user_cant_submit_on_root_proposals() {
         let proposer = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
 
         // Build and submit a root proposal
-        let root_proposal =
-            ChangeCanisterProposal::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
+        let change_canister_request =
+            ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
                 .with_memory_allocation(ic_nns_constants::memory_allocation_of(
                     GOVERNANCE_CANISTER_ID,
                 ))
@@ -202,7 +203,7 @@ fn test_unauthorized_user_cant_submit_on_root_proposals() {
             .update_from_sender(
                 "submit_root_proposal_to_upgrade_governance_canister",
                 dfn_candid::candid,
-                (governance_canister_sha(), root_proposal),
+                (governance_canister_sha(), change_canister_request),
                 &proposer,
             )
             .await
@@ -218,7 +219,7 @@ fn test_unauthorized_user_cant_submit_on_root_proposals() {
 
 #[test]
 fn test_cant_submit_root_proposal_with_wrong_sha() {
-    ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_mutations(vec![RegistryAtomicMutateRequest {
                 mutations: initial_mutations_for_a_multinode_nns_subnet(),
@@ -230,8 +231,8 @@ fn test_cant_submit_root_proposal_with_wrong_sha() {
         let proposer = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
 
         // Build and submit a root proposal
-        let root_proposal =
-            ChangeCanisterProposal::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
+        let change_canister_request =
+            ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
                 .with_memory_allocation(ic_nns_constants::memory_allocation_of(
                     GOVERNANCE_CANISTER_ID,
                 ))
@@ -245,7 +246,7 @@ fn test_cant_submit_root_proposal_with_wrong_sha() {
             .update_from_sender(
                 "submit_root_proposal_to_upgrade_governance_canister",
                 dfn_candid::candid,
-                (empty_wasm_sha, root_proposal),
+                (empty_wasm_sha, change_canister_request),
                 &proposer,
             )
             .await
@@ -261,7 +262,7 @@ fn test_cant_submit_root_proposal_with_wrong_sha() {
 
 #[test]
 fn test_enough_no_votes_rejects_the_proposal() {
-    ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_mutations(vec![RegistryAtomicMutateRequest {
                 mutations: initial_mutations_for_a_multinode_nns_subnet(),
@@ -276,8 +277,8 @@ fn test_enough_no_votes_rejects_the_proposal() {
         let proposer_pid = *TEST_USER1_PRINCIPAL;
 
         // Build and submit a root proposal
-        let root_proposal =
-            ChangeCanisterProposal::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
+        let change_canister_request =
+            ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
                 .with_memory_allocation(ic_nns_constants::memory_allocation_of(
                     GOVERNANCE_CANISTER_ID,
                 ))
@@ -294,7 +295,7 @@ fn test_enough_no_votes_rejects_the_proposal() {
             .update_from_sender(
                 "submit_root_proposal_to_upgrade_governance_canister",
                 dfn_candid::candid,
-                (governance_canister_sha(), root_proposal),
+                (governance_canister_sha(), change_canister_request),
                 &proposer,
             )
             .await
@@ -340,7 +341,7 @@ fn test_enough_no_votes_rejects_the_proposal() {
 // first which should cause 1 to be invalid.
 #[test]
 fn test_changing_the_sha_invalidates_the_proposal() {
-    ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_mutations(vec![RegistryAtomicMutateRequest {
                 mutations: initial_mutations_for_a_multinode_nns_subnet(),
@@ -355,8 +356,8 @@ fn test_changing_the_sha_invalidates_the_proposal() {
         let proposer1_pid = *TEST_USER1_PRINCIPAL;
 
         // Build and submit a root proposal
-        let root_proposal1 =
-            ChangeCanisterProposal::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
+        let change_canister_request1 =
+            ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
                 .with_memory_allocation(ic_nns_constants::memory_allocation_of(
                     GOVERNANCE_CANISTER_ID,
                 ))
@@ -373,7 +374,7 @@ fn test_changing_the_sha_invalidates_the_proposal() {
             .update_from_sender(
                 "submit_root_proposal_to_upgrade_governance_canister",
                 dfn_candid::candid,
-                (governance_canister_sha(), root_proposal1),
+                (governance_canister_sha(), change_canister_request1),
                 &proposer1,
             )
             .await
@@ -389,8 +390,8 @@ fn test_changing_the_sha_invalidates_the_proposal() {
         let proposer2_pid = *TEST_USER2_PRINCIPAL;
 
         // Build and submit a second root proposal
-        let root_proposal2 =
-            ChangeCanisterProposal::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
+        let change_canister_request2 =
+            ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
                 .with_memory_allocation(ic_nns_constants::memory_allocation_of(
                     GOVERNANCE_CANISTER_ID,
                 ))
@@ -401,7 +402,7 @@ fn test_changing_the_sha_invalidates_the_proposal() {
             .update_from_sender(
                 "submit_root_proposal_to_upgrade_governance_canister",
                 dfn_candid::candid,
-                (governance_canister_sha(), root_proposal2),
+                (governance_canister_sha(), change_canister_request2),
                 &proposer2,
             )
             .await
@@ -444,7 +445,7 @@ fn test_changing_the_sha_invalidates_the_proposal() {
             RootProposalBallot::Yes,
         )
         .await
-        .expect_err("Should have returned an eror")
+        .expect_err("Should have returned an error")
         .contains("Expected governance wasm sha must match");
 
         Ok(())

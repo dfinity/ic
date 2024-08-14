@@ -1,28 +1,63 @@
-use crate::catch_up_package_provider::CatchUpPackageProvider;
-use crate::error::{OrchestratorError, OrchestratorResult};
-use crate::metrics::OrchestratorMetrics;
-use crate::registry_helper::RegistryHelper;
-use crate::replica_process::ReplicaProcess;
+use crate::{
+    catch_up_package_provider::CatchUpPackageProvider,
+    error::{OrchestratorError, OrchestratorResult},
+    metrics::OrchestratorMetrics,
+    process_manager::{Process, ProcessManager},
+    registry_helper::RegistryHelper,
+};
 use async_trait::async_trait;
-use ic_crypto::get_tecdsa_master_public_key;
+use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
-use ic_ic00_types::EcdsaKeyId;
-use ic_image_upgrader::error::{UpgradeError, UpgradeResult};
-use ic_image_upgrader::ImageUpgrader;
+use ic_image_upgrader::{
+    error::{UpgradeError, UpgradeResult},
+    ImageUpgrader,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_registry_client_helpers::node::NodeRegistry;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_management_canister_types::MasterPublicKeyId;
+use ic_protobuf::proxy::try_from_option_field;
+use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
-use ic_types::consensus::{CatchUpPackage, HasHeight};
-use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
-use ic_types::{Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId};
-use std::collections::BTreeMap;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use ic_types::{
+    consensus::{CatchUpPackage, HasHeight},
+    crypto::{
+        canister_threshold_sig::MasterPublicKey,
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet},
+    },
+    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
+};
+use std::{
+    collections::BTreeMap,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
+
+pub struct ReplicaProcess {
+    version: ReplicaVersion,
+    binary: String,
+    args: Vec<String>,
+}
+
+impl Process for ReplicaProcess {
+    const NAME: &'static str = "Replica";
+
+    type Version = ReplicaVersion;
+
+    fn get_version(&self) -> &Self::Version {
+        &self.version
+    }
+
+    fn get_binary(&self) -> &str {
+        &self.binary
+    }
+
+    fn get_args(&self) -> &[String] {
+        &self.args
+    }
+}
 
 /// Provides function to continuously check the Registry to determine if this
 /// node should upgrade to a new release package, and if so, downloads and
@@ -31,7 +66,7 @@ const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 pub(crate) struct Upgrade {
     pub registry: Arc<RegistryHelper>,
     pub metrics: Arc<OrchestratorMetrics>,
-    replica_process: Arc<Mutex<ReplicaProcess>>,
+    replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
     cup_provider: Arc<CatchUpPackageProvider>,
     replica_version: ReplicaVersion,
     replica_config_file: PathBuf,
@@ -50,7 +85,7 @@ impl Upgrade {
     pub(crate) async fn new(
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
-        replica_process: Arc<Mutex<ReplicaProcess>>,
+        replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
         cup_provider: Arc<CatchUpPackageProvider>,
         replica_version: ReplicaVersion,
         replica_config_file: PathBuf,
@@ -79,11 +114,14 @@ impl Upgrade {
         if let Err(e) = value.report_reboot_time() {
             warn!(logger, "Cannot report the reboot time: {}", e);
         }
-        if let Err(e) = report_ecdsa_key_changed_metric(
+        if let Err(e) = report_master_public_key_changed_metric(
             value.orchestrator_data_directory.join(KEY_CHANGES_FILENAME),
             &value.metrics,
         ) {
-            warn!(logger, "Cannot report ECDSA key changed metric: {}", e);
+            warn!(
+                logger,
+                "Cannot report master public key changed metric: {}", e
+            );
         }
         value.confirm_boot().await;
         value
@@ -102,20 +140,70 @@ impl Upgrade {
     pub(crate) async fn check(&mut self) -> OrchestratorResult<Option<SubnetId>> {
         let latest_registry_version = self.registry.get_latest_version();
         // Determine the subnet_id using the local CUP.
-        let (subnet_id, local_cup_proto, local_cup) =
-            if let Some(proto) = self.cup_provider.get_local_cup_proto() {
-                let cup = CatchUpPackage::try_from(&proto).expect("deserializing CUP failed");
-                let subnet_id =
-                    get_subnet_id(&*self.registry.registry_client, &cup).map_err(|err| {
-                        OrchestratorError::UpgradeError(format!(
-                            "Couldn't determine the subnet id: {:?}",
-                            err
-                        ))
-                    })?;
-                (subnet_id, Some(proto), Some(cup))
-            } else {
-                // No local CUP found, check registry
-                match self.registry.get_subnet_id(latest_registry_version) {
+        let (subnet_id, local_cup_proto, local_cup) = {
+            let maybe_proto = self.cup_provider.get_local_cup_proto();
+            let maybe_cup = maybe_proto.as_ref().and_then(|proto| {
+                CatchUpPackage::try_from(proto)
+                    .inspect_err(|err| {
+                        error!(self.logger, "Failed to deserialize CatchUpPackage: {}", err);
+                    })
+                    .ok()
+            });
+
+            match (&maybe_cup, &maybe_proto) {
+                (Some(cup), _) => {
+                    let subnet_id =
+                        get_subnet_id(&*self.registry.registry_client, cup).map_err(|err| {
+                            OrchestratorError::UpgradeError(format!(
+                                "Couldn't determine the subnet id: {:?}",
+                                err
+                            ))
+                        })?;
+                    (subnet_id, maybe_proto, maybe_cup)
+                }
+                (None, Some(proto)) => {
+                    // We found a local CUP proto that we can't deserialize. This may only happen
+                    // if this is the first CUP we are reading on a new replica version after an
+                    // upgrade. This means we have to be an assigned node, otherwise we would have
+                    // left the subnet and deleted the CUP before upgrading to this version.
+                    // The only way to leave this branch is via subnet recovery.
+                    self.metrics.critical_error_cup_deserialization_failed.inc();
+
+                    // Try to find the subnet ID by deserializing only the NiDkgId. If it fails
+                    // we will have to recover using failover nodes.
+                    let nidkg_id: NiDkgId = try_from_option_field(proto.signer.clone(), "NiDkgId")
+                        .map_err(|err| {
+                            OrchestratorError::UpgradeError(format!(
+                                "Couldn't deserialize NiDkgId to determine the subnet id: {:?}",
+                                err
+                            ))
+                        })?;
+
+                    let subnet_id = match nidkg_id.target_subnet {
+                        NiDkgTargetSubnet::Local => nidkg_id.dealer_subnet,
+                        NiDkgTargetSubnet::Remote(_) => {
+                            // If this CUP was created by a remote subnet, then it is a genesis/recovery
+                            // CUP. This is the only case in the branch where we can trust the subnet ID
+                            // of the latest registry version, as switching to a registry CUP "resets" the
+                            // "oldest registry version in use" which is responsible for subnet membership.
+                            match self.registry.get_subnet_id(latest_registry_version) {
+                                Ok(subnet_id) => subnet_id,
+                                Err(OrchestratorError::NodeUnassignedError(_, _)) => {
+                                    // If the registry says that we are unassigned, this unassignment
+                                    // must have happened after the registry CUP triggering the upgrade.
+                                    // Otherwise we would have left the subnet before upgrading. This means
+                                    // we will trust the registry and go ahead with removing the node's state
+                                    // including the broken local CUP.
+                                    self.remove_state()?;
+                                    return Ok(None);
+                                }
+                                Err(other) => return Err(other),
+                            }
+                        }
+                    };
+                    (subnet_id, maybe_proto, None)
+                }
+                (None, None) => match self.registry.get_subnet_id(latest_registry_version) {
                     Ok(subnet_id) => {
                         info!(self.logger, "Assignment to subnet {} detected", subnet_id);
                         (subnet_id, None, None)
@@ -125,24 +213,25 @@ impl Upgrade {
                         self.check_for_upgrade_as_unassigned().await?;
                         return Ok(None);
                     }
-                }
-            };
+                },
+            }
+        };
 
         // When we arrived here, we are an assigned node.
         let old_cup_height = local_cup.as_ref().map(HasHeight::height);
 
         // Get the latest available CUP from the disk, peers or registry and
         // persist it if necessary.
-        let (_, latest_cup) = self
+        let latest_cup = self
             .cup_provider
             .get_latest_cup(local_cup_proto, subnet_id)
             .await?;
 
-        // If we replaced the previous local CUP, compare potential tECDSA public keys with the
-        // ones in the new CUP, to make sure they haven't changed. Raise an alert if they did.
+        // If we replaced the previous local CUP, compare potential threshold master public keys with
+        // the ones in the new CUP, to make sure they haven't changed. Raise an alert if they did.
         if let Some(old_cup) = local_cup {
             if old_cup.height() < latest_cup.height() {
-                compare_tecdsa_public_keys(
+                compare_master_public_keys(
                     &old_cup,
                     &latest_cup,
                     self.metrics.as_ref(),
@@ -155,13 +244,15 @@ impl Upgrade {
         // If the CUP is unsigned, it's a registry CUP and we're in a genesis or subnet
         // recovery scenario. Check if we're in an NNS subnet recovery case and download
         // the new registry if needed.
-        if latest_cup.is_unsigned() {
+        if !latest_cup.is_signed() {
             info!(
                 self.logger,
-                "The latest CUP (registry version={}, height={}) is unsigned: a subnet genesis/recovery is in progress",
+                "The latest CUP (registry version={}, height={}) is unsigned: \
+                a subnet genesis/recovery is in progress",
                 latest_cup.content.registry_version(),
                 latest_cup.height(),
             );
+
             self.download_registry_and_restart_if_nns_subnet_recovery(
                 subnet_id,
                 latest_registry_version,
@@ -177,16 +268,8 @@ impl Upgrade {
             subnet_id,
             &latest_cup,
         ) {
-            // Reset the key changed errors counter to not raise alerts in other subnets
-            self.metrics.ecdsa_key_changed_errors.reset();
             self.stop_replica()?;
-            remove_node_state(
-                self.replica_config_file.clone(),
-                self.cup_provider.get_cup_path(),
-                self.orchestrator_data_directory.clone(),
-            )
-            .map_err(OrchestratorError::UpgradeError)?;
-            info!(self.logger, "Subnet state removed");
+            self.remove_state()?;
             return Ok(None);
         }
 
@@ -226,7 +309,7 @@ impl Upgrade {
         Ok(Some(subnet_id))
     }
 
-    // Special case for when we are doing boostrap subnet recovery for
+    // Special case for when we are doing bootstrap subnet recovery for
     // nns and replacing the local registry store. Because we replace the
     // contents of the local registry store in the process of doing this, we
     // will not perpetually hit this case, and thus it is not important to
@@ -255,7 +338,7 @@ impl Upgrade {
                     .expect("temporary location for local store download could not be created")
                     .into_path();
                 downloader
-                    .download_and_extract_tar_gz(
+                    .download_and_extract_tar(
                         &registry_store_uri.uri,
                         &local_store_location,
                         Some(registry_store_uri.hash),
@@ -273,6 +356,19 @@ impl Upgrade {
                 reexec_current_process(&self.logger);
             }
         }
+        Ok(())
+    }
+
+    fn remove_state(&self) -> OrchestratorResult<()> {
+        // Reset the key changed errors counter to not raise alerts in other subnets
+        self.metrics.master_public_key_changed_errors.reset();
+        remove_node_state(
+            self.replica_config_file.clone(),
+            self.cup_provider.get_cup_path(),
+            self.orchestrator_data_directory.clone(),
+        )
+        .map_err(OrchestratorError::UpgradeError)?;
+        info!(self.logger, "Subnet state removed");
         Ok(())
     }
 
@@ -300,9 +396,18 @@ impl Upgrade {
 
     async fn check_for_upgrade_as_unassigned(&mut self) -> OrchestratorResult<()> {
         let registry_version = self.registry.get_latest_version();
+
+        // If the node is a boundary node, we upgrade to that version, otherwise we upgrade to the unassigned version
         let replica_version = self
             .registry
-            .get_unassigned_replica_version(registry_version)?;
+            .get_api_boundary_node_version(self.node_id, registry_version)
+            .or_else(|err| match err {
+                OrchestratorError::ApiBoundaryNodeMissingError(_, _) => self
+                    .registry
+                    .get_unassigned_replica_version(registry_version),
+                err => Err(err),
+            })?;
+
         if self.replica_version == replica_version {
             return Ok(());
         }
@@ -336,7 +441,7 @@ impl Upgrade {
         old_cup_height: Option<Height>,
     ) {
         let new_height = cup.content.height();
-        if cup.is_unsigned() && old_cup_height.is_some() && Some(new_height) > old_cup_height {
+        if !cup.is_signed() && old_cup_height.is_some() && Some(new_height) > old_cup_height {
             info!(
                 self.logger,
                 "Found higher unsigned CUP, restarting replica for subnet recovery..."
@@ -380,7 +485,11 @@ impl Upgrade {
         self.replica_process
             .lock()
             .unwrap()
-            .start(replica_binary, replica_version, cmd)
+            .start(ReplicaProcess {
+                version: replica_version.clone(),
+                binary: replica_binary,
+                args: cmd,
+            })
             .map_err(|e| {
                 OrchestratorError::IoError("Error when attempting to start new replica".into(), e)
             })
@@ -453,7 +562,6 @@ fn get_subnet_id(registry: &dyn RegistryClient, cup: &CatchUpPackage) -> Result<
     // recovery CUPs) they always have the signer id (the DKG id), which is taken
     // from the high-threshold transcript when we build a genesis/recovery CUP.
     let dkg_id = cup.signature.signer;
-    use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetSubnet;
     // If the DKG key material was signed by the subnet itself — use it, if not, get
     // the subnet id from the registry.
     match dkg_id.target_subnet {
@@ -494,8 +602,7 @@ fn should_node_become_unassigned(
     subnet_id: SubnetId,
     cup: &CatchUpPackage,
 ) -> bool {
-    let summary = &cup.content.block.get_value().payload.as_ref().as_summary();
-    let oldest_relevant_version = summary.get_oldest_registry_version_in_use().get();
+    let oldest_relevant_version = cup.get_oldest_registry_version_in_use().get();
     let latest_registry_version = registry.get_latest_version().get();
     // Make sure that if the latest registry version is for some reason violating
     // the assumption that it's higher/equal than any other version used in the
@@ -642,57 +749,104 @@ fn reexec_current_process(logger: &ReplicaLogger) -> OrchestratorError {
     OrchestratorError::ExecError(PathBuf::new(), error)
 }
 
-/// Return the threshold ECDSA master public key of the given CUP, if it exists.
-fn get_tecdsa_key(cup: &CatchUpPackage) -> Option<(EcdsaKeyId, MasterEcdsaPublicKey)> {
-    let ecdsa = cup.content.block.get_value().payload.as_ref().as_ecdsa()?;
-    let transcript_ref = ecdsa.key_transcript.current.as_ref()?;
-    let transcript = ecdsa
-        .idkg_transcripts
-        .get(&transcript_ref.transcript_id())?;
+/// Return the threshold master public key of the given CUP, if it exists.
+fn get_master_public_keys(
+    cup: &CatchUpPackage,
+    log: &ReplicaLogger,
+) -> BTreeMap<MasterPublicKeyId, MasterPublicKey> {
+    let mut public_keys = BTreeMap::new();
 
-    get_tecdsa_master_public_key(transcript)
-        .ok()
-        .map(|key| (ecdsa.key_transcript.key_id.clone(), key))
+    let Some(idkg) = cup.content.block.get_value().payload.as_ref().as_idkg() else {
+        return public_keys;
+    };
+
+    for (key_id, key_transcript) in &idkg.key_transcripts {
+        let Some(transcript) = key_transcript
+            .current
+            .as_ref()
+            .and_then(|transcript_ref| idkg.idkg_transcripts.get(&transcript_ref.transcript_id()))
+        else {
+            continue;
+        };
+
+        match get_master_public_key_from_transcript(transcript) {
+            Ok(public_key) => {
+                public_keys.insert(key_id.clone(), public_key);
+            }
+            Err(err) => {
+                warn!(
+                    log,
+                    "Failed to get the master public key for key id {}: {:?}", key_id, err,
+                );
+            }
+        };
+    }
+
+    public_keys
 }
 
-/// Get tECDSA public keys of both CUPs and make sure previous keys weren't changed
+/// Get threshold master public keys of both CUPs and make sure previous keys weren't changed
 /// or deleted. Raise an alert if they were.
-fn compare_tecdsa_public_keys(
+fn compare_master_public_keys(
     old_cup: &CatchUpPackage,
     new_cup: &CatchUpPackage,
     metrics: &OrchestratorMetrics,
     path: PathBuf,
     log: &ReplicaLogger,
 ) {
-    let Some(old_key) = get_tecdsa_key(old_cup) else {
+    let old_public_keys = get_master_public_keys(old_cup, log);
+    if old_public_keys.is_empty() {
         return;
-    };
-    let new_key = get_tecdsa_key(new_cup);
-    let mut changes = BTreeMap::new();
-    // Get the metric here already, which will initialize it with zero
-    // even if keys haven't changed.
-    let metric = metrics
-        .ecdsa_key_changed_errors
-        .get_metric_with_label_values(&[&old_key.0.name])
-        .expect("Failed to get ECDSA key changed metric");
-    if Some(&old_key) != new_key.as_ref() {
-        error!(
-            log,
-            "Threshold ECDSA public key has changed! Old: {:?}, New: {:?}", old_key, new_key,
-        );
-        metric.inc();
-        changes.insert(old_key.0.name, metric.get());
     }
+
+    let new_public_keys = get_master_public_keys(new_cup, log);
+    let mut changes = BTreeMap::new();
+
+    for (key_id, old_public_key) in old_public_keys {
+        let key_id_label = key_id.to_string();
+
+        // Get the metric here already, which will initialize it with zero
+        // even if keys haven't changed.
+        let metric = metrics
+            .master_public_key_changed_errors
+            .get_metric_with_label_values(&[&key_id_label])
+            .expect("Failed to get master public key changed metric");
+
+        if let Some(new_public_key) = new_public_keys.get(&key_id) {
+            if old_public_key != *new_public_key {
+                error!(
+                    log,
+                    "Threshold master public key for {} has changed! Old: {:?}, New: {:?}",
+                    key_id,
+                    old_public_key,
+                    new_public_key,
+                );
+                metric.inc();
+                changes.insert(key_id_label.clone(), metric.get());
+            }
+        } else {
+            error!(
+                log,
+                "Threshold master public key for {} has been deleted!", key_id,
+            );
+            metric.inc();
+            changes.insert(key_id_label, metric.get());
+        }
+    }
+
     // We persist the latest value of the changed metrics, such that we can re-apply them
     // after the restart. As any increase in the value is enough to trigger the alert, it
     // is fine to reset the metric of keys that haven't changed.
-    if let Err(e) = persist_ecdsa_key_changed_metric(path, changes) {
-        warn!(log, "Failed to persist ECDSA key changed metric: {}", e)
+    if let Err(e) = persist_master_public_key_changed_metric(path, changes) {
+        warn!(
+            log,
+            "Failed to persist master public key changed metric: {}", e
+        )
     }
 }
 
-/// Persist the given map of ecdsa key changed metrics in `path`.
-fn persist_ecdsa_key_changed_metric(
+/// Persist the given map of master public key changed metrics in `path`.
+fn persist_master_public_key_changed_metric(
     path: PathBuf,
     changes: BTreeMap<String, u64>,
 ) -> OrchestratorResult<()> {
@@ -700,8 +854,8 @@ fn persist_ecdsa_key_changed_metric(
     serde_cbor::to_writer(file, &changes).map_err(OrchestratorError::key_monitoring_error)
 }
 
-/// Increment the `ecdsa_key_changed_errors` metric by the values persisted in the given file.
-fn report_ecdsa_key_changed_metric(
+/// Increment the `master_public_key_changed_errors` metric by the values persisted in the given file.
+fn report_master_public_key_changed_metric(
     path: PathBuf,
     metrics: &OrchestratorMetrics,
 ) -> OrchestratorResult<()> {
@@ -711,7 +865,7 @@ fn report_ecdsa_key_changed_metric(
 
     for (key, count) in key_changes {
         metrics
-            .ecdsa_key_changed_errors
+            .master_public_key_changed_errors
             .with_label_values(&[&key])
             .inc_by(count);
     }
@@ -728,37 +882,35 @@ mod tests {
         generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
-    use ic_ic00_types::EcdsaCurve;
+    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::{
-        consensus::fake::{Fake, FakeContent},
-        mock_time,
-        types::ids::subnet_test_id,
-    };
+    use ic_test_utilities_consensus::fake::{Fake, FakeContent};
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         batch::ValidationContext,
         consensus::{
-            ecdsa::{self, EcdsaKeyTranscript, EcdsaUIDGenerator, TranscriptAttributes},
-            Block, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload, RandomBeacon,
-            RandomBeaconContent, Rank,
+            idkg::{self, MasterKeyTranscript, TranscriptAttributes},
+            Block, BlockPayload, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload,
+            RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
         },
         crypto::{
             canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId, CryptoHash, CryptoHashOf,
         },
         signature::ThresholdSignature,
+        time::UNIX_EPOCH,
     };
     use tempfile::{tempdir, TempDir};
 
     fn make_cup(
         h: Height,
-        key_id: &str,
+        key_id: MasterPublicKeyId,
         key_transcript: Option<&IDkgTranscript>,
     ) -> CatchUpPackage {
         let unmasked = key_transcript.map(|t| {
-            ecdsa::UnmaskedTranscriptWithAttributes::new(
+            idkg::UnmaskedTranscriptWithAttributes::new(
                 t.to_attributes(),
-                ecdsa::UnmaskedTranscript::try_from((h, t)).unwrap(),
+                idkg::UnmaskedTranscript::try_from((h, t)).unwrap(),
             )
         });
 
@@ -766,37 +918,32 @@ mod tests {
             .map(|t| BTreeMap::from_iter(vec![(t.transcript_id, t.clone())]))
             .unwrap_or_default();
 
-        let ecdsa = ecdsa::EcdsaPayload {
-            signature_agreements: BTreeMap::new(),
-            ongoing_signatures: BTreeMap::new(),
-            available_quadruples: BTreeMap::new(),
-            quadruples_in_creation: BTreeMap::new(),
-            uid_generator: EcdsaUIDGenerator::new(subnet_test_id(0), h),
-            idkg_transcripts,
-            ongoing_xnet_reshares: BTreeMap::new(),
-            xnet_reshare_agreements: BTreeMap::new(),
-            key_transcript: EcdsaKeyTranscript {
+        let mut idkg = idkg::IDkgPayload::empty(
+            h,
+            subnet_test_id(0),
+            vec![MasterKeyTranscript {
                 current: unmasked,
-                next_in_creation: ecdsa::KeyTranscriptCreation::Begin,
-                key_id: EcdsaKeyId {
-                    curve: EcdsaCurve::Secp256k1,
-                    name: key_id.to_string(),
-                },
-            },
-        };
+                next_in_creation: idkg::KeyTranscriptCreation::Begin,
+                master_key_id: key_id.clone(),
+            }],
+        );
+        idkg.idkg_transcripts = idkg_transcripts;
 
         let block = Block::new(
             CryptoHashOf::from(CryptoHash(Vec::new())),
             Payload::new(
                 ic_types::crypto::crypto_hash,
-                (ic_types::consensus::dkg::Summary::fake(), Some(ecdsa)).into(),
+                BlockPayload::Summary(SummaryPayload {
+                    dkg: ic_types::consensus::dkg::Summary::fake(),
+                    idkg: Some(idkg),
+                }),
             ),
             h,
             Rank(46),
             ValidationContext {
                 registry_version: RegistryVersion::from(101),
                 certified_height: Height::from(42),
-                time: mock_time(),
+                time: UNIX_EPOCH,
             },
         );
 
@@ -811,15 +958,19 @@ mod tests {
                     )),
                 ),
                 CryptoHashOf::from(CryptoHash(Vec::new())),
+                None,
             ),
             signature: ThresholdSignature::fake(),
         }
     }
 
-    fn get_ecdsa_key_changed_metric(key: &str, metrics: &OrchestratorMetrics) -> u64 {
+    fn get_master_key_changed_metric(
+        key: &MasterPublicKeyId,
+        metrics: &OrchestratorMetrics,
+    ) -> u64 {
         metrics
-            .ecdsa_key_changed_errors
-            .get_metric_with_label_values(&[key])
+            .master_public_key_changed_errors
+            .get_metric_with_label_values(&[&key.to_string()])
             .unwrap()
             .get()
     }
@@ -862,22 +1013,25 @@ mod tests {
         with_test_replica_logger(|log| {
             let mut setup = Setup::new();
             let key = setup.generate_key_transcript();
-            let key_id = "some_key";
+            let key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: String::from("some_key"),
+            });
 
-            let c1 = make_cup(Height::from(10), key_id, Some(&key));
-            let c2 = make_cup(Height::from(100), key_id, None);
+            let c1 = make_cup(Height::from(10), key_id.clone(), Some(&key));
+            let c2 = make_cup(Height::from(100), key_id.clone(), None);
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
-            let before = get_ecdsa_key_changed_metric(key_id, &metrics);
-            compare_tecdsa_public_keys(&c1, &c2, &metrics, setup.path(), &log);
-            let after = get_ecdsa_key_changed_metric(key_id, &metrics);
+            let before = get_master_key_changed_metric(&key_id, &metrics);
+            compare_master_public_keys(&c1, &c2, &metrics, setup.path(), &log);
+            let after = get_master_key_changed_metric(&key_id, &metrics);
 
             assert_eq!(before + 1, after);
 
             let metrics_new = OrchestratorMetrics::new(&MetricsRegistry::new());
-            report_ecdsa_key_changed_metric(setup.path(), &metrics_new).unwrap();
-            let after_restart = get_ecdsa_key_changed_metric(key_id, &metrics);
+            report_master_public_key_changed_metric(setup.path(), &metrics_new).unwrap();
+            let after_restart = get_master_key_changed_metric(&key_id, &metrics);
 
             assert_eq!(after_restart, after);
         });
@@ -889,16 +1043,19 @@ mod tests {
             let mut setup = Setup::new();
             let key1 = setup.generate_key_transcript();
             let key2 = setup.generate_key_transcript();
-            let key_id = "some_key";
+            let key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: String::from("some_key"),
+            });
 
-            let c1 = make_cup(Height::from(10), key_id, Some(&key1));
-            let c2 = make_cup(Height::from(100), key_id, Some(&key2));
+            let c1 = make_cup(Height::from(10), key_id.clone(), Some(&key1));
+            let c2 = make_cup(Height::from(100), key_id.clone(), Some(&key2));
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
-            let before = get_ecdsa_key_changed_metric(key_id, &metrics);
-            compare_tecdsa_public_keys(&c1, &c2, &metrics, setup.path(), &log);
-            let after = get_ecdsa_key_changed_metric(key_id, &metrics);
+            let before = get_master_key_changed_metric(&key_id, &metrics);
+            compare_master_public_keys(&c1, &c2, &metrics, setup.path(), &log);
+            let after = get_master_key_changed_metric(&key_id, &metrics);
 
             assert_eq!(before + 1, after);
         });
@@ -909,16 +1066,19 @@ mod tests {
         with_test_replica_logger(|log| {
             let mut setup = Setup::new();
             let key = setup.generate_key_transcript();
-            let key_id = "some_key";
+            let key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: String::from("some_key"),
+            });
 
-            let c1 = make_cup(Height::from(10), key_id, Some(&key));
-            let c2 = make_cup(Height::from(100), key_id, Some(&key));
+            let c1 = make_cup(Height::from(10), key_id.clone(), Some(&key));
+            let c2 = make_cup(Height::from(100), key_id.clone(), Some(&key));
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
-            let before = get_ecdsa_key_changed_metric(key_id, &metrics);
-            compare_tecdsa_public_keys(&c1, &c2, &metrics, setup.path(), &log);
-            let after = get_ecdsa_key_changed_metric(key_id, &metrics);
+            let before = get_master_key_changed_metric(&key_id, &metrics);
+            compare_master_public_keys(&c1, &c2, &metrics, setup.path(), &log);
+            let after = get_master_key_changed_metric(&key_id, &metrics);
 
             assert_eq!(before, after);
         });
@@ -929,17 +1089,23 @@ mod tests {
         with_test_replica_logger(|log| {
             let mut setup = Setup::new();
             let key = setup.generate_key_transcript();
-            let key_id1 = "some_key1";
-            let key_id2 = "some_key2";
+            let key_id1 = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: String::from("some_key1"),
+            });
+            let key_id2 = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: String::from("some_key2"),
+            });
 
-            let c1 = make_cup(Height::from(10), key_id1, Some(&key));
+            let c1 = make_cup(Height::from(10), key_id1.clone(), Some(&key));
             let c2 = make_cup(Height::from(100), key_id2, Some(&key));
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
-            let before = get_ecdsa_key_changed_metric(key_id1, &metrics);
-            compare_tecdsa_public_keys(&c1, &c2, &metrics, setup.path(), &log);
-            let after = get_ecdsa_key_changed_metric(key_id1, &metrics);
+            let before = get_master_key_changed_metric(&key_id1, &metrics);
+            compare_master_public_keys(&c1, &c2, &metrics, setup.path(), &log);
+            let after = get_master_key_changed_metric(&key_id1, &metrics);
 
             assert_eq!(before + 1, after);
         });
@@ -950,16 +1116,19 @@ mod tests {
         with_test_replica_logger(|log| {
             let mut setup = Setup::new();
             let key = setup.generate_key_transcript();
-            let key_id = "some_key";
+            let key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: String::from("some_key"),
+            });
 
-            let c1 = make_cup(Height::from(10), key_id, None);
-            let c2 = make_cup(Height::from(100), key_id, Some(&key));
+            let c1 = make_cup(Height::from(10), key_id.clone(), None);
+            let c2 = make_cup(Height::from(100), key_id.clone(), Some(&key));
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
-            let before = get_ecdsa_key_changed_metric(key_id, &metrics);
-            compare_tecdsa_public_keys(&c1, &c2, &metrics, setup.path(), &log);
-            let after = get_ecdsa_key_changed_metric(key_id, &metrics);
+            let before = get_master_key_changed_metric(&key_id, &metrics);
+            compare_master_public_keys(&c1, &c2, &metrics, setup.path(), &log);
+            let after = get_master_key_changed_metric(&key_id, &metrics);
 
             assert_eq!(before, after);
         });
@@ -969,16 +1138,19 @@ mod tests {
     fn test_ecdsa_no_keys_created_does_not_raise_alert() {
         with_test_replica_logger(|log| {
             let setup = Setup::new();
-            let key_id = "some_key";
+            let key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: String::from("some_key"),
+            });
 
-            let c1 = make_cup(Height::from(10), key_id, None);
-            let c2 = make_cup(Height::from(100), key_id, None);
+            let c1 = make_cup(Height::from(10), key_id.clone(), None);
+            let c2 = make_cup(Height::from(100), key_id.clone(), None);
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
-            let before = get_ecdsa_key_changed_metric(key_id, &metrics);
-            compare_tecdsa_public_keys(&c1, &c2, &metrics, setup.path(), &log);
-            let after = get_ecdsa_key_changed_metric(key_id, &metrics);
+            let before = get_master_key_changed_metric(&key_id, &metrics);
+            compare_master_public_keys(&c1, &c2, &metrics, setup.path(), &log);
+            let after = get_master_key_changed_metric(&key_id, &metrics);
 
             assert_eq!(before, after);
         });

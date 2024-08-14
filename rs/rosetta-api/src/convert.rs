@@ -4,8 +4,7 @@ use crate::convert::state::State;
 use crate::errors::ApiError;
 use crate::models::amount::{from_amount, ledgeramount_from_amount};
 use crate::models::operation::OperationType;
-use crate::models::RosettaSupportedKeyPair;
-use crate::models::{self, operation::Operation, AccountIdentifier, BlockIdentifier};
+use crate::models::{self, AccountIdentifier, BlockIdentifier, Operation};
 use crate::request::request_result::RequestResult;
 use crate::request::transaction_operation_results::TransactionOperationResults;
 use crate::request::transaction_results::TransactionResults;
@@ -19,16 +18,18 @@ use crate::request_types::{
 use crate::transaction_id::TransactionIdentifier;
 use crate::{convert, errors};
 use dfn_protobuf::ProtoBuf;
-use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
-use ic_canister_client_sender::Secp256k1KeyPair;
 use ic_crypto_tree_hash::Path;
 use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_hash_of::HashOf;
 use ic_types::messages::{HttpCanisterUpdate, HttpReadState};
 use ic_types::{CanisterId, PrincipalId};
-use icp_ledger::{Block, BlockIndex, Operation as LedgerOperation, SendArgs, Subaccount, Tokens};
+use icp_ledger::{
+    Block, BlockIndex, Operation as LedgerOperation, SendArgs, Subaccount, TimeStamp, Tokens,
+    Transaction,
+};
 use on_wire::{FromWire, IntoWire};
+use rosetta_core::convert::principal_id_from_public_key;
 use serde_json::map::Map;
 use serde_json::{from_value, Number, Value};
 use std::convert::{TryFrom, TryInto};
@@ -36,23 +37,22 @@ use std::convert::{TryFrom, TryInto};
 /// This module converts from ledger_canister data structures to Rosetta data
 /// structures
 
-pub fn block_to_transaction(
-    hb: &HashedBlock,
-    token_name: &str,
-) -> Result<models::Transaction, ApiError> {
-    let block = Block::decode(hb.block.clone())
-        .map_err(|err| ApiError::internal_error(format!("Cannot decode block: {}", err)))?;
-    let transaction = block.transaction;
-    let transaction_identifier = TransactionIdentifier::from(&transaction);
+pub fn to_rosetta_core_transaction(
+    transaction_index: BlockIndex,
+    transaction: Transaction,
+    timestamp: TimeStamp,
+    token_symbol: &str,
+) -> Result<rosetta_core::objects::Transaction, ApiError> {
+    let transaction_identifier = TransactionIdentifier::from(&transaction).into();
     let operation = transaction.operation;
     let operations = {
-        let mut ops = Request::requests_to_operations(&[Request::Transfer(operation)], token_name)?;
+        let mut ops =
+            Request::requests_to_operations(&[Request::Transfer(operation)], token_symbol)?;
         for op in ops.iter_mut() {
             op.status = Some(STATUS_COMPLETED.to_string());
         }
         ops
     };
-    let mut t = models::Transaction::new(transaction_identifier, operations);
     let mut metadata = Map::new();
     metadata.insert(
         "memo".to_string(),
@@ -60,14 +60,27 @@ pub fn block_to_transaction(
     );
     metadata.insert(
         "block_height".to_string(),
-        Value::Number(Number::from(hb.index)),
+        Value::Number(Number::from(transaction_index)),
     );
     metadata.insert(
         "timestamp".to_string(),
-        Value::Number(Number::from(block.timestamp.as_nanos_since_unix_epoch())),
+        Value::Number(Number::from(timestamp.as_nanos_since_unix_epoch())),
     );
-    t.metadata = Some(metadata);
-    Ok(t)
+    Ok(rosetta_core::objects::Transaction {
+        transaction_identifier,
+        operations,
+        metadata: Some(metadata),
+    })
+}
+
+pub fn hashed_block_to_rosetta_core_transaction(
+    hb: &HashedBlock,
+    token_symbol: &str,
+) -> Result<models::Transaction, ApiError> {
+    let block = Block::decode(hb.block.clone())
+        .map_err(|err| ApiError::internal_error(format!("Cannot decode block: {:?}", err)))?;
+    let transaction = block.transaction;
+    to_rosetta_core_transaction(hb.index, transaction, block.timestamp, token_symbol)
 }
 
 /// Convert from operations to requests.
@@ -94,12 +107,12 @@ pub fn operations_to_requests(
             .map_err(|e| op_error(o, e))?;
 
         let validate_neuron_management_op = || {
-            if o.amount.is_some() && o._type != OperationType::Disburse {
+            if o.amount.is_some() && o.type_.parse::<OperationType>()? != OperationType::Disburse {
                 Err(op_error(
                     o,
                     format!(
                         "neuron management {:?} operation cannot have an amount",
-                        o._type
+                        o.type_
                     ),
                 ))
             } else if o.coin_change.is_some() {
@@ -107,7 +120,7 @@ pub fn operations_to_requests(
                     o,
                     format!(
                         "neuron management {:?} operation cannot have a coin change",
-                        o._type
+                        o.type_
                     ),
                 ))
             } else {
@@ -115,7 +128,7 @@ pub fn operations_to_requests(
             }
         };
 
-        match o._type {
+        match o.type_.parse::<OperationType>()? {
             OperationType::Transaction => {
                 let amount = o
                     .amount
@@ -123,6 +136,12 @@ pub fn operations_to_requests(
                     .ok_or_else(|| op_error(o, "Amount must be populated".into()))?;
                 let amount = from_amount(amount, token_name).map_err(|e| op_error(o, e))?;
                 state.transaction(account, amount)?;
+            }
+            OperationType::Approve => {
+                return Err(ApiError::InvalidRequest(
+                    false,
+                    "OperationType Approve is not supported for Requests".into(),
+                ))
             }
             OperationType::Fee => {
                 let amount = o
@@ -250,8 +269,12 @@ pub fn operations_to_requests(
                 };
                 state.neuron_info(account, principal, neuron_index)?;
             }
+            OperationType::ListNeurons => {
+                validate_neuron_management_op()?;
+                state.list_neurons(account)?;
+            }
             OperationType::Burn | OperationType::Mint => {
-                let msg = format!("Unsupported operation type: {:?}", o._type);
+                let msg = format!("Unsupported operation type: {:?}", o.type_);
                 return Err(op_error(o, msg));
             }
             OperationType::Follow => {
@@ -285,14 +308,16 @@ pub fn operations_to_requests(
 }
 
 pub fn block_id(block: &HashedBlock) -> Result<BlockIdentifier, ApiError> {
-    let idx = i64::try_from(block.index).map_err(|_| {
-        ApiError::internal_error("block index is too large to be converted from a u64 to an i64")
-    })?;
+    let idx = block.index;
     Ok(BlockIdentifier::new(idx, from_hash(&block.hash)))
 }
 
 pub fn to_model_account_identifier(aid: &icp_ledger::AccountIdentifier) -> AccountIdentifier {
-    AccountIdentifier::new(aid.to_hex())
+    AccountIdentifier {
+        address: aid.to_hex(),
+        sub_account: None,
+        metadata: None,
+    }
 }
 
 pub fn from_model_account_identifier(
@@ -304,7 +329,7 @@ pub fn from_model_account_identifier(
 const LAST_HEIGHT: &str = "last_height";
 
 // Last hash is an option because there may be no blocks on the system
-pub fn from_metadata(mut ob: models::Object) -> Result<BlockIndex, ApiError> {
+pub fn from_metadata(mut ob: rosetta_core::objects::ObjectMap) -> Result<BlockIndex, ApiError> {
     let v = ob
         .remove(LAST_HEIGHT)
         .ok_or_else(|| ApiError::internal_error("No value `LAST_HEIGHT` in object"))?;
@@ -317,7 +342,7 @@ pub fn from_public_key(pk: &models::PublicKey) -> Result<Vec<u8>, ApiError> {
 
 pub fn from_hex(hex: &str) -> Result<Vec<u8>, ApiError> {
     hex::decode(hex)
-        .map_err(|e| ApiError::invalid_request(format!("Hex could not be decoded {}", e)))
+        .map_err(|e| ApiError::invalid_request(format!("Hex could not be decoded {:?}", e)))
 }
 
 pub fn to_hex(v: &[u8]) -> String {
@@ -325,7 +350,8 @@ pub fn to_hex(v: &[u8]) -> String {
 }
 
 pub fn account_from_public_key(pk: &models::PublicKey) -> Result<AccountIdentifier, ApiError> {
-    let pid = principal_id_from_public_key(pk)?;
+    let pid = principal_id_from_public_key(pk)
+        .map_err(|err| ApiError::InvalidPublicKey(false, err.into()))?;
     Ok(to_model_account_identifier(&pid.into()))
 }
 
@@ -334,7 +360,8 @@ pub fn neuron_subaccount_bytes_from_public_key(
     pk: &models::PublicKey,
     neuron_index: u64,
 ) -> Result<[u8; 32], ApiError> {
-    let controller = principal_id_from_public_key(pk)?;
+    let controller = principal_id_from_public_key(pk)
+        .map_err(|err| ApiError::InvalidPublicKey(false, err.into()))?;
     Ok(neuron_subaccount_hash(&controller, neuron_index))
 }
 
@@ -375,18 +402,8 @@ pub fn principal_id_from_public_key_or_principal(
 ) -> Result<PrincipalId, ApiError> {
     match pkp {
         PublicKeyOrPrincipal::Principal(p) => Ok(p),
-        PublicKeyOrPrincipal::PublicKey(pk) => principal_id_from_public_key(&pk),
-    }
-}
-
-pub fn principal_id_from_public_key(pk: &models::PublicKey) -> Result<PrincipalId, ApiError> {
-    match pk.curve_type {
-        models::CurveType::Edwards25519 => EdKeypair::get_principal_id(&pk.hex_bytes),
-        models::CurveType::Secp256K1 => Secp256k1KeyPair::get_principal_id(&pk.hex_bytes),
-        _ => Err(ApiError::InvalidPublicKey(
-            false,
-            format!("Curve Type {} is not supported", pk.curve_type).into(),
-        )),
+        PublicKeyOrPrincipal::PublicKey(pk) => principal_id_from_public_key(&pk)
+            .map_err(|err| ApiError::InvalidPublicKey(false, err.into())),
     }
 }
 
@@ -442,9 +459,9 @@ pub fn from_transaction_operation_results(
     for _type in requests.into_iter() {
         let o = match (&_type, &t.operations[op_idx..]) {
             (Request::Transfer(LedgerOperation::Transfer { .. }), [withdraw, deposit, fee, ..])
-                if withdraw._type == OperationType::Transaction
-                    && deposit._type == OperationType::Transaction
-                    && fee._type == OperationType::Fee =>
+                if withdraw.type_.parse::<OperationType>()? == OperationType::Transaction
+                    && deposit.type_.parse::<OperationType>()? == OperationType::Transaction
+                    && fee.type_.parse::<OperationType>()? == OperationType::Fee =>
             {
                 op_idx += 3;
                 fee

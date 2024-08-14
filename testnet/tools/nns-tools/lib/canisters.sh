@@ -16,7 +16,7 @@ get_info() {
     local NETWORK=$1
     local CANISTER_ID=$2
 
-    dfx -q canister --network "$NETWORK" info "$CANISTER_ID"
+    __dfx -q canister --network "$NETWORK" info "$CANISTER_ID"
 }
 
 nns_canister_hash() {
@@ -57,8 +57,17 @@ canister_git_version() {
     local NETWORK=$1
     local CANISTER_ID=$2
 
-    dfx -q canister --network "$NETWORK" metadata \
-        "$CANISTER_ID" git_commit_id
+    GIT_COMMIT_ID_FROM_METADATA=$(
+        __dfx -q canister --network "$NETWORK" metadata "$CANISTER_ID" git_commit_id
+    )
+    if [ "${GIT_COMMIT_ID_FROM_METADATA}" = "0000000000000000000000000000000000000000" ]; then
+        echo >&2 "Looks like the canister ${CANISTER_ID} was built from the tip of this branch."
+        GIT_COMMIT_ID=$(git rev-parse HEAD)
+        echo >&2 "Taking Git commit ID from the tip of this branch: ${GIT_COMMIT_ID}"
+    else
+        GIT_COMMIT_ID="${GIT_COMMIT_ID_FROM_METADATA}"
+    fi
+    echo -n "${GIT_COMMIT_ID}"
 }
 
 nns_canister_id() {
@@ -174,4 +183,45 @@ wait_for_nns_canister_has_file_contents() {
 
     print_red "Canister $CANISTER_NAME upgrade failed"
     return 1
+}
+
+wait_for_nns_canister_has_new_code() {
+    local NETWORK=$1
+    local CANISTER_NAME=$2
+
+    ORIGINAL_WASM_HASH="$(nns_canister_hash ic "${CANISTER_NAME}")"
+
+    echo "The original WASM hash is ${ORIGINAL_WASM_HASH}."
+    echo "We will now poll until it changes. Please, stand by..."
+    echo
+
+    for i in {1..100}; do
+        sleep 6
+        LATEST_WASM_HASH="$(nns_canister_hash ic "${CANISTER_NAME}")"
+
+        if [[ "${LATEST_WASM_HASH}" != "${ORIGINAL_WASM_HASH}" ]]; then
+            echo
+            echo "The WASM hash for ${CANISTER_NAME} has changed to ${LATEST_WASM_HASH}."
+            return
+        fi
+
+        echo "No change yet..."
+    done
+
+    echo
+    echo "Giving up. The canister's WASM hash has not changed after 10 minutes."
+    return 1
+}
+
+reset_nns_canister_version_to_mainnet() {
+    local NNS_URL=$1
+    local NEURON_ID=$2
+    local PEM=$3
+    local CANISTER_NAME=$4
+    local ENCODED_ARGS_FILE=${5:-}
+
+    VERSION=$(nns_canister_git_version "ic" "${CANISTER_NAME}")
+    propose_upgrade_canister_to_version_pem "${NNS_URL}" "${NEURON_ID}" "${PEM}" "${CANISTER_NAME}" "${VERSION}" "${ENCODED_ARGS_FILE}"
+
+    wait_for_nns_canister_has_version "${NNS_URL}" "${CANISTER_NAME}" "${VERSION}"
 }

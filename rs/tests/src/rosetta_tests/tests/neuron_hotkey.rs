@@ -1,24 +1,26 @@
-use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::lib::{
     acc_id, assert_ic_error, create_ledger_client, create_neuron, do_multiple_txn, make_user,
     make_user_ed25519, one_day_from_now_nanos, prepare_txn, sign_txn, NeuronDetails,
 };
 use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use crate::rosetta_tests::setup::{setup, TRANSFER_FEE};
-use crate::util::block_on;
 use ic_ledger_core::Tokens;
+use ic_rosetta_api::models::SignedTransaction;
 use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{AddHotKey, PublicKeyOrPrincipal, RemoveHotKey, Status};
 use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::util::block_on;
 use icp_ledger::Operation;
 use slog::Logger;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
 const PORT: u32 = 8105;
-const VM_NAME: &str = "rosetta-test-neuron-hotkey";
+const VM_NAME: &str = "rosetta-neuron-hotkey";
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
@@ -29,7 +31,7 @@ pub fn test(env: TestEnv) {
     // Create neurons.
     let neuron1 = create_neuron(2001, |_| {}, &mut ledger_balances);
     let neuron2 = create_neuron(2002, |_| {}, &mut ledger_balances);
-    let mut neurons = HashMap::new();
+    let mut neurons = BTreeMap::new();
     neurons.insert(neuron1.neuron.id.unwrap().id, neuron1.neuron.clone());
     neurons.insert(neuron2.neuron.id.unwrap().id, neuron2.neuron.clone());
 
@@ -53,7 +55,7 @@ async fn test_add_hotkey(
 ) -> Result<(), ic_rosetta_api::models::Error> {
     let _neuron = &neuron_info.neuron;
     let acc = neuron_info.account_id;
-    let key_pair = Arc::new(neuron_info.key_pair);
+    let key_pair = Arc::new(neuron_info.key_pair.clone());
     let neuron_index = neuron_info.neuron_subaccount_identifier;
 
     let (_, _, pk, pid) = make_user(1400);
@@ -124,7 +126,7 @@ async fn test_remove_hotkey(
     neuron_details: &NeuronDetails,
     _logger: &Logger,
 ) {
-    let key_pair: Arc<EdKeypair> = neuron_details.key_pair.into();
+    let key_pair: Arc<EdKeypair> = neuron_details.key_pair.clone().into();
     let account = neuron_details.account_id;
     let neuron_index = neuron_details.neuron_subaccount_identifier;
     let _neuron_controller = neuron_details.principal_id;
@@ -223,8 +225,8 @@ async fn test_remove_hotkey(
         "Expecting an error while removing twice the hotkey."
     );
     let res = res.unwrap_err();
-    assert_eq!(res.code, 770);
-    assert_eq!(res.message, "Operation failed");
+    assert_eq!(res.0.code, 770);
+    assert_eq!(res.0.message, "Operation failed");
 }
 
 // Sign a transaction with wrong key and check if it gets rejected
@@ -235,6 +237,7 @@ async fn test_wrong_key(ros: &RosettaApiClient, _logger: &Logger) {
     let t = Operation::Transfer {
         from: acc_a,
         to: acc_id(1051),
+        spender: None,
         amount: Tokens::from_e8s(100),
         fee: Tokens::from_e8s(TRANSFER_FEE),
     };
@@ -243,11 +246,13 @@ async fn test_wrong_key(ros: &RosettaApiClient, _logger: &Logger) {
         .await
         .unwrap();
 
-    let signed = sign_txn(ros, &[Arc::new(wrong_kp)], payloads)
-        .await
-        .unwrap()
-        .signed_transaction()
-        .unwrap();
+    let signed = SignedTransaction::from_str(
+        &sign_txn(ros, &[Arc::new(wrong_kp)], payloads)
+            .await
+            .unwrap()
+            .signed_transaction,
+    )
+    .unwrap();
     let err = ros.construction_submit(signed).await.unwrap().unwrap_err();
     assert_ic_error(&err, 740, 403, "does not match the public key");
 }

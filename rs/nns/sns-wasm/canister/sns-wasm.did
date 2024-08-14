@@ -1,12 +1,7 @@
-type AddWasmRequest = record { hash : vec nat8; wasm : opt SnsWasm };
+type AddWasmRequest = record { hash : blob; wasm : opt SnsWasm };
 type AddWasmResponse = record { result : opt Result };
 type AirdropDistribution = record { airdrop_neurons : vec NeuronDistribution };
 type Canister = record { id : opt principal };
-type CfNeuron = record { nns_neuron_id : nat64; amount_icp_e8s : nat64 };
-type CfParticipant = record {
-  hotkey_principal : text;
-  cf_neurons : vec CfNeuron;
-};
 type Countries = record { iso_codes : vec text };
 type DappCanisters = record { canisters : vec Canister };
 type DappCanistersTransferResult = record {
@@ -40,14 +35,29 @@ type FractionalDeveloperVotingPower = record {
 type GetAllowedPrincipalsResponse = record {
   allowed_principals : vec principal;
 };
+type GetDeployedSnsByProposalIdRequest = record { proposal_id : nat64 };
+type GetDeployedSnsByProposalIdResponse = record {
+  get_deployed_sns_by_proposal_id_result : opt GetDeployedSnsByProposalIdResult;
+};
+type GetDeployedSnsByProposalIdResult = variant {
+  Error : SnsWasmError;
+  DeployedSns : DeployedSns;
+};
 type GetNextSnsVersionRequest = record {
   governance_canister_id : opt principal;
   current_version : opt SnsVersion;
 };
 type GetNextSnsVersionResponse = record { next_version : opt SnsVersion };
+type GetProposalIdThatAddedWasmRequest = record { hash : blob };
+type GetProposalIdThatAddedWasmResponse = record { proposal_id : opt nat64 };
 type GetSnsSubnetIdsResponse = record { sns_subnet_ids : vec principal };
-type GetWasmRequest = record { hash : vec nat8 };
+type GetWasmMetadataRequest = record { hash : opt blob };
+type GetWasmMetadataResponse = record { result : opt Result_1 };
+type GetWasmRequest = record { hash : blob };
 type GetWasmResponse = record { wasm : opt SnsWasm };
+type IdealMatchedParticipationFunction = record {
+  serialized_representation : opt text;
+};
 type InitialTokenDistribution = variant {
   FractionalDeveloperVotingPower : FractionalDeveloperVotingPower;
 };
@@ -56,6 +66,13 @@ type InsertUpgradePathEntriesRequest = record {
   sns_governance_canister_id : opt principal;
 };
 type InsertUpgradePathEntriesResponse = record { error : opt SnsWasmError };
+type LinearScalingCoefficient = record {
+  slope_numerator : opt nat64;
+  intercept_icp_e8s : opt nat64;
+  from_direct_participation_icp_e8s : opt nat64;
+  slope_denominator : opt nat64;
+  to_direct_participation_icp_e8s : opt nat64;
+};
 type ListDeployedSnsesResponse = record { instances : vec DeployedSns };
 type ListUpgradeStep = record {
   pretty_version : opt PrettySnsVersion;
@@ -67,6 +84,11 @@ type ListUpgradeStepsRequest = record {
   sns_governance_canister_id : opt principal;
 };
 type ListUpgradeStepsResponse = record { steps : vec ListUpgradeStep };
+type MetadataSection = record {
+  contents : opt blob;
+  name : opt text;
+  visibility : opt text;
+};
 type NeuronBasketConstructionParameters = record {
   dissolve_delay_interval_seconds : nat64;
   count : nat64;
@@ -78,7 +100,13 @@ type NeuronDistribution = record {
   stake_e8s : nat64;
   vesting_period_seconds : opt nat64;
 };
-type NeuronsFundParticipants = record { participants : vec CfParticipant };
+type NeuronsFundParticipationConstraints = record {
+  coefficient_intervals : vec LinearScalingCoefficient;
+  max_neurons_fund_participation_icp_e8s : opt nat64;
+  min_direct_participation_threshold_icp_e8s : opt nat64;
+  ideal_matched_participation_function : opt IdealMatchedParticipationFunction;
+};
+type Ok = record { sections : vec MetadataSection };
 type PrettySnsVersion = record {
   archive_wasm_hash : text;
   root_wasm_hash : text;
@@ -87,7 +115,8 @@ type PrettySnsVersion = record {
   governance_wasm_hash : text;
   index_wasm_hash : text;
 };
-type Result = variant { Error : SnsWasmError; Hash : vec nat8 };
+type Result = variant { Error : SnsWasmError; Hash : blob };
+type Result_1 = variant { Ok : Ok; Error : SnsWasmError };
 type SnsCanisterIds = record {
   root : opt principal;
   swap : opt principal;
@@ -100,6 +129,7 @@ type SnsInitPayload = record {
   max_dissolve_delay_seconds : opt nat64;
   max_dissolve_delay_bonus_percentage : opt nat64;
   nns_proposal_id : opt nat64;
+  neurons_fund_participation : opt bool;
   min_participant_icp_e8s : opt nat64;
   neuron_basket_construction_parameters : opt NeuronBasketConstructionParameters;
   fallback_controller_principal_ids : vec text;
@@ -121,29 +151,36 @@ type SnsInitPayload = record {
   wait_for_quiet_deadline_increase_seconds : opt nat64;
   transaction_fee_e8s : opt nat64;
   dapp_canisters : opt DappCanisters;
-  neurons_fund_participants : opt NeuronsFundParticipants;
+  neurons_fund_participation_constraints : opt NeuronsFundParticipationConstraints;
   max_age_bonus_percentage : opt nat64;
   initial_token_distribution : opt InitialTokenDistribution;
   reward_rate_transition_duration_seconds : opt nat64;
+  token_logo : opt text;
   token_name : opt text;
   max_participant_icp_e8s : opt nat64;
+  min_direct_participation_icp_e8s : opt nat64;
   proposal_reject_cost_e8s : opt nat64;
   restricted_countries : opt Countries;
   min_icp_e8s : opt nat64;
+  max_direct_participation_icp_e8s : opt nat64;
 };
 type SnsUpgrade = record {
   next_version : opt SnsVersion;
   current_version : opt SnsVersion;
 };
 type SnsVersion = record {
-  archive_wasm_hash : vec nat8;
-  root_wasm_hash : vec nat8;
-  swap_wasm_hash : vec nat8;
-  ledger_wasm_hash : vec nat8;
-  governance_wasm_hash : vec nat8;
-  index_wasm_hash : vec nat8;
+  archive_wasm_hash : blob;
+  root_wasm_hash : blob;
+  swap_wasm_hash : blob;
+  ledger_wasm_hash : blob;
+  governance_wasm_hash : blob;
+  index_wasm_hash : blob;
 };
-type SnsWasm = record { wasm : vec nat8; canister_type : int32 };
+type SnsWasm = record {
+  wasm : blob;
+  proposal_id : opt nat64;
+  canister_type : int32;
+};
 type SnsWasmCanisterInitPayload = record {
   allowed_principals : vec principal;
   access_controls_enabled : bool;
@@ -175,12 +212,21 @@ service : (SnsWasmCanisterInitPayload) -> {
   add_wasm : (AddWasmRequest) -> (AddWasmResponse);
   deploy_new_sns : (DeployNewSnsRequest) -> (DeployNewSnsResponse);
   get_allowed_principals : (record {}) -> (GetAllowedPrincipalsResponse) query;
+  get_deployed_sns_by_proposal_id : (GetDeployedSnsByProposalIdRequest) -> (
+      GetDeployedSnsByProposalIdResponse,
+    ) query;
   get_latest_sns_version_pretty : (null) -> (vec record { text; text }) query;
   get_next_sns_version : (GetNextSnsVersionRequest) -> (
       GetNextSnsVersionResponse,
     ) query;
+  get_proposal_id_that_added_wasm : (GetProposalIdThatAddedWasmRequest) -> (
+      GetProposalIdThatAddedWasmResponse,
+    ) query;
   get_sns_subnet_ids : (record {}) -> (GetSnsSubnetIdsResponse) query;
   get_wasm : (GetWasmRequest) -> (GetWasmResponse) query;
+  get_wasm_metadata : (GetWasmMetadataRequest) -> (
+      GetWasmMetadataResponse,
+    ) query;
   insert_upgrade_path_entries : (InsertUpgradePathEntriesRequest) -> (
       InsertUpgradePathEntriesResponse,
     );

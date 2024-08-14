@@ -1,14 +1,18 @@
 use crate::models::amount::{signed_amount, tokens_to_amount};
-use crate::models::operation::{OperationIdentifier, OperationType};
+use crate::models::operation::OperationType;
 use crate::models::seconds::Seconds;
+use crate::models::OperationIdentifier;
 use crate::{
-    convert::{principal_id_from_public_key, to_model_account_identifier},
+    convert::to_model_account_identifier,
     errors::ApiError,
-    models::{self, operation::Operation, Object},
+    models::{self, Operation},
     transaction_id::TransactionIdentifier,
 };
+pub use ic_ledger_canister_blocks_synchronizer::blocks::RosettaBlocksMode;
 use ic_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, BlockIndex, Operation as LedgerOperation, Tokens};
+use rosetta_core::convert::principal_id_from_public_key;
+use rosetta_core::objects::ObjectMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::convert::TryFrom;
@@ -35,6 +39,7 @@ pub const MERGE_MATURITY: &str = "MERGE_MATURITY";
 pub const REGISTER_VOTE: &str = "REGISTER_VOTE";
 pub const STAKE_MATURITY: &str = "STAKE_MATURITY";
 pub const NEURON_INFO: &str = "NEURON_INFO";
+pub const LIST_NEURONS: &str = "LIST_NEURONS";
 pub const FOLLOW: &str = "FOLLOW";
 
 /// `RequestType` contains all supported values of `Operation.type`.
@@ -88,6 +93,9 @@ pub enum RequestType {
         neuron_index: u64,
         controller: Option<PublicKeyOrPrincipal>,
     },
+    #[serde(rename = "LIST_NEURONS")]
+    #[serde(alias = "ListNeurons")]
+    ListNeurons,
     #[serde(rename = "FOLLOW")]
     #[serde(alias = "Follow")]
     Follow {
@@ -113,6 +121,7 @@ impl RequestType {
             RequestType::RegisterVote { .. } => REGISTER_VOTE,
             RequestType::StakeMaturity { .. } => STAKE_MATURITY,
             RequestType::NeuronInfo { .. } => NEURON_INFO,
+            RequestType::ListNeurons { .. } => LIST_NEURONS,
             RequestType::Follow { .. } => FOLLOW,
         }
     }
@@ -137,16 +146,19 @@ impl RequestType {
                 | RequestType::RegisterVote { .. }
                 | RequestType::StakeMaturity { .. }
                 | RequestType::NeuronInfo { .. }
+                | RequestType::ListNeurons { .. }
                 | RequestType::Follow { .. }
         )
     }
 }
 
-impl From<RequestResultMetadata> for Object {
-    fn from(d: RequestResultMetadata) -> Self {
+impl TryFrom<RequestResultMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: RequestResultMetadata) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
-            Ok(Value::Object(o)) => o,
-            _ => Object::default(),
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert RequestResultMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert RequestResultMetadata to ObjectMap: {:?}",err))),
         }
     }
 }
@@ -167,9 +179,9 @@ pub struct RequestResultMetadata {
     pub response: Option<models::Error>,
 }
 
-impl TryFrom<Option<Object>> for RequestResultMetadata {
+impl TryFrom<Option<ObjectMap>> for RequestResultMetadata {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse a `neuron_identifier` from metadata JSON object: {}",
@@ -223,18 +235,20 @@ pub struct GetProposalInfo {
     pub proposal_id: u64,
 }
 
-impl From<GetProposalInfo> for Object {
-    fn from(m: GetProposalInfo) -> Self {
-        match serde_json::to_value(m) {
-            Ok(Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<GetProposalInfo> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: GetProposalInfo) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert GetProposalInfo to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert GetProposalInfo to ObjectMap: {:?}",err))),
         }
     }
 }
 
-impl TryFrom<Option<Object>> for GetProposalInfo {
+impl TryFrom<Option<ObjectMap>> for GetProposalInfo {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse a `proposal_id` from metadata JSON object: {}",
@@ -349,6 +363,11 @@ pub struct NeuronInfo {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ListNeurons {
+    pub account: icp_ledger::AccountIdentifier,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Follow {
     pub account: icp_ledger::AccountIdentifier,
     pub topic: i32,
@@ -370,7 +389,8 @@ impl TryFrom<&PublicKeyOrPrincipal> for PrincipalId {
     type Error = ApiError;
     fn try_from(p: &PublicKeyOrPrincipal) -> Result<PrincipalId, ApiError> {
         match p {
-            PublicKeyOrPrincipal::PublicKey(pk) => principal_id_from_public_key(pk),
+            PublicKeyOrPrincipal::PublicKey(pk) => principal_id_from_public_key(pk)
+                .map_err(|err| ApiError::InvalidPublicKey(false, err.into())),
             PublicKeyOrPrincipal::Principal(pid) => Ok(*pid),
         }
     }
@@ -406,18 +426,20 @@ pub struct ChangeAutoStakeMaturityMetadata {
     pub requested_setting_for_auto_stake_maturity: bool,
 }
 
-impl From<ChangeAutoStakeMaturityMetadata> for Object {
-    fn from(m: ChangeAutoStakeMaturityMetadata) -> Self {
-        match serde_json::to_value(m) {
-            Ok(Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<ChangeAutoStakeMaturityMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: ChangeAutoStakeMaturityMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ChangeAutoStakeMaturityMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert ChangeAutoStakeMaturityMetadata to ObjectMap: {:?}",err))),
         }
     }
 }
 
-impl TryFrom<Option<Object>> for ChangeAutoStakeMaturityMetadata {
+impl TryFrom<Option<ObjectMap>> for ChangeAutoStakeMaturityMetadata {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse a `neuron_index` from metadata JSON object: {}",
@@ -427,18 +449,20 @@ impl TryFrom<Option<Object>> for ChangeAutoStakeMaturityMetadata {
     }
 }
 
-impl From<SetDissolveTimestampMetadata> for Object {
-    fn from(m: SetDissolveTimestampMetadata) -> Self {
-        match serde_json::to_value(m) {
-            Ok(Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<SetDissolveTimestampMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: SetDissolveTimestampMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert SetDissolveTimestampMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert SetDissolveTimestampMetadata to ObjectMap: {:?}",err))),
         }
     }
 }
 
-impl TryFrom<Option<Object>> for SetDissolveTimestampMetadata {
+impl TryFrom<Option<ObjectMap>> for SetDissolveTimestampMetadata {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Set Dissolve Timestamp operation must have a 'dissolve_time_utc_seconds' metadata field.
@@ -461,9 +485,9 @@ pub struct NeuronIdentifierMetadata {
     pub neuron_index: u64,
 }
 
-impl TryFrom<Option<Object>> for NeuronIdentifierMetadata {
+impl TryFrom<Option<ObjectMap>> for NeuronIdentifierMetadata {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse a `neuron_index` from metadata JSON object: {}",
@@ -473,11 +497,13 @@ impl TryFrom<Option<Object>> for NeuronIdentifierMetadata {
     }
 }
 
-impl From<NeuronIdentifierMetadata> for Object {
-    fn from(m: NeuronIdentifierMetadata) -> Self {
-        match serde_json::to_value(m) {
-            Ok(Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<NeuronIdentifierMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: NeuronIdentifierMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert NeuronIdentifierMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert NeuronIdentifierMetadata to ObjectMap: {:?}",err))),
         }
     }
 }
@@ -491,10 +517,10 @@ pub struct DisburseMetadata {
     pub recipient: Option<AccountIdentifier>,
 }
 
-impl TryFrom<Option<Object>> for DisburseMetadata {
+impl TryFrom<Option<ObjectMap>> for DisburseMetadata {
     type Error = ApiError;
 
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse DISBURSE operation metadata from a JSON object: {}",
@@ -503,11 +529,14 @@ impl TryFrom<Option<Object>> for DisburseMetadata {
         })
     }
 }
-impl From<DisburseMetadata> for Object {
-    fn from(m: DisburseMetadata) -> Self {
-        match serde_json::to_value(m) {
-            Ok(Value::Object(o)) => o,
-            _ => unreachable!(),
+
+impl TryFrom<DisburseMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: DisburseMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert DisburseMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert DisburseMetadata to ObjectMap: {:?}",err))),
         }
     }
 }
@@ -520,10 +549,10 @@ pub struct KeyMetadata {
     pub neuron_index: u64,
 }
 
-impl TryFrom<Option<Object>> for KeyMetadata {
+impl TryFrom<Option<ObjectMap>> for KeyMetadata {
     type Error = ApiError;
 
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse hot key management operation metadata from a JSON object: {}",
@@ -533,11 +562,13 @@ impl TryFrom<Option<Object>> for KeyMetadata {
     }
 }
 
-impl From<KeyMetadata> for Object {
-    fn from(m: KeyMetadata) -> Self {
-        match serde_json::to_value(m) {
-            Ok(Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<KeyMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: KeyMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert KeyMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert KeyMetadata to ObjectMap: {:?}",err))),
         }
     }
 }
@@ -601,10 +632,10 @@ pub struct SpawnMetadata {
     pub spawned_neuron_index: u64,
 }
 
-impl TryFrom<Option<Object>> for SpawnMetadata {
+impl TryFrom<Option<ObjectMap>> for SpawnMetadata {
     type Error = ApiError;
 
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse SPAWN operation metadata from a JSON object: {}",
@@ -614,11 +645,13 @@ impl TryFrom<Option<Object>> for SpawnMetadata {
     }
 }
 
-impl From<SpawnMetadata> for Object {
-    fn from(m: SpawnMetadata) -> Self {
-        match serde_json::to_value(m) {
-            Ok(Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<SpawnMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: SpawnMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert SpawnMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert SpawnMetadata to ObjectMap: {:?}",err))),
         }
     }
 }
@@ -631,9 +664,9 @@ pub struct RegisterVoteMetadata {
     pub neuron_index: u64,
 }
 
-impl TryFrom<Option<Object>> for RegisterVoteMetadata {
+impl TryFrom<Option<ObjectMap>> for RegisterVoteMetadata {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse REGISTER_VOTE operation metadata from metadata JSON object: {}",
@@ -643,11 +676,13 @@ impl TryFrom<Option<Object>> for RegisterVoteMetadata {
     }
 }
 
-impl From<RegisterVoteMetadata> for Object {
-    fn from(m: RegisterVoteMetadata) -> Self {
-        match serde_json::to_value(m) {
-            Ok(Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<RegisterVoteMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: RegisterVoteMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert RegisterVoteMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert RegisterVoteMetadata to ObjectMap: {:?}",err))),
         }
     }
 }
@@ -661,9 +696,9 @@ pub struct MergeMaturityMetadata {
     pub neuron_index: u64,
 }
 
-impl TryFrom<Option<Object>> for MergeMaturityMetadata {
+impl TryFrom<Option<ObjectMap>> for MergeMaturityMetadata {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse MERGE_MATURITY operation metadata from metadata JSON object: {}",
@@ -673,14 +708,17 @@ impl TryFrom<Option<Object>> for MergeMaturityMetadata {
     }
 }
 
-impl From<MergeMaturityMetadata> for Object {
-    fn from(m: MergeMaturityMetadata) -> Self {
-        match serde_json::to_value(m) {
-            Ok(Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<MergeMaturityMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: MergeMaturityMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert MergeMaturityMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert MergeMaturityMetadata to ObjectMap: {:?}",err))),
         }
     }
 }
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub struct StakeMaturityMetadata {
     #[serde(default)]
@@ -690,9 +728,9 @@ pub struct StakeMaturityMetadata {
     pub neuron_index: u64,
 }
 
-impl TryFrom<Option<Object>> for StakeMaturityMetadata {
+impl TryFrom<Option<ObjectMap>> for StakeMaturityMetadata {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse STAKE_MATURITY operation metadata from metadata JSON object: {}",
@@ -702,11 +740,13 @@ impl TryFrom<Option<Object>> for StakeMaturityMetadata {
     }
 }
 
-impl From<StakeMaturityMetadata> for Object {
-    fn from(m: StakeMaturityMetadata) -> Self {
-        match serde_json::to_value(m) {
-            Ok(Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<StakeMaturityMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: StakeMaturityMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert StakeMaturityMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert StakeMaturityMetadata to ObjectMap: {:?}",err))),
         }
     }
 }
@@ -718,18 +758,20 @@ pub struct NeuronInfoMetadata {
     pub neuron_index: u64,
 }
 
-impl From<PublicKeyOrPrincipal> for Object {
-    fn from(p: PublicKeyOrPrincipal) -> Self {
-        match serde_json::to_value(p) {
-            Ok(Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<PublicKeyOrPrincipal> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: PublicKeyOrPrincipal) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert PublicKeyOrPrincipal to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert PublicKeyOrPrincipal to ObjectMap: {:?}",err))),
         }
     }
 }
 
-impl TryFrom<Option<Object>> for NeuronInfoMetadata {
+impl TryFrom<Option<ObjectMap>> for NeuronInfoMetadata {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse NEURON_INFO operation metadata from metadata JSON object: {}",
@@ -791,11 +833,13 @@ fn test_parse_neuron_info_metadata_principal() {
     );
 }
 
-impl From<NeuronInfoMetadata> for Object {
-    fn from(m: NeuronInfoMetadata) -> Self {
-        match serde_json::to_value(m) {
-            Ok(Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<NeuronInfoMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: NeuronInfoMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert NeuronInfoMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert NeuronInfoMetadata to ObjectMap: {:?}",err))),
         }
     }
 }
@@ -809,9 +853,9 @@ pub struct FollowMetadata {
     pub neuron_index: u64,
 }
 
-impl TryFrom<Option<Object>> for FollowMetadata {
+impl TryFrom<Option<ObjectMap>> for FollowMetadata {
     type Error = ApiError;
-    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
                 "Could not parse a FOLLOW operation metadata from metadata JSON object: {}",
@@ -821,11 +865,45 @@ impl TryFrom<Option<Object>> for FollowMetadata {
     }
 }
 
-impl From<FollowMetadata> for Object {
-    fn from(m: FollowMetadata) -> Self {
-        match serde_json::to_value(m) {
-            Ok(Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<FollowMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: FollowMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert FollowMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert FollowMetadata to ObjectMap: {:?}",err))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ApproveMetadata {
+    pub from: AccountIdentifier,
+    pub spender: AccountIdentifier,
+    pub allowance: Tokens,
+    pub expected_allowance: Option<Tokens>,
+    pub expires_at: Option<u64>,
+}
+
+impl TryFrom<Option<ObjectMap>> for ApproveMetadata {
+    type Error = ApiError;
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse a Approve operation metadata from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
+}
+
+impl TryFrom<ApproveMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: ApproveMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ApproveMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert ApproveMetadata to ObjectMap: {:?}",err))),
         }
     }
 }
@@ -836,7 +914,7 @@ impl From<FollowMetadata> for Object {
 pub struct TransactionBuilder {
     /// The next `OperationIdentifier` `index`.
     /// TODO Why is `OperationIdentifier.index` a signed integer?
-    op_index: i64,
+    op_index: u64,
     ops: Vec<Operation>,
 }
 
@@ -856,47 +934,77 @@ impl TransactionBuilder {
     }
 
     /// Add a `Request::Transfer` to the Transaction.
-    /// This handles `Send`, `Mint`, and `Burn`.
+    /// This handles `Send`, `Mint`, `Approve` and `Burn`.
     pub fn transfer(
         &mut self,
         operation: &LedgerOperation,
         token_name: &str,
     ) -> Result<(), ApiError> {
-        let mut push_op = |_type: OperationType, account: &AccountIdentifier, amount: i128| {
+        let mut push_op = |_type: OperationType,
+                           account: Option<crate::models::AccountIdentifier>,
+                           amount: Option<crate::models::Amount>,
+                           metadata: Option<ObjectMap>| {
             let operation_identifier = self.allocate_op_id();
             self.ops.push(Operation {
                 operation_identifier,
-                _type,
+                type_: _type.to_string(),
                 status: None,
-                account: Some(to_model_account_identifier(account)),
-                amount: Some(signed_amount(amount, token_name)),
+                account,
+                amount,
                 related_operations: None,
                 coin_change: None,
-                metadata: None,
+                metadata,
             });
         };
 
         match operation {
-            LedgerOperation::Burn { from, amount } => {
-                push_op(OperationType::Burn, from, -i128::from(amount.get_e8s()));
+            LedgerOperation::Burn { from, amount, .. } => {
+                push_op(
+                    OperationType::Burn,
+                    Some(to_model_account_identifier(from)),
+                    Some(signed_amount(-i128::from(amount.get_e8s()), token_name)),
+                    None,
+                );
             }
             LedgerOperation::Mint { to, amount } => {
-                push_op(OperationType::Mint, to, i128::from(amount.get_e8s()));
+                push_op(
+                    OperationType::Mint,
+                    Some(to_model_account_identifier(to)),
+                    Some(signed_amount(i128::from(amount.get_e8s()), token_name)),
+                    None,
+                );
             }
             LedgerOperation::Approve {
-                from, spender, fee, ..
+                from,
+                spender,
+                fee,
+                allowance,
+                expected_allowance,
+                expires_at,
             } => {
-                push_op(OperationType::Transaction, from, 0);
-                push_op(OperationType::Transaction, spender, 0);
-                push_op(OperationType::Fee, from, -i128::from(fee.get_e8s()));
+                push_op(
+                    OperationType::Approve,
+                    Some(to_model_account_identifier(from)),
+                    None,
+                    Some(
+                        ApproveMetadata {
+                            from: *from,
+                            allowance: *allowance,
+                            spender: *spender,
+                            expected_allowance: *expected_allowance,
+                            expires_at: expires_at.map(|ts| ts.as_nanos_since_unix_epoch()),
+                        }
+                        .try_into()?,
+                    ),
+                );
+                push_op(
+                    OperationType::Fee,
+                    Some(to_model_account_identifier(from)),
+                    Some(signed_amount(-i128::from(fee.get_e8s()), token_name)),
+                    None,
+                );
             }
             LedgerOperation::Transfer {
-                from,
-                to,
-                amount,
-                fee,
-            }
-            | LedgerOperation::TransferFrom {
                 from,
                 to,
                 amount,
@@ -904,15 +1012,30 @@ impl TransactionBuilder {
                 ..
             } => {
                 let amount = i128::from(amount.get_e8s());
-                push_op(OperationType::Transaction, from, -amount);
-                push_op(OperationType::Transaction, to, amount);
-                push_op(OperationType::Fee, from, -i128::from(fee.get_e8s()));
+                push_op(
+                    OperationType::Transaction,
+                    Some(to_model_account_identifier(from)),
+                    Some(signed_amount(-amount, token_name)),
+                    None,
+                );
+                push_op(
+                    OperationType::Transaction,
+                    Some(to_model_account_identifier(to)),
+                    Some(signed_amount(amount, token_name)),
+                    None,
+                );
+                push_op(
+                    OperationType::Fee,
+                    Some(to_model_account_identifier(from)),
+                    Some(signed_amount(-i128::from(fee.get_e8s()), token_name)),
+                    None,
+                );
             }
         };
         Ok(())
     }
 
-    pub fn stake(&mut self, stake: &Stake) {
+    pub fn stake(&mut self, stake: &Stake) -> Result<(), ApiError> {
         let Stake {
             account,
             neuron_index,
@@ -920,7 +1043,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::Stake,
+            type_: OperationType::Stake.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -930,12 +1053,16 @@ impl TransactionBuilder {
                 NeuronIdentifierMetadata {
                     neuron_index: *neuron_index,
                 }
-                .into(),
+                .try_into()?,
             ),
         });
+        Ok(())
     }
 
-    pub fn set_dissolve_timestamp(&mut self, set_dissolve: &SetDissolveTimestamp) {
+    pub fn set_dissolve_timestamp(
+        &mut self,
+        set_dissolve: &SetDissolveTimestamp,
+    ) -> Result<(), ApiError> {
         let SetDissolveTimestamp {
             account,
             neuron_index,
@@ -944,7 +1071,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::SetDissolveTimestamp,
+            type_: OperationType::SetDissolveTimestamp.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -955,15 +1082,16 @@ impl TransactionBuilder {
                     neuron_index: *neuron_index,
                     timestamp: *timestamp,
                 }
-                .into(),
+                .try_into()?,
             ),
         });
+        Ok(())
     }
 
     pub fn change_auto_stake_maturity(
         &mut self,
         setting_for_auto_stake_maturity: &ChangeAutoStakeMaturity,
-    ) {
+    ) -> Result<(), ApiError> {
         let ChangeAutoStakeMaturity {
             account,
             neuron_index,
@@ -972,7 +1100,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::ChangeAutoStakeMaturity,
+            type_: OperationType::ChangeAutoStakeMaturity.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -984,12 +1112,13 @@ impl TransactionBuilder {
                     requested_setting_for_auto_stake_maturity:
                         *requested_setting_for_auto_stake_maturity,
                 }
-                .into(),
+                .try_into()?,
             ),
         });
+        Ok(())
     }
 
-    pub fn start_dissolve(&mut self, start_dissolve: &StartDissolve) {
+    pub fn start_dissolve(&mut self, start_dissolve: &StartDissolve) -> Result<(), ApiError> {
         let StartDissolve {
             account,
             neuron_index,
@@ -997,7 +1126,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::StartDissolving,
+            type_: OperationType::StartDissolving.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1007,12 +1136,13 @@ impl TransactionBuilder {
                 NeuronIdentifierMetadata {
                     neuron_index: *neuron_index,
                 }
-                .into(),
+                .try_into()?,
             ),
         });
+        Ok(())
     }
 
-    pub fn stop_dissolve(&mut self, stop_dissolve: &StopDissolve) {
+    pub fn stop_dissolve(&mut self, stop_dissolve: &StopDissolve) -> Result<(), ApiError> {
         let StopDissolve {
             account,
             neuron_index,
@@ -1020,7 +1150,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::StopDissolving,
+            type_: OperationType::StopDissolving.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1030,12 +1160,13 @@ impl TransactionBuilder {
                 NeuronIdentifierMetadata {
                     neuron_index: *neuron_index,
                 }
-                .into(),
+                .try_into()?,
             ),
         });
+        Ok(())
     }
 
-    pub fn disburse(&mut self, disburse: &Disburse, token_name: &str) {
+    pub fn disburse(&mut self, disburse: &Disburse, token_name: &str) -> Result<(), ApiError> {
         let Disburse {
             account,
             amount,
@@ -1045,7 +1176,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::Disburse,
+            type_: OperationType::Disburse.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: amount
@@ -1057,11 +1188,12 @@ impl TransactionBuilder {
                     recipient: *recipient,
                     neuron_index: *neuron_index,
                 }
-                .into(),
+                .try_into()?,
             ),
         });
+        Ok(())
     }
-    pub fn add_hot_key(&mut self, key: &AddHotKey) {
+    pub fn add_hot_key(&mut self, key: &AddHotKey) -> Result<(), ApiError> {
         let AddHotKey {
             account,
             neuron_index,
@@ -1070,7 +1202,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::AddHotkey,
+            type_: OperationType::AddHotkey.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1081,11 +1213,12 @@ impl TransactionBuilder {
                     key: key.clone(),
                     neuron_index: *neuron_index,
                 }
-                .into(),
+                .try_into()?,
             ),
         });
+        Ok(())
     }
-    pub fn remove_hotkey(&mut self, key: &RemoveHotKey) {
+    pub fn remove_hotkey(&mut self, key: &RemoveHotKey) -> Result<(), ApiError> {
         let RemoveHotKey {
             account,
             neuron_index,
@@ -1094,7 +1227,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::RemoveHotkey,
+            type_: OperationType::RemoveHotkey.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1105,11 +1238,12 @@ impl TransactionBuilder {
                     key: key.clone(),
                     neuron_index: *neuron_index,
                 }
-                .into(),
+                .try_into()?,
             ),
         });
+        Ok(())
     }
-    pub fn spawn(&mut self, spawn: &Spawn) {
+    pub fn spawn(&mut self, spawn: &Spawn) -> Result<(), ApiError> {
         let Spawn {
             account,
             spawned_neuron_index,
@@ -1120,7 +1254,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::Spawn,
+            type_: OperationType::Spawn.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1133,12 +1267,13 @@ impl TransactionBuilder {
                     percentage_to_spawn: *percentage_to_spawn,
                     spawned_neuron_index: *spawned_neuron_index,
                 }
-                .into(),
+                .try_into()?,
             ),
         });
+        Ok(())
     }
 
-    pub fn register_vote(&mut self, register_vote: &RegisterVote) {
+    pub fn register_vote(&mut self, register_vote: &RegisterVote) -> Result<(), ApiError> {
         let RegisterVote {
             account,
             proposal,
@@ -1148,7 +1283,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::RegisterVote,
+            type_: OperationType::RegisterVote.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1160,12 +1295,13 @@ impl TransactionBuilder {
                     vote: *vote,
                     neuron_index: *neuron_index,
                 }
-                .into(),
+                .try_into()?,
             ),
         });
+        Ok(())
     }
 
-    pub fn merge_maturity(&mut self, merge: &MergeMaturity) {
+    pub fn merge_maturity(&mut self, merge: &MergeMaturity) -> Result<(), ApiError> {
         let MergeMaturity {
             account,
             percentage_to_merge,
@@ -1174,7 +1310,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::MergeMaturity,
+            type_: OperationType::MergeMaturity.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1185,12 +1321,13 @@ impl TransactionBuilder {
                     percentage_to_merge: Option::from(*percentage_to_merge),
                     neuron_index: *neuron_index,
                 }
-                .into(),
+                .try_into()?,
             ),
         });
+        Ok(())
     }
 
-    pub fn stake_maturity(&mut self, stake: &StakeMaturity) {
+    pub fn stake_maturity(&mut self, stake: &StakeMaturity) -> Result<(), ApiError> {
         let StakeMaturity {
             account,
             percentage_to_stake,
@@ -1199,7 +1336,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::StakeMaturity,
+            type_: OperationType::StakeMaturity.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1210,12 +1347,13 @@ impl TransactionBuilder {
                     percentage_to_stake: *percentage_to_stake,
                     neuron_index: *neuron_index,
                 }
-                .into(),
+                .try_into()?,
             ),
         });
+        Ok(())
     }
 
-    pub fn neuron_info(&mut self, req: &NeuronInfo) {
+    pub fn neuron_info(&mut self, req: &NeuronInfo) -> Result<(), ApiError> {
         let NeuronInfo {
             account,
             controller,
@@ -1224,7 +1362,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::NeuronInfo,
+            type_: OperationType::NeuronInfo.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1235,12 +1373,29 @@ impl TransactionBuilder {
                     controller: pkp_from_principal(controller),
                     neuron_index: *neuron_index,
                 }
-                .into(),
+                .try_into()?,
             ),
         });
+        Ok(())
     }
 
-    pub fn follow(&mut self, follow: &Follow) {
+    pub fn list_neurons(&mut self, req: &ListNeurons) -> Result<(), ApiError> {
+        let ListNeurons { account } = req;
+        let operation_identifier = self.allocate_op_id();
+        self.ops.push(Operation {
+            operation_identifier,
+            type_: OperationType::ListNeurons.to_string(),
+            status: None,
+            account: Some(to_model_account_identifier(account)),
+            amount: None,
+            related_operations: None,
+            coin_change: None,
+            metadata: None,
+        });
+        Ok(())
+    }
+
+    pub fn follow(&mut self, follow: &Follow) -> Result<(), ApiError> {
         let Follow {
             account,
             topic,
@@ -1251,7 +1406,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::Follow,
+            type_: OperationType::Follow.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1264,13 +1419,19 @@ impl TransactionBuilder {
                     controller: pkp_from_principal(controller),
                     neuron_index: *neuron_index,
                 }
-                .into(),
+                .try_into()?,
             ),
         });
+        Ok(())
     }
 }
 
 /// Converts an optional PrincipalId to an optional PublicKeyOrPrincipal.
 fn pkp_from_principal(pid: &Option<PrincipalId>) -> Option<PublicKeyOrPrincipal> {
     pid.as_ref().map(|p| PublicKeyOrPrincipal::Principal(*p))
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+pub struct RosettaStatus {
+    pub rosetta_blocks_mode: RosettaBlocksMode,
 }

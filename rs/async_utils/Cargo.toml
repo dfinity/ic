@@ -1,22 +1,25 @@
 [package]
 name = "ic-async-utils"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-async-stream = "0.3.4"
+anyhow = { workspace = true }
+async-stream = { workspace = true }
+axum = { workspace = true }
 byte-unit = "4.0.14"
-derive_more = "0.99.17"
-futures = "0.3.13"
-futures-util = "0.3.13"
+bytes = { workspace = true }
+futures = { workspace = true }
+futures-util = { workspace = true }
 hyper = { version = "0.14.16", features = ["full"] }
-ic-types = { path = "../types/types" }
-prometheus = { version = "0.12.0", features = [ "process" ] }
-slog = "2.5.2"
-tokio = { version = "1.15.0", features = ["full"] }
-tonic = "0.8.2"
-tower =  { version = "0.4.8", features = ["load-shed", "limit", "steer"] }
+slog = { workspace = true }
+sync_wrapper = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tonic = { workspace = true }
 
 [dev-dependencies]
-bytes = "1.0.1"
-rand = "0.8.3"
+rand = { workspace = true }

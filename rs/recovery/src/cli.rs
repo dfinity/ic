@@ -36,7 +36,7 @@ On a high level, this process consists of the following steps:
 1. Halting the broken subnet and deploying read only access keys.
 2. Downloading the most recent state by:
     a) Downloading and merging certification pools from all available nodes
-    b) Choosing a node with the highest finalization height and downloading its 
+    b) Choosing a node with the highest finalization height and downloading its
        most recent state,
 3. Replaying finalized blocks using `ic-replay`.
 4. Optionally proposing and upgrading the subnet to a new replica
@@ -54,21 +54,21 @@ pub fn app_subnet_recovery(
     print_step(&logger, "App Subnet Recovery");
     info!(logger, "\n{}\n", SUMMARY);
     print_summary(&logger, &args, subnet_recovery_args.subnet_id);
-    wait_for_confirmation(&logger);
-
+    if !args.skip_prompts {
+        wait_for_confirmation(&logger);
+    }
     if neuron_args.is_none() && !args.test_mode {
         neuron_args = Some(read_neuron_args(&logger));
     }
 
     let subnet_recovery = AppSubnetRecovery::new(
         logger.clone(),
-        args,
+        args.clone(),
         neuron_args,
         subnet_recovery_args,
-        /*interactive=*/ true,
     );
 
-    execute_steps(&logger, subnet_recovery);
+    execute_steps(&logger, args.skip_prompts, subnet_recovery);
 }
 
 /// NNS is recovered on same nodes by:
@@ -89,16 +89,12 @@ pub fn nns_recovery_same_nodes(
 ) {
     print_step(&logger, "NNS Recovery Same Nodes");
     print_summary(&logger, &args, nns_recovery_args.subnet_id);
-    wait_for_confirmation(&logger);
+    if !args.skip_prompts {
+        wait_for_confirmation(&logger);
+    }
+    let nns_recovery = NNSRecoverySameNodes::new(logger.clone(), args.clone(), nns_recovery_args);
 
-    let nns_recovery = NNSRecoverySameNodes::new(
-        logger.clone(),
-        args,
-        nns_recovery_args,
-        /*interactive=*/ true,
-    );
-
-    execute_steps(&logger, nns_recovery);
+    execute_steps(&logger, args.skip_prompts, nns_recovery);
 }
 
 /// NNS is recovered on failover nodes by:
@@ -120,21 +116,18 @@ pub fn nns_recovery_failover_nodes(
 ) {
     print_step(&logger, "NNS Recovery Failover Nodes");
     print_summary(&logger, &args, nns_recovery_args.subnet_id);
-    wait_for_confirmation(&logger);
+    if !args.skip_prompts {
+        wait_for_confirmation(&logger);
+    }
 
     if neuron_args.is_none() && !args.test_mode {
         neuron_args = Some(read_neuron_args(&logger));
     }
 
-    let nns_recovery = NNSRecoveryFailoverNodes::new(
-        logger.clone(),
-        args,
-        neuron_args,
-        nns_recovery_args,
-        /*interactive=*/ true,
-    );
+    let nns_recovery =
+        NNSRecoveryFailoverNodes::new(logger.clone(), args.clone(), neuron_args, nns_recovery_args);
 
-    execute_steps(&logger, nns_recovery);
+    execute_steps(&logger, args.skip_prompts, nns_recovery);
 }
 
 pub fn execute_steps<
@@ -146,6 +139,7 @@ pub fn execute_steps<
         + Iterator<Item = (StepType, Box<dyn Step>)>,
 >(
     logger: &Logger,
+    skip_prompts: bool,
     mut steps: Steps,
 ) {
     if let Some(next_step) = steps.get_next_step() {
@@ -153,7 +147,7 @@ pub fn execute_steps<
     }
 
     while let Some((_step_type, step)) = steps.next() {
-        execute_step_after_consent(logger, step);
+        execute_step_after_consent(logger, skip_prompts, step);
 
         if let Err(e) = steps.get_state().and_then(|state| state.save()) {
             warn!(logger, "Failed to save the recovery state: {}", e);
@@ -161,9 +155,9 @@ pub fn execute_steps<
     }
 }
 
-fn execute_step_after_consent(logger: &Logger, step: Box<dyn Step>) {
+fn execute_step_after_consent(logger: &Logger, skip_prompts: bool, step: Box<dyn Step>) {
     info!(logger, "{}", step.descr());
-    if !consent_given(logger, "Execute now?") {
+    if !skip_prompts && !consent_given(logger, "Execute now?") {
         return;
     }
 
@@ -172,7 +166,7 @@ fn execute_step_after_consent(logger: &Logger, step: Box<dyn Step>) {
             Ok(()) => break,
             Err(e) => {
                 warn!(logger, "Error: {}", e);
-                if !consent_given(logger, "Retry now?") {
+                if !skip_prompts && !consent_given(logger, "Retry now?") {
                     break;
                 }
             }

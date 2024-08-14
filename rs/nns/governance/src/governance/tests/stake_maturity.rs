@@ -11,8 +11,7 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
-use maplit::hashmap;
-use std::sync::{Arc, Mutex};
+use maplit::btreemap;
 
 #[test]
 fn test_stake_maturity() {
@@ -31,15 +30,12 @@ fn test_stake_maturity() {
 
     let mut governance = Governance::new(
         GovernanceProto {
-            neurons: hashmap! {
+            neurons: btreemap! {
                 1 => neuron_1
             },
             ..GovernanceProto::default()
         },
-        Box::new(MockEnvironment {
-            expected_call_canister_method_calls: Arc::new(Mutex::new(Default::default())),
-            now: Arc::new(Mutex::new(0)),
-        }),
+        Box::new(MockEnvironment::new(vec![], 0)),
         Box::new(StubIcpLedger {}),
         Box::new(StubCMC {}),
     );

@@ -1,19 +1,19 @@
 /* tag::catalog[]
 end::catalog[] */
 
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
-use crate::{types::*, util::CYCLES_LIMIT_PER_CANISTER, util::*};
 use candid::{Decode, Encode, Principal};
 use ic_agent::{
     agent::{RejectCode, RejectResponse},
     AgentError,
 };
 use ic_base_types::RegistryVersion;
-use ic_ic00_types::SetupInitialDKGArgs;
+use ic_management_canister_types::SetupInitialDKGArgs;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
+use ic_system_test_driver::{types::*, util::CYCLES_LIMIT_PER_CANISTER, util::*};
 use ic_types::Cycles;
 use ic_types_test_utils::ids::node_test_id;
 use lazy_static::lazy_static;
@@ -80,11 +80,11 @@ pub fn mint_cycles_supported_only_on_cycles_minting_canister(env: TestEnv) {
 
         assert_eq!(
             res,
-            AgentError::ReplicaError(
+            AgentError::CertifiedReject(
                 RejectResponse {
                     reject_code: RejectCode::CanisterError,
                     reject_message: format!(
-                        "Canister {} violated contract: ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}",
+                        "Error from Canister {}: Canister violated contract: ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}.\nThis is likely an error with the compiler/CDK toolchain being used to build the canister. Please report the error to IC devs on the forum: https://forum.dfinity.org and include which language/CDK was used to create the canister.",
                         nns_canister_id, nns_canister_id,
                         CYCLES_MINTING_CANISTER_ID),
                     error_code: None})

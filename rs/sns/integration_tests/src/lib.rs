@@ -42,3 +42,12 @@ mod sns_treasury;
 
 #[cfg(test)]
 mod payment_flow;
+
+#[cfg(test)]
+mod initialization_flow;
+
+#[cfg(test)]
+mod manage_ledger_parameters;
+
+#[cfg(test)]
+mod manage_dapp_canister_settings;

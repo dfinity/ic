@@ -1,8 +1,11 @@
 [package]
 name = "criterion-time"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-criterion = "0.3"
-libc = "0.2.91"
+criterion = { workspace = true }
+libc = { workspace = true }

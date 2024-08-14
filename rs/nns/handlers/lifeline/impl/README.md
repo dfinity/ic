@@ -26,7 +26,7 @@ moc --idl -o lifeline.did lifeline.mo --actor-alias governance "rrkah-fqaaa-aaaa
 ```
 The `--idl` option makes sure that the `.did` file is updated.
 
-Before comitting the `.did` file, the `git diff` should be consulted, and the (for external usage) irrelevant changes backed out. Please note that the purely internal (callback) method `upgrade_root` should not appear in the `.did` file, and should be removed entirely (preferred) or (at least) commented out.
+Before committing the `.did` file, the `git diff` should be consulted, and the (for external usage) irrelevant changes backed out. Please note that the purely internal (callback) method `upgrade_root` should not appear in the `.did` file, and should be removed entirely (preferred) or (at least) commented out.
 
 ## How `lifeline` is built in `nix`
 

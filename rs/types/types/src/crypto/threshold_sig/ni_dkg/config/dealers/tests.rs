@@ -37,7 +37,7 @@ fn should_return_correct_dealers() {
 
 #[test]
 fn should_return_correct_dealers_iter() {
-    let mut dealers = vec![node_id(NODE_1), node_id(NODE_2)];
+    let mut dealers = [node_id(NODE_1), node_id(NODE_2)];
 
     // The indices should correspond to the natural ordering of the elements:
     dealers.sort();

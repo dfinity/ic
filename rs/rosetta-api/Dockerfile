@@ -21,8 +21,6 @@ RUN \
 
 COPY ic-rosetta-api /usr/local/bin/ic-rosetta-api
 
-COPY --chown=rosetta:rosetta log_config.yml /home/rosetta
-
 USER rosetta
 
 WORKDIR /home/rosetta

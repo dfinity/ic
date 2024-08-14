@@ -1,6 +1,6 @@
-load(":json.bzl", "jq_dep")
-load("@rules_python//python:defs.bzl", "py_binary")
 load("@python_deps//:requirements.bzl", "requirement")
+load("@rules_python//python:defs.bzl", "py_binary")
+load(":json.bzl", "jq_dep")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -9,6 +9,11 @@ jq_dep(
     json_path = ".subnets.\\\"tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe\\\"",
     source = "mainnet_revisions.json",
     target = "mainnet_nns_revision.txt",
+)
+
+filegroup(
+    name = "mainnet_revisions",
+    srcs = ["mainnet_revisions.json"],
 )
 
 py_binary(

@@ -1,0 +1,13 @@
+package(default_visibility = ["//ic-os/boundary-guestos:__subpackages__"])
+
+exports_files(glob(["**"]))
+
+filegroup(
+    name = "context-files",
+    srcs =
+        [
+            "Dockerfile",
+            "docker-base.prod",
+        ],
+    tags = ["manual"],
+)

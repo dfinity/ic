@@ -121,7 +121,7 @@ impl BtcService for BtcServiceImpl {
 }
 
 /// Spawns in a separate Tokio task the BTC adapter gRPC service.
-pub fn spawn_grpc_server(
+pub fn start_grpc_server(
     config: Config,
     logger: ReplicaLogger,
     adapter_state: AdapterState,
@@ -150,8 +150,8 @@ pub fn spawn_grpc_server(
                     .add_service(BtcServiceServer::new(btc_adapter_impl))
                     // SAFETY: The process is managed by systemd and is configured to start with at least one socket.
                     // Additionally this function is only called once here.
-                    // Systemd Socket config: ic-os/guestos/rootfs/etc/systemd/system/ic-btc-<testnet,mainnet>-adapter.socket
-                    // Systemd Service config: ic-os/guestos/rootfs/etc/systemd/system/ic-btc-<testnet,mainnet>-adapter.service
+                    // Systemd Socket config: ic-btc-<testnet,mainnet>-adapter.socket
+                    // Systemd Service config: ic-btc-<testnet,mainnet>-adapter.service
                     .serve_with_incoming(unsafe { incoming_from_first_systemd_socket() })
                     .await
                     .expect("gRPC server crashed");

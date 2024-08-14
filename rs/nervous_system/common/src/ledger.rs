@@ -9,6 +9,7 @@ use icp_ledger::{
     Subaccount as IcpSubaccount, Tokens, TotalSupplyArgs,
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use mockall::automock;
 
 pub struct IcpLedgerCanister {
     id: CanisterId,
@@ -21,6 +22,7 @@ impl IcpLedgerCanister {
 }
 
 /// A trait defining common patterns for accessing the ICRC1 Ledger canister.
+#[automock]
 #[async_trait]
 pub trait ICRC1Ledger: Send + Sync {
     /// Transfers funds from one of this canister's subaccount to
@@ -48,6 +50,7 @@ pub trait ICRC1Ledger: Send + Sync {
 }
 
 /// A trait defining common patterns for accessing the Ledger canister.
+#[automock]
 #[async_trait]
 pub trait IcpLedger: Send + Sync {
     /// Transfers funds from one of this canister's subaccount to

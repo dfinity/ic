@@ -1,9 +1,10 @@
 //! Test to validate that all existing function references are properly updated
 //! after instrumentation.
 
-use ic_test_utilities::{mock_time, wasmtime_instance::WasmtimeInstanceBuilder};
+use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
+    time::UNIX_EPOCH,
     Cycles, PrincipalId,
 };
 
@@ -13,7 +14,7 @@ fn run_go_export(wat: &str) {
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_wat(wat)
         .with_api_type(ic_system_api::ApiType::update(
-            mock_time(),
+            UNIX_EPOCH,
             vec![],
             Cycles::from(0_u128),
             PrincipalId::new_user_test_id(0),
@@ -83,31 +84,6 @@ fn element_const_expr() {
 			(elem (i32.const 0) funcref (ref.func $f))
 
 			(func $go (export "canister_update go")
-				(call_indirect (type $f_type) (i32.const 0))
-				(i32.const 123)
-				(i32.ne)
-				(if (then unreachable))
-				(call $reply)
-		    )
-		)
-	"#,
-    );
-}
-
-#[test]
-fn global() {
-    run_go_export(
-        r#"
-		(module
-			(func $reply (import "ic0" "msg_reply"))
-			(func $f (result i32) (i32.const 123))
-
-			(type $f_type (func (result i32)))
-			(table 1 funcref)
-			(global $f_global funcref (ref.func $f))
-
-			(func $go (export "canister_update go")
-				(table.set (i32.const 0) (global.get $f_global))
 				(call_indirect (type $f_type) (i32.const 0))
 				(i32.const 123)
 				(i32.ne)

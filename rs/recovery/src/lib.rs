@@ -103,6 +103,7 @@ pub struct RecoveryArgs {
     pub replica_version: Option<ReplicaVersion>,
     pub key_file: Option<PathBuf>,
     pub test_mode: bool,
+    pub skip_prompts: bool,
 }
 
 /// The recovery struct comprises working directories for the recovery of a
@@ -338,6 +339,7 @@ impl Recovery {
         subnet_id: SubnetId,
         subcmd: Option<ReplaySubCmd>,
         canister_caller_id: Option<CanisterId>,
+        replay_until_height: Option<u64>,
     ) -> impl Step {
         ReplayStep {
             logger: self.logger.clone(),
@@ -346,6 +348,7 @@ impl Recovery {
             config: self.work_dir.join("ic.json5"),
             subcmd,
             canister_caller_id,
+            replay_until_height,
             result: self.work_dir.join(replay_helper::OUTPUT_FILE_NAME),
         }
     }
@@ -356,8 +359,10 @@ impl Recovery {
         &self,
         subnet_id: SubnetId,
         upgrade_version: ReplicaVersion,
+        upgrade_url: Url,
+        sha256: String,
+        replay_until_height: Option<u64>,
     ) -> RecoveryResult<impl Step> {
-        let (upgrade_url, sha256) = Recovery::get_img_url_and_sha(&upgrade_version)?;
         let version_record = format!(
             r#"{{ "release_package_sha256_hex": "{}", "release_package_urls": ["{}"] }}"#,
             sha256, upgrade_url
@@ -376,6 +381,7 @@ impl Recovery {
                 ),
             }),
             None,
+            replay_until_height,
         ))
     }
 
@@ -386,6 +392,7 @@ impl Recovery {
         subnet_id: SubnetId,
         new_registry_local_store: PathBuf,
         canister_caller_id: &str,
+        replay_until_height: Option<u64>,
     ) -> RecoveryResult<impl Step> {
         let canister_id = CanisterId::from_str(canister_caller_id).map_err(|e| {
             RecoveryError::invalid_output_error(format!("Failed to parse canister id: {}", e))
@@ -407,6 +414,7 @@ impl Recovery {
                 ),
             }),
             Some(canister_id),
+            replay_until_height,
         ))
     }
 
@@ -484,22 +492,13 @@ impl Recovery {
 
     /// Lookup the image [Url] and sha hash of the given [ReplicaVersion]
     pub fn get_img_url_and_sha(version: &ReplicaVersion) -> RecoveryResult<(Url, String)> {
-        let mut version_string = version.to_string();
-        let mut test_version = false;
-        let parts: Vec<_> = version_string.split('-').collect();
-        if parts.len() > 1 && parts[parts.len() - 1] == "test" {
-            test_version = true;
-            version_string = parts[..parts.len() - 1].join("-");
-        }
+        let version_string = version.to_string();
         let url_base = format!(
             "https://download.dfinity.systems/ic/{}/guest-os/update-img/",
             version_string
         );
 
-        let image_name = format!(
-            "update-img{}.tar.zst",
-            if test_version { "-test" } else { "" }
-        );
+        let image_name = "update-img.tar.zst";
         let upgrade_url_string = format!("{}{}", url_base, image_name);
         let invalid_url = |url, e| {
             RecoveryError::invalid_output_error(format!("Invalid Url string: {}, {}", url, e))
@@ -542,8 +541,9 @@ impl Recovery {
     pub fn elect_replica_version(
         &self,
         upgrade_version: &ReplicaVersion,
+        upgrade_url: Url,
+        sha256: String,
     ) -> RecoveryResult<impl Step> {
-        let (upgrade_url, sha256) = Recovery::get_img_url_and_sha(upgrade_version)?;
         Ok(AdminStep {
             logger: self.logger.clone(),
             ic_admin_cmd: self
@@ -558,7 +558,7 @@ impl Recovery {
 
     /// Return an [AdminStep] step upgrading the given subnet to the given
     /// replica version.
-    pub fn update_subnet_replica_version(
+    pub fn deploy_guestos_to_all_subnet_nodes(
         &self,
         subnet_id: SubnetId,
         upgrade_version: &ReplicaVersion,
@@ -567,7 +567,10 @@ impl Recovery {
             logger: self.logger.clone(),
             ic_admin_cmd: self
                 .admin_helper
-                .get_propose_to_update_subnet_replica_version_command(subnet_id, upgrade_version),
+                .get_propose_to_deploy_guestos_to_all_subnet_nodes_command(
+                    subnet_id,
+                    upgrade_version,
+                ),
         }
     }
 
@@ -580,21 +583,21 @@ impl Recovery {
         state_hash: String,
         replacement_nodes: &[NodeId],
         registry_params: Option<RegistryParams>,
-        ecdsa_subnet_id: Option<SubnetId>,
+        chain_key_subnet_id: Option<SubnetId>,
     ) -> RecoveryResult<impl Step> {
-        let key_ids = ecdsa_subnet_id
-            .map(|id| match self.registry_helper.get_ecdsa_config(id) {
-                Ok((_registry_version, Some(config))) => config.key_ids,
+        let chain_key_config = chain_key_subnet_id
+            .map(|id| match self.registry_helper.get_chain_key_config(id) {
+                Ok((_registry_version, Some(config))) => Some((config, id)),
                 Ok((registry_version, None)) => {
                     info!(
                         self.logger,
-                        "No ECDSA config at registry version {}", registry_version
+                        "No Chain key config at registry version {}", registry_version
                     );
-                    vec![]
+                    None
                 }
                 Err(err) => {
-                    warn!(self.logger, "Failed to get ECDSA config: {}", err);
-                    vec![]
+                    warn!(self.logger, "Failed to get Chain Key config: {}", err);
+                    None
                 }
             })
             .unwrap_or_default();
@@ -607,10 +610,9 @@ impl Recovery {
                     subnet_id,
                     checkpoint_height,
                     state_hash,
-                    key_ids,
+                    chain_key_config,
                     replacement_nodes,
                     registry_params,
-                    ecdsa_subnet_id,
                     SystemTime::now(),
                 ),
         })
@@ -686,7 +688,7 @@ impl Recovery {
         })?;
 
         let mut cup_present = false;
-        for i in 0..20 {
+        for i in 0..35 {
             let maybe_cup = match block_on(get_catchup_content(&node_url)) {
                 Ok(res) => res,
                 Err(e) => {
@@ -725,7 +727,7 @@ impl Recovery {
             }
 
             info!(logger, "Recovery CUP not yet present, retrying...");
-            thread::sleep(time::Duration::from_secs(10));
+            thread::sleep(time::Duration::from_secs(15));
         }
 
         if !cup_present {
@@ -784,7 +786,7 @@ impl Recovery {
             .arg("-zcvf")
             .arg(
                 self.work_dir
-                    .join(format!("{}.tar.gz", IC_REGISTRY_LOCAL_STORE)),
+                    .join(format!("{}.tar.zst", IC_REGISTRY_LOCAL_STORE)),
             )
             .arg(".");
 
@@ -955,7 +957,7 @@ pub fn get_member_ips(
         .filter_map(|node_id| {
             registry_helper
                 .registry_client()
-                .get_transport_info(node_id, registry_version)
+                .get_node_record(node_id, registry_version)
                 .unwrap_or_default()
         })
         .filter_map(|node_record| {

@@ -5,7 +5,7 @@ use ic_crypto_sha2::Sha256;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
 use ic_ledger_core::{
-    approvals::Approvals,
+    approvals::{AllowanceTable, HeapAllowancesData},
     balances::Balances,
     block::{BlockType, EncodedBlock, FeeCollector},
     tokens::CheckedAdd,
@@ -16,11 +16,11 @@ use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
-use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::fmt;
 use std::time::Duration;
+use std::{borrow::Cow, collections::BTreeMap};
 use strum_macros::IntoStaticStr;
 
 pub use ic_ledger_core::{
@@ -43,10 +43,12 @@ pub use validate_endpoints::{tokens_from_proto, tokens_into_proto};
 pub const DEFAULT_TRANSFER_FEE: Tokens = Tokens::from_e8s(10_000);
 
 pub const MAX_BLOCKS_PER_REQUEST: usize = 2000;
+pub const MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST: usize = 50;
 
 pub const MEMO_SIZE_BYTES: usize = 32;
 
-pub type LedgerBalances = Balances<HashMap<AccountIdentifier, Tokens>>;
+pub type LedgerBalances = Balances<BTreeMap<AccountIdentifier, Tokens>>;
+pub type LedgerAllowances = AllowanceTable<HeapAllowancesData<AccountIdentifier, Tokens>>;
 
 #[derive(
     Serialize,
@@ -84,6 +86,8 @@ pub enum Operation {
     Burn {
         from: AccountIdentifier,
         amount: Tokens,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        spender: Option<AccountIdentifier>,
     },
     Mint {
         to: AccountIdentifier,
@@ -94,6 +98,8 @@ pub enum Operation {
         to: AccountIdentifier,
         amount: Tokens,
         fee: Tokens,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        spender: Option<AccountIdentifier>,
     },
     Approve {
         from: AccountIdentifier,
@@ -101,13 +107,6 @@ pub enum Operation {
         allowance: Tokens,
         expected_allowance: Option<Tokens>,
         expires_at: Option<TimeStamp>,
-        fee: Tokens,
-    },
-    TransferFrom {
-        from: AccountIdentifier,
-        to: AccountIdentifier,
-        spender: AccountIdentifier,
-        amount: Tokens,
         fee: Tokens,
     },
 }
@@ -121,15 +120,27 @@ where
     C: LedgerContext<AccountId = AccountIdentifier, Tokens = Tokens>,
 {
     match operation {
-        Operation::Transfer {
+        Operation::Burn {
             from,
-            to,
             amount,
-            fee,
-        } => context
-            .balances_mut()
-            .transfer(from, to, *amount, *fee, None)?,
-        Operation::Burn { from, amount, .. } => context.balances_mut().burn(from, *amount)?,
+            spender,
+        } => {
+            if let Some(spender) = spender.as_ref() {
+                let allowance = context.approvals().allowance(from, spender, now);
+                if allowance.amount < *amount {
+                    return Err(TxApplyError::InsufficientAllowance {
+                        allowance: allowance.amount,
+                    });
+                }
+            }
+            context.balances_mut().burn(from, *amount)?;
+            if spender.is_some() && from != &spender.unwrap() {
+                context
+                    .approvals_mut()
+                    .use_allowance(from, &spender.unwrap(), *amount, now)
+                    .expect("bug: cannot use allowance");
+            }
+        }
         Operation::Mint { to, amount, .. } => context.balances_mut().mint(to, *amount)?,
         Operation::Approve {
             from,
@@ -165,18 +176,20 @@ where
             }
         }
 
-        Operation::TransferFrom {
+        Operation::Transfer {
             from,
             to,
             spender,
             amount,
             fee,
         } => {
-            if from == spender {
+            if spender.is_none() || *from == spender.unwrap() {
+                // It is either a regular transfer or a self-transfer_from.
+
                 // NB. We bypass the allowance check if the account owner calls
                 // transfer_from.
 
-                // NB. We cannot reliably detect self-transfers at this level.
+                // NB. We cannot reliably detect self-transfer_from at this level.
                 // We need help from the transfer_from endpoint to populate
                 // [from] and [spender] with equal values if the spender is the
                 // account owner.
@@ -186,8 +199,14 @@ where
                 return Ok(());
             }
 
-            let allowance = context.approvals().allowance(from, spender, now);
-            if allowance.amount < *amount {
+            let allowance = context.approvals().allowance(from, &spender.unwrap(), now);
+            let used_allowance =
+                amount
+                    .checked_add(fee)
+                    .ok_or(TxApplyError::InsufficientAllowance {
+                        allowance: allowance.amount,
+                    })?;
+            if allowance.amount < used_allowance {
                 return Err(TxApplyError::InsufficientAllowance {
                     allowance: allowance.amount,
                 });
@@ -197,7 +216,7 @@ where
                 .transfer(from, to, *amount, *fee, None)?;
             context
                 .approvals_mut()
-                .use_allowance(from, spender, *amount, now)
+                .use_allowance(from, &spender.unwrap(), used_allowance, now)
                 .expect("bug: cannot use allowance");
         }
     };
@@ -223,13 +242,17 @@ impl LedgerTransaction for Transaction {
 
     fn burn(
         from: Self::AccountId,
-        _spender: Option<Self::AccountId>,
+        spender: Option<Self::AccountId>,
         amount: Tokens,
         created_at_time: Option<TimeStamp>,
         memo: Option<u64>,
     ) -> Self {
         Self {
-            operation: Operation::Burn { from, amount },
+            operation: Operation::Burn {
+                from,
+                amount,
+                spender,
+            },
             memo: memo.map(Memo).unwrap_or_default(),
             icrc1_memo: None,
             created_at_time,
@@ -237,13 +260,25 @@ impl LedgerTransaction for Transaction {
     }
 
     fn approve(
-        _from: Self::AccountId,
-        _spender: Self::AccountId,
-        _amount: Self::Tokens,
-        _created_at_time: Option<TimeStamp>,
-        _memo: Option<u64>,
+        from: Self::AccountId,
+        spender: Self::AccountId,
+        amount: Self::Tokens,
+        created_at_time: Option<TimeStamp>,
+        memo: Option<u64>,
     ) -> Self {
-        todo!()
+        Self {
+            operation: Operation::Approve {
+                from,
+                spender,
+                allowance: amount,
+                expected_allowance: None,
+                expires_at: None,
+                fee: Tokens::ZERO,
+            },
+            memo: memo.map(Memo).unwrap_or_default(),
+            icrc1_memo: None,
+            created_at_time,
+        }
     }
 
     fn created_at_time(&self) -> Option<TimeStamp> {
@@ -273,6 +308,7 @@ impl Transaction {
     pub fn new(
         from: AccountIdentifier,
         to: AccountIdentifier,
+        spender: Option<AccountIdentifier>,
         amount: Tokens,
         fee: Tokens,
         memo: Memo,
@@ -281,6 +317,7 @@ impl Transaction {
         let operation = Operation::Transfer {
             from,
             to,
+            spender,
             amount,
             fee,
         };
@@ -290,21 +327,6 @@ impl Transaction {
             icrc1_memo: None,
             created_at_time: Some(created_at_time),
         }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct ApprovalKey(AccountIdentifier, AccountIdentifier);
-
-impl From<(&AccountIdentifier, &AccountIdentifier)> for ApprovalKey {
-    fn from((account, spender): (&AccountIdentifier, &AccountIdentifier)) -> Self {
-        Self(*account, *spender)
-    }
-}
-
-impl From<ApprovalKey> for (AccountIdentifier, AccountIdentifier) {
-    fn from(key: ApprovalKey) -> Self {
-        (key.0, key.1)
     }
 }
 
@@ -455,6 +477,8 @@ pub struct InitArgs {
     pub token_symbol: Option<String>,
     pub token_name: Option<String>,
     pub feature_flags: Option<FeatureFlags>,
+    pub maximum_number_of_accounts: Option<usize>,
+    pub accounts_overflow_trim_quantity: Option<usize>,
 }
 
 impl LedgerCanisterInitPayload {
@@ -487,6 +511,8 @@ pub struct LedgerCanisterInitPayloadBuilder {
     token_symbol: Option<String>,
     token_name: Option<String>,
     feature_flags: Option<FeatureFlags>,
+    maximum_number_of_accounts: Option<usize>,
+    accounts_overflow_trim_quantity: Option<usize>,
 }
 
 impl LedgerCanisterInitPayloadBuilder {
@@ -503,6 +529,8 @@ impl LedgerCanisterInitPayloadBuilder {
             token_symbol: None,
             token_name: None,
             feature_flags: None,
+            maximum_number_of_accounts: None,
+            accounts_overflow_trim_quantity: None,
         }
     }
 
@@ -557,6 +585,23 @@ impl LedgerCanisterInitPayloadBuilder {
         self
     }
 
+    pub fn maximum_number_of_accounts(mut self, maximum_number_of_accounts: Option<u64>) -> Self {
+        if let Some(maximum_number_of_accounts) = maximum_number_of_accounts {
+            self.maximum_number_of_accounts = Some(maximum_number_of_accounts as usize);
+        }
+        self
+    }
+
+    pub fn accounts_overflow_trim_quantity(
+        mut self,
+        accounts_overflow_trim_quantity: Option<u64>,
+    ) -> Self {
+        if let Some(accounts_overflow_trim_quantity) = accounts_overflow_trim_quantity {
+            self.accounts_overflow_trim_quantity = Some(accounts_overflow_trim_quantity as usize);
+        }
+        self
+    }
+
     pub fn build(self) -> Result<LedgerCanisterInitPayload, String> {
         let minting_account = self
             .minting_account
@@ -571,7 +616,7 @@ impl LedgerCanisterInitPayloadBuilder {
         }
 
         // Don't allow self-transfers of the minting canister
-        if self.initial_values.get(&minting_account).is_some() {
+        if self.initial_values.contains_key(&minting_account) {
             return Err(
                 "initial_values cannot contain transfers to the minting_account".to_string(),
             );
@@ -590,6 +635,8 @@ impl LedgerCanisterInitPayloadBuilder {
                 token_symbol: self.token_symbol,
                 token_name: self.token_name,
                 feature_flags: self.feature_flags,
+                maximum_number_of_accounts: self.maximum_number_of_accounts,
+                accounts_overflow_trim_quantity: self.accounts_overflow_trim_quantity,
             },
         )))
     }
@@ -795,6 +842,7 @@ pub enum CandidOperation {
     Burn {
         from: AccountIdBlob,
         amount: Tokens,
+        spender: Option<AccountIdBlob>,
     },
     Mint {
         to: AccountIdBlob,
@@ -803,6 +851,7 @@ pub enum CandidOperation {
     Transfer {
         from: AccountIdBlob,
         to: AccountIdBlob,
+        spender: Option<AccountIdBlob>,
         amount: Tokens,
         fee: Tokens,
     },
@@ -816,21 +865,19 @@ pub enum CandidOperation {
         fee: Tokens,
         expires_at: Option<TimeStamp>,
     },
-    TransferFrom {
-        from: AccountIdBlob,
-        to: AccountIdBlob,
-        spender: AccountIdBlob,
-        amount: Tokens,
-        fee: Tokens,
-    },
 }
 
 impl From<Operation> for CandidOperation {
     fn from(op: Operation) -> Self {
         match op {
-            Operation::Burn { from, amount } => Self::Burn {
+            Operation::Burn {
+                from,
+                amount,
+                spender,
+            } => Self::Burn {
                 from: from.to_address(),
                 amount,
+                spender: spender.map(|s| s.to_address()),
             },
             Operation::Mint { to, amount } => Self::Mint {
                 to: to.to_address(),
@@ -839,11 +886,13 @@ impl From<Operation> for CandidOperation {
             Operation::Transfer {
                 from,
                 to,
+                spender,
                 amount,
                 fee,
             } => Self::Transfer {
                 from: from.to_address(),
                 to: to.to_address(),
+                spender: spender.map(|s| s.to_address()),
                 amount,
                 fee,
             },
@@ -863,19 +912,6 @@ impl From<Operation> for CandidOperation {
                 expires_at,
                 allowance,
             },
-            Operation::TransferFrom {
-                from,
-                to,
-                spender,
-                amount,
-                fee,
-            } => Self::TransferFrom {
-                from: from.to_address(),
-                to: to.to_address(),
-                spender: spender.to_address(),
-                amount,
-                fee,
-            },
         }
     }
 }
@@ -888,10 +924,22 @@ impl TryFrom<CandidOperation> for Operation {
             AccountIdentifier::from_address(acc).map_err(|err| err.to_string())
         };
         Ok(match value {
-            CandidOperation::Burn { from, amount } => Operation::Burn {
-                from: address_to_accountidentifier(from)?,
+            CandidOperation::Burn {
+                from,
                 amount,
-            },
+                spender,
+            } => {
+                let spender = if spender.is_some() {
+                    Some(address_to_accountidentifier(spender.unwrap())?)
+                } else {
+                    None
+                };
+                Operation::Burn {
+                    from: address_to_accountidentifier(from)?,
+                    amount,
+                    spender,
+                }
+            }
             CandidOperation::Mint { to, amount } => Operation::Mint {
                 to: address_to_accountidentifier(to)?,
                 amount,
@@ -899,14 +947,23 @@ impl TryFrom<CandidOperation> for Operation {
             CandidOperation::Transfer {
                 from,
                 to,
+                spender,
                 amount,
                 fee,
-            } => Operation::Transfer {
-                to: address_to_accountidentifier(to)?,
-                from: address_to_accountidentifier(from)?,
-                amount,
-                fee,
-            },
+            } => {
+                let spender = if spender.is_some() {
+                    Some(address_to_accountidentifier(spender.unwrap())?)
+                } else {
+                    None
+                };
+                Operation::Transfer {
+                    to: address_to_accountidentifier(to)?,
+                    from: address_to_accountidentifier(from)?,
+                    spender,
+                    amount,
+                    fee,
+                }
+            }
             CandidOperation::Approve {
                 from,
                 spender,
@@ -922,19 +979,6 @@ impl TryFrom<CandidOperation> for Operation {
                 expected_allowance,
                 fee,
                 expires_at,
-            },
-            CandidOperation::TransferFrom {
-                from,
-                to,
-                spender,
-                amount,
-                fee,
-            } => Operation::TransferFrom {
-                spender: address_to_accountidentifier(spender)?,
-                from: address_to_accountidentifier(from)?,
-                to: address_to_accountidentifier(to)?,
-                amount,
-                fee,
             },
         })
     }
@@ -1185,12 +1229,186 @@ pub struct FeatureFlags {
 
 impl FeatureFlags {
     const fn const_default() -> Self {
-        Self { icrc2: false }
+        Self { icrc2: true }
     }
 }
 
 impl Default for FeatureFlags {
     fn default() -> Self {
         Self::const_default()
+    }
+}
+
+pub fn max_blocks_per_request(principal_id: &PrincipalId) -> usize {
+    if ic_cdk::api::data_certificate().is_none() && principal_id.is_self_authenticating() {
+        return MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST;
+    }
+    MAX_BLOCKS_PER_REQUEST
+}
+
+#[cfg(test)]
+mod test {
+    use std::str::FromStr;
+
+    use proptest::{arbitrary::any, prop_assert_eq, prop_oneof, proptest, strategy::Strategy};
+
+    use super::*;
+
+    #[test]
+    fn transaction_hash() {
+        let expected_hash = "be31664ef154456aec5df2e4acc7f23a715ad8ea33ad9dbcbb7e6e90bc5a8b8f";
+
+        let transaction = Transaction {
+            operation: Operation::Transfer {
+                from: AccountIdentifier::from_str(
+                    "e7a879ea563d273c46dd28c1584eaa132fad6f3e316615b3eb657d067f3519b5",
+                )
+                .unwrap(),
+                to: AccountIdentifier::from_str(
+                    "207ec07185bedd0f2176ec2760057b8b7bc619a94d60e70fbc91af322a9f7e93",
+                )
+                .unwrap(),
+                amount: Tokens::from_e8s(11541900000),
+                fee: Tokens::from_e8s(10_000),
+                spender: None,
+            },
+            memo: Memo(5432845643782906771),
+            created_at_time: Some(TimeStamp::from_nanos_since_unix_epoch(1621901572293430780)),
+            icrc1_memo: None,
+        };
+
+        assert_eq!(expected_hash, transaction.hash().to_string());
+    }
+
+    fn arb_principal_id() -> impl Strategy<Value = PrincipalId> {
+        // PrincipalId::try_from won't panic for any byte array with len <= 29
+        proptest::collection::vec(any::<u8>(), 0..30)
+            .prop_map(|v| PrincipalId::try_from(v).unwrap())
+    }
+
+    fn arb_opt_subaccount() -> impl Strategy<Value = Option<Subaccount>> {
+        proptest::option::of(any::<[u8; 32]>().prop_map(Subaccount))
+    }
+
+    fn arb_account() -> impl Strategy<Value = AccountIdentifier> {
+        (arb_principal_id(), arb_opt_subaccount())
+            .prop_map(|(owner, subaccount)| AccountIdentifier::new(owner, subaccount))
+    }
+
+    fn arb_tokens() -> impl Strategy<Value = Tokens> {
+        any::<u64>().prop_map(Tokens::from_e8s)
+    }
+
+    fn arb_burn() -> impl Strategy<Value = Operation> {
+        (
+            arb_account(),
+            arb_tokens(),
+            proptest::option::of(arb_account()),
+        )
+            .prop_map(|(from, amount, spender)| Operation::Burn {
+                from,
+                amount,
+                spender,
+            })
+    }
+
+    fn arb_mint() -> impl Strategy<Value = Operation> {
+        (arb_account(), arb_tokens()).prop_map(|(to, amount)| Operation::Mint { to, amount })
+    }
+
+    fn arb_tranfer() -> impl Strategy<Value = Operation> {
+        (
+            arb_account(),
+            arb_account(),
+            arb_tokens(),
+            arb_tokens(),
+            proptest::option::of(arb_account()),
+        )
+            .prop_map(|(from, to, amount, fee, spender)| Operation::Transfer {
+                from,
+                to,
+                amount,
+                fee,
+                spender,
+            })
+    }
+
+    fn arb_approve() -> impl Strategy<Value = Operation> {
+        (
+            arb_account(),
+            arb_account(),
+            arb_tokens(),
+            proptest::option::of(arb_tokens()),
+            proptest::option::of(arb_timestamp()),
+            arb_tokens(),
+        )
+            .prop_map(
+                |(from, spender, allowance, expected_allowance, expires_at, fee)| {
+                    Operation::Approve {
+                        from,
+                        spender,
+                        allowance,
+                        expected_allowance,
+                        expires_at,
+                        fee,
+                    }
+                },
+            )
+    }
+
+    fn arb_operation() -> impl Strategy<Value = Operation> {
+        prop_oneof![arb_burn(), arb_mint(), arb_tranfer(), arb_approve(),]
+    }
+
+    fn arb_memo() -> impl Strategy<Value = Memo> {
+        any::<u64>().prop_map(Memo)
+    }
+
+    fn arb_icrc1_memo() -> impl Strategy<Value = Option<ByteBuf>> {
+        proptest::option::of(any::<[u8; 32]>().prop_map(ByteBuf::from))
+    }
+
+    fn arb_transaction() -> impl Strategy<Value = Transaction> {
+        (
+            arb_operation(),
+            arb_memo(),
+            proptest::option::of(arb_timestamp()),
+            arb_icrc1_memo(),
+        )
+            .prop_map(
+                |(operation, memo, created_at_time, icrc1_memo)| Transaction {
+                    operation,
+                    memo,
+                    created_at_time,
+                    icrc1_memo,
+                },
+            )
+    }
+
+    fn arb_parent_hash() -> impl Strategy<Value = Option<HashOf<EncodedBlock>>> {
+        proptest::option::of(any::<[u8; 32]>().prop_map(HashOf::new))
+    }
+
+    fn arb_timestamp() -> impl Strategy<Value = TimeStamp> {
+        any::<u64>().prop_map(TimeStamp::from_nanos_since_unix_epoch)
+    }
+
+    fn arb_block() -> impl Strategy<Value = Block> {
+        (arb_parent_hash(), arb_transaction(), arb_timestamp()).prop_map(
+            |(parent_hash, transaction, timestamp)| Block {
+                parent_hash,
+                transaction,
+                timestamp,
+            },
+        )
+    }
+
+    #[test]
+    fn test_encode_decode() {
+        proptest!(|(block in arb_block())| {
+            let encoded = block.clone().encode();
+            let decoded = Block::decode(encoded).expect("Unable to decode block!");
+            prop_assert_eq!(block, decoded)
+        })
     }
 }

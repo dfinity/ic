@@ -1,33 +1,35 @@
+use crate::rosetta_tests::{lib::hex2addr, rosetta_client::RosettaApiClient};
 use candid::Encode;
 use canister_test::{Canister, CanisterId, Runtime};
 use ic_ledger_core::Tokens;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron};
-use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
+use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
+use ic_nns_test_utils::itest_helpers::install_rust_canister;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
+    driver::{
+        ic::InternetComputer,
+        resource::AllocatedVm,
+        test_env::TestEnv,
+        test_env_api::{
+            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            IcNodeSnapshot, SshSession, SubnetSnapshot,
+        },
+        universal_vm::{insert_file_to_config, UniversalVm, UniversalVms},
+    },
+    util::{block_on, runtime_from_url},
+};
 use icp_ledger::{AccountIdentifier, ArchiveOptions, LedgerCanisterInitPayload};
 use prost::Message;
 use slog::{debug, error, info, Logger};
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
-use std::time::Duration;
-use url::Url;
-
-use crate::driver::test_env_api::{HasDependencies, SshSession};
-use crate::driver::universal_vm::{insert_file_to_config, UniversalVm, UniversalVms};
-use crate::driver::{
-    ic::InternetComputer,
-    resource::AllocatedVm,
-    test_env::TestEnv,
-    test_env_api::{
-        HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SubnetSnapshot,
-    },
+use std::{
+    collections::{BTreeMap, HashMap},
+    fs::File,
+    io::Read,
+    path::Path,
+    time::Duration,
 };
-use crate::rosetta_tests::lib::hex2addr;
-use crate::rosetta_tests::rosetta_client::RosettaApiClient;
-use crate::util::{block_on, runtime_from_url};
+use url::Url;
 
 /// Transfer fee on the ledger.
 pub const TRANSFER_FEE: u64 = 10_000;
@@ -44,7 +46,7 @@ pub fn setup(
     port: u32,
     vm_name: &str,
     ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
-    neurons: Option<HashMap<u64, Neuron>>,
+    neurons: Option<BTreeMap<u64, Neuron>>,
 ) -> RosettaApiClient {
     create_ic(env);
     let subnet_sys = subnet_sys(env);
@@ -111,7 +113,7 @@ fn create_dummy_registry_canister(env: &TestEnv, node: &IcNodeSnapshot) {
 fn create_governance_canister(
     env: &TestEnv,
     node: &IcNodeSnapshot,
-    neurons: Option<HashMap<u64, Neuron>>,
+    neurons: Option<BTreeMap<u64, Neuron>>,
 ) -> CanisterId {
     let logger = env.logger();
     block_on(async {
@@ -119,7 +121,7 @@ fn create_governance_canister(
         let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
         let mut canister = create_canister(&runtime).await;
 
-        let neurons: HashMap<u64, Neuron> = neurons.unwrap_or_default();
+        let neurons: BTreeMap<u64, Neuron> = neurons.unwrap_or_default();
         // TODO Define common predefined test neurons here (if any?).
 
         let governance_canister_init = Governance {
@@ -140,9 +142,13 @@ fn create_governance_canister(
             "Installing governance canister code on canister {}",
             canister.canister_id().get()
         );
-        let path_to_wasm =
-            env.get_dependency_path("rs/tests/tip-nns-canisters/governance-canister_test");
-        install_rust_canister_from_path(&mut canister, path_to_wasm, Some(serialized)).await;
+        install_rust_canister(
+            &mut canister,
+            "governance-canister",
+            &["test"],
+            Some(serialized),
+        )
+        .await;
 
         info!(
             &logger,
@@ -190,6 +196,7 @@ fn create_ledger_canister(
             node_max_memory_size_bytes: Some(1024 + 512), // about 10 blocks
             max_message_size_bytes: Some(2 * 1024 * 1024),
             controller_id: CanisterId::from_u64(876).into(),
+            more_controller_ids: None,
             cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         };
@@ -208,10 +215,14 @@ fn create_ledger_canister(
             "Installing ledger canister code on canister {}",
             canister.canister_id().get()
         );
-        let path_to_wasm =
-            env.get_dependency_path("rs/tests/tip-nns-canisters/ledger-canister_notify-method");
         let encoded = Encode!(&ledger_init_args).unwrap();
-        install_rust_canister_from_path(&mut canister, path_to_wasm, Some(encoded)).await;
+        install_rust_canister(
+            &mut canister,
+            "ledger-canister",
+            &["notify-method"],
+            Some(encoded),
+        )
+        .await;
 
         canister.canister_id()
     })
@@ -238,14 +249,6 @@ fn install_rosetta(
         &logger,
         "Setting up configuration for Rosetta test on port {}", port
     );
-
-    let workspace_path = env
-        .get_dependency_path("rs/tests/rosetta_workspace")
-        .into_os_string()
-        .into_string()
-        .unwrap();
-    let log_conf_file = format!("{}/ic_rosetta_api_log_config.yml", workspace_path);
-    debug!(&logger, "Conf file: {}", log_conf_file);
 
     // Activate script for code to release.
     let image_file = "/config/rosetta_image.tar";
@@ -291,8 +294,7 @@ echo \"Rosetta container started \"
         .unwrap();
 
     // Add Rosetta image to config dir.
-    let path = env
-        .get_dependency_path("rs/rosetta-api/")
+    let path = get_dependency_path("rs/rosetta-api/")
         .into_os_string()
         .into_string()
         .unwrap();
@@ -309,14 +311,6 @@ echo \"Rosetta container started \"
         config_dir.clone(),
         "rosetta_image.tar",
         &get_file_content(&logger, rosetta_image_path),
-    );
-
-    // Add log config in config dir.
-    let log_config_path = Path::new(log_conf_file.as_str());
-    let _ = insert_file_to_config(
-        config_dir.clone(),
-        "ic_rosetta_api_log_config.yml",
-        &get_file_content(&logger, log_config_path),
     );
 
     UniversalVm::new(String::from(vm_name))

@@ -96,6 +96,19 @@ pub trait SecretKeyStore: Send + Sync {
     fn retain<F>(&mut self, _filter: F, _scope: Scope) -> Result<(), SecretKeyStoreWriteError>
     where
         F: Fn(&KeyId, &CspSecretKey) -> bool + 'static;
+
+    /// Checks to see if a call to [`Self::retain`] with the same set of active keys and the same
+    /// filter would result in modification of the keystore.
+    /// Returns `true` if a call to [`Self::retain`] would modify the keystore, `false` if not.
+    ///
+    /// # Panics
+    /// This MAY panic if the predicate panics.
+    ///
+    /// # Notes
+    /// For more details on `F`, see [`Self::retain`].
+    fn retain_would_modify_keystore<F>(&self, filter: F, scope: Scope) -> bool
+    where
+        F: Fn(&KeyId, &CspSecretKey) -> bool + 'static;
 }
 
 /// Errors that can occur while inserting a key into the secret key store

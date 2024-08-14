@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package bitcoin.v1;
 
+import "types/v1/errors.proto";
+
 message Transaction {
   int32 version = 1;
   uint32 lock_time = 2;
@@ -45,7 +47,7 @@ message SendTransactionRequest {
   bytes transaction = 2;
 }
 
-message SendTransactionResponse {};
+message SendTransactionResponse {}
 
 // Wraps the different types of requests to the Bitcoin Adapter.
 message BitcoinAdapterRequestWrapper {
@@ -64,6 +66,8 @@ message BitcoinAdapterResponseWrapper {
   oneof r {
     GetSuccessorsResponseComplete get_successors_response = 3;
     SendTransactionResponse send_transaction_response = 4;
+    GetSuccessorsReject get_successors_reject = 5;
+    SendTransactionReject send_transaction_reject = 6;
   }
 }
 
@@ -107,3 +111,18 @@ message GetSuccessorsResponseComplete {
   repeated bytes next = 2;
 }
 
+// A `GetSucceessors` reject response containing additional information about the rejection.
+message GetSuccessorsReject {
+  reserved 1;
+  reserved "reject_code_old";
+  types.v1.RejectCode reject_code = 3;
+  string message = 2;
+}
+
+// A `SendTransaction` reject response containing additional information about the rejection.
+message SendTransactionReject {
+  reserved 1;
+  reserved "reject_code_old";
+  types.v1.RejectCode reject_code = 3;
+  string message = 2;
+}

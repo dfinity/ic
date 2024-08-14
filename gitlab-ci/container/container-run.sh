@@ -18,9 +18,8 @@ fi
 
 usage() {
     cat <<EOF
-Usage: $0 -h | --help, -f | --full, -c <dir> | --cache-dir <dir>
+Usage: $0 -h | --help, -c <dir> | --cache-dir <dir>
 
-    -f | --full             Use full container image (dfinity/ic-build-legacy)
     -c | --cache-dir <dir>  Bind-mount custom cache dir instead of '~/.cache'
     -h | --help             Print help
 
@@ -28,12 +27,19 @@ Script uses dfinity/ic-build image by default.
 EOF
 }
 
-IMAGE="docker.io/dfinity/ic-build"
+if findmnt /hoststorage >/dev/null; then
+    PODMAN_ARGS=(--root /hoststorage/podman-root)
+else
+    PODMAN_ARGS=()
+fi
+
+IMAGE="ghcr.io/dfinity/ic-build"
 BUILD_ARGS=(--bazel)
 CTR=0
 while test $# -gt $CTR; do
     case "$1" in
         -h | --help) usage && exit 0 ;;
+        -f | --full) echo "The legacy image has been deprecated, --full is not an option anymore." && exit 0 ;;
         -c | --cache-dir)
             if [[ $# -gt "$CTR + 1" ]]; then
                 if [ ! -d "$2" ]; then
@@ -49,12 +55,6 @@ while test $# -gt $CTR; do
             shift
             shift
             ;;
-        -f | --full)
-            IMAGE="docker.io/dfinity/ic-build-legacy"
-            BUILD_ARGS=()
-            echo "Using docker.io/dfinity/ic-build-legacy image."
-            shift
-            ;;
         *) let CTR=CTR+1 ;;
     esac
 done
@@ -62,21 +62,19 @@ done
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 IMAGE_TAG=$("$REPO_ROOT"/gitlab-ci/container/get-image-tag.sh)
 IMAGE="$IMAGE:$IMAGE_TAG"
-if ! sudo podman image exists $IMAGE; then
-    if grep 'index.docker.io' $HOME/.docker/config.json >/dev/null 2>&1; then
-        # copy credentials for root
-        ROOT_HOME="$(getent passwd root | awk -F: '{print $6}')"
-        sudo mkdir -p $ROOT_HOME/.docker
-        sudo cp -f $HOME/.docker/config.json $ROOT_HOME/.docker/
-        sudo podman login --authfile $ROOT_HOME/.docker/config.json docker.io
-    fi
-    if ! sudo podman pull $IMAGE; then
+if ! sudo podman "${PODMAN_ARGS[@]}" image exists $IMAGE; then
+    if ! sudo podman "${PODMAN_ARGS[@]}" pull $IMAGE; then
         # fallback to building the image
-        docker() { sudo podman "$@" --network=host; }
+        docker() { sudo podman "${PODMAN_ARGS[@]}" "$@" --network=host; }
         export -f docker
         "$REPO_ROOT"/gitlab-ci/container/build-image.sh "${BUILD_ARGS[@]}"
         unset -f docker
     fi
+fi
+
+if findmnt /hoststorage >/dev/null; then
+    echo "Purging non-relevant container images"
+    sudo podman "${PODMAN_ARGS[@]}" image prune -a -f --filter "reference!=$IMAGE"
 fi
 
 WORKDIR="/ic"
@@ -92,6 +90,7 @@ PODMAN_RUN_ARGS=(
     --add-host devenv-container:127.0.0.1
     --entrypoint=
     --init
+    --pull=missing
 )
 
 if podman version | grep -qE 'Version:\s+4.'; then
@@ -100,13 +99,20 @@ if podman version | grep -qE 'Version:\s+4.'; then
     )
 fi
 
+if [ "$(id -u)" = "1000" ]; then
+    CTR_HOME="/home/ubuntu"
+else
+    CTR_HOME="/ic"
+fi
+
 PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"
     --mount type=bind,source="${HOME}",target="${HOME}"
-    --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="/home/ubuntu/.cache"
-    --mount type=bind,source="${HOME}/.ssh",target="/home/ubuntu/.ssh"
-    --mount type=bind,source="${HOME}/.aws",target="/home/ubuntu/.aws"
+    --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="${CTR_HOME}/.cache"
+    --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
+    --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
     --mount type=bind,source="/var/lib/containers",target="/var/lib/containers"
+    --mount type=bind,source="/tmp",target="/tmp"
     --mount type=tmpfs,destination=/var/sysimage
 )
 
@@ -162,13 +168,13 @@ fi
 # additionally, we need to use hosts's cgroups and network
 if [ $# -eq 0 ]; then
     set -x
-    sudo podman run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=host \
+    sudo podman "${PODMAN_ARGS[@]}" run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=host \
         "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" \
         "$IMAGE" ${USHELL:-/usr/bin/bash}
     set +x
 else
     set -x
-    sudo podman run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=host \
+    sudo podman "${PODMAN_ARGS[@]}" run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=host \
         "${PODMAN_RUN_ARGS[@]}" "${PODMAN_RUN_USR_ARGS[@]}" -w "$WORKDIR" \
         "$IMAGE" "$@"
     set +x

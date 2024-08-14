@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Result};
 use clap::Parser;
-use ic_crypto::threshold_sig_public_key_from_der;
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
 use ic_registry_client::client::RegistryVersion;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use serde_json::Value;
@@ -372,7 +372,7 @@ fn parse_threshold_sig_key<P: AsRef<std::path::Path> + fmt::Debug>(pem_file: P) 
         );
     }
 
-    let decoded = base64::decode(&lines[1..n - 1].join(""))
+    let decoded = base64::decode(lines[1..n - 1].join(""))
         .with_context(|| format!("failed to decode base64 from: {:?}", &pem_file))?;
 
     Ok(decoded)

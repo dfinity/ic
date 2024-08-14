@@ -7,10 +7,9 @@
 use clap::Parser;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
+use ic_state_tool::commands;
 use ic_types::{PrincipalId, Time};
 use std::path::PathBuf;
-
-mod commands;
 
 /// Supported `state_tool` commands and their arguments.
 #[derive(Parser, Debug)]
@@ -59,50 +58,6 @@ enum Opt {
         /// Path to a manifest.
         #[clap(long = "file")]
         file: PathBuf,
-    },
-
-    /// Computes a hash of a canister that is independent
-    /// of its position in the file table.
-    #[clap(name = "canister_hash")]
-    CanisterHash {
-        /// Path to a manifest.
-        #[clap(long = "file")]
-        file: PathBuf,
-        /// The canister to match for. The tool filters the files using a simple
-        /// `relative_path.contains(&format!{"canister_states/{}/", canister)`
-        /// on the relative file paths as given in the manifest's file entries.
-        ///
-        /// Say we have a manifest corresponding to a state thats
-        /// structured as follows:
-        ///
-        /// ```text
-        /// 0000000000001c20/
-        /// ├── bitcoin
-        /// │   └── ...
-        /// ├── canister_states
-        /// │   ├── 00000000000000000101
-        /// │   │   ├── ...
-        /// .   .
-        /// .   .
-        /// │   ├── 00000000000000070101
-        /// │   │   ├── canister.pbuf
-        /// │   │   ├── queues.pbuf
-        /// │   │   ├── software.wasm
-        /// │   │   ├── stable_memory.bin
-        /// │   │   └── vmemory_0.bin
-        /// .   .
-        /// .   .
-        /// ```
-        ///
-        /// Then calling the tool with `--canister 00000000000000070101`, for example,
-        /// would select all files with `canister_states/00000000000000070101/` in
-        /// their path.
-        ///
-        /// To make sure that accidentally passing something that matches
-        /// unwanted file paths, the list of processed files is explicitly
-        /// printed.
-        #[clap(long = "canister")]
-        canister: String,
     },
 
     /// Enumerates persisted states.
@@ -206,9 +161,6 @@ fn main() {
         } => commands::import_state::do_import(state, config, height),
         Opt::Manifest { path } => commands::manifest::do_compute_manifest(path),
         Opt::VerifyManifest { file } => commands::verify_manifest::do_verify_manifest(&file),
-        Opt::CanisterHash { file, canister } => {
-            commands::verify_manifest::do_canister_hash(&file, &canister)
-        }
         Opt::ListStates { config } => commands::list::do_list(config),
         Opt::Decode { file } => commands::decode::do_decode(file),
         Opt::CanisterIdToHex { canister_id } => {

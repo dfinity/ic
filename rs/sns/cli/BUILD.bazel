@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/sha2",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
@@ -11,32 +12,21 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/proto",
     "//rs/nns/common",
     "//rs/nns/constants",
-    "//rs/nns/test_utils",
-    "//rs/protobuf",
-    "//rs/rosetta-api/icp_ledger",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_protobuf",
-    "//rs/rust_canisters/on_wire",
     "//rs/sns/root",
     "//rs/types/base_types",
     "@crate_index//:anyhow",
     "@crate_index//:base64",
-    "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:clap",
     "@crate_index//:hex",
+    "@crate_index//:itertools",
     "@crate_index//:json-patch",
-    "@crate_index//:maplit",
     "@crate_index//:pretty_assertions",
-    "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
-    "@crate_index//:regex",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:serde_yaml",
     "@crate_index//:tempfile",
-    "@crate_index//:url",
+    "@crate_index//:thiserror",
 ]
 
 # Each target declared in this file may choose either these (release-ready)
@@ -46,7 +36,6 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/nns/sns-wasm",
     "//rs/sns/governance",
     "//rs/sns/init",
-    "//rs/sns/test_utils",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
@@ -54,12 +43,12 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/sns/governance:governance--test_feature",
     "//rs/sns/init:init--test_feature",
-    "//rs/sns/test_utils:test_utils--test_feature",
 ]
 
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:lazy_static",
 ]
 
@@ -137,9 +126,9 @@ rust_test(
     ],
     crate_root = "src/lib.rs",
     data = [
-        "example_sns_init_v1.yaml",
-        "example_sns_init_v2.yaml",
         "test.png",
+        "test_sns_init_v1.yaml",
+        "test_sns_init_v2.yaml",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/sns/cli",

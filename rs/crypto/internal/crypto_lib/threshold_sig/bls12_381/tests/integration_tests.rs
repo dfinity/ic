@@ -13,18 +13,18 @@ use rand::Rng;
 #[test]
 fn potpourri() {
     let sys = SysParam::global();
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2u8, 0u8, 2u8, 1u8];
 
     println!("generating key pair...");
-    let (pk, mut dk) = kgen(KEY_GEN_ASSOCIATED_DATA, sys, &mut rng);
+    let (pk, mut dk) = kgen(KEY_GEN_ASSOCIATED_DATA, sys, rng);
     assert!(
         pk.verify(KEY_GEN_ASSOCIATED_DATA),
         "Forward secure public key failed validation"
     );
     for _i in 0..10 {
         println!("upgrading private key...");
-        dk.update(sys, &mut rng);
+        dk.update(sys, rng);
     }
     let epoch10 = Epoch::from(10);
 
@@ -33,18 +33,18 @@ fn potpourri() {
     let mut keys = Vec::new();
     for i in 0..=3 {
         println!("generating key pair {}...", i);
-        keys.push(kgen(KEY_GEN_ASSOCIATED_DATA, sys, &mut rng));
+        keys.push(kgen(KEY_GEN_ASSOCIATED_DATA, sys, rng));
     }
     let pks = keys
         .iter()
         .map(|key| key.0.public_key().clone())
         .collect::<Vec<_>>();
 
-    let ptext = Scalar::batch_random(&mut rng, keys.len());
+    let ptext = Scalar::batch_random(rng, keys.len());
 
     let ptext_chunks = ptext
         .iter()
-        .map(|p| PlaintextChunks::from_scalar(p))
+        .map(PlaintextChunks::from_scalar)
         .collect::<Vec<_>>();
 
     let pk_and_chunks = pks
@@ -53,12 +53,12 @@ fn potpourri() {
         .zip(ptext_chunks.iter().cloned())
         .collect::<Vec<_>>();
 
-    let (crsz, _toxic) = enc_chunks(&pk_and_chunks, epoch10, &associated_data, sys, &mut rng);
+    let (crsz, _toxic) = enc_chunks(&pk_and_chunks, epoch10, &associated_data, sys, rng);
 
     let dk = &mut keys[1].1;
     for _i in 0..3 {
         println!("upgrading private key...");
-        dk.update(sys, &mut rng);
+        dk.update(sys, rng);
     }
 
     verify_ciphertext_integrity(&crsz, epoch10, &associated_data, sys)
@@ -71,7 +71,7 @@ fn potpourri() {
 
     for _i in 0..8 {
         println!("upgrading private key...");
-        dk.update(sys, &mut rng);
+        dk.update(sys, rng);
     }
     // Should be impossible to decrypt now.
     let out = dec_chunks(dk, 1, &crsz, epoch10, &associated_data);
@@ -91,7 +91,7 @@ fn potpourri() {
 /// * Varying the plaintexts more; here we have only fairly noddy variation.
 fn encrypted_chunks_should_validate(epoch: Epoch) {
     let sys = SysParam::global();
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[1u8, 9u8, 8u8, 4u8];
 
     let num_receivers = 3;
@@ -102,7 +102,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
     let receiver_fs_keys: Vec<_> = (0..num_receivers)
         .map(|i| {
             println!("generating key pair {}...", i);
-            let key_pair = kgen(KEY_GEN_ASSOCIATED_DATA, sys, &mut rng);
+            let key_pair = kgen(KEY_GEN_ASSOCIATED_DATA, sys, rng);
             println!("{:#?}", &key_pair.0);
             key_pair
         })
@@ -116,7 +116,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         .map(|key| key.public_key().clone())
         .collect();
 
-    let polynomial = Scalar::batch_random(&mut rng, threshold);
+    let polynomial = Scalar::batch_random(rng, threshold);
     let polynomial_exp = g2.batch_mul(&polynomial);
 
     // Plaintext, unchunked:
@@ -136,7 +136,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
     // Plaintext, chunked:
     let plaintext_chunks: Vec<PlaintextChunks> = plaintexts
         .iter()
-        .map(|plaintext| PlaintextChunks::from_scalar(plaintext))
+        .map(PlaintextChunks::from_scalar)
         .collect();
     println!("Messages: {:#?}", plaintext_chunks);
 
@@ -149,7 +149,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
     // Encrypt
     let associated_data = rng.gen::<[u8; 10]>();
     let (crsz, encryption_witness) =
-        enc_chunks(&keys_and_chunks, epoch, &associated_data, sys, &mut rng);
+        enc_chunks(&keys_and_chunks, epoch, &associated_data, sys, rng);
 
     // Check that decryption succeeds
     let dk = &receiver_fs_keys[1].1;
@@ -176,7 +176,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         let chunking_witness =
             ChunkingWitness::new(encryption_witness.witness().clone(), big_plaintext_chunks);
 
-        let nizk_chunking = prove_chunking(&chunking_instance, &chunking_witness, &mut rng);
+        let nizk_chunking = prove_chunking(&chunking_instance, &chunking_witness, rng);
 
         assert_eq!(
             Ok(()),
@@ -267,7 +267,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         );
         let sharing_witness = SharingWitness::new(combined_r, combined_plaintexts);
 
-        let sharing_proof = prove_sharing(&sharing_instance, &sharing_witness, &mut rng);
+        let sharing_proof = prove_sharing(&sharing_instance, &sharing_witness, rng);
 
         assert_eq!(
             Ok(()),

@@ -1,12 +1,14 @@
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer};
-use crate::util;
 use candid::Encode;
 use ic_agent::export::Principal;
 use ic_agent::Agent;
 use ic_base_types::PrincipalId;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+};
+use ic_system_test_driver::util;
 use ic_utils::interfaces::ManagementCanister;
 use slog::info;
 use std::env;
@@ -56,9 +58,10 @@ pub fn test(env: TestEnv) {
             info!(log, "Send query to canister");
             // Verify that the compute function exported by the installed canister can be
             // called.
+            let arg = Encode!().unwrap();
             app_agent
                 .query(&cid, "compute")
-                .with_arg(&Encode!().unwrap())
+                .with_arg(arg)
                 .call()
                 .await
                 .expect("compute returned error");

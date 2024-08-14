@@ -99,7 +99,7 @@ where
         })?;
         let mut hash =
             Sha256::new_with_context(&DomainSeparationContext::new(KEY_ID_DOMAIN.to_string()));
-        hash.write(&[alg_id.as_u8()]);
+        hash.write(&[u8::from(alg_id)]);
         hash.write(&bytes_size.to_be_bytes());
         hash.write(bytes);
         Ok(KeyId::from(hash.finish()))
@@ -164,15 +164,20 @@ impl TryFrom<&TlsPublicKeyCert> for KeyId {
     }
 }
 
-impl From<&CspPublicCoefficients> for KeyId {
-    fn from(coefficients: &CspPublicCoefficients) -> Self {
+impl TryFrom<&CspPublicCoefficients> for KeyId {
+    type Error = KeyIdInstantiationError;
+
+    fn try_from(coefficients: &CspPublicCoefficients) -> Result<Self, Self::Error> {
         let mut hash = Sha256::new_with_context(&DomainSeparationContext::new(
             THRESHOLD_PUBLIC_COEFFICIENTS_KEY_ID_DOMAIN,
         ));
-        hash.write(
-            &serde_cbor::to_vec(&coefficients).expect("Failed to serialize public coefficients"),
-        );
-        KeyId::from(hash.finish())
+        hash.write(&serde_cbor::to_vec(&coefficients).map_err(|err| {
+            Self::Error::InvalidArguments(format!(
+                "Failed to serialize public coefficients: {}",
+                err
+            ))
+        })?);
+        Ok(KeyId::from(hash.finish()))
     }
 }
 

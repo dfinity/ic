@@ -1,4 +1,3 @@
-use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::ledger_client::LedgerClient;
 use crate::rosetta_tests::lib::{
     assert_canister_error, check_balance, create_ledger_client, do_multiple_txn, make_user_ed25519,
@@ -7,17 +6,19 @@ use crate::rosetta_tests::lib::{
 use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use crate::rosetta_tests::setup::setup;
 use crate::rosetta_tests::test_neurons::TestNeurons;
-use crate::util::block_on;
 use assert_json_diff::{assert_json_eq, assert_json_include};
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_ledger_core::Tokens;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_rosetta_api::convert::{from_model_account_identifier, neuron_account_from_public_key};
 use ic_rosetta_api::models::seconds::Seconds;
+use ic_rosetta_api::models::NeuronInfoResponse;
 use ic_rosetta_api::models::NeuronState;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{SetDissolveTimestamp, Stake, StartDissolve, StopDissolve};
 use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::util::block_on;
 use icp_ledger::{AccountIdentifier, Operation, DEFAULT_TRANSFER_FEE};
 use serde_json::{json, Value};
 use slog::info;
@@ -26,7 +27,7 @@ use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 
 const PORT: u32 = 8103;
-const VM_NAME: &str = "rosetta-test-neuron-staking";
+const VM_NAME: &str = "rosetta-neuron-staking";
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
@@ -84,6 +85,7 @@ async fn test_staking(client: &RosettaApiClient) -> (AccountIdentifier, Arc<EdKe
                 request: Request::Transfer(Operation::Transfer {
                     from: acc,
                     to: dst_acc,
+                    spender: None,
                     amount: staked_amount.checked_add(&DEFAULT_TRANSFER_FEE).unwrap(),
                     fee: DEFAULT_TRANSFER_FEE,
                 }),
@@ -93,6 +95,7 @@ async fn test_staking(client: &RosettaApiClient) -> (AccountIdentifier, Arc<EdKe
                 request: Request::Transfer(Operation::Transfer {
                     from: dst_acc,
                     to: neuron_account,
+                    spender: None,
                     amount: staked_amount,
                     fee: DEFAULT_TRANSFER_FEE,
                 }),
@@ -123,16 +126,17 @@ async fn test_staking(client: &RosettaApiClient) -> (AccountIdentifier, Arc<EdKe
     // In this case the transfer to neuron_account.
     assert!(results.last_block_index().is_some());
 
-    let neuron_info = client
+    let neuron_info: NeuronInfoResponse = client
         .account_balance_neuron(neuron_account, neuron_id, None, false)
         .await
         .unwrap()
         .unwrap()
         .metadata
+        .try_into()
         .unwrap();
     assert_eq!(neuron_info.state, NeuronState::Dissolved);
 
-    let neuron_info = client
+    let neuron_info: NeuronInfoResponse = client
         .account_balance_neuron(
             neuron_account,
             None,
@@ -143,15 +147,17 @@ async fn test_staking(client: &RosettaApiClient) -> (AccountIdentifier, Arc<EdKe
         .unwrap()
         .unwrap()
         .metadata
+        .try_into()
         .unwrap();
     assert_eq!(neuron_info.state, NeuronState::Dissolved);
 
-    let neuron_info = client
+    let neuron_info: NeuronInfoResponse = client
         .account_balance_neuron(neuron_account, None, Some((dst_acc_pk, neuron_index)), true)
         .await
         .unwrap()
         .unwrap()
         .metadata
+        .try_into()
         .unwrap();
     assert_eq!(neuron_info.state, NeuronState::Dissolved);
 
@@ -185,6 +191,7 @@ async fn test_staking_failure(client: &RosettaApiClient) {
                 request: Request::Transfer(Operation::Transfer {
                     from: acc,
                     to: dst_acc,
+                    spender: None,
                     amount: staked_amount.checked_add(&DEFAULT_TRANSFER_FEE).unwrap(),
                     fee: DEFAULT_TRANSFER_FEE,
                 }),
@@ -194,6 +201,7 @@ async fn test_staking_failure(client: &RosettaApiClient) {
                 request: Request::Transfer(Operation::Transfer {
                     from: dst_acc,
                     to: neuron_account,
+                    spender: None,
                     amount: staked_amount,
                     fee: DEFAULT_TRANSFER_FEE,
                 }),
@@ -541,12 +549,13 @@ async fn test_staking_raw(client: &RosettaApiClient) -> (AccountIdentifier, Arc<
         .find_map(|r| r.get("metadata").and_then(|r| r.get("block_index")));
     assert!(last_block_idx.is_some());
 
-    let neuron_info = client
+    let neuron_info: NeuronInfoResponse = client
         .account_balance_neuron(neuron_account, neuron_id, None, false)
         .await
         .unwrap()
         .unwrap()
         .metadata
+        .try_into()
         .unwrap();
     assert_eq!(neuron_info.state, NeuronState::Dissolved);
 
@@ -582,6 +591,7 @@ async fn test_staking_flow(
                 request: Request::Transfer(Operation::Transfer {
                     from: test_account,
                     to: dst_acc,
+                    spender: None,
                     amount: staked_amount.checked_add(&DEFAULT_TRANSFER_FEE).unwrap(),
                     fee: DEFAULT_TRANSFER_FEE,
                 }),
@@ -591,6 +601,7 @@ async fn test_staking_flow(
                 request: Request::Transfer(Operation::Transfer {
                     from: dst_acc,
                     to: neuron_account,
+                    spender: None,
                     amount: staked_amount,
                     fee: DEFAULT_TRANSFER_FEE,
                 }),
@@ -684,6 +695,7 @@ async fn test_staking_flow_two_txns(
                 request: Request::Transfer(Operation::Transfer {
                     from: test_account,
                     to: dst_acc,
+                    spender: None,
                     amount: staked_amount.checked_add(&DEFAULT_TRANSFER_FEE).unwrap(),
                     fee: DEFAULT_TRANSFER_FEE,
                 }),
@@ -693,6 +705,7 @@ async fn test_staking_flow_two_txns(
                 request: Request::Transfer(Operation::Transfer {
                     from: dst_acc,
                     to: neuron_account,
+                    spender: None,
                     amount: staked_amount,
                     fee: DEFAULT_TRANSFER_FEE,
                 }),

@@ -35,12 +35,16 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     std::fs::create_dir_all(out).expect("failed to create output directory");
     config.out_dir(out);
 
-    // Use BTreeMap for the proposals map.
-    // This is useful because:
+    // Use BTreeMap for the neurons and proposals maps.
+    // This is useful for proposals because:
     // - the reverse iterator can be used to access the greatest proposal ID
     // - there are public methods that return several proposals. For those, it
     // is useful to have them ordered.
-    config.btree_map([".ic_nns_governance.pb.v1.Governance.proposals"]);
+    // This is useful for neurons because it makes it easier to iterate in batches.
+    config.btree_map([
+        ".ic_nns_governance.pb.v1.Governance.proposals",
+        ".ic_nns_governance.pb.v1.Governance.neurons",
+    ]);
 
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
     config.extern_path(".ic_ledger.pb.v1", "::icp-ledger::protobuf");
@@ -103,6 +107,31 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "ic_nns_governance.pb.v1.KnownNeuronData",
         "#[compare_default]",
     );
+
+    // Add serde_bytes for efficiently parsing blobs.
+    let blob_fields = vec![
+        "NeuronStakeTransfer.from_subaccount",
+        "NeuronStakeTransfer.to_subaccount",
+        "Neuron.account",
+        "AbridgedNeuron.account",
+        "ExecuteNnsFunction.payload",
+        "ManageNeuron.neuron_id_or_subaccount.subaccount",
+        "SwapBackgroundInformation.CanisterStatusResultV2.module_hash",
+    ];
+    for field in blob_fields {
+        config.field_attribute(
+            format!(".ic_nns_governance.pb.v1.{}", field),
+            "#[serde(with = \"serde_bytes\")]",
+        );
+    }
+
+    let option_blob_fields = vec!["InstallCode.wasm_module", "InstallCode.arg"];
+    for field in option_blob_fields {
+        config.field_attribute(
+            format!(".ic_nns_governance.pb.v1.{}", field),
+            "#[serde(deserialize_with = \"ic_utils::deserialize::deserialize_option_blob\")]",
+        );
+    }
 
     // END type_attribute.
 

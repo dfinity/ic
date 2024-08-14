@@ -1,29 +1,33 @@
-use crate::driver::resource::AllocatedVm;
 use ic_base_types::CanisterId;
 use ic_ledger_core::block::BlockIndex;
-use ic_nns_governance::pb::v1::Proposal;
+use ic_nns_governance_api::pb::v1::Proposal;
 use ic_rosetta_api::convert::to_model_account_identifier;
+use ic_system_test_driver::driver::resource::AllocatedVm;
 
-use ic_rosetta_api::ledger_client::pending_proposals_response::PendingProposalsResponse;
-use ic_rosetta_api::models::operation::Operation;
-use ic_rosetta_api::models::{
-    AccountBalanceMetadata, AccountBalanceRequest, AccountBalanceResponse, AccountType,
-    BalanceAccountType, Block, BlockRequest, BlockResponse, CallRequest, CallResponse,
-    ConstructionCombineRequest, ConstructionCombineResponse, ConstructionDeriveRequest,
-    ConstructionDeriveRequestMetadata, ConstructionDeriveResponse, ConstructionHashRequest,
-    ConstructionHashResponse, ConstructionMetadataRequest, ConstructionMetadataRequestOptions,
-    ConstructionMetadataResponse, ConstructionParseRequest, ConstructionParseResponse,
-    ConstructionPayloadsRequest, ConstructionPayloadsRequestMetadata, ConstructionPayloadsResponse,
-    ConstructionPreprocessRequest, ConstructionPreprocessResponse, ConstructionSubmitRequest,
-    ConstructionSubmitResponse, Error, MetadataRequest, NetworkIdentifier, NetworkListResponse,
-    NetworkRequest, NetworkStatusResponse, NeuronSubaccountComponents, Object,
-    PartialBlockIdentifier, PublicKey, Signature, SignedTransaction,
+use ic_rosetta_api::{
+    ledger_client::pending_proposals_response::PendingProposalsResponse,
+    models::{
+        AccountBalanceMetadata, AccountBalanceRequest, AccountBalanceResponse, AccountType,
+        BalanceAccountType, Block, BlockRequest, BlockResponse, CallRequest, CallResponse,
+        ConstructionCombineRequest, ConstructionCombineResponse, ConstructionDeriveRequest,
+        ConstructionDeriveRequestMetadata, ConstructionDeriveResponse, ConstructionHashRequest,
+        ConstructionHashResponse, ConstructionMetadataRequest, ConstructionMetadataRequestOptions,
+        ConstructionMetadataResponse, ConstructionParseRequest, ConstructionParseResponse,
+        ConstructionPayloadsRequest, ConstructionPayloadsRequestMetadata,
+        ConstructionPayloadsResponse, ConstructionPreprocessRequest,
+        ConstructionPreprocessResponse, ConstructionSubmitRequest, ConstructionSubmitResponse,
+        Error, NetworkRequest, NetworkStatusResponse, NeuronSubaccountComponents, Operation,
+        PartialBlockIdentifier, PublicKey, Signature, SignedTransaction,
+    },
+    request_types::GetProposalInfo,
 };
-use ic_rosetta_api::request_types::GetProposalInfo;
 use icp_ledger::AccountIdentifier;
 use rand::{seq::SliceRandom, thread_rng};
-use reqwest::Client as HttpClient;
-use reqwest::StatusCode as HttpStatusCode;
+use reqwest::{Client as HttpClient, StatusCode as HttpStatusCode};
+use rosetta_core::{
+    identifiers::NetworkIdentifier, objects::ObjectMap, request_types::MetadataRequest,
+    response_types::NetworkListResponse,
+};
 use slog::{debug, info, Logger};
 use std::time::Duration;
 use tokio::time::sleep;
@@ -166,9 +170,13 @@ impl RosettaApiClient {
         let req = ConstructionDeriveRequest {
             network_identifier: self.network_id(),
             public_key: pk,
-            metadata: Some(ConstructionDeriveRequestMetadata {
-                account_type: AccountType::Neuron { neuron_index: 0 },
-            }),
+            metadata: Some(
+                ConstructionDeriveRequestMetadata {
+                    account_type: AccountType::Neuron { neuron_index: 0 },
+                }
+                .try_into()
+                .unwrap(),
+            ),
         };
         to_rosetta_response::<ConstructionDeriveResponse>(
             self.post_json_request(
@@ -236,7 +244,7 @@ impl RosettaApiClient {
     ) -> Result<Result<ConstructionMetadataResponse, Error>, String> {
         let req = ConstructionMetadataRequest {
             network_identifier: self.network_id(),
-            options,
+            options: options.map(|op| op.try_into().unwrap()),
             public_keys,
         };
         to_rosetta_response::<ConstructionMetadataResponse>(
@@ -275,7 +283,7 @@ impl RosettaApiClient {
     ) -> Result<Result<ConstructionPayloadsResponse, Error>, String> {
         let req = ConstructionPayloadsRequest {
             network_identifier: self.network_id(),
-            metadata,
+            metadata: metadata.map(|m| m.try_into().unwrap()),
             operations,
             public_keys,
         };
@@ -294,11 +302,11 @@ impl RosettaApiClient {
         // Shuffle the messages to check whether the server picks a
         // valid one to send to the IC.
         let mut rng = thread_rng();
-        for request in signed_transaction.iter_mut() {
+        for request in signed_transaction.requests.iter_mut() {
             request.1.shuffle(&mut rng);
         }
 
-        let req = ConstructionSubmitRequest::new(self.network_id(), signed_transaction);
+        let req = ConstructionSubmitRequest::new(self.network_id(), signed_transaction.to_string());
 
         to_rosetta_response::<ConstructionSubmitResponse>(
             self.post_json_request(
@@ -361,7 +369,7 @@ impl RosettaApiClient {
             network_identifier: self.network_id(),
             account_identifier: to_model_account_identifier(&acc),
             block_identifier: None,
-            metadata: Some(account_balance_metadata),
+            metadata: Some(account_balance_metadata.into()),
         };
 
         to_rosetta_response::<AccountBalanceResponse>(
@@ -398,8 +406,13 @@ impl RosettaApiClient {
         &self,
         account: AccountIdentifier,
     ) -> Result<Result<AccountBalanceResponse, Error>, String> {
-        let req =
-            AccountBalanceRequest::new(self.network_id(), to_model_account_identifier(&account));
+        let req = AccountBalanceRequest {
+            network_identifier: self.network_id(),
+            account_identifier: to_model_account_identifier(&account),
+            block_identifier: None,
+            metadata: None,
+        };
+
         to_rosetta_response::<AccountBalanceResponse>(
             self.post_json_request(
                 &format!("{}/account/balance", self.api_url),
@@ -411,7 +424,7 @@ impl RosettaApiClient {
 
     pub async fn block_at(&self, idx: u64) -> Result<Result<BlockResponse, Error>, String> {
         let block_id = PartialBlockIdentifier {
-            index: Some(i64::try_from(idx).unwrap()),
+            index: Some(idx),
             hash: None,
         };
         let req = BlockRequest::new(self.network_id(), block_id);
@@ -432,7 +445,28 @@ impl RosettaApiClient {
         let req = CallRequest::new(
             self.network_id(),
             "get_proposal_info".to_owned(),
-            Object::from(GetProposalInfo { proposal_id }),
+            ObjectMap::try_from(GetProposalInfo { proposal_id }).unwrap(),
+        );
+        debug!(&self.logger, "[Rosetta client] Call Request: {:?}", req);
+        debug!(
+            &self.logger,
+            "[Rosetta client] Call: {}",
+            &format!("{}/call", self.api_url)
+        );
+        to_rosetta_response::<CallResponse>(
+            self.post_json_request(
+                &format!("{}/call", self.api_url),
+                serde_json::to_vec(&req).unwrap(),
+            )
+            .await,
+        )
+    }
+
+    pub async fn get_known_neurons(&self) -> Result<Result<CallResponse, Error>, String> {
+        let req = CallRequest::new(
+            self.network_id(),
+            "list_known_neurons".to_owned(),
+            ObjectMap::new(),
         );
         debug!(&self.logger, "[Rosetta client] Call Request: {:?}", req);
         debug!(
@@ -453,7 +487,7 @@ impl RosettaApiClient {
         let req = CallRequest::new(
             self.network_id(),
             "get_pending_proposals".to_owned(),
-            Object::new(),
+            ObjectMap::new(),
         );
         debug!(&self.logger, "[Rosetta client] Call Request: {:?}", req);
         debug!(
@@ -505,7 +539,7 @@ impl RosettaApiClient {
         let now = std::time::SystemTime::now();
         while now.elapsed().unwrap() < timeout {
             if let Ok(Ok(resp)) = self.network_status().await {
-                if resp.current_block_identifier.index as u64 >= tip_idx {
+                if resp.current_block_identifier.index >= tip_idx {
                     return Ok(());
                 }
             }

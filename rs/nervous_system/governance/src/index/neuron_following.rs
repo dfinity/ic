@@ -1,5 +1,5 @@
-use ic_stable_structures::{BoundedStorable, Memory, StableBTreeMap};
-use num_traits::bounds::LowerBounded;
+use ic_stable_structures::{Memory, StableBTreeMap, Storable};
+use num_traits::bounds::{LowerBounded, UpperBounded};
 use std::{
     cmp::Ord,
     collections::{BTreeMap, BTreeSet},
@@ -153,16 +153,40 @@ where
 }
 
 /// An in-memory implementation of the neuron following index.
-#[derive(Default)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct HeapNeuronFollowingIndex<NeuronId, Category> {
     category_to_followee_to_followers: BTreeMap<Category, BTreeMap<NeuronId, BTreeSet<NeuronId>>>,
 }
 
 impl<NeuronId, Category> HeapNeuronFollowingIndex<NeuronId, Category> {
-    pub fn new() -> Self {
+    pub fn new(
+        category_to_followee_to_followers: BTreeMap<
+            Category,
+            BTreeMap<NeuronId, BTreeSet<NeuronId>>,
+        >,
+    ) -> Self {
         Self {
-            category_to_followee_to_followers: BTreeMap::new(),
+            category_to_followee_to_followers,
         }
+    }
+
+    /// Returns the number of entries (category, followee, follower) in the index. This is for
+    /// validation purpose: this should be equal to the size of the followee collection within the
+    /// primary storage.
+    pub fn num_entries(&self) -> usize {
+        self.category_to_followee_to_followers
+            .values()
+            .map(|neuron_followers_map| {
+                neuron_followers_map
+                    .values()
+                    .map(|followers| followers.len())
+                    .sum::<usize>()
+            })
+            .sum()
+    }
+
+    pub fn into_inner(self) -> BTreeMap<Category, BTreeMap<NeuronId, BTreeSet<NeuronId>>> {
+        self.category_to_followee_to_followers
     }
 }
 
@@ -180,9 +204,9 @@ where
     ) -> bool {
         self.category_to_followee_to_followers
             .entry(category)
-            .or_insert_with(BTreeMap::new)
+            .or_default()
             .entry(followee_neuron_id.clone())
-            .or_insert_with(BTreeSet::new)
+            .or_default()
             .insert(follower_neuron_id.clone())
     }
 
@@ -216,8 +240,8 @@ where
 /// A stable memory implementation of the index.
 pub struct StableNeuronFollowingIndex<NeuronId, Category, M>
 where
-    NeuronId: BoundedStorable + Clone + Default + Ord,
-    Category: BoundedStorable + Copy + Default + Ord,
+    NeuronId: Storable + Clone + Default + Ord,
+    Category: Storable + Copy + Default + Ord,
     M: Memory,
 {
     // The composite key cannot be easily flattened since (A, B, C) does not
@@ -227,8 +251,8 @@ where
 
 impl<NeuronId, Category, M> StableNeuronFollowingIndex<NeuronId, Category, M>
 where
-    NeuronId: BoundedStorable + Default + Clone + Ord,
-    Category: BoundedStorable + Default + Copy + Ord,
+    NeuronId: Storable + Default + Clone + Ord,
+    Category: Storable + Default + Copy + Ord,
     M: Memory,
 {
     pub fn new(memory: M) -> Self {
@@ -236,13 +260,38 @@ where
             category_followee_follower_to_null: StableBTreeMap::init(memory),
         }
     }
+
+    /// Returns the number of entries (category, followee, follower) in the index. This is for
+    /// validation purpose: this should be equal to the size of the followee collection within the
+    /// primary storage.
+    pub fn num_entries(&self) -> usize {
+        self.category_followee_follower_to_null.len() as usize
+    }
+
+    /// Returns whether the (category, followee, follower) entry exists in the index. This is for
+    /// validation purpose: each such pair in the primary storage should exist in the index.
+    pub fn contains_entry(
+        &self,
+        category: Category,
+        followee_id: &NeuronId,
+        follower_id: &NeuronId,
+    ) -> bool {
+        let key = ((category, followee_id.clone()), follower_id.clone());
+        self.category_followee_follower_to_null.contains_key(&key)
+    }
+
+    /// Validates that some of the data in stable storage can be read, in order to prevent broken
+    /// schema. Should only be called in post_upgrade.
+    pub fn validate(&self) {
+        super::validate_stable_btree_map(&self.category_followee_follower_to_null);
+    }
 }
 
 impl<NeuronId, Category, M> NeuronFollowingIndex<NeuronId, Category>
     for StableNeuronFollowingIndex<NeuronId, Category, M>
 where
-    NeuronId: BoundedStorable + Clone + Default + LowerBounded + Ord,
-    Category: BoundedStorable + Copy + Default + Ord,
+    NeuronId: Storable + Clone + Default + LowerBounded + UpperBounded + Ord,
+    Category: Storable + Copy + Default + Ord,
     M: Memory,
 {
     fn add_neuron_followee_for_category(
@@ -294,6 +343,7 @@ where
 mod tests {
     use super::*;
 
+    use ic_stable_structures::storable::Bound;
     use ic_stable_structures::{Storable, VectorMemory};
     use maplit::btreeset;
     use std::borrow::Cow;
@@ -309,16 +359,22 @@ mod tests {
         fn from_bytes(bytes: Cow<[u8]>) -> Self {
             TestNeuronId(<[u8; 32]>::from_bytes(bytes))
         }
-    }
 
-    impl BoundedStorable for TestNeuronId {
-        const MAX_SIZE: u32 = 32;
-        const IS_FIXED_SIZE: bool = true;
+        const BOUND: Bound = Bound::Bounded {
+            max_size: 32,
+            is_fixed_size: true,
+        };
     }
 
     impl LowerBounded for TestNeuronId {
         fn min_value() -> Self {
             TestNeuronId([0u8; 32])
+        }
+    }
+
+    impl UpperBounded for TestNeuronId {
+        fn max_value() -> Self {
+            TestNeuronId([u8::MAX; 32])
         }
     }
 
@@ -349,11 +405,11 @@ mod tests {
         fn from_bytes(bytes: Cow<[u8]>) -> Self {
             i32::from_be_bytes(bytes.as_ref().try_into().unwrap()).into()
         }
-    }
 
-    impl BoundedStorable for Topic {
-        const MAX_SIZE: u32 = std::mem::size_of::<i32>() as u32;
-        const IS_FIXED_SIZE: bool = true;
+        const BOUND: Bound = Bound::Bounded {
+            max_size: std::mem::size_of::<i32>() as u32,
+            is_fixed_size: true,
+        };
     }
 
     fn get_stable_index() -> StableNeuronFollowingIndex<TestNeuronId, Topic, VectorMemory> {
@@ -361,7 +417,7 @@ mod tests {
     }
 
     fn get_heap_index() -> HeapNeuronFollowingIndex<TestNeuronId, Topic> {
-        HeapNeuronFollowingIndex::<TestNeuronId, Topic>::new()
+        HeapNeuronFollowingIndex::<TestNeuronId, Topic>::new(BTreeMap::new())
     }
 
     // The following test helpers will be run by both implementations.
@@ -711,5 +767,44 @@ mod tests {
     #[test]
     fn test_update_followee_invalid_stable() {
         test_update_followee_invalid_helper(get_stable_index());
+    }
+
+    #[test]
+    fn test_stable_neuron_index_num_entries() {
+        let follower_id = TestNeuronId([1u8; 32]);
+        let followee_id = TestNeuronId([2u8; 32]);
+        let mut index = get_stable_index();
+
+        assert_eq!(index.num_entries(), 0);
+
+        assert_eq!(
+            add_neuron_followees(
+                &mut index,
+                &follower_id,
+                btreeset![(Topic::Topic1, followee_id.clone())],
+            ),
+            vec![]
+        );
+
+        assert_eq!(index.num_entries(), 1);
+    }
+
+    #[test]
+    fn test_stable_neuron_index_contains_entry() {
+        let follower_id = TestNeuronId([1u8; 32]);
+        let followee_id = TestNeuronId([2u8; 32]);
+        let mut index = get_stable_index();
+
+        assert_eq!(
+            add_neuron_followees(
+                &mut index,
+                &follower_id,
+                btreeset![(Topic::Topic1, followee_id.clone())],
+            ),
+            vec![]
+        );
+
+        assert!(index.contains_entry(Topic::Topic1, &followee_id, &follower_id));
+        assert!(!index.contains_entry(Topic::Topic1, &follower_id, &followee_id));
     }
 }

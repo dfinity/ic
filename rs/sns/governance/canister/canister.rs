@@ -18,8 +18,10 @@ use dfn_core::{
 };
 use ic_base_types::CanisterId;
 use ic_canister_log::log;
+use ic_canister_profiler::{measure_span, measure_span_async};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_clients::canister_status::CanisterStatusResultV2;
+use ic_nervous_system_clients::ledger_client::LedgerCanister;
 use ic_nervous_system_common::{
     cmc::CMCCanister,
     dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
@@ -29,17 +31,21 @@ use ic_nervous_system_common::{
 use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 #[cfg(feature = "test")]
-use ic_sns_governance::pb::v1::{GovernanceError, Neuron};
+use ic_sns_governance::pb::v1::{
+    AddMaturityRequest, AddMaturityResponse, GovernanceError, MintTokensRequest,
+    MintTokensResponse, Neuron,
+};
 use ic_sns_governance::{
-    governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
-    ledger::LedgerCanister,
+    governance::{
+        log_prefix, Governance, TimeWarp, ValidGovernanceProto, MATURITY_DISBURSEMENT_DELAY_SECONDS,
+    },
     logs::{ERROR, INFO},
     pb::v1::{
-        governance, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
-        FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
-        GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
-        GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal,
-        GetProposalResponse, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
+        ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
+        FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
+        GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
+        GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+        GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
         GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
         Governance as GovernanceProto, ListNervousSystemFunctionsResponse, ListNeurons,
         ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
@@ -261,9 +267,13 @@ fn canister_post_upgrade() {
             );
             Err(err)
         }
-        Ok(mut proto) => {
-            set_mode_to_normal_if_unspecified(&mut proto);
-            canister_init_(proto);
+        Ok(mut governance_proto) => {
+            // Post-process GovernanceProto
+
+            // TODO: Delete this once it's been released.
+            populate_finalize_disbursement_timestamp_seconds(&mut governance_proto);
+
+            canister_init_(governance_proto);
             Ok(())
         }
     }
@@ -271,15 +281,14 @@ fn canister_post_upgrade() {
     log!(INFO, "Completed post upgrade");
 }
 
-/// Sets the GovernanceProto's mode to Normal if it is Unspecified.
-///
-/// This is NOT used during installation, because the installer needs to make an
-/// explicit choice about what mode to use. Wheres, this IS INDEED used during
-/// upgrades, because mode did not used to exist, but is now required (because
-/// Unspecified is not allowed); this is called in post_upgrade).
-fn set_mode_to_normal_if_unspecified(g: &mut GovernanceProto) {
-    if g.mode == governance::Mode::Unspecified as i32 {
-        g.mode = governance::Mode::Normal as i32;
+fn populate_finalize_disbursement_timestamp_seconds(governance_proto: &mut GovernanceProto) {
+    for neuron in governance_proto.neurons.values_mut() {
+        for disbursement in neuron.disburse_maturity_in_progress.iter_mut() {
+            disbursement.finalize_disbursement_timestamp_seconds = Some(
+                disbursement.timestamp_of_disbursement_seconds
+                    + MATURITY_DISBURSEMENT_DELAY_SECONDS,
+            );
+        }
     }
 }
 
@@ -344,7 +353,7 @@ fn get_sns_initialization_parameters_(
 /// Performs a command on a neuron if the caller is authorized to do so.
 /// The possible neuron commands are (for details, see the SNS's governance.proto):
 /// - configuring the neuron (increasing or setting its dissolve delay or changing the
-/// dissolve state),
+///   dissolve state),
 /// - disbursing the neuron's stake to a ledger account
 /// - following a set of neurons for proposals of a certain action
 /// - make a proposal in the name of the neuron
@@ -361,9 +370,13 @@ fn manage_neuron() {
 /// Internal method for calling manage_neuron.
 #[candid_method(update, rename = "manage_neuron")]
 async fn manage_neuron_(manage_neuron: ManageNeuron) -> ManageNeuronResponse {
-    governance_mut()
-        .manage_neuron(&manage_neuron, &caller())
-        .await
+    let governance = governance_mut();
+    measure_span_async(
+        governance.profiling_information,
+        "manage_neuron",
+        governance.manage_neuron(&manage_neuron, &caller()),
+    )
+    .await
 }
 
 #[cfg(feature = "test")]
@@ -378,7 +391,10 @@ fn update_neuron() {
 #[candid_method(update, rename = "update_neuron")]
 /// Internal method for calling update_neuron.
 fn update_neuron_(neuron: Neuron) -> Option<GovernanceError> {
-    governance_mut().update_neuron(neuron).err()
+    let governance = governance_mut();
+    measure_span(governance.profiling_information, "update_neuron", || {
+        governance.update_neuron(neuron).err()
+    })
 }
 
 /// Returns the full neuron corresponding to the neuron with ID `neuron_id`.
@@ -452,7 +468,7 @@ fn list_proposals() {
 /// Internal method for calling list_proposals.
 #[candid_method(query, rename = "list_proposals")]
 fn list_proposals_(list_proposals: ListProposals) -> ListProposalsResponse {
-    governance().list_proposals(&list_proposals)
+    governance().list_proposals(&list_proposals, &caller())
 }
 
 /// Returns the current list of available NervousSystemFunctions.
@@ -489,6 +505,7 @@ fn get_root_canister_status() {
 
 /// Internal method for calling get_root_canister_status.
 #[candid_method(update, rename = "get_root_canister_status")]
+#[allow(clippy::let_unit_value)] // clippy false positive
 async fn get_root_canister_status_(_: ()) -> CanisterStatusResultV2 {
     panic!("This method is deprecated and should not be used. Please use the root canister's `get_sns_canisters_summary` method.")
 }
@@ -580,7 +597,12 @@ fn claim_swap_neurons() {
 fn claim_swap_neurons_(
     claim_swap_neurons_request: ClaimSwapNeuronsRequest,
 ) -> ClaimSwapNeuronsResponse {
-    governance_mut().claim_swap_neurons(claim_swap_neurons_request, caller())
+    let governance = governance_mut();
+    measure_span(
+        governance.profiling_information,
+        "claim_swap_neurons",
+        || governance.claim_swap_neurons(claim_swap_neurons_request, caller()),
+    )
 }
 
 /// This is not really useful to the public. It is, however, useful to integration tests.
@@ -595,7 +617,12 @@ fn get_maturity_modulation() {
 fn get_maturity_modulation_(
     request: GetMaturityModulationRequest,
 ) -> GetMaturityModulationResponse {
-    governance().get_maturity_modulation(request)
+    let governance = governance_mut();
+    measure_span(
+        governance.profiling_information,
+        "get_maturity_modulation",
+        || governance.get_maturity_modulation(request),
+    )
 }
 
 /// The canister's heartbeat.
@@ -687,6 +714,32 @@ fn expose_candid() {
     })
 }
 
+/// Adds maturity to a neuron for testing
+#[cfg(feature = "test")]
+#[export_name = "canister_update add_maturity"]
+fn add_maturity() {
+    over(candid_one, add_maturity_)
+}
+
+#[cfg(feature = "test")]
+#[candid_method(update, rename = "add_maturity")]
+fn add_maturity_(request: AddMaturityRequest) -> AddMaturityResponse {
+    governance_mut().add_maturity(request)
+}
+
+/// Mints tokens for testing
+#[cfg(feature = "test")]
+#[export_name = "canister_update mint_tokens"]
+fn mint_tokens() {
+    over_async(candid_one, mint_tokens_)
+}
+
+#[cfg(feature = "test")]
+#[candid_method(update, rename = "mint_tokens")]
+async fn mint_tokens_(request: MintTokensRequest) -> MintTokensResponse {
+    governance_mut().mint_tokens(request).await
+}
+
 /// When run on native, this prints the candid service definition of this
 /// canister, from the methods annotated with `candid_method` above.
 ///
@@ -755,7 +808,8 @@ fn check_governance_candid_file() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use strum::IntoEnumIterator;
+    use ic_sns_governance::pb::v1::{DisburseMaturityInProgress, Neuron};
+    use maplit::btreemap;
 
     /// A test that checks that set_time_warp advances time correctly.
     #[test]
@@ -771,39 +825,54 @@ mod tests {
     }
 
     #[test]
-    fn test_set_mode_to_normal_if_unspecified_already_specified() {
-        for mode in governance::Mode::iter() {
-            if mode == governance::Mode::Unspecified {
-                continue;
-            }
-
-            let before = GovernanceProto {
-                mode: mode as i32,
-                ..Default::default()
-            };
-
-            let mut after = before.clone();
-            set_mode_to_normal_if_unspecified(&mut after);
-            // No change.
-            assert_eq!(after, before);
-        }
-    }
-
-    #[test]
-    fn test_set_mode_to_normal_if_unspecified_originally_unspecified() {
-        let mut result = GovernanceProto {
-            mode: governance::Mode::Unspecified as i32,
+    fn test_populate_finalize_disbursement_timestamp_seconds() {
+        // Step 1: prepare a neuron with 2 in progress disbursement, one with
+        // finalize_disbursement_timestamp_seconds as None, and the other has incorrect timestamp.
+        let mut governance_proto = GovernanceProto {
+            neurons: btreemap! {
+                "1".to_string() => Neuron {
+                    disburse_maturity_in_progress: vec![
+                        DisburseMaturityInProgress {
+                            timestamp_of_disbursement_seconds: 1,
+                            finalize_disbursement_timestamp_seconds: None,
+                            ..Default::default()
+                        },
+                        DisburseMaturityInProgress {
+                            timestamp_of_disbursement_seconds: 2,
+                            finalize_disbursement_timestamp_seconds: Some(3),
+                            ..Default::default()
+                        }
+                    ],
+                    ..Default::default()
+                },
+            },
             ..Default::default()
         };
 
-        set_mode_to_normal_if_unspecified(&mut result);
-        // Change!
-        assert_eq!(
-            result,
-            GovernanceProto {
-                mode: governance::Mode::Normal as i32,
-                ..Default::default()
+        // Step 2: populates the timestamps.
+        populate_finalize_disbursement_timestamp_seconds(&mut governance_proto);
+
+        // Step 3: verifies that both disbursements have the correct finalization timestamps.
+        let expected_governance_proto = GovernanceProto {
+            neurons: btreemap! {
+                "1".to_string() => Neuron {
+                    disburse_maturity_in_progress: vec![
+                        DisburseMaturityInProgress {
+                            timestamp_of_disbursement_seconds: 1,
+                            finalize_disbursement_timestamp_seconds: Some(1 + MATURITY_DISBURSEMENT_DELAY_SECONDS),
+                            ..Default::default()
+                        },
+                        DisburseMaturityInProgress {
+                            timestamp_of_disbursement_seconds: 2,
+                            finalize_disbursement_timestamp_seconds: Some(2 + MATURITY_DISBURSEMENT_DELAY_SECONDS),
+                            ..Default::default()
+                        },
+                    ],
+                    ..Default::default()
+                },
             },
-        );
+            ..Default::default()
+        };
+        assert_eq!(governance_proto, expected_governance_proto);
     }
 }

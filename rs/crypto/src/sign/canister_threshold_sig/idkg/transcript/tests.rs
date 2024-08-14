@@ -70,19 +70,11 @@ mod verify_signature_batch {
         let batch_signed_idkg_dealing = setup.batch_signed_idkg_dealing.clone();
         let verification_threshold = NumberOfNodes::new(NUMBER_OF_NODES);
         let mut mock_csp = MockAllCryptoServiceProvider::new();
-        let node_id_counter = AtomicU64::new(0);
         mock_csp
-            .expect_verify()
+            .expect_verify_batch()
             .times(1)
-            .withf(move |sig, message, algorithm_id, csp_pub_key| {
-                check_input_to_verify(
-                    sig,
-                    message,
-                    algorithm_id,
-                    csp_pub_key,
-                    &setup,
-                    &node_id_counter,
-                )
+            .withf(move |pks_sigs, message, algorithm_id| {
+                check_input_to_verify_batch(pks_sigs, message, algorithm_id, &setup)
             })
             .return_const(Ok(()));
 
@@ -110,19 +102,24 @@ mod verify_signature_batch {
             sig_bytes: vec![0; 64],
             internal_error: "oh no!".to_string(),
         };
+        {
+            let setup = setup.clone();
+            let internal_crypto_error = internal_crypto_error.clone();
+            mock_csp
+                .expect_verify_batch()
+                .times(1)
+                .withf(move |pks_sigs, message, algorithm_id| {
+                    check_input_to_verify_batch(pks_sigs, message, algorithm_id, &setup)
+                })
+                .return_const(Err(internal_crypto_error.clone()));
+        }
+
         let node_id_counter = AtomicU64::new(0);
         mock_csp
             .expect_verify()
             .times(1)
-            .withf(move |sig, message, algorithm_id, csp_pub_key| {
-                check_input_to_verify(
-                    sig,
-                    message,
-                    algorithm_id,
-                    csp_pub_key,
-                    &setup,
-                    &node_id_counter,
-                )
+            .withf(move |sig, message, algorithm_id, pk| {
+                check_input_to_verify(sig, message, algorithm_id, pk, &setup, &node_id_counter)
             })
             .return_const(Err(internal_crypto_error.clone()));
         let verification_threshold = NumberOfNodes::new(NUMBER_OF_NODES);
@@ -145,37 +142,54 @@ mod verify_signature_batch {
         let setup = Setup::builder().with_signature_count(3).build();
         let registry_client = Arc::clone(&setup.registry_client);
         let batch_signed_idkg_dealing = setup.batch_signed_idkg_dealing.clone();
+        let internal_crypto_error = CryptoError::MalformedSignature {
+            algorithm: AlgorithmId::Ed25519,
+            sig_bytes: vec![0; 64],
+            internal_error: "oh no!".to_string(),
+        };
         let mut mock_csp = MockAllCryptoServiceProvider::new();
-        let node_id_counter = AtomicU64::new(0);
-        let mut verify_call_counter = 0_u8;
-        mock_csp
-            .expect_verify()
-            .times(3)
-            .withf(move |sig, message, algorithm_id, csp_pub_key| {
-                check_input_to_verify(
-                    sig,
-                    message,
-                    algorithm_id,
-                    csp_pub_key,
-                    &setup,
-                    &node_id_counter,
-                )
-            })
-            .returning(move |_, _, _, _| match verify_call_counter {
-                0 | 1 => {
-                    verify_call_counter += 1;
-                    Ok(())
-                }
-                2 => {
-                    verify_call_counter += 1;
-                    Err(CryptoError::MalformedSignature {
-                        algorithm: AlgorithmId::Ed25519,
-                        sig_bytes: vec![0; 64],
-                        internal_error: "oh no!".to_string(),
-                    })
-                }
-                _ => panic!("verify called too many times!"),
-            });
+
+        {
+            let setup = setup.clone();
+            let internal_crypto_error = internal_crypto_error.clone();
+            mock_csp
+                .expect_verify_batch()
+                .times(1)
+                .withf(move |pks_sigs, message, algorithm_id| {
+                    check_input_to_verify_batch(pks_sigs, message, algorithm_id, &setup)
+                })
+                .returning(move |_, _, _| Err(internal_crypto_error.clone()));
+        }
+        {
+            let node_id_counter = AtomicU64::new(0);
+            let mut verify_call_counter = 0_u8;
+            let internal_crypto_error = internal_crypto_error.clone();
+            mock_csp
+                .expect_verify()
+                .times(3)
+                .withf(move |sig, message, algorithm_id, csp_pub_key| {
+                    check_input_to_verify(
+                        sig,
+                        message,
+                        algorithm_id,
+                        csp_pub_key,
+                        &setup,
+                        &node_id_counter,
+                    )
+                })
+                .returning(move |_, _, _, _| match verify_call_counter {
+                    0 | 1 => {
+                        verify_call_counter += 1;
+                        Ok(())
+                    }
+                    2 => {
+                        verify_call_counter += 1;
+                        Err(internal_crypto_error.clone())
+                    }
+                    _ => panic!("verify called too many times!"),
+                });
+        }
+
         let verification_threshold = NumberOfNodes::new(2);
 
         assert_matches!(
@@ -224,6 +238,26 @@ mod verify_signature_batch {
                         node_id_counter_val
                     )
                 })
+    }
+
+    fn check_input_to_verify_batch(
+        pks_sigs: &[(CspPublicKey, CspSignature)],
+        message: &[u8],
+        algorithm_id: &AlgorithmId,
+        setup: &Setup,
+    ) -> bool {
+        (0..)
+            .map(node_id)
+            .zip(pks_sigs.iter().map(|(_pk, sig)| sig.clone()))
+            .collect::<BTreeMap<_, _>>()
+            == setup.idkg_dealing_supports
+            && message == setup.message
+            && algorithm_id == &setup.algorithm_id
+            && setup.csp_public_keys
+                == (0..)
+                    .map(node_id)
+                    .zip(pks_sigs.iter().map(|(pk, _sig)| pk.clone()))
+                    .collect::<BTreeMap<_, _>>()
     }
 
     struct SetupBuilder {
@@ -337,6 +371,7 @@ mod verify_signature_batch {
         }
     }
 
+    #[derive(Clone)]
     struct Setup {
         batch_signed_idkg_dealing: BatchSignedIDkgDealing,
         idkg_dealing_supports: BTreeMap<NodeId, CspSignature>,

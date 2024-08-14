@@ -1,27 +1,18 @@
 [package]
 name = "ic-utils"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-features = "0.10.0"
-bitflags = "1.2.1"
-hex = "0.4.2"
-prost = "0.11.0"
+hex = { workspace = true }
 scoped_threadpool = "0.1.*"
-serde = { version = "1.0.99", default-features = false }
-
-[target.'cfg(target_family = "unix")'.dependencies]
-rand = "0.8.3"
-
-[target.'cfg(target_os = "linux")'.dependencies]
-cvt = "0.1.1"
-ic-sys = { path = "../sys" }
-libc = "0.2.91"
-nix = "0.23.0"
-thiserror = "1.0"
+serde = { workspace = true }
+serde_bytes = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.5.0"
-tempfile = "3.1.0"
-serde = { version = "1.0.99", features = ["derive"] }
+assert_matches = { workspace = true }
+serde = { workspace = true }
+tempfile = { workspace = true }

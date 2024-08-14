@@ -2,10 +2,6 @@
 
 A command line tool to serve as a gateway for a Internet Computer replica.
 
-## Contributing
-
-Please follow the guidelines in the [CONTRIBUTING.md](.github/CONTRIBUTING.md) document.
-
 ## Installing `icx-proxy`
 
 One can install `icx-proxy` by running cargo;

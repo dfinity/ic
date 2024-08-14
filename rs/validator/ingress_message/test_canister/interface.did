@@ -1,0 +1,6 @@
+service : {
+  create_and_validate_anonymous_http_with_ingress_expiry_time : (
+      nat64,
+      nat64,
+    ) -> (bool) query;
+}

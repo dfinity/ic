@@ -10,6 +10,7 @@ use crate::crypto::hash_message_to_g1;
 use crate::types::PublicKey;
 use ic_crypto_internal_bls12_381_type::{G2Projective, LagrangeCoefficients, Scalar};
 use ic_crypto_internal_seed::Seed;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::error::InvalidArgumentError;
 use ic_types::{NodeIndex, NumberOfNodes};
 use proptest::prelude::*;
@@ -238,12 +239,12 @@ fn omnipotent_dealer() {
 
 #[test]
 fn test_combined_secret_key() {
-    let mut rng = rand::thread_rng();
+    let rng = &mut reproducible_rng();
     for _trial in 0..3 {
-        let num_receivers = rng.gen::<u8>() as NodeIndex;
+        let num_receivers = rng.gen_range::<u8, _>(1..=u8::MAX) as NodeIndex;
         let poly_degree = rng.gen::<u8>() as usize;
 
-        let polynomial = Polynomial::random(poly_degree, &mut rng);
+        let polynomial = Polynomial::random(poly_degree, rng);
 
         // If the number of receivers is at least the length of the polynomial,
         // combined_secret_key() should recover the 0'th term of the polynomial.
@@ -266,7 +267,7 @@ proptest! {
         })]
 
         #[test]
-        fn single_keygen_is_valid(keygen_seed: [u8;32], test_seed: [u8;32], threshold in 0_u32..5, redundancy in (0_u32..10), message: Vec<u8>) {
+        fn single_keygen_is_valid(keygen_seed: [u8;32], test_seed: [u8;32], threshold in 1_u32..5, redundancy in (0_u32..10), message: Vec<u8>) {
             let threshold = NumberOfNodes::from(threshold);
             let num_shares = threshold + NumberOfNodes::from(redundancy);
             let (public_coefficients, secret_keys) = util::generate_threshold_key(Seed::from_bytes(&keygen_seed), threshold, num_shares).expect("Failed to generate keys");
@@ -275,7 +276,7 @@ proptest! {
 
 
         #[test]
-        fn proptest_keygen_composes(keygen_seeds in proptest::collection::vec(any::<[u8;32]>(), 1..10), test_seed: [u8;32], threshold in 0_u32..10, redundancy in (0_u32..10), message: Vec<u8>) {
+        fn proptest_keygen_composes(keygen_seeds in proptest::collection::vec(any::<[u8;32]>(), 1..10), test_seed: [u8;32], threshold in 1_u32..10, redundancy in (0_u32..10), message: Vec<u8>) {
             let threshold = NumberOfNodes::from(threshold);
             let num_shares = threshold + NumberOfNodes::from(redundancy);
             let generations = keygen_seeds.into_iter().map(|seed| util::generate_threshold_key(Seed::from_bytes(&seed), threshold, num_shares).expect("Could not generate keys")).collect::<Vec<_>>();
@@ -293,13 +294,13 @@ proptest! {
             idle_receivers in 0_u32..5,
             seed: [u8; 32]
         ) {
-            let mut rng = ChaChaRng::from_seed(seed);
+            let rng = &mut ChaChaRng::from_seed(seed);
             let receivers_size = (threshold+redundancy+idle_receivers) as usize;
 
-            let secret_key = Scalar::random(&mut rng);
+            let secret_key = Scalar::random(rng);
 
             let (public_coefficients, _secret_keys) = crypto::threshold_share_secret_key(
-                Seed::from_rng(&mut rng),
+                Seed::from_rng(rng),
                 NumberOfNodes::from(threshold),
                 NumberOfNodes::from(receivers_size as u32),
                 &secret_key,
@@ -327,7 +328,7 @@ mod resharing_util {
     ///   system.
     /// * `new_receivers` indicates how many receivers get a new share
     pub fn multiple_keygen(
-        mut rng: &mut ChaChaRng,
+        rng: &mut ChaChaRng,
         original_receiver_shares: &[SecretKey],
         new_threshold: NumberOfNodes,
         new_receivers: NumberOfNodes,
@@ -336,7 +337,7 @@ mod resharing_util {
             .iter()
             .map(|key| {
                 crypto::threshold_share_secret_key(
-                    Seed::from_rng(&mut rng),
+                    Seed::from_rng(rng),
                     new_threshold,
                     new_receivers,
                     key,
@@ -420,16 +421,13 @@ fn simplified_resharing_should_preserve_the_threshold_key() {
     let new_threshold = NumberOfNodes::from(4);
     let new_receivers = NumberOfNodes::from(7);
 
-    let mut rng = ChaChaRng::from_seed([9u8; 32]);
+    let rng = &mut ChaChaRng::from_seed([9u8; 32]);
 
-    let (original_public_coefficients, original_receiver_shares) = crypto::generate_threshold_key(
-        Seed::from_rng(&mut rng),
-        original_threshold,
-        original_receivers,
-    )
-    .expect("Original keygen failed");
+    let (original_public_coefficients, original_receiver_shares) =
+        crypto::generate_threshold_key(Seed::from_rng(rng), original_threshold, original_receivers)
+            .expect("Original keygen failed");
     let reshares = resharing_util::multiple_keygen(
-        &mut rng,
+        rng,
         &original_receiver_shares,
         new_threshold,
         new_receivers,
@@ -471,15 +469,12 @@ fn resharing_with_encryption_should_preserve_the_threshold_key() {
     let original_receivers = NumberOfNodes::from(5);
     let new_threshold = NumberOfNodes::from(5);
     let new_receivers = NumberOfNodes::from(7);
-    let mut rng = ChaChaRng::from_seed([9u8; 32]);
-    let (original_public_coefficients, original_receiver_shares) = crypto::generate_threshold_key(
-        Seed::from_rng(&mut rng),
-        original_threshold,
-        original_receivers,
-    )
-    .expect("Original keygen failed");
+    let rng = &mut ChaChaRng::from_seed([9u8; 32]);
+    let (original_public_coefficients, original_receiver_shares) =
+        crypto::generate_threshold_key(Seed::from_rng(rng), original_threshold, original_receivers)
+            .expect("Original keygen failed");
     let unencrypted_reshares = resharing_util::multiple_keygen(
-        &mut rng,
+        rng,
         &original_receiver_shares,
         new_threshold,
         new_receivers,
@@ -527,4 +522,37 @@ fn resharing_with_encryption_should_preserve_the_threshold_key() {
         resharing_util::interpolate_secret_key(&new_combined_receiver_shares),
         "New secret doesn't match old"
     );
+}
+
+#[test]
+fn generating_a_key_returns_expected_error_for_invalid_args() {
+    let seed = [0u8; 32];
+    let rng = &mut ChaChaRng::from_seed(seed);
+
+    for threshold in 0..10 {
+        for receivers in 0..10 {
+            let result = crypto::generate_threshold_key(
+                Seed::from_rng(rng),
+                NumberOfNodes::from(threshold as u32),
+                NumberOfNodes::from(receivers as u32),
+            );
+
+            match result {
+                Ok((public_coeff, shares)) => {
+                    assert!(threshold > 0);
+                    assert!(threshold <= receivers);
+                    assert_eq!(shares.len(), receivers);
+                    assert_eq!(public_coeff.coefficients.len(), threshold);
+                }
+                Err(e) => {
+                    if threshold == 0 {
+                        assert!(e.message.starts_with("Threshold of zero is invalid"));
+                    } else {
+                        assert!(threshold > receivers);
+                        assert!(e.message.starts_with("Threshold too high: "));
+                    }
+                }
+            }
+        }
+    }
 }

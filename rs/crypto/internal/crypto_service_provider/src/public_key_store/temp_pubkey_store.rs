@@ -1,7 +1,8 @@
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::PublicKeyGenerationTimestamps;
 use crate::public_key_store::{
-    PublicKeyAddError, PublicKeyRetainError, PublicKeySetOnceError, PublicKeyStore,
+    PublicKeyAddError, PublicKeyRetainCheckError, PublicKeyRetainError, PublicKeySetOnceError,
+    PublicKeyStore,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
@@ -94,12 +95,20 @@ impl PublicKeyStore for TempPublicKeyStore {
         self.store.add_idkg_dealing_encryption_pubkey(key)
     }
 
-    fn retain_most_recent_idkg_public_keys_up_to_inclusive(
+    fn retain_idkg_public_keys_since(
         &mut self,
         oldest_public_key_to_keep: &PublicKey,
     ) -> Result<bool, PublicKeyRetainError> {
         self.store
-            .retain_most_recent_idkg_public_keys_up_to_inclusive(oldest_public_key_to_keep)
+            .retain_idkg_public_keys_since(oldest_public_key_to_keep)
+    }
+
+    fn would_retain_idkg_public_keys_modify_pubkey_store(
+        &self,
+        oldest_public_key_to_keep: &PublicKey,
+    ) -> Result<bool, PublicKeyRetainCheckError> {
+        self.store
+            .would_retain_idkg_public_keys_modify_pubkey_store(oldest_public_key_to_keep)
     }
 
     fn idkg_dealing_encryption_pubkeys(&self) -> Vec<PublicKey> {

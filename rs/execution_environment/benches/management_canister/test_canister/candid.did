@@ -1,0 +1,46 @@
+type create_canisters_args = record {
+    canisters_number : nat64;
+    canisters_per_batch : nat64;
+    initial_cycles : nat;
+};
+
+type install_code_args = record {
+    canisters : vec principal;
+    wasm_module_size : nat64;
+    arg_size : nat64;
+};
+
+type update_settings_args = record {
+    canisters : vec principal;
+    controllers_number : nat64;
+};
+
+type ecdsa_curve = variant { secp256k1 };
+
+type ecdsa_args = record {
+    ecdsa_key : record { curve : ecdsa_curve; name : text };
+    calls : nat64;
+    derivation_paths : nat64;
+    buf_size : nat64;
+};
+
+type http_header = record {
+    name : text;
+    value : text;
+};
+
+type http_request_args = record {
+    calls : nat64;
+    headers_number : nat64;
+    header : http_header;
+    cycles : nat;
+};
+
+service : {
+    "create_canisters" : (create_canisters_args) -> (vec principal);
+    "install_code" : (install_code_args) -> ();
+    "update_settings" : (update_settings_args) -> ();
+    "ecdsa_public_key" : (ecdsa_args) -> ();
+    "sign_with_ecdsa" : (ecdsa_args) -> ();
+    "http_request" : (http_request_args) -> ();
+};

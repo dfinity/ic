@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_bench")
+load("//bazel:defs.bzl", "rust_bench", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -11,9 +11,15 @@ rust_library(
         "//conditions:default": [],
     }),
     crate_name = "ic_state_manager",
-    version = "0.8.0",
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:strum_macros",
+    ],
+    version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/canonical_state",
+        "//rs/canonical_state/tree_hash",
         "//rs/config",
         "//rs/crypto/sha2",
         "//rs/crypto/tree_hash",
@@ -33,20 +39,21 @@ rust_library(
         "//rs/types/error_types",
         "//rs/types/types",
         "//rs/utils",
+        "//rs/utils/thread",
         "@crate_index//:bit-vec",
         "@crate_index//:crossbeam-channel",
         "@crate_index//:hex",
-        "@crate_index//:libc",
         "@crate_index//:nix",
         "@crate_index//:parking_lot",
         "@crate_index//:prometheus",
         "@crate_index//:prost",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:rand_chacha_0_3_1",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
         "@crate_index//:scoped_threadpool",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:slog",
+        "@crate_index//:strum",
         "@crate_index//:tempfile",
         "@crate_index//:uuid",
     ],
@@ -54,16 +61,21 @@ rust_library(
 
 rust_test(
     name = "state_manager_lib_tests",
+    timeout = "long",
     crate = ":state_manager",
     deps = [
+        # Keep sorted.
         "//rs/registry/routing_table",
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
-        "//rs/test_utilities",
+        "//rs/test_utilities/consensus",
         "//rs/test_utilities/logger",
+        "//rs/test_utilities/state",
+        "//rs/test_utilities/time",
         "//rs/test_utilities/tmpdir",
+        "//rs/test_utilities/types",
         "//rs/types/error_types",
-        "//rs/types/ic00_types",
+        "//rs/types/management_canister_types",
         "//rs/types/wasm_types",
         "@crate_index//:assert_matches",
         "@crate_index//:maplit",
@@ -73,15 +85,18 @@ rust_test(
     ],
 )
 
-rust_test(
+rust_ic_test(
     name = "state_manager_integration_test",
+    timeout = "long",
     srcs = [
         "tests/common/mod.rs",
         "tests/state_manager.rs",
     ],
     crate_root = "tests/state_manager.rs",
     deps = [
+        # Keep sorted.
         ":state_manager",
+        "//rs/canonical_state/certification_version",
         "//rs/config",
         "//rs/crypto/tree_hash",
         "//rs/interfaces",
@@ -89,17 +104,22 @@ rust_test(
         "//rs/interfaces/state_manager",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
+        "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
         "//rs/state_layout",
         "//rs/state_machine_tests",
         "//rs/sys",
-        "//rs/test_utilities",
+        "//rs/test_utilities/consensus",
+        "//rs/test_utilities/io",
         "//rs/test_utilities/logger",
         "//rs/test_utilities/metrics",
+        "//rs/test_utilities/state",
+        "//rs/test_utilities/time",
         "//rs/test_utilities/tmpdir",
+        "//rs/test_utilities/types",
         "//rs/types/base_types",
-        "//rs/types/ic00_types",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/types/wasm_types",
         "@crate_index//:assert_matches",
@@ -116,14 +136,19 @@ rust_bench(
     name = "traversal_bench",
     srcs = ["benches/bench_traversal.rs"],
     deps = [
+        # Keep sorted.
         ":state_manager",
         "//rs/canonical_state",
         "//rs/canonical_state/certification_version",
+        "//rs/canonical_state/tree_hash",
+        "//rs/canonical_state/tree_hash/test_utils",
         "//rs/criterion_time",
         "//rs/crypto/tree_hash",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
-        "//rs/test_utilities",
+        "//rs/test_utilities/state",
+        "//rs/test_utilities/time",
+        "//rs/test_utilities/types",
         "//rs/types/base_types",
         "//rs/types/error_types",
         "//rs/types/types",

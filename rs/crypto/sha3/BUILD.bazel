@@ -3,10 +3,12 @@ load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:sha3",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:hex",
 ]
 
@@ -38,6 +40,10 @@ rust_test_suite(
     srcs = glob(
         ["tests/*.rs"],
     ),
+    data = [
+        "test_resources/SHAKE256ShortMsg_subset.rsp",
+        "test_resources/SHAKE256VariableOut_subset.rsp",
+    ],
     proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
     deps = [":sha3"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

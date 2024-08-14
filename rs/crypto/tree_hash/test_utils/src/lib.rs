@@ -4,7 +4,7 @@ use ic_crypto_tree_hash::*;
 
 pub mod arbitrary;
 
-pub const MAX_HASH_TREE_DEPTH: usize = 128;
+pub const MAX_HASH_TREE_DEPTH: u8 = 128;
 
 const DOMAIN_HASHTREE_LEAF: &str = "ic-hashtree-leaf";
 const DOMAIN_HASHTREE_EMPTY_SUBTREE: &str = "ic-hashtree-empty";
@@ -98,7 +98,7 @@ fn check_leaves_and_empty_subtrees_are_known_impl(
             lhs_num_known + rhs_num_known
         }
         Witness::Node { label, sub_witness } => {
-            labels_on_path.push(label.clone().to_vec());
+            labels_on_path.push(label.clone().into_vec());
             let num_known = check_leaves_and_empty_subtrees_are_known_impl(
                 labeled_tree,
                 sub_witness.as_ref(),
@@ -279,7 +279,7 @@ fn labeled_tree_without_leaf_or_empty_subtree_impl(
             let tree_child_has_become_empty_subtree =
                 matches!(tree_child, LabeledTree::SubTree(children) if children.is_empty());
             if tree_child_has_become_empty_subtree {
-                assert_matches!(tree_children.remove(&path_children.keys()[0]), Some(LabeledTree::SubTree(children)) if children.is_empty());
+                assert_matches!(tree_children.remove(&path_children.keys()[0]), Some(LabeledTree::SubTree(ref children)) if children.is_empty());
             }
         }
         (LabeledTree::Leaf(_), LabeledTree::Leaf(_)) => {
@@ -365,9 +365,9 @@ fn partial_trees_to_leaves_and_empty_subtrees_impl<'a>(
     }
 }
 
-/// Merges a path (i.e., a one node wide [`LabeledTree`]  containing exactly one
-/// [`LabeledTree::Leaf`]) into the `agg` by appending the missing node/subtree
-/// from `path`.
+/// Merges a path (i.e., a one node wide [`LabeledTree`] ending with a
+/// [`LabeledTree::Leaf`] or empty [`LabeledTree::SubTree`]) into the `agg` by
+/// appending the missing node/subtree from `path`.
 ///
 /// Panics if the appended label from `path` is not larger than the largest
 /// label in the respective subtree.
@@ -377,15 +377,19 @@ pub fn merge_path_into_labeled_tree<T: core::fmt::Debug + std::cmp::PartialEq + 
 ) {
     match (agg, path) {
         (LabeledTree::SubTree(subtree_agg), LabeledTree::SubTree(subtree_path)) => {
+            if subtree_path.is_empty() {
+                // path with an empty subtree at the end
+                return;
+            }
             assert_eq!(
                 subtree_path.len(),
                 1,
-                "`path` should always contain only exactly one label/tree pair in each subtree"
+                "`path` should always contain only exactly one label/tree pair in each subtree but got {subtree_path:?}"
             );
             let (path_label, subpath) = subtree_path
                 .iter()
                 .next()
-                .expect("should containt exactly one child");
+                .expect("should contain exactly one child");
             // if the left subtree contains the label from the right subtree, go one level deeper,
             // otherwise append the right subtree to the left subtree
             if let Some(subagg) = subtree_agg.get_mut(path_label) {
@@ -454,4 +458,34 @@ pub fn compute_fork_digest(left_digest: &Digest, right_digest: &Digest) -> Diges
 
 pub fn empty_subtree_hash() -> Digest {
     Hasher::for_domain(DOMAIN_HASHTREE_EMPTY_SUBTREE).finalize()
+}
+
+/// This error indicates that the algorithm exceeded the recursion depth limit.
+#[derive(thiserror::Error, Debug, PartialEq)]
+#[error("The algorithm failed due to too deep recursion (depth={0})")]
+pub struct TooDeepRecursion(pub u8);
+
+/// Recomputes root hash of the full tree that this mixed tree was
+/// constructed from.
+pub fn mixed_hash_tree_digest_recursive(tree: &MixedHashTree) -> Result<Digest, TooDeepRecursion> {
+    fn digest_impl(t: &MixedHashTree, depth: u8) -> Result<Digest, TooDeepRecursion> {
+        if depth > MAX_HASH_TREE_DEPTH {
+            return Err(TooDeepRecursion(depth));
+        }
+        let result = match t {
+            MixedHashTree::Empty => empty_subtree_hash(),
+            MixedHashTree::Fork(lr) => compute_fork_digest(
+                &digest_impl(&lr.0, depth + 1)?,
+                &digest_impl(&lr.1, depth + 1)?,
+            ),
+            MixedHashTree::Labeled(label, subtree) => {
+                compute_node_digest(label, &digest_impl(subtree, depth + 1)?)
+            }
+            MixedHashTree::Leaf(buf) => compute_leaf_digest(&buf[..]),
+            MixedHashTree::Pruned(digest) => digest.clone(),
+        };
+        Ok(result)
+    }
+
+    digest_impl(tree, 1)
 }

@@ -42,7 +42,7 @@ message RegistryError {
     // The 'key' specified on the request was already present.
     KEY_ALREADY_PRESENT = 2;
     // The 'version' specified in a precondition for a mutation
-    // was not the lastest version.
+    // was not the latest version.
     VERSION_NOT_LATEST = 3;
     // The 'version' specified in a precondition for a mutation
     // is beyond the latest version in the registry.

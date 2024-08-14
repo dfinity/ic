@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 NNS_TOOLS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 source "$NNS_TOOLS_DIR/lib/include.sh"
@@ -47,5 +47,11 @@ current_branch_has_commit $NEXT || (
     echo "Current branch does not contain target version: $NEXT.  Aborting."
     exit 1
 )
+
+if [ "$CANISTER_NAME" == "cycles-minting" -a -z "$CANDID_ARGS" ]; then
+    echo "cycles-minting requires upgrade arguments. We recommend setting them to '()', i.e.:"
+    echo "$0 $CANISTER_NAME $NEXT '()'"
+    exit 1
+fi
 
 generate_nns_upgrade_proposal_text "$LAST" "$NEXT" "$CANISTER_NAME" "$CANDID_ARGS" "$OUTPUT_FILE"

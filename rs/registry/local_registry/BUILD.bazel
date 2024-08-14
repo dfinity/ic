@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/interfaces/registry",
     "//rs/protobuf",
     "//rs/registry/fake",
@@ -20,7 +21,7 @@ rust_library(
     name = "local_registry",
     srcs = glob(["src/**"]),
     crate_name = "ic_registry_local_registry",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
@@ -33,6 +34,7 @@ rust_test(
     ],
     crate = ":local_registry",
     deps = [
+        # Keep sorted.
         "//rs/registry/local_store/artifacts",
         "@crate_index//:tempfile",
     ],

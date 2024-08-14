@@ -1,8 +1,0 @@
-apiVersion: crd.projectcalico.org/v1
-kind: IPReservation
-metadata:
-  name: testnet-$NAME
-  namespace: $NAMESPACE
-spec:
-  reservedCIDRs:
-    - $CIDR_RESERVATION

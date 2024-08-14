@@ -200,7 +200,10 @@ pub async fn http_call<I: Serialize, O: DeserializeOwned>(
             },
         ],
         body: Some(payload.into_bytes()),
-        transform: Some(TransformContext::new(super::cleanup_response, vec![])),
+        transform: Some(TransformContext::from_name(
+            "cleanup_response".to_owned(),
+            vec![],
+        )),
     };
 
     // Details of the values used in the following lines can be found here:

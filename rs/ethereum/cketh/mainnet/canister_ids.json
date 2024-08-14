@@ -1,0 +1,17 @@
+{
+  "archive": {
+    "ic": "xob7s-iqaaa-aaaar-qacra-cai"
+  },
+  "index": {
+    "ic": "s3zol-vqaaa-aaaar-qacpa-cai"
+  },
+  "ledger": {
+    "ic": "ss2fx-dyaaa-aaaar-qacoq-cai"
+  },
+  "minter": {
+    "ic": "sv3dd-oaaaa-aaaar-qacoa-cai"
+  },
+  "orchestrator": {
+    "ic": "vxkom-oyaaa-aaaar-qafda-cai"
+  }
+}

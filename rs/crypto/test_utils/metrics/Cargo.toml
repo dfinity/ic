@@ -1,12 +1,12 @@
 [package]
 name = "ic-crypto-test-utils-metrics"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-crypto-internal-logmon = { path = "../../internal/logmon" }
 ic-metrics = { path = "../../../monitoring/metrics" }
 ic-test-utilities-metrics = { path = "../../../test_utilities/metrics" }
-prometheus = { version = "0.12.0", features = [ "process" ] }
-strum = "0.23.0"
-strum_macros = "0.23.0"

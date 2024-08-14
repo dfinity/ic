@@ -25,7 +25,20 @@ Success::
 
 end::catalog[] */
 
-use crate::{
+use ic_base_types::SubnetId;
+use ic_consensus_system_test_utils::subnet::assert_subnet_is_healthy;
+use ic_consensus_system_test_utils::{
+    rw_message::{
+        can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
+        store_message,
+    },
+    set_sandbox_env_vars,
+};
+use ic_recovery::{file_sync_helper, get_node_metrics, RecoveryArgs};
+use ic_registry_routing_table::CanisterIdRange;
+use ic_registry_subnet_type::SubnetType;
+use ic_subnet_splitting::subnet_splitting::{StepType, SubnetSplitting, SubnetSplittingArgs};
+use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
         driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
@@ -33,29 +46,16 @@ use crate::{
         test_env::TestEnv,
         test_env_api::{IcNodeSnapshot, SubnetSnapshot, *},
     },
-    orchestrator::utils::{
-        rw_message::{
-            can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
-            store_message,
-        },
-        subnet_recovery::*,
-    },
     util::*,
 };
+use ic_types::{CanisterId, Height, PrincipalId, ReplicaVersion};
 
 use candid::Principal;
-use ic_base_types::SubnetId;
-use ic_recovery::{file_sync_helper, get_node_metrics, RecoveryArgs};
-use ic_registry_routing_table::CanisterIdRange;
-use ic_registry_subnet_type::SubnetType;
-use ic_subnet_splitting::subnet_splitting::{StepType, SubnetSplitting, SubnetSplittingArgs};
-use ic_types::{CanisterId, Height, PrincipalId, ReplicaVersion};
 use slog::{info, Logger};
-
 use std::{thread, time::Duration};
 
 const DKG_INTERVAL: u64 = 9;
-const APP_NODES: i32 = 1;
+const APP_NODES: usize = 1;
 
 const MESSAGE_IN_THE_CANISTER_TO_BE_MIGRATED: &str =
     "Message in the canister to be migrated from source subnet to the destination subnet";
@@ -75,13 +75,14 @@ pub fn setup(env: TestEnv) {
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .add_nodes(APP_NODES.try_into().unwrap()),
+                .add_nodes(APP_NODES),
         )
         // Destination Subnet
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
-                .add_nodes(APP_NODES.try_into().unwrap()),
+                .halted()
+                .add_nodes(APP_NODES),
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
@@ -95,11 +96,16 @@ pub fn subnet_splitting_test(env: TestEnv) {
     //
     let logger = env.logger();
 
-    let master_version = env
+    let initial_replica_version = env
         .get_initial_replica_version()
         .expect("Failed to get master version");
 
     let (source_subnet, destination_subnet) = get_subnets(&env);
+
+    assert!(
+        destination_subnet.raw_subnet_record().is_halted,
+        "The destination subnet should be halted from the beginning!"
+    );
 
     let (
         download_node_source,
@@ -110,7 +116,7 @@ pub fn subnet_splitting_test(env: TestEnv) {
 
     let upload_node_destination = prepare_destination_subnet(&destination_subnet, &logger);
 
-    let recovery_dir = env.get_dependency_path("rs/tests");
+    let recovery_dir = get_dependency_path("rs/tests");
     set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
 
     //
@@ -124,12 +130,13 @@ pub fn subnet_splitting_test(env: TestEnv) {
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: get_nns_node(&env.topology_snapshot()).get_public_url(),
-        replica_version: Some(master_version.clone()),
+        replica_version: Some(initial_replica_version.clone()),
         key_file: Some(
             env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
                 .join(SSH_USERNAME),
         ),
         test_mode: true,
+        skip_prompts: true,
     };
 
     let subnet_splitting_args = SubnetSplittingArgs {
@@ -158,15 +165,6 @@ pub fn subnet_splitting_test(env: TestEnv) {
         recovery_args,
         /*neuron_args=*/ None,
         subnet_splitting_args,
-        /*interactive=*/ false,
-    );
-
-    // TODO(kpop): figure out how to create a halted subnet in a system test.
-    halt_subnet(
-        &upload_node_destination,
-        destination_subnet.subnet_id,
-        subnet_splitting.get_recovery_api(),
-        &env.logger(),
     );
 
     for (step_type, step) in subnet_splitting {
@@ -178,6 +176,12 @@ pub fn subnet_splitting_test(env: TestEnv) {
 
         if step_type == StepType::HaltSourceSubnetAtCupHeight {
             wait_until_halted_at_cup_height(&source_subnet, &logger);
+            info!(
+                logger,
+                "Wait 15 seconds to make sure that \
+                the Orchestrator on the `download_node_source` creates a new CUP"
+            );
+            std::thread::sleep(Duration::from_secs(15));
         }
     }
 
@@ -191,14 +195,14 @@ pub fn subnet_splitting_test(env: TestEnv) {
     verify_source_subnet(
         &topology_snapshot,
         source_subnet.subnet_id,
-        &master_version,
+        &initial_replica_version,
         canister_id_to_stay_in_source_subnet,
         &logger,
     );
     verify_destination_subnet(
         &topology_snapshot,
         destination_subnet.subnet_id,
-        &master_version,
+        &initial_replica_version,
         canister_id_to_be_migrated,
         &logger,
     );
@@ -230,6 +234,7 @@ fn prepare_source_subnet(
         &download_node.get_public_url(),
         download_node.effective_canister_id(),
         MESSAGE_IN_THE_CANISTER_TO_STAY_IN_SOURCE_SUBNET,
+        logger,
     );
     assert!(can_read_msg(
         logger,
@@ -242,6 +247,7 @@ fn prepare_source_subnet(
         &download_node.get_public_url(),
         download_node.get_last_canister_id_in_allocation_ranges(),
         MESSAGE_IN_THE_CANISTER_TO_BE_MIGRATED,
+        logger,
     );
     assert!(can_read_msg(
         logger,
@@ -397,7 +403,7 @@ fn get_subnets(env: &TestEnv) -> (SubnetSnapshot, SubnetSnapshot) {
         .filter(|subnet| subnet.subnet_type() == SubnetType::Application)
         .collect::<Vec<_>>();
 
-    let source_subnet = app_subnets.get(0).expect("there is no application subnet");
+    let source_subnet = app_subnets.first().expect("there is no application subnet");
     let destination_subnet = app_subnets.get(1).expect("there is no application subnet");
 
     (source_subnet.clone(), destination_subnet.clone())

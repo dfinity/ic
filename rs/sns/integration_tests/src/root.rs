@@ -1,13 +1,17 @@
 use candid::{Decode, Encode};
-use dfn_candid::candid;
+use canister_test::Project;
+use dfn_candid::{candid, candid_one};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
+use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},
 };
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
-use ic_nns_test_utils::state_test_helpers::{get_controllers, set_controllers};
+use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_test_utils::state_test_helpers::{get_controllers, set_controllers, update_with_sender};
 use ic_sns_root::{
     pb::v1::SnsRootCanister, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
 };
@@ -16,12 +20,14 @@ use ic_sns_test_utils::{
         local_test_on_sns_subnet, set_up_root_canister, SnsCanisters, SnsTestsInitPayloadBuilder,
     },
     state_test_helpers::{
-        sns_root_register_dapp_canister, sns_root_register_dapp_canisters, Scenario,
+        sns_root_register_dapp_canister, sns_root_register_dapp_canisters,
+        state_machine_builder_for_sns_tests, Scenario,
     },
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;
-use std::collections::BTreeSet;
+use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
+use std::{collections::BTreeSet, time::Duration};
 
 #[test]
 fn test_get_status() {
@@ -113,7 +119,7 @@ fn test_get_sns_canisters_summary() {
 
 #[test]
 fn test_register_dapp_canister() {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_sns_tests().build();
 
     let scenario = Scenario::new(&state_machine, Tokens::from_tokens(100).unwrap());
     scenario.init_all_canisters(&state_machine);
@@ -154,7 +160,7 @@ fn test_register_dapp_canister() {
 
 #[test]
 fn test_register_dapp_canisters() {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_sns_tests().build();
 
     let scenario = Scenario::new(&state_machine, Tokens::from_tokens(100).unwrap());
     scenario.init_all_canisters(&state_machine);
@@ -192,7 +198,7 @@ fn test_register_dapp_canisters() {
 
 #[test]
 fn test_register_dapp_canisters_removes_other_controllers() {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_sns_tests().build();
 
     let scenario = Scenario::new(&state_machine, Tokens::from_tokens(100).unwrap());
     scenario.init_all_canisters(&state_machine);
@@ -247,6 +253,98 @@ fn test_register_dapp_canisters_removes_other_controllers() {
         );
         assert_eq!(controllers, vec![scenario.root_canister_id.into()]);
     }
+}
+
+#[test]
+fn test_root_restarts_governance_on_stop_canister_timeout() {
+    let state_machine = state_machine_builder_for_sns_tests().build();
+
+    let scenario = Scenario::new(&state_machine, Tokens::from_tokens(100).unwrap());
+    scenario.init_all_canisters(&state_machine);
+
+    let get_gov_status = || {
+        let response =
+            root_get_sns_canisters_summary(&scenario, &state_machine, scenario.root_canister_id);
+
+        response.governance.unwrap().status.unwrap().status
+    };
+
+    let get_gov_hash = || {
+        let response =
+            root_get_sns_canisters_summary(&scenario, &state_machine, scenario.root_canister_id);
+        response
+            .governance
+            .unwrap()
+            .status
+            .unwrap()
+            .module_hash
+            .unwrap()
+    };
+
+    // Uninstall and reinstall so we get our killer feature from the unstoppable canister
+    let _: () = update_with_sender(
+        &state_machine,
+        CanisterId::ic_00(),
+        "uninstall_code",
+        candid_one,
+        CanisterIdRecord::from(scenario.governance_canister_id),
+        scenario.root_canister_id.get(),
+    )
+    .unwrap();
+
+    state_machine
+        .install_wasm_in_mode(
+            scenario.governance_canister_id,
+            CanisterInstallMode::Install,
+            Project::cargo_bin_maybe_from_env("unstoppable-canister", &[]).bytes(),
+            vec![],
+        )
+        .unwrap();
+
+    let installed_gov_hash = get_gov_hash();
+
+    state_machine.advance_time(Duration::from_secs(1));
+    state_machine.tick();
+
+    assert_eq!(get_gov_status(), CanisterStatusType::Running);
+
+    let wasm_module = UNIVERSAL_CANISTER_WASM.to_vec();
+
+    let proposal = ChangeCanisterRequest {
+        stop_before_installing: true,
+        mode: CanisterInstallMode::Upgrade,
+        canister_id: GOVERNANCE_CANISTER_ID,
+        wasm_module,
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+    };
+
+    let _: () = update_with_sender(
+        &state_machine,
+        scenario.root_canister_id,
+        "change_canister",
+        candid_one,
+        proposal,
+        scenario.governance_canister_id.get(),
+    )
+    .expect("Didn't work");
+
+    state_machine.tick();
+
+    // After 60 seconds, canister is still trying to stop...
+    state_machine.advance_time(Duration::from_secs(60));
+    state_machine.tick();
+
+    assert_eq!(get_gov_status(), CanisterStatusType::Stopping);
+
+    state_machine.advance_time(Duration::from_secs(241));
+    state_machine.tick();
+    state_machine.tick();
+
+    assert_eq!(get_gov_status(), CanisterStatusType::Running);
+    // We assert no upgrade happened.
+    assert_eq!(get_gov_hash(), installed_gov_hash)
 }
 
 fn root_get_sns_canisters_summary(

@@ -1,0 +1,11 @@
+[Unit]
+Description=Setup Canary Proxy
+DefaultDependencies=no
+After=bootstrap-ic-node.service
+Requires=bootstrap-ic-node.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecCondition=/opt/ic/bin/setup-canary-proxy.sh
+ExecStart=/usr/bin/true

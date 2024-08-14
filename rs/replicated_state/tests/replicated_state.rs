@@ -1,31 +1,36 @@
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_btc_interface::Network;
-use ic_btc_types_internal::{
-    BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
-    GetSuccessorsResponseComplete,
+use ic_btc_replica_types::{
+    BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, BitcoinReject,
+    GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, SendTransactionRequest,
 };
-use ic_ic00_types::{
+use ic_error_types::RejectCode;
+use ic_management_canister_types::{
     BitcoinGetSuccessorsResponse, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
     Payload as _,
 };
-use ic_interfaces::messages::CanisterMessage;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::BitcoinSendTransactionInternalContext;
 use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
     canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
     metadata_state::subnet_call_context_manager::{BitcoinGetSuccessorsContext, SubnetCallContext},
     replicated_state::{MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting},
-    CanisterState, IngressHistoryState, ReplicatedState, SchedulerState, StateError, SystemState,
+    CanisterState, IngressHistoryState, NextInputQueue, ReplicatedState, SchedulerState,
+    StateError, SystemState,
 };
-use ic_test_utilities::mock_time;
-use ic_test_utilities::state::{arb_replicated_state_with_queues, ExecutionStateBuilder};
-use ic_test_utilities::types::ids::{canister_test_id, message_test_id, user_test_id, SUBNET_1};
-use ic_test_utilities::types::messages::{RequestBuilder, ResponseBuilder};
+use ic_test_utilities_state::{arb_replicated_state_with_queues, ExecutionStateBuilder};
+use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id, SUBNET_1};
+use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types::messages::RejectContext;
 use ic_types::{
-    messages::{Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES},
+    messages::{
+        CanisterMessage, Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
+    },
+    time::UNIX_EPOCH,
     CountBytes, Cycles, MemoryAllocation, Time,
 };
 use maplit::btreemap;
@@ -33,6 +38,7 @@ use proptest::prelude::*;
 use std::collections::{BTreeMap, VecDeque};
 use std::mem::size_of;
 use std::sync::Arc;
+use strum::IntoEnumIterator;
 
 const SUBNET_ID: SubnetId = SubnetId::new(PrincipalId::new(29, [0xfc; 29]));
 const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
@@ -91,7 +97,7 @@ impl ReplicatedStateFixture {
         let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
         for canister_id in canister_ids {
             let scheduler_state = SchedulerState::default();
-            let system_state = SystemState::new_running(
+            let system_state = SystemState::new_running_for_testing(
                 *canister_id,
                 user_test_id(24).get(),
                 Cycles::new(1 << 36),
@@ -154,6 +160,10 @@ impl ReplicatedStateFixture {
         self.state.memory_taken()
     }
 
+    fn guaranteed_response_message_memory_taken(&self) -> NumBytes {
+        self.state.guaranteed_response_message_memory_taken()
+    }
+
     fn remote_subnet_input_schedule(&self, canister: &CanisterId) -> &VecDeque<CanisterId> {
         self.state
             .canister_state(canister)
@@ -183,7 +193,11 @@ fn assert_execution_memory_taken(total_memory_usage: usize, fixture: &Replicated
 fn assert_message_memory_taken(queues_memory_usage: usize, fixture: &ReplicatedStateFixture) {
     assert_eq!(
         queues_memory_usage as u64,
-        fixture.memory_taken().messages().get()
+        fixture.memory_taken().guaranteed_response_messages().get()
+    );
+    assert_eq!(
+        queues_memory_usage as u64,
+        fixture.guaranteed_response_message_memory_taken().get()
     );
 }
 
@@ -516,7 +530,9 @@ fn push_input_queues_respects_local_remote_subnet() {
 
     // Push message from the local subnet, should be in the local subnet queue.
     fixture
-        .push_input(request_from(CanisterId::new(SUBNET_ID.get()).unwrap()))
+        .push_input(request_from(CanisterId::unchecked_from_principal(
+            SUBNET_ID.get(),
+        )))
         .unwrap();
     assert_eq!(fixture.local_subnet_input_schedule(&CANISTER_ID).len(), 2);
 }
@@ -551,7 +567,7 @@ fn insert_bitcoin_response() {
                 anchor: vec![],
                 processed_block_hashes: vec![],
             },
-            time: mock_time(),
+            time: UNIX_EPOCH,
         }),
     );
 
@@ -568,8 +584,75 @@ fn insert_bitcoin_response() {
         .unwrap();
 
     assert_eq!(
-        state.consensus_queue[0].response_payload,
+        state.consensus_queue[0].payload,
         Payload::Data(BitcoinGetSuccessorsResponse::Complete(response).encode())
+    );
+}
+
+#[test]
+fn insert_bitcoin_get_successor_reject_response() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+
+    state.metadata.subnet_call_context_manager.push_context(
+        SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
+            request: RequestBuilder::default().build(),
+            payload: GetSuccessorsRequestInitial {
+                network: Network::Regtest,
+                anchor: vec![],
+                processed_block_hashes: vec![],
+            },
+            time: UNIX_EPOCH,
+        }),
+    );
+
+    let error_message = "Request failed with error.".to_string();
+    let response = BitcoinReject {
+        message: error_message.clone(),
+        reject_code: RejectCode::SysTransient,
+    };
+
+    state
+        .push_response_bitcoin(BitcoinAdapterResponse {
+            response: BitcoinAdapterResponseWrapper::GetSuccessorsReject(response.clone()),
+            callback_id: 0,
+        })
+        .unwrap();
+    assert_eq!(
+        state.consensus_queue[0].payload,
+        Payload::Reject(RejectContext::new(RejectCode::SysTransient, error_message))
+    );
+}
+
+#[test]
+fn insert_bitcoin_send_transaction_reject_response() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+
+    state.metadata.subnet_call_context_manager.push_context(
+        SubnetCallContext::BitcoinSendTransactionInternal(BitcoinSendTransactionInternalContext {
+            request: RequestBuilder::default().build(),
+            payload: SendTransactionRequest {
+                network: Network::Regtest,
+                transaction: vec![],
+            },
+            time: UNIX_EPOCH,
+        }),
+    );
+
+    let error_message = "Request failed with error.".to_string();
+    let response = BitcoinReject {
+        message: error_message.clone(),
+        reject_code: RejectCode::SysTransient,
+    };
+
+    state
+        .push_response_bitcoin(BitcoinAdapterResponse {
+            response: BitcoinAdapterResponseWrapper::SendTransactionReject(response.clone()),
+            callback_id: 0,
+        })
+        .unwrap();
+    assert_eq!(
+        state.consensus_queue[0].payload,
+        Payload::Reject(RejectContext::new(RejectCode::SysTransient, error_message))
     );
 }
 
@@ -584,17 +667,14 @@ fn time_out_requests_updates_subnet_input_schedules_correctly() {
     let remote_canister_id = CanisterId::from_u64(123);
     for receiver in [CANISTER_ID, OTHER_CANISTER_ID, remote_canister_id] {
         fixture
-            .push_output_request(request_to(receiver), mock_time())
+            .push_output_request(request_to(receiver), UNIX_EPOCH)
             .unwrap();
     }
 
-    // Time out everything, then check subnet input schedules are as expected.
-    assert_eq!(
-        3,
-        fixture
-            .state
-            .time_out_requests(Time::from_nanos_since_unix_epoch(u64::MAX)),
-    );
+    // Time out everything, then check that subnet input schedules are as expected.
+    fixture.state.metadata.batch_time = Time::from_nanos_since_unix_epoch(u64::MAX);
+    assert_eq!(3, fixture.state.time_out_requests());
+
     assert_eq!(2, fixture.local_subnet_input_schedule(&CANISTER_ID).len());
     for canister_id in [CANISTER_ID, OTHER_CANISTER_ID] {
         assert!(fixture
@@ -609,7 +689,7 @@ fn time_out_requests_updates_subnet_input_schedules_correctly() {
 
 #[test]
 fn split() {
-    // We will be splitting subnet A into A' and B. C is a third-party subnet.
+    // We will be splitting subnet A into A' and B.
     const SUBNET_A: SubnetId = SUBNET_ID;
     const SUBNET_B: SubnetId = SUBNET_1;
 
@@ -645,10 +725,10 @@ fn split() {
                     IngressStatus::Known {
                         receiver: canister.get(),
                         user_id: user_test_id(i as u64),
-                        time: mock_time(),
+                        time: UNIX_EPOCH,
                         state: IngressState::Received,
                     },
-                    mock_time(),
+                    UNIX_EPOCH,
                     NumBytes::from(u64::MAX),
                 );
             }
@@ -692,7 +772,7 @@ fn split() {
     //
     // Split off subnet A', phase 1.
     //
-    let state_a_phase_1 = fixture
+    let mut state_a = fixture
         .state
         .clone()
         .split(SUBNET_A, &routing_table, None)
@@ -704,13 +784,13 @@ fn split() {
     expected.canister_states.remove(&CANISTER_2);
     // And the split marker should be set.
     expected.metadata.split_from = Some(SUBNET_A);
-    // Otherwise, the state shold be the same.
-    assert_eq!(expected, state_a_phase_1);
+    // Otherwise, the state should be the same.
+    assert_eq!(expected, state_a);
 
     //
     // Subnet A', phase 2.
     //
-    let state_a_phase_2 = state_a_phase_1.after_split();
+    state_a.after_split();
 
     // Ingress history should only contain the message to `CANISTER_1`.
     expected.metadata.ingress_history = make_ingress_history(&[CANISTER_1]);
@@ -722,13 +802,13 @@ fn split() {
     expected.canister_states.insert(CANISTER_1, canister_state);
     // And the split marker should be reset.
     expected.metadata.split_from = None;
-    // Everything else shold be the same as in phase 1.
-    assert_eq!(expected, state_a_phase_2);
+    // Everything else should be the same as in phase 1.
+    assert_eq!(expected, state_a);
 
     //
     // Split off subnet B, phase 1.
     //
-    let state_b_phase_1 = fixture
+    let mut state_b = fixture
         .state
         .clone()
         .split(SUBNET_B, &routing_table, None)
@@ -745,13 +825,13 @@ fn split() {
     expected.metadata.ingress_history = fixture.state.metadata.ingress_history;
     // And the split marker should be set.
     expected.metadata.split_from = Some(SUBNET_A);
-    // Otherwise, the state shold be the same.
-    assert_eq!(expected, state_b_phase_1);
+    // Otherwise, the state should be the same.
+    assert_eq!(expected, state_b);
 
     //
     // Subnet B, phase 2.
     //
-    let state_b_phase_2 = state_b_phase_1.after_split();
+    state_b.after_split();
 
     // Ingress history should only contain the message to `CANISTER_2`.
     expected.metadata.ingress_history = make_ingress_history(&[CANISTER_2]);
@@ -763,8 +843,32 @@ fn split() {
     expected.canister_states.insert(CANISTER_2, canister_state);
     // And the split marker should be reset.
     expected.metadata.split_from = None;
-    // Everything else shold be the same as in phase 1.
-    assert_eq!(expected, state_b_phase_2);
+    // Everything else should be the same as in phase 1.
+    assert_eq!(expected, state_b);
+}
+
+#[test]
+fn next_input_queue_round_trip() {
+    use ic_protobuf::state::queues::v1::canister_queues as pb;
+
+    for initial in NextInputQueue::iter() {
+        let encoded = pb::NextInputQueue::from(&initial);
+        let round_trip = NextInputQueue::from(encoded);
+
+        assert_eq!(initial, round_trip);
+    }
+}
+
+#[test]
+fn compatibility_for_next_input_queue() {
+    // If this fails, you are making a potentially incompatible change to `NextInputQueue`.
+    // See note [Handling changes to Enums in Replicated State] for how to proceed.
+    assert_eq!(
+        NextInputQueue::iter()
+            .map(|x| x as i32)
+            .collect::<Vec<i32>>(),
+        [0, 1, 2]
+    );
 }
 
 proptest! {
@@ -775,9 +879,9 @@ proptest! {
         let mut output_iter = replicated_state.output_into_iter();
 
         let mut num_requests = 0;
-        while let Some((queue_id, msg)) = output_iter.peek() {
+        while let Some(msg) = output_iter.peek() {
             num_requests += 1;
-            assert_eq!(Some((queue_id, msg.clone())), output_iter.next());
+            assert_eq!(Some(msg.clone()), output_iter.next());
         }
 
         drop(output_iter);
@@ -801,13 +905,13 @@ proptest! {
         let mut i = start;
         let mut excluded = 0;
         let mut consumed = 0;
-        while let Some((queue_id, msg)) = output_iter.peek() {
+        while let Some(msg) = output_iter.peek() {
             i += 1;
             if i % exclude_step == 0 {
                 output_iter.exclude_queue();
                 excluded += 1;
             } else {
-                assert_eq!(Some((queue_id, msg.clone())), output_iter.next());
+                assert_eq!(Some(msg.clone()), output_iter.next());
                 consumed += 1;
             }
         }
@@ -823,7 +927,7 @@ proptest! {
     ) {
         let mut output_iter = replicated_state.output_into_iter();
 
-        for (_, msg) in &mut output_iter {
+        for msg in &mut output_iter {
             let mut requests = raw_requests.pop_front().unwrap();
             while requests.is_empty() {
                 requests = raw_requests.pop_front().unwrap();
@@ -857,7 +961,7 @@ proptest! {
             let mut output_iter = replicated_state.output_into_iter();
 
             let mut i = start;
-            while let Some((_, msg)) = output_iter.peek() {
+            while let Some(msg) = output_iter.peek() {
 
                 let mut requests = raw_requests.pop_front().unwrap();
                 while requests.is_empty() {
@@ -878,7 +982,7 @@ proptest! {
                     continue;
                 }
 
-                let (_, msg) = output_iter.next().unwrap();
+                let msg = output_iter.next().unwrap();
                 if let Some(raw_msg) = requests.pop_front() {
                     consumed += 1;
                     assert_eq!(msg, raw_msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw_msg);

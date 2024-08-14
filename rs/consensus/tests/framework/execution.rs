@@ -1,17 +1,15 @@
 use super::types::*;
-use ic_interfaces::{
-    artifact_pool::{MutablePool, UnvalidatedArtifact},
-    time_source::TimeSource,
-};
+use ic_consensus::consensus::bounds::validated_pool_within_bounds;
+use ic_consensus_utils::pool_reader::PoolReader;
+use ic_interfaces::p2p::consensus::{MutablePool, Priority, UnvalidatedArtifact};
 use ic_logger::{trace, ReplicaLogger};
-use ic_test_utilities::types::ids::node_test_id;
-use ic_types::{artifact::Priority, time::Time};
+use ic_test_utilities_types::ids::node_test_id;
+use ic_types::time::Time;
 use rand::seq::SliceRandom;
 use std::time::Duration;
 
 fn execute_instance(
     instance: &ConsensusInstance,
-    time_source: &dyn TimeSource,
     use_priority_fn: bool,
     logger: &ReplicaLogger,
 ) -> Option<Time> {
@@ -42,14 +40,14 @@ fn execute_instance(
                             .get_priority(&msg)
                         {
                             Priority::Drop => return Some(timestamp),
-                            Priority::Stash | Priority::Later => {
+                            Priority::Stash => {
                                 instance
                                     .buffered
                                     .borrow_mut()
                                     .push(InputMessage::Consensus(msg));
                                 return Some(timestamp);
                             }
-                            Priority::Fetch | Priority::FetchNow => (),
+                            Priority::FetchNow => (),
                         };
                     }
                     let mut pool = instance.driver.consensus_pool.write().unwrap();
@@ -70,6 +68,14 @@ fn execute_instance(
                 InputMessage::Certification(msg) => {
                     let mut pool = instance.driver.certification_pool.write().unwrap();
                     pool.insert(UnvalidatedArtifact {
+                        message: msg,
+                        peer_id: node_test_id(0),
+                        timestamp,
+                    });
+                }
+                InputMessage::IDkg(msg) => {
+                    let mut idkg_pool = instance.driver.idkg_pool.write().unwrap();
+                    idkg_pool.insert(UnvalidatedArtifact {
                         message: msg,
                         peer_id: node_test_id(0),
                         timestamp,
@@ -98,9 +104,30 @@ fn execute_instance(
             }
         }
         // Move new messages into out_queue.
-        for message in instance.driver.step(time_source) {
+        for message in instance.driver.step() {
             out_queue.push(Message { message, timestamp })
         }
+
+        // Assert that instance has not crossed their validated pool bounds.
+        let pool = instance.deps.consensus_pool.read().unwrap();
+        let pool_reader = PoolReader::new(&*pool);
+        let cfg = &instance.deps.replica_config;
+        let registry_client = instance.deps.registry_client.as_ref();
+        if let Some(excess) = validated_pool_within_bounds(&pool_reader, registry_client, cfg) {
+            // There are multiple reasons for why this could panic:
+            // - You introduced or triggered a regression/bug in the purging logic.
+            // - The consensus bounds are outdated, and don't match the implementation.
+            //   In this case, consider updating the formulas.
+            // - A malicious behavior deviates from the honest replicas, by keeping
+            //   too many artifacts in its pool. If this is intentional, consider
+            //   excluding malicious nodes from this check.
+            panic!(
+                "violated consensus pool bounds! too many artifacts in validated pool. \
+                    Excess counts:\n--\nExpected:  {:?}\n--\nFound:     {:?}\n--\n",
+                excess.expected, excess.found,
+            );
+        }
+
         Some(timestamp)
     } else {
         None
@@ -132,9 +159,7 @@ impl ExecutionStrategy for GlobalMessage {
                 let t_j = j.in_queue.borrow().peek().map(|x| x.timestamp());
                 compare_timestamp(t_i, t_j)
             })
-            .and_then(|instance| {
-                execute_instance(instance, runner.time_source(), self.use_priority_fn, logger)
-            })
+            .and_then(|instance| execute_instance(instance, self.use_priority_fn, logger))
     }
 }
 
@@ -156,8 +181,7 @@ impl ExecutionStrategy for RandomExecute {
         let mut rng = runner.rng();
         instances.shuffle(&mut *rng);
         while let Some(instance) = instances.pop() {
-            let result =
-                execute_instance(instance, runner.time_source(), self.use_priority_fn, logger);
+            let result = execute_instance(instance, self.use_priority_fn, logger);
             if result.is_some() {
                 return result;
             }
@@ -188,8 +212,6 @@ impl ExecutionStrategy for GlobalClock {
                 let t_j = j.in_queue.borrow().peek().map(|_| *j.clock.borrow());
                 compare_timestamp(t_i, t_j)
             })
-            .and_then(|instance| {
-                execute_instance(instance, runner.time_source(), self.use_priority_fn, logger)
-            })
+            .and_then(|instance| execute_instance(instance, self.use_priority_fn, logger))
     }
 }

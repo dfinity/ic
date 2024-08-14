@@ -26,6 +26,7 @@ use ic_crypto_node_key_validation::{
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
 use ic_types::crypto::AlgorithmId;
+use ic_types::Time;
 use rand::{CryptoRng, Rng};
 
 #[cfg(test)]
@@ -75,7 +76,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: 
         };
         // Release both locks on SKS and PKS
         // before doing expensive computation (validation of public keys)
-        required_public_keys.validate()
+        required_public_keys.validate(self.time_source.get_relative_time())
     }
 }
 
@@ -370,7 +371,7 @@ impl RequiredNodePublicKeys {
         })
     }
 
-    fn validate(self) -> Result<ValidNodePublicKeys, ValidatePksAndSksError> {
+    fn validate(self, current_time: Time) -> Result<ValidNodePublicKeys, ValidatePksAndSksError> {
         let node_signing_public_key =
             ValidNodeSigningPublicKey::try_from(self.node_signing_public_key).map_err(|e| {
                 ValidatePksAndSksError::NodeSigningKeyError(PublicKeyInvalid(e.error))
@@ -380,8 +381,10 @@ impl RequiredNodePublicKeys {
             self.committee_signing_public_key,
         )
         .map_err(|e| ValidatePksAndSksError::CommitteeSigningKeyError(PublicKeyInvalid(e.error)))?;
-        let tls_certificate = ValidTlsCertificate::try_from((self.tls_certificate, *node_id))
-            .map_err(|e| ValidatePksAndSksError::TlsCertificateError(PublicKeyInvalid(e.error)))?;
+        let tls_certificate =
+            ValidTlsCertificate::try_from((self.tls_certificate, *node_id, current_time)).map_err(
+                |e| ValidatePksAndSksError::TlsCertificateError(PublicKeyInvalid(e.error)),
+            )?;
         let dkg_dealing_encryption_public_key = ValidDkgDealingEncryptionPublicKey::try_from((
             self.dkg_dealing_encryption_public_key,
             *node_id,

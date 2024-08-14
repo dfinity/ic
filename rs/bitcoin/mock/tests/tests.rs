@@ -5,15 +5,16 @@ use hex::FromHex;
 use ic_bitcoin_canister_mock::PushUtxoToAddress;
 use ic_btc_interface::{
     GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse, MillisatoshiPerByte,
-    Network, NetworkInRequest, OutPoint, SendTransactionRequest, Utxo,
+    Network, NetworkInRequest, OutPoint, Txid, Utxo,
 };
+use ic_cdk::api::management_canister::bitcoin::{BitcoinNetwork, SendTransactionRequest};
 use ic_state_machine_tests::{CanisterId, Cycles, PrincipalId, StateMachine, StateMachineBuilder};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use rand::{thread_rng, Rng};
 use std::str::FromStr;
 
-fn generate_tx_id() -> Vec<u8> {
+fn generate_tx_id() -> Txid {
     let mut rng = thread_rng();
     let mut bytes = [1u8; 32];
     rng.fill(&mut bytes);
@@ -100,7 +101,7 @@ fn test_install_bitcoin_mock_canister() {
         "bitcoin_send_transaction",
         Encode!(&SendTransactionRequest {
             transaction: Vec::from_hex(tx).unwrap(),
-            network: NetworkInRequest::Regtest,
+            network: BitcoinNetwork::Regtest,
         })
         .unwrap(),
     )

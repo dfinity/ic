@@ -43,4 +43,5 @@ service : (network: NetworkInRequest) -> {
   remove_utxo : (Utxo) -> ();
   reset_mempool : () -> ();
   set_fee_percentiles : (vec nat64) -> ();
+  set_tip_height : (nat32) -> ();
 }

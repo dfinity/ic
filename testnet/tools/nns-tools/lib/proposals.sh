@@ -102,8 +102,8 @@ $([ ! -z "$CANDID_ARGS" ] && echo "## Candid Post Upgrade Args
 $CANDID_ARGS
 \`\`\`
 ### Validating Candid Args
-Verify that the hash of the args matches proposal contents.
-\`didc encode '$CANDID_ARGS' | xxd -r -p | sha256sum\`
+Verify that the encoded version of the plaintext args matches the \`arg_hex\` field in the proposal.
+\`didc encode '$CANDID_ARGS'\`
 ")
 ## Wasm Verification
 Verify that the hash of the gzipped WASM matches the proposed hash.
@@ -180,13 +180,30 @@ EOF
 
 }
 
-generate_insert_custom_upgrade_paths_proposal_text() {
-    local SNS_GOVERNANCE_CANISTER_ID=$1
-    shift
+generate_versions_from_initial_and_diffs() {
     VERSIONS=()
     for ((c = 1; c <= $#; c++)); do
         VERSIONS+=("${!c}")
     done
+
+    LAST_VERSION=""
+    for VERSION in "${VERSIONS[@]}"; do
+        if [ "$LAST_VERSION" != "" ]; then
+            # Combine the upgrades to emulate the way this will work
+            VERSION=$(echo "[$LAST_VERSION, $VERSION]" | jq -cS '.[0] * .[1]')
+        else
+
+            VERSION=$(echo $VERSION | jq -cS .)
+        fi
+        echo $VERSION | jq -c .
+        LAST_VERSION=$VERSION
+    done
+}
+
+generate_insert_custom_upgrade_paths_proposal_text() {
+    local SNS_GOVERNANCE_CANISTER_ID=$1
+    shift
+    VERSIONS=$(generate_versions_from_initial_and_diffs "${@}")
 
     DESCRIPTION=$([ "$SNS_GOVERNANCE_CANISTER_ID" == "" ] \
         && echo "All SNS upgrade paths (without their own overrides) will be affected by this proposal." \
@@ -199,11 +216,11 @@ generate_insert_custom_upgrade_paths_proposal_text() {
     LAST_VERSION=""
     OUTPUT=$(
         cat <<EOF
-## Proposal to TODO
+## Proposal to Insert Custom Upgrade Path to SNS-W
 ### Proposer: DFINITY Foundation
-### Target SNS Governance Canister: $DISPLAY_GOVERNANCE_ID
+### Target SNS Governance Canister(s): $DISPLAY_GOVERNANCE_ID
 ---
-This proposal will change the upgrade path to use different WASMs, but WASMs that are already available on SNS-W.
+This proposal will change the upgrade path to use different WASMs that are already available on SNS-W.
 
 $DESCRIPTION
 
@@ -233,17 +250,9 @@ EO2
         )
 ## Upgrade Path Changes
 
-$(for VERSION in "${VERSIONS[@]}"; do
-            if [ "$LAST_VERSION" != "" ]; then
-                # Combine the upgrades to emulate the way this will work
-                VERSION=$(echo "[$LAST_VERSION, $VERSION]" | jq -cS '.[0] * .[1]')
-            else
-
-                VERSION=$(echo $VERSION | jq -cS .)
-            fi
+$(for VERSION in ${VERSIONS}; do
             echo $VERSION | jq .
             echo
-            LAST_VERSION=$VERSION
         done)
 
 EOF
@@ -327,7 +336,7 @@ encode_candid_args_in_file() {
     echo "$ENCODED_ARGS_FILE"
 }
 
-# Return the candid args when none are passsed.
+# Return the candid args when none are passed.
 # Usually returns empty string to say "no args passed", but
 # In cases where upgrade args are needed, even as a "None", a value must
 # be encoded

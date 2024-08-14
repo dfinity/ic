@@ -6,10 +6,10 @@ rust_library(
     name = "wasm_types",
     srcs = glob(["src/**"]),
     crate_name = "ic_wasm_types",
-    version = "0.8.0",
+    version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/crypto/sha2",
-        "//rs/protobuf",
         "//rs/sys",
         "//rs/types/types",
         "//rs/utils",

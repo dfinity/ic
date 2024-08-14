@@ -8,7 +8,9 @@ use crate::crypto::{AlgorithmId, BasicSig, BasicSigOf};
 use crate::signature::{BasicSignature, BasicSignatureBatch};
 use crate::{Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use assert_matches::assert_matches;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use maplit::{btreemap, btreeset};
+use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
 
 type Itt = IDkgTranscriptType;
@@ -17,14 +19,16 @@ type Iuto = IDkgUnmaskedTranscriptOrigin;
 
 #[test]
 fn should_succeed_on_correct_transcript() {
-    let (transcript, params) = valid_transcript_and_params();
+    let rng = &mut reproducible_rng();
+    let (transcript, params) = valid_transcript_and_params(rng);
 
     assert!(transcript.verify_consistency_with_params(&params).is_ok());
 }
 
 #[test]
 fn should_fail_on_mismatching_transcript_ids() {
-    let (mut transcript, params) = valid_transcript_and_params();
+    let rng = &mut reproducible_rng();
+    let (mut transcript, params) = valid_transcript_and_params(rng);
 
     transcript.transcript_id = transcript.transcript_id.increment();
     assert_ne!(transcript.transcript_id, params.transcript_id());
@@ -36,7 +40,8 @@ fn should_fail_on_mismatching_transcript_ids() {
 
 #[test]
 fn should_fail_on_mismatching_receivers() {
-    let (mut transcript, params) = valid_transcript_and_params();
+    let rng = &mut reproducible_rng();
+    let (mut transcript, params) = valid_transcript_and_params(rng);
     transcript.receivers = {
         let mut receivers = transcript.receivers.get().clone();
         receivers.insert(node_id(99999));
@@ -51,7 +56,8 @@ fn should_fail_on_mismatching_receivers() {
 
 #[test]
 fn should_fail_on_mismatching_registry_versions() {
-    let (mut transcript, params) = valid_transcript_and_params();
+    let rng = &mut reproducible_rng();
+    let (mut transcript, params) = valid_transcript_and_params(rng);
     transcript.registry_version = RegistryVersion::from(transcript.registry_version.get() + 1);
     assert_ne!(transcript.registry_version, params.registry_version());
 
@@ -62,7 +68,8 @@ fn should_fail_on_mismatching_registry_versions() {
 
 #[test]
 fn should_fail_on_mismatching_algorithm_ids() {
-    let (mut transcript, params) = valid_transcript_and_params();
+    let rng = &mut reproducible_rng();
+    let (mut transcript, params) = valid_transcript_and_params(rng);
     transcript.algorithm_id = AlgorithmId::RsaSha256;
     assert_ne!(transcript.algorithm_id, params.algorithm_id());
 
@@ -73,7 +80,8 @@ fn should_fail_on_mismatching_algorithm_ids() {
 
 #[test]
 fn should_fail_on_mismatching_transcript_types_for_operation_type_random() {
-    let (mut transcript, mut params) = valid_transcript_and_params();
+    let rng = &mut reproducible_rng();
+    let (mut transcript, mut params) = valid_transcript_and_params(rng);
     params.operation_type = IDkgTranscriptOperation::Random;
 
     transcript.transcript_type = Itt::Unmasked(Iuto::ReshareMasked(dummy_transcript_id()));
@@ -94,7 +102,8 @@ fn should_fail_on_mismatching_transcript_types_for_operation_type_random() {
 
 #[test]
 fn should_fail_on_mismatching_transcript_types_for_operation_type_reshare_of_masked() {
-    let (mut transcript, mut params) = valid_transcript_and_params();
+    let rng = &mut reproducible_rng();
+    let (mut transcript, mut params) = valid_transcript_and_params(rng);
     params.operation_type = IDkgTranscriptOperation::ReshareOfMasked(dummy_transcript());
 
     transcript.transcript_type = Itt::Masked(Imto::Random);
@@ -115,7 +124,8 @@ fn should_fail_on_mismatching_transcript_types_for_operation_type_reshare_of_mas
 
 #[test]
 fn should_fail_on_mismatching_transcript_types_for_operation_type_reshare_of_unmasked() {
-    let (mut transcript, mut params) = valid_transcript_and_params();
+    let rng = &mut reproducible_rng();
+    let (mut transcript, mut params) = valid_transcript_and_params(rng);
     params.operation_type = IDkgTranscriptOperation::ReshareOfUnmasked(dummy_transcript());
 
     transcript.transcript_type = Itt::Masked(Imto::Random);
@@ -136,7 +146,8 @@ fn should_fail_on_mismatching_transcript_types_for_operation_type_reshare_of_unm
 
 #[test]
 fn should_fail_on_mismatching_transcript_types_for_operation_type_unmasked_times_masked() {
-    let (mut transcript, mut params) = valid_transcript_and_params();
+    let rng = &mut reproducible_rng();
+    let (mut transcript, mut params) = valid_transcript_and_params(rng);
     params.operation_type =
         IDkgTranscriptOperation::UnmaskedTimesMasked(dummy_transcript(), dummy_transcript());
 
@@ -155,7 +166,8 @@ fn should_fail_on_mismatching_transcript_types_for_operation_type_unmasked_times
 
 #[test]
 fn should_fail_on_insufficient_num_of_dealings() {
-    let (mut transcript, mut params) = valid_transcript_and_params();
+    let rng = &mut reproducible_rng();
+    let (mut transcript, mut params) = valid_transcript_and_params(rng);
     params.dealers = dealers(btreeset! {node_id(1), node_id(2), node_id(3), node_id(4)});
     transcript.verified_dealings =
         btreemap! {0 => batch_signed_dealing(node_id(42), params.receivers.get().clone())};
@@ -167,7 +179,8 @@ fn should_fail_on_insufficient_num_of_dealings() {
 
 #[test]
 fn should_fail_on_dealing_from_non_dealer() {
-    let (mut transcript, mut params) = valid_transcript_and_params();
+    let rng = &mut reproducible_rng();
+    let (mut transcript, mut params) = valid_transcript_and_params(rng);
     params.dealers = dealers(btreeset! {node_id(1), node_id(2), node_id(3)});
     transcript.verified_dealings =
         btreemap! {0 => batch_signed_dealing(node_id(999), params.receivers.get().clone())};
@@ -179,7 +192,8 @@ fn should_fail_on_dealing_from_non_dealer() {
 
 #[test]
 fn should_fail_on_mismatching_dealer_indexes() {
-    let (mut transcript, mut params) = valid_transcript_and_params();
+    let rng = &mut reproducible_rng();
+    let (mut transcript, mut params) = valid_transcript_and_params(rng);
     params.dealers = dealers(btreeset! {node_id(3), node_id(1), node_id(2)});
     transcript.verified_dealings =
         btreemap! {0 => batch_signed_dealing(node_id(2), params.receivers.get().clone())};
@@ -194,9 +208,10 @@ fn should_fail_on_mismatching_dealer_indexes() {
 
 #[test]
 fn should_fail_on_ineligible_signer() {
-    let (mut transcript, params) = valid_transcript_and_params();
+    let rng = &mut reproducible_rng();
+    let (mut transcript, params) = valid_transcript_and_params(rng);
     let non_receiver = node_id(99999);
-    assert!(!params.receivers.get().contains(&non_receiver));
+    assert!(!params.receivers.contains(non_receiver));
     let first_dealer_index = *transcript.verified_dealings.keys().next().unwrap();
     transcript
         .verified_dealings
@@ -214,8 +229,10 @@ fn should_fail_on_ineligible_signer() {
     );
 }
 
-fn valid_transcript_and_params() -> (IDkgTranscript, IDkgTranscriptParams) {
-    let transcript_id = random_transcript_id();
+fn valid_transcript_and_params<R: Rng + CryptoRng>(
+    rng: &mut R,
+) -> (IDkgTranscript, IDkgTranscriptParams) {
+    let transcript_id = random_transcript_id(rng);
     let dealers = dealers(btreeset! {node_id(42), node_id(43), node_id(44)});
     let receivers = receivers(btreeset! {node_id(45), node_id(46)});
     let registry_version = RegistryVersion::from(234);

@@ -7,14 +7,14 @@ package registry.hostos_version.v1;
 // accepted by token holders. Nodes can then be upgraded to any of those
 // versions. hostos_version_id commonly matches release_package_sha256_hex,
 // and is used in the key for this record.
-message HostOsVersionRecord {
-    // The URLs against which a HTTP GET request will return a release package
-    // that corresponds to this version.
-    repeated string release_package_urls = 1;
+message HostosVersionRecord {
+  // The URLs against which a HTTP GET request will return a release package
+  // that corresponds to this version.
+  repeated string release_package_urls = 1;
 
-    // The hex-formatted SHA-256 hash of the archive file served by 'release_package_url'.
-    string release_package_sha256_hex = 2;
+  // The hex-formatted SHA-256 hash of the archive file served by 'release_package_url'.
+  string release_package_sha256_hex = 2;
 
-    // The ID used to reference this version. (This is often the same as release_package_sha256_hex, but does not have to be.)
-    string hostos_version_id = 3;
+  // The ID used to reference this version. (This is often the same as release_package_sha256_hex, but does not have to be.)
+  string hostos_version_id = 3;
 }

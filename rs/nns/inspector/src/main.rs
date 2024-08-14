@@ -6,7 +6,7 @@ use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
 };
-use ic_nns_governance::pb::v1::{Governance as GovernanceProto, Neuron};
+use ic_nns_governance_api::pb::v1::{Governance as GovernanceProto, Neuron};
 use ic_nns_gtc::pb::v1::Gtc as GtcProto;
 use icp_ledger::{AccountIdentifier, Subaccount};
 use prost::Message;
@@ -216,7 +216,7 @@ fn decode_governance_stable_memory(gov_pb: PathBuf, output: &Path, rs: &Path) {
 struct GtcAccountRecord {
     account_address: String,
     neuron_ids: String,
-    acount_value_icpts: u32,
+    account_value_icpts: u32,
     has_claimed: bool,
     has_donated: bool,
 }
@@ -268,7 +268,7 @@ fn decode_gtc_stable_memory(gtc_pb: PathBuf, output: &Path, rs: &Path) {
                 .map(|id| id.id.to_string())
                 .collect::<Vec<String>>()
                 .join(";"),
-            acount_value_icpts: s.icpts,
+            account_value_icpts: s.icpts,
             has_claimed: s.has_claimed,
             has_donated: s.has_donated,
         })

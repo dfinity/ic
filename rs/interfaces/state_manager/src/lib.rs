@@ -1,35 +1,23 @@
 //! The state manager public interface.
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_types::{
-    consensus::certification::Certification, CryptoHashOfPartialState, CryptoHashOfState, Height,
+    batch::BatchSummary, consensus::certification::Certification, CryptoHashOfPartialState,
+    CryptoHashOfState, Height,
 };
 use phantom_newtype::BitMask;
 use std::sync::Arc;
 use thiserror::Error;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Error, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum StateManagerError {
     /// The state at the specified height was removed and cannot be recovered
     /// anymore.
+    #[error("state at height {0} has already been removed")]
     StateRemoved(Height),
     /// The state at the specified height is not committed yet.
+    #[error("state at height {0} is not committed yet")]
     StateNotCommittedYet(Height),
 }
-
-impl std::fmt::Display for StateManagerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::StateRemoved(height) => {
-                write!(f, "state at height {} has already been removed", height)
-            }
-            Self::StateNotCommittedYet(height) => {
-                write!(f, "state at height {} is not committed yet", height)
-            }
-        }
-    }
-}
-
-impl std::error::Error for StateManagerError {}
 
 pub type StateManagerResult<T> = Result<T, StateManagerError>;
 
@@ -282,7 +270,13 @@ pub trait StateManager: StateReader {
     ///
     /// Panics if the state at `height` has already been committed before but
     /// has a different hash.
-    fn commit_and_certify(&self, state: Self::State, height: Height, scope: CertificationScope);
+    fn commit_and_certify(
+        &self,
+        state: Self::State,
+        height: Height,
+        scope: CertificationScope,
+        batch_summary: Option<BatchSummary>,
+    );
 
     /// Returns the version of the state that can be modified in-place and the
     /// height of that state.
@@ -331,6 +325,32 @@ pub trait StateManager: StateReader {
     fn report_diverged_checkpoint(&self, height: Height);
 }
 // end::state-manager-interface[]
+
+/// This component bundles a version of the state with the corresponding hash tree and
+/// certifications.
+pub trait CertifiedStateSnapshot: Send + Sync {
+    type State;
+
+    /// Returns a reference to the underlying certified state.
+    fn get_state(&self) -> &Self::State;
+
+    /// Returns the height of the underlying certified state.
+    fn get_height(&self) -> Height;
+
+    /// This method runs the same computation as [StateReader::read_certified_state],
+    /// with three significant differences:
+    ///
+    /// * This method is deterministic.
+    ///
+    /// * This method doesn't return the state because the state is fixed.
+    ///   Use the [get_state] method to access the underlying state.
+    ///
+    /// * This method is not blocking and is safe to use in async environment.
+    fn read_certified_state(
+        &self,
+        paths: &LabeledTree<()>,
+    ) -> Option<(MixedHashTree, Certification)>;
+}
 
 /// This component is analogous to the `StateManager` except that it is used to
 /// access State which cannot be checkpointed or snapshotted.
@@ -395,4 +415,9 @@ pub trait StateReader: Send + Sync {
         &self,
         paths: &LabeledTree<()>,
     ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)>;
+
+    /// Returns a CertifiedStateSnapshot corresponding to the latest certified state.
+    fn get_certified_state_snapshot(
+        &self,
+    ) -> Option<Box<dyn CertifiedStateSnapshot<State = Self::State> + 'static>>;
 }

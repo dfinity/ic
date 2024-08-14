@@ -1,81 +1,3 @@
-mod mint_transaction {
-    use crate::endpoints::ReceivedEthEvent;
-    use crate::eth_logs::mint_transaction;
-    use crate::eth_rpc::Hash;
-    use candid::{Nat, Principal};
-    use std::collections::BTreeSet;
-    use std::str::FromStr;
-
-    #[test]
-    fn should_mint_new_transaction_from_event() {
-        let mut minted_transactions = BTreeSet::new();
-        let event = received_eth_event();
-
-        mint_transaction(&mut minted_transactions, event.clone());
-
-        assert!(minted_transactions.contains(&Hash::from_str(&event.transaction_hash).unwrap()));
-    }
-
-    #[test]
-    fn should_ignore_events_with_same_transaction_hash() {
-        let mut minted_transactions = BTreeSet::new();
-        let event = received_eth_event();
-        let invalid_event_with_same_hash = ReceivedEthEvent {
-            value: Nat::from(50_000_000_000_000_000_u128),
-            ..event.clone()
-        };
-        assert_ne!(event, invalid_event_with_same_hash);
-        assert_eq!(
-            event.transaction_hash,
-            invalid_event_with_same_hash.transaction_hash
-        );
-        mint_transaction(&mut minted_transactions, event);
-
-        let minted_transactions_before = minted_transactions.clone();
-        mint_transaction(&mut minted_transactions, invalid_event_with_same_hash);
-        let minted_transactions_after = minted_transactions.clone();
-
-        assert_eq!(minted_transactions_before, minted_transactions_after);
-    }
-
-    #[test]
-    fn should_process_events_after_event_with_duplicated_transaction_hash() {
-        let mut minted_transactions = BTreeSet::new();
-        let event = received_eth_event();
-        let other_event = ReceivedEthEvent {
-            transaction_hash: "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89ccA"
-                .to_string(),
-            ..event.clone()
-        };
-        assert_ne!(event.transaction_hash, other_event.transaction_hash);
-
-        mint_transaction(&mut minted_transactions, event.clone());
-        mint_transaction(&mut minted_transactions, event.clone());
-        mint_transaction(&mut minted_transactions, other_event.clone());
-
-        assert_eq!(minted_transactions.len(), 2);
-        assert!(minted_transactions.contains(&Hash::from_str(&event.transaction_hash).unwrap()));
-        assert!(
-            minted_transactions.contains(&Hash::from_str(&other_event.transaction_hash).unwrap())
-        );
-    }
-
-    fn received_eth_event() -> ReceivedEthEvent {
-        ReceivedEthEvent {
-            transaction_hash: "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2"
-                .to_string(),
-            block_number: Nat::from(3960623),
-            log_index: Nat::from(29),
-            from_address: "0xdd2851cdd40ae6536831558dd46db62fac7a844d".to_string(),
-            value: Nat::from(10_000_000_000_000_000_u128),
-            principal: Principal::from_slice(&[
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0,
-            ]),
-        }
-    }
-}
-
 mod parse_principal_from_slice {
     use crate::eth_logs::parse_principal_from_slice;
     use crate::eth_rpc::FixedSizeData;
@@ -139,6 +61,24 @@ mod parse_principal_from_slice {
         encoded_principal[0] = 33;
 
         assert_matches!(parse_principal_from_slice(&encoded_principal), Err(_));
+    }
+
+    #[test]
+    fn should_not_accept_management_canister_principal() {
+        let principal = Principal::management_canister();
+        let encoded_principal = to_bytes_with_size_prefix(&principal);
+        let parsed_principal = parse_principal_from_slice(&encoded_principal);
+
+        assert_matches!(parsed_principal, Err(err) if err.contains("management canister"));
+    }
+
+    #[test]
+    fn should_not_accept_anonymous_principal() {
+        let principal = Principal::anonymous();
+        let encoded_principal = to_bytes_with_size_prefix(&principal);
+        let parsed_principal = parse_principal_from_slice(&encoded_principal);
+
+        assert_matches!(parsed_principal, Err(err) if err.contains("anonymous principal"));
     }
 
     #[test]

@@ -10,15 +10,26 @@ pub mod malicious_input;
 pub mod nns_shielding;
 pub mod queries;
 pub mod system_api_security_test;
+pub mod wasm_chunk_store;
 
-use crate::driver::{
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
 };
-use ic_registry_subnet_type::SubnetType;
 
 pub fn config_system_verified_application_subnets(env: TestEnv) {
     InternetComputer::new()
+        .add_subnet(Subnet::fast_single_node(SubnetType::System))
+        .add_subnet(Subnet::fast_single_node(SubnetType::VerifiedApplication))
+        .add_subnet(Subnet::fast_single_node(SubnetType::Application))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
+}
+
+pub fn config_system_verified_application_subnets_with_specified_ids(env: TestEnv) {
+    InternetComputer::new()
+        .use_specified_ids_allocation_range()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .add_subnet(Subnet::fast_single_node(SubnetType::VerifiedApplication))
         .add_subnet(Subnet::fast_single_node(SubnetType::Application))

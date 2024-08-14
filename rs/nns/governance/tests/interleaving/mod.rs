@@ -7,23 +7,18 @@ use futures::channel::{
 };
 use ic_base_types::CanisterId;
 use ic_nervous_system_common::{ledger::IcpLedger, NervousSystemError};
+use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use std::sync::{atomic, atomic::Ordering as AOrdering};
 
-use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
+pub mod test_data;
 
 /// Reifies the methods of the Ledger trait, such that they can be sent over a
 /// channel
 #[derive(Debug)]
 pub enum LedgerMessage {
-    Transfer {
-        amount_e8s: u64,
-        fee_e8s: u64,
-        from_subaccount: Option<Subaccount>,
-        to: AccountIdentifier,
-        memo: u64,
-    },
+    Transfer,
     TotalSupply,
-    BalanceQuery(AccountIdentifier),
+    BalanceQuery,
 }
 
 pub type LedgerControlMessage = (LedgerMessage, OSender<Result<(), NervousSystemError>>);
@@ -51,8 +46,8 @@ impl InterleavingTestLedger {
         }
     }
 
-    // Notifies the observer that a ledger method has been called, and blocks until
-    // it receives a message to continue.
+    /// Notifies the observer that a ledger method has been called, and blocks until
+    /// it receives a message to continue.
     async fn notify(&self, msg: LedgerMessage) -> Result<(), NervousSystemError> {
         let (tx, rx) = oneshot::channel::<Result<(), NervousSystemError>>();
         self.observer.unbounded_send((msg, tx)).unwrap();
@@ -71,13 +66,7 @@ impl IcpLedger for InterleavingTestLedger {
         to: AccountIdentifier,
         memo: u64,
     ) -> Result<u64, NervousSystemError> {
-        let msg = LedgerMessage::Transfer {
-            amount_e8s,
-            fee_e8s,
-            from_subaccount,
-            to,
-            memo,
-        };
+        let msg = LedgerMessage::Transfer;
         atomic::fence(AOrdering::SeqCst);
         self.notify(msg).await?;
         self.underlying
@@ -96,7 +85,7 @@ impl IcpLedger for InterleavingTestLedger {
         account: AccountIdentifier,
     ) -> Result<Tokens, NervousSystemError> {
         atomic::fence(AOrdering::SeqCst);
-        self.notify(LedgerMessage::BalanceQuery(account)).await?;
+        self.notify(LedgerMessage::BalanceQuery).await?;
         self.underlying.account_balance(account).await
     }
 

@@ -1,11 +1,10 @@
 use criterion::*;
 use ic_crypto_internal_bls12_381_type::{Gt, Scalar};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::fs_ni_dkg::dlog_recovery::*;
-use rand::Rng;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use rand::{CryptoRng, Rng};
 
-fn honest_dlog_instance(n: usize) -> (Vec<Scalar>, Vec<Gt>) {
-    let mut rng = rand::thread_rng();
-
+fn honest_dlog_instance<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> (Vec<Scalar>, Vec<Gt>) {
     let mut scalars = Vec::with_capacity(n);
     let mut powers = Vec::with_capacity(n);
 
@@ -29,11 +28,13 @@ fn check_dlog_solution(solutions: &[Scalar], solved: &[Option<Scalar>]) {
 fn honest_dlog(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_nidkg_dlog_honest_dealer");
 
+    let rng = &mut reproducible_rng();
+
     let dlog_solver = HonestDealerDlogLookupTable::new();
 
     group.bench_function("solve_1", |b| {
         b.iter_batched_ref(
-            || honest_dlog_instance(1),
+            || honest_dlog_instance(1, rng),
             |(dlogs, powers)| check_dlog_solution(dlogs, &dlog_solver.solve_several(powers)),
             BatchSize::SmallInput,
         )
@@ -41,7 +42,7 @@ fn honest_dlog(c: &mut Criterion) {
 
     group.bench_function("solve_16", |b| {
         b.iter_batched_ref(
-            || honest_dlog_instance(16),
+            || honest_dlog_instance(16, rng),
             |(dlogs, powers)| check_dlog_solution(dlogs, &dlog_solver.solve_several(powers)),
             BatchSize::SmallInput,
         )
@@ -51,11 +52,12 @@ fn honest_dlog(c: &mut Criterion) {
 fn baby_step_giant_step(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_nidkg_dlog_bsgs");
 
-    let bsgs = BabyStepGiantStep::new(Gt::generator(), 0, 1 << 16);
+    let rng = &mut reproducible_rng();
 
+    let bsgs = BabyStepGiantStep::new(Gt::generator(), 0, 1 << 16, 512, 10);
     group.bench_function("solve", |b| {
         b.iter_batched_ref(
-            || honest_dlog_instance(1),
+            || honest_dlog_instance(1, rng),
             |(dlogs, powers)| check_dlog_solution(dlogs, &[bsgs.solve(&powers[0])]),
             BatchSize::SmallInput,
         )

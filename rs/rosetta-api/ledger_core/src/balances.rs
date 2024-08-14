@@ -1,9 +1,6 @@
 use num_traits::Bounded;
 use serde::{Deserialize, Serialize};
-use std::collections::{
-    hash_map::Entry::{Occupied, Vacant},
-    HashMap,
-};
+use std::collections::{btree_map::Entry, BTreeMap};
 
 use crate::tokens::{CheckedAdd, CheckedSub, TokensType, Zero};
 
@@ -12,7 +9,7 @@ pub trait BalancesStore {
     type Tokens;
 
     /// Returns the balance on the specified account.
-    fn get_balance(&self, k: &Self::AccountId) -> Option<&Self::Tokens>;
+    fn get_balance(&self, k: &Self::AccountId) -> Option<Self::Tokens>;
 
     /// Update balance for an account using function f.
     /// Its arg is previous balance or None if not found and
@@ -29,16 +26,16 @@ pub trait InspectableBalancesStore: BalancesStore {
     fn len(&self) -> usize;
 }
 
-impl<AccountId, Tokens> BalancesStore for HashMap<AccountId, Tokens>
+impl<AccountId, Tokens> BalancesStore for BTreeMap<AccountId, Tokens>
 where
-    AccountId: std::hash::Hash + Eq + Clone,
+    AccountId: Eq + Clone + std::cmp::Ord,
     Tokens: TokensType,
 {
     type AccountId = AccountId;
     type Tokens = Tokens;
 
-    fn get_balance(&self, k: &Self::AccountId) -> Option<&Self::Tokens> {
-        self.get(k)
+    fn get_balance(&self, k: &Self::AccountId) -> Option<Self::Tokens> {
+        self.get(k).cloned()
     }
 
     fn update<F, E>(&mut self, k: AccountId, mut f: F) -> Result<Self::Tokens, E>
@@ -46,19 +43,19 @@ where
         F: FnMut(Option<&Self::Tokens>) -> Result<Self::Tokens, E>,
     {
         match self.entry(k) {
-            Occupied(mut entry) => {
+            Entry::Occupied(mut entry) => {
                 let new_v = f(Some(entry.get()))?;
                 if !new_v.is_zero() {
-                    *entry.get_mut() = new_v;
+                    *entry.get_mut() = new_v.clone();
                 } else {
                     entry.remove_entry();
                 }
                 Ok(new_v)
             }
-            Vacant(entry) => {
+            Entry::Vacant(entry) => {
                 let new_v = f(None)?;
                 if !new_v.is_zero() {
-                    entry.insert(new_v);
+                    entry.insert(new_v.clone());
                 }
                 Ok(new_v)
             }
@@ -66,9 +63,9 @@ where
     }
 }
 
-impl<AccountId, Tokens> InspectableBalancesStore for HashMap<AccountId, Tokens>
+impl<AccountId, Tokens> InspectableBalancesStore for BTreeMap<AccountId, Tokens>
 where
-    AccountId: std::hash::Hash + Eq + Clone,
+    AccountId: Eq + Clone + std::cmp::Ord,
     Tokens: TokensType,
 {
     fn len(&self) -> usize {
@@ -158,7 +155,7 @@ where
         from: &S::AccountId,
         amount: S::Tokens,
     ) -> Result<(), BalanceError<S::Tokens>> {
-        self.debit(from, amount)?;
+        self.debit(from, amount.clone())?;
         self.token_pool = self
             .token_pool
             .checked_add(&amount)
@@ -188,7 +185,7 @@ where
     ) -> Result<S::Tokens, BalanceError<S::Tokens>> {
         self.store.update(from.clone(), |prev| {
             let mut balance = match prev {
-                Some(x) => *x,
+                Some(x) => x.clone(),
                 None => {
                     return Err(BalanceError::InsufficientFunds {
                         balance: S::Tokens::zero(),
@@ -228,7 +225,6 @@ where
     pub fn account_balance(&self, account: &S::AccountId) -> S::Tokens {
         self.store
             .get_balance(account)
-            .cloned()
             .unwrap_or_else(S::Tokens::zero)
     }
 

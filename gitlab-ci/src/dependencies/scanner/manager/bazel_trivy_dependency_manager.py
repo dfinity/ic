@@ -10,7 +10,7 @@ from model.finding import Finding
 from model.project import Project
 from model.vulnerability import Vulnerability
 from notification.app_owner_msg_subscriber import AppOwnerMsgSubscriber
-from notification.console_logger_app_owner_msg_subsriber import ConsoleLoggerAppOwnerMsgSubscriber
+from notification.console_logger_app_owner_msg_subscriber import ConsoleLoggerAppOwnerMsgSubscriber
 from scanner.manager.dependency_manager import DependencyManager
 from scanner.process_executor import ProcessExecutor
 
@@ -324,7 +324,7 @@ class BazelTrivyContainer(DependencyManager):
         raise NotImplementedError
 
     def get_findings(
-        self, repository_name: str, project: typing.Optional[Project], engine_version: typing.Optional[int]
+        self, repository_name: str, project: Project, engine_version: typing.Optional[int]
     ) -> typing.List[Finding]:
         path = self.root.parent / project.path
 

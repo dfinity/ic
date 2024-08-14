@@ -1,38 +1,39 @@
-use std::{convert::TryFrom, sync::Arc};
+use std::{convert::TryFrom, rc::Rc, sync::Arc};
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_config::{
     embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
 };
-use ic_cycles_account_manager::CyclesAccountManager;
-use ic_ic00_types::IC_00;
+use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types::IC_00;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CallOrigin, Memory, NetworkTopology, SubnetTopology, SystemState};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    ExecutionParameters, InstructionLimits, SystemApiImpl,
+    ExecutionParameters, InstructionLimits, NonReplicatedQueryKind, SystemApiImpl,
 };
-use ic_test_utilities::{
-    mock_time,
-    state::SystemStateBuilder,
-    types::ids::{call_context_test_id, canister_test_id, subnet_test_id, user_test_id},
+use ic_test_utilities_state::SystemStateBuilder;
+use ic_test_utilities_types::ids::{
+    call_context_test_id, canister_test_id, subnet_test_id, user_test_id,
 };
 use ic_types::{
-    messages::{CallContextId, CallbackId, RejectContext},
+    messages::{CallContextId, CallbackId, RejectContext, RequestMetadata, NO_DEADLINE},
     methods::SystemMethod,
+    time::UNIX_EPOCH,
     ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, PrincipalId, Time,
 };
 use maplit::btreemap;
 
 pub const CANISTER_CURRENT_MEMORY_USAGE: NumBytes = NumBytes::new(0);
+pub const CANISTER_CURRENT_MESSAGE_MEMORY_USAGE: NumBytes = NumBytes::new(0);
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 
-pub fn execution_parameters() -> ExecutionParameters {
+pub fn execution_parameters(execution_mode: ExecutionMode) -> ExecutionParameters {
     ExecutionParameters {
         instruction_limits: InstructionLimits::new(
             FlagStatus::Disabled,
@@ -40,12 +41,12 @@ pub fn execution_parameters() -> ExecutionParameters {
             NumInstructions::from(5_000_000_000),
         ),
         canister_memory_limit: NumBytes::new(4 << 30),
+        wasm_memory_limit: None,
         memory_allocation: MemoryAllocation::default(),
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
-        execution_mode: ExecutionMode::Replicated,
-        subnet_memory_capacity: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
-        subnet_memory_threshold: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
+        execution_mode,
+        subnet_memory_saturation: ResourceSaturation::default(),
     }
 }
 
@@ -79,7 +80,7 @@ pub struct ApiTypeBuilder;
 impl ApiTypeBuilder {
     pub fn build_update_api() -> ApiType {
         ApiType::update(
-            mock_time(),
+            UNIX_EPOCH,
             vec![],
             Cycles::zero(),
             user_test_id(1).get(),
@@ -91,32 +92,85 @@ impl ApiTypeBuilder {
         ApiType::system_task(
             IC_00.get(),
             SystemMethod::CanisterHeartbeat,
-            mock_time(),
+            UNIX_EPOCH,
             CallContextId::from(1),
+        )
+    }
+
+    pub fn build_non_replicated_query_api() -> ApiType {
+        ApiType::non_replicated_query(
+            UNIX_EPOCH,
+            user_test_id(1).get(),
+            subnet_test_id(1),
+            vec![],
+            Some(vec![1]),
+            NonReplicatedQueryKind::Pure,
+        )
+    }
+
+    pub fn build_composite_query_api() -> ApiType {
+        ApiType::non_replicated_query(
+            UNIX_EPOCH,
+            user_test_id(1).get(),
+            subnet_test_id(1),
+            vec![],
+            Some(vec![1]),
+            NonReplicatedQueryKind::Stateful {
+                call_context_id: CallContextId::from(1),
+                outgoing_request: None,
+            },
         )
     }
 
     pub fn build_reply_api(incoming_cycles: Cycles) -> ApiType {
         ApiType::reply_callback(
-            mock_time(),
+            UNIX_EPOCH,
             PrincipalId::new_anonymous(),
             vec![],
             incoming_cycles,
             CallContextId::new(1),
             false,
             ExecutionMode::Replicated,
+            0.into(),
+        )
+    }
+
+    pub fn build_composite_reply_api(incoming_cycles: Cycles) -> ApiType {
+        ApiType::reply_callback(
+            UNIX_EPOCH,
+            PrincipalId::new_anonymous(),
+            vec![],
+            incoming_cycles,
+            CallContextId::new(1),
+            false,
+            ExecutionMode::NonReplicated,
+            0.into(),
         )
     }
 
     pub fn build_reject_api(reject_context: RejectContext) -> ApiType {
         ApiType::reject_callback(
-            mock_time(),
+            UNIX_EPOCH,
             PrincipalId::new_anonymous(),
             reject_context,
             Cycles::zero(),
             call_context_test_id(1),
             false,
             ExecutionMode::Replicated,
+            0.into(),
+        )
+    }
+
+    pub fn build_composite_reject_api(reject_context: RejectContext) -> ApiType {
+        ApiType::reject_callback(
+            UNIX_EPOCH,
+            PrincipalId::new_anonymous(),
+            reject_context,
+            Cycles::zero(),
+            call_context_test_id(1),
+            false,
+            ExecutionMode::NonReplicated,
+            0.into(),
         )
     }
 }
@@ -126,18 +180,23 @@ pub fn get_system_api(
     system_state: &SystemState,
     cycles_account_manager: CyclesAccountManager,
 ) -> SystemApiImpl {
+    let execution_mode = api_type.execution_mode();
     let sandbox_safe_system_state = SandboxSafeSystemState::new(
         system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
-        execution_parameters().compute_allocation,
+        execution_parameters(execution_mode.clone()).compute_allocation,
+        RequestMetadata::new(0, UNIX_EPOCH),
+        api_type.caller(),
+        api_type.call_context_id(),
     );
     SystemApiImpl::new(
         api_type,
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
-        execution_parameters(),
+        CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
+        execution_parameters(execution_mode),
         SubnetAvailableMemory::new(
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,
@@ -146,8 +205,9 @@ pub fn get_system_api(
         EmbeddersConfig::default()
             .feature_flags
             .wasm_native_stable_memory,
+        EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
-        Arc::new(DefaultOutOfInstructionsHandler {}),
+        Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     )
 }
@@ -158,9 +218,10 @@ pub fn get_system_state() -> SystemState {
         .call_context_manager_mut()
         .unwrap()
         .new_call_context(
-            CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
+            CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
+            RequestMetadata::new(0, UNIX_EPOCH),
         );
     system_state
 }

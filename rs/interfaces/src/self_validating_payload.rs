@@ -1,29 +1,26 @@
 use crate::validation::ValidationError;
-use ic_interfaces_state_manager::StateManagerError;
+use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
     batch::{SelfValidatingPayload, ValidationContext},
     consensus::Payload,
-    registry::RegistryClientError,
     Height, NumBytes, Time,
 };
 
-/// A SelfValidatingPayload error from which it is not possible to recover.
+/// A SelfValidatingPayload is invalid.
 #[derive(Debug)]
-pub enum InvalidSelfValidatingPayload {
-    Disabled,
+pub enum InvalidSelfValidatingPayloadReason {
     PayloadTooBig,
+    DecodeError(ProxyDecodeError),
 }
 
-/// A SelfValidatingPayload error from which it may be possible to recover.
+/// A SelfValidatingPayload validation failure which prevents us to determine whether the payload is
+/// valid or not.
 #[derive(Debug)]
-pub enum SelfValidatingTransientValidationError {
-    GetStateFailed(Height, StateManagerError),
-    GetRegistryFailed(RegistryClientError),
-}
+pub enum SelfValidatingPayloadValidationFailure {}
 
 /// A SelfValidationPayload error that results from payload validation.
 pub type SelfValidatingPayloadValidationError =
-    ValidationError<InvalidSelfValidatingPayload, SelfValidatingTransientValidationError>;
+    ValidationError<InvalidSelfValidatingPayloadReason, SelfValidatingPayloadValidationFailure>;
 
 pub trait SelfValidatingPayloadBuilder: Send + Sync {
     /// Produces a `SelfValidatingPayload` of maximum byte size `byte_limit`
@@ -36,6 +33,7 @@ pub trait SelfValidatingPayloadBuilder: Send + Sync {
         validation_context: &ValidationContext,
         past_payloads: &[&SelfValidatingPayload],
         byte_limit: NumBytes,
+        priority: usize,
     ) -> (SelfValidatingPayload, NumBytes);
 
     /// Checks whether the provided `SelfValidatingPayload` is valid given a

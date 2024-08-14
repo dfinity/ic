@@ -5,22 +5,26 @@
 
 [package]
 name = "lifeline"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [[bin]]
 name = "lifeline"
 path = "src/main.rs"
 
 [build-dependencies]
-ic-nns-constants = { path = "../../../constants" }
 ic-base-types = { path = "../../../../types/base_types" }
+ic-nns-constants = { path = "../../../constants" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-wasmprinter = "0.2.45"
 candid = { workspace = true }
 dfn_candid = {path="../../../../rust_canisters/dfn_candid"}
-ic-ic00-types = {path="../../../../types/ic00_types"}
-ic-nns-common ={path="../../../common"}
+flate2 = { workspace = true }
+ic-nervous-system-clients = { path="../../../../nervous_system/clients" }
 ic-nervous-system-root = { path="../../../../nervous_system/root" }
+ic-nns-common ={path="../../../common"}
 ic-nns-test-utils = { path = "../../../../nns/test_utils" }
+wasmprinter = "0.2.45"

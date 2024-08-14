@@ -1,0 +1,36 @@
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "service",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_adapter_metrics_service",
+    version = "0.1.0",
+    deps = [
+        # Keep sorted.
+        ":build_script",
+        "@crate_index//:prost",
+        "@crate_index//:tonic",
+    ],
+)
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    build_script_env = {
+        "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
+        "RUSTFMT": "$(execpath @rules_rust//rust/toolchain:current_rustfmt_files)",
+    },
+    data = [
+        "proto/adapter_metrics/v1/proto.proto",
+        "@com_google_protobuf//:protoc",
+        "@rules_rust//rust/toolchain:current_rustfmt_files",
+    ],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:prost-build",
+        "@crate_index//:tonic-build",
+    ],
+)

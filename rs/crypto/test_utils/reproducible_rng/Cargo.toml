@@ -1,9 +1,11 @@
 [package]
 name = "ic-crypto-test-utils-reproducible-rng"
-version = "0.1.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-rand = "0.8"
-rand_chacha = "0.3"
+rand = { workspace = true }
+rand_chacha = { workspace = true }

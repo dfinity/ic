@@ -2,12 +2,12 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ic00_types::CanisterInstallMode::Upgrade;
+use ic_management_canister_types::CanisterInstallMode::Upgrade;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };
 use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
-use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
+use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_handler_root::{
     encode_metrics, init::RootCanisterInitPayloadBuilder, PROXIED_CANISTER_CALLS_TRACKER,
 };
@@ -98,13 +98,18 @@ fn test_the_anonymous_user_cannot_change_an_nns_canister() {
             .await
             .unwrap();
 
-        let proposal = ChangeCanisterProposal::new(false, Upgrade, universal.canister_id())
-            .with_wasm(UNIVERSAL_CANISTER_WASM.to_vec());
+        let change_canister_request =
+            ChangeCanisterRequest::new(false, Upgrade, universal.canister_id())
+                .with_wasm(UNIVERSAL_CANISTER_WASM.to_vec());
 
         // The anonymous end-user tries to upgrade an NNS canister a subnet, bypassing
         // the proposals This should be rejected.
         let response: Result<(), String> = root
-            .update_("change_nns_canister", candid, (proposal.clone(),))
+            .update_(
+                "change_nns_canister",
+                candid,
+                (change_canister_request.clone(),),
+            )
             .await;
         assert_matches!(response,
                             Err(s) if s.contains("Only the Governance canister is allowed to call this method"));
@@ -112,7 +117,11 @@ fn test_the_anonymous_user_cannot_change_an_nns_canister() {
         // Go through an upgrade cycle, and verify that it still works the same
         root.upgrade_to_self_binary(vec![]).await.unwrap();
         let response: Result<(), String> = root
-            .update_("change_nns_canister", candid, (proposal.clone(),))
+            .update_(
+                "change_nns_canister",
+                candid,
+                (change_canister_request.clone(),),
+            )
             .await;
         assert_matches!(response,
                             Err(s) if s.contains("Only the Governance canister is allowed to call this method"));
@@ -142,15 +151,16 @@ fn test_a_canister_other_than_the_governance_canister_cannot_change_an_nns_canis
             attacker_canister.canister_id(),
             ic_nns_constants::GOVERNANCE_CANISTER_ID
         );
-        let proposal = ChangeCanisterProposal::new(false, Upgrade, universal.canister_id())
-            .with_wasm(UNIVERSAL_CANISTER_WASM.to_vec());
+        let change_canister_request =
+            ChangeCanisterRequest::new(false, Upgrade, universal.canister_id())
+                .with_wasm(UNIVERSAL_CANISTER_WASM.to_vec());
 
         assert!(
             !forward_call_via_universal_canister(
                 &attacker_canister,
                 &root,
                 "change_nns_canister",
-                Encode!(&proposal).unwrap()
+                Encode!(&change_canister_request).unwrap()
             )
             .await
         );
@@ -223,11 +233,11 @@ fn test_encode_metrics() {
         get_metric_value_does_not_capture(now_millis, &metrics, line_prefix)
     };
 
-    fn assert_less_than_10_ms(seconds: f64) {
-        assert!(0.0 < seconds && seconds < 0.010, "{}", seconds);
+    fn assert_less_than_50_ms(seconds: f64) {
+        assert!(0.0 < seconds && seconds < 0.050, "{}", seconds);
     }
 
-    assert_less_than_10_ms(get_metric_value(&format!(
+    assert_less_than_50_ms(get_metric_value(&format!(
         r#"nns_root_in_flight_proxied_canister_call_max_age_seconds{{caller="{}",callee="{}",method_name="some_method"}} "#,
         caller, callee,
     )));
@@ -279,12 +289,12 @@ fn test_encode_metrics() {
         get_metric_value_does_not_capture(now_millis, &metrics, line_prefix)
     };
 
-    assert_less_than_10_ms(get_metric_value(&format!(
+    assert_less_than_50_ms(get_metric_value(&format!(
         r#"nns_root_in_flight_proxied_canister_call_max_age_seconds{{caller="{}",callee="{}",method_name="some_method"}} "#,
         caller, callee,
     )));
 
-    assert_less_than_10_ms(get_metric_value(&format!(
+    assert_less_than_50_ms(get_metric_value(&format!(
         r#"nns_root_in_flight_proxied_canister_call_max_age_seconds{{caller="{}",callee="{}",method_name="canister_status"}} "#,
         caller, callee,
     )));
@@ -337,7 +347,7 @@ fn test_encode_metrics() {
         get_metric_value_does_not_capture(now_millis, &metrics, line_prefix)
     };
 
-    assert_less_than_10_ms(get_metric_value(&format!(
+    assert_less_than_50_ms(get_metric_value(&format!(
         r#"nns_root_in_flight_proxied_canister_call_max_age_seconds{{caller="{}",callee="{}",method_name="some_method"}} "#,
         caller, callee,
     )));

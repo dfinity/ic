@@ -1,6 +1,6 @@
 use crate::host::command_utilities::handle_command_output;
 use crate::protocol::Response;
-use libusb::Device;
+use rusb::{Context, Device, UsbContext};
 use std::io::{Error, ErrorKind, Write};
 use tempfile::NamedTempFile;
 
@@ -60,13 +60,13 @@ fn create_hsm_xml_file() -> Result<NamedTempFile, String> {
 }
 
 fn get_hsm_info() -> Result<HSMInfo, Error> {
-    let context = libusb::Context::new().map_err(|e| Error::new(ErrorKind::Other, e))?;
+    let context = Context::new().map_err(|e| Error::new(ErrorKind::Other, e))?;
 
     let usb_devices = context
         .devices()
         .map_err(|e| Error::new(ErrorKind::Other, e))?;
 
-    fn is_hsm_device(device: &Device) -> bool {
+    fn is_hsm_device(device: &Device<Context>) -> bool {
         match device.device_descriptor() {
             Ok(device_descriptor) => {
                 println!(
@@ -86,7 +86,7 @@ fn get_hsm_info() -> Result<HSMInfo, Error> {
         }
     }
 
-    println!("Iterating over attached devices to find hsm");
+    println!("Iterating over attached devices to find HSM");
     // return the first usb device that satisfies the is_hsm_device filter
     usb_devices
         .iter()

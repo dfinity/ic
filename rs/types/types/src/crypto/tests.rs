@@ -4,7 +4,8 @@ use strum::IntoEnumIterator;
 
 #[test]
 fn should_correctly_convert_i32_to_algorithm_id() {
-    ensure_all_algorithm_ids_are_compared(&(0..=16).collect::<Vec<_>>());
+    // ensure _all_ algorithm IDs are compared (i.e., no algorithm was forgotten)
+    assert_eq!(AlgorithmId::iter().count(), 20);
 
     assert_eq!(AlgorithmId::from(0), AlgorithmId::Placeholder);
     assert_eq!(AlgorithmId::from(1), AlgorithmId::MultiBls12_381);
@@ -23,14 +24,21 @@ fn should_correctly_convert_i32_to_algorithm_id() {
     assert_eq!(AlgorithmId::from(14), AlgorithmId::RsaSha256);
     assert_eq!(AlgorithmId::from(15), AlgorithmId::ThresholdEcdsaSecp256k1);
     assert_eq!(AlgorithmId::from(16), AlgorithmId::MegaSecp256k1);
+    assert_eq!(AlgorithmId::from(17), AlgorithmId::ThresholdEcdsaSecp256r1);
+    assert_eq!(AlgorithmId::from(18), AlgorithmId::ThresholdSchnorrBip340);
+    assert_eq!(AlgorithmId::from(19), AlgorithmId::ThresholdEd25519);
 
     // Verify that an unknown i32 maps onto Placeholder
     assert_eq!(AlgorithmId::from(42), AlgorithmId::Placeholder);
+
+    // Verify that an i32 that doesn't fit into a u8 maps onto Placeholder
+    assert_eq!(AlgorithmId::from(420), AlgorithmId::Placeholder);
 }
 
 #[test]
 fn should_correctly_convert_algorithm_id_to_i32() {
-    ensure_all_algorithm_ids_are_compared(&(0..=16).collect::<Vec<_>>());
+    // ensure _all_ algorithm IDs are compared (i.e., no algorithm was forgotten)
+    assert_eq!(AlgorithmId::iter().count(), 20);
 
     assert_eq!(AlgorithmId::Placeholder as i32, 0);
     assert_eq!(AlgorithmId::MultiBls12_381 as i32, 1);
@@ -48,12 +56,16 @@ fn should_correctly_convert_algorithm_id_to_i32() {
     assert_eq!(AlgorithmId::IcCanisterSignature as i32, 13);
     assert_eq!(AlgorithmId::RsaSha256 as i32, 14);
     assert_eq!(AlgorithmId::ThresholdEcdsaSecp256k1 as i32, 15);
-    assert_eq!(AlgorithmId::MegaSecp256k1 as i32, 16)
+    assert_eq!(AlgorithmId::MegaSecp256k1 as i32, 16);
+    assert_eq!(AlgorithmId::ThresholdEcdsaSecp256r1 as i32, 17);
+    assert_eq!(AlgorithmId::ThresholdSchnorrBip340 as i32, 18);
+    assert_eq!(AlgorithmId::ThresholdEd25519 as i32, 19);
 }
 
 #[test]
 fn should_correctly_convert_algorithm_id_to_u8() {
-    ensure_all_algorithm_ids_are_compared(&(0..=16).collect::<Vec<_>>());
+    // ensure _all_ algorithm IDs are compared (i.e., no algorithm was forgotten)
+    assert_eq!(AlgorithmId::iter().count(), 20);
 
     let tests: Vec<(AlgorithmId, u8)> = vec![
         (AlgorithmId::Placeholder, 0),
@@ -73,10 +85,13 @@ fn should_correctly_convert_algorithm_id_to_u8() {
         (AlgorithmId::RsaSha256, 14),
         (AlgorithmId::ThresholdEcdsaSecp256k1, 15),
         (AlgorithmId::MegaSecp256k1, 16),
+        (AlgorithmId::ThresholdEcdsaSecp256r1, 17),
+        (AlgorithmId::ThresholdSchnorrBip340, 18),
+        (AlgorithmId::ThresholdEd25519, 19),
     ];
 
     for (algorithm_id, expected_discriminant) in tests {
-        assert_eq!(algorithm_id.as_u8(), expected_discriminant);
+        assert_eq!(u8::from(algorithm_id), expected_discriminant);
     }
 }
 
@@ -94,6 +109,25 @@ fn should_correctly_convert_usize_to_key_purpose() {
 
     // Verify that an unknown usize maps onto Placeholder
     assert_eq!(AlgorithmId::from(42), AlgorithmId::Placeholder);
+}
+
+#[test]
+fn should_not_have_any_algorithm_id_that_does_not_fit_into_u8() {
+    for algorithm_id in AlgorithmId::iter() {
+        assert!(algorithm_id as isize >= (u8::MIN as isize));
+        assert!(algorithm_id as isize <= (u8::MAX as isize));
+    }
+}
+
+#[test]
+fn should_have_consistent_logic_for_tecdsa_algorithm_identification() {
+    let tecdsa_algos = AlgorithmId::all_threshold_ecdsa_algorithms();
+
+    for algorithm_id in AlgorithmId::iter() {
+        let is_tecdsa = algorithm_id.is_threshold_ecdsa();
+
+        assert_eq!(is_tecdsa, tecdsa_algos.contains(&algorithm_id));
+    }
 }
 
 #[cfg(test)]
@@ -131,11 +165,6 @@ pub fn set_of(node_ids: &[NodeId]) -> BTreeSet<NodeId> {
         dealers.insert(*node_id);
     });
     dealers
-}
-
-fn ensure_all_algorithm_ids_are_compared(tested_algorithm_ids: &[isize]) {
-    let all_algorithm_ids: Vec<isize> = (0..=16).collect();
-    assert_eq!(tested_algorithm_ids, all_algorithm_ids);
 }
 
 mod current_node_public_keys {

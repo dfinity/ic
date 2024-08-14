@@ -32,6 +32,7 @@ MintTx = (
 BurnTx = (
   op: "burn",
   from: Account,
+  ? spender: Account,
   TxCommon
 )
 
@@ -39,12 +40,23 @@ TransferTx = (
   op: "xfer",
   from: Account,
   to: Account,
+  ? spender: Account,
   ? fee: Amount,
   TxCommon
 )
 
+ApproveTx = (
+  op: "approve",
+  from: Account,
+  spender: Account,
+  ? fee: Amount,
+  ? expected_allowance: Amount,
+  ? expires_at: Timestamp,
+  TxCommon
+)
+
 TransactionContent = {
-  MintTx // BurnTx // TransferTx
+  MintTx // BurnTx // TransferTx // ApproveTx
 }
 
 TxCommon = (

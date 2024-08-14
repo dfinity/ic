@@ -2,13 +2,8 @@
 :toc:
  
 == Introduction ==
- 
-The directory contains replica components that listen on network sockets, manage connections and serve HTTP requests.
 
-The replica components in this directory are:
-
-* link:public/README.adoc[public HTTPS API endpoint], serving incoming requests from boundary nodes and other replica nodes
-* metrics HTTPS endpoint, used by https://prometheus.io/[Prometheus] for scraping
+The purpose of this README is to list and argue about common design patterns when implementing a HTTPS server.
 
 == Connection management ==
 
@@ -27,70 +22,82 @@ The above rules serve as protection against:
  *  shared resource exhaustion (e.g. file descriptor exhaustion due to many connections, 
  CPU exhaustion due to excessive number of TLS handshakes).
 
-=== Detecing idle connections ===
+=== Detecting idle connections ===
 
-Each component implements detection for dead peers, disconnections due
-to network inactivity and/or peers holding on to connections without sending requests.
+Each server must implement detection for dead connections, disconnections due
+to network inactivity and peers holding on to connections without sending requests.
 For this purpose, if no bytes are read from a connection for the duration of 
 `+connection_read_timeout_seconds+` then the connection is dropped. There is no point in 
 setting a timeout on the write bytes since they are conditioned on the received requests. 
 
 Each component uses the ReplicaOS defaults for https://tldp.org/HOWTO/TCP-Keepalive-HOWTO/overview.html#whyuse[TCP alivekeep].
 
-== Thread-per-request ==
+== Queue management ==
 
 Components in scope use the https://sre.google/sre-book/addressing-cascading-failures/#xref_cascading-failure_queue-management[thread-per-request]
-pattern. More specifically, requests come in, they sit in a bounded-size queue, and then threads pick requests off the queue and perform the actual work (whatever actions are required by the replica). If a request is cancelled before it is picked up from a thread, then the request is not executed.
+pattern. More specifically, requests come in, they sit in a bounded-size queue, and then threads pick requests off the queue and perform the actual work (whatever actions are required by the replica). 
+If a request is cancelled before it is picked up from a thread, then the request is not executed.
+
+When implementing queue management in async environment, extra care should be taken not to starve the async runtime.
+Some upstream component(s) provide only synchronous APIs that block the running thread for longer periods of time (>100ms). In order to make request processing https://docs.rs/tokio/latest/tokio/task/index.html[non-blocking], 
+each server uses a https://docs.rs/threadpool/latest/threadpool/[threadpool] per upstream service and https://docs.rs/tokio/latest/tokio/sync/oneshot/index.html[Tokio oneshot channel] for communicating the result back to the async component.
+A nice writeup about async and blocking operations can be found in https://ryhl.io/blog/async-what-is-blocking/[Alice Ryhl's blog post].
+
+== Load shedding ==
  
-Some upstream component(s) provide only synchronous APIs that block the running thread for longer periods of time (>100ms). In order to make request processing https://docs.rs/tokio/latest/tokio/task/index.html[non-blocking], components in scope 
-https://docs.rs/tower/latest/tower/limit/concurrency/index.html[limit the number of requests being concurrently processed],
-use a https://docs.rs/threadpool/latest/threadpool/[threadpool] per upstream service and use https://docs.rs/tokio/latest/tokio/sync/oneshot/index.html[Tokio oneshot channel] for communicating the result back to the async component.
-
-== Request timeout ==
-
-In order to guard against stuck upstream services, a https://docs.rs/tower/latest/tower/timeout/index.html[timeout] is set for each received request. 
-If a request is not completed within the timeout then the endpoint responds with `+504 Gateway Timeout+`.
-
-Setting a timeout on requests also guards against closing an idle connection due to stuck upstream service.
-For example, if a user uses HTTP1 over a connection and there is a upstream service that takes longer
-than it should, then the user is unable to send new requests until the last one completed.
-Hence, this may result in dropping the connection because no new bytes are read by the replica on that
-connection. 
-
-== Preventing Server Overload ==
- 
-Servers should protect themselves from becoming overloaded and crashing. When overloaded at either the frontend or
-backend layers, fail early and cheaply. For details, see 
+Servers should protect themselves from becoming overloaded and crashing. When overloaded servers should fail early and cheaply. For details, see 
 https://sre.google/sre-book/addressing-cascading-failures/#xref_cascading-failure_load-shed-graceful-degredation[Load Shedding and Graceful Degradation.]
 
 In addition, serving errors early and cheaply can be beneficial for replicated servers that stay behind load balancers.
 For example, https://sre.google/sre-book/load-balancing-datacenter/[Least-Loaded Round Robin] takes into account recent errors.
  
-Given the listed best practices, when a particular queue in-front of a thread pool is full and new request can't be added,
-the endpoint https://docs.rs/tower/latest/tower/load_shed/index.html#[sheds load] by responding with `+429 Too Many Requests+` for the request. 
+Given the listed best practices, when request queues are full and new request can't be added,
+the server https://docs.rs/tower/latest/tower/load_shed/index.html#[sheds load] by responding with `+429 Too Many Requests+` for the request. 
 
-== Too large and too slow requests ==
+== Request timeout ==
+
+If upstream services are stuck this can result in requests being removed from a queue slower than expected. An alternative way to think about this,
+is what happens when an upstream service falls out of its SLO. It is undesirable to respond with `+429+` if the problem is with the server.
+In order to guard against stuck upstream services, a https://docs.rs/tower/latest/tower/timeout/index.html[timeout] is set for each received request. 
+If a request is not completed within the timeout then the endpoint responds with `+504 Gateway Timeout+`.
+
+Setting a request timeout is important so servers don't drop a connection when an upstream service is slow.
+For example, a user sends requests sequentially over a connection and there is an upstream service that 
+takes longer than `+connection_read_timeout_seconds+` to process a single request.
+Since the user doesn't send a new request until the last one completed, there will be no bytes read by the
+server and the server will just drop the connection. Returning 5xx error is important because if a 
+downstream service is unexpectedly slow this is a server error.
+
+== Rate limiting ==
+
+Rate limiting doesn't prevent server overload, request queue management does.
+Rate limiting helps to prevent abuse and misuses of a particular API. The Internet Computer is a distributed platform that can be accessed
+by anyone. This makes it is very hard to reason if a user abuses/misuses the API because there is no way to have insight into all different usecases.
+
+People are often tempted to use rate limiting as a DDoS protection, however if there is a proper request queue management 
+implemented then ideally there is no need for any rate limiting mechanism. The system should be able to maintain it's throughput even
+at capacity. 
+
+== Fairness ==
+
+If the system is not at capacity this implies the system throughput is enough to process all inputs on time.
+However, when the system is at capacity, it needs to make sure that it processes requests fairly.
+
+As explained above, there are bounded request queues for different API endpoints. The system is at capacity when queues are full.
+When a queue is full new requests are rejected (in other scenarios it may be that the call that adds the element to the queue waits until there is space in the queue).
+
+In this queueing model, as long as there is a fair thread/task scheduler this would guarantee fairness across threads/tasks that try to 
+add elements into a full queue.
+
+== Request validation ==
 
 If a http request body is greater than the configured limit, the endpoints responds with `+413 Payload Too Large+`.
 
 If a http request does not complete within the specified timeout it will be aborted and a `+408 Request Timeout+` response will be sent.
 
-== Fairness ==
+== Components ==
 
-Fairness implies that the probability of picking up a request from any connection is uniformly distributed.
+The directory contains all HTTP(s) servers/endpoints required by the Internet Computer. Those are:
 
-Currently boundary nodes use https://www.nginx.com/[nginx] as reverse proxy. Thus, the boundary nodes
-can only use https://mailman.nginx.org/pipermail/nginx/2015-December/049445.html[HTTP1] for communicating with replicas.
-Hence, there can be at most one in-flight request in the replica from each connection. Given we use https://tokio.rs/blog/2019-10-scheduler[Tokio's fair scheduler]
-and we have a dedicated Tokio task for serving each connection, this is sufficient to provide request fairness across connections.
-
-== Graceful shutdown ==
-
-All the components are written in Rust async, implementing at least one event loop that lives for the duration
-of the replica process. For graceful shutdown of such event loops the replica relies on the Tokio runtime to cancel the 
-running and queued futures. Such cancellation happens when the runtime is dropped.
-
-== HTTP vs HTTPS ==
-
-Each component has a single listening port that accepts a TCP connection. After a connection is accepted, 
-the component peeks the first byte of the TCP stream to determine if a TLS connection is initiated.
+* link:public/README.adoc[public HTTPS API endpoint], which implements the https://internetcomputer.org/docs/current/references/ic-interface-spec#http-interface[HTTPS Interface] defined by the Internet Computer Interface Specification
+* metrics HTTPS endpoint, used by https://prometheus.io/[Prometheus] for scraping metrics

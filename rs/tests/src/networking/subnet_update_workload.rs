@@ -21,7 +21,7 @@ Runbook::
 
 end::catalog[] */
 
-use crate::{
+use ic_system_test_driver::{
     canister_api::{CallMode, GenericRequest},
     driver::{
         boundary_node::{BoundaryNode, BoundaryNodeVm},
@@ -29,9 +29,9 @@ use crate::{
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
-            retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer,
-            NnsInstallationBuilder, RetrieveIpv4Addr, SshSession, SubnetSnapshot,
-            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer,
+            NnsInstallationBuilder, RetrieveIpv4Addr, SubnetSnapshot, READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
         },
     },
     util::{
@@ -40,9 +40,9 @@ use crate::{
     },
 };
 
-use std::{io::Read, time::Duration};
+use std::time::Duration;
 
-use anyhow::{bail, Context, Error};
+use anyhow::{bail, Context};
 use ic_agent::Agent;
 use ic_interfaces_registry::RegistryValue;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
@@ -58,31 +58,16 @@ const CANISTER_METHOD: &str = "write";
 // Duration of each request is placed into one of the two categories - below or above this threshold.
 const APP_DURATION_THRESHOLD: Duration = Duration::from_secs(30);
 const NNS_DURATION_THRESHOLD: Duration = Duration::from_secs(20);
-// Ratio of requests with duration < DURATION_THRESHOLD should exceed this parameter.
-const MIN_REQUESTS_RATIO_BELOW_THRESHOLD: f64 = 0.9;
 // Parameters related to reading/asserting counter values of the canisters.
 const MAX_CANISTER_READ_RETRIES: u32 = 4;
 const CANISTER_READ_RETRY_WAIT: Duration = Duration::from_secs(10);
 // Parameters related to workload creation.
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(2); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
 
-fn exec_ssh_command(vm: &dyn SshSession, command: &str) -> Result<(String, i32), Error> {
-    let mut channel = vm.block_on_ssh_session()?.channel_session()?;
-
-    channel.exec(command)?;
-
-    let mut output = String::new();
-    channel.read_to_string(&mut output)?;
-    channel.wait_close()?;
-
-    Ok((output, channel.exit_status()?))
-}
-
 // Create an IC with two subnets, with variable number of nodes and boundary nodes
 // Install NNS canister on system subnet
 pub fn config(
     env: TestEnv,
-    nodes_nns_subnet: usize,
     nodes_app_subnet: usize,
     use_boundary_node: bool,
     boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
@@ -97,11 +82,8 @@ pub fn config(
         boot_image_minimal_size_gibibytes,
     };
     InternetComputer::new()
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_default_vm_resources(vm_resources)
-                .add_nodes(nodes_nns_subnet),
-        )
+        .add_fast_single_node_subnet(SubnetType::System)
+        .with_default_vm_resources(vm_resources)
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_default_vm_resources(vm_resources)
@@ -109,8 +91,8 @@ pub fn config(
         )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
-    env.sync_prometheus_config_with_topology();
-    info!(logger, "Step 1: Intalling NNS canisters ...");
+    env.sync_with_prometheus();
+    info!(logger, "Step 1: Installing NNS canisters ...");
     let nns_node = env
         .topology_snapshot()
         .root_subnet()
@@ -150,15 +132,21 @@ pub fn config(
     if let Some(bn) = bn {
         info!(&logger, "Polling registry");
         let registry = RegistryCanister::new(bn.nns_node_urls);
-        let (latest, routes) = rt.block_on(retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-            let (bytes, latest) = registry.get_value(make_routing_table_record_key().into(), None).await
-                .context("Failed to `get_value` from registry")?;
-            let routes = PbRoutingTable::decode(bytes.as_slice())
-                .context("Failed to decode registry routes")?;
-            let routes = RoutingTable::try_from(routes)
-                .context("Failed to convert registry routes")?;
-            Ok((latest, routes))
-        }))
+        let (latest, routes) = rt.block_on(ic_system_test_driver::retry_with_msg_async!(
+            "checking registry",
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let (bytes, latest) = registry.get_value(make_routing_table_record_key().into(), None).await
+                    .context("Failed to `get_value` from registry")?;
+                let routes = PbRoutingTable::decode(bytes.as_slice())
+                    .context("Failed to decode registry routes")?;
+                let routes = RoutingTable::try_from(routes)
+                    .context("Failed to convert registry routes")?;
+                Ok((latest, routes))
+            }
+        ))
         .expect("Failed to poll registry. This is not a Boundary Node error. It is a test environment issue.");
         info!(&logger, "Latest registry {latest}: {routes:?}");
 
@@ -174,20 +162,6 @@ pub fn config(
             "Boundary node {BOUNDARY_NODE_NAME} has IPv4 {:?} and IPv6 {:?}",
             boundary_node_vm.block_on_ipv4().unwrap(),
             boundary_node_vm.ipv6()
-        );
-
-        info!(&logger, "Waiting for routes file");
-        let routes_path = "/var/opt/nginx/ic/ic_routes.js";
-        let sleep_command =
-            format!("while grep -q '// PLACEHOLDER' {routes_path}; do sleep 5; done");
-
-        let (cmd_output, exit_status) =
-            exec_ssh_command(&boundary_node_vm, &sleep_command).unwrap();
-
-        info!(
-            logger,
-            "{BOUNDARY_NODE_NAME} ran `{sleep_command}`: '{}'. Exit status = {exit_status}",
-            cmd_output.trim(),
         );
 
         info!(&logger, "Checking BN health");
@@ -207,7 +181,6 @@ pub fn test(
     payload_size_bytes: usize,
     duration: Duration,
     use_boundary_node: bool,
-    min_success_ratio: f64,
 ) {
     let log = env.logger();
     info!(
@@ -257,22 +230,34 @@ pub fn test(
     );
     block_on(async {
         for agent in nns_agents.iter() {
-            retry_async(&log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-                match agent_observes_canister_module(agent, &nns_canister).await {
-                    true => Ok(()),
-                    false => bail!("Canister module not available yet"),
+            ic_system_test_driver::retry_with_msg_async!(
+                format!("observing NNS canister module {}", nns_canister.to_string()),
+                &log,
+                READY_WAIT_TIMEOUT,
+                RETRY_BACKOFF,
+                || async {
+                    match agent_observes_canister_module(agent, &nns_canister).await {
+                        true => Ok(()),
+                        false => bail!("Canister module not available yet"),
+                    }
                 }
-            })
+            )
             .await
             .unwrap();
         }
         for agent in app_agents.iter() {
-            retry_async(&log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-                match agent_observes_canister_module(agent, &app_canister).await {
-                    true => Ok(()),
-                    false => bail!("Canister module not available yet"),
+            ic_system_test_driver::retry_with_msg_async!(
+                format!("observing app canister module {}", app_canister.to_string()),
+                &log,
+                READY_WAIT_TIMEOUT,
+                RETRY_BACKOFF,
+                || async {
+                    match agent_observes_canister_module(agent, &app_canister).await {
+                        true => Ok(()),
+                        false => bail!("Canister module not available yet"),
+                    }
                 }
-            })
+            )
             .await
             .unwrap();
         }
@@ -330,49 +315,35 @@ pub fn test(
         load_metrics_nns.requests_count_below_threshold(NNS_DURATION_THRESHOLD);
     let requests_count_below_threshold_app =
         load_metrics_app.requests_count_below_threshold(APP_DURATION_THRESHOLD);
-    let requests_ratio_below_threshold_nns =
-        load_metrics_nns.requests_ratio_below_threshold(NNS_DURATION_THRESHOLD);
-    let requests_ratio_below_threshold_app =
-        load_metrics_app.requests_ratio_below_threshold(APP_DURATION_THRESHOLD);
     info!(
         &log,
-        "System subnet: requests below {} sec: requests_count={:?}, requests_ratio={:?}",
+        "System subnet: requests below {} sec: requests_count={:?}",
         NNS_DURATION_THRESHOLD.as_secs(),
         requests_count_below_threshold_nns,
-        requests_ratio_below_threshold_nns,
     );
     info!(
         &log,
-        "Application subnet: requests below {} sec: requests_count={:?}, requests_ratio={:?}",
+        "Application subnet: requests below {} sec: requests_count={:?}",
         APP_DURATION_THRESHOLD.as_secs(),
         requests_count_below_threshold_app,
-        requests_ratio_below_threshold_app,
     );
-    info!(
-        &log,
-        "Minimum expected success ratio is {}\n. Actual values on the subnets: System={}, Application={}",
-        min_success_ratio,
-        load_metrics_nns.success_ratio(),
-        load_metrics_app.success_ratio(),
+    assert_eq!(
+        load_metrics_nns.failure_calls(),
+        0,
+        "Requests failed on the System subnet."
     );
-    assert!(
-        load_metrics_nns.success_ratio() > min_success_ratio,
-        "Too many requests failed on the System subnet."
+    assert_eq!(
+        load_metrics_app.failure_calls(),
+        0,
+        "Requests failed on the Application subnet."
     );
-    assert!(
-        load_metrics_app.success_ratio() > min_success_ratio,
-        "Too many requests failed on the Application subnet."
-    );
-    assert!(requests_ratio_below_threshold_nns
+    let min_expected_counter = rps * duration.as_secs() as usize;
+    assert!(requests_count_below_threshold_nns
         .iter()
-        .all(|(_, ratio)| *ratio > MIN_REQUESTS_RATIO_BELOW_THRESHOLD));
-    assert!(requests_ratio_below_threshold_app
+        .all(|(_, count)| *count as usize == min_expected_counter));
+    assert!(requests_count_below_threshold_app
         .iter()
-        .all(|(_, ratio)| *ratio > MIN_REQUESTS_RATIO_BELOW_THRESHOLD));
-    let min_expected_counter = {
-        let total_requests_count = rps * duration.as_secs() as usize;
-        (min_success_ratio * total_requests_count as f64) as usize
-    };
+        .all(|(_, count)| *count as usize == min_expected_counter));
     info!(
         &log,
         "Step 5: Assert min counter value={} on the canisters has been reached ... ",

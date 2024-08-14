@@ -1,0 +1,7 @@
+== The peer-to-peer protocol of the Internet Computer ==
+
+The peer-to-peer (P2P) layer of the Internet Computer is responsible for message delivery within subnets of nodes.
+Each subnet operates a separate peer-to-peer network, and nodes within each such subnet use this network to send messages to each other.
+
+On top of this layer there are multiple components that use the P2P layer to exchange messages between peers, the most famous being the Internet Computer Consensus protocol. 
+Other components, including the state sync protocol, also use the P2P layer to exchange messages with peers on the same subnet.

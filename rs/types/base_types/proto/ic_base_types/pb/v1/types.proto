@@ -9,6 +9,7 @@ import "google/protobuf/descriptor.proto";
 extend google.protobuf.MessageOptions {
   bool tui_signed_message = 20000;
 }
+
 // The annotated field is displayed on the hardware wallet in the specification
 // used by launch of the Internet Computer.
 extend google.protobuf.FieldOptions {
@@ -19,5 +20,5 @@ extend google.protobuf.FieldOptions {
 // a principal.
 message PrincipalId {
   option (tui_signed_message) = true;
-  bytes serialized_id = 1      [(tui_signed_display_q2_2021) = true];
+  bytes serialized_id = 1 [(tui_signed_display_q2_2021) = true];
 }

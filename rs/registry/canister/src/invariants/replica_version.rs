@@ -1,12 +1,11 @@
 use std::collections::BTreeSet;
 
 use crate::invariants::common::{
-    assert_valid_urls_and_hash, get_subnet_ids_from_snapshot, get_value_from_snapshot,
-    InvariantCheckError, RegistrySnapshot,
+    assert_valid_urls_and_hash, get_api_boundary_node_records_from_snapshot,
+    get_subnet_ids_from_snapshot, get_value_from_snapshot, InvariantCheckError, RegistrySnapshot,
 };
 
 use ic_base_types::SubnetId;
-use ic_nns_common::registry::decode_or_panic;
 use ic_protobuf::registry::{
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
     subnet::v1::SubnetRecord,
@@ -16,12 +15,14 @@ use ic_registry_keys::{
     make_blessed_replica_versions_key, make_replica_version_key, make_subnet_record_key,
     make_unassigned_nodes_config_record_key,
 };
+use prost::Message;
 
 /// A predicate on the replica version records contained in a registry
 /// snapshot.
 ///
-/// For each replica version that is either referred to in an SubnetRecord
-/// of a subnet that is listed in the subnet list or that is contained
+/// For each replica version that is either referred to in a SubnetRecord
+/// of a subnet listed in the subnet list, that is in use by an API boundary node,
+/// that is used by the unassigned nodes, or that is contained
 /// the BlessedReplicaVersions-List, the following is checked:
 ///
 /// * The corresponding ReplicaVersionRecord exists.
@@ -35,20 +36,21 @@ pub(crate) fn check_replica_version_invariants(
         .get(make_unassigned_nodes_config_record_key().as_bytes())
         .map(|bytes| {
             let unassigned_nodes_config =
-                decode_or_panic::<UnassignedNodesConfigRecord>(bytes.clone());
+                UnassignedNodesConfigRecord::decode(bytes.as_slice()).unwrap();
             unassigned_nodes_config.replica_version
         });
     if let Some(version) = unassigned_version_id {
         versions_in_use.insert(version);
     }
+    versions_in_use.append(&mut get_all_api_boundary_node_versions(snapshot));
 
     let blessed_version_ids = snapshot
         .get(make_blessed_replica_versions_key().as_bytes())
         .map(|bytes| {
-            let version_list = decode_or_panic::<BlessedReplicaVersions>(bytes.clone());
+            let version_list = BlessedReplicaVersions::decode(bytes.as_slice()).unwrap();
             version_list.blessed_version_ids
         })
-        .unwrap_or_else(Vec::default);
+        .unwrap_or_default();
 
     let num_blessed = blessed_version_ids.len();
     let blessed_set = BTreeSet::from_iter(blessed_version_ids);
@@ -101,16 +103,23 @@ fn get_all_replica_versions_of_subnets(snapshot: &RegistrySnapshot) -> BTreeSet<
         .collect()
 }
 
+/// Returns the list of all replica versions that are currently in use by the API boundary nodes.
+fn get_all_api_boundary_node_versions(snapshot: &RegistrySnapshot) -> BTreeSet<String> {
+    get_api_boundary_node_records_from_snapshot(snapshot)
+        .values()
+        .map(|node_record| node_record.version.clone())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::{
-        common::test_helpers::invariant_compliant_registry, mutations::common::encode_or_panic,
-    };
+    use crate::common::test_helpers::invariant_compliant_registry;
 
     use super::*;
     use canister_test::PrincipalId;
     use ic_registry_transport::{insert, upsert};
     use ic_types::ReplicaVersion;
+    use prost::Message;
 
     const MOCK_HASH: &str = "C0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEED00D";
     const MOCK_URL: &str = "http://release_package.tar.gz";
@@ -119,9 +128,10 @@ mod tests {
         let registry = invariant_compliant_registry(0);
 
         let key = make_blessed_replica_versions_key();
-        let value = encode_or_panic(&BlessedReplicaVersions {
+        let value = BlessedReplicaVersions {
             blessed_version_ids: versions,
-        });
+        }
+        .encode_to_vec();
 
         let mutation = vec![insert(key.as_bytes(), value)];
         registry.check_global_state_invariants(&mutation);
@@ -163,13 +173,13 @@ mod tests {
         let registry = invariant_compliant_registry(0);
 
         let list = registry.get_subnet_list_record();
-        let nns_id = SubnetId::from(PrincipalId::try_from(list.subnets.get(0).unwrap()).unwrap());
+        let nns_id = SubnetId::from(PrincipalId::try_from(list.subnets.first().unwrap()).unwrap());
         let mut subnet = registry.get_subnet_or_panic(nns_id);
         subnet.replica_version_id = "unelected".into();
 
         let new_subnet = upsert(
             make_subnet_record_key(nns_id).into_bytes(),
-            encode_or_panic(&subnet),
+            subnet.encode_to_vec(),
         );
         registry.check_global_state_invariants(&[new_subnet]);
     }
@@ -196,24 +206,25 @@ mod tests {
         let init = vec![
             insert(
                 make_replica_version_key(replica_version_id).as_bytes(),
-                encode_or_panic(&replica_version),
+                replica_version.encode_to_vec(),
             ),
             upsert(
                 make_blessed_replica_versions_key().as_bytes(),
-                encode_or_panic(&blessed_replica_version),
+                blessed_replica_version.encode_to_vec(),
             ),
             insert(
                 make_unassigned_nodes_config_record_key(),
-                encode_or_panic(&unassigned_nodes_config),
+                unassigned_nodes_config.encode_to_vec(),
             ),
         ];
         registry.maybe_apply_mutation_internal(init);
 
         let key = make_blessed_replica_versions_key();
 
-        let value = encode_or_panic(&BlessedReplicaVersions {
+        let value = BlessedReplicaVersions {
             blessed_version_ids: vec![ReplicaVersion::default().into()],
-        });
+        }
+        .encode_to_vec();
 
         let mutation = vec![insert(key.as_bytes(), value)];
         registry.check_global_state_invariants(&mutation);
@@ -225,10 +236,11 @@ mod tests {
         let registry = invariant_compliant_registry(0);
 
         let key = make_unassigned_nodes_config_record_key();
-        let value = encode_or_panic(&UnassignedNodesConfigRecord {
+        let value = UnassignedNodesConfigRecord {
             ssh_readonly_access: vec![],
             replica_version: "unelected".into(),
-        });
+        }
+        .encode_to_vec();
 
         let mutation = vec![insert(key.as_bytes(), value)];
         registry.check_global_state_invariants(&mutation);
@@ -238,11 +250,12 @@ mod tests {
         let registry = invariant_compliant_registry(0);
 
         let key = make_replica_version_key(ReplicaVersion::default());
-        let value = encode_or_panic(&ReplicaVersionRecord {
+        let value = ReplicaVersionRecord {
             release_package_sha256_hex: hash.into(),
             release_package_urls: urls,
             guest_launch_measurement_sha256_hex: None,
-        });
+        }
+        .encode_to_vec();
 
         let mutation = vec![upsert(key.as_bytes(), value)];
         registry.check_global_state_invariants(&mutation);

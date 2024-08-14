@@ -1,0 +1,26 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_library(
+    name = "lib",
+    testonly = True,
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_query_stats_test",
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-utils",
+        "@crate_index//:itertools",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)

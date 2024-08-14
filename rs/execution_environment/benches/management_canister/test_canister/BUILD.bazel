@@ -1,0 +1,20 @@
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_canister(
+    name = "test_canister",
+    srcs = ["src/main.rs"],
+    crate_name = "ic_test_canister",
+    proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
+    service_file = "candid.did",
+    version = "0.1.0",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+    ],
+)

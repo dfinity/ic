@@ -1,11 +1,14 @@
 [package]
 name = "ic-xnet-payload-builder"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-async-trait = "0.1.31"
-hyper = { version = "0.14.18" , features = ["full", "tcp"] }
+async-trait = { workspace = true }
+hyper = { version = "0.14.18", features = ["full", "tcp"] }
 ic-async-utils = { path = "../../async_utils" }
 ic-base-types = { path = "../../types/base_types" }
 ic-canonical-state = { path = "../../canonical_state" }
@@ -26,28 +29,33 @@ ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
 ic-xnet-hyper = { path = "../hyper" }
 ic-xnet-uri = { path = "../uri" }
-prometheus = { version = "0.12.0", features = [ "process" ] }
-rand = "0.8"
-rand_chacha = "0.3"
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
-tokio = { version = "1.15.0", features = ["full"] }
+prometheus = { workspace = true }
+rand = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.3.0"
+assert_matches = { workspace = true }
+axum = { workspace = true }
 ic-config = { path = "../../config" }
+ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
+ic-interfaces-certified-stream-store-mocks = { path = "../../interfaces/certified_stream_store/mocks" }
 ic-interfaces-state-manager-mocks = { path = "../../interfaces/state_manager/mocks" }
 ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-state-manager = { path = "../../state_manager" }
 ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-consensus = { path = "../../test_utilities/consensus" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-test-utilities-metrics = { path = "../../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
+ic-test-utilities-state = { path = "../../test_utilities/state" }
+ic-test-utilities-time = { path = "../../test_utilities/time" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
 maplit = "1.0.2"
-mockall = "0.7.2"
-nix = "0.23.0"
+mockall = { workspace = true }
+nix = { workspace = true }
 proptest = "1.0"
-reqwest = "0.11.1"
-tempfile = "3.1.0"
-tiny_http = "0.10.0"
-url = "2.1.1"
+reqwest = { workspace = true }
+tempfile = { workspace = true }
+url = { workspace = true }

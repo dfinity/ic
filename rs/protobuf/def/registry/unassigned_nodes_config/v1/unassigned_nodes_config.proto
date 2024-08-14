@@ -1,6 +1,5 @@
 syntax = "proto3";
 package registry.unassigned_nodes_config.v1;
-import "types/v1/types.proto";
 
 // Config applied to the set of all unassigned nodes.
 message UnassignedNodesConfigRecord {

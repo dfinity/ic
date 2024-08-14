@@ -1,5 +1,7 @@
-use ic_crypto::{ecdsa_p256_signature_from_der_bytes, rsa_signature_from_bytes};
-use ic_interfaces::crypto::IngressSigVerifier;
+use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
+use ic_crypto_standalone_sig_verifier::{
+    ecdsa_p256_signature_from_der_bytes, rsa_signature_from_bytes,
+};
 use ic_types::{
     crypto::{AlgorithmId, BasicSig, BasicSigOf, Signable, UserPublicKey},
     messages::{WebAuthnEnvelope, WebAuthnSignature},
@@ -72,9 +74,9 @@ mod tests {
     use crate::webauthn::tests::ecdsa::{
         ECDSA_P256_PK_COSE_DER_WRAPPED_HEX, ECDSA_WEBAUTHN_SIG_HELLO_HEX,
     };
-    use ic_crypto::user_public_key_from_bytes;
+    use ic_crypto_standalone_sig_verifier::user_public_key_from_bytes;
     use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
-    use ic_test_utilities::types::ids::{message_test_id, node_test_id};
+    use ic_test_utilities_types::ids::{message_test_id, node_test_id};
     use ic_types::{
         crypto::SignableMock,
         messages::{Blob, Delegation},

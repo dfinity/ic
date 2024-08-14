@@ -2,6 +2,7 @@
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetRecord {
+    /// The IDs of the nodes that are part of this subnet.
     #[prost(bytes = "vec", repeated, tag = "3")]
     pub membership: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     /// Maximum amount of bytes per message. This is a hard cap, which means
@@ -21,9 +22,6 @@ pub struct SubnetRecord {
     /// The length of all DKG intervals. The DKG interval length is the number of rounds following the DKG summary.
     #[prost(uint64, tag = "10")]
     pub dkg_interval_length: u64,
-    /// Gossip Config
-    #[prost(message, optional, tag = "13")]
-    pub gossip_config: ::core::option::Option<GossipConfig>,
     /// If set to yes, the subnet starts as a (new) NNS
     #[prost(bool, tag = "14")]
     pub start_as_nns: bool,
@@ -42,18 +40,6 @@ pub struct SubnetRecord {
     /// The maximum combined size of the ingress and xnet messages that fit into a block.
     #[prost(uint64, tag = "19")]
     pub max_block_payload_size: u64,
-    /// The maximum number of instructions a message can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[prost(uint64, tag = "20")]
-    pub max_instructions_per_message: u64,
-    /// The maximum number of instructions a round can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[prost(uint64, tag = "21")]
-    pub max_instructions_per_round: u64,
-    /// The maximum number of instructions an `install_code` message can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[prost(uint64, tag = "22")]
-    pub max_instructions_per_install_code: u64,
     /// Information on whether a feature is supported by this subnet.
     #[prost(message, optional, tag = "23")]
     pub features: ::core::option::Option<SubnetFeatures>,
@@ -74,6 +60,8 @@ pub struct SubnetRecord {
     /// ECDSA Config. This field cannot be set back to `None` once it has been set
     /// to `Some`. To remove a key, the list of `key_ids` can be set to not include a particular key.
     /// If a removed key is not held by another subnet, it will be lost.
+    ///
+    /// Deprecated; please use chain_key_config instead.
     #[prost(message, optional, tag = "27")]
     pub ecdsa_config: ::core::option::Option<EcdsaConfig>,
     /// If `true`, the subnet will be halted after reaching the next cup height: it will no longer
@@ -84,12 +72,25 @@ pub struct SubnetRecord {
     /// appropriate proposal which sets `is_halted` to `false` is approved.
     #[prost(bool, tag = "28")]
     pub halt_at_cup_height: bool,
+    /// Cryptographic key configuration. This field cannot be set back to `None` once it has been set
+    /// to `Some`. To remove a key, the list of `key_configs` can be set to not include a particular
+    /// key. If the removed key is not held by another subnet, it will be lost.
+    #[prost(message, optional, tag = "29")]
+    pub chain_key_config: ::core::option::Option<ChainKeyConfig>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaInitialization {
     #[prost(message, optional, tag = "1")]
     pub key_id: ::core::option::Option<super::super::crypto::v1::EcdsaKeyId>,
+    #[prost(message, optional, tag = "2")]
+    pub dealings: ::core::option::Option<InitialIDkgDealings>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ChainKeyInitialization {
+    #[prost(message, optional, tag = "1")]
+    pub key_id: ::core::option::Option<super::super::crypto::v1::MasterPublicKeyId>,
     #[prost(message, optional, tag = "2")]
     pub dealings: ::core::option::Option<InitialIDkgDealings>,
 }
@@ -122,6 +123,9 @@ pub struct CatchUpPackageContents {
     /// / The initial ECDSA dealings for boot strapping target subnets.
     #[prost(message, repeated, tag = "7")]
     pub ecdsa_initializations: ::prost::alloc::vec::Vec<EcdsaInitialization>,
+    /// / The initial IDkg dealings for boot strapping target chain key subnets.
+    #[prost(message, repeated, tag = "8")]
+    pub chain_key_initializations: ::prost::alloc::vec::Vec<ChainKeyInitialization>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -295,38 +299,6 @@ pub struct ExtendedDerivationPath {
     #[prost(bytes = "vec", repeated, tag = "2")]
     pub derivation_path: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
-/// Per subnet P2P configuration
-/// Note: protoc is mangling the name P2PConfig to P2pConfig
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GossipConfig {
-    /// max outstanding request per peer MIN/DEFAULT/MAX 1/20/200
-    #[prost(uint32, tag = "1")]
-    pub max_artifact_streams_per_peer: u32,
-    /// timeout for a outstanding request 3_000/15_000/180_000
-    #[prost(uint32, tag = "2")]
-    pub max_chunk_wait_ms: u32,
-    /// max duplicate requests in underutilized networks 1/28/6000
-    #[prost(uint32, tag = "3")]
-    pub max_duplicity: u32,
-    /// maximum chunk size supported on this subnet 1024/4096/131_072
-    #[prost(uint32, tag = "4")]
-    pub max_chunk_size: u32,
-    /// history size for receive check 1_000/5_000/30_000
-    #[prost(uint32, tag = "5")]
-    pub receive_check_cache_size: u32,
-    /// period for re evaluating the priority function. 1_000/3_000/30_000
-    #[prost(uint32, tag = "6")]
-    pub pfn_evaluation_period_ms: u32,
-    /// period for polling the registry for updates 1_000/3_000/30_000
-    #[prost(uint32, tag = "7")]
-    pub registry_poll_period_ms: u32,
-    /// period for sending a retransmission request    
-    ///
-    /// config for advert distribution.
-    #[prost(uint32, tag = "8")]
-    pub retransmission_request_ms: u32,
-}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetFeatures {
@@ -339,13 +311,12 @@ pub struct SubnetFeatures {
     #[prost(bool, tag = "3")]
     pub http_requests: bool,
     /// Status of the SEV-SNP feature.
-    #[prost(enumeration = "SevFeatureStatus", optional, tag = "7")]
-    pub sev_status: ::core::option::Option<i32>,
-    /// Controls whether to collect/publish data to the onchain observability canister
-    #[prost(bool, optional, tag = "8")]
-    pub onchain_observability: ::core::option::Option<bool>,
+    #[prost(bool, optional, tag = "9")]
+    pub sev_enabled: ::core::option::Option<bool>,
 }
 /// Per subnet ECDSA configuration
+///
+/// Deprecated; please use ChainKeyConfig instead.
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaConfig {
@@ -367,6 +338,33 @@ pub struct EcdsaConfig {
     pub idkg_key_rotation_period_ms: ::core::option::Option<u64>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct KeyConfig {
+    /// The key's identifier.
+    #[prost(message, optional, tag = "1")]
+    pub key_id: ::core::option::Option<super::super::crypto::v1::MasterPublicKeyId>,
+    /// Number of pre-signatures to create in advance.
+    #[prost(uint32, optional, tag = "3")]
+    pub pre_signatures_to_create_in_advance: ::core::option::Option<u32>,
+    /// The maximum number of signature requests that can be enqueued at once.
+    #[prost(uint32, optional, tag = "4")]
+    pub max_queue_size: ::core::option::Option<u32>,
+}
+/// Per-subnet chain key configuration
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ChainKeyConfig {
+    /// Configurations for keys held by the subnet.
+    #[prost(message, repeated, tag = "1")]
+    pub key_configs: ::prost::alloc::vec::Vec<KeyConfig>,
+    /// Signature requests will timeout after the given number of nano seconds.
+    #[prost(uint64, optional, tag = "2")]
+    pub signature_request_timeout_ns: ::core::option::Option<u64>,
+    /// Key rotation period of a single node in milliseconds.
+    /// If none is specified key rotation is disabled.
+    #[prost(uint64, optional, tag = "3")]
+    pub idkg_key_rotation_period_ms: ::core::option::Option<u64>,
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum IDkgTranscriptOperation {
@@ -375,6 +373,7 @@ pub enum IDkgTranscriptOperation {
     ReshareOfMasked = 2,
     ReshareOfUnmasked = 3,
     UnmaskedTimesMasked = 4,
+    RandomUnmasked = 5,
 }
 impl IDkgTranscriptOperation {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -394,13 +393,25 @@ impl IDkgTranscriptOperation {
             IDkgTranscriptOperation::UnmaskedTimesMasked => {
                 "I_DKG_TRANSCRIPT_OPERATION_UNMASKED_TIMES_MASKED"
             }
+            IDkgTranscriptOperation::RandomUnmasked => "I_DKG_TRANSCRIPT_OPERATION_RANDOM_UNMASKED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "I_DKG_TRANSCRIPT_OPERATION_UNSPECIFIED" => Some(Self::Unspecified),
+            "I_DKG_TRANSCRIPT_OPERATION_RANDOM" => Some(Self::Random),
+            "I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_MASKED" => Some(Self::ReshareOfMasked),
+            "I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_UNMASKED" => Some(Self::ReshareOfUnmasked),
+            "I_DKG_TRANSCRIPT_OPERATION_UNMASKED_TIMES_MASKED" => Some(Self::UnmaskedTimesMasked),
+            "I_DKG_TRANSCRIPT_OPERATION_RANDOM_UNMASKED" => Some(Self::RandomUnmasked),
+            _ => None,
         }
     }
 }
 /// Represents the type of subnet. Subnets of different type might exhibit different
 /// behavior, e.g. being more restrictive in what operations are allowed or privileged
 /// compared to other subnet types.
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum SubnetType {
@@ -428,68 +439,14 @@ impl SubnetType {
             SubnetType::VerifiedApplication => "SUBNET_TYPE_VERIFIED_APPLICATION",
         }
     }
-}
-/// These modes correspond to milestones in the SEV-SNP development plan.
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum SevFeatureStatus {
-    /// The SEV-SNP feature is disabled.
-    ///
-    /// SEV-SNP enabled machines run the Guest without SEV-SNP.
-    ///
-    /// Warning: transitioning from SEV_FEATURE_STATUS_SECURE_ENABLED will result loss of all data.
-    Unspecified = 0,
-    /// The SEV-SNP feature is enabled in insecure mode.
-    ///
-    /// SEV-SNP enabled machines run the Guest with SEV-SNP but without disk integrity protection
-    /// and storing the KEK (Key Encryption Key) in cleartext.
-    ///
-    /// Warning: transitioning from any mode other than SEV_FEATURE_STATUS_UNSPECIFIED will result
-    /// in loss of all data.
-    InsecureEnabled = 1,
-    /// The SEV-SNP feature is enabled in insecure mode with disk integrity protection.
-    ///
-    /// SEV-SNP enabled machines run the Guest with SEV-SNP but with disk integrity protection
-    /// and storing the KEK (Key Encryption Key) in cleartext.
-    ///
-    /// Warning: transitioning to or from this mode will result loss of all data.
-    InsecureIntegrityEnabled = 2,
-    /// The SEV-SNP feature is enabled in secure mode with disk integrity protection.
-    ///
-    /// SEV-SNP enabled machines run the Guest with SEV-SNP with disk integrty protection
-    /// and the KEK (Key Encryption Key) is derived from the measurement.  Upgrades result
-    /// in the loss of all data as the KEK is not passed to the new Guest.
-    ///
-    /// Warning: transitioning to or from this mode except for SEV_FEATURE_STATUS_SECURE_ENABLED
-    /// will resut in loss of all data.
-    SecureNoUpgradeEnabled = 3,
-    /// The SEV-SNP feature is enabled in secure mode with disk integrity protection.
-    ///
-    /// SEV-SNP enabled machines run the Guest with SEV-SNP with disk integrty protection
-    /// and the KEK (Key Encryption Key) is derived from the measurement.  Upgrades do not
-    /// result in the loss of data as the KEK is passed to the new Guest.
-    ///
-    /// Warning: transitioning to or from this mode except for SEV_FEATURE_STATUS_SECURE_NO_UPGRADE_ENABLED
-    /// will result in loss of all data.
-    SecureEnabled = 4,
-}
-impl SevFeatureStatus {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            SevFeatureStatus::Unspecified => "SEV_FEATURE_STATUS_UNSPECIFIED",
-            SevFeatureStatus::InsecureEnabled => "SEV_FEATURE_STATUS_INSECURE_ENABLED",
-            SevFeatureStatus::InsecureIntegrityEnabled => {
-                "SEV_FEATURE_STATUS_INSECURE_INTEGRITY_ENABLED"
-            }
-            SevFeatureStatus::SecureNoUpgradeEnabled => {
-                "SEV_FEATURE_STATUS_SECURE_NO_UPGRADE_ENABLED"
-            }
-            SevFeatureStatus::SecureEnabled => "SEV_FEATURE_STATUS_SECURE_ENABLED",
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SUBNET_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "SUBNET_TYPE_APPLICATION" => Some(Self::Application),
+            "SUBNET_TYPE_SYSTEM" => Some(Self::System),
+            "SUBNET_TYPE_VERIFIED_APPLICATION" => Some(Self::VerifiedApplication),
+            _ => None,
         }
     }
 }

@@ -4,13 +4,8 @@
 
 use crate::{
     consensus::certification::{Certification, CertificationContent, CertificationShare},
-    crypto::{
-        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed, ThresholdSigShare,
-        ThresholdSigShareOf,
-    },
-    node_id_into_protobuf, node_id_try_from_option,
+    crypto::{CryptoHash, Signed},
     replica_version::ReplicaVersionParseError,
-    signature::{ThresholdSignature, ThresholdSignatureShare},
     xnet::CertifiedStreamSlice,
     CryptoHashOfPartialState, Height,
 };
@@ -24,44 +19,6 @@ mod tests;
 impl From<ReplicaVersionParseError> for ProxyDecodeError {
     fn from(err: ReplicaVersionParseError) -> Self {
         Self::ReplicaVersionParseError(Box::new(err))
-    }
-}
-
-impl<T> From<ThresholdSignature<T>> for pb::ThresholdSignature {
-    fn from(value: ThresholdSignature<T>) -> Self {
-        Self {
-            signature: value.signature.get().0,
-            signer: Some(value.signer.into()),
-        }
-    }
-}
-impl<T> TryFrom<pb::ThresholdSignature> for ThresholdSignature<T> {
-    type Error = ProxyDecodeError;
-
-    fn try_from(value: pb::ThresholdSignature) -> Result<Self, Self::Error> {
-        Ok(Self {
-            signature: CombinedThresholdSigOf::new(CombinedThresholdSig(value.signature)),
-            signer: try_from_option_field(value.signer, "ThresholdSignature::signer")?,
-        })
-    }
-}
-
-impl<T> From<ThresholdSignatureShare<T>> for pb::ThresholdSignatureShare {
-    fn from(value: ThresholdSignatureShare<T>) -> Self {
-        Self {
-            signature: value.signature.get().0,
-            signer: Some(node_id_into_protobuf(value.signer)),
-        }
-    }
-}
-impl<T> TryFrom<pb::ThresholdSignatureShare> for ThresholdSignatureShare<T> {
-    type Error = ProxyDecodeError;
-
-    fn try_from(value: pb::ThresholdSignatureShare) -> Result<Self, Self::Error> {
-        Ok(Self {
-            signature: ThresholdSigShareOf::new(ThresholdSigShare(value.signature)),
-            signer: node_id_try_from_option(value.signer)?,
-        })
     }
 }
 

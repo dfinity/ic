@@ -1,7 +1,10 @@
 [package]
 name = "stable_reader"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 byteorder = "1.3.4"

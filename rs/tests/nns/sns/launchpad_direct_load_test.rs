@@ -1,11 +1,11 @@
 use anyhow::Result;
 use std::time::Duration;
 
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::systest;
 use ic_tests::nns_tests::sns_aggregator::{benchmark_config, workload_direct};
 use ic_tests::nns_tests::sns_deployment::initiate_token_swap_with_oc_parameters;
-use ic_tests::systest;
 
 const WORKLOAD_DURATION: Duration = Duration::from_secs(2 * 60);
 
@@ -47,7 +47,7 @@ fn workload_direct_rps4800(env: TestEnv) {
 ///
 /// 1. Install NNS and SNS
 /// 2. Initiate the token sale
-/// 3. Generate workload (mimicking nns-dapp frontent) at various RPSs
+/// 3. Generate workload (mimicking nns-dapp frontend) at various RPSs
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_overall_timeout(Duration::from_secs(60 * 60))

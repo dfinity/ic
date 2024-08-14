@@ -1,7 +1,10 @@
 [package]
 name = "ic-state-tool"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -10,8 +13,8 @@ name = "state-tool"
 path = "src/main.rs"
 
 [dependencies]
-clap = { version = "3.1.6", features = ["derive"] }
-hex = "0.4.2"
+clap = { version = "3.2.25", features = ["derive"] }
+hex = { workspace = true }
 ic-config = { path = "../config" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
@@ -21,12 +24,12 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-layout = { path = "../state_layout" }
 ic-state-manager = { path = "../state_manager" }
-ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
-prost = "0.11.0"
-scoped_threadpool = "0.1.*"
+prost = { workspace = true }
+slog = { workspace = true }
+slog-term = { workspace = true }
 
 [dev-dependencies]
-tempfile = "3.1.0"
+tempfile = { workspace = true }

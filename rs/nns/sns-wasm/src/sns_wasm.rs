@@ -3,24 +3,27 @@ use crate::{
     pb::{
         hash_to_hex_string,
         v1::{
-            add_wasm_response, update_allowed_principals_response,
-            update_allowed_principals_response::AllowedPrincipals, AddWasmRequest, AddWasmResponse,
-            DappCanistersTransferResult, DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns,
-            GetAllowedPrincipalsResponse, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
-            GetSnsSubnetIdsResponse, GetWasmRequest, GetWasmResponse,
+            add_wasm_response, AddWasmRequest, AddWasmResponse, DappCanistersTransferResult,
+            DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns,
+            GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse,
+            GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetProposalIdThatAddedWasmRequest,
+            GetProposalIdThatAddedWasmResponse, GetSnsSubnetIdsResponse,
+            GetWasmMetadataRequest as GetWasmMetadataRequestPb,
+            GetWasmMetadataResponse as GetWasmMetadataResponsePb, GetWasmRequest, GetWasmResponse,
             InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
             ListDeployedSnsesRequest, ListDeployedSnsesResponse, ListUpgradeStep,
             ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsCanisterIds, SnsCanisterType,
             SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex, StableCanisterState,
-            UpdateAllowedPrincipalsRequest, UpdateAllowedPrincipalsResponse,
             UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
         },
     },
     stable_memory::SnsWasmStableMemory,
+    wasm_metadata::MetadataSection,
 };
 use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::api::stable::StableMemory;
+use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_common::{ONE_TRILLION, SNS_CREATION_FEE};
 use ic_nervous_system_proto::pb::v1::Canister;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
@@ -32,6 +35,7 @@ use ic_sns_governance::pb::v1::governance::Version;
 use ic_sns_init::{pb::v1::SnsInitPayload, SnsCanisterInitPayloads};
 use ic_sns_root::GetSnsCanistersSummaryResponse;
 use ic_types::{Cycles, SubnetId};
+use ic_wasm;
 use maplit::{btreemap, hashmap};
 use std::{
     cell::RefCell,
@@ -43,11 +47,30 @@ use std::{
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 
 const LOG_PREFIX: &str = "[SNS-WASM] ";
 
 const INITIAL_CANISTER_CREATION_CYCLES: u64 = ONE_TRILLION;
+
+/// The number of canisters that the SNS-WASM canister will install when deploying
+/// an SNS. This constant is different than `SNS_CANISTER_COUNT` due to the Archive
+/// canister being spawned by the Ledger canister, and not the directly by the
+/// SNS-WASM canister. The canisters being installed are the:
+///   - SNS Governance Canister
+///   - SNS Root Canister
+///   - SNS Swap Canister
+///   - ICRC Ledger Canister
+///   - ICRC Index Canister
+pub const SNS_CANISTER_COUNT_AT_INSTALL: u64 = 5;
+
+/// The total number of SNS canister types that make up an SNS. These are:
+///   - SNS Governance Canister
+///   - SNS Root Canister
+///   - SNS Swap Canister
+///   - ICRC Ledger Canister
+///   - ICRC Index Canister
+///   - ICRC Ledger Archive Canister
+pub const SNS_CANISTER_TYPE_COUNT: u64 = 6;
 
 impl From<SnsCanisterIds> for DeployedSns {
     fn from(src: SnsCanisterIds) -> Self {
@@ -82,6 +105,8 @@ where
     pub access_controls_enabled: bool,
     /// List of principals that are allowed to deploy an SNS
     pub allowed_principals: Vec<PrincipalId>,
+    /// Map of nns proposal id to index in the `deployed_sns_list`.
+    pub nns_proposal_to_deployed_sns: BTreeMap<u64, u64>,
 }
 
 /// Internal implementation to give the wasms we explicitly handle a name (instead of Vec<u8>) for
@@ -274,11 +299,102 @@ where
         }
     }
 
-    /// Read a WASM with the given hash from stable memory, if such a WASM exists
+    /// Returns an Option(ProposalId) in the GetProposalIdThatAddedWasmResponse (a struct with the proposal ID
+    /// that blessed the given wasm hash)
+    pub fn get_proposal_id_that_added_wasm(
+        &self,
+        payload: GetProposalIdThatAddedWasmRequest,
+    ) -> GetProposalIdThatAddedWasmResponse {
+        let hash = vec_to_hash(payload.hash).unwrap();
+        GetProposalIdThatAddedWasmResponse {
+            proposal_id: self
+                .read_wasm(&hash)
+                .and_then(|sns_wasm| sns_wasm.proposal_id),
+        }
+    }
+
+    /// Read a WASM with the given hash from stable memory, if such a WASM exists.
     fn read_wasm(&self, hash: &[u8; 32]) -> Option<SnsWasm> {
         self.wasm_indexes
             .get(hash)
             .and_then(|index| self.stable_memory.read_wasm(index.offset, index.size).ok())
+    }
+
+    pub fn get_wasm_metadata(
+        &self,
+        #[allow(unused_variables)] get_wasm_metadata_payload: GetWasmMetadataRequestPb,
+    ) -> GetWasmMetadataResponsePb {
+        // TODO[NNS1-2997]: Enable this feature on mainnet.
+        #[cfg(feature = "test")]
+        let result = self.get_wasm_metadata_impl(get_wasm_metadata_payload);
+
+        #[cfg(not(feature = "test"))]
+        let result = Err("get_wasm_metadata is not implemented yet.".to_string());
+
+        GetWasmMetadataResponsePb::from(result)
+    }
+
+    pub fn get_wasm_metadata_impl(
+        &self,
+        get_wasm_metadata_payload: GetWasmMetadataRequestPb,
+    ) -> Result<Vec<MetadataSection>, String> {
+        let module_hash = <[u8; 32]>::try_from(get_wasm_metadata_payload)?;
+
+        let wasm_metadata = self.read_wasm_metadata_or_err(&module_hash)?;
+
+        Ok(wasm_metadata)
+    }
+
+    /// Try reading the metadata sections of a WASM with the given hash from stable memory,
+    /// if such a WASM exists.
+    fn read_wasm_metadata_or_err(&self, hash: &[u8; 32]) -> Result<Vec<MetadataSection>, String> {
+        use ic_wasm::{metadata, utils};
+
+        let Some(wasm) = self.read_wasm(hash) else {
+            return Err(format!("Cannot find WASM stored under key `{:?}`.", hash));
+        };
+
+        // We don't care for symbol names in the WASM module as we just want the custom sections
+        // containing the metadata.
+        let wasm_module = utils::parse_wasm(&wasm.wasm, false)
+            .map_err(|err| format!("Cannot parse WASM: {}", err))?;
+
+        let sections = metadata::list_metadata(&wasm_module);
+
+        let sections = sections
+            .into_iter()
+            .filter_map(|section| {
+                let mut section: Vec<&str> = section.split(' ').collect();
+                if section.is_empty() {
+                    // This cannot practically happen, as it would imply that all characters of
+                    // the section are whitespaces.
+                    return None;
+                }
+                // Save this section's visibility specification, e.g. "icp:public" or "icp:private".
+                let visibility = section.remove(0).to_string();
+
+                // The conjunction of the remaining parts are the section's name.
+                let name = section.join(" ");
+
+                // Read the actual contents of this section.
+                let contents = metadata::get_metadata(&wasm_module, &name);
+
+                // Represent the absence of contents as an empty byte vector.
+                let contents = if let Some(contents) = contents {
+                    contents.to_vec()
+                } else {
+                    vec![]
+                };
+
+                Some(MetadataSection {
+                    visibility,
+                    name,
+                    contents,
+                })
+            })
+            .collect();
+
+        Ok(sections)
     }
 
     /// Adds a WASM to the canister's storage, validating that the expected hash matches that of the
@@ -508,10 +624,10 @@ where
     ///   3. Installs SNS root, SNS governance, SNS ledger and SNS index WASMs onto the created canisters.
     ///   4. Fund canisters with cycles
     ///   5. Sets the canisters' controllers:
-    ///     a. Root is controlled only by Governance.
-    ///     b. Governance is controlled only by Root.
-    ///     c. Ledger is controlled only by Root.
-    ///     d. Index is controlled only by Root.
+    ///       * Root is controlled only by Governance.
+    ///       * Governance is controlled only by Root.
+    ///       * Ledger is controlled only by Root.
+    ///       * Index is controlled only by Root.
     ///   6. Transfers control of the dapp_canisters from NNS Root to SNS Root.
     ///
     /// Step 3 requires installation parameters which come from the SnsInitPayload object
@@ -528,18 +644,16 @@ where
         deploy_new_sns_payload: DeployNewSnsRequest,
         caller: PrincipalId,
     ) -> DeployNewSnsResponse {
-        if !thread_safe_sns.with(|sns_wasm| sns_wasm.borrow_mut().check_caller(&caller)) {
-            return validation_deploy_error(
-                "Caller is not in allowed principals list. Cannot deploy an sns.".to_string(),
-            )
-            .into();
+        if caller != GOVERNANCE_CANISTER_ID.get() {
+            return DeployNewSnsResponse::from(validation_deploy_error(
+                "Only the NNS Governance may deploy a new SNS instance.".to_string(),
+            ));
         }
         match Self::do_deploy_new_sns(
             thread_safe_sns,
             canister_api,
             nns_root_canister_client,
             deploy_new_sns_payload,
-            &caller,
         )
         .await
         {
@@ -554,7 +668,7 @@ where
                 }),
             },
             Err(DeployError::Reversible(reversible)) => {
-                // Attempt to clean up after normal failures
+                // Attempt to clean up after normal failures.
                 Self::try_cleanup_reversible_deploy_error(
                     canister_api,
                     nns_root_canister_client,
@@ -563,7 +677,7 @@ where
                 .await
             }
             Err(DeployError::PartiallyReversible(partially_reversible)) => {
-                // Attempt to clean up after normal failures
+                // Attempt to clean up after abnormal failures.
                 Self::try_cleanup_partially_reversible_deploy_error(
                     nns_root_canister_client,
                     partially_reversible,
@@ -575,58 +689,14 @@ where
         }
     }
 
-    pub fn allowed_to_deploy_sns(&self, caller: PrincipalId) -> bool {
-        self.allowed_principals.contains(&caller)
-    }
-
-    /// If the caller is NNS Governance, always allow, as this would indicate a proposal was passed
-    /// to create a new SNS.
-    /// If the given caller exists in the `allowed_principals` whitelist return `true`,
-    /// otherwise return `false`.
-    ///
-    /// Deploying an SNS is a resource intensive operation, so removing the caller ensures that the
-    /// caller cannot repeated call `deploy_new_sns` and exhaust NNS resources.
-    pub fn check_caller(&mut self, caller: &PrincipalId) -> bool {
-        if &GOVERNANCE_CANISTER_ID.get() == caller {
-            return true;
-        }
-
-        self.allowed_principals.contains(caller)
-    }
-
-    /// If the caller is NNS Governance, always allow, as this would indicate a proposal was passed
-    /// to create a new SNS.
-    /// Otherwise, if the given caller exists in the `allowed_principals` whitelist, remove it.
-    ///
-    /// Deploying an SNS is a resource intensive operation, so removing the caller ensures that the
-    /// caller cannot repeated call `deploy_new_sns` and exhaust NNS resources.
-    pub fn consume_from_whitelist(&mut self, caller: &PrincipalId) {
-        if &GOVERNANCE_CANISTER_ID.get() == caller {
-            return;
-        }
-
-        // Debug assert for tests to ensure that `consume_from_whitelist` is
-        // only called on principals in the whitelist.
-        debug_assert!(self.allowed_principals.contains(caller));
-
-        if let Some(index) = self
-            .allowed_principals
-            .iter()
-            .position(|principal| principal == caller)
-        {
-            self.allowed_principals.remove(index);
-        }
-    }
-
     async fn do_deploy_new_sns(
         thread_safe_sns: &'static LocalKey<RefCell<SnsWasmCanister<M>>>,
         canister_api: &impl CanisterApi,
         nns_root_canister_client: &impl NnsRootCanisterClient,
         deploy_new_sns_request: DeployNewSnsRequest,
-        caller: &PrincipalId,
     ) -> Result<(SubnetId, SnsCanisterIds, Vec<Canister>), DeployError> {
         let sns_init_payload = deploy_new_sns_request
-            .get_and_validate_sns_init_payload(caller)
+            .get_and_validate_sns_init_payload()
             .map_err(validation_deploy_error)?;
 
         let dapp_canisters = &sns_init_payload
@@ -644,20 +714,9 @@ where
             .with(|sns_wasms| sns_wasms.borrow().get_latest_version_wasms())
             .map_err(validation_deploy_error)?;
 
-        let charge_cycles = caller != &GOVERNANCE_CANISTER_ID.get(); // Charge cycles except for Governance
-        if charge_cycles {
-            // If the fee is not present, we fail.
-            canister_api
-                .message_has_enough_cycles(SNS_CREATION_FEE)
-                .map_err(validation_deploy_error)?;
-        } else {
-            canister_api
-                .this_canister_has_enough_cycles(SNS_CREATION_FEE)
-                .map_err(validation_deploy_error)?;
-        }
-
-        // Now that all preconditions have been met, remove the caller from the whitelist.
-        thread_safe_sns.with(|sns_wasm| sns_wasm.borrow_mut().consume_from_whitelist(caller));
+        canister_api
+            .this_canister_has_enough_cycles(SNS_CREATION_FEE)
+            .map_err(validation_deploy_error)?;
 
         // Get the current controllers of each of the dapp_canisters in case of deployment errors.
         // The dapps will be returned to these controllers because it is not necessarily true
@@ -703,21 +762,17 @@ where
         })?;
 
         // After this step, we need to delete the canisters if things fail
-        let sns_canisters = Self::create_sns_canisters(
-            canister_api,
-            subnet_id,
-            INITIAL_CANISTER_CREATION_CYCLES,
-            charge_cycles,
-        )
-        .await
-        .map_err(|(message, canisters_to_delete)| {
-            DeployError::Reversible(ReversibleDeployError {
-                message,
-                canisters_to_delete,
-                subnet: Some(subnet_id),
-                dapp_canisters_to_restore: dapp_canisters_original_controllers.to_owned(),
-            })
-        })?;
+        let sns_canisters =
+            Self::create_sns_canisters(canister_api, subnet_id, INITIAL_CANISTER_CREATION_CYCLES)
+                .await
+                .map_err(|(message, canisters_to_delete)| {
+                    DeployError::Reversible(ReversibleDeployError {
+                        message,
+                        canisters_to_delete,
+                        subnet: Some(subnet_id),
+                        dapp_canisters_to_restore: dapp_canisters_original_controllers.to_owned(),
+                    })
+                })?;
 
         // This step should never fail unless the step before it fails which would return
         // an error.
@@ -785,14 +840,26 @@ where
             sns_canister
                 .borrow_mut()
                 .deployed_sns_list
-                .push(DeployedSns::from(sns_canisters))
+                .push(DeployedSns::from(sns_canisters));
+
+            // Get the index of the DeployedSns we just pushed
+            let latest_deployed_sns_index = sns_canister.borrow().deployed_sns_list.len() - 1;
+
+            // Record the index in `nns_proposal_to_deployed_sns`
+            sns_canister
+                .borrow_mut()
+                .nns_proposal_to_deployed_sns
+                .insert(
+                    sns_init_payload.nns_proposal_id(),
+                    latest_deployed_sns_index as u64,
+                );
         });
 
         // We combine the errors of the last two steps because at this point they should both be done
         // even if one fails, since we can no longer back out
         join_errors_or_ok(vec![
             // Accept all remaining cycles and fund the canisters
-            Self::fund_canisters(canister_api, &sns_canisters, charge_cycles).await,
+            Self::fund_canisters(canister_api, &sns_canisters).await,
             // Remove self as the controller
             Self::remove_self_as_controller(canister_api, &sns_canisters).await,
         ])
@@ -807,12 +874,17 @@ where
                 non_controlled_dapp_canisters: vec![],
             })
         })?;
-
-        // Request that NNS Root make the newly created SNS Root canister the sole controller
-        // of the dapp_canisters, removing itself.
+        // Request that NNS Root add the newly created SNS Root canister as a controller
+        // of the dapp_canisters.
+        // (NNS Root will be removed as a controller after the swap is done)
         let dapp_canister_to_new_controllers: BTreeMap<Canister, Vec<PrincipalId>> = dapp_canisters
             .iter()
-            .map(|canister| (*canister, vec![sns_init_canister_ids.root]))
+            .map(|canister| {
+                (
+                    *canister,
+                    vec![sns_init_canister_ids.root, ROOT_CANISTER_ID.get()],
+                )
+            })
             .collect();
         Self::change_controllers_of_nns_root_owned_canisters(
             nns_root_canister_client,
@@ -844,22 +916,18 @@ where
     async fn fund_canisters(
         canister_api: &impl CanisterApi,
         canisters: &SnsCanisterIds,
-        charge_cycles: bool,
     ) -> Result<(), String> {
         // Accept the remaining cycles in the request we need to fund the canisters
-        let remaining_unaccepted_cycles = if charge_cycles {
-            canister_api.accept_message_cycles(None)?
-        } else {
-            // We are loaning to the SNS a specific amount if we are not getting it from caller
-            SNS_CREATION_FEE.saturating_sub(INITIAL_CANISTER_CREATION_CYCLES.saturating_mul(5))
-        };
+        let remaining_unaccepted_cycles = SNS_CREATION_FEE.saturating_sub(
+            INITIAL_CANISTER_CREATION_CYCLES.saturating_mul(SNS_CANISTER_COUNT_AT_INSTALL),
+        );
         // We only collect the INITIAL_CANISTER_CREATION_CYCLES for the other 5 canisters because
         // archive will be created by the ledger post deploy.  In order to split whole allocation
         // evenly between all 6 canisters, we want to account for this.
         let uncollected_allocation_for_archive = INITIAL_CANISTER_CREATION_CYCLES;
         let cycles_per_canister = (remaining_unaccepted_cycles
             .saturating_sub(uncollected_allocation_for_archive))
-        .saturating_div(6);
+        .saturating_div(SNS_CANISTER_TYPE_COUNT);
 
         let results = futures::future::join_all(canisters.into_named_tuples().into_iter().map(
             |(label, canister_id)| async move {
@@ -894,7 +962,7 @@ where
             // Set Root as controller of Governance.
             canister_api
                 .set_controllers(
-                    CanisterId::new(canisters.governance.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.governance.unwrap()),
                     vec![this_canister_id, canisters.root.unwrap()],
                 )
                 .await
@@ -907,7 +975,7 @@ where
             // Set root as controller of Ledger.
             canister_api
                 .set_controllers(
-                    CanisterId::new(canisters.ledger.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.ledger.unwrap()),
                     vec![this_canister_id, canisters.root.unwrap()],
                 )
                 .await
@@ -915,7 +983,7 @@ where
             // Set root as controller of Index.
             canister_api
                 .set_controllers(
-                    CanisterId::new(canisters.index.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.index.unwrap()),
                     vec![this_canister_id, canisters.root.unwrap()],
                 )
                 .await
@@ -923,7 +991,7 @@ where
             // Set Governance as controller of Root.
             canister_api
                 .set_controllers(
-                    CanisterId::new(canisters.root.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.root.unwrap()),
                     vec![this_canister_id, canisters.governance.unwrap()],
                 )
                 .await
@@ -937,7 +1005,7 @@ where
             // Set NNS-Root as controller of Swap
             canister_api
                 .set_controllers(
-                    CanisterId::new(canisters.swap.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.swap.unwrap()),
                     vec![this_canister_id, ROOT_CANISTER_ID.get()],
                 )
                 .await
@@ -961,7 +1029,7 @@ where
             // Removing self, leaving root.
             canister_api
                 .set_controllers(
-                    CanisterId::new(canisters.governance.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.governance.unwrap()),
                     vec![canisters.root.unwrap()],
                 )
                 .await
@@ -974,7 +1042,7 @@ where
             // Removing self, leaving root.
             canister_api
                 .set_controllers(
-                    CanisterId::new(canisters.ledger.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.ledger.unwrap()),
                     vec![canisters.root.unwrap()],
                 )
                 .await
@@ -982,7 +1050,7 @@ where
             // Removing self, leaving governance.
             canister_api
                 .set_controllers(
-                    CanisterId::new(canisters.root.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.root.unwrap()),
                     vec![canisters.governance.unwrap()],
                 )
                 .await
@@ -990,7 +1058,7 @@ where
             // Removing self, leaving NNS-Root
             canister_api
                 .set_controllers(
-                    CanisterId::new(canisters.swap.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.swap.unwrap()),
                     vec![ROOT_CANISTER_ID.get()],
                 )
                 .await
@@ -998,7 +1066,7 @@ where
             // Removing self, leaving root.
             canister_api
                 .set_controllers(
-                    CanisterId::new(canisters.index.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.index.unwrap()),
                     vec![canisters.root.unwrap()],
                 )
                 .await
@@ -1019,27 +1087,27 @@ where
             vec!["Root", "Governance", "Ledger", "Index", "Swap"],
             futures::future::join_all(vec![
                 canister_api.install_wasm(
-                    CanisterId::new(canisters.root.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.root.unwrap()),
                     latest_wasms.root,
                     Encode!(&init_payloads.root).unwrap(),
                 ),
                 canister_api.install_wasm(
-                    CanisterId::new(canisters.governance.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.governance.unwrap()),
                     latest_wasms.governance,
                     Encode!(&init_payloads.governance).unwrap(),
                 ),
                 canister_api.install_wasm(
-                    CanisterId::new(canisters.ledger.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.ledger.unwrap()),
                     latest_wasms.ledger,
                     Encode!(&init_payloads.ledger).unwrap(),
                 ),
                 canister_api.install_wasm(
-                    CanisterId::new(canisters.index.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.index.unwrap()),
                     latest_wasms.index,
-                    Encode!(&init_payloads.index).unwrap(),
+                    Encode!(&init_payloads.index_ng).unwrap(),
                 ),
                 canister_api.install_wasm(
-                    CanisterId::new(canisters.swap.unwrap()).unwrap(),
+                    CanisterId::unchecked_from_principal(canisters.swap.unwrap()),
                     latest_wasms.swap,
                     Encode!(&init_payloads.swap).unwrap(),
                 ),
@@ -1060,23 +1128,7 @@ where
         canister_api: &impl CanisterApi,
         subnet_id: SubnetId,
         initial_cycles_per_canister: u64,
-        charge_cycles: bool,
     ) -> Result<SnsCanisterIds, (String, Option<SnsCanisterIds>)> {
-        if charge_cycles {
-            // Accept enough cycles to simply create the canisters.
-            canister_api
-                .accept_message_cycles(Some(initial_cycles_per_canister.saturating_mul(5)))
-                .map_err(|e| {
-                    (
-                        format!(
-                            "Could not accept cycles from request needed to create canisters: {}",
-                            e
-                        ),
-                        None,
-                    )
-                })?;
-        }
-
         let this_canister_id = canister_api.local_canister_id().get();
         let new_canister = || {
             canister_api.create_canister(
@@ -1441,7 +1493,7 @@ where
         }
     }
 
-    /// Dispatch the the CanisterStatus call to NNS Root and handle error cases.
+    /// Dispatch the CanisterStatus call to NNS Root and handle error cases.
     async fn get_controllers_of_nns_root_owned_canister(
         nns_root_canister_client: &impl NnsRootCanisterClient,
         target_canister: Canister,
@@ -1453,11 +1505,7 @@ where
                 target_canister,
             ))?;
 
-        let target_canister_id = CanisterId::new(target_principal_id)
-            .map_err(|_|
-            // In practice, validation ensures that this is unreachable.
-            format!("Could not get the controllers of {:?} as it is not a CanisterId", target_principal_id)
-        )?;
+        let target_canister_id = CanisterId::unchecked_from_principal(target_principal_id);
 
         let request = CanisterIdRecord {
             canister_id: target_canister_id,
@@ -1606,55 +1654,6 @@ where
             .into()
     }
 
-    /// Update allowed principals list
-    pub fn update_allowed_principals(
-        &mut self,
-        update_allowed_principals_request: UpdateAllowedPrincipalsRequest,
-        caller: PrincipalId,
-    ) -> UpdateAllowedPrincipalsResponse {
-        if caller != GOVERNANCE_CANISTER_ID.into() {
-            return UpdateAllowedPrincipalsResponse::error(
-                "Only Governance can call update_allowed_principals".to_string(),
-            );
-        }
-        let remove_set: HashSet<PrincipalId> = update_allowed_principals_request
-            .removed_principals
-            .into_iter()
-            .collect();
-
-        let add_set: HashSet<PrincipalId> = update_allowed_principals_request
-            .added_principals
-            .into_iter()
-            .collect();
-        let current_set: HashSet<PrincipalId> =
-            self.allowed_principals.clone().into_iter().collect();
-
-        self.allowed_principals = current_set
-            .union(&add_set)
-            .copied()
-            .collect::<HashSet<PrincipalId>>()
-            .difference(&remove_set)
-            .copied()
-            .collect();
-
-        UpdateAllowedPrincipalsResponse {
-            update_allowed_principals_result: Some(
-                update_allowed_principals_response::UpdateAllowedPrincipalsResult::AllowedPrincipals(
-                    AllowedPrincipals {
-                        allowed_principals: self.allowed_principals.clone(),
-                    },
-                ),
-            ),
-        }
-    }
-
-    // Get the list of principals allowed to deploy an sns.
-    pub fn get_allowed_principals(&self) -> GetAllowedPrincipalsResponse {
-        GetAllowedPrincipalsResponse {
-            allowed_principals: self.allowed_principals.clone(),
-        }
-    }
-
     /// Add or remove SNS subnet IDs from the list of subnet IDs that SNS instances will be
     /// deployed to
     pub fn update_sns_subnet_list(
@@ -1683,6 +1682,46 @@ where
                 .map(|id| id.get())
                 .collect(),
         }
+    }
+
+    /// Returns the DeployedSns structure that maps from the proposal_id in the
+    /// GetDeployedSnsByProposalIdRequest request. Return an error if the
+    /// proposal_id is not tracked, or maps to missing data.
+    pub fn get_deployed_sns_by_proposal_id(
+        &self,
+        request: GetDeployedSnsByProposalIdRequest,
+    ) -> GetDeployedSnsByProposalIdResponse {
+        match self.do_get_deployed_sns_by_proposal_id(request) {
+            Ok(deployed_sns) => GetDeployedSnsByProposalIdResponse::ok(deployed_sns),
+            Err(message) => GetDeployedSnsByProposalIdResponse::error(message),
+        }
+    }
+
+    /// Returns the DeployedSns structure that maps from the proposal_id in the
+    /// GetDeployedSnsByProposalIdRequest request. Return an error if the
+    /// proposal_id is not tracked, or maps to missing data.
+    pub fn do_get_deployed_sns_by_proposal_id(
+        &self,
+        request: GetDeployedSnsByProposalIdRequest,
+    ) -> Result<DeployedSns, String> {
+        let deployed_sns_index = self
+            .nns_proposal_to_deployed_sns
+            .get(&request.proposal_id)
+            .ok_or_else(|| {
+                format!(
+                    "No DeployedSns matches provided proposal_id({})",
+                    request.proposal_id
+                )
+            })?;
+        self.deployed_sns_list
+            .get(*deployed_sns_index as usize)
+            .cloned()
+            .ok_or_else(|| {
+                format!(
+                    "Missing DeployedSns for provided proposal_id({})",
+                    request.proposal_id
+                )
+            })
     }
 }
 
@@ -1770,7 +1809,7 @@ impl UpgradePath {
         match self
             .sns_specific_upgrade_path
             .entry(sns_governance_canister_id)
-            .or_insert_with(HashMap::new)
+            .or_default()
             .entry(from)
         {
             Entry::Occupied(occupied) => {
@@ -1811,24 +1850,15 @@ impl DeployNewSnsRequest {
     /// Validates that the payload is valid w.r.t. the sender - the NNS
     /// governance canister can only create an SNS using the one-proposal flow,
     /// while other canisters can only create an SNS using the legacy flow.
-    pub fn get_and_validate_sns_init_payload(
-        &self,
-        caller: &PrincipalId,
-    ) -> Result<SnsInitPayload, String> {
+    pub fn get_and_validate_sns_init_payload(&self) -> Result<SnsInitPayload, String> {
         let init_payload = self
             .sns_init_payload
             .as_ref()
             // Validate presence
-            .ok_or("sns_init_payload is a required field")?;
+            .ok_or("sns_init_payload is a required field")?
+            .validate_post_execution()?;
 
-        // The legacy flow cannot be initiated by the NNS governance canister canister,
-        // while the one proposal flow must be initiated by the NNS governance canister
-        match (init_payload.is_legacy_flow()?, caller == &GOVERNANCE_CANISTER_ID.get()) {
-            (true, false) => init_payload.validate_legacy_init(),
-            (false, true) => init_payload.validate_post_execution(),
-            (true, true) => Err("The legacy (non-one-proposal) flow cannot be initiated by the NNS Governance Canister".to_string()),
-            (false, false) => Err("The one-proposal flow can only be initiated by the NNS Governance Canister".to_string()),
-        }
+        Ok(init_payload)
     }
 }
 
@@ -1910,17 +1940,14 @@ mod test {
     use super::*;
     use crate::{canister_stable_memory::TestCanisterStableMemory, pb::v1::SnsUpgrade};
     use async_trait::async_trait;
-    use candid::{Decode, Encode};
     use ic_base_types::PrincipalId;
     use ic_crypto_sha2::Sha256;
-    use ic_icrc1_ledger::LedgerArgument;
     use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
     use ic_nns_handler_root_interface::client::{
         SpyNnsRootCanisterClient, SpyNnsRootCanisterClientCall, SpyNnsRootCanisterClientReply,
     };
     use ic_sns_init::pb::v1::{DappCanisters, SnsInitPayload};
-    use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id};
-    use maplit::hashset;
+    use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
     use pretty_assertions::assert_eq;
     use std::{
         sync::{Arc, Mutex},
@@ -1931,7 +1958,7 @@ mod test {
 
     struct TestCanisterApi {
         canisters_created: Arc<Mutex<u64>>,
-        // keep track of calls to our mocked methods
+        /// Keep track of calls to our mocked methods.
         #[allow(clippy::type_complexity)]
         pub install_wasm_calls: Arc<Mutex<Vec<(CanisterId, Vec<u8>, Vec<u8>)>>>,
         #[allow(clippy::type_complexity)]
@@ -1940,11 +1967,11 @@ mod test {
         #[allow(clippy::type_complexity)]
         pub cycles_sent: Arc<Mutex<Vec<(CanisterId, u64)>>>,
         pub canisters_deleted: Arc<Mutex<Vec<CanisterId>>>,
-        // How many cycles the canister has
+        /// How many cycles the canister has.
         pub canister_cycles_balance: Arc<Mutex<u64>>,
-        // How many cycles does the pretend request contain?
+        /// How many cycles does the pretend request contain.
         pub cycles_found_in_request: Arc<Mutex<u64>>,
-        // Errors that can be thrown at some nth function call
+        /// Errors that can be thrown at some nth function call.
         pub errors_on_create_canister: Arc<Mutex<Vec<Option<String>>>>,
         pub errors_on_set_controller: Arc<Mutex<Vec<Option<String>>>>,
         pub errors_on_delete_canister: Arc<Mutex<Vec<Option<String>>>>,
@@ -2083,7 +2110,7 @@ mod test {
             cycles_accepted: Arc::new(Mutex::new(vec![])),
             cycles_sent: Arc::new(Mutex::new(vec![])),
             canisters_deleted: Arc::new(Mutex::new(vec![])),
-            canister_cycles_balance: Arc::new(Mutex::new(0)),
+            canister_cycles_balance: Arc::new(Mutex::new(SNS_CREATION_FEE)),
             cycles_found_in_request: Arc::new(Mutex::new(SNS_CREATION_FEE)),
             errors_on_create_canister: Arc::new(Mutex::new(vec![])),
             errors_on_set_controller: Arc::new(Mutex::new(vec![])),
@@ -2097,6 +2124,7 @@ mod test {
         SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
             canister_type: i32::from(SnsCanisterType::Governance),
+            proposal_id: Some(2),
         }
     }
 
@@ -2129,6 +2157,7 @@ mod test {
         let root = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta],
             canister_type: i32::from(SnsCanisterType::Root),
+            ..SnsWasm::default()
         };
         let root_wasm_hash = root.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2144,6 +2173,7 @@ mod test {
         let governance = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta + 1],
             canister_type: i32::from(SnsCanisterType::Governance),
+            ..SnsWasm::default()
         };
         let governance_wasm_hash = governance.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2159,6 +2189,7 @@ mod test {
         let ledger = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta + 2],
             canister_type: i32::from(SnsCanisterType::Ledger),
+            ..SnsWasm::default()
         };
         let ledger_wasm_hash = ledger.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2173,6 +2204,7 @@ mod test {
         let swap = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta + 3],
             canister_type: i32::from(SnsCanisterType::Swap),
+            ..SnsWasm::default()
         };
         let swap_wasm_hash = swap.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2188,6 +2220,7 @@ mod test {
         let archive = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta + 4],
             canister_type: i32::from(SnsCanisterType::Archive),
+            ..SnsWasm::default()
         };
         let archive_wasm_hash = archive.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2203,6 +2236,7 @@ mod test {
         let index = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta + 5],
             canister_type: i32::from(SnsCanisterType::Index),
+            ..SnsWasm::default()
         };
         let index_wasm_hash = index.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2295,11 +2329,44 @@ mod test {
     }
 
     #[test]
+    fn test_api_get_proposal_id_that_added_wasm_returns_right_response() {
+        let mut canister = new_wasm_canister();
+
+        let wasm = smallest_valid_wasm();
+        let expected_hash = Sha256::hash(&wasm.wasm);
+        let expected_proposal_id = wasm.proposal_id.unwrap();
+
+        canister.add_wasm(AddWasmRequest {
+            wasm: Some(wasm.clone()),
+            hash: expected_hash.to_vec(),
+        });
+
+        // When given non-existent hash, return None
+        let bad_hash = Sha256::hash("something_else".as_bytes());
+        let proposal_id_response =
+            canister.get_proposal_id_that_added_wasm(GetProposalIdThatAddedWasmRequest {
+                hash: bad_hash.to_vec(),
+            });
+        assert!(proposal_id_response.proposal_id.is_none());
+
+        // When given valid hash return correct proposal ID
+        let proposal_id_response =
+            canister.get_proposal_id_that_added_wasm(GetProposalIdThatAddedWasmRequest {
+                hash: expected_hash.to_vec(),
+            });
+        assert_eq!(
+            proposal_id_response.proposal_id.unwrap(),
+            expected_proposal_id
+        );
+    }
+
+    #[test]
     fn test_api_add_wasm_fails_on_unspecified_canister_type() {
         let mut canister = new_wasm_canister();
         let unspecified_canister_wasm = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
             canister_type: i32::from(SnsCanisterType::Unspecified),
+            ..SnsWasm::default()
         };
 
         let response = canister.add_wasm(AddWasmRequest {
@@ -2323,6 +2390,7 @@ mod test {
         let invalid_canister_type_wasm = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
             canister_type: 1000,
+            ..SnsWasm::default()
         };
 
         let response = canister.add_wasm(AddWasmRequest {
@@ -2417,6 +2485,7 @@ mod test {
         let governance = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 6],
             canister_type: SnsCanisterType::Governance.into(),
+            ..SnsWasm::default()
         };
         let governance_wasm_hash = governance.sha256_hash().to_vec();
 
@@ -2470,6 +2539,7 @@ mod test {
         let governance = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 6],
             canister_type: i32::from(SnsCanisterType::Governance),
+            ..SnsWasm::default()
         };
         let governance_wasm_hash = governance.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2480,6 +2550,7 @@ mod test {
         let ledger = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 7],
             canister_type: i32::from(SnsCanisterType::Ledger),
+            ..SnsWasm::default()
         };
         let ledger_wasm_hash = ledger.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2591,6 +2662,7 @@ mod test {
         let governance = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 6],
             canister_type: i32::from(SnsCanisterType::Governance),
+            ..SnsWasm::default()
         };
         let governance_wasm_hash = governance.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2601,6 +2673,7 @@ mod test {
         let ledger = SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 7],
             canister_type: i32::from(SnsCanisterType::Ledger),
+            ..SnsWasm::default()
         };
         let ledger_wasm_hash = ledger.sha256_hash().to_vec();
         canister.add_wasm(AddWasmRequest {
@@ -2814,97 +2887,6 @@ mod test {
         );
     }
 
-    #[test]
-    fn test_update_allowed_principals() {
-        let mut canister = new_wasm_canister();
-
-        let update_allowed_principals_response_1 = canister.update_allowed_principals(
-            UpdateAllowedPrincipalsRequest {
-                added_principals: vec![
-                    PrincipalId::new_user_test_id(1),
-                    PrincipalId::new_user_test_id(2),
-                    PrincipalId::new_user_test_id(3),
-                ],
-                removed_principals: vec![],
-            },
-            GOVERNANCE_CANISTER_ID.into(),
-        );
-
-        let expected_1 = hashset! {
-            PrincipalId::new_user_test_id(1),
-            PrincipalId::new_user_test_id(2),
-            PrincipalId::new_user_test_id(3),
-        };
-
-        match update_allowed_principals_response_1.update_allowed_principals_result {
-            Some(update_allowed_principals_response::UpdateAllowedPrincipalsResult::AllowedPrincipals(
-                allowed_principals,
-            )) => assert_eq!(
-                expected_1
-                    .symmetric_difference(
-                        &allowed_principals
-                            .allowed_principals
-                            .iter()
-                            .copied()
-                            .collect()
-                    )
-                    .collect::<HashSet<&PrincipalId>>(),
-                HashSet::new()
-            ),
-            _ => panic!(
-                "Error: update_allowed_principals_response = {:#?}",
-                update_allowed_principals_response_1
-            ),
-        }
-
-        let update_allowed_principals_response_2 = canister.update_allowed_principals(
-            UpdateAllowedPrincipalsRequest {
-                added_principals: vec![
-                    PrincipalId::new_user_test_id(1),
-                    PrincipalId::new_user_test_id(4),
-                    PrincipalId::new_user_test_id(5),
-                ],
-                removed_principals: vec![PrincipalId::new_user_test_id(2)],
-            },
-            GOVERNANCE_CANISTER_ID.into(),
-        );
-
-        let expected_2 = hashset! {
-            PrincipalId::new_user_test_id(1),
-            PrincipalId::new_user_test_id(3),
-            PrincipalId::new_user_test_id(4),
-            PrincipalId::new_user_test_id(5),
-        };
-
-        match update_allowed_principals_response_2.update_allowed_principals_result {
-            Some(update_allowed_principals_response::UpdateAllowedPrincipalsResult::AllowedPrincipals(
-                allowed_principals,
-            )) => assert_eq!(
-                expected_2
-                    .symmetric_difference(
-                        &allowed_principals
-                            .allowed_principals
-                            .iter()
-                            .copied()
-                            .collect()
-                    )
-                    .collect::<HashSet<&PrincipalId>>(),
-                HashSet::new()
-            ),
-            _ => panic!(
-                "Error: update_allowed_principals_response = {:#?}",
-                update_allowed_principals_response_2
-            ),
-        }
-
-        assert_eq!(
-            expected_2
-                .symmetric_difference(&canister.allowed_principals.into_iter().collect())
-                .count(),
-            0
-        );
-    }
-
     /// Adds Governance and Ledger WASMs and asserts that the upgrade path is updated by
     /// these calls to add_wasm
     #[test]
@@ -3085,16 +3067,15 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_missing_init_payload_legacy() {
+    async fn test_missing_init_payload() {
         let canister_api = new_canister_api();
 
-        test_deploy_new_sns_request_legacy(
+        test_deploy_new_sns_request_one_proposal(
             None,
             canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             Some(subnet_test_id(1)),
             true,
-            false,
             vec![],
             vec![],
             vec![],
@@ -3114,47 +3095,15 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_invalid_init_payload_legacy() {
-        let canister_api = new_canister_api();
-        let mut payload = SnsInitPayload::with_valid_legacy_values_for_testing();
-        payload.token_symbol = None;
-
-        test_deploy_new_sns_request_legacy(
-            Some(payload),
-            canister_api,
-            &SpyNnsRootCanisterClient::new(vec![]),
-            Some(subnet_test_id(1)),
-            true,
-            false,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            DeployNewSnsResponse {
-                canisters: None,
-                subnet_id: None,
-                error: Some(SnsWasmError {
-                    message: "Error: token-symbol must be specified".to_string(),
-                }),
-                dapp_canisters_transfer_result: None,
-            },
-        )
-        .await;
-    }
-
-    #[tokio::test]
-    async fn test_missing_available_subnet_legacy() {
+    async fn test_missing_available_subnet() {
         let canister_api = new_canister_api();
 
-        test_deploy_new_sns_request_legacy(
-            Some(SnsInitPayload::with_valid_legacy_values_for_testing()),
+        test_deploy_new_sns_request_one_proposal(
+            Some(SnsInitPayload::with_valid_values_for_testing_post_execution()),
             canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             None,
             true,
-            false,
             vec![],
             vec![],
             vec![],
@@ -3174,15 +3123,14 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_wasms_not_available_legacy() {
+    async fn test_wasms_not_available() {
         let canister_api = new_canister_api();
 
-        test_deploy_new_sns_request_legacy(
-            Some(SnsInitPayload::with_valid_legacy_values_for_testing()),
+        test_deploy_new_sns_request_one_proposal(
+            Some(SnsInitPayload::with_valid_values_for_testing_post_execution()),
             canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             Some(subnet_test_id(1)),
-            false,
             false,
             vec![],
             vec![],
@@ -3203,17 +3151,21 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_insufficient_cycles_in_request_legacy() {
+    async fn test_insufficient_cycles_in_request() {
         let mut canister_api = new_canister_api();
-        canister_api.cycles_found_in_request = Arc::new(Mutex::new(100000));
+        canister_api.canister_cycles_balance = Arc::new(Mutex::new(100000));
 
-        test_deploy_new_sns_request_legacy(
-            Some(SnsInitPayload::with_valid_legacy_values_for_testing()),
+        let sns_init_payload = SnsInitPayload {
+            dapp_canisters: None,
+            ..SnsInitPayload::with_valid_values_for_testing_post_execution()
+        };
+
+        test_deploy_new_sns_request_one_proposal(
+            Some(sns_init_payload),
             canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             Some(subnet_test_id(1)),
             true,
-            false,
             vec![],
             vec![],
             vec![],
@@ -3225,7 +3177,7 @@ mod test {
                 canisters: None,
                 error: Some(SnsWasmError {
                     message: format!(
-                        "Not enough cycles in request.  Required: {}. Found: {}",
+                        "Not enough cycles in canister.  Required: {}. Found: {}",
                         SNS_CREATION_FEE, 100000
                     ),
                 }),
@@ -3236,7 +3188,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_failure_if_canisters_cannot_be_created_legacy() {
+    async fn test_failure_if_canisters_cannot_be_created() {
         let canister_api = new_canister_api();
         canister_api
             .errors_on_create_canister
@@ -3251,14 +3203,18 @@ mod test {
         let ledger_id = canister_test_id(3);
         let swap_id = canister_test_id(4);
 
-        test_deploy_new_sns_request_legacy(
-            Some(SnsInitPayload::with_valid_legacy_values_for_testing()),
+        let sns_init_payload = SnsInitPayload {
+            dapp_canisters: None,
+            ..SnsInitPayload::with_valid_values_for_testing_post_execution()
+        };
+
+        test_deploy_new_sns_request_one_proposal(
+            Some(sns_init_payload),
             canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             Some(subnet_id),
             true,
-            true,
-            vec![CANISTER_CREATION_CYCLES],
+            vec![],
             vec![],
             vec![root_id, governance_id, ledger_id, swap_id],
             vec![],
@@ -3288,84 +3244,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_failure_if_canisters_cannot_be_created_with_dapp_canisters_legacy() {
-        let mut canister_api = new_canister_api();
-        canister_api
-            .errors_on_create_canister
-            .lock()
-            .unwrap()
-            .push(Some("Canister Creation Failed from our test".to_string()));
-        canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
-        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
-
-        let subnet_id = subnet_test_id(1);
-
-        let root_id = canister_test_id(1);
-        let governance_id = canister_test_id(2);
-        let ledger_id = canister_test_id(3);
-        let swap_id = canister_test_id(4);
-
-        let dapp_id = canister_test_id(1000).get();
-        let original_dapp_controller = PrincipalId::new_user_test_id(10);
-
-        let sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
-
-        let spy_nns_root_client = SpyNnsRootCanisterClient::new(vec![
-            // The first call to get the controllers of the dapp_canister
-            SpyNnsRootCanisterClientReply::ok_canister_status_from_root(vec![
-                original_dapp_controller,
-                ROOT_CANISTER_ID.get(),
-            ]),
-            // The second call to change the controllers of the dapp_canister to just NNS Root
-            SpyNnsRootCanisterClientReply::ok_change_canister_controllers_from_root(),
-            // The third call to change the controllers of the dapp_canister to
-            // the original controllers
-            SpyNnsRootCanisterClientReply::ok_change_canister_controllers_from_root(),
-        ]);
-
-        test_deploy_new_sns_request_one_proposal(
-            Some(sns_init_payload),
-            canister_api,
-            &spy_nns_root_client,
-            Some(subnet_id),
-            true,
-            vec![],
-            vec![],
-            vec![root_id, governance_id, ledger_id, swap_id],
-            vec![],
-            vec![
-                (dapp_id, vec![ROOT_CANISTER_ID.get()]),
-                (
-                    dapp_id,
-                    vec![original_dapp_controller, ROOT_CANISTER_ID.get()],
-                ),
-            ],
-            vec![dapp_id],
-            DeployNewSnsResponse {
-                canisters: Some(SnsCanisterIds {
-                    root: Some(root_id.get()),
-                    ledger: Some(ledger_id.get()),
-                    governance: Some(governance_id.get()),
-                    swap: Some(swap_id.get()),
-                    index: None,
-                }),
-                subnet_id: Some(subnet_id.get()),
-                error: Some(SnsWasmError {
-                    message: "Could not create needed canisters. Only created 4 but 5 needed."
-                        .to_string(),
-                }),
-                dapp_canisters_transfer_result: Some(DappCanistersTransferResult {
-                    restored_dapp_canisters: vec![Canister::new(dapp_id)],
-                    nns_controlled_dapp_canisters: vec![],
-                    sns_controlled_dapp_canisters: vec![],
-                }),
-            },
-        )
-        .await;
-    }
-
-    #[tokio::test]
-    async fn fail_install_wasms_legacy() {
+    async fn fail_install_wasms() {
         let canister_api = new_canister_api();
         // don't throw an error until 3rd call to API
         canister_api
@@ -3402,14 +3281,18 @@ mod test {
         let swap_id = canister_test_id(4);
         let index_id = canister_test_id(5);
 
-        test_deploy_new_sns_request_legacy(
-            Some(SnsInitPayload::with_valid_legacy_values_for_testing()),
+        let sns_init_payload = SnsInitPayload {
+            dapp_canisters: None,
+            ..SnsInitPayload::with_valid_values_for_testing_post_execution()
+        };
+
+        test_deploy_new_sns_request_one_proposal(
+            Some(sns_init_payload),
             canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             Some(subnet_id),
             true,
-            true,
-            vec![CANISTER_CREATION_CYCLES],
+            vec![],
             vec![],
             vec![root_id, governance_id, ledger_id, swap_id, index_id],
             vec![],
@@ -3441,7 +3324,6 @@ mod test {
     async fn fail_install_wasms_with_dapp_canisters() {
         let mut canister_api = new_canister_api();
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
-        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
 
         canister_api
             .errors_on_install_wasms
@@ -3466,7 +3348,7 @@ mod test {
         let dapp_id = canister_test_id(1000).get();
         let original_dapp_controller = PrincipalId::new_user_test_id(10);
 
-        let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
+        let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing_post_execution();
         add_dapp_canisters(&mut sns_init_payload, &[dapp_id]);
 
         let spy_nns_root_client = SpyNnsRootCanisterClient::new(vec![
@@ -3523,7 +3405,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn fail_add_controllers_legacy() {
+    async fn fail_add_controllers() {
         let canister_api = new_canister_api();
         canister_api
             .errors_on_set_controller
@@ -3546,14 +3428,18 @@ mod test {
         let swap_id = canister_test_id(4);
         let index_id = canister_test_id(5);
 
-        test_deploy_new_sns_request_legacy(
-            Some(SnsInitPayload::with_valid_legacy_values_for_testing()),
+        let sns_init_payload = SnsInitPayload {
+            dapp_canisters: None,
+            ..SnsInitPayload::with_valid_values_for_testing_post_execution()
+        };
+
+        test_deploy_new_sns_request_one_proposal(
+            Some(sns_init_payload),
             canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             Some(subnet_id),
             true,
-            true,
-            vec![CANISTER_CREATION_CYCLES],
+            vec![],
             vec![],
             vec![root_id, governance_id, ledger_id, swap_id, index_id],
             vec![
@@ -3593,7 +3479,6 @@ mod test {
     async fn fail_add_controllers_with_dapp_canisters() {
         let mut canister_api = new_canister_api();
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
-        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
         canister_api
             .errors_on_set_controller
             .lock()
@@ -3613,7 +3498,7 @@ mod test {
         let dapp_id = canister_test_id(1000).get();
         let original_dapp_controller = PrincipalId::new_user_test_id(10);
 
-        let sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
+        let sns_init_payload = SnsInitPayload::with_valid_values_for_testing_post_execution();
 
         let spy_nns_root_client = SpyNnsRootCanisterClient::new(vec![
             // The first call to get the controllers of the dapp_canister
@@ -3677,7 +3562,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn fail_remove_self_as_controllers_legacy() {
+    async fn fail_remove_self_as_controllers() {
         let canister_api = new_canister_api();
         let mut errors = vec![
             None,
@@ -3708,17 +3593,18 @@ mod test {
         let sent_cycles =
             (SNS_CREATION_FEE - CANISTER_CREATION_CYCLES - INITIAL_CANISTER_CREATION_CYCLES) / 6;
 
-        test_deploy_new_sns_request_legacy(
-            Some(SnsInitPayload::with_valid_legacy_values_for_testing()),
+        let sns_init_payload = SnsInitPayload {
+            dapp_canisters: None,
+            ..SnsInitPayload::with_valid_values_for_testing_post_execution()
+        };
+
+        test_deploy_new_sns_request_one_proposal(
+            Some(sns_init_payload),
             canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             Some(subnet_test_id(1)),
             true,
-            true,
-            vec![
-                CANISTER_CREATION_CYCLES,
-                SNS_CREATION_FEE - CANISTER_CREATION_CYCLES,
-            ],
+            vec![],
             vec![
                 (root_id, sent_cycles),
                 (governance_id, sent_cycles),
@@ -3807,7 +3693,7 @@ mod test {
         let sent_cycles =
             (SNS_CREATION_FEE - CANISTER_CREATION_CYCLES - INITIAL_CANISTER_CREATION_CYCLES) / 6;
 
-        let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
+        let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing_post_execution();
         add_dapp_canisters(&mut sns_init_payload, &[dapp_id]);
 
         let spy_nns_root_client = SpyNnsRootCanisterClient::new(vec![
@@ -3887,7 +3773,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn fail_cleanup_legacy() {
+    async fn fail_cleanup() {
         let canister_api = new_canister_api();
         canister_api
             .errors_on_install_wasms
@@ -3919,14 +3805,18 @@ mod test {
         let swap_id = canister_test_id(4);
         let index_id = canister_test_id(5);
 
-        test_deploy_new_sns_request_legacy(
-            Some(SnsInitPayload::with_valid_legacy_values_for_testing()),
+        let sns_init_payload = SnsInitPayload {
+            dapp_canisters: Some(DappCanisters::default()),
+            ..SnsInitPayload::with_valid_values_for_testing_post_execution()
+        };
+
+        test_deploy_new_sns_request_one_proposal(
+            Some(sns_init_payload),
             canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             Some(subnet_test_id(1)),
             true,
-            true,
-            vec![CANISTER_CREATION_CYCLES],
+            vec![],
             vec![],
             vec![root_id, governance_id, ledger_id, swap_id, index_id],
             vec![],
@@ -3982,7 +3872,7 @@ mod test {
 
         let sns_init_payload = SnsInitPayload {
             dapp_canisters: Some(DappCanisters::default()),
-            ..SnsInitPayload::with_valid_values_for_testing()
+            ..SnsInitPayload::with_valid_values_for_testing_post_execution()
         };
 
         test_deploy_new_sns_request_one_proposal(
@@ -4076,75 +3966,7 @@ mod test {
         .await;
     }
 
-    async fn test_deploy_new_sns_request_legacy(
-        sns_init_payload: Option<SnsInitPayload>,
-        canister_api: TestCanisterApi,
-        nns_root_canister_client: &SpyNnsRootCanisterClient,
-        available_subnet: Option<SubnetId>,
-        wasm_available: bool,
-        should_caller_be_removed_from_whitelist: bool,
-        expected_accepted_cycles: Vec<u64>,
-        expected_sent_cycles: Vec<(CanisterId, u64)>,
-        expected_canisters_destroyed: Vec<CanisterId>,
-        expected_set_controllers_calls: Vec<(CanisterId, Vec<PrincipalId>)>,
-        expected_change_canister_controllers_calls: Vec<(PrincipalId, Vec<PrincipalId>)>,
-        expected_canister_status_calls: Vec<PrincipalId>,
-        expected_response: DeployNewSnsResponse,
-    ) {
-        let caller = PrincipalId::new_user_test_id(1);
-
-        thread_local! {
-            static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
-        }
-        CANISTER_WRAPPER.with(|sns_wasm| {
-            sns_wasm.borrow_mut().update_allowed_principals(
-                UpdateAllowedPrincipalsRequest {
-                    added_principals: vec![caller],
-                    removed_principals: vec![],
-                },
-                GOVERNANCE_CANISTER_ID.into(),
-            )
-        });
-
-        let get_allowed_principals_response =
-            CANISTER_WRAPPER.with(|c| c.borrow_mut().get_allowed_principals());
-
-        assert_eq!(
-            get_allowed_principals_response.allowed_principals,
-            vec![caller]
-        );
-
-        test_deploy_new_sns_request(
-            &CANISTER_WRAPPER,
-            sns_init_payload,
-            canister_api,
-            nns_root_canister_client,
-            available_subnet,
-            wasm_available,
-            caller,
-            expected_accepted_cycles,
-            expected_sent_cycles,
-            expected_canisters_destroyed,
-            expected_set_controllers_calls,
-            expected_change_canister_controllers_calls,
-            expected_canister_status_calls,
-            expected_response,
-        )
-        .await;
-
-        let get_allowed_principals_response =
-            CANISTER_WRAPPER.with(|c| c.borrow_mut().get_allowed_principals());
-
-        if should_caller_be_removed_from_whitelist {
-            assert_eq!(get_allowed_principals_response.allowed_principals, vec![]);
-        } else {
-            assert_eq!(
-                get_allowed_principals_response.allowed_principals,
-                vec![caller]
-            );
-        }
-    }
-
+    #[allow(clippy::too_many_arguments)]
     async fn test_deploy_new_sns_request(
         canister_wrapper: &'static LocalKey<RefCell<SnsWasmCanister<TestCanisterStableMemory>>>,
         sns_init_payload: Option<SnsInitPayload>,
@@ -4202,6 +4024,7 @@ mod test {
         );
     }
 
+    #[track_caller]
     fn assert_nns_root_calls(
         nns_root_canister_client: &SpyNnsRootCanisterClient,
         expected_change_canister_controllers_calls: Vec<(PrincipalId, Vec<PrincipalId>)>,
@@ -4250,7 +4073,7 @@ mod test {
                 .into_iter()
                 .map(|principal_id| {
                     SpyNnsRootCanisterClientCall::CanisterStatus(CanisterIdRecord {
-                        canister_id: CanisterId::new(principal_id).unwrap(),
+                        canister_id: CanisterId::unchecked_from_principal(principal_id),
                     })
                 })
                 .collect();
@@ -4262,181 +4085,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_deploy_new_sns_to_subnet_creates_canisters_and_installs_with_correct_params_legacy(
-    ) {
-        thread_local! {
-            static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
-        }
-        CANISTER_WRAPPER.with(|sns_wasm| {
-            sns_wasm.borrow_mut().update_allowed_principals(
-                UpdateAllowedPrincipalsRequest {
-                    added_principals: vec![PrincipalId::new_user_test_id(1)],
-                    removed_principals: vec![],
-                },
-                GOVERNANCE_CANISTER_ID.into(),
-            )
-        });
-
-        let test_id = subnet_test_id(1);
-        let deployed_version = CANISTER_WRAPPER.with(|c| {
-            c.borrow_mut().set_sns_subnets(vec![test_id]);
-            add_dummy_wasms(&mut c.borrow_mut(), None).5
-        });
-
-        let init_payload = SnsInitPayload::with_valid_legacy_values_for_testing();
-        let mut canister_api = new_canister_api();
-        canister_api.cycles_found_in_request = Arc::new(Mutex::new(SNS_CREATION_FEE + 100));
-
-        let response = SnsWasmCanister::deploy_new_sns(
-            &CANISTER_WRAPPER,
-            &canister_api,
-            &SpyNnsRootCanisterClient::new(vec![]),
-            DeployNewSnsRequest {
-                sns_init_payload: Some(init_payload.clone()),
-            },
-            PrincipalId::new_user_test_id(1),
-        )
-        .await;
-
-        let root_id = canister_test_id(1);
-        let governance_id = canister_test_id(2);
-        let ledger_id = canister_test_id(3);
-        let swap_id = canister_test_id(4);
-        let index_id = canister_test_id(5);
-
-        assert_eq!(
-            response,
-            DeployNewSnsResponse {
-                subnet_id: Some(test_id.get()),
-                canisters: Some(SnsCanisterIds {
-                    root: Some(root_id.get()),
-                    governance: Some(governance_id.get()),
-                    ledger: Some(ledger_id.get()),
-                    swap: Some(swap_id.get()),
-                    index: Some(index_id.get()),
-                }),
-                error: None,
-                dapp_canisters_transfer_result: Some(DappCanistersTransferResult {
-                    restored_dapp_canisters: vec![],
-                    nns_controlled_dapp_canisters: vec![],
-                    sns_controlled_dapp_canisters: vec![],
-                }),
-            }
-        );
-
-        let wasms_payloads = init_payload
-            .validate_legacy_init()
-            .unwrap()
-            .build_canister_payloads(
-                &SnsCanisterIds {
-                    root: Some(root_id.get()),
-                    governance: Some(governance_id.get()),
-                    ledger: Some(ledger_id.get()),
-                    swap: Some(swap_id.get()),
-                    index: Some(index_id.get()),
-                }
-                .try_into()
-                .unwrap(),
-                Some(Version {
-                    root_wasm_hash: deployed_version.root_wasm_hash,
-                    governance_wasm_hash: deployed_version.governance_wasm_hash,
-                    ledger_wasm_hash: deployed_version.ledger_wasm_hash,
-                    swap_wasm_hash: deployed_version.swap_wasm_hash,
-                    archive_wasm_hash: deployed_version.archive_wasm_hash,
-                    index_wasm_hash: deployed_version.index_wasm_hash,
-                }),
-                false,
-            )
-            .unwrap();
-
-        // Assert that we accepted the cycles
-        let cycles_accepted = &*canister_api.cycles_accepted.lock().unwrap();
-        assert_eq!(
-            &vec![
-                CANISTER_CREATION_CYCLES,
-                SNS_CREATION_FEE + 100 - CANISTER_CREATION_CYCLES
-            ],
-            cycles_accepted
-        );
-
-        // We subtract our initial creation fee sent, then send the remainder here
-        let sixth_remaining =
-            (SNS_CREATION_FEE + 100 - CANISTER_CREATION_CYCLES - INITIAL_CANISTER_CREATION_CYCLES)
-                / 6;
-        let cycles_sent = &*canister_api.cycles_sent.lock().unwrap();
-        assert_eq!(
-            &vec![
-                (root_id, sixth_remaining),
-                (governance_id, sixth_remaining),
-                (
-                    ledger_id,
-                    sixth_remaining * 2 + INITIAL_CANISTER_CREATION_CYCLES
-                ),
-                (swap_id, sixth_remaining),
-                (index_id, sixth_remaining),
-            ],
-            cycles_sent
-        );
-
-        // Now we assert that the expected canisters got the expected wasms with expected init params
-        let SnsCanisterInitPayloads {
-            root,
-            governance,
-            ledger,
-            ..
-        } = wasms_payloads;
-
-        let root_args = canister_api.install_wasm_calls.lock().unwrap().remove(0);
-        assert_eq!(
-            root_args,
-            (
-                // root
-                root_id,
-                vec![0, 97, 115, 109, 1, 0, 0, 0],
-                Encode!(&root).unwrap()
-            )
-        );
-
-        let governance_args = canister_api.install_wasm_calls.lock().unwrap().remove(0);
-        assert_eq!(
-            governance_args,
-            (
-                // governance
-                governance_id,
-                vec![0, 97, 115, 109, 1, 0, 0, 1],
-                Encode!(&governance).unwrap()
-            )
-        );
-        // We actually Decode! here because LedgerCanisterInitPayload uses hashset and hashmap
-        // which have non-deterministic ordering (and therefore serialization results)
-        let (ledger_canister, ledger_wasm, ledger_init_args) =
-            canister_api.install_wasm_calls.lock().unwrap().remove(0);
-        assert_eq!(ledger_canister, ledger_id);
-        assert_eq!(ledger_wasm, vec![0, 97, 115, 109, 1, 0, 0, 2]);
-        assert_eq!(Decode!(&ledger_init_args, LedgerArgument).unwrap(), ledger);
-
-        let set_controllers_calls = &*canister_api.set_controllers_calls.lock().unwrap();
-
-        let this_id = canister_test_id(0);
-        assert_eq!(
-            &vec![
-                (governance_id, vec![this_id.get(), root_id.get()]),
-                (ledger_id, vec![this_id.get(), root_id.get()]),
-                (index_id, vec![this_id.get(), root_id.get()]),
-                (root_id, vec![this_id.get(), governance_id.get()]),
-                (swap_id, vec![this_id.get(), ROOT_CANISTER_ID.get()]),
-                (governance_id, vec![root_id.get()]),
-                (ledger_id, vec![root_id.get()]),
-                (root_id, vec![governance_id.get()]),
-                (swap_id, vec![ROOT_CANISTER_ID.get()]),
-                (index_id, vec![root_id.get()]),
-            ],
-            set_controllers_calls
-        );
-    }
-
-    #[tokio::test]
-    async fn test_deploy_new_sns_records_root_canisters_legacy() {
+    async fn test_deploy_new_sns_records_root_canisters() {
         let test_id = subnet_test_id(1);
         let mut canister_api = new_canister_api();
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(SNS_CREATION_FEE));
@@ -4444,60 +4093,43 @@ mod test {
         thread_local! {
             static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
         }
-
-        CANISTER_WRAPPER.with(|sns_wasm| {
-            sns_wasm.borrow_mut().update_allowed_principals(
-                UpdateAllowedPrincipalsRequest {
-                    added_principals: vec![PrincipalId::new_user_test_id(1)],
-                    removed_principals: vec![],
-                },
-                GOVERNANCE_CANISTER_ID.into(),
-            )
-        });
 
         CANISTER_WRAPPER.with(|c| {
             c.borrow_mut().set_sns_subnets(vec![test_id]);
             add_dummy_wasms(&mut c.borrow_mut(), None);
         });
 
+        let sns_init_payload = SnsInitPayload {
+            dapp_canisters: None,
+            ..SnsInitPayload::with_valid_values_for_testing_post_execution()
+        };
+
         let sns_1 = SnsWasmCanister::deploy_new_sns(
             &CANISTER_WRAPPER,
             &canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             DeployNewSnsRequest {
-                sns_init_payload: Some(SnsInitPayload::with_valid_legacy_values_for_testing()),
+                sns_init_payload: Some(sns_init_payload.clone()),
             },
-            PrincipalId::new_user_test_id(1),
+            PrincipalId::from(GOVERNANCE_CANISTER_ID),
         )
         .await
         .canisters
         .unwrap();
 
-        // Each SNS deploy consumes an ID from the whitelist, so we re-add the ID here
-        CANISTER_WRAPPER.with(|sns_wasm| {
-            sns_wasm.borrow_mut().update_allowed_principals(
-                UpdateAllowedPrincipalsRequest {
-                    added_principals: vec![PrincipalId::new_user_test_id(1)],
-                    removed_principals: vec![],
-                },
-                GOVERNANCE_CANISTER_ID.into(),
-            )
-        });
-
         // Add more cycles so our second call works
-        canister_api.cycles_found_in_request = Arc::new(Mutex::new(SNS_CREATION_FEE));
-        let response = SnsWasmCanister::deploy_new_sns(
+        let sns_2 = SnsWasmCanister::deploy_new_sns(
             &CANISTER_WRAPPER,
             &canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             DeployNewSnsRequest {
-                sns_init_payload: Some(SnsInitPayload::with_valid_legacy_values_for_testing()),
+                sns_init_payload: Some(sns_init_payload),
             },
-            PrincipalId::new_user_test_id(1),
+            PrincipalId::from(GOVERNANCE_CANISTER_ID),
         )
-        .await;
-
-        let sns_2 = response.canisters.unwrap();
+        .await
+        .canisters
+        .unwrap();
 
         assert_unique_canister_ids(&sns_1, &sns_2);
 
@@ -4526,23 +4158,13 @@ mod test {
             static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
         }
 
-        CANISTER_WRAPPER.with(|sns_wasm| {
-            sns_wasm.borrow_mut().update_allowed_principals(
-                UpdateAllowedPrincipalsRequest {
-                    added_principals: vec![PrincipalId::new_user_test_id(1)],
-                    removed_principals: vec![],
-                },
-                GOVERNANCE_CANISTER_ID.into(),
-            )
-        });
-
         CANISTER_WRAPPER.with(|c| {
             c.borrow_mut().set_sns_subnets(vec![test_id]);
             add_dummy_wasms(&mut c.borrow_mut(), None);
         });
 
         let original_dapp_controller = PrincipalId::new_user_test_id(10);
-        let sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
+        let sns_init_payload = SnsInitPayload::with_valid_values_for_testing_post_execution();
         let root_canister_calls = sns_init_payload
             .dapp_canisters
             .clone()
@@ -4602,11 +4224,6 @@ mod test {
                 instances: vec![DeployedSns::from(sns_1)],
             },
         );
-
-        assert_eq!(
-            vec![PrincipalId::new_user_test_id(1)],
-            CANISTER_WRAPPER.with(|c| c.borrow().allowed_principals.clone())
-        );
     }
 
     #[tokio::test]
@@ -4630,7 +4247,9 @@ mod test {
             &canister_api,
             &SpyNnsRootCanisterClient::new(vec![]),
             DeployNewSnsRequest {
-                sns_init_payload: Some(SnsInitPayload::with_valid_values_for_testing()),
+                sns_init_payload: Some(
+                    SnsInitPayload::with_valid_values_for_testing_post_execution(),
+                ),
             },
             GOVERNANCE_CANISTER_ID.get(),
         )
@@ -4649,11 +4268,10 @@ mod test {
     #[tokio::test]
     async fn test_deploy_new_sns_with_dapp_canisters_only_by_nns_governance() {
         let test_id = subnet_test_id(1);
-        let allowed_principal = PrincipalId::new_user_test_id(1);
+        let principal = PrincipalId::new_user_test_id(1);
 
         let mut canister_api = new_canister_api();
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
-        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
 
         thread_local! {
             static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
@@ -4661,19 +4279,11 @@ mod test {
 
         CANISTER_WRAPPER.with(|sns_wasm| {
             let mut sns_wasm = sns_wasm.borrow_mut();
-            sns_wasm.update_allowed_principals(
-                UpdateAllowedPrincipalsRequest {
-                    added_principals: vec![allowed_principal],
-                    removed_principals: vec![],
-                },
-                GOVERNANCE_CANISTER_ID.into(),
-            );
             sns_wasm.set_sns_subnets(vec![test_id]);
             add_dummy_wasms(&mut sns_wasm, None);
         });
 
-        let mut sns_init_payload = SnsInitPayload::with_valid_legacy_values_for_testing();
-        add_dapp_canisters(&mut sns_init_payload, &[CanisterId::from_u64(1000).get()]);
+        let sns_init_payload = SnsInitPayload::with_valid_values_for_testing_post_execution();
 
         let response = SnsWasmCanister::deploy_new_sns(
             &CANISTER_WRAPPER,
@@ -4682,58 +4292,14 @@ mod test {
             DeployNewSnsRequest {
                 sns_init_payload: Some(sns_init_payload),
             },
-            allowed_principal,
+            principal,
         )
         .await;
 
         assert_eq!(
             response.error,
             Some(SnsWasmError {
-                message: "Could not determine whether the SNS init payload is using the one-proposal flow or the legacy because it contains a mix of set and unset one proposal parameters"
-                    .to_string()
-            })
-        );
-    }
-
-    #[tokio::test]
-    async fn test_deploy_new_sns_without_dapp_canisters_not_possible_by_nns_governance() {
-        let test_id = subnet_test_id(1);
-
-        thread_local! {
-            static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
-        }
-
-        let mut canister_api = new_canister_api();
-        canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
-        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
-
-        CANISTER_WRAPPER.with(|sns_wasm| {
-            let mut sns_wasm = sns_wasm.borrow_mut();
-            sns_wasm.set_sns_subnets(vec![test_id]);
-            add_dummy_wasms(&mut sns_wasm, None);
-        });
-
-        let sns_init_payload = SnsInitPayload {
-            dapp_canisters: None,
-            ..SnsInitPayload::with_valid_values_for_testing()
-        };
-
-        let response = SnsWasmCanister::deploy_new_sns(
-            &CANISTER_WRAPPER,
-            &canister_api,
-            &SpyNnsRootCanisterClient::new(vec![]),
-            DeployNewSnsRequest {
-                sns_init_payload: Some(sns_init_payload),
-            },
-            GOVERNANCE_CANISTER_ID.into(),
-        )
-        .await;
-
-        assert_eq!(
-            response.error,
-            Some(SnsWasmError {
-                message: "Could not determine whether the SNS init payload is using the one-proposal flow or the legacy because it contains a mix of set and unset one proposal parameters"
-                    .to_string()
+                message: "Only the NNS Governance may deploy a new SNS instance.".to_string()
             })
         );
     }
@@ -4744,7 +4310,7 @@ mod test {
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
         canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
 
-        let dapp_ids = vec![
+        let dapp_ids = [
             canister_test_id(1000).get(),
             canister_test_id(1001).get(),
             canister_test_id(1002).get(),
@@ -4758,7 +4324,7 @@ mod test {
                     .map(|id| Canister { id: Some(*id) })
                     .collect(),
             }),
-            ..SnsInitPayload::with_valid_values_for_testing()
+            ..SnsInitPayload::with_valid_values_for_testing_post_execution()
         };
 
         let spy_nns_root_client = SpyNnsRootCanisterClient::new(vec![
@@ -4849,7 +4415,7 @@ mod test {
             canister_test_id(1002).get(),
         ];
 
-        let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
+        let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing_post_execution();
         add_dapp_canisters(&mut sns_init_payload, &dapp_ids);
 
         let spy_nns_root_client = SpyNnsRootCanisterClient::new(vec![
@@ -4924,9 +4490,9 @@ mod test {
                 (dapp_ids[0], vec![ROOT_CANISTER_ID.get()]),
                 (dapp_ids[1], vec![ROOT_CANISTER_ID.get()]),
                 (dapp_ids[2], vec![ROOT_CANISTER_ID.get()]),
-                (dapp_ids[0], vec![root_id.get()]),
-                (dapp_ids[1], vec![root_id.get()]),
-                (dapp_ids[2], vec![root_id.get()]),
+                (dapp_ids[0], vec![root_id.get(), ROOT_CANISTER_ID.get()]),
+                (dapp_ids[1], vec![root_id.get(), ROOT_CANISTER_ID.get()]),
+                (dapp_ids[2], vec![root_id.get(), ROOT_CANISTER_ID.get()]),
                 (
                     dapp_ids[1],
                     vec![original_dapp_controller, ROOT_CANISTER_ID.get()],
@@ -4977,7 +4543,7 @@ mod test {
             canister_test_id(1002).get(),
         ];
 
-        let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
+        let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing_post_execution();
         add_dapp_canisters(&mut sns_init_payload, &dapp_ids);
 
         let spy_nns_root_client = SpyNnsRootCanisterClient::new(vec![
@@ -5040,7 +4606,7 @@ mod test {
             canister_test_id(1002).get(),
         ];
 
-        let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
+        let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing_post_execution();
         add_dapp_canisters(&mut sns_init_payload, &dapp_ids);
 
         let spy_nns_root_client = SpyNnsRootCanisterClient::new(vec![
@@ -5112,7 +4678,7 @@ mod test {
             canister_test_id(1002).get(),
         ];
 
-        let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
+        let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing_post_execution();
         add_dapp_canisters(&mut sns_init_payload, &dapp_ids);
 
         let spy_nns_root_client = SpyNnsRootCanisterClient::new(vec![
@@ -5226,7 +4792,7 @@ mod test {
             canister_test_id(1002).get(),
         ];
 
-        let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
+        let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing_post_execution();
         add_dapp_canisters(&mut sns_init_payload, &dapp_ids);
 
         let spy_nns_root_client = SpyNnsRootCanisterClient::new(vec![
@@ -5305,9 +4871,9 @@ mod test {
                 (dapp_ids[0], vec![ROOT_CANISTER_ID.get()]),
                 (dapp_ids[1], vec![ROOT_CANISTER_ID.get()]),
                 (dapp_ids[2], vec![ROOT_CANISTER_ID.get()]),
-                (dapp_ids[0], vec![root_id.get()]),
-                (dapp_ids[1], vec![root_id.get()]),
-                (dapp_ids[2], vec![root_id.get()]),
+                (dapp_ids[0], vec![root_id.get(), ROOT_CANISTER_ID.get()]),
+                (dapp_ids[1], vec![root_id.get(), ROOT_CANISTER_ID.get()]),
+                (dapp_ids[2], vec![root_id.get(), ROOT_CANISTER_ID.get()]),
                 (dapp_ids[1], vec![original_dapp_controller, ROOT_CANISTER_ID.get()]),
                 (dapp_ids[2], vec![original_dapp_controller, ROOT_CANISTER_ID.get()]),
             ],
@@ -5340,5 +4906,214 @@ mod test {
             },
         )
         .await;
+    }
+
+    // TODO[NNS1-2997]: remove `#[cfg(feature = "test")]`.
+    #[cfg(feature = "test")]
+    mod get_wasm_metadata {
+        use super::*;
+        use crate::pb::v1::{
+            get_wasm_metadata_response, GetWasmMetadataRequest as GetWasmMetadataRequestPb,
+            GetWasmMetadataResponse as GetWasmMetadataResponsePb,
+            MetadataSection as MetadataSectionPb,
+        };
+        use libflate::gzip;
+        use pretty_assertions::assert_eq;
+
+        // Adds section "icp:[public|private] $name$contents" to `wasm`, returning `wasm`'s new hash.
+        fn annotate_wasm_with_metadata(
+            wasm: &mut SnsWasm,
+            is_public: bool,
+            name: &str,
+            contents: Vec<u8>,
+        ) -> Vec<u8> {
+            use ic_wasm::{metadata, utils};
+
+            let kind = if is_public {
+                metadata::Kind::Public
+            } else {
+                metadata::Kind::Private
+            };
+
+            let mut wasm_module = utils::parse_wasm(&wasm.wasm, false).unwrap();
+            metadata::add_metadata(&mut wasm_module, kind, name, contents);
+
+            wasm.wasm = wasm_module.emit_wasm();
+
+            Sha256::hash(&wasm.wasm).to_vec()
+        }
+
+        // Gzips a wasm, returning the hash of its compressed representation.
+        fn gzip_wasm(wasm: &mut SnsWasm) -> Vec<u8> {
+            wasm.wasm = {
+                let mut encoder = gzip::Encoder::new(Vec::new()).unwrap();
+                std::io::copy(&mut &wasm.wasm[..], &mut encoder).unwrap();
+                encoder.finish().into_result().unwrap()
+            };
+
+            Sha256::hash(&wasm.wasm).to_vec()
+        }
+
+        #[test]
+        fn test_read_metadata_no_sections() {
+            let mut canister = new_wasm_canister();
+
+            let wasm = smallest_valid_wasm();
+            let hash = Sha256::hash(&wasm.wasm);
+            canister.add_wasm(AddWasmRequest {
+                wasm: Some(wasm.clone()),
+                hash: hash.to_vec(),
+            });
+
+            // Run code under test
+            let response = canister.get_wasm_metadata(GetWasmMetadataRequestPb {
+                hash: Some(hash.to_vec()),
+            });
+
+            use get_wasm_metadata_response::{Ok, Result};
+            assert_eq!(
+                response,
+                GetWasmMetadataResponsePb {
+                    result: Some(Result::Ok(Ok { sections: vec![] }))
+                }
+            );
+        }
+
+        #[test]
+        fn test_read_metadata_one_section() {
+            let git_commit_id = "ABCDEFG".to_string();
+            let git_commit_id = git_commit_id.as_bytes();
+
+            let mut wasm = smallest_valid_wasm();
+            let hash = annotate_wasm_with_metadata(
+                &mut wasm,
+                true,
+                "git_commit_id",
+                git_commit_id.to_vec(),
+            );
+
+            let mut canister = new_wasm_canister();
+            canister.add_wasm(AddWasmRequest {
+                wasm: Some(wasm.clone()),
+                hash: hash.clone(),
+            });
+
+            // Run code under test
+            let response =
+                canister.get_wasm_metadata(GetWasmMetadataRequestPb { hash: Some(hash) });
+
+            use get_wasm_metadata_response::{Ok, Result};
+            assert_eq!(
+                response,
+                GetWasmMetadataResponsePb {
+                    result: Some(Result::Ok(Ok {
+                        sections: vec![MetadataSectionPb {
+                            visibility: Some("icp:public".to_string()),
+                            name: Some("git_commit_id".to_string()),
+                            contents: Some(git_commit_id.to_vec()),
+                        }],
+                    }))
+                }
+            );
+        }
+
+        #[test]
+        fn test_read_metadata_two_sections() {
+            let git_commit_id = "ABCDEFG".to_string();
+            let git_commit_id = git_commit_id.as_bytes();
+
+            let other_contents = "123456".to_string();
+            let other_contents = other_contents.as_bytes();
+
+            let mut wasm = smallest_valid_wasm();
+
+            let hash = {
+                annotate_wasm_with_metadata(
+                    &mut wasm,
+                    true,
+                    "git_commit_id",
+                    git_commit_id.to_vec(),
+                );
+                annotate_wasm_with_metadata(
+                    &mut wasm,
+                    false,
+                    "other_contents",
+                    other_contents.to_vec(),
+                )
+            };
+
+            let mut canister = new_wasm_canister();
+            canister.add_wasm(AddWasmRequest {
+                wasm: Some(wasm.clone()),
+                hash: hash.clone(),
+            });
+
+            // Run code under test
+            let response =
+                canister.get_wasm_metadata(GetWasmMetadataRequestPb { hash: Some(hash) });
+
+            use get_wasm_metadata_response::{Ok, Result};
+            assert_eq!(
+                response,
+                GetWasmMetadataResponsePb {
+                    result: Some(Result::Ok(Ok {
+                        sections: vec![
+                            MetadataSectionPb {
+                                visibility: Some("icp:public".to_string()),
+                                name: Some("git_commit_id".to_string()),
+                                contents: Some(git_commit_id.to_vec()),
+                            },
+                            MetadataSectionPb {
+                                visibility: Some("icp:private".to_string()),
+                                name: Some("other_contents".to_string()),
+                                contents: Some(other_contents.to_vec()),
+                            },
+                        ],
+                    }))
+                }
+            );
+        }
+
+        #[test]
+        fn test_read_metadata_gzipped() {
+            let git_commit_id = "ABCDEFG".to_string();
+            let git_commit_id = git_commit_id.as_bytes();
+
+            let mut wasm = smallest_valid_wasm();
+
+            let hash = {
+                annotate_wasm_with_metadata(
+                    &mut wasm,
+                    true,
+                    "git_commit_id",
+                    git_commit_id.to_vec(),
+                );
+                gzip_wasm(&mut wasm)
+            };
+
+            let mut canister = new_wasm_canister();
+            canister.add_wasm(AddWasmRequest {
+                wasm: Some(wasm.clone()),
+                hash: hash.clone(),
+            });
+
+            // Run code under test
+            let response =
+                canister.get_wasm_metadata(GetWasmMetadataRequestPb { hash: Some(hash) });
+
+            use get_wasm_metadata_response::{Ok, Result};
+            assert_eq!(
+                response,
+                GetWasmMetadataResponsePb {
+                    result: Some(Result::Ok(Ok {
+                        sections: vec![MetadataSectionPb {
+                            visibility: Some("icp:public".to_string()),
+                            name: Some("git_commit_id".to_string()),
+                            contents: Some(git_commit_id.to_vec()),
+                        }],
+                    }))
+                }
+            );
+        }
     }
 }

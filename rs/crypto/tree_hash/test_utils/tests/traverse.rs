@@ -185,9 +185,9 @@ fn labeled_tree_without_leaf_or_empty_subtree_works_correctly() {
     const RANDOM_TREE_DESIRED_SIZE: u32 = 100;
     const RANDOM_TREE_MIN_LEAVES: u32 = 70;
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let mut tree = new_random_labeled_tree(
-        &mut rng,
+        rng,
         RANDOM_TREE_MAX_DEPTH,
         RANDOM_TREE_DESIRED_SIZE,
         RANDOM_TREE_MIN_LEAVES,

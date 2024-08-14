@@ -122,7 +122,6 @@ pub struct Ordering {
     pub v_inner: ::core::option::Option<composite::NestedInner>,
 }
 /// An enum type with a couple of variants with a gap between them.
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum Enum {
@@ -140,6 +139,15 @@ impl Enum {
             Enum::Unspecified => "ENUM_UNSPECIFIED",
             Enum::One => "ENUM_ONE",
             Enum::Many => "ENUM_MANY",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "ENUM_UNSPECIFIED" => Some(Self::Unspecified),
+            "ENUM_ONE" => Some(Self::One),
+            "ENUM_MANY" => Some(Self::Many),
+            _ => None,
         }
     }
 }

@@ -1,4 +1,4 @@
-use ic_crypto::threshold_sig_public_key_to_der;
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_protobuf::registry::crypto::v1::PublicKey as PbPublicKey;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
@@ -8,14 +8,14 @@ use std::path::{Path, PathBuf};
 use std::{convert::TryFrom, fmt};
 
 /// Adds the k/v entry to the given data provider.
-pub fn write_registry_entry<P: AsRef<Path> + fmt::Debug, M: Message>(
+pub fn write_registry_entry<P, M>(
     data_provider: &ProtoRegistryDataProvider,
     _path: P,
     key: &str,
     registry_version: RegistryVersion,
     record: M,
 ) where
-    P: AsRef<Path>,
+    P: AsRef<Path> + fmt::Debug,
     M: Message + std::clone::Clone,
 {
     data_provider

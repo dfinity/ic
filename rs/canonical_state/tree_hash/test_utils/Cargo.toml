@@ -1,0 +1,13 @@
+[package]
+name = "ic-canonical-state-tree-hash-test-utils"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-canonical-state-tree-hash = { path = ".." }
+ic-crypto-tree-hash = { path = "../../../crypto/tree_hash" }
+ic-crypto-tree-hash-test-utils = { path = "../../../crypto/tree_hash/test_utils" }
+rand = { workspace = true }

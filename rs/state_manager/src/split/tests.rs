@@ -1,37 +1,40 @@
 use super::*;
 use crate::{
-    checkpoint::make_checkpoint, tip::spawn_tip_thread, ManifestMetrics, StateManagerMetrics,
-    NUMBER_OF_CHECKPOINT_THREADS,
+    checkpoint::make_checkpoint,
+    flush_canister_snapshots_and_page_maps,
+    state_sync::types::{FileInfo, Manifest},
+    tip::spawn_tip_thread,
+    CheckpointMetrics, ManifestMetrics, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use assert_matches::assert_matches;
-use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, NumSeconds};
+use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, NumSeconds, SnapshotId};
+use ic_config::{flag_status::FlagStatus, state_manager::lsmt_config_default};
 use ic_error_types::{ErrorCode, UserError};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    page_map::TestPageAllocatorFileDescriptorImpl, ReplicatedState, SystemMetadata,
+    canister_snapshots::CanisterSnapshot, page_map::TestPageAllocatorFileDescriptorImpl,
+    CheckpointLoadingMetrics, ReplicatedState, SystemMetadata,
 };
 use ic_state_layout::{
     ProtoFileWith, StateLayout, CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR,
     INGRESS_HISTORY_FILE, SPLIT_MARKER_FILE, SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE,
 };
-use ic_test_utilities::{
-    mock_time,
-    state::new_canister_state,
-    types::{
-        ids::{user_test_id, SUBNET_1, SUBNET_2},
-        messages::RequestBuilder,
-    },
-};
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_test_utilities_state::new_canister_state_with_execution;
 use ic_test_utilities_tmpdir::tmpdir;
+use ic_test_utilities_types::{
+    ids::{user_test_id, SUBNET_1, SUBNET_2},
+    messages::RequestBuilder,
+};
+use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::MessageId,
-    state_sync::{FileInfo, Manifest, CURRENT_STATE_SYNC_VERSION},
+    time::UNIX_EPOCH,
     Cycles, Height,
 };
 use std::{path::Path, sync::Arc, time::Duration};
@@ -78,32 +81,93 @@ const SUBNET_B_RANGES: &[CanisterIdRange] = &[
 
 /// Full list of files expected to be listed in the manifest of subnet A.
 /// Note that any queue files are missing as they would be empty.
-const SUBNET_A_FILES: &[&str] = &[
-    "canister_states/00000000000000010101/canister.pbuf",
-    "canister_states/00000000000000020101/canister.pbuf",
-    "canister_states/00000000000000030101/canister.pbuf",
-    INGRESS_HISTORY_FILE,
-    SUBNET_QUEUES_FILE,
-    SYSTEM_METADATA_FILE,
-];
+fn subnet_a_files() -> &'static [&'static str] {
+    // With lsmt enabled, we do do not write empty files for the wasm chunk store.
+    match lsmt_config_default().lsmt_status {
+        FlagStatus::Enabled => &[
+            "canister_states/00000000000000010101/canister.pbuf",
+            "canister_states/00000000000000010101/software.wasm",
+            "canister_states/00000000000000020101/canister.pbuf",
+            "canister_states/00000000000000020101/software.wasm",
+            "canister_states/00000000000000030101/canister.pbuf",
+            "canister_states/00000000000000030101/software.wasm",
+            INGRESS_HISTORY_FILE,
+            "snapshots/00000000000000010101/000000000000000000000000000000010101/snapshot.pbuf",
+            "snapshots/00000000000000010101/000000000000000000000000000000010101/software.wasm",
+            SUBNET_QUEUES_FILE,
+            SYSTEM_METADATA_FILE,
+        ],
+        FlagStatus::Disabled => &[
+            "canister_states/00000000000000010101/canister.pbuf",
+            "canister_states/00000000000000010101/software.wasm",
+            "canister_states/00000000000000010101/wasm_chunk_store.bin",
+            "canister_states/00000000000000020101/canister.pbuf",
+            "canister_states/00000000000000020101/software.wasm",
+            "canister_states/00000000000000020101/wasm_chunk_store.bin",
+            "canister_states/00000000000000030101/canister.pbuf",
+            "canister_states/00000000000000030101/software.wasm",
+            "canister_states/00000000000000030101/wasm_chunk_store.bin",
+            INGRESS_HISTORY_FILE,
+            "snapshots/00000000000000010101/000000000000000000000000000000010101/snapshot.pbuf",
+            "snapshots/00000000000000010101/000000000000000000000000000000010101/software.wasm",
+            SUBNET_QUEUES_FILE,
+            SYSTEM_METADATA_FILE,
+        ],
+    }
+}
 
 /// Full list of files expected to be listed in the manifest of subnet A'.
-const SUBNET_A_PRIME_FILES: &[&str] = &[
-    "canister_states/00000000000000010101/canister.pbuf",
-    "canister_states/00000000000000030101/canister.pbuf",
-    INGRESS_HISTORY_FILE,
-    SPLIT_MARKER_FILE,
-    SUBNET_QUEUES_FILE,
-    SYSTEM_METADATA_FILE,
-];
+fn subnet_a_prime_files() -> &'static [&'static str] {
+    match lsmt_config_default().lsmt_status {
+        FlagStatus::Enabled => &[
+            "canister_states/00000000000000010101/canister.pbuf",
+            "canister_states/00000000000000010101/software.wasm",
+            "canister_states/00000000000000030101/canister.pbuf",
+            "canister_states/00000000000000030101/software.wasm",
+            INGRESS_HISTORY_FILE,
+            "snapshots/00000000000000010101/000000000000000000000000000000010101/snapshot.pbuf",
+            "snapshots/00000000000000010101/000000000000000000000000000000010101/software.wasm",
+            SPLIT_MARKER_FILE,
+            SUBNET_QUEUES_FILE,
+            SYSTEM_METADATA_FILE,
+        ],
+        FlagStatus::Disabled => &[
+            "canister_states/00000000000000010101/canister.pbuf",
+            "canister_states/00000000000000010101/software.wasm",
+            "canister_states/00000000000000010101/wasm_chunk_store.bin",
+            "canister_states/00000000000000030101/canister.pbuf",
+            "canister_states/00000000000000030101/software.wasm",
+            "canister_states/00000000000000030101/wasm_chunk_store.bin",
+            INGRESS_HISTORY_FILE,
+            "snapshots/00000000000000010101/000000000000000000000000000000010101/snapshot.pbuf",
+            "snapshots/00000000000000010101/000000000000000000000000000000010101/software.wasm",
+            SPLIT_MARKER_FILE,
+            SUBNET_QUEUES_FILE,
+            SYSTEM_METADATA_FILE,
+        ],
+    }
+}
 
 /// Full list of files expected to be listed in the manifest of subnet B.
-const SUBNET_B_FILES: &[&str] = &[
-    "canister_states/00000000000000020101/canister.pbuf",
-    INGRESS_HISTORY_FILE,
-    SPLIT_MARKER_FILE,
-    SYSTEM_METADATA_FILE,
-];
+fn subnet_b_files() -> &'static [&'static str] {
+    match lsmt_config_default().lsmt_status {
+        FlagStatus::Enabled => &[
+            "canister_states/00000000000000020101/canister.pbuf",
+            "canister_states/00000000000000020101/software.wasm",
+            INGRESS_HISTORY_FILE,
+            SPLIT_MARKER_FILE,
+            SYSTEM_METADATA_FILE,
+        ],
+        FlagStatus::Disabled => &[
+            "canister_states/00000000000000020101/canister.pbuf",
+            "canister_states/00000000000000020101/software.wasm",
+            "canister_states/00000000000000020101/wasm_chunk_store.bin",
+            INGRESS_HISTORY_FILE,
+            SPLIT_MARKER_FILE,
+            SYSTEM_METADATA_FILE,
+        ],
+    }
+}
 
 const HEIGHT: Height = Height::new(42);
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
@@ -115,31 +179,33 @@ fn read_write_roundtrip() {
         let (tmp, _) = new_state_layout(log.clone());
         let root = tmp.path().to_path_buf();
         let metrics_registry = MetricsRegistry::new();
-        let layout = StateLayout::try_new(log.clone(), root, &metrics_registry).unwrap();
+        let layout = StateLayout::try_new(log.clone(), root.clone(), &metrics_registry).unwrap();
         let mut thread_pool = Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
         // Sanity check: ensure that we have a single checkpoint.
         assert_eq!(1, layout.checkpoint_heights().unwrap().len());
 
         // Compute the manifest of the original checkpoint.
-        let metrics = StateManagerMetrics::new(&metrics_registry);
+        let metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
         let manifest_metrics = &metrics.manifest_metrics;
         let (manifest_before, height_before) = compute_manifest(&layout, manifest_metrics, &log);
 
         // Read the latest checkpoint into a state.
         let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
-        let (cp, state) = read_checkpoint(&layout, &mut thread_pool, fd_factory.clone(), &metrics)
-            .expect("failed to read checkpoint");
+        let (cp, mut state) =
+            read_checkpoint(&layout, &mut thread_pool, fd_factory.clone(), &metrics)
+                .expect("failed to read checkpoint");
 
         // Sanity check: ensure that `split_from` is not set by default.
         assert_eq!(None, state.metadata.split_from);
 
         // Write back the state as a new checkpoint.
         write_checkpoint(
-            &state,
+            &mut state,
             layout.clone(),
             &cp,
             &mut thread_pool,
             fd_factory,
+            &Config::new(root),
             &metrics,
             log.clone(),
         )
@@ -167,7 +233,7 @@ fn split_subnet_a_prime() {
         let root = tmp.path().to_path_buf();
 
         let (manifest_a, height_a) = compute_manifest_for_root(&root, &log);
-        assert_eq!(SUBNET_A_FILES, manifest_files(&manifest_a).as_slice());
+        assert_eq!(subnet_a_files(), manifest_files(&manifest_a).as_slice());
 
         split(
             root.clone(),
@@ -181,7 +247,7 @@ fn split_subnet_a_prime() {
 
         let (manifest_a_prime, height_a_prime) = compute_manifest_for_root(&root, &log);
         assert_eq!(
-            SUBNET_A_PRIME_FILES,
+            subnet_a_prime_files(),
             manifest_files(&manifest_a_prime).as_slice()
         );
 
@@ -189,7 +255,7 @@ fn split_subnet_a_prime() {
         assert_eq!(height_a.increment(), height_a_prime);
 
         // Compare the 2 manifests.
-        for &file in SUBNET_A_PRIME_FILES {
+        for &file in subnet_a_prime_files() {
             if file == SPLIT_MARKER_FILE {
                 assert_eq!(SUBNET_A, deserialize_split_from(&root, height_a_prime));
             } else {
@@ -241,7 +307,7 @@ fn split_subnet_b_helper(new_subnet_batch_time_delta: Option<Duration>) {
         let new_subnet_batch_time = new_subnet_batch_time_delta.map(|delta| batch_time + delta);
 
         let (manifest_a, height_a) = compute_manifest_for_root(&root, &log);
-        assert_eq!(SUBNET_A_FILES, manifest_files(&manifest_a).as_slice());
+        assert_eq!(subnet_a_files(), manifest_files(&manifest_a).as_slice());
 
         split(
             root.clone(),
@@ -254,7 +320,7 @@ fn split_subnet_b_helper(new_subnet_batch_time_delta: Option<Duration>) {
         .unwrap();
 
         let (manifest_b, height_b) = compute_manifest_for_root(&root, &log);
-        assert_eq!(SUBNET_B_FILES, manifest_files(&manifest_b).as_slice());
+        assert_eq!(subnet_b_files(), manifest_files(&manifest_b).as_slice());
 
         // Checkpoint heights should differ by 1.
         assert_eq!(height_a.increment(), height_b);
@@ -269,7 +335,7 @@ fn split_subnet_b_helper(new_subnet_batch_time_delta: Option<Duration>) {
         //
         // Hence, for files that we expect to be different after the split it is
         // safe to compare the resulding Rust structs for equality.
-        for &file in SUBNET_B_FILES {
+        for &file in subnet_b_files() {
             if file == SPLIT_MARKER_FILE {
                 assert_eq!(SUBNET_A, deserialize_split_from(&root, height_b));
             } else if file == SYSTEM_METADATA_FILE {
@@ -277,7 +343,7 @@ fn split_subnet_b_helper(new_subnet_batch_time_delta: Option<Duration>) {
                 // `batch_time` should be the provided `new_subnet_batch_time` (if `Some`); or
                 // else the original subnet's `batch_time`.
                 expected.batch_time = new_subnet_batch_time.unwrap_or(batch_time);
-                assert_eq!(expected, deserialize_system_metadata(&root, height_b))
+                assert_eq!(expected, deserialize_system_metadata(&root, height_b, &log))
             } else {
                 // All other files should be unmodified (`subnet_queues.pbuf` was never
                 // populated in this test, so it happens to be identical).
@@ -316,29 +382,30 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     let metrics_registry = MetricsRegistry::new();
     let layout = StateLayout::try_new(log.clone(), root.clone(), &metrics_registry).unwrap();
     let tip_handler = layout.capture_tip_handler();
-    let state_manager_metrics = StateManagerMetrics::new(&metrics_registry);
+    let state_manager_metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
     let (_tip_thread, tip_channel) = spawn_tip_thread(
         log,
         tip_handler,
         layout.clone(),
+        lsmt_config_default(),
         state_manager_metrics.clone(),
         MaliciousFlags::default(),
     );
 
     let mut state = ReplicatedState::new(SUBNET_A, SubnetType::Application);
-    state.put_canister_state(new_canister_state(
+    state.put_canister_state(new_canister_state_with_execution(
         CANISTER_1,
         CANISTER_0.get(),
         INITIAL_CYCLES,
         NumSeconds::from(100_000),
     ));
-    state.put_canister_state(new_canister_state(
+    state.put_canister_state(new_canister_state_with_execution(
         CANISTER_2,
         CANISTER_0.get(),
         INITIAL_CYCLES * 2usize,
         NumSeconds::from(200_000),
     ));
-    state.put_canister_state(new_canister_state(
+    state.put_canister_state(new_canister_state_with_execution(
         CANISTER_3,
         CANISTER_0.get(),
         INITIAL_CYCLES * 3usize,
@@ -349,16 +416,24 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         IngressStatus::Known {
             receiver: CANISTER_1.get(),
             user_id: user_test_id(123),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Failed(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 "Canister rejected the message",
             )),
         },
-        mock_time(),
+        UNIX_EPOCH,
         (1u64 << 30).into(),
     );
     state.metadata.batch_time = Time::from_secs_since_unix_epoch(1234567890).unwrap();
+
+    let snapshot_id = SnapshotId::from((CANISTER_1, 0));
+    let snapshot =
+        CanisterSnapshot::from_canister(state.canister_state(&CANISTER_1).unwrap(), state.time())
+            .unwrap();
+    state
+        .canister_snapshots
+        .push(snapshot_id, Arc::new(snapshot));
 
     // Make subnet_queues non-empty
     state
@@ -371,6 +446,13 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         )
         .unwrap();
 
+    flush_canister_snapshots_and_page_maps(
+        &mut state,
+        HEIGHT,
+        &tip_channel,
+        &state_manager_metrics.checkpoint_metrics,
+    );
+
     let _state = make_checkpoint(
         &state,
         HEIGHT,
@@ -378,6 +460,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         &state_manager_metrics.checkpoint_metrics,
         &mut thread_pool(),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+        lsmt_config_default().lsmt_status,
     )
     .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err))
     .1;
@@ -519,7 +602,7 @@ fn compute_manifest_for_root(root: &Path, log: &ReplicaLogger) -> (Manifest, Hei
     let layout = StateLayout::try_new(log.clone(), root.to_path_buf(), &metrics_registry).unwrap();
 
     // Compute the manifest of the original checkpoint.
-    let metrics = StateManagerMetrics::new(&metrics_registry);
+    let metrics = StateManagerMetrics::new(&metrics_registry, log.clone());
     let manifest_metrics = &metrics.manifest_metrics;
     compute_manifest(&layout, manifest_metrics, log)
 }
@@ -533,7 +616,7 @@ fn deserialize_split_from(root: &Path, height: Height) -> SubnetId {
     subnet_id_try_from_protobuf(split_from.deserialize().unwrap().subnet_id.unwrap()).unwrap()
 }
 
-fn deserialize_system_metadata(root: &Path, height: Height) -> SystemMetadata {
+fn deserialize_system_metadata(root: &Path, height: Height, log: &ReplicaLogger) -> SystemMetadata {
     let system_metadata: ProtoFileWith<
         ic_protobuf::state::system_metadata::v1::SystemMetadata,
         ReadOnly,
@@ -542,5 +625,11 @@ fn deserialize_system_metadata(root: &Path, height: Height) -> SystemMetadata {
         .join(StateLayout::checkpoint_name(height))
         .join(SYSTEM_METADATA_FILE)
         .into();
-    system_metadata.deserialize().unwrap().try_into().unwrap()
+    (
+        system_metadata.deserialize().unwrap(),
+        &CheckpointMetrics::new(&MetricsRegistry::new(), log.clone())
+            as &dyn CheckpointLoadingMetrics,
+    )
+        .try_into()
+        .unwrap()
 }

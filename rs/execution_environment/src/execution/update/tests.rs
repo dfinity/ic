@@ -4,7 +4,7 @@ use assert_matches::assert_matches;
 
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_error_types::{ErrorCode, UserError};
+use ic_error_types::ErrorCode;
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
@@ -13,11 +13,13 @@ use ic_replicated_state::{
     canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES},
     CallOrigin,
 };
-use ic_state_machine_tests::{Cycles, WasmResult};
+use ic_state_machine_tests::{Cycles, IngressStatus, WasmResult};
 use ic_sys::PAGE_SIZE;
-use ic_types::{NumInstructions, NumPages};
+use ic_types::messages::{CallbackId, RequestMetadata};
+use ic_types::{NumInstructions, NumOsPages};
 use ic_universal_canister::{call_args, wasm};
 
+use ic_config::embedders::StableMemoryPageLimit;
 use ic_test_utilities_execution_environment::{
     check_ingress_status, ExecutionTest, ExecutionTestBuilder,
 };
@@ -47,10 +49,80 @@ fn wat_writing_to_each_stable_memory_page(memory_amount: u64) -> String {
     )
 }
 
+fn wat_writing_to_each_stable_memory_page_long_execution(memory_amount: u64) -> String {
+    format!(
+        r#"
+        (module
+            (import "ic0" "stable64_write"
+                (func $stable_write (param $offset i64) (param $src i64) (param $size i64))
+            )
+            (import "ic0" "stable64_grow" (func $stable_grow (param i64) (result i64)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_init") (local i64)
+                (local.set 0 (i64.const 0))
+                (drop (call $stable_grow (i64.const 10)))
+                (loop $loop
+                    (call $stable_write (local.get 0) (i64.const 0) (i64.const 1))
+                    (local.set 0 (i64.add (local.get 0) (i64.const 4096))) (;increment by OS page size;)
+                    (br_if $loop (i64.lt_s (local.get 0) (i64.const {}))) (;loop if value is within the memory amount;)
+                )
+                (call $msg_reply)
+            )
+            (memory (export "memory") 1)
+        )"#,
+        memory_amount
+    )
+}
+
+fn wat_writing_to_each_stable_memory_page_query(memory_amount: u64) -> String {
+    format!(
+        r#"
+        (module
+            (import "ic0" "stable64_write"
+                (func $stable_write (param $offset i64) (param $src i64) (param $size i64))
+            )
+            (import "ic0" "stable64_read"
+                (func $stable_read (param $dst i64) (param $offset i64) (param $size i64))
+            )
+            (import "ic0" "stable64_grow" (func $stable_grow (param i64) (result i64)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_query go") (local i64)
+                (local.set 0 (i64.const 0))
+                (drop (call $stable_grow (i64.const 10)))
+                (loop $loop
+                    (call $stable_write (local.get 0) (i64.const 0) (i64.const 1))
+                    (local.set 0 (i64.add (local.get 0) (i64.const 4096))) (;increment by OS page size;)
+                    (br_if $loop (i64.lt_s (local.get 0) (i64.const {}))) (;loop if value is within the memory amount;)
+                )
+                (call $msg_reply)
+            )
+            (func (export "canister_query read") 
+                (local i64)
+                (local i64)
+                (local.set 0 (i64.const 0))
+                (local.set 1 (i64.const 0))
+                (drop (call $stable_grow (i64.const 10)))
+                (loop $loop
+                    (call $stable_read (local.get 1) (local.get 0) (i64.const 1))
+                    (local.set 0 (i64.add (local.get 0) (i64.const 4096))) (;increment by OS page size;)
+                    (br_if $loop (i64.lt_s (local.get 0) (i64.const {}))) (;loop if value is within the memory amount;)
+                )
+                (call $msg_reply)
+            )
+            (memory (export "memory") 1)
+        )"#,
+        memory_amount, memory_amount
+    )
+}
+
 #[test]
 fn can_write_to_each_page_in_stable_memory() {
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(NumPages::new(10))
+        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+            upgrade: NumOsPages::new(10),
+            message: NumOsPages::new(10),
+            query: NumOsPages::new(10),
+        })
         .build();
     let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64);
     let canister_id = test.canister_from_wat(wat).unwrap();
@@ -70,7 +142,6 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -88,7 +159,7 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     let a = wasm()
         .instruction_counter_is_at_least(1_000_000)
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args().other_side(b.clone()),
             transferred_cycles,
@@ -175,7 +246,6 @@ fn dts_update_concurrent_cycles_change_fails() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -193,7 +263,7 @@ fn dts_update_concurrent_cycles_change_fails() {
     let a = wasm()
         .instruction_counter_is_at_least(1_000_000)
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args().other_side(b.clone()),
             transferred_cycles,
@@ -261,12 +331,10 @@ fn dts_update_concurrent_cycles_change_fails() {
         err.description(),
         format!(
             "Canister {} is out of cycles: \
-             requested {} cycles but the available balance \
-             is {} cycles and the freezing threshold {} cycles",
+             please top up the canister with at least {} additional cycles",
             a_id,
-            call_charge,
-            initial_cycles - max_execution_cost - cycles_debit,
-            freezing_threshold
+            (freezing_threshold + call_charge)
+                - (initial_cycles - max_execution_cost - cycles_debit)
         )
     );
 
@@ -313,17 +381,233 @@ fn dirty_pages_are_free_on_system_subnet() {
 
 #[test]
 fn hitting_page_delta_limit_fails_message() {
+    let no_pages = 10;
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(NumPages::from(10))
+        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+            upgrade: NumOsPages::new(no_pages),
+            message: NumOsPages::new(no_pages),
+            query: NumOsPages::new(no_pages),
+        })
+        .build();
+    let wat = wat_writing_to_each_stable_memory_page(no_pages * PAGE_SIZE as u64 + 1);
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
+    result.assert_contains(
+        ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &format!(
+            "Error from Canister {canister_id}: Canister exceeded memory access \
+        limits: Exceeded the limit for the number of modified pages in the stable \
+        memory in a single execution: limit {} KB for regular messages, {} KB for \
+        upgrade messages and {} KB for queries.",
+            no_pages * (PAGE_SIZE as u64 / 1024),
+            no_pages * (PAGE_SIZE as u64 / 1024),
+            no_pages * (PAGE_SIZE as u64 / 1024)
+        ),
+    );
+}
+
+#[test]
+fn hitting_page_delta_limit_fails_message_system_subnet() {
+    let no_pages = 10;
+    let mut test = ExecutionTestBuilder::new()
+        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+            upgrade: NumOsPages::new(no_pages),
+            message: NumOsPages::new(no_pages),
+            query: NumOsPages::new(no_pages),
+        })
+        .with_subnet_type(SubnetType::System)
+        .build();
+    let wat = wat_writing_to_each_stable_memory_page(no_pages * PAGE_SIZE as u64 + 1);
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
+    result.assert_contains(
+        ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &format!(
+            "Error from Canister {canister_id}: Canister exceeded memory access \
+        limits: Exceeded the limit for the number of modified pages in the stable memory \
+        in a single execution: limit {} KB for regular messages, {} KB for upgrade \
+        messages and {} KB for queries.",
+            no_pages * (PAGE_SIZE as u64 / 1024),
+            no_pages * (PAGE_SIZE as u64 / 1024),
+            no_pages * (PAGE_SIZE as u64 / 1024)
+        ),
+    );
+}
+
+fn hitting_page_delta_limit_fails_for_install_code_helper(with_native_stable_mem: bool) {
+    let no_pages_upgrade = 10;
+    // A large enough limit that will never be triggered.
+    let no_pages_other_messages = no_pages_upgrade * 10_000_000;
+    let mut test =
+        ExecutionTestBuilder::new().with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+            upgrade: NumOsPages::new(no_pages_upgrade),
+            message: NumOsPages::new(no_pages_other_messages),
+            query: NumOsPages::new(no_pages_other_messages),
+        });
+    if with_native_stable_mem {
+        test = test.with_non_native_stable();
+    }
+    let mut test = test.build();
+    let wat = wat_writing_to_each_stable_memory_page_long_execution(
+        no_pages_upgrade * PAGE_SIZE as u64 + 1,
+    );
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    let result = test
+        .install_canister(canister_id, wat::parse_str(wat).unwrap())
+        .unwrap_err();
+    if with_native_stable_mem {
+        result.assert_contains(
+            ErrorCode::CanisterMemoryAccessLimitExceeded,
+            &format!(
+                "Error from Canister {canister_id}: Canister exceeded memory access \
+            limits: Exceeded the limit for the number of modified pages in the stable \
+            memory in a single message execution: limit: 40 KB."
+            ),
+        );
+    } else {
+        result.assert_contains(
+            ErrorCode::CanisterMemoryAccessLimitExceeded,
+            &format!(
+                "Error from Canister {canister_id}: Canister exceeded memory access \
+            limits: Exceeded the limit for the number of modified pages in the stable memory \
+            in a single execution: limit {} KB for regular messages, {} KB for upgrade \
+            messages and {} KB for queries.",
+                no_pages_other_messages * (PAGE_SIZE as u64 / 1024),
+                no_pages_upgrade * (PAGE_SIZE as u64 / 1024),
+                no_pages_other_messages * (PAGE_SIZE as u64 / 1024)
+            ),
+        );
+    }
+}
+
+#[test]
+fn hitting_page_delta_limit_fails_for_install_code() {
+    hitting_page_delta_limit_fails_for_install_code_helper(false)
+}
+
+#[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+fn hitting_page_delta_limit_fails_for_install_code_non_native_stable() {
+    hitting_page_delta_limit_fails_for_install_code_helper(true)
+}
+
+#[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+fn hitting_page_delta_limit_fails_message_non_native_stable() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+            upgrade: NumOsPages::new(10),
+            message: NumOsPages::new(10),
+            query: NumOsPages::new(10),
+        })
+        .with_non_native_stable()
         .build();
     let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
-    assert_eq!(result.code(), ErrorCode::CanisterMemoryAccessLimitExceeded);
-    assert_eq!(
-        result.description(),
-        "Canister exceeded memory access limits: Exceeded the limit for the \
-    number of modified pages in the stable memory in a single message execution: limit: 40 KB."
+    result.assert_contains(
+        ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &format!(
+            "Error from Canister {canister_id}: Canister exceeded memory access \
+        limits: Exceeded the limit for the number of modified pages in the stable memory \
+        in a single message execution: limit: 40 KB."
+        ),
+    );
+}
+
+#[test]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+fn hitting_page_delta_limit_fails_message_non_native_stable_system_subnet() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+            upgrade: NumOsPages::new(10),
+            message: NumOsPages::new(10),
+            query: NumOsPages::new(10),
+        })
+        .with_non_native_stable()
+        .with_subnet_type(SubnetType::System)
+        .build();
+    let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
+    result.assert_contains(
+        ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &format!(
+            "Error from Canister {canister_id}: Canister exceeded memory access \
+        limits: Exceeded the limit for the number of modified pages in the stable memory \
+        in a single message execution: limit: 40 KB."
+        ),
+    );
+}
+
+#[test]
+fn hitting_page_delta_limit_fails_non_replicated_query() {
+    let no_pages = 10;
+    let mut test = ExecutionTestBuilder::new()
+        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+            upgrade: NumOsPages::new(no_pages),
+            message: NumOsPages::new(no_pages),
+            query: NumOsPages::new(no_pages - 1),
+        })
+        .build();
+    let wat = wat_writing_to_each_stable_memory_page_query(no_pages * PAGE_SIZE as u64);
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test
+        .non_replicated_query(canister_id, "go", vec![])
+        .unwrap_err();
+    result.assert_contains(
+        ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the \
+         number of modified pages in the stable memory in a single execution: limit {} KB for regular messages, {} KB for upgrade messages and \
+         {} KB for queries.",
+         no_pages * (PAGE_SIZE as u64 / 1024), no_pages * (PAGE_SIZE as u64 / 1024), (no_pages - 1) * (PAGE_SIZE as u64 / 1024))
+    );
+}
+
+#[test]
+fn hitting_page_delta_limit_fails_replicated_query() {
+    let no_pages = 10;
+    let mut test = ExecutionTestBuilder::new()
+        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+            upgrade: NumOsPages::new(no_pages),
+            message: NumOsPages::new(no_pages),
+            query: NumOsPages::new(no_pages - 1),
+        })
+        .build();
+    let wat = wat_writing_to_each_stable_memory_page_query(no_pages * PAGE_SIZE as u64);
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
+    result.assert_contains(
+        ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the \
+         number of modified pages in the stable memory in a single execution: limit {} KB for regular messages, {} KB for upgrade messages and \
+         {} KB for queries.",
+         no_pages * (PAGE_SIZE as u64 / 1024), no_pages * (PAGE_SIZE as u64 / 1024), (no_pages - 1) * (PAGE_SIZE as u64 / 1024))
+    );
+}
+
+#[test]
+fn hitting_access_limit_fails_non_replicated_query() {
+    let no_pages = 10;
+    let mut test = ExecutionTestBuilder::new()
+        .with_stable_memory_access_limit(StableMemoryPageLimit {
+            message: NumOsPages::new(no_pages),
+            upgrade: NumOsPages::new(no_pages),
+            query: NumOsPages::new(no_pages - 1),
+        })
+        .build();
+    let wat = wat_writing_to_each_stable_memory_page_query(no_pages * PAGE_SIZE as u64);
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test
+        .non_replicated_query(canister_id, "read", vec![])
+        .unwrap_err();
+    result.assert_contains(
+        ErrorCode::CanisterMemoryAccessLimitExceeded,
+        &format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the \
+        number of accessed pages in the stable memory in a single message execution: limit {} KB for regular messages and \
+         {} KB for queries.",
+         no_pages * (PAGE_SIZE as u64 / 1024), (no_pages - 1) * (PAGE_SIZE as u64 / 1024))
     );
 }
 
@@ -338,7 +622,6 @@ fn dts_update_resume_fails_due_to_cycles_change() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(10_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -372,16 +655,14 @@ fn dts_update_resume_fails_due_to_cycles_change() {
     );
 
     let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterWasmEngineError);
-
-    assert_eq!(
-        err.description(),
-        format!(
-            "Canister {} encountered a Wasm engine error: \
+    err.assert_contains(
+        ErrorCode::CanisterWasmEngineError,
+        &format!(
+            "Error from Canister {}: Canister encountered a Wasm engine error: \
              Failed to apply system changes: Mismatch in cycles \
              balance when resuming an update call",
             a_id
-        )
+        ),
     );
 }
 
@@ -396,7 +677,6 @@ fn dts_update_resume_fails_due_to_call_context_change() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(10_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -422,7 +702,12 @@ fn dts_update_resume_fails_due_to_call_context_change() {
         .system_state
         .call_context_manager_mut()
         .unwrap()
-        .new_call_context(CallOrigin::SystemTask, Cycles::new(0), time);
+        .new_call_context(
+            CallOrigin::SystemTask,
+            Cycles::new(0),
+            time,
+            RequestMetadata::for_new_call_tree(time),
+        );
 
     test.execute_slice(a_id);
 
@@ -437,7 +722,7 @@ fn dts_update_resume_fails_due_to_call_context_change() {
     assert_eq!(
         err.description(),
         format!(
-            "Canister {} encountered a Wasm engine error: \
+            "Error from Canister {}: Canister encountered a Wasm engine error: \
              Failed to apply system changes: Mismatch in call \
              context id when resuming an update call",
             a_id
@@ -455,7 +740,6 @@ fn dts_update_does_not_expire_while_executing() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -525,7 +809,6 @@ fn dts_abort_of_call_works() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_initial_canister_cycles(initial_cycles)
         .with_manual_execution()
         .build();
@@ -544,11 +827,11 @@ fn dts_abort_of_call_works() {
 
     let a = wasm()
         .call_with_cycles(
-            b_id.get(),
+            b_id,
             "update",
             call_args()
                 .other_side(b.clone())
-                .on_reject(wasm().reject_code().reject_message().reject()),
+                .on_reject(wasm().reject_message().reject()),
             transferred_cycles,
         )
         .build();
@@ -609,7 +892,6 @@ fn dts_ingress_induction_cycles_debit_is_applied_on_aborts() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(1_000_000)
-        .with_deterministic_time_slicing()
         .with_initial_canister_cycles(initial_canister_cycles)
         .with_manual_execution()
         .build();
@@ -669,7 +951,6 @@ fn dts_uninstall_with_aborted_update() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(10_000)
-        .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
 
@@ -698,11 +979,9 @@ fn dts_uninstall_with_aborted_update() {
     test.execute_message(canister_id);
 
     let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterWasmModuleNotFound);
-    assert_eq!(
-        err.description(),
-        format!(
-            "Attempt to execute a message on canister {} which contains no Wasm module",
+    err.assert_contains(ErrorCode::CanisterWasmModuleNotFound,
+        &format!(
+            "Error from Canister {}: Attempted to execute a message, but the canister contains no Wasm module.",
             canister_id
         )
     );
@@ -778,15 +1057,11 @@ fn stable_grow_returns_allocated_memory_on_error() {
     // Calling 32-bit stable grow should trap.
     let payload = wasm().stable_grow(1).reply().build();
     let result = test.ingress(canister_id, "update", payload).unwrap_err();
-    assert_eq!(
-        result,
-        UserError::new(
+    result.assert_contains(
             ErrorCode::CanisterTrapped,
-            format!(
-                "Canister {} trapped: 32 bit stable memory api used on a memory larger than 4GB",
-                canister_id
+            &format!(
+                "Error from Canister {canister_id}: Canister trapped: 32 bit stable memory api used on a memory larger than 4GB"
             )
-        )
     );
 
     // Subnet and canister memory should remain unchanged
@@ -798,4 +1073,61 @@ fn stable_grow_returns_allocated_memory_on_error() {
         test.canister_state(canister_id).memory_usage(),
         initial_canister_memory
     );
+}
+
+#[test]
+fn test_call_context_instructions_executed_is_updated_on_ok_update() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+
+    // Create canisters A and B.
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    // Canister A calls canister B.
+    let wasm_payload = wasm().inter_update(b_id, call_args()).build();
+
+    // Enqueue ingress message to canister A.
+    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
+    assert_matches!(ingress_status, IngressStatus::Unknown);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+
+    // Execute canister A ingress.
+    test.execute_message(a_id);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+
+    // Make sure the execution was ok.
+    let call_context = test.get_call_context(a_id, CallbackId::from(1));
+
+    // Make sure the `instructions_executed` is updated.
+    let instructions_executed_a_1 = call_context.instructions_executed();
+    assert!(instructions_executed_a_1 > 0.into());
+}
+
+#[test]
+fn test_call_context_instructions_executed_is_updated_on_err_update() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+
+    // Create canisters A and B.
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    // Canister A calls canister B and then traps.
+    let wasm_payload = wasm().inter_update(b_id, call_args()).trap().build();
+
+    // Enqueue ingress message to canister A.
+    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
+    assert_matches!(ingress_status, IngressStatus::Unknown);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+
+    // Execute canister A ingress.
+    test.execute_message(a_id);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+
+    // Make sure the execution was not ok.
+    let call_context_manager = test
+        .canister_state(a_id)
+        .system_state
+        .call_context_manager()
+        .unwrap();
+    assert!(call_context_manager.call_contexts().is_empty());
 }

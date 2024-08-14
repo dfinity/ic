@@ -1,18 +1,20 @@
 [package]
 name = "rust-canister-tests"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-serde = "1.0.99"
-serde_json = "1.0.40"
 dfn_core = { path = "../dfn_core" }
-dfn_macro = { path = "../dfn_macro" }
 dfn_json = { path = "../dfn_json" }
-rand = "0.8.4"
+dfn_macro = { path = "../dfn_macro" }
+on_wire = { path = "../on_wire" }
+rand = { workspace = true }
 rand_pcg = "0.3.1"
-on_wire = { path = "../on_wire"}
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [[bin]]
 name = "json"
@@ -39,18 +41,18 @@ name = "panics"
 path = "src/panics.rs"
 
 [dev-dependencies]
+assert_matches = { workspace = true }
+candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
-criterion = "0.3"
-assert_matches = "1.3.0"
-on_wire = { path = "../on_wire" }
+criterion = { workspace = true }
+dfn_candid = { path = "../dfn_candid" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-error-types = { path = "../../types/error_types" }
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-test-identity = { path = "../../test_utilities/identity" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-types = { path = "../../types/types" }
-dfn_candid={path="../dfn_candid"}
-candid = { workspace = true }
+on_wire = { path = "../on_wire" }
 
 [[bench]]
 name = "json"
@@ -69,9 +71,9 @@ name = "upgrade"
 path = "test/upgrade.rs"
 
 [[test]]
-name="canister_management"
-path="test/canister_management.rs"
+name = "canister_management"
+path = "test/canister_management.rs"
 
 [[test]]
-name="ingress"
-path="test/ingress.rs"
+name = "ingress"
+path = "test/ingress.rs"

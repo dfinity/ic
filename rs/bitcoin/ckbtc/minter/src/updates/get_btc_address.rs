@@ -5,7 +5,7 @@ use crate::{
 };
 use candid::{CandidType, Deserialize, Principal};
 use ic_canister_log::log;
-use ic_ic00_types::DerivationPath;
+use ic_management_canister_types::DerivationPath;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use serde::Serialize;
 

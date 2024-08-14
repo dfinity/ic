@@ -1,12 +1,13 @@
-use crate::app_subnet_recovery::{self, AppSubnetRecovery};
-use crate::cmd::SubCommand;
-use crate::error::{RecoveryError, RecoveryResult};
-use crate::file_sync_helper::{path_exists, read_file, write_file};
-use crate::nns_recovery_failover_nodes::{self, NNSRecoveryFailoverNodes};
-use crate::nns_recovery_same_nodes::{self, NNSRecoverySameNodes};
-use crate::{NeuronArgs, RecoveryArgs};
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use crate::{
+    app_subnet_recovery::{self, AppSubnetRecovery},
+    cmd::SubCommand,
+    error::{RecoveryError, RecoveryResult},
+    file_sync_helper::{path_exists, read_file, write_file},
+    nns_recovery_failover_nodes::{self, NNSRecoveryFailoverNodes},
+    nns_recovery_same_nodes::{self, NNSRecoverySameNodes},
+    NeuronArgs, RecoveryArgs,
+};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 const RECOVERY_STATE_FILE_NAME: &str = "recovery_state.json";
@@ -174,17 +175,21 @@ mod tests {
                 replica_version: None,
                 key_file: Some(PathBuf::from(dir)),
                 test_mode: true,
+                skip_prompts: true,
             },
             subcommand_args: SubCommand::AppSubnetRecovery(AppSubnetRecoveryArgs {
                 subnet_id: fake_subnet_id(),
                 upgrade_version: None,
                 replacement_nodes: None,
+                replay_until_height: None,
                 pub_key: Some(String::from("Fake public key")),
                 download_node: None,
                 keep_downloaded_state: Some(false),
                 upload_node: None,
-                ecdsa_subnet_id: Some(fake_subnet_id()),
+                chain_key_subnet_id: Some(fake_subnet_id()),
                 next_step: None,
+                upgrade_image_url: None,
+                upgrade_image_hash: None,
             }),
             neuron_args: None,
         }

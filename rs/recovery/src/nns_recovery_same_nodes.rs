@@ -14,6 +14,7 @@ use slog::Logger;
 use std::{iter::Peekable, net::IpAddr, path::PathBuf};
 use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, EnumMessage, EnumString};
+use url::Url;
 
 use crate::{Recovery, Step};
 
@@ -48,6 +49,18 @@ pub struct NNSRecoverySameNodesArgs {
     #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
     pub upgrade_version: Option<ReplicaVersion>,
 
+    #[clap(long)]
+    /// The replay will stop at this height and make a checkpoint.
+    pub replay_until_height: Option<u64>,
+
+    /// URL of the upgrade image
+    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    pub upgrade_image_url: Option<Url>,
+
+    /// SHA256 hash of the upgrade image
+    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    pub upgrade_image_hash: Option<String>,
+
     /// IP address of the node to download the subnet state from. Should be different to node used in nns-url.
     #[clap(long)]
     pub download_node: Option<IpAddr>,
@@ -66,7 +79,6 @@ pub struct NNSRecoverySameNodes {
     pub params: NNSRecoverySameNodesArgs,
     pub recovery_args: RecoveryArgs,
     pub recovery: Recovery,
-    interactive: bool,
     logger: Logger,
     new_state_dir: PathBuf,
 }
@@ -76,7 +88,6 @@ impl NNSRecoverySameNodes {
         logger: Logger,
         recovery_args: RecoveryArgs,
         subnet_args: NNSRecoverySameNodesArgs,
-        interactive: bool,
     ) -> Self {
         let recovery = Recovery::new(
             logger.clone(),
@@ -96,7 +107,6 @@ impl NNSRecoverySameNodes {
             recovery,
             logger,
             new_state_dir,
-            interactive,
         }
     }
 
@@ -119,7 +129,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
     }
 
     fn interactive(&self) -> bool {
-        self.interactive
+        !self.recovery_args.skip_prompts
     }
 
     fn read_step_params(&mut self, step_type: StepType) {
@@ -140,6 +150,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 if self.params.upgrade_version.is_none() {
                     self.params.upgrade_version =
                         read_optional_version(&self.logger, "Upgrade version: ");
+                };
+                if self.params.replay_until_height.is_none() {
+                    self.params.replay_until_height =
+                        read_optional(&self.logger, "Replay until height: ");
                 }
             }
 
@@ -187,15 +201,27 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
             StepType::ICReplay => {
                 if let Some(upgrade_version) = self.params.upgrade_version.clone() {
+                    let params = self.params.clone();
+                    let (url, hash) = params
+                        .upgrade_image_url
+                        .and_then(|url| params.upgrade_image_hash.map(|hash| (url, hash)))
+                        .or_else(|| Recovery::get_img_url_and_sha(&upgrade_version).ok())
+                        .ok_or(RecoveryError::UnexpectedError(
+                            "couldn't retrieve the upgrade image params".into(),
+                        ))?;
                     Ok(Box::new(self.recovery.get_replay_with_upgrade_step(
                         self.params.subnet_id,
                         upgrade_version,
+                        url,
+                        hash,
+                        self.params.replay_until_height,
                     )?))
                 } else {
                     Ok(Box::new(self.recovery.get_replay_step(
                         self.params.subnet_id,
                         None,
                         None,
+                        self.params.replay_until_height,
                     )))
                 }
             }

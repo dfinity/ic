@@ -1,7 +1,10 @@
 [package]
 name = "ic-test-utilities-execution-environment"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-base-types = { path = "../../types/base_types" }
@@ -11,10 +14,12 @@ ic-cycles-account-manager = { path = "../../cycles_account_manager" }
 ic-embedders = { path = "../../embedders" }
 ic-error-types = { path = "../../types/error_types" }
 ic-execution-environment = { path = "../../execution_environment" }
-ic-ic00-types = { path = "../../types/ic00_types" }
 ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-logger = { path = "../../monitoring/logger" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-metrics = { path = "../../monitoring/metrics" }
+ic-query-stats = { path = "../../query_stats" }
 ic-registry-provisional-whitelist = { path = "../../registry/provisional_whitelist" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
@@ -22,10 +27,14 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-system-api = { path = "../../system_api" }
 ic-test-utilities = { path = ".." }
+ic-test-utilities-types = { path = "../types" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 ic-wasm-types = { path = "../../types/wasm_types" }
 maplit = "1.0.2"
-tempfile = "3.4.0"
+strum = { workspace = true }
+strum_macros = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
 wat = "1.0.52"

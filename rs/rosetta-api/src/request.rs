@@ -1,16 +1,15 @@
-use crate::convert::principal_id_from_public_key_or_principal;
-use crate::errors::ApiError;
-use crate::models::seconds::Seconds;
-use crate::request_types::*;
-use crate::{convert, models};
+use crate::{
+    convert, convert::principal_id_from_public_key_or_principal, errors::ApiError, models,
+    models::seconds::Seconds, request_types::*,
+};
 use dfn_candid::CandidOne;
-use ic_nns_governance::pb::v1::manage_neuron::{self, configure, Command, Configure};
+use ic_nns_governance_api::pb::v1::manage_neuron::{self, configure, Command, Configure};
 use ic_types::PrincipalId;
 use icp_ledger::Tokens;
 use on_wire::FromWire;
 use std::convert::{TryFrom, TryInto};
 
-use crate::models::operation::Operation;
+use crate::models::Operation;
 use serde::{Deserialize, Serialize};
 
 pub mod request_result;
@@ -25,7 +24,7 @@ pub mod transaction_results;
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(tag = "type")]
 pub enum Request {
-    /// Contains `Send`, `Mint`, and `Burn` operations.
+    /// Contains `Send`, `Mint`, `Approve` and `Burn` operations.
     /// Attempting to serialize or deserialize any Mint, or Burn will error.
     #[serde(rename = "TRANSACTION")]
     #[serde(with = "serde_transfer")]
@@ -56,6 +55,8 @@ pub enum Request {
     StakeMaturity(StakeMaturity),
     #[serde(rename = "NEURON_INFO")]
     NeuronInfo(NeuronInfo),
+    #[serde(rename = "LIST_NEURONS")]
+    ListNeurons(ListNeurons),
     #[serde(rename = "FOLLOW")]
     Follow(Follow),
 }
@@ -98,7 +99,14 @@ impl Request {
                     neuron_index: *neuron_index,
                 })
             }
-            Request::Transfer(icp_ledger::Operation::Transfer { .. }) => Ok(RequestType::Send),
+            Request::Transfer(icp_ledger::Operation::Transfer { spender, .. }) => {
+                if spender.is_some() {
+                    return Err(ApiError::invalid_request(
+                        "TransferFrom operations are not supported through Rosetta",
+                    ));
+                }
+                Ok(RequestType::Send)
+            }
             Request::Transfer(icp_ledger::Operation::Burn { .. }) => Err(
                 ApiError::invalid_request("Burn operations are not supported through Rosetta"),
             ),
@@ -108,11 +116,6 @@ impl Request {
             Request::Transfer(icp_ledger::Operation::Approve { .. }) => Err(
                 ApiError::invalid_request("Approve operations are not supported through Rosetta"),
             ),
-            Request::Transfer(icp_ledger::Operation::TransferFrom { .. }) => {
-                Err(ApiError::invalid_request(
-                    "TransferFrom operations are not supported through Rosetta",
-                ))
-            }
             Request::Spawn(Spawn { neuron_index, .. }) => Ok(RequestType::Spawn {
                 neuron_index: *neuron_index,
             }),
@@ -139,6 +142,7 @@ impl Request {
                 neuron_index: *neuron_index,
                 controller: controller.map(PublicKeyOrPrincipal::Principal),
             }),
+            Request::ListNeurons(ListNeurons { .. }) => Ok(RequestType::ListNeurons),
             Request::Follow(Follow {
                 neuron_index,
                 controller,
@@ -161,7 +165,7 @@ impl Request {
         let mut builder = TransactionBuilder::default();
         for request in requests {
             match request {
-                Request::Transfer(o) => builder.transfer(o, token_name)?,
+                Request::Transfer(o) => builder.transfer(o, token_name),
                 Request::Stake(o) => builder.stake(o),
                 Request::SetDissolveTimestamp(o) => builder.set_dissolve_timestamp(o),
                 Request::ChangeAutoStakeMaturity(o) => builder.change_auto_stake_maturity(o),
@@ -175,8 +179,9 @@ impl Request {
                 Request::RegisterVote(o) => builder.register_vote(o),
                 Request::StakeMaturity(o) => builder.stake_maturity(o),
                 Request::NeuronInfo(o) => builder.neuron_info(o),
+                Request::ListNeurons(o) => builder.list_neurons(o),
                 Request::Follow(o) => builder.follow(o),
-            };
+            }?;
         }
         Ok(builder.build())
     }
@@ -200,6 +205,7 @@ impl Request {
                 | Request::RegisterVote(_)
                 | Request::MergeMaturity(_)
                 | Request::StakeMaturity(_)
+                | Request::ListNeurons(_) // not neuron management but we need it signed.
                 | Request::NeuronInfo(_) // not neuron management but we need it signed.
                 | Request::Follow(_)
         )
@@ -228,7 +234,7 @@ impl TryFrom<&models::Request> for Request {
 
         let manage_neuron = || {
             {
-                CandidOne::<ic_nns_governance::pb::v1::ManageNeuron>::from_bytes(
+                CandidOne::<ic_nns_governance_api::pb::v1::ManageNeuron>::from_bytes(
                     payload.update_content().arg.0.clone(),
                 )
                 .map_err(|e| {
@@ -246,6 +252,7 @@ impl TryFrom<&models::Request> for Request {
                 Ok(Request::Transfer(icp_ledger::Operation::Transfer {
                     from: account,
                     to,
+                    spender: None,
                     amount,
                     fee,
                 }))
@@ -462,6 +469,7 @@ impl TryFrom<&models::Request> for Request {
                     Some(Err(e)) => Err(e),
                 }
             }
+            RequestType::ListNeurons { .. } => Ok(Request::ListNeurons(ListNeurons { account })),
             RequestType::Follow {
                 neuron_index,
                 controller,

@@ -1,13 +1,15 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test", "rust_ic_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/common/test_keys",
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/handlers/lifeline/impl:lifeline",
@@ -21,23 +23,24 @@ BASE_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:bytes",
     "@crate_index//:candid",
+    "@crate_index//:fs_extra",
     "@crate_index//:futures",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:lazy_static",
+    "@crate_index//:prometheus-parse",
     "@crate_index//:prost",
     "@crate_index//:strum",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/canister_client/sender",
         "//rs/config",
         "//rs/crypto",
         "//rs/crypto/sha2",
-        "//rs/nervous_system/common/test_keys",
         "//rs/nervous_system/root",
-        "//rs/nns/constants",
-        "//rs/nns/gtc",
-        "//rs/nns/test_utils",
         "//rs/phantom_newtype",
         "//rs/protobuf",
         "//rs/registry/canister",
@@ -47,23 +50,21 @@ BASE_DEPENDENCIES = [
         "//rs/registry/transport",
         "//rs/rosetta-api/tvl/xrc_mock",
         "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/http_types",
         "//rs/rust_canisters/on_wire",
         "//rs/state_machine_tests",
         "//rs/test_utilities",
         "//rs/types/error_types",
-        "//rs/types/ic00_types",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
-        "@crate_index//:crossbeam",
         "@crate_index//:crossbeam-channel",
-        "@crate_index//:futures-util",
         "@crate_index//:hex",
         "@crate_index//:ic-xrc-types",
-        "@crate_index//:libsecp256k1",
         "@crate_index//:maplit",
-        "@crate_index//:rand_0_8_4",
-        # "@crate_index//:randomkit",
+        "@crate_index//:rand",
         "@crate_index//:rustc-hash",
         "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
         "@crate_index//:tokio",
         "@crate_index//:wat",
     ],
@@ -72,23 +73,45 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/sns/init",
+    # Keep sorted.
     "//rs/nns/governance",
-    "//rs/nns/sns-wasm",
+    "//rs/nns/governance/api",
+    "//rs/nns/governance/init",
     "//rs/nns/handlers/root/impl:root",
+    "//rs/nns/sns-wasm",
+    "//rs/sns/init",
     "//rs/sns/swap",
-]
+] + select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+    "//conditions:default": [
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
+        "//rs/nns/gtc",
+    ],
+})
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/sns/init:init--test_feature",
+    # Keep sorted.
     "//rs/nns/governance:governance--test_feature",
-    "//rs/nns/sns-wasm:sns-wasm--test_feature",
+    "//rs/nns/governance/api:api--test_feature",
+    "//rs/nns/governance/init:init--test_feature",
     "//rs/nns/handlers/root/impl:root--test_feature",
+    "//rs/nns/sns-wasm:sns-wasm--test_feature",
+    "//rs/sns/init:init--test_feature",
     "//rs/sns/swap:swap--test_feature",
-]
+] + select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+    "//conditions:default": [
+        "//rs/nns/constants:constants--test_feature",
+        "//rs/nns/test_utils:test_utils--test_feature",
+        "//rs/nns/gtc:gtc--test_feature",
+    ],
+})
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
+    "@crate_index//:ic-cdk-macros",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [
     ],
@@ -98,6 +121,9 @@ MACRO_DEPENDENCIES = [
 })
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/nervous_system/common/test_utils",
+    "//rs/nns/test_utils/golden_nns_state",
     "//rs/types/types_test_utils",
 ]
 
@@ -106,16 +132,16 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 DEV_DATA = [
+    ":canister-playground-canister",
     ":governance-mem-test-canister",
-    ":governance-memory-migration-test-canister",
+    ":unstoppable-canister",
     ":mem-utils-test-canister",
-    "//rs/canister_sandbox",
-    "//rs/canister_sandbox/sandbox_launcher",
     "//rs/nns/cmc:cycles-minting-canister",
     "//rs/nns/governance:governance-canister",
     "//rs/nns/governance:governance-canister-test",
     "//rs/nns/gtc:genesis-token-canister",
     "//rs/nns/handlers/root/impl:root-canister",
+    "//rs/nns/handlers/lifeline/impl:lifeline_canister",
     "//rs/nns/sns-wasm:sns-wasm-canister",
     "//rs/registry/canister:registry-canister",
     "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm",
@@ -123,54 +149,62 @@ DEV_DATA = [
     "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
     "//rs/rosetta-api/icrc1/archive:archive_canister",
     "//rs/rosetta-api/icrc1/index:index_canister",
+    "//rs/rosetta-api/icrc1/index-ng:index_ng_canister",
     "//rs/rosetta-api/icrc1/ledger:ledger_canister",
     "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
     "//rs/sns/governance:sns-governance-canister",
     "//rs/sns/root:sns-root-canister",
     "//rs/sns/swap:sns-swap-canister",
     "src/neurons.csv",
+    "@cycles-ledger.wasm.gz//file",
+    "@subnet_rental_canister//file",
 ]
 
 DEV_ENV = {
     "CARGO_MANIFEST_DIR": "rs/nns/integration_tests",
-    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-    "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    "NEURON_CSV_PATH": "rs/nns/integration_tests/src/neurons.csv",
+    "CYCLES_LEDGER_WASM_PATH": "$(rootpath @cycles-ledger.wasm.gz//file)",
     "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
     "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
     "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm)",
     "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
     "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm)",
+    "LIFELINE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
     "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister)",
     "IC_ICRC1_INDEX_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index:index_canister)",
+    "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index-ng:index_ng_canister)",
     "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
     "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
     "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
     "MEM_UTILS_TEST_CANISTER_WASM_PATH": "$(rootpath :mem-utils-test-canister)",
     "GOVERNANCE_MEM_TEST_CANISTER_WASM_PATH": "$(rootpath :governance-mem-test-canister)",
-    "GOVERNANCE_MEMORY_MIGRATION_TEST_CANISTER_WASM_PATH": "$(rootpath :governance-memory-migration-test-canister)",
+    "CANISTER_PLAYGROUND_CANISTER_WASM_PATH": "$(rootpath :canister-playground-canister)",
     "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
+    "UNSTOPPABLE_CANISTER_WASM_PATH": "$(rootpath :unstoppable-canister)",
     "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister)",
     "SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/sns/root:sns-root-canister)",
     "SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/swap:sns-swap-canister)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
-    "NEURON_CSV_PATH": "rs/nns/integration_tests/src/neurons.csv",
     "XRC_MOCK_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
+    "SUBNET_RENTAL_CANISTER_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
 }
 
 rust_library(
     name = "integration_tests",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_features = ["test"],
     crate_name = "ic_nns_integration_tests",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES_WITH_TEST_FEATURES,
 )
 
 rust_canister(
     name = "mem-utils-test-canister",
+    testonly = True,
     srcs = ["test_canisters/mem_utils_test.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -179,7 +213,18 @@ rust_canister(
 )
 
 rust_canister(
+    name = "canister-playground-canister",
+    testonly = True,
+    srcs = ["test_canisters/canister_playground_canister.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":test_canisters/empty.did",
+    deps = DEPENDENCIES + [":integration_tests"],
+)
+
+rust_canister(
     name = "governance-mem-test-canister",
+    testonly = True,
     srcs = ["test_canisters/governance_mem_test_canister.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -188,22 +233,43 @@ rust_canister(
 )
 
 rust_canister(
-    name = "governance-memory-migration-test-canister",
-    srcs = ["test_canisters/governance_memory_migration_test_canister.rs"],
+    name = "unstoppable-canister",
+    testonly = True,
+    srcs = ["test_canisters/unstoppable_canister.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test_canisters/empty.did",
-    deps = DEPENDENCIES + [":integration_tests"],
+    deps = DEPENDENCIES + [
+        ":integration_tests",
+    ],
 )
 
-rust_test_suite_with_extra_srcs(
+rust_canister(
+    name = "unstoppable-sns-root-canister",
+    testonly = True,
+    srcs = ["test_canisters/unstoppable_sns_root_canister.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":test_canisters/empty.did",
+    deps = DEPENDENCIES + [
+        ":integration_tests",
+        "//rs/nervous_system/runtime",
+        "//rs/sns/root",
+    ],
+)
+
+rust_ic_test_suite_with_extra_srcs(
     name = "integration_tests_test",
     srcs = glob(
         ["src/**/*.rs"],
         exclude = [
             "src/lib.rs",
-            # governance mem test is tested in a separate rule below, it needs 5+ minutes to finish.
+            # Tests that are broken out into their own rules below,
+            # mostly due to long running times.
+            "src/canister_playground.rs",
+            "src/copy_inactive_neurons_to_stable_memory.rs",
             "src/governance_mem_test.rs",
+            "src/upgrade_canisters_with_golden_nns_state.rs",
         ],
     ),
     aliases = ALIASES,
@@ -212,12 +278,12 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = ["src/lib.rs"],
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 
 # To run this test use `bazel test --config=alltests //rs/nns/integration_tests:governance_mem_test`
 # See the .bazelrc for more configuration information.
-rust_test(
+rust_ic_test(
     name = "governance_mem_test",
     size = "large",
     srcs = [
@@ -230,5 +296,127 @@ rust_test(
     env = DEV_ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["manual"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+# To run this test use `bazel test --config=alltests //rs/nns/integration_tests:canister_playground` --test_output=all
+# See the .bazelrc for more configuration information.
+rust_ic_test(
+    name = "canister_playground",
+    srcs = [
+        "src/canister_playground.rs",
+        "src/lib.rs",
+    ],
+    aliases = ALIASES,
+    crate_root = "src/canister_playground.rs",
+    data = DEV_DATA,
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = ["manual"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+# To run this test,
+#
+#     bazel \
+#         test \
+#         --test_env=SSH_AUTH_SOCK \
+#         //rs/nns/integration_tests:copy_inactive_neurons_to_stable_memory_test
+#
+# The only unusual thing in this command is `--test_env=SSH_AUTH_SOCK`. That causes the
+# SSH_AUTH_SOCK environment variable to be "forwarded" from your shell to the sandbox where the test
+# is run. This authorizes the test to download the test data.
+#
+# Additionally, the following flags are recommended (but not required):
+#
+# --test_output=streamed
+# --test_arg=--nocapture
+#
+# These let you watch the progress of the test, rather than only being able to see the output only
+# at the end.
+#
+# See the .bazelrc for more configuration information.
+rust_ic_test(
+    name = "copy_inactive_neurons_to_stable_memory_test",
+    # This uses on the order of 10 GB of disk space.
+    # Therefore, size = "large" is not large enough.
+    size = "enormous",
+    srcs = [
+        "src/copy_inactive_neurons_to_stable_memory.rs",
+    ],
+    aliases = ALIASES,
+    crate_root = "src/copy_inactive_neurons_to_stable_memory.rs",
+    data = DEV_DATA,
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "manual",  # CI should not be downloading nns_state.tar.zst.
+        "requires-network",  # Because mainnet state is downloaded (and used).
+    ],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+# This test has tag "manual", which means it only runs when you explicitly specify it. In addition,
+# this requires a couple of environment variables.
+#
+# To run this test,
+#
+#     bazel \
+#         test \
+#         --test_env=SSH_AUTH_SOCK \
+#         --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=governance,root \
+#         --test_output=streamed \
+#         --test_arg=--nocapture \
+#         //rs/nns/integration_tests:upgrade_canisters_with_golden_nns_state
+#
+# Required Environment Variables:
+#
+#     * `--test_env=SSH_AUTH_SOCK`: This causes the SSH_AUTH_SOCK environment
+#       variable to be "forwarded" from your shell to the sandbox where the test
+#       is run. This authorizes the test to download the test data.
+#
+#     * `--test_env=NNS_CANISTER_UPGRADE_SEQUENCE=`. The value is a comma
+#       separated list of NNS canister names, or 'all'. When 'all' is used, it
+#       takes about 5 minutes to run the test on my devenv machine.
+#
+# Additionally, the following flags are recommended (but not required):
+#
+# --test_output=streamed
+# --test_arg=--nocapture
+#
+# These let you watch the progress of the test, rather than only being able to see the output only
+# at the end.
+#
+# Troubleshooting
+# ===============
+#
+# Symptom: [Governance] Error when refreshing XDR rate in run_periodic_tasks: External: Error calling 'get_average_icp_xdr_conversion_rate': code: Some(5), message: Canister rkp4c-7iaaa-aaaaa-aaaca-cai is stopping
+#
+# Possible solution: Wait a few hours for next golden state to be generated.
+#
+# Possible cause: In the current golden state, the cycles-minting canister is calling
+# the exchange-rate canister. In this case, the CMC cannot be upgraded, because
+# it never transitions from the stopping state to the stopped state. This transition
+# is required in order to proceed with upgrading the CMC.
+#
+# TODO: When the plaform supports best-effort requests, make the CMC use that.
+rust_ic_test(
+    name = "upgrade_canisters_with_golden_nns_state",
+    # This uses on the order of 10 GB of disk space.
+    # Therefore, size = "large" is not large enough.
+    size = "enormous",
+    srcs = [
+        "src/upgrade_canisters_with_golden_nns_state.rs",
+    ],
+    aliases = ALIASES,
+    crate_root = "src/upgrade_canisters_with_golden_nns_state.rs",
+    data = DEV_DATA,
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
+        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
+        "requires-network",  # Because mainnet state is downloaded (and used).
+    ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

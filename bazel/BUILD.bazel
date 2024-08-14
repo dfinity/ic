@@ -1,6 +1,6 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
-load("//bazel:status.bzl", "ic_version_or_git_sha", "version_file_path")
+load("//bazel:status.bzl", "FAKE_IC_VERSION", "ic_version_or_git_sha", "version_file_path")
 
 bool_flag(
     name = "enable_malicious_code",
@@ -26,6 +26,20 @@ config_setting(
     },
 )
 
+# Flag to enable uploading performance system test results to the ES database
+# that is connected to the testnet Grafana dashboard.
+bool_flag(
+    name = "enable_upload_perf_systest_results",
+    build_setting_default = False,
+)
+
+config_setting(
+    name = "upload_perf_systest_results_enabled",
+    flag_values = {
+        ":enable_upload_perf_systest_results": "True",
+    },
+)
+
 string_flag(
     name = "ic_version",
     build_setting_default = "",
@@ -33,7 +47,13 @@ string_flag(
 
 string_flag(
     name = "ic_version_rc_only",
-    build_setting_default = "0000000000000000000000000000000000000000",
+    build_setting_default = FAKE_IC_VERSION,
+)
+
+string_flag(
+    name = "timeout_value",
+    build_setting_default = "10m",
+    visibility = ["//visibility:public"],
 )
 
 # Generates version.txt file that contains the value of `--ic_version` flag if set, otherwise <git sha>-<timestamp>.
@@ -68,6 +88,7 @@ exports_files(
     [
         "prost_generator.sh",
         "generic_rust_bench.sh",
+        "canbench.sh",
     ],
     visibility = ["//visibility:public"],
 )
@@ -136,7 +157,6 @@ version_file_path(
     name = "version_file_path",
     visibility = [
         "//rs/tests:__subpackages__",
-        "//scalability:__pkg__",
     ],
 )
 

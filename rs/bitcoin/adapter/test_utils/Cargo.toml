@@ -1,0 +1,15 @@
+[package]
+name = "ic-btc-adapter-test-utils"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+bitcoin = { version = "0.28.1", features = ["default", "use-serde", "rand"] }
+flate2 = { workspace = true }
+hex = { workspace = true }
+rand = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }

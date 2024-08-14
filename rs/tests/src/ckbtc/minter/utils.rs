@@ -19,11 +19,8 @@ Runbook::
 
 end::catalog[] */
 
-use crate::{
-    ckbtc::lib::ADDRESS_LENGTH,
-    driver::{test_env::TestEnv, universal_vm::UniversalVms},
-    util::UniversalCanister,
-};
+use crate::ckbtc::lib::ADDRESS_LENGTH;
+use assert_matches::assert_matches;
 use bitcoincore_rpc::{
     bitcoin::{Address, Amount, Txid},
     bitcoincore_rpc_json::{self, LoadWalletResult},
@@ -34,7 +31,12 @@ use canister_test::Canister;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError};
+use ic_ckbtc_minter::updates::update_balance::UtxoStatus::Checked;
 use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
+use ic_system_test_driver::{
+    driver::{test_env::TestEnv, universal_vm::UniversalVms},
+    util::UniversalCanister,
+};
 use ic_universal_canister::{management, wasm};
 use icrc_ledger_agent::{CallMode, Icrc1Agent, Icrc1AgentError};
 use icrc_ledger_types::{
@@ -111,7 +113,7 @@ pub async fn wait_for_ledger_balance<'a>(
     expected_balance: Nat,
     account: Account,
 ) {
-    let mut balance: Nat = Nat::from(0);
+    let mut balance: Nat = Nat::from(0_u8);
     let start = Instant::now();
     while balance != expected_balance {
         if start.elapsed() >= SHORT_TIMEOUT {
@@ -178,7 +180,7 @@ pub async fn wait_for_signed_tx(
     ckbtc_minter_agent: &CkBtcMinterAgent,
     logger: &Logger,
     block_index: u64,
-) -> [u8; 32] {
+) -> ic_btc_interface::Txid {
     let start = Instant::now();
     loop {
         if start.elapsed() >= LONG_TIMEOUT {
@@ -237,7 +239,7 @@ pub async fn wait_for_finalization(
     logger: &Logger,
     block_index: u64,
     default_btc_address: &Address,
-) -> [u8; 32] {
+) -> ic_btc_interface::Txid {
     let start = Instant::now();
     loop {
         if start.elapsed() >= LONG_TIMEOUT {
@@ -282,7 +284,7 @@ pub async fn wait_for_finalization(
 pub async fn wait_for_finalization_no_new_blocks(
     ckbtc_minter_agent: &CkBtcMinterAgent,
     block_index: u64,
-) -> [u8; 32] {
+) -> ic_btc_interface::Txid {
     let start = Instant::now();
     loop {
         if start.elapsed() >= LONG_TIMEOUT {
@@ -522,7 +524,7 @@ pub async fn assert_mint_transaction(
     .await
     .expect("Error while getting ledger transaction");
     assert_eq!(1, res.transactions.len(), "Expecting one transaction");
-    let transaction = res.transactions.get(0).unwrap();
+    let transaction = res.transactions.first().unwrap();
     assert_eq!("mint", transaction.kind);
     let mint = transaction
         .mint
@@ -559,7 +561,7 @@ pub async fn assert_burn_transaction(
     .await
     .expect("Error while getting ledger transaction");
     assert_eq!(1, res.transactions.len(), "Expecting one transaction");
-    let transaction = res.transactions.get(0).unwrap();
+    let transaction = res.transactions.first().unwrap();
     assert_eq!("burn", transaction.kind);
     let burn = transaction
         .burn
@@ -579,14 +581,14 @@ pub async fn assert_no_transaction(agent: &Icrc1Agent, logger: &Logger) {
     let res = get_ledger_transactions(
         agent,
         GetTransactionsRequest {
-            start: BlockIndex::from(0),
+            start: BlockIndex::from(0_u8),
             length: Nat::from(1_000u32),
         },
     )
     .await
     .expect("Error while getting ledger transaction");
     assert_eq!(
-        Nat::from(0),
+        Nat::from(0_u8),
         res.log_length,
         "Ledger expected to not have transactions, got {:?}",
         res
@@ -602,7 +604,7 @@ pub async fn assert_no_new_utxo(agent: &CkBtcMinterAgent, subaccount: &Subaccoun
         })
         .await
         .expect("Error while calling update_balance");
-    matches!(result, Err(UpdateBalanceError::NoNewUtxos { .. }));
+    assert_matches!(result, Err(UpdateBalanceError::NoNewUtxos { .. }));
 }
 
 /// Assert that calling update_balance returns a transient error.
@@ -614,7 +616,16 @@ pub async fn assert_temporarily_unavailable(agent: &CkBtcMinterAgent, subaccount
         })
         .await
         .expect("Error while calling update_balance");
-    matches!(result, Err(UpdateBalanceError::TemporarilyUnavailable(..)));
+    match result {
+        Ok(utxos_statues) => {
+            for status in utxos_statues {
+                assert_matches!(status, Checked(_));
+            }
+        }
+        Err(error) => {
+            assert_matches!(error, UpdateBalanceError::TemporarilyUnavailable(..));
+        }
+    }
 }
 
 /// Ensure wallet existence by creating one if required.

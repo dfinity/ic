@@ -7,7 +7,7 @@ import "ic_base_types/pb/v1/types.proto";
 // All essential state of an SNS root canister.
 //
 // When canister_init is called in the SNS root canister, it is expected that a
-// serialized version of this was passed via ic_ic00_types::InstallCodeArgs::args,
+// serialized version of this was passed via ic_management_canister_types::InstallCodeArgs::args,
 // which can be retrieved by the canister via ic_cdk::api::call::arg_data().
 message SnsRootCanister {
   // Required.
@@ -51,17 +51,15 @@ message RegisterDappCanisterRequest {
   ic_base_types.pb.v1.PrincipalId canister_id = 1;
 }
 
-message RegisterDappCanisterResponse {
-}
+message RegisterDappCanisterResponse {}
 
 // This message has an identical message defined in governace.proto, both need to be changed together
 // TODO(NNS1-1589)
 message RegisterDappCanistersRequest {
- repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
+  repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
 }
 
-message RegisterDappCanistersResponse {
-}
+message RegisterDappCanistersResponse {}
 
 // Change control of the listed canisters to the listed principal id.
 // Same proto in governance.proto. TODO(NNS1-1589)
@@ -105,4 +103,29 @@ message ListSnsCanistersResponse {
   repeated ic_base_types.pb.v1.PrincipalId dapps = 5;
   repeated ic_base_types.pb.v1.PrincipalId archives = 6;
   ic_base_types.pb.v1.PrincipalId index = 7;
+}
+
+enum LogVisibility {
+  LOG_VISIBILITY_UNSPECIFIED = 0;
+
+  // The log is visible to the controllers of the dapp canister.
+  LOG_VISIBILITY_CONTROLLERS = 1;
+
+  // The log is visible to the public.
+  LOG_VISIBILITY_PUBLIC = 2;
+}
+
+message ManageDappCanisterSettingsRequest {
+  repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
+  optional uint64 compute_allocation = 2;
+  optional uint64 memory_allocation = 3;
+  optional uint64 freezing_threshold = 4;
+  optional uint64 reserved_cycles_limit = 5;
+  optional LogVisibility log_visibility = 6;
+  optional uint64 wasm_memory_limit = 7;
+}
+
+message ManageDappCanisterSettingsResponse {
+  // Absense of failure_reason indicates success.
+  optional string failure_reason = 1;
 }

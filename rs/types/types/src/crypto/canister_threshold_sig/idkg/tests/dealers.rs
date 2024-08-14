@@ -39,7 +39,7 @@ fn should_return_correct_dealers() {
 
 #[test]
 fn should_return_correct_dealers_iter() {
-    let mut dealers = vec![node_id(NODE_1), node_id(NODE_2)];
+    let mut dealers = [node_id(NODE_1), node_id(NODE_2)];
 
     // The indices should correspond to the natural ordering of the elements:
     dealers.sort();
@@ -68,25 +68,25 @@ fn should_return_correct_dealers_count() {
 }
 
 #[test]
-fn should_return_correct_sorted_dealer_position() {
-    let mut dealers = BTreeSet::new();
-    dealers.insert(node_id(NODE_3));
-    dealers.insert(node_id(NODE_1));
-    dealers.insert(node_id(NODE_2));
-    let dealers = IDkgDealers::new(dealers).unwrap();
-
-    assert_eq!(dealers.position(node_id(NODE_1)).unwrap(), 0);
-    assert_eq!(dealers.position(node_id(NODE_2)).unwrap(), 1);
-    assert_eq!(dealers.position(node_id(NODE_3)).unwrap(), 2);
-}
-
-#[test]
-fn should_return_none_position_if_node_id_not_in_dealers() {
+fn should_return_contains_false_if_node_id_not_in_dealers() {
     let not_a_dealer_node = node_id(NODE_3);
     let mut dealers = BTreeSet::new();
     dealers.insert(node_id(NODE_1));
     dealers.insert(node_id(NODE_2));
     let dealers = IDkgDealers::new(dealers).unwrap();
 
-    assert!(dealers.position(not_a_dealer_node).is_none());
+    assert!(!dealers.contains(not_a_dealer_node));
+}
+
+#[test]
+fn should_return_contains_true_if_node_id_in_dealers() {
+    let dealer_node_1 = node_id(NODE_1);
+    let dealer_node_2 = node_id(NODE_2);
+    let mut dealers = BTreeSet::new();
+    dealers.insert(dealer_node_1);
+    dealers.insert(dealer_node_2);
+    let dealers = IDkgDealers::new(dealers).unwrap();
+
+    assert!(dealers.contains(dealer_node_1));
+    assert!(dealers.contains(dealer_node_2));
 }

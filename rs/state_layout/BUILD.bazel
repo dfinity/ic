@@ -4,13 +4,14 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/config",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/protobuf",
     "//rs/replicated_state",
     "//rs/sys",
     "//rs/types/base_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/utils",
@@ -19,11 +20,7 @@ DEPENDENCIES = [
     "@crate_index//:prometheus",
     "@crate_index//:prost",
     "@crate_index//:scoped_threadpool",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:serde_cbor",
     "@crate_index//:slog",
-    "@crate_index//:tempfile",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -31,9 +28,12 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/interfaces",
-    "//rs/test_utilities",
     "//rs/test_utilities/logger",
+    "//rs/test_utilities/time",
     "//rs/test_utilities/tmpdir",
+    "//rs/test_utilities/types",
+    "@crate_index//:itertools",
+    "@crate_index//:proptest",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
@@ -43,7 +43,7 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_state_layout",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 

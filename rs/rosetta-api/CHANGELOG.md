@@ -4,10 +4,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## Unreleased 
 ### Fixes
+- Enable store-location option to be set by a user
+- Replacing internal crypto library `ic_canister_client_sender` with `ic_crypto_ed25519` 
+  and `ic_crypto_ecdsa_secp256k1`.
+- Return the correct `signature_type` in the `payloads` returned by the `construction_payloads` endpoint.
+- Handle Errors that may occur while deserializing objects using serde_json
 ### Added
+- /call endpoint with the method 'query_block_range' to fetch multiple blocks at once
+
 ### Changed
+
+## [2.0.0] - 2024-01-18
+### Fixes
+- Prohibit Rosetta from spamming the ledger in case of errors at the ledger client. 
+### Added
+- Add `timestamp` to the `blocks` table
+- Add support for `list_neurons`. Lets a user query a list of all the neurons a user has created.
+- Add support for `list_known_neurons`. Lets a user query a list of all publicly known neurons.
+
+## [1.9.0] - 2023-11-16
+### Fixes
+- Return transaction metadata (`memo` and `created_at_time`) in `/construction/parse`
+- Remove `rosetta-exchanges.ic0.app`
+### Added
+- Add support for ICRC-2
+- Add support for voting staking
+- Add support for auto staking
+- Add the ability to fetch pending proposals and proposal info
+- Add listen to port file to rosetta
+### Changed
+- BREAKING CHANGE: update the database structure to support the ICRC-2 standard transactions.
+  The clients have to delete the old database and re-sync the Rosetta node from scratch. 
 
 ## [1.8.0] - 2023-01-16
 ### Fixes

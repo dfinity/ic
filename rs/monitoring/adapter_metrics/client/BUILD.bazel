@@ -1,0 +1,25 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/async_utils",
+    "//rs/monitoring/adapter_metrics/service",
+    "//rs/monitoring/logger",
+    "@crate_index//:prometheus",
+    "@crate_index//:protobuf",
+    "@crate_index//:slog",
+    "@crate_index//:slog-async",
+    "@crate_index//:tokio",
+    "@crate_index//:tonic",
+    "@crate_index//:tower",
+]
+
+rust_library(
+    name = "client",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_adapter_metrics_client",
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)

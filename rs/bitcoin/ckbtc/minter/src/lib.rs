@@ -1,13 +1,16 @@
 use crate::address::BitcoinAddress;
 use crate::logs::{P0, P1};
+use crate::memo::Status;
 use crate::queries::WithdrawalFee;
+use crate::state::ReimbursementReason;
 use crate::tasks::schedule_after;
 use candid::{CandidType, Deserialize};
-use ic_btc_interface::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Utxo};
+use ic_btc_interface::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Txid, Utxo};
 use ic_canister_log::log;
-use ic_ic00_types::DerivationPath;
+use ic_management_canister_types::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferError};
+use num_traits::ToPrimitive;
 use scopeguard::{guard, ScopeGuard};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
@@ -59,6 +62,11 @@ pub const MIN_RESUBMISSION_DELAY: Duration = Duration::from_secs(24 * 60 * 60);
 /// The ckBTC minter requires at least 69 bytes, we choose 80
 /// to have some room for future modifications.
 pub const CKBTC_LEDGER_MEMO_SIZE: u16 = 80;
+
+/// The threshold for the number of UTXOs under management before
+/// trying to match the number of outputs with the number of inputs
+/// when building transactions.
+pub const UTXOS_COUNT_THRESHOLD: usize = 1_000;
 
 #[derive(Clone, serde::Serialize, Deserialize, Debug)]
 pub enum Priority {
@@ -157,11 +165,19 @@ async fn fetch_main_utxos(main_account: &Account, main_address: &BitcoinAddress)
 
 /// Returns the minimum withdrawal amount based on the current median fee rate (in millisatoshi per byte).
 /// The returned amount is in satoshi.
-fn compute_min_withdrawal_amount(median_fee_rate_e3s: MillisatoshiPerByte) -> u64 {
+fn compute_min_withdrawal_amount(
+    btc_network: Network,
+    median_fee_rate_e3s: MillisatoshiPerByte,
+) -> u64 {
     const PER_REQUEST_RBF_BOUND: u64 = 22_100;
     const PER_REQUEST_VSIZE_BOUND: u64 = 221;
     const PER_REQUEST_MINTER_FEE_BOUND: u64 = 305;
     const PER_REQUEST_KYT_FEE: u64 = 2_000;
+
+    let min_withdrawal_amount = match btc_network {
+        Network::Testnet | Network::Regtest => 10_000,
+        Network::Mainnet => 100_000,
+    };
 
     let median_fee_rate = median_fee_rate_e3s / 1_000;
     ((PER_REQUEST_RBF_BOUND
@@ -170,7 +186,7 @@ fn compute_min_withdrawal_amount(median_fee_rate_e3s: MillisatoshiPerByte) -> u6
         + PER_REQUEST_KYT_FEE)
         / 50_000)
         * 50_000
-        + 100_000
+        + min_withdrawal_amount
 }
 
 /// Returns an estimate for transaction fees in millisatoshi per vbyte. Returns
@@ -189,8 +205,9 @@ pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
             }
             if fees.len() >= 100 {
                 state::mutate_state(|s| {
-                    s.last_fee_per_vbyte = fees.clone();
-                    s.retrieve_btc_min_amount = compute_min_withdrawal_amount(fees[50]);
+                    s.last_fee_per_vbyte.clone_from(&fees);
+                    s.retrieve_btc_min_amount =
+                        compute_min_withdrawal_amount(s.btc_network, fees[50]);
                 });
                 Some(fees[50])
             } else {
@@ -360,7 +377,7 @@ async fn submit_pending_requests() {
                         log!(
                             P1,
                             "[submit_pending_requests]: successfully sent transaction {}",
-                            tx::DisplayTxid(&txid),
+                            &txid,
                         );
 
                         // Defuse the guard because we sent the transaction
@@ -368,6 +385,7 @@ async fn submit_pending_requests() {
                         let (requests, used_utxos) = ScopeGuard::into_inner(requests_guard);
 
                         state::mutate_state(|s| {
+                            s.last_transaction_submission_time_ns = Some(ic_cdk::api::time());
                             state::audit::sent_transaction(
                                 s,
                                 state::SubmittedBtcTransaction {
@@ -414,10 +432,7 @@ fn finalization_time_estimate(min_confirmations: u32, network: Network) -> Durat
 
 /// Returns identifiers of finalized transactions from the list of `candidates` according to the
 /// list of newly received UTXOs for the main minter account.
-fn finalized_txids(
-    candidates: &[state::SubmittedBtcTransaction],
-    new_utxos: &[Utxo],
-) -> Vec<[u8; 32]> {
+fn finalized_txids(candidates: &[state::SubmittedBtcTransaction], new_utxos: &[Utxo]) -> Vec<Txid> {
     candidates
         .iter()
         .filter_map(|tx| {
@@ -431,6 +446,35 @@ fn finalized_txids(
         .collect()
 }
 
+async fn reimburse_failed_kyt() {
+    let try_to_reimburse = state::read_state(|s| s.pending_reimbursements.clone());
+    for (burn_block_index, entry) in try_to_reimburse {
+        let (memo_status, kyt_fee) = match entry.reason {
+            ReimbursementReason::TaintedDestination { kyt_fee, .. } => (Status::Rejected, kyt_fee),
+            ReimbursementReason::CallFailed => (Status::CallFailed, 0),
+        };
+        let reimburse_memo = crate::memo::MintMemo::KytFail {
+            kyt_fee: Some(kyt_fee),
+            status: Some(memo_status),
+            associated_burn_index: Some(burn_block_index),
+        };
+        if let Ok(block_index) = crate::updates::update_balance::mint(
+            entry
+                .amount
+                .checked_sub(kyt_fee)
+                .expect("reimburse underflow"),
+            entry.account,
+            crate::memo::encode(&reimburse_memo).into(),
+        )
+        .await
+        {
+            state::mutate_state(|s| {
+                state::audit::reimbursed_failed_deposit(s, burn_block_index, block_index)
+            });
+        }
+    }
+}
+
 async fn finalize_requests() {
     if state::read_state(|s| s.submitted_transactions.is_empty()) {
         return;
@@ -440,15 +484,13 @@ async fn finalize_requests() {
     let now = ic_cdk::api::time();
 
     // The list of transactions that are likely to be finalized, indexed by the transaction id.
-    let mut maybe_finalized_transactions: BTreeMap<[u8; 32], state::SubmittedBtcTransaction> =
+    let mut maybe_finalized_transactions: BTreeMap<Txid, state::SubmittedBtcTransaction> =
         state::read_state(|s| {
             let wait_time = finalization_time_estimate(s.min_confirmations, s.btc_network);
             s.submitted_transactions
                 .iter()
-                .filter_map(|req| {
-                    (req.submitted_at + (wait_time.as_nanos() as u64) < now)
-                        .then(|| (req.txid, req.clone()))
-                })
+                .filter(|&req| (req.submitted_at + (wait_time.as_nanos() as u64) < now))
+                .map(|req| (req.txid, req.clone()))
                 .collect()
         });
 
@@ -498,7 +540,7 @@ async fn finalize_requests() {
             log!(
                 P0,
                 "[finalize_requests]: finalized transaction {} assumed to be stuck",
-                tx::DisplayTxid(&txid)
+                &txid
             );
             state::audit::confirm_transaction(s, &txid);
         }
@@ -541,13 +583,8 @@ async fn finalize_requests() {
     };
 
     for utxo in main_utxos_zero_confirmations {
-        let txid: [u8; 32] = utxo
-            .outpoint
-            .txid
-            .try_into()
-            .expect("BUG: invalid UTXO TXID");
         // This transaction got at least one confirmation, we don't need to replace it.
-        maybe_finalized_transactions.remove(&txid);
+        maybe_finalized_transactions.remove(&utxo.outpoint.txid);
     }
 
     if maybe_finalized_transactions.is_empty() {
@@ -567,7 +604,7 @@ async fn finalize_requests() {
         maybe_finalized_transactions.len(),
         maybe_finalized_transactions
             .keys()
-            .map(|txid| tx::DisplayTxid(txid).to_string())
+            .map(|txid| txid.to_string())
             .collect::<Vec<_>>()
             .join(","),
     );
@@ -611,7 +648,7 @@ async fn finalize_requests() {
                 log!(
                     P1,
                     "[finalize_requests]: failed to rebuild stuck transaction {}: {:?}",
-                    tx::DisplayTxid(&submitted_tx.txid),
+                    &submitted_tx.txid,
                     err
                 );
                 continue;
@@ -657,15 +694,15 @@ async fn finalize_requests() {
                     // equality in case the fee computation rules change in the future.
                     log!(P0,
                         "[finalize_requests]: resent transaction {} with a new signature. TX bytes: {}",
-                        tx::DisplayTxid(&new_txid),
+                        &new_txid,
                         hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                     );
                     continue;
                 }
                 log!(P0,
                     "[finalize_requests]: sent transaction {} to replace stuck transaction {}. TX bytes: {}",
-                    tx::DisplayTxid(&new_txid),
-                    tx::DisplayTxid(&old_txid),
+                    &new_txid,
+                    &old_txid,
                     hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                 );
                 let new_tx = state::SubmittedBtcTransaction {
@@ -684,7 +721,7 @@ async fn finalize_requests() {
             Err(err) => {
                 log!(P0, "[finalize_requests]: failed to send transaction bytes {} to replace stuck transaction {}: {}",
                     hex::encode(tx::encode_into(&signed_tx, Vec::new())),
-                    tx::DisplayTxid(&old_txid),
+                    &old_txid,
                     err,
                 );
                 continue;
@@ -716,6 +753,41 @@ fn filter_output_accounts(
             )
         })
         .collect()
+}
+
+/// The algorithm greedily selects the smallest UTXO(s) with a value that is at least the given `target` in a first step.
+///
+/// If the minter manages more than [UTXOS_COUNT_THRESHOLD], it will then try to match the number of inputs with the
+/// number of outputs + 1 (where the additional output corresponds to the change output).
+///
+/// If there are no UTXOs matching the criteria, returns an empty vector.
+///
+/// PROPERTY: sum(u.value for u in available_set) ≥ target ⇒ !solution.is_empty()
+/// POSTCONDITION: !solution.is_empty() ⇒ sum(u.value for u in solution) ≥ target
+/// POSTCONDITION:  solution.is_empty() ⇒ available_utxos did not change.
+fn utxos_selection(
+    target: u64,
+    available_utxos: &mut BTreeSet<Utxo>,
+    output_count: usize,
+) -> Vec<Utxo> {
+    let mut input_utxos = greedy(target, available_utxos);
+
+    if input_utxos.is_empty() {
+        return vec![];
+    }
+
+    if available_utxos.len() > UTXOS_COUNT_THRESHOLD {
+        while input_utxos.len() < output_count + 1 {
+            if let Some(min_utxo) = available_utxos.iter().min_by_key(|u| u.value) {
+                input_utxos.push(min_utxo.clone());
+                assert!(available_utxos.remove(&min_utxo.clone()));
+            } else {
+                break;
+            }
+        }
+    }
+
+    input_utxos
 }
 
 /// Selects a subset of UTXOs with the specified total target value and removes
@@ -785,6 +857,7 @@ pub async fn sign_transaction(
         let pkhash = tx::hash160(&pubkey);
 
         let sighash = sighasher.sighash(input, &pkhash);
+
         let sec1_signature =
             management::sign_with_ecdsa(key_name.clone(), DerivationPath::new(path), sighash)
                 .await?;
@@ -898,7 +971,7 @@ pub fn build_unsigned_transaction(
 
     let amount = outputs.iter().map(|(_, amount)| amount).sum::<u64>();
 
-    let input_utxos = greedy(amount, minter_utxos);
+    let input_utxos = utxos_selection(amount, minter_utxos, outputs.len());
 
     if input_utxos.is_empty() {
         return Err(BuildTxError::NotEnoughFunds);
@@ -1016,14 +1089,22 @@ fn distribute(amount: u64, n: u64) -> Vec<u64> {
 }
 
 pub async fn distribute_kyt_fees() {
-    use ic_icrc1_client_cdk::CdkRuntime;
-    use ic_icrc1_client_cdk::ICRC1Client;
+    use icrc_ledger_client_cdk::CdkRuntime;
+    use icrc_ledger_client_cdk::ICRC1Client;
     use icrc_ledger_types::icrc1::transfer::TransferArg;
 
-    #[derive(Debug)]
     enum MintError {
         TransferError(TransferError),
         CallError(i32, String),
+    }
+
+    impl std::fmt::Debug for MintError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                MintError::TransferError(e) => write!(f, "TransferError({:?})", e),
+                MintError::CallError(code, msg) => write!(f, "CallError({}, {:?})", code, msg),
+            }
+        }
     }
 
     async fn mint(amount: u64, to: candid::Principal, memo: Memo) -> Result<u64, MintError> {
@@ -1048,6 +1129,7 @@ pub async fn distribute_kyt_fees() {
             .await
             .map_err(|(code, msg)| MintError::CallError(code, msg))?
             .map_err(MintError::TransferError)
+            .map(|n| n.0.to_u64().expect("nat does not fit into u64"))
     }
 
     let fees_to_distribute = state::read_state(|s| s.owed_kyt_amount.clone());
@@ -1116,6 +1198,7 @@ pub fn timer() {
 
                 submit_pending_requests().await;
                 finalize_requests().await;
+                reimburse_failed_kyt().await;
             });
         }
         TaskType::RefreshFeePercentiles => {
@@ -1178,7 +1261,7 @@ pub fn estimate_fee(
     median_fee_millisatoshi_per_vbyte: u64,
     kyt_fee: u64,
 ) -> WithdrawalFee {
-    const DEFAULT_INPUT_COUNT: u64 = 3;
+    const DEFAULT_INPUT_COUNT: u64 = 2;
     // One output for the caller and one for the change.
     const DEFAULT_OUTPUT_COUNT: u64 = 2;
     let input_count = match maybe_amount {
@@ -1188,7 +1271,8 @@ pub fn estimate_fee(
             // should get the exact number of inputs that the minter
             // will use.
             let mut utxos = available_utxos.clone();
-            let selected_utxos = greedy(amount, &mut utxos);
+            let selected_utxos =
+                utxos_selection(amount, &mut utxos, DEFAULT_OUTPUT_COUNT as usize - 1);
 
             if !selected_utxos.is_empty() {
                 selected_utxos.len() as u64

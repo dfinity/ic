@@ -23,6 +23,7 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
+use strum_macros::EnumIter;
 
 /// An arbitrary piece of data that an embedder can store between module
 /// instantiations.
@@ -62,6 +63,7 @@ pub enum Global {
     I64(i64),
     F32(f32),
     F64(f64),
+    V128(u128),
 }
 
 impl Global {
@@ -71,6 +73,7 @@ impl Global {
             Global::I64(_) => "i64",
             Global::F32(_) => "f32",
             Global::F64(_) => "f64",
+            Global::V128(_) => "v128",
         }
     }
 }
@@ -82,6 +85,7 @@ impl Hash for Global {
             Global::I64(val) => val.to_le_bytes().to_vec(),
             Global::F32(val) => val.to_le_bytes().to_vec(),
             Global::F64(val) => val.to_le_bytes().to_vec(),
+            Global::V128(val) => val.to_le_bytes().to_vec(),
         };
         bytes.hash(state)
     }
@@ -94,6 +98,7 @@ impl PartialEq<Global> for Global {
             (Global::I64(val), Global::I64(other_val)) => val == other_val,
             (Global::F32(val), Global::F32(other_val)) => val == other_val,
             (Global::F64(val), Global::F64(other_val)) => val == other_val,
+            (Global::V128(val), Global::V128(other_val)) => val == other_val,
             _ => false,
         }
     }
@@ -114,6 +119,9 @@ impl From<&Global> for pb::Global {
             Global::F64(value) => Self {
                 global: Some(pb::global::Global::F64(*value)),
             },
+            Global::V128(value) => Self {
+                global: Some(pb::global::Global::V128(value.to_le_bytes().to_vec())),
+            },
         }
     }
 }
@@ -126,6 +134,9 @@ impl TryFrom<pb::Global> for Global {
             pb::global::Global::I64(value) => Ok(Self::I64(value)),
             pb::global::Global::F32(value) => Ok(Self::F32(value)),
             pb::global::Global::F64(value) => Ok(Self::F64(value)),
+            pb::global::Global::V128(value) => Ok(Self::V128(u128::from_le_bytes(
+                value.as_slice().try_into().unwrap(),
+            ))),
         }
     }
 }
@@ -146,6 +157,9 @@ pub struct ExportedFunctions {
 
     /// Cached info about exporting a global timer method to skip expensive BTreeSet lookup.
     exports_global_timer: bool,
+
+    /// Cached info about exporting a on low Wasm memory to skip expensive BTreeSet lookup.
+    exports_on_low_wasm_memory: bool,
 }
 
 impl ExportedFunctions {
@@ -154,10 +168,13 @@ impl ExportedFunctions {
             exported_functions.contains(&WasmMethod::System(SystemMethod::CanisterHeartbeat));
         let exports_global_timer =
             exported_functions.contains(&WasmMethod::System(SystemMethod::CanisterGlobalTimer));
+        let exports_on_low_wasm_memory =
+            exported_functions.contains(&WasmMethod::System(SystemMethod::CanisterOnLowWasmMemory));
         Self {
             exported_functions: Arc::new(exported_functions),
             exports_heartbeat,
             exports_global_timer,
+            exports_on_low_wasm_memory,
         }
     }
 
@@ -166,6 +183,9 @@ impl ExportedFunctions {
             // Cached values.
             WasmMethod::System(SystemMethod::CanisterHeartbeat) => self.exports_heartbeat,
             WasmMethod::System(SystemMethod::CanisterGlobalTimer) => self.exports_global_timer,
+            WasmMethod::System(SystemMethod::CanisterOnLowWasmMemory) => {
+                self.exports_on_low_wasm_memory
+            }
             // Expensive lookup.
             _ => self.exported_functions.contains(method),
         }
@@ -350,12 +370,12 @@ impl SandboxMemoryHandle {
 }
 
 /// Next scheduled method: round-robin across GlobalTimer; Heartbeat; and Message.
-#[derive(Clone, Copy, Eq, Debug, PartialEq, Default)]
+#[derive(Clone, Copy, Eq, EnumIter, Debug, PartialEq, Default)]
 pub enum NextScheduledMethod {
     #[default]
-    GlobalTimer,
-    Heartbeat,
-    Message,
+    GlobalTimer = 1,
+    Heartbeat = 2,
+    Message = 3,
 }
 
 impl From<pb::NextScheduledMethod> for NextScheduledMethod {
@@ -381,8 +401,6 @@ impl From<NextScheduledMethod> for pb::NextScheduledMethod {
 }
 
 impl NextScheduledMethod {
-    pub const NUMBER_OF_VARIANTS: u32 = 3;
-
     /// Round-robin across methods.
     pub fn inc(&mut self) {
         *self = match self {
@@ -425,6 +443,7 @@ pub struct ExecutionState {
     /// - it is "shallow-copied" when cloning the execution state
     /// - all execution states cloned from each other (and also having the same
     ///   wasm_binary) share the same compilation cache object
+    ///
     /// The latter property ensures that compilation for queries is cached
     /// properly when loading a state from checkpoint.
     pub wasm_binary: Arc<WasmBinary>,
@@ -545,14 +564,22 @@ impl ExecutionState {
     pub fn num_wasm_globals(&self) -> usize {
         self.exported_globals.len()
     }
+
+    /// Returns the amount of heap delta represented by this canister's execution state.
+    /// See also comment on `CanisterState::heap_delta`.
+    pub(crate) fn heap_delta(&self) -> NumBytes {
+        let delta_pages = self.wasm_memory.page_map.num_delta_pages()
+            + self.stable_memory.page_map.num_delta_pages();
+        NumBytes::from((delta_pages * PAGE_SIZE) as u64)
+    }
 }
 
 /// An enum that represents the possible visibility levels a custom section
 /// defined in the wasm module can have.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter, serde::Serialize, serde::Deserialize)]
 pub enum CustomSectionType {
-    Public,
-    Private,
+    Public = 1,
+    Private = 2,
 }
 
 impl From<&CustomSectionType> for pb::CustomSectionType {
@@ -628,7 +655,7 @@ impl TryFrom<pb::WasmCustomSection> for CustomSection {
     type Error = ProxyDecodeError;
     fn try_from(item: pb::WasmCustomSection) -> Result<Self, Self::Error> {
         let visibility = CustomSectionType::try_from(
-            pb::CustomSectionType::from_i32(item.visibility).unwrap_or_default(),
+            pb::CustomSectionType::try_from(item.visibility).unwrap_or_default(),
         )?;
         Ok(Self {
             visibility,
@@ -751,28 +778,73 @@ impl TryFrom<pb::WasmMetadata> for WasmMetadata {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use super::*;
 
-    use super::NextScheduledMethod;
+    use ic_protobuf::state::canister_state_bits::v1 as pb;
+    use std::collections::BTreeSet;
+    use strum::IntoEnumIterator;
 
     #[test]
     fn test_next_scheduled_method() {
         let mut values: BTreeSet<u8> = BTreeSet::new();
-        let number_of_variants = NextScheduledMethod::NUMBER_OF_VARIANTS;
         let mut next_method = NextScheduledMethod::GlobalTimer;
         let initial_scheduled_method = NextScheduledMethod::GlobalTimer;
 
-        for _ in 0..number_of_variants {
+        for _ in 0..NextScheduledMethod::iter().count() {
             values.insert(next_method as u8);
             next_method.inc();
         }
 
-        // Check that after calling method 'inc()' 'NUMBER_OF_VARIANTS'
+        // Check that after calling method 'inc()' 'NextScheduledMethod::iter().count()'
         // times we are back at the initial method.
         assert_eq!(next_method, initial_scheduled_method);
 
         // Check that we loop over all possible variants of
         // the 'NextScheduledMethod'.
-        assert_eq!(values.len(), number_of_variants as usize);
+        assert_eq!(values.len(), NextScheduledMethod::iter().count());
+    }
+
+    #[test]
+    fn custom_section_type_proto_round_trip() {
+        for initial in CustomSectionType::iter() {
+            let encoded = pb::CustomSectionType::from(&initial);
+            let round_trip = CustomSectionType::try_from(encoded).unwrap();
+
+            assert_eq!(initial, round_trip);
+        }
+    }
+
+    #[test]
+    fn compatibility_for_custom_section_type() {
+        // If this fails, you are making a potentially incompatible change to `CustomSectionType`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        assert_eq!(
+            CustomSectionType::iter()
+                .map(|x| x as i32)
+                .collect::<Vec<i32>>(),
+            [1, 2]
+        );
+    }
+
+    #[test]
+    fn next_scheduled_method_proto_round_trip() {
+        for initial in NextScheduledMethod::iter() {
+            let encoded = pb::NextScheduledMethod::from(initial);
+            let round_trip = NextScheduledMethod::from(encoded);
+
+            assert_eq!(initial, round_trip);
+        }
+    }
+
+    #[test]
+    fn compatibility_for_next_scheduled_method() {
+        // If this fails, you are making a potentially incompatible change to `NextScheduledMethod`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        assert_eq!(
+            NextScheduledMethod::iter()
+                .map(|x| x as i32)
+                .collect::<Vec<i32>>(),
+            [1, 2, 3]
+        );
     }
 }

@@ -31,7 +31,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, trace, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    consensus::{Block, FinalizationContent, FinalizationShare},
+    consensus::{FinalizationContent, FinalizationShare, HashedBlock},
     replica_config::ReplicaConfig,
     Height, ReplicaVersion,
 };
@@ -94,6 +94,7 @@ impl Finalizer {
         // Try to deliver finalized batches to messaging
         let _ = deliver_batches(
             &*self.message_routing,
+            &self.membership,
             pool,
             &*self.registry_client,
             self.replica_config.subnet_id,
@@ -155,7 +156,7 @@ impl Finalizer {
     ///
     /// In this case, the single notarized block is returned. Otherwise,
     /// return `None`
-    fn pick_block_to_finality_sign(&self, pool: &PoolReader<'_>, h: Height) -> Option<Block> {
+    fn pick_block_to_finality_sign(&self, pool: &PoolReader<'_>, h: Height) -> Option<HashedBlock> {
         let me = self.replica_config.node_id;
         let previous_beacon = pool.get_random_beacon(h.decrement())?;
         // check whether this replica was a notary at height h
@@ -199,10 +200,9 @@ impl Finalizer {
 
         // If notarization shares exists created by this replica at height `h`
         // that sign a block different than `notarized_block`, do not finalize.
-        let other_notarized_shares_exists = pool.get_notarization_shares(h).any(|x| {
-            x.signature.signer == me
-                && x.content.block != ic_types::crypto::crypto_hash(&notarized_block)
-        });
+        let other_notarized_shares_exists = pool
+            .get_notarization_shares(h)
+            .any(|x| x.signature.signer == me && x.content.block != *notarized_block.get_hash());
         if other_notarized_shares_exists {
             return None;
         }
@@ -215,7 +215,9 @@ impl Finalizer {
     fn finalize_height(&self, pool: &PoolReader<'_>, height: Height) -> Option<FinalizationShare> {
         let content = FinalizationContent::new(
             height,
-            ic_types::crypto::crypto_hash(&self.pick_block_to_finality_sign(pool, height)?),
+            self.pick_block_to_finality_sign(pool, height)?
+                .get_hash()
+                .clone(),
         );
         let signature = self
             .crypto
@@ -235,28 +237,25 @@ mod tests {
     use super::*;
     use crate::consensus::batch_delivery::generate_responses_to_setup_initial_dkg_calls;
     use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
-    use ic_ic00_types::SetupInitialDKGResponse;
+    use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_management_canister_types::SetupInitialDKGResponse;
     use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         metadata_state::subnet_call_context_manager::SetupInitialDkgContext, SystemMetadata,
     };
     use ic_test_utilities::{
-        ingress_selector::FakeIngressSelector,
-        message_routing::FakeMessageRouting,
-        types::ids::{node_test_id, subnet_test_id},
+        ingress_selector::FakeIngressSelector, message_routing::FakeMessageRouting,
     };
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_types::consensus::{HasHeight, HashedBlock};
-    use ic_types::messages::Payload;
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        crypto::threshold_sig::ni_dkg::{
-            NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
-        },
-        messages::{CallbackId, Request},
+        consensus::{HasHeight, HashedBlock},
+        crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet},
+        messages::{CallbackId, Payload, Request, NO_DEADLINE},
+        CanisterId, Cycles, PrincipalId, RegistryVersion, SubnetId,
     };
-    use ic_types::{CanisterId, Cycles, PrincipalId, RegistryVersion, SubnetId};
     use std::{
         collections::{BTreeMap, BTreeSet},
         str::FromStr,
@@ -481,6 +480,8 @@ mod tests {
                     payment: Cycles::zero(),
                     method_name: "".to_string(),
                     method_payload: vec![],
+                    metadata: None,
+                    deadline: NO_DEADLINE,
                 },
                 nodes_in_target_subnet: BTreeSet::new(),
                 target_id: TARGET_ID,
@@ -501,7 +502,7 @@ mod tests {
                     target_subnet: NiDkgTargetSubnet::Remote(TARGET_ID),
                 },
                 CallbackId::from(1),
-                Ok(NiDkgTranscript::dummy_transcript_for_tests()),
+                Ok(dummy_transcript_for_tests()),
             ),
             (
                 NiDkgId {
@@ -511,7 +512,7 @@ mod tests {
                     target_subnet: NiDkgTargetSubnet::Remote(TARGET_ID),
                 },
                 CallbackId::from(1),
-                Ok(NiDkgTranscript::dummy_transcript_for_tests()),
+                Ok(dummy_transcript_for_tests()),
             ),
         ]
         .drain(..)
@@ -525,7 +526,7 @@ mod tests {
         assert_eq!(result.len(), 1);
 
         // Deserialize the `SetupInitialDKGResponse` and check the subnet id
-        let payload = match &result[0].response_payload {
+        let payload = match &result[0].payload {
             Payload::Data(data) => data,
             Payload::Reject(_) => panic!("Payload was rejected unexpectedly"),
         };
@@ -534,7 +535,7 @@ mod tests {
             initial_transcript_records.fresh_subnet_id,
             SubnetId::from(
                 PrincipalId::from_str(
-                    "wqwyc-qwfhw-xd535-3ic5a-jqn3j-okdfe-vlasr-ulpoq-xiirw-xpeoc-iae"
+                    "icdrs-3sfmz-hm6r3-cdzf5-cfroa-3cddh-aght7-azz25-eo34b-4strl-wae"
                 )
                 .unwrap()
             )

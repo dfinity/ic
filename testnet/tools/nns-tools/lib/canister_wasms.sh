@@ -22,13 +22,16 @@ _download_canister_gz() {
     DOWNLOAD_NAME=$1
     GIT_HASH=$2
 
-    # See note at variable declaration
+    DOWNLOAD_URL="https://download.dfinity.systems/ic/${GIT_HASH}/canisters/${DOWNLOAD_NAME}.wasm.gz"
     OUTPUT_FILE="$MY_DOWNLOAD_DIR/$DOWNLOAD_NAME-$GIT_HASH.wasm.gz"
 
-    curl --silent "https://download.dfinity.systems/ic/$GIT_HASH/canisters/$DOWNLOAD_NAME.wasm.gz" \
-        --output "$OUTPUT_FILE"
+    curl \
+        "${DOWNLOAD_URL}" \
+        --output "${OUTPUT_FILE}" \
+        --fail \
+        --silent
 
-    echo "$OUTPUT_FILE"
+    echo "${OUTPUT_FILE}"
 }
 
 _canister_download_name_for_sns_canister_type() {
@@ -39,7 +42,7 @@ _canister_download_name_for_sns_canister_type() {
     type__ledger="ic-icrc1-ledger"
     type__swap="sns-swap-canister"
     type__archive="ic-icrc1-archive"
-    type__index="ic-icrc1-index"
+    type__index="ic-icrc1-index-ng"
 
     local INDEX=type__${CANISTER_TYPE}
     echo ${!INDEX}
@@ -52,7 +55,7 @@ _canister_download_name_for_nns_canister_type() {
         echo "$CANISTER_TYPE"_canister
     elif [ "$CANISTER_TYPE" == "ledger" ]; then
         echo "ledger-canister_notify-method"
-    elif [ "$CANISTER_TYPE" == "icp-ledger-archive" ]; then
+    elif [ "$CANISTER_TYPE" == "icp-ledger-archive" ] || [ "$CANISTER_TYPE" == "icp-ledger-archive-1" ]; then
         echo "ledger-archive-node-canister"
     else
         echo "$CANISTER_TYPE"-canister

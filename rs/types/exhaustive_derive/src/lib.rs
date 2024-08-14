@@ -3,8 +3,8 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::ToTokens;
 use quote::{format_ident, quote};
 use syn::{
-    parse_macro_input, Data, DataEnum, DataStruct, DeriveInput, Fields, FieldsNamed, FieldsUnnamed,
-    Ident, Index, Type,
+    parse_macro_input, parse_quote, Data, DataEnum, DataStruct, DeriveInput, Fields, FieldsNamed,
+    FieldsUnnamed, Generics, Ident, Index, Type,
 };
 
 /// NOTE: Do not derive this implementation for types that have some special invariants
@@ -111,8 +111,8 @@ use syn::{
 pub fn exhaustive_set(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     match input.data {
-        Data::Struct(inner) => parse_struct(input.ident, inner),
-        Data::Enum(inner) => parse_enum(input.ident, inner),
+        Data::Struct(inner) => parse_struct(input.ident, inner, input.generics),
+        Data::Enum(inner) => parse_enum(input.ident, inner, input.generics),
         Data::Union(_) => {
             // NOTE: We can add support for unions if we actually need unions
             unimplemented!("ExhaustiveSet cannot be derived for unions.")
@@ -120,15 +120,15 @@ pub fn exhaustive_set(input: TokenStream) -> TokenStream {
     }
 }
 
-fn parse_struct(ident: Ident, input: DataStruct) -> TokenStream {
+fn parse_struct(ident: Ident, input: DataStruct, generics: Generics) -> TokenStream {
     match input.fields {
         Fields::Unit => unimplemented!("no support for unit structs"),
-        Fields::Named(named) => parse_named_struct(ident, named),
-        Fields::Unnamed(unnamed) => parse_unnamed_struct(ident, unnamed),
+        Fields::Named(named) => parse_named_struct(ident, named, generics),
+        Fields::Unnamed(unnamed) => parse_unnamed_struct(ident, unnamed, generics),
     }
 }
 
-fn parse_named_struct(ident: Ident, input: FieldsNamed) -> TokenStream {
+fn parse_named_struct(ident: Ident, input: FieldsNamed, generics: Generics) -> TokenStream {
     let (field_names, types): (Vec<_>, Vec<_>) = input
         .named
         .into_pairs()
@@ -137,10 +137,10 @@ fn parse_named_struct(ident: Ident, input: FieldsNamed) -> TokenStream {
             (f.ident.expect("field should have a name"), f.ty)
         })
         .unzip();
-    impl_product_type(ident, field_names, types).into()
+    impl_product_type(ident, field_names, types, generics).into()
 }
 
-fn parse_unnamed_struct(ident: Ident, input: FieldsUnnamed) -> TokenStream {
+fn parse_unnamed_struct(ident: Ident, input: FieldsUnnamed, generics: Generics) -> TokenStream {
     let types: Vec<_> = input
         .unnamed
         .into_pairs()
@@ -149,7 +149,7 @@ fn parse_unnamed_struct(ident: Ident, input: FieldsUnnamed) -> TokenStream {
 
     let field_names: Vec<_> = (0..types.len()).map(Index::from).collect();
 
-    impl_product_type(ident, field_names, types).into()
+    impl_product_type(ident, field_names, types, generics).into()
 }
 
 /// Creates a token stream of a derived implementation for product types
@@ -158,13 +158,22 @@ fn impl_product_type<T: ToTokens>(
     ident: Ident,
     field_names: Vec<T>,
     types: Vec<Type>,
+    mut generics: Generics,
 ) -> TokenStream2 {
     let var_names: Vec<_> = (0..types.len())
         .map(|i| format_ident!("field_{}", i))
         .collect();
 
+    // Add ExhaustiveSet bounds to generic type parameters
+    for param in generics.type_params_mut() {
+        param
+            .bounds
+            .push(parse_quote!(crate::exhaustive::ExhaustiveSet));
+    }
+    let (gen_impl, gen_ty, gen_where) = generics.split_for_impl();
+
     quote! {
-        impl crate::exhaustive::ExhaustiveSet for #ident {
+        impl #gen_impl crate::exhaustive::ExhaustiveSet for #ident #gen_ty #gen_where {
             fn exhaustive_set<R: rand::RngCore + rand::CryptoRng>(rng: &mut R) -> Vec<Self> {
                 #(let mut #var_names = <#types as crate::exhaustive::ExhaustiveSet>::exhaustive_set(rng));*;
 
@@ -188,7 +197,7 @@ fn impl_product_type<T: ToTokens>(
     }
 }
 
-fn parse_enum(ident: Ident, input: DataEnum) -> TokenStream {
+fn parse_enum(ident: Ident, input: DataEnum, mut generics: Generics) -> TokenStream {
     let variants = input
         .variants
         .into_pairs()
@@ -201,15 +210,25 @@ fn parse_enum(ident: Ident, input: DataEnum) -> TokenStream {
     for variant in variants {
         match variant.fields {
             Fields::Unit => unit_variants.push(variant.ident),
-            Fields::Named(_) => unimplemented!("named enum variant fields not supported"),
+            Fields::Named(named) => {
+                variant_tokenstreams.push(enumerate_named_enum_fields(variant.ident, named));
+            }
             Fields::Unnamed(unnamed) => {
                 variant_tokenstreams.push(enumerate_unnamed_enum_fields(variant.ident, unnamed));
             }
         };
     }
 
+    // Add ExhaustiveSet bounds to generic type parameters
+    for param in generics.type_params_mut() {
+        param
+            .bounds
+            .push(parse_quote!(crate::exhaustive::ExhaustiveSet));
+    }
+    let (gen_impl, gen_ty, gen_where) = generics.split_for_impl();
+
     quote! {
-        impl crate::exhaustive::ExhaustiveSet for #ident {
+        impl #gen_impl crate::exhaustive::ExhaustiveSet for #ident #gen_ty #gen_where {
             fn exhaustive_set<R: rand::RngCore + rand::CryptoRng>(rng: &mut R) -> Vec<Self> {
                 let mut result = vec![#(Self::#unit_variants),*];
                 #(
@@ -224,43 +243,63 @@ fn parse_enum(ident: Ident, input: DataEnum) -> TokenStream {
     .into()
 }
 
+macro_rules! enumerate_enum_fields {
+    ($ident:ident, $names:ident, $types:ident) => {{
+        let vars: Vec<_> = (0..$types.len())
+            .map(|i| format_ident!("field_{}", i))
+            .collect();
+        let ident = $ident;
+        let names = $names;
+        let types = $types;
+        quote! {
+            #(let mut #vars = <#types as crate::exhaustive::ExhaustiveSet>::exhaustive_set(rng));*;
+
+            // compute maximum number of elements of all exhaustive sets
+            let mut max = 0;
+            #(if #vars.len() > max { max = #vars.len(); })*
+
+            // create cyclic iterators
+            #(let mut #vars = #vars.iter().cycle());*;
+
+            let mut inner_result = Vec::new();
+
+            for i in 0..max {
+                inner_result.push(Self::#ident {
+                    #(#names: #vars
+                        .next()
+                        .expect(
+                            format!("exhaustive set for type {} must be non-empty",
+                                stringify!(#types)).as_str()
+                        )
+                        .clone()
+                    ),*
+                });
+            }
+
+            inner_result
+
+        }
+    }};
+}
+
+fn enumerate_named_enum_fields(ident: Ident, input: FieldsNamed) -> TokenStream2 {
+    let (names, types): (Vec<_>, Vec<_>) = input
+        .named
+        .into_pairs()
+        .map(|p| {
+            let val = p.value().clone();
+            (val.ident.unwrap(), val.ty)
+        })
+        .unzip();
+    enumerate_enum_fields!(ident, names, types)
+}
+
 fn enumerate_unnamed_enum_fields(ident: Ident, input: FieldsUnnamed) -> TokenStream2 {
-    let (field_names, types): (Vec<_>, Vec<_>) = input
+    let (names, types): (Vec<_>, Vec<_>) = input
         .unnamed
         .into_pairs()
         .enumerate()
         .map(|(i, p)| (Index::from(i), p.value().clone().ty))
         .unzip();
-    let var_names: Vec<_> = (0..types.len())
-        .map(|i| format_ident!("field_{}", i))
-        .collect();
-
-    quote! {
-        #(let mut #var_names = <#types as crate::exhaustive::ExhaustiveSet>::exhaustive_set(rng));*;
-
-        // compute maximum number of elements of all exhaustive sets
-        let mut max = 0;
-        #(if #var_names.len() > max { max = #var_names.len(); })*
-
-        // create cyclic iterators
-        #(let mut #var_names = #var_names.iter().cycle());*;
-
-        let mut inner_result = Vec::new();
-
-        for i in 0..max {
-            inner_result.push(Self::#ident {
-                #(#field_names: #var_names
-                    .next()
-                    .expect(
-                        format!("exhaustive set for type {} must be non-empty",
-                            stringify!(#types)).as_str()
-                    )
-                    .clone()
-                ),*
-            });
-        }
-
-        inner_result
-
-    }
+    enumerate_enum_fields!(ident, names, types)
 }

@@ -1,31 +1,37 @@
 [package]
 name = "ic-balance-exporter"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [[bin]]
 name = "ic-balance-exporter"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0.56"
-async-trait = "0.1.53"
-axum = "0.6.1"
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
 candid = { workspace = true }
-clap = { version = "3.1.8", features = ["derive"] }
+clap = { version = "3.2.25", features = ["derive"] }
 dashmap = "5.3.4"
-futures = "0.3.21"
+futures = { workspace = true }
 humantime = "2.1.0"
-hyper = "0.14.18"
+hyper = { workspace = true }
 ic-agent = { workspace = true }
-indoc = "1.0.6"
-mockall = "0.11.1"
-opentelemetry = "0.17.0"
-opentelemetry-prometheus = "0.10.0"
-prometheus = "0.13.0"
-serde = { version = "1.0.136", features = ["derive"] }
-serde_json = "1.0.79"
-tempfile = "3.3.0"
-tokio = { version = "1.17.0", features = ["full"] }
-tracing = "0.1.34"
-tracing-subscriber = { version = "0.3.11", features = ["json"] }
+indoc = "1.0.9"
+mockall = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry-prometheus = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+prometheus = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

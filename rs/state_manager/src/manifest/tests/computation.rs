@@ -1,28 +1,31 @@
-use crate::manifest::validate_manifest_internal_consistency;
 use crate::manifest::{
     build_file_group_chunks, build_meta_manifest, compute_manifest, diff_manifest,
-    file_chunk_range, filter_out_zero_chunks, hash::ManifestHash, manifest_hash, manifest_hash_v1,
-    manifest_hash_v2, meta_manifest_hash, validate_chunk, validate_manifest,
-    validate_meta_manifest, validate_sub_manifest, ChunkValidationError, DiffScript,
+    dirty_pages_to_dirty_chunks, file_chunk_range, files_with_sizes, filter_out_zero_chunks,
+    hash::ManifestHash, manifest_hash, manifest_hash_v1, manifest_hash_v2, meta_manifest_hash,
+    validate_chunk, validate_manifest, validate_manifest_internal_consistency,
+    validate_meta_manifest, validate_sub_manifest, ChunkValidationError, DiffScript, ManifestDelta,
     ManifestMetrics, ManifestValidationError, StateSyncVersion, DEFAULT_CHUNK_SIZE,
     MAX_FILE_SIZE_TO_GROUP,
 };
+use crate::state_sync::types::{
+    decode_manifest, encode_manifest, ChunkInfo, FileGroupChunks, FileInfo, Manifest, MetaManifest,
+    FILE_GROUP_CHUNK_ID_OFFSET,
+};
+use crate::DirtyPages;
 
+use bit_vec::BitVec;
+use ic_config::flag_status::FlagStatus;
 use ic_crypto_sha2::Sha256;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_state_layout::{CheckpointLayout, CANISTER_FILE};
-use ic_types::state_sync::{MetaManifest, CURRENT_STATE_SYNC_VERSION};
-use ic_types::{
-    crypto::CryptoHash,
-    state_sync::{
-        decode_manifest, encode_manifest, ChunkInfo, FileGroupChunks, FileInfo, Manifest,
-        FILE_GROUP_CHUNK_ID_OFFSET,
-    },
-    CryptoHashOfState, Height,
-};
+use ic_test_utilities_tmpdir::tmpdir;
+use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
+use ic_types::{crypto::CryptoHash, CryptoHashOfState, Height};
+use maplit::btreemap;
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 use strum::IntoEnumIterator;
 
@@ -604,11 +607,7 @@ fn test_diff_manifest_v1() {
     let manifest_new = manifest_old.clone();
     let len = manifest_new.file_table.len();
     let indices = (0..len).collect::<Vec<usize>>();
-    let copy_files: HashMap<_, _> = indices
-        .clone()
-        .into_iter()
-        .zip(indices.into_iter())
-        .collect();
+    let copy_files: HashMap<_, _> = indices.clone().into_iter().zip(indices).collect();
     assert_eq!(
         diff_manifest(&manifest_old, &Default::default(), &manifest_new),
         DiffScript {
@@ -785,11 +784,7 @@ fn test_missing_simple_manifest() {
     let manifest_new = manifest_old.clone();
     let len = manifest_new.file_table.len();
     let indices = (0..len).collect::<Vec<usize>>();
-    let copy_files: HashMap<_, _> = indices
-        .clone()
-        .into_iter()
-        .zip(indices.into_iter())
-        .collect();
+    let copy_files: HashMap<_, _> = indices.clone().into_iter().zip(indices).collect();
     assert_eq!(
         diff_manifest(&manifest_old, &Default::default(), &manifest_new),
         DiffScript {
@@ -1049,6 +1044,73 @@ fn test_hash_plan() {
 }
 
 #[test]
+fn test_dirty_pages_to_dirty_chunks_accounts_for_hardlinks() {
+    use crate::manifest::{dirty_pages_to_dirty_chunks, FileWithSize, ManifestDelta};
+    use bit_vec::BitVec;
+    use maplit::btreemap;
+
+    let dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
+    let root = dir.path();
+    let checkpoint0 = root.join("checkpoint0");
+    fs::create_dir(&checkpoint0).expect("failed to create dir 'subdir'");
+    let checkpoint1 = root.join("checkpoint1");
+    fs::create_dir(&checkpoint1).expect("failed to create dir 'subdir'");
+
+    fs::write(checkpoint0.join("wasm_a"), vec![1u8; 2048 * 1024])
+        .expect("failed to create file 'wasm_a'");
+    fs::write(checkpoint0.join("wasm_b"), vec![1u8; 2048 * 1024])
+        .expect("failed to create file 'wasm_b'");
+    fs::write(checkpoint1.join("wasm_a"), vec![1u8; 2048 * 1024])
+        .expect("failed to create file 'wasm_a'");
+    fs::hard_link(checkpoint0.join("wasm_b"), checkpoint1.join("wasm_b"))
+        .expect("failed to hardlink wasm_b");
+
+    let max_chunk_size = 1024 * 1024;
+
+    let mut thread_pool = scoped_threadpool::Pool::new(NUM_THREADS);
+    let metrics_registry = MetricsRegistry::new();
+    let manifest_metrics = ManifestMetrics::new(&metrics_registry);
+    let base_manifest = compute_manifest(
+        &mut thread_pool,
+        &manifest_metrics,
+        &no_op_logger(),
+        CURRENT_STATE_SYNC_VERSION,
+        &CheckpointLayout::new_untracked(checkpoint0.to_path_buf(), Height::new(0)).unwrap(),
+        max_chunk_size,
+        None,
+    )
+    .expect("failed to compute manifest");
+    let dirty_chunks = dirty_pages_to_dirty_chunks(
+        &no_op_logger(),
+        &ManifestDelta {
+            base_manifest,
+            base_height: Height::new(0),
+            target_height: Height::new(1),
+            dirty_memory_pages: Vec::new(),
+            base_checkpoint: CheckpointLayout::new_untracked(
+                checkpoint0.to_path_buf(),
+                Height::new(0),
+            )
+            .unwrap(),
+            lsmt_status: FlagStatus::Enabled,
+        },
+        &CheckpointLayout::new_untracked(checkpoint1.to_path_buf(), Height::new(1)).unwrap(),
+        &[
+            FileWithSize("wasm_a".into(), 2048 * 1024),
+            FileWithSize("wasm_b".into(), 2048 * 1024),
+        ],
+        max_chunk_size,
+    )
+    .expect("Failed to get dirty chunks");
+    assert_eq!(
+        dirty_chunks,
+        btreemap! {
+            PathBuf::from("wasm_b") => BitVec::from_elem(2, false)
+        }
+    );
+}
+
+#[test]
 fn test_file_chunk_range() {
     let manifest = simple_manifest(CURRENT_STATE_SYNC_VERSION).1;
     for file_index in 0..manifest.file_table.len() {
@@ -1235,4 +1297,66 @@ fn test_file_index_independent_file_hash() {
     // And the `V3` hashes should be the same, regardless of file index.
     assert_eq!(file1_hash_before, file1_hash_after);
     assert_eq!(file3_hash_before, file3_hash_after);
+}
+
+#[test]
+fn all_same_inodes_are_detected() {
+    use std::fs::hard_link;
+    use std::fs::File;
+
+    let base = tmpdir("base");
+    let target = tmpdir("target");
+
+    let create_file_in_target = |name| {
+        let mut file = File::create(target.path().join(name)).unwrap();
+        file.write_all(b"data").unwrap();
+    };
+    let create_different_file_in_base_and_target = |name| {
+        let mut file = File::create(base.path().join(name)).unwrap();
+        file.write_all(b"data").unwrap();
+        let mut file = File::create(target.path().join(name)).unwrap();
+        file.write_all(b"data").unwrap();
+    };
+    let create_same_file_in_base_and_target = |name| {
+        let mut file = File::create(base.path().join(name)).unwrap();
+        file.write_all(b"data").unwrap();
+        hard_link(base.path().join(name), target.path().join(name)).unwrap();
+    };
+
+    create_file_in_target("a_new");
+    create_different_file_in_base_and_target("b_changed");
+    create_same_file_in_base_and_target("c_same");
+    create_different_file_in_base_and_target("d_changed");
+    create_same_file_in_base_and_target("e_same");
+
+    let manifest_delta = ManifestDelta {
+        base_manifest: Manifest::new(StateSyncVersion::V0, vec![], vec![]),
+        base_height: Height::new(0),
+        target_height: Height::new(1),
+        dirty_memory_pages: DirtyPages::default(),
+        base_checkpoint: CheckpointLayout::new_untracked(base.path().to_path_buf(), Height::new(0))
+            .unwrap(),
+        lsmt_status: FlagStatus::Enabled,
+    };
+
+    let mut files = Vec::new();
+    files_with_sizes(target.path(), "".into(), &mut files).unwrap();
+
+    let result = dirty_pages_to_dirty_chunks(
+        &no_op_logger(),
+        &manifest_delta,
+        &CheckpointLayout::new_untracked(target.path().to_path_buf(), Height::new(1)).unwrap(),
+        &files,
+        1024 * 1024,
+    )
+    .unwrap();
+
+    // All files are shorter than a chunk
+    let chunks = 1;
+    let expected = btreemap! {
+        PathBuf::from("c_same") => BitVec::from_elem(chunks, false),
+        PathBuf::from("e_same") => BitVec::from_elem(chunks, false),
+    };
+
+    assert_eq!(result, expected);
 }

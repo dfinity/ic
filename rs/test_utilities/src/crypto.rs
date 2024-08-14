@@ -1,22 +1,20 @@
-pub mod fake_tls_handshake;
-
-pub use ic_crypto_test_utils::files as temp_dir;
-
-use crate::types::ids::node_test_id;
+use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgDealing;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values;
+use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
 use ic_interfaces::crypto::{
-    BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier,
-    CheckKeysWithRegistryError, CurrentNodePublicKeysError, IDkgDealingEncryptionKeyRotationError,
-    IDkgKeyRotationResult, IDkgProtocol, KeyManager, LoadTranscriptResult, NiDkgAlgorithm,
-    ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSigVerifier,
+    BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
+    IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
+    LoadTranscriptResult, NiDkgAlgorithm, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+    ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner, ThresholdSigVerifier,
     ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
 use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner};
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_test_utilities_types::ids::node_test_id;
 use ic_types::crypto::canister_threshold_sig::error::*;
 use ic_types::crypto::canister_threshold_sig::idkg::*;
 use ic_types::crypto::canister_threshold_sig::*;
@@ -26,7 +24,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRe
 use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgLoadTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::{
-    config::NiDkgConfig, DkgId, NiDkgDealing, NiDkgId, NiDkgTranscript,
+    config::NiDkgConfig, NiDkgDealing, NiDkgId, NiDkgTranscript,
 };
 use ic_types::crypto::{
     AlgorithmId, BasicSig, BasicSigOf, CanisterSigOf, CombinedMultiSig, CombinedMultiSigOf,
@@ -55,7 +53,7 @@ pub fn temp_crypto_component_with_fake_registry(node_id: NodeId) -> TempCryptoCo
 }
 
 fn empty_ni_dkg_csp_dealing() -> CspNiDkgDealing {
-    ic_crypto_test_utils::dkg::ni_dkg_csp_dealing(0)
+    ic_crypto_test_utils_ni_dkg::ni_dkg_csp_dealing(0)
 }
 
 fn empty_ni_dkg_dealing() -> NiDkgDealing {
@@ -64,7 +62,7 @@ fn empty_ni_dkg_dealing() -> NiDkgDealing {
     }
 }
 
-pub use ic_crypto_test_utils::dkg::empty_ni_dkg_transcripts_with_committee;
+pub use ic_crypto_test_utils_ni_dkg::empty_ni_dkg_transcripts_with_committee;
 use ic_types::crypto::threshold_sig::IcRootOfTrust;
 use ic_types_test_utils::ids::NODE_1;
 
@@ -174,7 +172,11 @@ impl<T: Signable> MultiSigVerifier<T> for CryptoReturningOk {
 }
 
 impl<T: Signable> ThresholdSigner<T> for CryptoReturningOk {
-    fn sign_threshold(&self, _message: &T, _dkg_id: DkgId) -> CryptoResult<ThresholdSigShareOf<T>> {
+    fn sign_threshold(
+        &self,
+        _message: &T,
+        _dkg_id: NiDkgId,
+    ) -> CryptoResult<ThresholdSigShareOf<T>> {
         Ok(ThresholdSigShareOf::new(ThresholdSigShare(vec![])))
     }
 }
@@ -184,7 +186,7 @@ impl<T: Signable> ThresholdSigVerifier<T> for CryptoReturningOk {
         &self,
         _signature: &ThresholdSigShareOf<T>,
         _message: &T,
-        _dkg_id: DkgId,
+        _dkg_id: NiDkgId,
         _signer: NodeId,
     ) -> CryptoResult<()> {
         Ok(())
@@ -193,7 +195,7 @@ impl<T: Signable> ThresholdSigVerifier<T> for CryptoReturningOk {
     fn combine_threshold_sig_shares(
         &self,
         _shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
-        _dkg_id: DkgId,
+        _dkg_id: NiDkgId,
     ) -> CryptoResult<CombinedThresholdSigOf<T>> {
         Ok(CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])))
     }
@@ -202,7 +204,7 @@ impl<T: Signable> ThresholdSigVerifier<T> for CryptoReturningOk {
         &self,
         _signature: &CombinedThresholdSigOf<T>,
         _message: &T,
-        _dkg_id: DkgId,
+        _dkg_id: NiDkgId,
     ) -> CryptoResult<()> {
         Ok(())
     }
@@ -251,7 +253,7 @@ impl NiDkgAlgorithm for CryptoReturningOk {
         config: &NiDkgConfig,
         _verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
     ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
-        let mut transcript = NiDkgTranscript::dummy_transcript_for_tests_with_params(
+        let mut transcript = dummy_transcript_for_tests_with_params(
             config.receivers().get().clone().into_iter().collect(),
             config.dkg_id().dkg_tag,
             config.threshold().get().get(),
@@ -440,10 +442,10 @@ impl IDkgProtocol for CryptoReturningOk {
 }
 
 impl ThresholdEcdsaSigner for CryptoReturningOk {
-    fn sign_share(
+    fn create_sig_share(
         &self,
         _inputs: &ThresholdEcdsaSigInputs,
-    ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
+    ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaCreateSigShareError> {
         Ok(ThresholdEcdsaSigShare {
             sig_share_raw: vec![],
         })
@@ -473,6 +475,44 @@ impl ThresholdEcdsaSigVerifier for CryptoReturningOk {
         _inputs: &ThresholdEcdsaSigInputs,
         _signature: &ThresholdEcdsaCombinedSignature,
     ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
+        Ok(())
+    }
+}
+
+impl ThresholdSchnorrSigner for CryptoReturningOk {
+    fn create_sig_share(
+        &self,
+        _inputs: &ThresholdSchnorrSigInputs,
+    ) -> Result<ThresholdSchnorrSigShare, ThresholdSchnorrCreateSigShareError> {
+        Ok(ThresholdSchnorrSigShare {
+            sig_share_raw: vec![],
+        })
+    }
+}
+
+impl ThresholdSchnorrSigVerifier for CryptoReturningOk {
+    fn verify_sig_share(
+        &self,
+        _signer: NodeId,
+        _inputs: &ThresholdSchnorrSigInputs,
+        _share: &ThresholdSchnorrSigShare,
+    ) -> Result<(), ThresholdSchnorrVerifySigShareError> {
+        Ok(())
+    }
+
+    fn combine_sig_shares(
+        &self,
+        _inputs: &ThresholdSchnorrSigInputs,
+        _shares: &BTreeMap<NodeId, ThresholdSchnorrSigShare>,
+    ) -> Result<ThresholdSchnorrCombinedSignature, ThresholdSchnorrCombineSigSharesError> {
+        Ok(ThresholdSchnorrCombinedSignature { signature: vec![] })
+    }
+
+    fn verify_combined_sig(
+        &self,
+        _inputs: &ThresholdSchnorrSigInputs,
+        _signature: &ThresholdSchnorrCombinedSignature,
+    ) -> Result<(), ThresholdSchnorrVerifyCombinedSigError> {
         Ok(())
     }
 }

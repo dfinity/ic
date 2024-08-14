@@ -1,18 +1,21 @@
 [package]
 name = "ic-crypto-internal-bls12-381-vetkd"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
 ic-crypto-internal-bls12-381-type = { path = "../type" }
+ic-crypto-sha3 = { path = "../../../../sha3" }
+rand = { workspace = true }
 zeroize = { version = "1", features = ["zeroize_derive"] }
-rand = "0.8"
-sha3 = "0.9"
 
 [dev-dependencies]
-criterion = { version = "0.3", features = ["html_reports"] }
+criterion = { workspace = true }
+hex = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
-hex = "0.4"
 
 [[bench]]
 name = "vetkd"

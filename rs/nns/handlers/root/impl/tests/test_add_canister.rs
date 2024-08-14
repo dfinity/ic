@@ -4,7 +4,7 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType::Running},
 };
-use ic_nervous_system_root::change_canister::AddCanisterProposal;
+use ic_nervous_system_root::change_canister::AddCanisterRequest;
 use ic_nns_constants::{REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::{
@@ -51,15 +51,13 @@ fn test_add_nns_canister() {
 
         let name = "i dunno, what would be a good canister name?".to_string();
 
-        let proposal = AddCanisterProposal {
+        let add_canister_request = AddCanisterRequest {
             name: name.clone(),
             wasm_module: EMPTY_WASM.to_vec(),
             arg: vec![],
-            query_allocation: Some(Nat::from(34)),
-            memory_allocation: Some(Nat::from(12345)),
-            compute_allocation: Some(Nat::from(12)),
+            memory_allocation: Some(Nat::from(12345u32)),
+            compute_allocation: Some(Nat::from(12u32)),
             initial_cycles: 1 << 45,
-            authz_changes: Vec::new(),
         };
 
         assert!(
@@ -67,7 +65,7 @@ fn test_add_nns_canister() {
                 &fake_governance_canister,
                 &root,
                 "add_nns_canister",
-                Encode!(&proposal).unwrap(),
+                Encode!(&add_canister_request).unwrap(),
             )
             .await
         );

@@ -4,12 +4,13 @@ use crate::fixtures::{
 };
 use assert_matches::assert_matches;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
+use ic_nervous_system_proto::pb::v1::{Percentage, Principals};
 use ic_sns_governance::{
-    account_to_proto,
+    governance::MATURITY_DISBURSEMENT_DELAY_SECONDS,
     neuron::NeuronState,
     pb::{
         sns_root_types::{
@@ -17,7 +18,10 @@ use ic_sns_governance::{
             SetDappControllersResponse,
         },
         v1::{
-            claim_swap_neurons_request::NeuronParameters,
+            claim_swap_neurons_request::{
+                neuron_recipe::{self, Participant},
+                NeuronRecipe, NeuronRecipes,
+            },
             claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
             governance_error::ErrorType,
             manage_neuron::{
@@ -29,19 +33,20 @@ use ic_sns_governance::{
                 Command as CommandResponse, DisburseMaturityResponse, MergeMaturityResponse,
                 RegisterVoteResponse, StakeMaturityResponse,
             },
-            neuron,
-            neuron::{DissolveState, Followees},
+            neuron::{self, DissolveState, Followees},
             proposal::Action,
-            Account as AccountProto, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
-            ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DeregisterDappCanisters, Empty,
-            GovernanceError, ManageNeuronResponse, Motion, Neuron, NeuronId, NeuronPermission,
-            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData, ProposalId,
-            RegisterDappCanisters, Vote, WaitForQuietState,
+            Account as AccountProto, AddMaturityRequest, Ballot, ClaimSwapNeuronsError,
+            ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
+            DeregisterDappCanisters, Empty, GovernanceError, ManageNeuronResponse,
+            MintTokensRequest, MintTokensResponse, Motion, NervousSystemParameters, Neuron,
+            NeuronId, NeuronIds, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
+            Proposal, ProposalData, ProposalId, RegisterDappCanisters, Vote, WaitForQuietState,
         },
     },
-    types::{native_action_ids, ONE_DAY_SECONDS, ONE_MONTH_SECONDS},
+    types::native_action_ids,
 };
 use maplit::btreemap;
+use pretty_assertions::assert_eq;
 use std::collections::{BTreeMap, HashSet};
 use strum::IntoEnumIterator;
 
@@ -254,6 +259,10 @@ fn test_disburse_maturity_succeeds_to_self() {
     assert_eq!(neuron.maturity_e8s_equivalent, 0);
     assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
     let in_progress = &neuron.disburse_maturity_in_progress[0];
+    assert_eq!(
+        in_progress.finalize_disbursement_timestamp_seconds,
+        Some(env.gov_fixture.now() + MATURITY_DISBURSEMENT_DELAY_SECONDS)
+    );
     let target_account_proto = in_progress
         .account_to_disburse_to
         .as_ref()
@@ -317,10 +326,11 @@ fn test_disburse_maturity_succeeds_to_other() {
         owner: receiver.0,
         subaccount: None,
     };
-    let destination_account_proto = account_to_proto(destination_account);
+    let destination_account_proto = AccountProto::from(destination_account);
     let mut env =
         setup_test_environment_with_one_neuron_with_maturity(earned_maturity_e8s, vec![receiver]);
     assert_ne!(env.controller, receiver);
+
     let controller_account = icrc_ledger_types::icrc1::account::Account {
         owner: env.controller.0,
         subaccount: None,
@@ -358,6 +368,10 @@ fn test_disburse_maturity_succeeds_to_other() {
     assert_eq!(neuron.maturity_e8s_equivalent, 0);
     assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
     let in_progress = &neuron.disburse_maturity_in_progress[0];
+    assert_eq!(
+        in_progress.finalize_disbursement_timestamp_seconds,
+        Some(env.gov_fixture.now() + MATURITY_DISBURSEMENT_DELAY_SECONDS)
+    );
     let target_account_proto = in_progress
         .account_to_disburse_to
         .as_ref()
@@ -431,13 +445,13 @@ fn test_disburse_maturity_succeeds_with_multiple_operations() {
 
     // Disburse maturity repeatedly.
     let mut remaining_maturity_e8s = earned_maturity_e8s;
-    let percentage_and_destination = vec![(50, receiver), (50, env.controller), (100, receiver)];
+    let percentage_and_destination = [(50, receiver), (50, env.controller), (100, receiver)];
     for (i, (percentage, destination)) in percentage_and_destination.iter().enumerate() {
         let destination_account = icrc_ledger_types::icrc1::account::Account {
             owner: destination.0,
             subaccount: None,
         };
-        let destination_account_proto = account_to_proto(destination_account);
+        let destination_account_proto = AccountProto::from(destination_account);
         let command_response = env
             .gov_fixture
             .manage_neuron(
@@ -532,7 +546,7 @@ fn test_disburse_maturity_fails_if_maturity_too_low() {
     assert_matches!(
         command_response,
         CommandResponse::Error(GovernanceError{error_type: code, error_message: msg})
-            if code == ErrorType::PreconditionFailed as i32 && msg.to_lowercase().contains("can't merge an amount less than"));
+            if code == ErrorType::PreconditionFailed as i32 && msg.to_lowercase().contains("can't disburse an amount less than"));
 }
 
 #[test]
@@ -615,7 +629,7 @@ fn test_disburse_maturity_fails_if_invalid_percentage_to_disburse() {
 ///
 /// This test sets up a GovernanceCanisterFixture, then sets up an exhaustive pair of manage_neuron
 /// requests and expected responses, and then calls manage_neuron for each request/response pair
-/// and asserts that the actual reponse is equal to the expected response.
+/// and asserts that the actual response is equal to the expected response.
 #[test]
 fn test_vesting_neuron_manage_neuron_operations() {
     use manage_neuron::Command;
@@ -682,6 +696,7 @@ fn test_vesting_neuron_manage_neuron_operations() {
 
     let disburse_maturity_response = DisburseMaturityResponse {
         amount_disbursed_e8s: 100000,
+        amount_deducted_e8s: Some(100000),
     };
 
     let merge_maturity = MergeMaturity {
@@ -782,6 +797,73 @@ fn test_vesting_neuron_manage_neuron_operations() {
     let expected_response = ManageNeuronResponse::register_vote_response();
     let actual_response = gov.manage_neuron(&neuron_id2, command, user_principal2);
     assert_eq!(expected_response, actual_response);
+}
+
+#[test]
+fn test_refresh_neuron() {
+    use manage_neuron::Command;
+
+    let claim_or_refresh = ClaimOrRefresh {
+        by: Some(claim_or_refresh::By::NeuronId(Empty {})),
+    };
+
+    let user_principal1 = PrincipalId::new_user_test_id(1000);
+    let neuron_id1 = neuron_id(user_principal1, /*memo*/ 0);
+
+    let user_principal2 = PrincipalId::new_user_test_id(1002);
+    let neuron_id2 = neuron_id(user_principal2, /*memo*/ 0);
+
+    // Set up the test environment with a single dissolved neuron
+    let mut gov = GovernanceCanisterFixtureBuilder::new()
+        // Add a neuron that will be configured the way a neuron originating from an NNS Neurons' Fund participation
+        // in a decentralization swap will be
+        .add_neuron(
+            NeuronBuilder::new(
+                neuron_id1.clone(),
+                E8,
+                NeuronPermission::all(&PrincipalId::from(ic_nns_constants::GOVERNANCE_CANISTER_ID)),
+            )
+            .add_neuron_permission(NeuronPermission {
+                principal: Some(user_principal1),
+                permission_type: vec![NeuronPermissionType::Vote as i32],
+            }),
+        )
+        // Add a regular neuron for comparison's sake
+        .add_neuron(NeuronBuilder::new(
+            neuron_id2.clone(),
+            E8,
+            NeuronPermission::all(&user_principal2),
+        ))
+        .create();
+
+    {
+        let actual_response = gov.manage_neuron(
+            &neuron_id1,
+            Command::ClaimOrRefresh(claim_or_refresh.clone()),
+            user_principal1,
+        );
+        assert_eq!(
+            ManageNeuronResponse {
+                command: Some(CommandResponse::Error(GovernanceError {
+                    error_type: ErrorType::PreconditionFailed as i32,
+                    error_message: "Cannot refresh an SNS Neuron controlled by the Neurons' Fund"
+                        .to_string()
+                }))
+            },
+            actual_response
+        );
+    }
+    {
+        let actual_response = gov.manage_neuron(
+            &neuron_id2,
+            Command::ClaimOrRefresh(claim_or_refresh),
+            user_principal2,
+        );
+        assert_eq!(
+            ManageNeuronResponse::claim_or_refresh_neuron_response(neuron_id2.clone()),
+            actual_response
+        );
+    }
 }
 
 #[test]
@@ -1631,8 +1713,10 @@ fn test_claim_swap_neurons_rejects_unauthorized_access() {
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // Build the request, but leave it empty as it is not relevant to the test
+    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
         neuron_parameters: vec![],
+        neuron_recipes: None,
     };
 
     // Generate a principal id that should not be authorized to call claim_swap_neurons
@@ -1679,11 +1763,13 @@ fn test_claim_swap_neurons_reports_invalid_neuron_parameters() {
     let test_neuron_id = NeuronId::new_test_neuron_id(1);
 
     // Create a request with an invalid NeuronParameter
+    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![NeuronParameters {
+        neuron_parameters: vec![],
+        neuron_recipes: Some(NeuronRecipes::from(vec![NeuronRecipe {
             neuron_id: Some(test_neuron_id.clone()),
             ..Default::default() // The rest of the fields are unset and will fail validation
-        }],
+        }])),
     };
 
     // Call the method
@@ -1723,14 +1809,17 @@ fn test_claim_swap_neurons_reports_already_existing_neurons() {
 
     // Create a request with a neuron id that should collide with the neuron already inserted into
     // Governance
+    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![NeuronParameters {
+        neuron_parameters: vec![],
+        neuron_recipes: Some(NeuronRecipes::from(vec![NeuronRecipe {
             neuron_id: Some(neuron_id.clone()),
             controller: Some(user_principal),
+            participant: Some(Participant::Direct(neuron_recipe::Direct {})),
             stake_e8s: Some(E8),
             dissolve_delay_seconds: Some(0),
-            ..Default::default() // The rest of the parameters are not required for this test
-        }],
+            followees: Some(NeuronIds::from(vec![])),
+        }])),
     };
 
     let authorized_sale_principal = canister_fixture.get_sale_canister_id();
@@ -1770,23 +1859,27 @@ fn test_claim_swap_neurons_reports_failure_if_neuron_cannot_be_added() {
     let test_neuron_id_failure = NeuronId::new_test_neuron_id(2);
 
     // Create a request with a NeuronParameter should succeed
+    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![
-            NeuronParameters {
+        neuron_parameters: vec![],
+        neuron_recipes: Some(NeuronRecipes::from(vec![
+            NeuronRecipe {
                 neuron_id: Some(test_neuron_id_success.clone()),
                 controller: Some(PrincipalId::new_user_test_id(1000)),
+                participant: Some(Participant::Direct(neuron_recipe::Direct {})),
                 stake_e8s: Some(E8),
                 dissolve_delay_seconds: Some(0),
-                ..Default::default() // The rest of the parameters are not required for this test
+                followees: Some(NeuronIds::from(vec![])),
             },
-            NeuronParameters {
+            NeuronRecipe {
                 neuron_id: Some(test_neuron_id_failure.clone()),
                 controller: Some(PrincipalId::new_user_test_id(1000)),
+                participant: Some(Participant::Direct(neuron_recipe::Direct {})),
                 stake_e8s: Some(E8),
                 dissolve_delay_seconds: Some(0),
-                ..Default::default() // The rest of the parameters are not required for this test
+                followees: Some(NeuronIds::from(vec![])),
             },
-        ],
+        ])),
     };
 
     // Call the method
@@ -1820,31 +1913,37 @@ fn test_claim_swap_neurons_succeeds() {
     // Set up the test environment with default sale canister id.
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
-    let direct_participant_neuron_params = NeuronParameters {
+    let direct_participant_neuron_recipe = NeuronRecipe {
         neuron_id: Some(NeuronId::new_test_neuron_id(1)),
         controller: Some(PrincipalId::new_user_test_id(1000)),
-        hotkey: None,
+        participant: Some(Participant::Direct(neuron_recipe::Direct {})),
         stake_e8s: Some(E8),
         dissolve_delay_seconds: Some(0),
-        source_nns_neuron_id: None,
-        followees: vec![NeuronId::new_test_neuron_id(10)],
+        followees: Some(NeuronIds::from(vec![NeuronId::new_test_neuron_id(10)])),
     };
 
-    let cf_participant_neuron_params = NeuronParameters {
+    let nf_participant_nns_neuron_id = 2;
+    let nf_participant_nns_neuron_controller = PrincipalId::new_user_test_id(1002);
+    let nf_participant_neuron_recipe = NeuronRecipe {
         neuron_id: Some(NeuronId::new_test_neuron_id(2)),
         controller: Some(PrincipalId::new_user_test_id(1001)),
-        hotkey: Some(PrincipalId::new_user_test_id(1002)),
+        participant: Some(Participant::NeuronsFund(neuron_recipe::NeuronsFund {
+            nns_neuron_controller: Some(nf_participant_nns_neuron_controller),
+            nns_neuron_id: Some(nf_participant_nns_neuron_id),
+            nns_neuron_hotkeys: Some(Principals::from(vec![PrincipalId::new_user_test_id(1003)])),
+        })),
         stake_e8s: Some(2 * E8),
         dissolve_delay_seconds: Some(ONE_MONTH_SECONDS),
-        source_nns_neuron_id: Some(2),
-        followees: vec![NeuronId::new_test_neuron_id(20)],
+        followees: Some(NeuronIds::from(vec![NeuronId::new_test_neuron_id(20)])),
     };
 
+    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![
-            direct_participant_neuron_params.clone(),
-            cf_participant_neuron_params.clone(),
-        ],
+        neuron_parameters: vec![],
+        neuron_recipes: Some(NeuronRecipes::from(vec![
+            direct_participant_neuron_recipe.clone(),
+            nf_participant_neuron_recipe.clone(),
+        ])),
     };
 
     // Call the method
@@ -1865,7 +1964,7 @@ fn test_claim_swap_neurons_succeeds() {
     // Assert that each NeuronParameter has a response and that it has the correct status
     let direct_participant_swap_neuron = swap_neurons
         .iter()
-        .find(|s| s.id == direct_participant_neuron_params.neuron_id)
+        .find(|s| s.id == direct_participant_neuron_recipe.neuron_id)
         .unwrap();
     assert_eq!(
         direct_participant_swap_neuron.status,
@@ -1874,7 +1973,7 @@ fn test_claim_swap_neurons_succeeds() {
 
     let cf_participant_swap_neuron = swap_neurons
         .iter()
-        .find(|s| s.id == cf_participant_neuron_params.neuron_id)
+        .find(|s| s.id == nf_participant_neuron_recipe.neuron_id)
         .unwrap();
     assert_eq!(
         cf_participant_swap_neuron.status,
@@ -1883,19 +1982,19 @@ fn test_claim_swap_neurons_succeeds() {
 
     // Asserts on Direct Participant
     let direct_participant_neuron =
-        canister_fixture.get_neuron(direct_participant_neuron_params.neuron_id.as_ref().unwrap());
+        canister_fixture.get_neuron(direct_participant_neuron_recipe.neuron_id.as_ref().unwrap());
     assert_eq!(
         direct_participant_neuron.id,
-        direct_participant_neuron_params.neuron_id
+        direct_participant_neuron_recipe.neuron_id
     );
     assert_eq!(
         direct_participant_neuron.cached_neuron_stake_e8s,
-        direct_participant_neuron_params.stake_e8s()
+        direct_participant_neuron_recipe.stake_e8s()
     );
     assert_eq!(
         direct_participant_neuron.dissolve_state,
         Some(DissolveState::DissolveDelaySeconds(
-            direct_participant_neuron_params.dissolve_delay_seconds()
+            direct_participant_neuron_recipe.dissolve_delay_seconds()
         ))
     );
     assert_eq!(direct_participant_neuron.source_nns_neuron_id, None);
@@ -1904,37 +2003,40 @@ fn test_claim_swap_neurons_succeeds() {
     assert_eq!(direct_participant_neuron.auto_stake_maturity, None);
     for followees in direct_participant_neuron.followees.values() {
         assert_eq!(
-            followees.followees,
-            direct_participant_neuron_params.followees
+            Some(NeuronIds::from(followees.followees.clone())),
+            direct_participant_neuron_recipe.followees
         );
     }
 
     // Asserts on CF Participant
     let cf_participant_neuron =
-        canister_fixture.get_neuron(cf_participant_neuron_params.neuron_id.as_ref().unwrap());
+        canister_fixture.get_neuron(nf_participant_neuron_recipe.neuron_id.as_ref().unwrap());
     assert_eq!(
         cf_participant_neuron.id,
-        cf_participant_neuron_params.neuron_id
+        nf_participant_neuron_recipe.neuron_id
     );
     assert_eq!(
         cf_participant_neuron.cached_neuron_stake_e8s,
-        cf_participant_neuron_params.stake_e8s()
+        nf_participant_neuron_recipe.stake_e8s()
     );
     assert_eq!(
         cf_participant_neuron.dissolve_state,
         Some(DissolveState::DissolveDelaySeconds(
-            cf_participant_neuron_params.dissolve_delay_seconds()
+            nf_participant_neuron_recipe.dissolve_delay_seconds()
         ))
     );
     assert_eq!(
         cf_participant_neuron.source_nns_neuron_id,
-        cf_participant_neuron_params.source_nns_neuron_id
+        Some(nf_participant_nns_neuron_id)
     );
     assert_eq!(cf_participant_neuron.maturity_e8s_equivalent, 0);
     assert_eq!(cf_participant_neuron.neuron_fees_e8s, 0);
     assert_eq!(cf_participant_neuron.auto_stake_maturity, Some(true));
     for followees in cf_participant_neuron.followees.values() {
-        assert_eq!(followees.followees, cf_participant_neuron_params.followees);
+        assert_eq!(
+            Some(NeuronIds::from(followees.followees.clone())),
+            nf_participant_neuron_recipe.followees
+        );
     }
 }
 
@@ -2565,14 +2667,16 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
 
     let DisburseMaturityResponse {
         amount_disbursed_e8s,
+        amount_deducted_e8s,
     } = disburse_maturity_response;
-    assert_eq!(amount_disbursed_e8s, expected_amount_disbursed_e8s);
+    assert_eq!(amount_deducted_e8s.unwrap(), amount_disbursed_e8s);
+    assert_eq!(amount_deducted_e8s.unwrap(), initial_maturity_e8s);
 
     // Assert that the neuron's maturity is now zero
     let neuron = canister_fixture.get_neuron(&neuron_id);
     assert_eq!(neuron.maturity_e8s_equivalent, 0);
 
-    canister_fixture.advance_time_by(7 * SECONDS_PER_DAY + 1);
+    canister_fixture.advance_time_by(7 * ONE_DAY_SECONDS + 1);
     canister_fixture.heartbeat();
 
     // Assert that the Neuron owner's account balance has increased the expected amount
@@ -2582,5 +2686,342 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
     assert_eq!(
         account_balance_after_disbursal,
         expected_amount_disbursed_e8s
+    );
+}
+
+/// Tests that `ManageNeuron::DisburseMaturity` applies maturity modulation at the
+/// end of the time window.
+#[tokio::test]
+async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
+    let initial_maturity_modulation_basis_points = 100;
+    let time_of_disbursement_maturity_modulation_basis_points = 200;
+    let initial_maturity_e8s = E8;
+
+    let user_principal = PrincipalId::new_user_test_id(1000);
+    let neuron_id = neuron_id(user_principal, /*memo*/ 0);
+
+    // Set up the test environment with a single dissolved neuron
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
+        .add_neuron(
+            NeuronBuilder::new(
+                neuron_id.clone(),
+                E8,
+                NeuronPermission::all(&user_principal),
+            )
+            .set_maturity(initial_maturity_e8s),
+        )
+        // Set an initial maturity modulation that will be different then the final maturity modulation
+        .set_maturity_modulation(initial_maturity_modulation_basis_points)
+        .create();
+
+    // This is supposed to cause Governance to poll CMC for the maturity modulation.
+    canister_fixture.heartbeat();
+
+    let current_basis_points = canister_fixture
+        .get_maturity_modulation()
+        .maturity_modulation
+        .unwrap()
+        .current_basis_points
+        .unwrap();
+
+    assert_eq!(
+        current_basis_points,
+        initial_maturity_modulation_basis_points
+    );
+
+    // Get the Neuron and assert its maturity is set as expected
+    let neuron = canister_fixture.get_neuron(&neuron_id);
+    let neuron_maturity_before_disbursal = neuron.maturity_e8s_equivalent;
+    assert_eq!(neuron_maturity_before_disbursal, E8);
+
+    let destination_account = icrc_ledger_types::icrc1::account::Account {
+        owner: user_principal.into(),
+        subaccount: None,
+    };
+
+    let account_balance_before_disbursal =
+        canister_fixture.get_account_balance(&destination_account, TargetLedger::Sns);
+    assert_eq!(account_balance_before_disbursal, 0);
+
+    // Disburse the neuron to self and assert that it succeeds
+    let manage_neuron_response = canister_fixture.manage_neuron(
+        &neuron_id,
+        manage_neuron::Command::DisburseMaturity(DisburseMaturity {
+            percentage_to_disburse: 100,
+            to_account: Some(AccountProto {
+                owner: Some(user_principal),
+                subaccount: None,
+            }),
+        }),
+        user_principal,
+    );
+
+    let disburse_maturity_response = match manage_neuron_response.command.unwrap() {
+        CommandResponse::DisburseMaturity(response) => response,
+        CommandResponse::Error(error) => {
+            panic!("Unexpected error when disbursing maturity: {}", error)
+        }
+        _ => panic!("Unexpected command response when disbursing maturity"),
+    };
+
+    let DisburseMaturityResponse {
+        amount_disbursed_e8s,
+        amount_deducted_e8s,
+    } = disburse_maturity_response;
+    assert_eq!(amount_disbursed_e8s, amount_deducted_e8s.unwrap());
+    assert_eq!(amount_deducted_e8s.unwrap(), initial_maturity_e8s);
+
+    // Assert that the neuron's maturity is now zero
+    let neuron = canister_fixture.get_neuron(&neuron_id);
+    assert_eq!(neuron.maturity_e8s_equivalent, 0);
+
+    // Update the maturity_modulation that the CMC will serve before the disbursement
+    *canister_fixture
+        .cmc_fixture
+        .maturity_modulation
+        .try_lock()
+        .unwrap() = time_of_disbursement_maturity_modulation_basis_points;
+
+    // Advancing time and triggering a heartbeat should force a query of the new modulation
+    canister_fixture.advance_time_by(2 * ONE_DAY_SECONDS);
+    canister_fixture.heartbeat();
+    let current_basis_points = canister_fixture
+        .get_maturity_modulation()
+        .maturity_modulation
+        .unwrap()
+        .current_basis_points
+        .unwrap();
+
+    assert_eq!(
+        current_basis_points,
+        time_of_disbursement_maturity_modulation_basis_points
+    );
+    // Assert that the Neuron owner's account balance has not changed
+    let account_balance_before_disbursal =
+        canister_fixture.get_account_balance(&destination_account, TargetLedger::Sns);
+
+    assert_eq!(account_balance_before_disbursal, 0);
+
+    // Advancing time and triggering a heartbeat should trigger the final disbursal
+    canister_fixture.advance_time_by(5 * ONE_DAY_SECONDS + 1);
+    canister_fixture.heartbeat();
+
+    // Assert that the Neuron owner's account balance has increased the expected amount
+    let account_balance_after_disbursal =
+        canister_fixture.get_account_balance(&destination_account, TargetLedger::Sns);
+
+    assert_eq!(account_balance_after_disbursal, 102_000_000);
+}
+
+#[test]
+fn test_add_maturity() {
+    let (mut canister_fixture, _user_principal, neuron_id) =
+        GovernanceCanisterFixtureBuilder::new().create_with_test_neuron();
+
+    const MATURITY_TO_ADD: u64 = 100_000;
+
+    let neuron_original = canister_fixture.get_neuron(&neuron_id);
+    let add_maturity_result = canister_fixture
+        .governance
+        .add_maturity(AddMaturityRequest {
+            id: Some(neuron_id.clone()),
+            amount_e8s: Some(MATURITY_TO_ADD),
+        });
+    let neuron_new = canister_fixture.get_neuron(&neuron_id);
+
+    assert_eq!(
+        neuron_original.maturity_e8s_equivalent + MATURITY_TO_ADD,
+        neuron_new.maturity_e8s_equivalent
+    );
+    assert_eq!(
+        add_maturity_result.new_maturity_e8s,
+        Some(neuron_new.maturity_e8s_equivalent)
+    );
+}
+
+#[tokio::test]
+async fn test_mint_tokens() {
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
+    let user_principal = PrincipalId::new_user_test_id(1000);
+    const E8S_TO_MINT: u64 = 100_000;
+
+    let account = AccountProto {
+        owner: Some(user_principal),
+        subaccount: None,
+    };
+
+    let balance_original = canister_fixture
+        .get_account_balance(&(account.clone().try_into().unwrap()), TargetLedger::Sns);
+    let MintTokensResponse {} = canister_fixture
+        .governance
+        .mint_tokens(MintTokensRequest {
+            recipient: Some(account.clone()),
+            amount_e8s: Some(E8S_TO_MINT),
+        })
+        .await;
+    let balance_new = canister_fixture
+        .get_account_balance(&(account.clone().try_into().unwrap()), TargetLedger::Sns);
+
+    assert_eq!(balance_original + E8S_TO_MINT, balance_new);
+}
+
+#[tokio::test]
+async fn test_process_proposals_tallies_votes_for_proposals_where_voting_is_possible() {
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
+        .set_start_time(10)
+        .create();
+
+    canister_fixture.governance.proto.proposals.insert(
+        10,
+        ProposalData {
+            decided_timestamp_seconds: 9, // proposal is decided
+            action: 1,
+            wait_for_quiet_state: Some(WaitForQuietState {
+                current_deadline_timestamp_seconds: 20, // voting period is still open
+            }),
+            proposal: Some(Proposal {
+                action: Some(Action::Motion(Motion {
+                    motion_text: "Test".to_string(),
+                })),
+                ..Proposal::default()
+            }),
+            latest_tally: None,
+            ..ProposalData::default()
+        },
+    );
+    canister_fixture.governance.process_proposals();
+    let proposal = canister_fixture
+        .governance
+        .proto
+        .proposals
+        .get(&10)
+        .unwrap();
+
+    assert!(proposal.latest_tally.is_some());
+}
+
+#[tokio::test]
+async fn test_process_proposals_doesnt_tally_votes_for_proposals_where_voting_is_impossible() {
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
+        .set_start_time(30)
+        .create();
+
+    canister_fixture.governance.proto.proposals.insert(
+        10,
+        ProposalData {
+            decided_timestamp_seconds: 9, // proposal is decided
+            action: 1,
+            wait_for_quiet_state: Some(WaitForQuietState {
+                current_deadline_timestamp_seconds: 20, // voting period is still open
+            }),
+            proposal: Some(Proposal {
+                action: Some(Action::Motion(Motion {
+                    motion_text: "Test".to_string(),
+                })),
+                ..Proposal::default()
+            }),
+            latest_tally: None,
+            ..ProposalData::default()
+        },
+    );
+    canister_fixture.governance.process_proposals();
+    let proposal = canister_fixture
+        .governance
+        .proto
+        .proposals
+        .get(&10)
+        .unwrap();
+
+    assert_eq!(proposal.latest_tally, None);
+}
+
+#[test]
+fn test_motion_has_normal_voting_thresholds() {
+    let user_principal = PrincipalId::new_user_test_id(1000);
+    let neuron_id_2 = neuron_id(user_principal, /*memo*/ 42);
+
+    let (mut canister_fixture, user_principal, neuron_id) = GovernanceCanisterFixtureBuilder::new()
+        .add_neuron(
+            NeuronBuilder::new(
+                neuron_id_2.clone(),
+                E8 * 1000,
+                NeuronPermission::new(&user_principal, vec![]),
+            )
+            .set_dissolve_delay(15778801),
+        )
+        // Create with a test neuron so that the proposal doesn't instantly pass
+        .create_with_test_neuron();
+
+    let proposal = Motion {
+        motion_text: "Do stuff".to_string(),
+    };
+
+    // Create the proposal with neuron_id so it doesn't instantly pass
+    let (_, proposal_data) = canister_fixture
+        .make_default_proposal(&neuron_id, proposal, user_principal)
+        .unwrap();
+
+    assert_eq!(
+        proposal_data.decided_timestamp_seconds, 0,
+        "proposal should not have been decided yet. ballots: {:?}",
+        proposal_data.ballots
+    );
+    assert_eq!(
+        proposal_data.minimum_yes_proportion_of_exercised.unwrap(),
+        NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER
+    );
+    assert_eq!(
+        proposal_data.minimum_yes_proportion_of_total.unwrap(),
+        NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER
+    );
+}
+
+#[test]
+fn test_deregister_dapp_has_higher_voting_thresholds() {
+    let user_principal = PrincipalId::new_user_test_id(1000);
+    let neuron_id_2 = neuron_id(user_principal, /*memo*/ 42);
+
+    let (mut canister_fixture, user_principal, neuron_id) = GovernanceCanisterFixtureBuilder::new()
+        .add_neuron(
+            NeuronBuilder::new(
+                neuron_id_2.clone(),
+                E8 * 1000,
+                NeuronPermission::new(&user_principal, vec![]),
+            )
+            .set_dissolve_delay(15778801),
+        )
+        // Create with a test neuron so that the proposal doesn't instantly pass
+        .create_with_test_neuron();
+
+    let proposal = DeregisterDappCanisters {
+        canister_ids: vec![user_principal],
+        new_controllers: vec![user_principal],
+    };
+
+    // Create the proposal with neuron_id so it doesn't instantly pass
+    let (_, proposal_data) = canister_fixture
+        .make_default_proposal(&neuron_id, proposal, user_principal)
+        .unwrap();
+
+    assert_eq!(
+        proposal_data.decided_timestamp_seconds, 0,
+        "proposal should not have been decided yet. ballots: {:?}",
+        proposal_data.ballots
+    );
+    assert!(
+        proposal_data.minimum_yes_proportion_of_exercised.unwrap()
+            > NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER
+    );
+    assert_eq!(
+        proposal_data.minimum_yes_proportion_of_exercised.unwrap(),
+        Percentage::from_basis_points(6700)
+    );
+    assert!(
+        proposal_data.minimum_yes_proportion_of_total.unwrap()
+            > NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER
+    );
+    assert_eq!(
+        proposal_data.minimum_yes_proportion_of_total.unwrap(),
+        Percentage::from_basis_points(2000)
     );
 }

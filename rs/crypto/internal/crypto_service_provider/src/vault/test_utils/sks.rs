@@ -3,8 +3,7 @@ use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::secret_key_store::SecretKeyStoreInsertionError;
 use crate::types::CspSecretKey;
 use crate::{KeyId, SecretKeyStore};
-use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
-use openssl::pkey::PKey;
+use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
 
 pub fn secret_key_store_with_duplicated_key_id_error_on_insert(
     duplicated_key_id: KeyId,
@@ -55,13 +54,9 @@ pub fn secret_key_store_containing_key_with_invalid_encoding(key_id: KeyId) -> i
 pub fn secret_key_store_containing_key_with_invalid_length(key_id: KeyId) -> impl SecretKeyStore {
     let mut key_store = TempSecretKeyStore::new();
 
-    let bytes = PKey::generate_ed448()
-        .expect("failed to create Ed2448 key pair")
-        .private_key_to_der()
-        .expect("failed to serialize Ed2448 key to DER");
-
-    let secret_key_with_invalid_length =
-        CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes::new(bytes));
+    let secret_key_with_invalid_length = CspSecretKey::TlsEd25519(
+        TlsEd25519SecretKeyDerBytes::new(b"invalid_ed25519_key".to_vec()),
+    );
     assert!(key_store
         .insert(key_id, secret_key_with_invalid_length, None)
         .is_ok());

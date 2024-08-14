@@ -1,21 +1,29 @@
 /* tag::catalog[]
 end::catalog[] */
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
-use crate::util::{agent_with_identity, block_on, random_ed25519_identity, UniversalCanister};
 use ic_agent::export::Principal;
-use ic_agent::{identity::AnonymousIdentity, Identity, Signature};
+use ic_agent::{
+    identity::{AnonymousIdentity, Secp256k1Identity},
+    Identity,
+};
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
+use ic_system_test_driver::util::{
+    agent_with_identity, block_on, expiry_time, random_ed25519_identity, sign_query, sign_update,
+    UniversalCanister,
+};
 use ic_types::messages::{
     Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery,
 };
 use ic_universal_canister::wasm;
+use rand::{CryptoRng, Rng};
 use slog::{debug, info};
-use std::time::{Duration, SystemTime};
 
 pub fn request_signature_test(env: TestEnv) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
     let agent = node.build_default_agent();
+    let rng = &mut reproducible_rng();
     block_on({
         async move {
             let node_url = node.get_public_url();
@@ -48,7 +56,7 @@ pub fn request_signature_test(env: TestEnv) {
             );
             test_valid_request_succeeds(
                 node_url.as_str(),
-                random_ecdsa_identity(),
+                random_ecdsa_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -70,7 +78,7 @@ pub fn request_signature_test(env: TestEnv) {
             );
             test_request_with_empty_signature_fails(
                 node_url.as_str(),
-                random_ecdsa_identity(),
+                random_ecdsa_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -92,7 +100,7 @@ pub fn request_signature_test(env: TestEnv) {
             );
             test_request_signed_by_another_identity_fails(
                 node_url.as_str(),
-                random_ecdsa_identity(),
+                random_ecdsa_identity(rng),
                 random_ed25519_identity(),
                 canister.canister_id(),
             )
@@ -105,7 +113,7 @@ pub fn request_signature_test(env: TestEnv) {
             test_request_signed_by_another_identity_fails(
                 node_url.as_str(),
                 random_ed25519_identity(),
-                random_ecdsa_identity(),
+                random_ecdsa_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -128,8 +136,8 @@ pub fn request_signature_test(env: TestEnv) {
             );
             test_request_signed_by_another_identity_fails(
                 node_url.as_str(),
-                random_ecdsa_identity(),
-                random_ecdsa_identity(),
+                random_ecdsa_identity(rng),
+                random_ecdsa_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -140,7 +148,7 @@ pub fn request_signature_test(env: TestEnv) {
             );
             test_request_with_valid_signature_but_wrong_sender_fails(
                 node_url.as_str(),
-                random_ecdsa_identity(),
+                random_ecdsa_identity(rng),
                 random_ed25519_identity(),
                 canister.canister_id(),
             )
@@ -153,7 +161,7 @@ pub fn request_signature_test(env: TestEnv) {
             test_request_with_valid_signature_but_wrong_sender_fails(
                 node_url.as_str(),
                 random_ed25519_identity(),
-                random_ecdsa_identity(),
+                random_ecdsa_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -176,8 +184,8 @@ pub fn request_signature_test(env: TestEnv) {
             );
             test_request_with_valid_signature_but_wrong_sender_fails(
                 node_url.as_str(),
-                random_ecdsa_identity(),
-                random_ecdsa_identity(),
+                random_ecdsa_identity(rng),
+                random_ecdsa_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -185,8 +193,8 @@ pub fn request_signature_test(env: TestEnv) {
     });
 }
 
-pub fn random_ecdsa_identity() -> EcdsaIdentity {
-    EcdsaIdentity::new_random()
+pub fn random_ecdsa_identity<R: Rng + CryptoRng>(rng: &mut R) -> Secp256k1Identity {
+    Secp256k1Identity::from_private_key(k256::SecretKey::random(rng))
 }
 
 // Test sending a query/update from the anonymous user that returns
@@ -442,81 +450,4 @@ async fn test_request_with_valid_signature_but_wrong_sender_fails<
         .unwrap();
 
     assert_eq!(res.status(), 403);
-}
-
-pub fn sign_query(content: &HttpQueryContent, identity: &impl Identity) -> Signature {
-    let mut msg = b"\x0Aic-request".to_vec();
-    msg.extend(content.representation_independent_hash());
-    identity.sign(&msg).unwrap()
-}
-
-pub fn sign_update(content: &HttpCallContent, identity: &impl Identity) -> Signature {
-    let mut msg = b"\x0Aic-request".to_vec();
-    msg.extend(content.representation_independent_hash());
-    identity.sign(&msg).unwrap()
-}
-
-pub fn expiry_time() -> Duration {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        + Duration::from_secs(4 * 60)
-}
-
-// TODO(VER-507): Move the ECDSA implementation below to `agent-rs`.
-use openssl::ec::{EcGroup, EcKey};
-use openssl::ecdsa::EcdsaSig;
-use openssl::nid::Nid;
-use openssl::pkey::Private;
-
-// NOTE: prime256v1 is a yet another name for secp256r1 (aka. NIST P-256),
-// cf. https://tools.ietf.org/html/rfc5480
-const CURVE_NAME: Nid = Nid::X9_62_PRIME256V1;
-
-pub struct EcdsaIdentity {
-    key: EcKey<Private>,
-}
-
-impl EcdsaIdentity {
-    pub fn new_random() -> Self {
-        let group = EcGroup::from_curve_name(CURVE_NAME).expect("unable to create EC group");
-        let ec_key = EcKey::generate(&group).expect("unable to generate EC key");
-        Self { key: ec_key }
-    }
-
-    fn ecdsa_sig_to_bytes(ecdsa_sig: EcdsaSig) -> [u8; 64] {
-        let r = ecdsa_sig.r().to_vec();
-        let s = ecdsa_sig.s().to_vec();
-        if r.len() > 32 || s.len() > 32 {
-            panic!("ECDSA signature too long");
-        }
-
-        let mut bytes = [0; 64];
-        // Account for leading zeros.
-        bytes[(32 - r.len())..32].clone_from_slice(&r);
-        bytes[(64 - s.len())..64].clone_from_slice(&s);
-        bytes
-    }
-
-    fn public_key_der(&self) -> Vec<u8> {
-        self.key.public_key_to_der().unwrap()
-    }
-}
-
-impl Identity for EcdsaIdentity {
-    fn sender(&self) -> Result<Principal, String> {
-        Ok(Principal::self_authenticating(self.public_key_der()))
-    }
-
-    fn sign(&self, msg: &[u8]) -> Result<Signature, String> {
-        use ic_crypto_sha2::Sha256;
-        let msg = Sha256::hash(msg).to_vec();
-        Ok(Signature {
-            signature: Some(
-                Self::ecdsa_sig_to_bytes(EcdsaSig::sign(&msg, &self.key).expect("unable to sign"))
-                    .to_vec(),
-            ),
-            public_key: Some(self.public_key_der()),
-        })
-    }
 }

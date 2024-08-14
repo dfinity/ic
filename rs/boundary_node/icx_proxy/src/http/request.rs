@@ -2,9 +2,10 @@ use crate::error::ErrorFactory;
 use crate::http::body::read_streaming_body;
 use crate::http::headers::REQUIRE_CERTIFICATION_HEADER_NAME;
 use crate::proxy::REQUEST_BODY_SIZE_LIMIT;
+use axum::body::Body;
 use hyper::http::request::Parts;
-use hyper::{Body, Uri};
-use ic_response_verification::types::Request;
+use hyper::Uri;
+use ic_http_certification::HttpRequest as Request;
 use tracing::trace;
 
 pub struct HttpRequest {
@@ -21,7 +22,7 @@ impl From<(&Parts, Vec<u8>)> for HttpRequest {
             .iter()
             .filter_map(|(name, value)| Some((name.as_str().into(), value.to_str().ok()?.into())))
             .inspect(|(name, value)| {
-                trace!("<< {}: {}", name, value);
+                trace!("<< {name}: {value}");
             })
             .collect::<Vec<(String, String)>>();
 
@@ -40,6 +41,7 @@ impl From<&HttpRequest> for Request {
             url: http_request.uri.to_string(),
             method: http_request.method.clone(),
             headers: http_request.headers.clone(),
+            body: http_request.body.clone(),
         }
     }
 }

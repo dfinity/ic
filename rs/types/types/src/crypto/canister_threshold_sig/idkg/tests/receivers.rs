@@ -39,7 +39,7 @@ fn should_return_correct_receivers() {
 
 #[test]
 fn should_return_correct_receivers_iter() {
-    let mut receivers = vec![node_id(NODE_1), node_id(NODE_2)];
+    let mut receivers = [node_id(NODE_1), node_id(NODE_2)];
 
     // The indices should correspond to the natural ordering of the elements:
     receivers.sort();
@@ -89,6 +89,30 @@ fn should_return_none_position_if_node_id_not_in_receivers() {
     let receivers = IDkgReceivers::new(receivers).unwrap();
 
     assert!(receivers.position(not_a_receiver_node).is_none());
+}
+
+#[test]
+fn should_return_contains_false_if_node_id_not_in_receivers() {
+    let not_a_receiver_node = node_id(NODE_3);
+    let mut receivers = BTreeSet::new();
+    receivers.insert(node_id(NODE_1));
+    receivers.insert(node_id(NODE_2));
+    let receivers = IDkgReceivers::new(receivers).unwrap();
+
+    assert!(!receivers.contains(not_a_receiver_node));
+}
+
+#[test]
+fn should_return_contains_true_if_node_id_in_receivers() {
+    let receiver_node_1 = node_id(NODE_1);
+    let receiver_node_2 = node_id(NODE_2);
+    let mut receivers = BTreeSet::new();
+    receivers.insert(receiver_node_1);
+    receivers.insert(receiver_node_2);
+    let receivers = IDkgReceivers::new(receivers).unwrap();
+
+    assert!(receivers.contains(receiver_node_1));
+    assert!(receivers.contains(receiver_node_2));
 }
 
 #[test]

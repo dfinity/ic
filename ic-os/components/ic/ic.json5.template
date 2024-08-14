@@ -1,0 +1,512 @@
+{
+    // ============================================
+    // Global Replica Configuration
+    // ============================================
+
+    node_id: "{{ node_index }}",
+
+    // =======================================================
+    // Configuration of transport parameters and node identity
+    // =======================================================
+    transport: {
+        node_ip: "{{ ipv6_address }}",
+        listening_port: 4100,
+    },
+
+    // =========================================================
+    // Configuration of IPv4 networking (provided at first boot)
+    // =========================================================
+    initial_ipv4_config: {
+        public_address: "{{ ipv4_address }}",
+        public_gateway: "{{ ipv4_gateway }}",
+    },
+
+    // ============================================
+    // Configuration of the domain name
+    // ============================================
+    domain: "{{ domain }}",
+
+    // ============================================
+    // Configuration of registry client
+    // ============================================
+    registry_client: {
+        // The directory that should be used to persist registry content.
+        local_store: "/var/lib/ic/data/ic_registry_local_store/"
+    },
+    // ============================================
+    // Configuration of the node state persistence.
+    // ============================================
+    state_manager: {
+        // The directory that should be used to persist node state.
+        state_root: "/var/lib/ic/data/ic_state",
+    },
+
+    // ============================================
+    // Configuration of the artifact pool state persistence.
+    // ============================================
+    artifact_pool: {
+        consensus_pool_path: "/var/lib/ic/data/ic_consensus_pool",
+        ingress_pool_max_count: 10000,
+        ingress_pool_max_bytes: 100000000,
+        // Backup configuration
+        backup: {
+            spool_path: "/var/lib/ic/backup",
+            // How long the artifacts stay in the pool before they get purged.
+            retention_time_secs: {{ backup_retention_time_secs }},
+            // How often the purging is triggered.
+            purging_interval_secs: {{ backup_purging_interval_secs }},
+        }
+    },
+
+    // ============================================
+    // Configuration of the crypto state persistence.
+    // ============================================
+    crypto: {
+        // The directory that should be used to persist crypto state.
+        crypto_root: "/var/lib/ic/crypto",
+        // The logic and metrics sockets for communicating with the crypto csp vault.
+        // Shall match the values configured in
+        // ic-crypto-csp.socket
+        csp_vault_type: { unix_socket: { logic: "/run/ic-node/crypto-csp/socket", metrics: "/run/ic-node/crypto-csp/metrics" } },
+    },
+
+    // ========================================
+    // Configuration of the message scheduling.
+    // ========================================
+    scheduler: {
+        // Maximum amount of instructions a single round can consume.
+        max_instructions_per_round: 26843545600,
+        // Maximum number of instructions a single message's execution
+        // can consume.
+        max_instructions_per_message: 5368709120,
+    },
+
+    // ================================================
+    // Configuration of the Wasm execution environment.
+    // ================================================
+    hypervisor: {
+        // A whitelist of principal IDs that are allowed to call the
+        // "dev_create_canister_with_funds" and "dev_set_funds" methods on
+        // the subnet.
+        //
+        // * The list should be a comma-separated list of principal IDs.
+        // * Setting the value to "*" = the methods are calleable by all IDs.
+        // * Setting the value to an empty string = the methods are
+        //   calleable by no one.
+        //
+        // The principal id below is used by the wallet CLI, the workload
+        // generator and scenario tests (corresponds to the hardcoded,
+        // DER-encoded keypair that these tools use).
+        create_funds_whitelist: "5o66h-77qch-43oup-7aaui-kz5ty-tww4j-t2wmx-e3lym-cbtct-l3gpw-wae",
+
+        // Enable Query Stats
+        query_stats_aggregation: {{ query_stats_aggregation }},
+
+        // Length of an epoch for query stats collection.
+        query_stats_epoch_length: {{ query_stats_epoch_length }},
+    },
+
+    // ==================================
+    // Configuration for replica tracing.
+    // ==================================
+
+    tracing: {
+        jaeger_addr: "{{ jaeger_addr }}",
+    },
+
+    // ====================================
+    // Configuration of the HTTP endpoint.
+    // ====================================
+    http_handler: {
+        listen_addr: "[{{ ipv6_address }}]:8080",
+    },
+
+    // ====================================
+    // Configuration of various adapters.
+    // ====================================
+    adapters_config: {
+        // IPC socket and metrics path for BTC Testnet adapter. This UDS path has to be the same as
+        // specified in the systemd socket file.
+        // The BTC adapter socket file is: ic-btc-testnet-adapter.socket
+        bitcoin_testnet_uds_path: "/run/ic-node/bitcoin-testnet-adapter/socket",
+        bitcoin_testnet_uds_metrics_path: "/run/ic-node/bitcoin-testnet-adapter/metrics",
+        // IPC socket and metrics path for BTC Mainnet adapter. This UDS path has to be the same as
+        // specified in the systemd socket file.
+        bitcoin_mainnet_uds_path: "/run/ic-node/bitcoin-mainnet-adapter/socket",
+        bitcoin_mainnet_uds_metrics_path: "/run/ic-node/bitcoin-mainnet-adapter/metrics",
+        // IPC socket and metrics path for canister http adapter. These UDS path has to be the same as
+        // specified in the systemd socket file.
+        // The canister http adapter socket file is: ic-https-outcalls-adapter.socket
+        https_outcalls_uds_path: "/run/ic-node/https-outcalls-adapter/socket",
+        https_outcalls_uds_metrics_path: "/run/ic-node/https-outcalls-adapter/metrics",
+    },
+
+    // ==================================================
+    // Configuration of the metrics collection subsystem.
+    // ==================================================
+    metrics: {
+        // How to export metrics.
+        // Supported values are:
+        // - "log"  — periodically write prometheus metrics to the application log
+        // - { http: <port> } — expose prometheus metrics on the specified port
+        // - { file: <path> } — dump prometheus metrics to the specified file on shutdown
+        exporter: { http: "[{{ ipv6_address }}]:9090", },
+    },
+
+    // ===================================
+    // Configuration of the logging setup.
+    // ===================================
+    logger: {
+        // The node id to append to log lines.
+        node_id: {{ node_index }},
+        // The log level to use.
+        level: "info",
+        // The format of emitted log lines
+        format: "json",
+    },
+
+    // ==================================
+    // Configuration for Message Routing.
+    // ==================================
+    message_routing: {
+        xnet_ip_addr: "{{ ipv6_address }}",
+        xnet_port: 2497,
+    },
+
+    firewall: {
+        config_file: "/run/ic-node/nftables-ruleset/nftables.conf",
+        file_template: "table filter {\n\
+  set rate_limit {\n\
+    type ipv4_addr\n\
+    size 65535\n\
+    flags dynamic\n\
+  }\n\
+\n\
+  set connection_limit {\n\
+    type ipv4_addr\n\
+    size 65535\n\
+    flags dynamic\n\
+  }\n\
+\n\
+  counter rate_limit_v4_counter {}\n\
+  counter connection_limit_v4_counter {}\n\
+\n\
+  chain INPUT {\n\
+    type filter hook input priority 0; policy drop;\n\
+    iif lo accept\n\
+    ct state new add @rate_limit { ip saddr limit rate over 1000/minute burst 500 packets } counter name rate_limit_v4_counter drop\n\
+    #  Notes about the rule below:\n\
+    #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip address.\n\
+    #   - The rule drops all new connections that goes over the configured limit.\n\
+    ct state new add @connection_limit { ip saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } counter name connection_limit_v4_counter drop\n\
+    icmp type parameter-problem accept\n\
+    icmp type echo-request accept\n\
+    icmp type echo-reply accept\n\
+    <<IPv4_TCP_RULES>>\n\
+    <<IPv4_UDP_RULES>>\n\
+    ct state { invalid } drop\n\
+    #   - The rule accepts all established and related connections. It's required for the IPv4 connectivity check.\n\
+    ct state { established, related } accept\n\
+    log prefix \"Drop - default policy: \"\n\
+  }\n\
+\n\
+  chain FORWARD {\n\
+    type filter hook forward priority 0; policy drop;\n\
+  }\n\
+\n\
+  chain OUTPUT {\n\
+    type filter hook output priority 0; policy accept;\n\
+    meta skuid ic-http-adapter ip daddr { 127.0.0.0/8 } ct state { new } tcp dport { 1-19999 } reject # Block restricted localhost ic-http-adapter HTTPS access\n\
+    <<IPv4_OUTBOUND_RULES>>\n\
+  }\n\
+}\n\
+\n\
+table ip6 filter {\n\
+  set rate_limit {\n\
+    type ipv6_addr\n\
+    size 65535\n\
+    flags dynamic\n\
+  }\n\
+\n\
+  set connection_limit {\n\
+    type ipv6_addr\n\
+    size 65535\n\
+    flags dynamic\n\
+  }\n\
+\n\
+  counter rate_limit_v6_counter {}\n\
+  counter connection_limit_v6_counter {}\n\
+\n\
+  chain INPUT {\n\
+    type filter hook input priority 0; policy drop;\n\
+    iif lo accept\n\
+    ct state { invalid } drop\n\
+    ct state { established, related } accept\n\
+    ct state new add @rate_limit { ip6 saddr limit rate over 1000/minute burst 500 packets } counter name rate_limit_v6_counter drop\n\
+    #  Notes about the rule below:\n\
+    #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip6 address.\n\
+    #   - The rule drops all new connections that goes over the configured limit.\n\
+    ct state new add @connection_limit { ip6 saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } counter name connection_limit_v6_counter drop\n\
+    icmpv6 type destination-unreachable accept\n\
+    icmpv6 type packet-too-big accept\n\
+    icmpv6 type time-exceeded accept\n\
+    icmpv6 type parameter-problem accept\n\
+    icmpv6 type echo-request accept\n\
+    icmpv6 type echo-reply accept\n\
+    icmpv6 type nd-router-advert accept\n\
+    icmpv6 type nd-neighbor-solicit accept\n\
+    icmpv6 type nd-neighbor-advert accept\n\
+    ip6 saddr { hostos } ct state { new } tcp dport { 42372 } accept # Allow access from HostOS metrics-proxy so GuestOS metrics-proxy can proxy certain metrics to HostOS.\n\
+    <<IPv6_TCP_RULES>>\n\
+    <<IPv6_UDP_RULES>>\n\
+    log prefix \"Drop - default policy: \"\n\
+  }\n\
+\n\
+  chain FORWARD {\n\
+    type filter hook forward priority 0; policy drop;\n\
+  }\n\
+\n\
+  chain OUTPUT {\n\
+    type filter hook output priority 0; policy accept;\n\
+    meta skuid ic-http-adapter ip6 daddr { ::1/128 } ct state { new } tcp dport { 1-19999 } reject # Block restricted localhost ic-http-adapter HTTPS access\n\
+    meta skuid ic-http-adapter ip6 daddr { 2a00:fb01:400:42::/64, 2001:4d78:40d::/48, 2602:fb2b:110::/48, 2607:fb58:9005::/48, 2602:fb2b:100::/48, 2607:f6f0:3004::/48, 2602:fb2b:120::/48, 2a05:d01c:d9:2b00::/56, 2a05:d01c:e2c:a700::/56 } ct state { new } tcp dport { 1-19999 } reject # Block restricted outbound ic-http-adapter HTTPS access\n\
+    <<IPv6_OUTBOUND_RULES>>\n\
+  }\n\
+}\n",
+        ipv4_tcp_rule_template: "ip saddr {<<IPv4_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv6_tcp_rule_template: "ip6 saddr {<<IPv6_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv4_udp_rule_template: "ip saddr {<<IPv4_PREFIXES>>} udp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv6_udp_rule_template: "ip6 saddr {<<IPv6_PREFIXES>>} udp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv4_user_output_rule_template: "meta skuid <<USER>> ip daddr {<<IPv4_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv6_user_output_rule_template: "meta skuid <<USER>> ip6 daddr {<<IPv6_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        default_rules: [{
+          ipv4_prefixes: [],
+          ipv6_prefixes: [
+            "2001:438:fffd:11c::/64",
+            "2001:470:1:c76::/64",
+            "2001:4d78:400:10a::/64",
+            "2001:4d78:40d::/48",
+            "2602:fb2b:110::/48",
+            "2001:920:401a:1706::/64",
+            "2001:920:401a:1708::/64",
+            "2001:920:401a:1710::/64",
+            "2401:3f00:1000:22::/64",
+            "2401:3f00:1000:23::/64",
+            "2401:3f00:1000:24::/64",
+            "2600:2c01:21::/64",
+            "2600:3000:1300:1300::/64",
+            "2600:3000:6100:200::/64",
+            "2600:3004:1200:1200::/56",
+            "2600:3006:1400:1500::/64",
+            "2600:c00:2:100::/64",
+            "2600:c02:b002:15::/64",
+            "2600:c0d:3002:4::/64",
+            "2602:ffe4:801:16::/64",
+            "2602:ffe4:801:17::/64",
+            "2602:ffe4:801:18::/64",
+            "2604:1380:4091:3000::/64",
+            "2604:1380:40e1:4700::/64",
+            "2604:1380:40f1:1700::/64",
+            "2604:1380:45d1:bf00::/64",
+            "2604:1380:45e1:a600::/64",
+            "2604:1380:45f1:9400::/64",
+            "2604:1380:4601:6200::/64",
+            "2604:1380:4601:6201::/64",
+            "2604:1380:4601:6202::/64",
+            "2604:1380:4641:6101::/64",
+            "2604:1380:4641:6102::/64",
+            "2604:1380:4091:3001::/64",
+            "2604:1380:4091:3002::/64",
+            "2604:1380:45e1:a601::/64",
+            "2604:1380:45e1:a602::/64",
+            "2604:1380:4641:6100::/64",
+            "2604:3fc0:2001::/48",
+            "2604:3fc0:3002::/48",
+            "2604:6800:258:1::/64",
+            "2604:7e00:30:3::/64",
+            "2604:7e00:50::/64",
+            "2604:b900:4001:76::/64",
+            "2607:f1d0:10:1::/64",
+            "2607:f6f0:3004::/48",
+            "2602:fb2b:120::/48",
+            "2607:f758:1220::/64",
+            "2607:f758:c300::/64",
+            "2607:fb58:9005::/48",
+            "2602:fb2b:100::/48",
+            "2607:ff70:3:2::/64",
+            "2610:190:6000:1::/64",
+            "2610:190:df01:5::/64",
+            "2a00:fa0:3::/48",
+            "2a00:fb01:400:100::/56",
+            "2a00:fb01:400::/56",
+            "2a00:fc0:5000:300::/64",
+            "2a01:138:900a::/48",
+            "2a01:2a8:a13c:1::/64",
+            "2a01:2a8:a13d:1::/64",
+            "2a01:2a8:a13e:1::/64",
+            "2a02:418:3002:0::/64",
+            "2a02:41b:300e::/48",
+            "2a02:800:2:2003::/64",
+            "2a04:9dc0:0:108::/64",
+            "2a05:d014:939:bf00::/56",
+            "2a05:d01c:d9:2b00::/56",
+            "2a05:d01c:e2c:a700::/56",
+            "2a0b:21c0:4003:2::/64",
+            "2a0b:21c0:4006:100::/56",
+            "2a0b:21c0:b002:2::/64",
+            "2a0f:cd00:0002::/56",
+            "fd00:2:1:1::/64",
+            "fda6:8d22:43e1::/48",
+          ],
+          ports: [22, 2497, 4100, 7070, 8080, 9090, 9091, 9100, 19100, 19531],
+          action: 1,
+          comment: "Default rule from template",
+          direction: 1,
+        }],
+        tcp_ports_for_node_whitelist: [2497, 4100, 8080],
+        udp_ports_for_node_whitelist: [4100],
+        ports_for_http_adapter_blacklist: [22, 2497, 4100, 7070, 8080, 9090, 9091, 9100, 19100, 19531],
+        max_simultaneous_connections_per_ip_address: 1000,
+    },
+
+    boundary_node_firewall: {
+        config_file: "/run/ic-node/nftables-ruleset/nftables.conf",
+        file_template: "table filter {\n\
+  set rate_limit {\n\
+    type ipv4_addr\n\
+    size 65535\n\
+    flags dynamic\n\
+  }\n\
+\n\
+  set connection_limit {\n\
+    type ipv4_addr\n\
+    size 65535\n\
+    flags dynamic\n\
+  }\n\
+\n\
+  set blackhole {\n\
+    type ipv4_addr\n\
+    size 65535\n\
+  }\n\
+\n\
+  counter rate_limit_v4_counter {}\n\
+  counter connection_limit_v4_counter {}\n\
+\n\
+  chain INPUT {\n\
+    type filter hook input priority 0; policy drop;\n\
+    iif lo accept\n\
+    ip saddr @blackhole drop\n\
+    ct state new add @rate_limit { ip saddr limit rate over 2000/minute burst 1000 packets } counter name rate_limit_v4_counter drop\n\
+    #  Notes about the rule below:\n\
+    #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip address.\n\
+    #   - The rule drops all new connections that goes over the configured limit.\n\
+    ct state new add @connection_limit { ip saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } counter name connection_limit_v4_counter drop\n\
+    icmp type { echo-reply, destination-unreachable, source-quench, echo-request, time-exceeded } accept\n\
+    ct state invalid drop\n\
+    ct state { established, related } accept\n\
+    ip saddr { 0.0.0.0-255.255.255.255 } ct state new tcp dport { 80, 443 } accept\n\
+\n\
+    <<IPv4_TCP_RULES>>\n\
+    <<IPv4_UDP_RULES>>\n\
+  }\n\
+\n\
+  chain FORWARD {\n\
+    type filter hook forward priority 0; policy drop;\n\
+  }\n\
+\n\
+  chain OUTPUT {\n\
+    type filter hook output priority 0; policy drop;\n\
+    oif \"lo\" accept\n\
+    icmp type { echo-reply, destination-unreachable, source-quench, echo-request, time-exceeded } accept\n\
+    ct state invalid drop\n\
+    ct state { established, related } accept\n\
+    ct state new tcp dport { 53, 80, 443, 8080 } accept\n\
+    ct state new udp dport { 53, 123 } accept\n\
+  }\n\
+}\n\
+\n\
+table ip6 filter {\n\
+  set rate_limit {\n\
+    type ipv6_addr\n\
+    size 65535\n\
+    flags dynamic\n\
+  }\n\
+\n\
+  set connection_limit {\n\
+    type ipv6_addr\n\
+    size 65535\n\
+    flags dynamic\n\
+  }\n\
+\n\
+  set blackhole6 {\n\
+    type ipv6_addr\n\
+    size 65535\n\
+  }\n\
+\n\
+  counter rate_limit_v6_counter {}\n\
+  counter connection_limit_v6_counter {}\n\
+\n\
+  chain INPUT {\n\
+    type filter hook input priority 0; policy drop;\n\
+    iif lo accept\n\
+    ip6 saddr @blackhole6 drop\n\
+    ct state new add @rate_limit { ip6 saddr limit rate over 2000/minute burst 1000 packets } counter name rate_limit_v6_counter drop\n\
+    #  Notes about the rule below:\n\
+    #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip6 address.\n\
+    #   - The rule drops all new connections that goes over the configured limit.\n\
+    ct state new add @connection_limit { ip6 saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } counter name connection_limit_v6_counter drop\n\
+    icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept\n\
+    ct state { invalid } drop\n\
+    ct state { established, related } accept\n\
+    ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport { 80, 443 } accept\n\
+\n\
+    <<IPv6_TCP_RULES>>\n\
+    <<IPv6_UDP_RULES>>\n\
+  }\n\
+\n\
+  chain FORWARD {\n\
+    type filter hook forward priority 0; policy drop;\n\
+  }\n\
+\n\
+  chain OUTPUT {\n\
+    type filter hook output priority 0; policy drop;\n\
+    oif \"lo\" accept\n\
+    icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-solicit, nd-neighbor-solicit, nd-neighbor-advert } accept\n\
+    ct state invalid drop\n\
+    ct state { established, related } accept\n\
+    ct state new tcp dport { 53, 80, 443, 8080 } accept\n\
+    ct state new udp dport { 53, 123 } accept\n\
+  }\n\
+}\n",
+        ipv4_tcp_rule_template: "ip saddr {<<IPv4_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv4_udp_rule_template: "ip saddr {<<IPv4_PREFIXES>>} udp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv6_tcp_rule_template: "ip6 saddr {<<IPv6_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv6_udp_rule_template: "ip6 saddr {<<IPv6_PREFIXES>>} udp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        default_rules: [{
+            ipv4_prefixes: [],
+            ipv6_prefixes: [
+                "2a00:fb01:400::/56",
+                "2602:fb2b:120::/48",
+                "2607:f6f0:3004::/48",
+                "2602:fb2b:110::/48",
+                "2001:4d78:40d::/48",
+                "2602:fb2b:100::/48",
+                "2607:fb58:9005::/48",
+                "2a0b:21c0:4006:100::/56",
+            ],
+            ports: [22, 7070, 9091, 9100, 9324, 19531],
+            action: 1,
+            comment: "Default rule from template",
+            direction: null,
+        }],
+        max_simultaneous_connections_per_ip_address: 400,
+    },
+
+    registration: {
+        nns_url: "{{ nns_url }}",
+        nns_pub_key_pem: "/var/lib/ic/data/nns_public_key.pem",
+        node_operator_pem: "/var/lib/ic/data/node_operator_private_key.pem"
+    },
+
+    malicious_behaviour: {{ malicious_behavior }},
+}

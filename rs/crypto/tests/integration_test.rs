@@ -1,6 +1,5 @@
 #![allow(clippy::unwrap_used)]
 
-use crate::keygen_utils::TestKeygenCrypto;
 use assert_matches::assert_matches;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_config::crypto::CryptoConfig;
@@ -8,19 +7,19 @@ use ic_crypto::CryptoComponent;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::{
     get_temp_file_path, start_new_remote_csp_vault_server_for_test,
 };
-use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
+use ic_crypto_internal_tls::generate_tls_key_pair_der;
 use ic_crypto_node_key_generation::generate_node_keys_once;
-use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_temp_crypto::{EcdsaSubnetConfig, NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_test_utils::files::temp_dir;
-use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
+use ic_crypto_test_utils_keygen::TestKeygenCrypto;
 use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
-use ic_crypto_utils_time::CurrentSystemTimeSource;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_test_utils_tls::x509_certificates::generate_ed25519_cert;
 use ic_interfaces::crypto::KeyManager;
 use ic_interfaces::crypto::{
     CheckKeysWithRegistryError, IDkgKeyRotationResult, KeyRotationOutcome,
 };
-use ic_interfaces::time_source::TimeSource;
+use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
@@ -28,22 +27,19 @@ use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_test_utilities::FastForwardTimeSource;
 use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
+use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::crypto::{AlgorithmId, KeyPurpose};
 use ic_types::time::GENESIS;
 use ic_types::{RegistryVersion, Time};
 use ic_types_test_utils::ids::node_test_id;
-use openssl::asn1::Asn1Time;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use slog::Level;
 use std::sync::Arc;
 use std::time::Duration;
 use strum::IntoEnumIterator;
-
-mod keygen_utils;
 
 const REG_V1: RegistryVersion = RegistryVersion::new(1);
 const REG_V2: RegistryVersion = RegistryVersion::new(2);
@@ -53,14 +49,14 @@ const TWO_WEEKS: Duration = Duration::from_secs(2 * 7 * 24 * 60 * 60);
 #[test]
 fn should_successfully_construct_crypto_component_with_default_config() {
     CryptoConfig::run_with_temp_config(|config| {
+        generate_node_keys_once(&config, None).expect("error generating node public keys");
         let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-        CryptoComponent::new_with_fake_node_id(
+        CryptoComponent::new(
             &config,
             None,
             Arc::new(registry_client),
-            node_test_id(42),
             no_op_logger(),
-            Arc::new(CurrentSystemTimeSource::new(no_op_logger())),
+            None,
         );
     })
 }
@@ -71,15 +67,16 @@ fn should_successfully_construct_crypto_component_with_remote_csp_vault() {
     let socket_path = start_new_remote_csp_vault_server_for_test(tokio_rt.handle());
     let temp_dir = temp_dir(); // temp dir with correct permissions
     let crypto_root = temp_dir.path().to_path_buf();
-    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path);
+    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path, None);
+    generate_node_keys_once(&config, Some(tokio_rt.handle().clone()))
+        .expect("error generating node public keys");
     let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-    CryptoComponent::new_with_fake_node_id(
+    CryptoComponent::new(
         &config,
         Some(tokio_rt.handle().clone()),
         Arc::new(registry_client),
-        node_test_id(42),
         no_op_logger(),
-        Arc::new(CurrentSystemTimeSource::new(no_op_logger())),
+        None,
     );
 }
 
@@ -89,80 +86,16 @@ fn should_not_construct_crypto_component_if_remote_csp_vault_is_missing() {
     let socket_path = get_temp_file_path(); // no CSP vault server is running
     let temp_dir = temp_dir(); // temp dir with correct permissions
     let crypto_root = temp_dir.path().to_path_buf();
-    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path);
+    let config = CryptoConfig::new_with_unix_socket_vault(crypto_root, socket_path, None);
     let tokio_rt = new_tokio_runtime();
     let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-    CryptoComponent::new_with_fake_node_id(
+    CryptoComponent::new(
         &config,
         Some(tokio_rt.handle().clone()),
         Arc::new(registry_client),
-        node_test_id(42),
         no_op_logger(),
-        FastForwardTimeSource::new(),
+        None,
     );
-}
-
-#[test]
-#[should_panic(expected = "Missing node signing public key")]
-fn should_not_construct_crypto_component_for_non_replica_process_without_keys() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-        let _crypto = CryptoComponent::new_for_non_replica_process(
-            &config,
-            None,
-            Arc::new(registry_client),
-            no_op_logger(),
-            None,
-        );
-    })
-}
-
-#[test]
-fn should_successfully_construct_crypto_component_for_non_replica_process_with_default_config_and_keys(
-) {
-    CryptoConfig::run_with_temp_config(|config| {
-        // Create node keys.
-        let _created_node_pks =
-            generate_node_keys_once(&config, None).expect("error generating node public keys");
-
-        let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-        let _crypto = CryptoComponent::new_for_non_replica_process(
-            &config,
-            None,
-            Arc::new(registry_client),
-            no_op_logger(),
-            None,
-        );
-    })
-}
-
-#[test]
-fn should_provide_public_keys_via_crypto_for_non_replica_process() {
-    CryptoConfig::run_with_temp_config(|config| {
-        // Create node keys.
-        let created_node_pks =
-            generate_node_keys_once(&config, None).expect("error generating node public keys");
-        let node_id = created_node_pks.node_id();
-
-        let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
-        let crypto = CryptoComponent::new_for_non_replica_process(
-            &config,
-            None,
-            Arc::new(registry_client),
-            no_op_logger(),
-            None,
-        );
-
-        let retrieved_node_pks = ValidNodePublicKeys::try_from(
-            crypto
-                .current_node_public_keys()
-                .expect("Failed to retrieve node public keys"),
-            node_id,
-        )
-        .expect("retrieved keys are not valid");
-
-        assert_eq!(created_node_pks, retrieved_node_pks);
-    })
 }
 
 // TODO(CRP-430): check/improve the test coverage of SKS checks.
@@ -583,11 +516,9 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_malformed() {
 
 #[test]
 fn should_fail_check_keys_with_registry_if_tls_cert_secret_key_is_missing() {
+    let rng = &mut reproducible_rng();
     let cert_without_corresponding_secret_key = X509PublicKeyCert {
-        certificate_der: generate_ed25519_cert()
-            .1
-            .to_der()
-            .expect("Failed to convert X509 to DER"),
+        certificate_der: generate_ed25519_cert(rng).cert_der(),
     };
     let crypto = TestKeygenCrypto::builder()
         .with_node_keys_to_generate(NodeKeysToGenerate::all())
@@ -812,13 +743,13 @@ fn should_fail_check_keys_with_registry_if_no_idkg_key_in_registry() {
 /// Ensure the structs are consistent and then update the test below.
 #[test]
 fn algorithm_id_should_match_algorithm_id_proto() {
-    let algorithm_id_variants = 17;
+    let algorithm_id_variants = 20;
     assert_eq!(AlgorithmId::iter().count(), algorithm_id_variants);
 
     for i in 0..algorithm_id_variants {
-        assert!(AlgorithmIdProto::from_i32(i as i32).is_some());
+        assert!(AlgorithmIdProto::try_from(i as i32).is_ok());
     }
-    assert!(AlgorithmIdProto::from_i32(algorithm_id_variants as i32).is_none());
+    assert!(AlgorithmIdProto::try_from(algorithm_id_variants as i32).is_err());
 
     assert_eq!(
         AlgorithmId::Placeholder as i32,
@@ -884,6 +815,18 @@ fn algorithm_id_should_match_algorithm_id_proto() {
     assert_eq!(
         AlgorithmId::MegaSecp256k1 as i32,
         AlgorithmIdProto::MegaSecp256k1 as i32
+    );
+    assert_eq!(
+        AlgorithmId::ThresholdEcdsaSecp256r1 as i32,
+        AlgorithmIdProto::ThresholdEcdsaSecp256r1 as i32
+    );
+    assert_eq!(
+        AlgorithmId::ThresholdSchnorrBip340 as i32,
+        AlgorithmIdProto::ThresholdSchnorrBip340 as i32
+    );
+    assert_eq!(
+        AlgorithmId::ThresholdEd25519 as i32,
+        AlgorithmIdProto::ThresholdEd25519 as i32
     );
 }
 
@@ -1019,11 +962,11 @@ fn should_fail_check_keys_with_registry_if_registry_tls_cert_has_no_matching_sec
         .build();
     let (tls_cert_without_corresponding_secret_key, _tls_cert_der) = {
         let mut csprng = ChaChaRng::from_seed([9u8; 32]);
-        let not_before = Asn1Time::from_unix(123).expect("unable to create Asn1Time");
-        let not_after = Asn1Time::from_unix(456).expect("unable to create Asn1Time");
+        let not_before = 123_u64;
+        let not_after_unix_time = 456_u64;
         let common_name = "another_common_name";
         let (x509_cert, _key_pair) =
-            generate_tls_key_pair_der(&mut csprng, common_name, &not_before, &not_after)
+            generate_tls_key_pair_der(&mut csprng, common_name, not_before, not_after_unix_time)
                 .expect("error generating TLS key pair");
         (
             ic_crypto_tls_interfaces::TlsPublicKeyCert::new_from_der(x509_cert.bytes.clone())
@@ -1456,7 +1399,7 @@ fn should_transition_from_latest_rotation_too_recent_to_rotating_local_key_with_
     let key_rotation_period = Duration::from_secs(5);
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
-    let time: Arc<dyn TimeSource> = Arc::new(CurrentSystemTimeSource::new(no_op_logger()));
+    let time: Arc<dyn TimeSource> = Arc::new(SysTimeSource::new());
     let crypto_component = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::all())
         .with_registry_client_and_data(

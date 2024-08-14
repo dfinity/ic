@@ -1,0 +1,12 @@
+[Unit]
+Description=User Manager for UID %i (DISABLED)
+After=systemd-user-sessions.service
+After=user-runtime-dir@%i.service
+Requires=user-runtime-dir@%i.service
+
+[Service]
+User=%i
+Type=simple
+RemainAfterExit=yes
+ExecStart=-/bin/true
+Slice=user-%i.slice

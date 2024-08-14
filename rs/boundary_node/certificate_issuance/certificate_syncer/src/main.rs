@@ -12,34 +12,25 @@ use axum::{
     handler::Handler,
     http::{Response, StatusCode},
     routing::get,
-    Extension, Router, Server,
+    Extension, Router,
 };
 use clap::Parser;
-use futures::future::TryFutureExt;
-use hyper::Uri;
-use hyper_rustls::HttpsConnectorBuilder;
 use import::Import;
 use nix::sys::signal::Signal;
-use opentelemetry::{
-    global,
-    sdk::{
-        export::metrics::aggregation,
-        metrics::{controllers, processors, selectors},
-        Resource,
-    },
-    Context, KeyValue,
-};
-use opentelemetry_prometheus::{ExporterBuilder, PrometheusExporter};
+use opentelemetry::{metrics::MeterProvider, KeyValue};
+use opentelemetry_prometheus::exporter;
+use opentelemetry_sdk::metrics::MeterProviderBuilder;
 use persist::Persist;
-use prometheus::{Encoder as PrometheusEncoder, TextEncoder};
-use tokio::task;
+use prometheus::{labels, Encoder as PrometheusEncoder, Registry, TextEncoder};
+use reqwest::{redirect::Policy, Url};
+use tokio::{net::TcpListener, task};
 use tracing::info;
 
 use crate::{
-    http::HyperClient,
+    http::ReqwestClient,
     import::CertificatesImporter,
     metrics::{MetricParams, WithMetrics},
-    persist::{Persister, WithDedup, WithEmpty},
+    persist::{Persister, WithDedup},
     reload::{Reloader, WithReload},
     render::Renderer,
     verify::{Parser as CertificateParser, Verifier, WithVerify},
@@ -55,8 +46,6 @@ mod verify;
 
 const SERVICE_NAME: &str = "certificate-syncer";
 
-const SECOND: Duration = Duration::from_secs(1);
-
 #[derive(Parser)]
 #[command(name = SERVICE_NAME)]
 struct Cli {
@@ -64,7 +53,7 @@ struct Cli {
     pid_path: PathBuf,
 
     #[clap(long, default_value = "http://127.0.0.1:3000/certificates")]
-    certificates_exporter_uri: Uri,
+    certificates_exporter_uri: Url,
 
     #[clap(long, default_value = "certs")]
     local_certificates_path: PathBuf,
@@ -80,6 +69,9 @@ struct Cli {
 
     #[arg(long, default_value = "127.0.0.1:9090")]
     metrics_addr: SocketAddr,
+
+    #[arg(long, default_value = "10")]
+    polling_interval_sec: u64,
 }
 
 #[tokio::main]
@@ -96,33 +88,30 @@ async fn main() -> Result<(), Error> {
         .context("failed to set global subscriber")?;
 
     // Metrics
-    let exporter = ExporterBuilder::new(
-        controllers::basic(
-            processors::factory(
-                selectors::simple::histogram([]),
-                aggregation::cumulative_temporality_selector(),
-            )
-            .with_memory(true),
-        )
-        .with_resource(Resource::new(vec![KeyValue::new("service", SERVICE_NAME)]))
-        .build(),
+    let registry: Registry = Registry::new_custom(
+        None,
+        Some(labels! {"service".into() => SERVICE_NAME.into()}),
     )
-    .init();
+    .unwrap();
+    let exporter = exporter().with_registry(registry.clone()).build()?;
+    let provider = MeterProviderBuilder::default()
+        .with_reader(exporter)
+        .build();
+    let meter = provider.meter(SERVICE_NAME);
 
-    let meter = global::meter(SERVICE_NAME);
-
-    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { exporter }));
+    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { registry }));
     let metrics_router = Router::new().route("/metrics", get(metrics_handler));
 
     // HTTP
-    let http_client = hyper::Client::builder().build(
-        HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .https_or_http()
-            .enable_http1()
-            .build(),
-    );
-    let http_client = HyperClient::new(http_client);
+    let http_client = reqwest::ClientBuilder::new()
+        .use_rustls_tls()
+        .http1_only()
+        .redirect(Policy::none())
+        .referer(false)
+        .build()
+        .unwrap();
+
+    let http_client = ReqwestClient::new(http_client);
     let http_client = WithMetrics(
         http_client,
         MetricParams::new(&meter, SERVICE_NAME, "http_request"),
@@ -151,11 +140,9 @@ async fn main() -> Result<(), Error> {
         renderer,
         cli.local_certificates_path,
         cli.local_configuration_path,
-        cli.domain_mappings_path,
     );
     let persister = WithReload(persister, reloader);
     let persister = WithDedup(persister, Arc::new(RwLock::new(None)));
-    let persister = WithEmpty(persister);
     let persister = WithMetrics(
         persister,
         MetricParams::new(&meter, SERVICE_NAME, "persist"),
@@ -165,7 +152,10 @@ async fn main() -> Result<(), Error> {
     // Runner
     let runner = Runner::new(importer, persister);
     let runner = WithMetrics(runner, MetricParams::new(&meter, SERVICE_NAME, "run"));
-    let runner = WithThrottle(runner, ThrottleParams::new(10 * SECOND));
+    let runner = WithThrottle(
+        runner,
+        ThrottleParams::new(Duration::from_secs(cli.polling_interval_sec)),
+    );
     let mut runner = runner;
 
     // Service
@@ -180,11 +170,12 @@ async fn main() -> Result<(), Error> {
                 let _ = runner.run().await;
             }
         }),
-        task::spawn(
-            Server::bind(&cli.metrics_addr)
-                .serve(metrics_router.into_make_service())
+        task::spawn(async move {
+            let listener = TcpListener::bind(&cli.metrics_addr).await.unwrap();
+            axum::serve(listener, metrics_router.into_make_service())
+                .await
                 .map_err(|err| anyhow!("server failed: {:?}", err))
-        ),
+        }),
     )
     .context(format!("{SERVICE_NAME} failed to run"))?;
 
@@ -193,13 +184,13 @@ async fn main() -> Result<(), Error> {
 
 #[derive(Clone)]
 struct MetricsHandlerArgs {
-    exporter: PrometheusExporter,
+    registry: Registry,
 }
 
 async fn metrics_handler(
-    Extension(MetricsHandlerArgs { exporter }): Extension<MetricsHandlerArgs>,
+    Extension(MetricsHandlerArgs { registry }): Extension<MetricsHandlerArgs>,
 ) -> Response<Body> {
-    let metric_families = exporter.registry().gather();
+    let metric_families = registry.gather();
 
     let encoder = TextEncoder::new();
 
@@ -303,10 +294,8 @@ impl<T: Run> Run for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        let cx = Context::current();
-
-        counter.add(&cx, 1, labels);
-        recorder.record(&cx, duration, labels);
+        counter.add(1, labels);
+        recorder.record(duration, labels);
 
         info!(action = action.as_str(), status, duration, error = ?out.as_ref().err());
 

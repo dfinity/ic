@@ -33,7 +33,7 @@ detail in the xref:ic-policy-structure[IC security policy structure] section.
 == Policy modules
 
 This section gives an overview of the organisation of
-security policy modules (to be found in +ic/ic-os/guestos/rootfs/prep+).
+security policy modules (to be found in +prep+).
 
 === +systemd-fixes+ and +misc-fixes+
 
@@ -60,9 +60,9 @@ filesystem tree contained in the root filesystem as "template".
 This makes it necessary for the fs creation utility to read all
 labels contained in this template directory.
 
-=== +journalbeat+
+=== +filebeat+
 
-Policy to confine the +journalbeat+ 3rd party software.
+Policy to confine the +filebeat+ 3rd party software.
 
 === +node_exporter+
 
@@ -133,7 +133,7 @@ represents the persistently stored payload data of the IC
 * +ic_crypto_store_t+: This label is applied to the directory +/var/lib/ic/crypto+
 as well as the files and directories below it.
 It represents the data managed by the crypto subsystem. At present there
-is no distinction between "private" and "public" key material, futher
+is no distinction between "private" and "public" key material, further
 refinement is required to eventually apply more restrictive policy to
 private key material.
 
@@ -174,7 +174,8 @@ to declutter the heavily overloaded role of the +ic_replica_t+
 domain).
 
 * +ic_canister_sandbox_exec_t+: This label is applied to the canister_sandbox
-_binary_ file located at +/opt/ic/bin/canister_sandbox+. Its purpose is
+_binary_ file located at +/opt/ic/bin/canister_sandbox+ and to the compiler_sandbox
+_binary_ file located at +/opt/ic/bin/compiler_sandbox+. Its purpose is
 to trigger transition into the +ic_canister_sandbox_t+ domain when executed.
 
 * +ic_canister_sandbox_t+: This label is applied to the canister
@@ -238,7 +239,7 @@ Allow to get own scheduler information (implicitly called by rust runtime), allo
 
 _Side effects_: getting scheduler information does not only allow to get scheduler information about _own_ process,
 but of all processes within same security domain (other sandboxes). There is no secret information in this
-(the scheduler settings are not changable anyways), but it could be "abused" to probe the pid space for
+(the scheduler settings are not changeable anyways), but it could be "abused" to probe the pid space for
 other sandbox processes. This may allow to learn about the _existence_ of other sandbox processes and
 their pid, but does not grant any interaction capability. It is not clear whether the +getsched+ call
 is needed at all, could probably just safely be denied.

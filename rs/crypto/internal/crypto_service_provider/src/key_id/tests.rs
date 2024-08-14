@@ -32,7 +32,6 @@ mod stability_tests {
     use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
     use ic_crypto_tls_interfaces::TlsPublicKeyCert;
     use ic_types::crypto::AlgorithmId;
-    use openssl::x509::X509;
     use std::fmt::Debug;
 
     #[derive(Debug)]
@@ -148,6 +147,10 @@ mod stability_tests {
             ParameterizedTest {
                 input: (AlgorithmId::MegaSecp256k1, bytes),
                 expected: "93549663cba48293c1d9a92de585a49581e05af84563aecd47fb7ab5fe9745c3",
+            },
+            ParameterizedTest {
+                input: (AlgorithmId::ThresholdEcdsaSecp256r1, bytes),
+                expected: "001b0b2aa06c51280e5267b7c9a5c5aa1691dcec75622eaa5c30d2ed08c5f25a",
             },
         ];
 
@@ -370,8 +373,8 @@ t7Ica9iKR8XXVy+W5eyW52YYPbGzXZ0FgxPcOMk3Tm2qx/zJJ7pkN+rJeIEgQHEj
 
         for test in &tests {
             assert_eq!(
-                KeyId::from(&test.input),
-                test.expected_key_id(),
+                KeyId::try_from(&test.input),
+                Ok(test.expected_key_id()),
                 "Parameterized test {:?} failed",
                 &test
             )
@@ -379,10 +382,7 @@ t7Ica9iKR8XXVy+W5eyW52YYPbGzXZ0FgxPcOMk3Tm2qx/zJJ7pkN+rJeIEgQHEj
     }
 
     fn tls_public_key_cert_from_pem(pem_cert: &str) -> TlsPublicKeyCert {
-        TlsPublicKeyCert::new_from_x509(
-            X509::from_pem(pem_cert.as_bytes()).expect("error parsing X509"),
-        )
-        .expect("error parsing certificate")
+        TlsPublicKeyCert::new_from_pem(pem_cert).expect("error parsing certificate")
     }
 
     fn csp_public_coefficients<T: AsRef<[u8]>>(public_key: T) -> CspPublicCoefficients {

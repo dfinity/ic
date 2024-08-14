@@ -34,7 +34,7 @@ Run `+cargo run --bin ic-nns-init -- --help+` for the usage and all available op
 
 An easy way to interact with the NNS for manual testing is through the Candid web UI and/or the `dfx canister` command.
 
-To get `dfx`, see https://sdk.dfinity.org/docs/quickstart/quickstart.html#download-and-install
+To get `dfx`, see https://internetcomputer.org/docs/current/developer-docs/getting-started/install/
 
 All commands in these instructions assume that the NNS dir `rs/nns` is the current dir.
 
@@ -103,7 +103,7 @@ Create proposal (web UI)
 Demo `get_proposal_info` and `get_pending_proposals`
 ----
 # create key material
-cargo run --bin ic-prep --release -- --working-dir /tmp/replicas --replica-version 0.8.0 --replica-download-url <download url> --nodes 1,1,192.168.0.101,20,30,0 2,1,192.168.0.102,30,40,0 3,1,192.168.0.200,40,50,0
+cargo run --bin ic-prep --release -- --working-dir /tmp/replicas --replica-version 0.8.0 --release-package-url <download url> --node idx:1,subnet_idx:1,xnet_api:"[::1]:2497",public_api:"[::1]:8080" --node idx:2,subnet_idx:1,xnet_api:"[::1]:2497",public_api:"[::1]:8080" --node idx:3,subnet_idx:1,xnet_api:"[::1]:2497",public_api:"[::1]:8080"
 
 # upload the key material to the registry
 cargo run --bin ic-admin -- --registry-url http://localhost:8080 add-all-pb-files-in-path /tmp/replicas/node-1

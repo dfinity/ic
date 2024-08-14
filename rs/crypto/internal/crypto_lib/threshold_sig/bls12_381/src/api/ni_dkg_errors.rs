@@ -174,6 +174,8 @@ pub enum CspDkgCreateReshareDealingError {
         receiver_index: NodeIndex,
         error: MalformedPublicKeyError,
     },
+    /// Error computing the KeyId of the secret key to be reshared.
+    ReshareKeyIdComputationError(InternalError),
     /// Precondition error: The key encryption key was not in the secret key
     /// store.
     ReshareKeyNotInSecretKeyStoreError(KeyNotFoundError),
@@ -271,6 +273,9 @@ impl From<CspDkgCreateReshareDealingError> for CspDkgCreateDealingError {
             }
             CspDkgCreateReshareDealingError::TransientInternalError(error) => {
                 CspDkgCreateDealingError::TransientInternalError(error)
+            }
+            CspDkgCreateReshareDealingError::ReshareKeyIdComputationError(_) => {
+                panic!("This error cannot be converted")
             }
         }
     }
@@ -430,7 +435,9 @@ pub enum CspDkgCreateReshareTranscriptError {
 /// A call to retain existing threshold keys failed.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CspDkgRetainThresholdKeysError {
-    // An internal error, e.g. an RPC error.
+    /// A key ID could not be computed from the public coefficients.
+    KeyIdInstantiationError(String),
+    /// An internal error, e.g. an RPC error.
     TransientInternalError(InternalError),
 }
 
@@ -480,6 +487,8 @@ pub enum CspDkgLoadPrivateKeyError {
         ciphertext_epoch: Epoch,
         secret_key_epoch: Epoch,
     },
+    /// The ID of the threshold key could not be computed from the public coefficients.
+    KeyIdInstantiationError(String),
     /// An internal error occurred.
     InternalError(InternalError),
     /// A transient internal error, e.g. an RPC error.

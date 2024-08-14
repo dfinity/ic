@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/temp_crypto",
     "//rs/crypto/tls_interfaces",
     "//rs/interfaces",
@@ -12,7 +13,10 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/test_utils",
+    "//rs/crypto/test_utils/reproducible_rng",
     "//rs/registry/fake",
     "//rs/registry/proto_data_provider",
     "//rs/types/types",

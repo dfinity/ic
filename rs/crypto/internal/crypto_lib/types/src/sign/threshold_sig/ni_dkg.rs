@@ -1,9 +1,9 @@
 //! Data types for non-interactive distributed key generation (NI-DKG).
 pub use crate::encrypt::forward_secure::{CspFsEncryptionPop, CspFsEncryptionPublicKey};
 use crate::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
+use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use std::hash::Hash;
 use strum_macros::IntoStaticStr;
 
@@ -71,18 +71,6 @@ pub enum CspNiDkgTranscript {
     Groth20_Bls12_381(ni_dkg_groth20_bls12_381::Transcript),
 }
 impl CspNiDkgTranscript {
-    /// Generates an instance of a transcript, for use in stub implementations.
-    /// TODO (CRP-824): Delete when stub implementations are complete.
-    pub fn placeholder_to_delete() -> Self {
-        use crate::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
-        CspNiDkgTranscript::Groth20_Bls12_381(ni_dkg_groth20_bls12_381::Transcript {
-            public_coefficients: ni_dkg_groth20_bls12_381::PublicCoefficientsBytes {
-                coefficients: vec![PublicKeyBytes([0; PublicKeyBytes::SIZE])],
-            },
-            receiver_data: BTreeMap::new(),
-        })
-    }
-
     /// From a general transcript to general public coefficients.
     pub fn public_coefficients(&self) -> CspPublicCoefficients {
         match &self {
@@ -90,6 +78,17 @@ impl CspNiDkgTranscript {
                 CspPublicCoefficients::Bls12_381(transcript.public_coefficients.clone())
             }
         }
+    }
+}
+
+impl TryFrom<&InitialNiDkgTranscriptRecord> for CspNiDkgTranscript {
+    type Error = String;
+
+    fn try_from(
+        initial_ni_dkg_transcript_record: &InitialNiDkgTranscriptRecord,
+    ) -> Result<Self, Self::Error> {
+        serde_cbor::from_slice(&initial_ni_dkg_transcript_record.internal_csp_transcript)
+            .map_err(|e| format!("Error deserializing CspNiDkgTranscript: {}", e))
     }
 }
 
@@ -191,11 +190,11 @@ pub mod ni_dkg_groth20_bls12_381 {
         type Error = ();
 
         fn try_from(item: ZKProofDecHelper) -> Result<Self, Self::Error> {
-            let first_move_b: ArrayVec<[G1Bytes; NUM_ZK_REPETITIONS]> =
+            let first_move_b: ArrayVec<G1Bytes, NUM_ZK_REPETITIONS> =
                 item.first_move_b.into_iter().collect();
-            let first_move_c: ArrayVec<[G1Bytes; NUM_ZK_REPETITIONS]> =
+            let first_move_c: ArrayVec<G1Bytes, NUM_ZK_REPETITIONS> =
                 item.first_move_c.into_iter().collect();
-            let response_z_s: ArrayVec<[FrBytes; NUM_ZK_REPETITIONS]> =
+            let response_z_s: ArrayVec<FrBytes, NUM_ZK_REPETITIONS> =
                 item.response_z_s.into_iter().collect();
             Ok(ZKProofDec {
                 first_move_y0: item.first_move_y0,

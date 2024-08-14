@@ -41,9 +41,9 @@ impl Verifier for VerifierImpl {
 mod tests {
     use super::*;
     use assert_matches::assert_matches;
-    use ic_test_utilities::{
-        consensus::fake::*, crypto::CryptoReturningOk, types::ids::subnet_test_id,
-    };
+    use ic_test_utilities::crypto::CryptoReturningOk;
+    use ic_test_utilities_consensus::fake::*;
+    use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         consensus::certification::{Certification, CertificationContent},
         crypto::{

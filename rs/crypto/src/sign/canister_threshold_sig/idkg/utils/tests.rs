@@ -63,7 +63,7 @@ mod index_and_dealing_of_dealer {
         assert_matches!(
             index_and_dealing_of_dealer(dealer_id, &transcript),
             Err(IDkgDealingExtractionError::SerializationError { internal_error })
-            if internal_error.contains("Error deserializing a signed dealing: ThresholdEcdsaSerializationError")
+            if internal_error.contains("Error deserializing a signed dealing: CanisterThresholdSerializationError")
         );
     }
 
@@ -252,7 +252,7 @@ mod retrieve_mega_public_key_from_registry {
                 assert_matches!(
                     retrieve_mega_public_key_from_registry(&node_id, &registry_client, registry_client.get_latest_version()),
                     Err(MegaKeyFromRegistryError::UnsupportedAlgorithm { algorithm_id })
-                    if algorithm_id == AlgorithmIdProto::from_i32(wrong_algorithm_id as i32)
+                    if algorithm_id == AlgorithmIdProto::try_from(wrong_algorithm_id as i32).ok()
                 );
             });
     }

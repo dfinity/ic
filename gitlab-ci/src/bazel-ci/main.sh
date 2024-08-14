@@ -6,23 +6,68 @@
 
 set -eufo pipefail
 
+ic_version_rc_only="0000000000000000000000000000000000000000"
+if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
+    ic_version_rc_only="${CI_COMMIT_SHA}"
+    s3_upload="True"
+fi
+
+if [[ "${CI_COMMIT_BRANCH:-}" =~ ^hotfix-.* ]]; then
+    ic_version_rc_only="${CI_COMMIT_SHA}"
+    s3_upload="True"
+fi
+
+# We run the diff if the following is true:
+# - bazel target is //...
+# - merge request pipeline but not merge train pipeline
+# - target branch is not rc--*
+# - uploading to S3 has not been requested
+
+if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]] || [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[S3_UPLOAD]"* ]]; then
+    RUN_ON_DIFF_ONLY="false"
+    s3_upload="True"
+fi
+
+if [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
+    && [ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ] \
+    && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
+    # get bazel targets that changed within the MR
+    BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/gitlab-ci/src/bazel-ci/diff.sh)
+fi
+
+# pass info about bazel targets to bazel-targets file
+echo "$BAZEL_TARGETS" >bazel-targets
+
+# if bazel targets is empty we don't need to run any tests
+if [ -z "${BAZEL_TARGETS:-}" ]; then
+    echo "No bazel targets to build"
+    exit 0
+fi
+
 echo "Building as user: $(whoami)"
 echo "Bazel version: $(bazel version)"
 
 AWS_CREDS="${HOME}/.aws/credentials"
 mkdir -p "$(dirname "${AWS_CREDS}")"
-ln -fs "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
 
-ic_version_rc_only="0000000000000000000000000000000000000000"
-if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
-    ic_version_rc_only="${CI_COMMIT_SHA}"
+# handle github and gitlab differently
+if [ -n "${AWS_SHARED_CREDENTIALS_FILE+x}" ]; then
+    ln -fs "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
+elif [ -n "${AWS_SHARED_CREDENTIALS_CONTENT+x}" ]; then
+    echo "$AWS_SHARED_CREDENTIALS_CONTENT" >"$AWS_CREDS"
+else
+    echo '$AWS_SHARED_CREDENTIALS_CONTENT or $AWS_SHARED_CREDENTIALS_FILE has to be set' >&2
+    exit 1
 fi
 
-# Many actions seem to be using much more resources than bazel expects.
-# Running too many of them in parallel causes some tests that expect to get some resources within limited time to fail.
-# TODO(IDX-2225): reconsider limit when we will use Remute Execution.
-if [ "$(nproc)" -gt 32 ]; then
-    BAZEL_EXTRA_ARGS="--jobs=32 ${BAZEL_EXTRA_ARGS}"
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+    echo "upload_artifacts=true" >>"$GITHUB_OUTPUT"
+fi
+
+if [ -z "${KUBECONFIG:-}" ] && [ ! -z "${KUBECONFIG_TNET_CREATOR_LN1:-}" ]; then
+    export KUBECONFIG=$(mktemp -t kubeconfig-XXXXXX)
+    echo $KUBECONFIG_TNET_CREATOR_LN1 >$KUBECONFIG
+    trap 'rm -f -- "$KUBECONFIG"' EXIT
 fi
 
 # shellcheck disable=SC2086
@@ -31,10 +76,11 @@ buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" 
     ${BAZEL_STARTUP_ARGS} \
     ${BAZEL_COMMAND} \
     ${BAZEL_CI_CONFIG} \
-    --build_metadata=BUILDBUDDY_LINKS="[GitLab CI Job](${CI_JOB_URL})" \
+    --build_metadata=BUILDBUDDY_LINKS="[CI Job](${CI_JOB_URL})" \
     --ic_version="${CI_COMMIT_SHA}" \
     --ic_version_rc_only="${ic_version_rc_only}" \
-    ${BAZEL_EXTRA_ARGS} \
+    --s3_upload="${s3_upload:-"False"}" \
+    ${BAZEL_EXTRA_ARGS:-} \
     ${BAZEL_TARGETS} \
     2>&1 \
     | perl -pe 'BEGIN { select(STDOUT); $| = 1 } s/(.*Streaming build results to:.*)/\o{33}[92m$1\o{33}[0m/'

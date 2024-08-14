@@ -1,15 +1,17 @@
 use crate::convert::{from_hex, make_read_state_from_update};
-use crate::errors::ApiError;
-use crate::models::RosettaSupportedKeyPair;
-use crate::models::{ConstructionCombineResponse, EnvelopePair, SignatureType, SignedTransaction};
+use crate::errors::{ApiError, Details};
+use crate::models::{
+    ConstructionCombineResponse, EnvelopePair, SignatureType, SignedTransaction,
+    UnsignedTransaction,
+};
 use crate::request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler};
 use crate::{convert, models};
-use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
-use ic_canister_client_sender::Secp256k1KeyPair;
 use ic_types::messages::{
     Blob, HttpCallContent, HttpReadStateContent, HttpRequestEnvelope, MessageId,
 };
+use rosetta_core::models::{Ed25519KeyPair, RosettaSupportedKeyPair, Secp256k1KeyPair};
 use std::collections::HashMap;
+use std::str::FromStr;
 
 impl RosettaRequestHandler {
     /// Create Network Transaction from Signatures.
@@ -28,9 +30,14 @@ impl RosettaRequestHandler {
             signatures_by_sig_data.insert(sig_data, sig);
         }
 
-        let unsigned_transaction = msg.unsigned_transaction()?;
-
-        let mut envelopes: SignedTransaction = vec![];
+        let unsigned_transaction = UnsignedTransaction::from_str(&msg.unsigned_transaction)
+            .map_err(|e| {
+                ApiError::invalid_request(format!(
+                    "Cannot deserialize signed transaction in /construction/combine response: {}",
+                    e
+                ))
+            })?;
+        let mut requests = vec![];
 
         for (request_type, update) in unsigned_transaction.updates {
             let mut request_envelopes = vec![];
@@ -60,19 +67,49 @@ impl RosettaRequestHandler {
                 let envelope = match transaction_signature.signature_type {
                     SignatureType::Ed25519 => Ok(HttpRequestEnvelope::<HttpCallContent> {
                         content: HttpCallContent::Call { update },
-                        sender_pubkey: Some(Blob(EdKeypair::der_encode_pk(
-                            EdKeypair::hex_decode_pk(&transaction_signature.public_key.hex_bytes)?,
-                        )?)),
+                        sender_pubkey: Some(Blob(
+                            Ed25519KeyPair::der_encode_pk(
+                                Ed25519KeyPair::hex_decode_pk(
+                                    &transaction_signature.public_key.hex_bytes,
+                                )
+                                .map_err(|err| {
+                                    ApiError::InvalidPublicKey(
+                                        false,
+                                        Details::from(format!("{:?}", err)),
+                                    )
+                                })?,
+                            )
+                            .map_err(|err| {
+                                ApiError::InvalidPublicKey(
+                                    false,
+                                    Details::from(format!("{:?}", err)),
+                                )
+                            })?,
+                        )),
                         sender_sig: Some(Blob(from_hex(&transaction_signature.hex_bytes)?)),
                         sender_delegation: None,
                     }),
                     SignatureType::Ecdsa => Ok(HttpRequestEnvelope::<HttpCallContent> {
                         content: HttpCallContent::Call { update },
-                        sender_pubkey: Some(Blob(Secp256k1KeyPair::der_encode_pk(
-                            Secp256k1KeyPair::hex_decode_pk(
-                                &transaction_signature.public_key.hex_bytes,
-                            )?,
-                        )?)),
+                        sender_pubkey: Some(Blob(
+                            Secp256k1KeyPair::der_encode_pk(
+                                Secp256k1KeyPair::hex_decode_pk(
+                                    &transaction_signature.public_key.hex_bytes,
+                                )
+                                .map_err(|err| {
+                                    ApiError::InvalidPublicKey(
+                                        false,
+                                        Details::from(format!("{:?}", err)),
+                                    )
+                                })?,
+                            )
+                            .map_err(|err| {
+                                ApiError::InvalidPublicKey(
+                                    false,
+                                    Details::from(format!("{:?}", err)),
+                                )
+                            })?,
+                        )),
                         sender_sig: Some(Blob(from_hex(&transaction_signature.hex_bytes)?)),
                         sender_delegation: None,
                     }),
@@ -85,19 +122,49 @@ impl RosettaRequestHandler {
                 let read_state_envelope = match read_state_signature.signature_type {
                     SignatureType::Ed25519 => Ok(HttpRequestEnvelope::<HttpReadStateContent> {
                         content: HttpReadStateContent::ReadState { read_state },
-                        sender_pubkey: Some(Blob(EdKeypair::der_encode_pk(
-                            EdKeypair::hex_decode_pk(&read_state_signature.public_key.hex_bytes)?,
-                        )?)),
+                        sender_pubkey: Some(Blob(
+                            Ed25519KeyPair::der_encode_pk(
+                                Ed25519KeyPair::hex_decode_pk(
+                                    &read_state_signature.public_key.hex_bytes,
+                                )
+                                .map_err(|err| {
+                                    ApiError::InvalidPublicKey(
+                                        false,
+                                        Details::from(format!("{:?}", err)),
+                                    )
+                                })?,
+                            )
+                            .map_err(|err| {
+                                ApiError::InvalidPublicKey(
+                                    false,
+                                    Details::from(format!("{:?}", err)),
+                                )
+                            })?,
+                        )),
                         sender_sig: Some(Blob(from_hex(&read_state_signature.hex_bytes)?)),
                         sender_delegation: None,
                     }),
                     SignatureType::Ecdsa => Ok(HttpRequestEnvelope::<HttpReadStateContent> {
                         content: HttpReadStateContent::ReadState { read_state },
-                        sender_pubkey: Some(Blob(Secp256k1KeyPair::der_encode_pk(
-                            Secp256k1KeyPair::hex_decode_pk(
-                                &transaction_signature.public_key.hex_bytes,
-                            )?,
-                        )?)),
+                        sender_pubkey: Some(Blob(
+                            Secp256k1KeyPair::der_encode_pk(
+                                Secp256k1KeyPair::hex_decode_pk(
+                                    &transaction_signature.public_key.hex_bytes,
+                                )
+                                .map_err(|err| {
+                                    ApiError::InvalidPublicKey(
+                                        false,
+                                        Details::from(format!("{:?}", err)),
+                                    )
+                                })?,
+                            )
+                            .map_err(|err| {
+                                ApiError::InvalidPublicKey(
+                                    false,
+                                    Details::from(format!("{:?}", err)),
+                                )
+                            })?,
+                        )),
 
                         sender_sig: Some(Blob(from_hex(&read_state_signature.hex_bytes)?)),
                         sender_delegation: None,
@@ -113,15 +180,23 @@ impl RosettaRequestHandler {
                 });
             }
 
-            envelopes.push((request_type, request_envelopes));
+            requests.push((request_type, request_envelopes));
         }
-
-        let envelopes = hex::encode(serde_cbor::to_vec(&envelopes).map_err(|_| {
-            ApiError::InternalError(false, "Serialization of envelope failed".into())
-        })?);
+        let signed_transaction = SignedTransaction { requests };
 
         Ok(ConstructionCombineResponse {
-            signed_transaction: envelopes,
+            signed_transaction: hex::encode(serde_cbor::to_vec(&signed_transaction).map_err(
+                |err| {
+                    ApiError::InternalError(
+                        false,
+                        format!(
+                            "Serialization of signed transaction {:?} failed: {:?}",
+                            signed_transaction, err
+                        )
+                        .into(),
+                    )
+                },
+            )?),
         })
     }
 }

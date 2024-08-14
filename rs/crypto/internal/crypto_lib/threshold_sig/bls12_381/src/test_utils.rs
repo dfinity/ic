@@ -11,12 +11,12 @@ mod tests;
 /// `seed`.
 pub fn select_n<T: Clone>(seed: Seed, n: NumberOfNodes, list: &[T]) -> Vec<Option<T>> {
     assert!(n.get() as usize <= list.len());
-    let mut rng = seed.into_rng();
+    let rng = &mut seed.into_rng();
     let mut ans: Vec<Option<T>> = vec![None; list.len()];
     for (index, element) in list
         .iter()
         .enumerate()
-        .choose_multiple(&mut rng, n.get() as usize)
+        .choose_multiple(rng, n.get() as usize)
     {
         ans[index] = Some(element.clone());
     }

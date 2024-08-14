@@ -2,6 +2,7 @@ mod handle_add_hotkey;
 mod handle_change_auto_stake_maturity;
 mod handle_disburse;
 mod handle_follow;
+mod handle_list_neurons;
 mod handle_merge_maturity;
 mod handle_neuron_info;
 mod handle_register_vote;
@@ -13,61 +14,71 @@ mod handle_stake;
 mod handle_stake_maturity;
 mod handle_start_dissolve;
 mod handle_stop_dissolve;
+pub mod list_known_neurons_response;
+pub mod list_neurons_response;
 mod neuron_response;
 pub mod pending_proposals_response;
 pub mod proposal_info_response;
 
-use core::ops::Deref;
-
 use candid::{Decode, Encode};
+use core::ops::Deref;
 use ic_agent::agent::{RejectCode, RejectResponse};
-use ic_nns_governance::pb::v1::ProposalInfo;
-use std::convert::TryFrom;
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use ic_nns_governance_api::pb::v1::{KnownNeuron, ListKnownNeuronsResponse, ProposalInfo};
+use std::{
+    convert::TryFrom,
+    sync::{atomic::AtomicBool, Arc},
+    thread, time,
+    time::{Duration, Instant},
+};
 use url::Url;
 
 use async_trait::async_trait;
-use log::{debug, error, warn};
 use reqwest::{Client, StatusCode};
+use tracing::{debug, error, warn};
 
 use dfn_candid::CandidOne;
-use ic_ledger_canister_blocks_synchronizer::blocks::Blocks;
-use ic_ledger_canister_blocks_synchronizer::canister_access::CanisterAccess;
-use ic_ledger_canister_blocks_synchronizer::certification::VerificationInfo;
-use ic_ledger_canister_blocks_synchronizer::ledger_blocks_sync::{
-    LedgerBlocksSynchronizer, LedgerBlocksSynchronizerMetrics,
+use ic_ledger_canister_blocks_synchronizer::{
+    blocks::{Blocks, RosettaBlocksMode},
+    canister_access::CanisterAccess,
+    certification::VerificationInfo,
+    ledger_blocks_sync::{LedgerBlocksSynchronizer, LedgerBlocksSynchronizerMetrics},
 };
-use ic_nns_governance::pb::v1::{manage_neuron::NeuronIdOrSubaccount, GovernanceError, NeuronInfo};
-use ic_types::messages::{HttpCallContent, MessageId};
-use ic_types::CanisterId;
-use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, messages::SignedRequestBytes};
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron::NeuronIdOrSubaccount, GovernanceError, NeuronInfo,
+};
+use ic_types::{
+    crypto::threshold_sig::ThresholdSigPublicKey,
+    messages::{HttpCallContent, MessageId, SignedRequestBytes},
+    CanisterId,
+};
 use icp_ledger::{BlockIndex, Symbol, TransferFee, TransferFeeArgs, DEFAULT_TRANSFER_FEE};
 use on_wire::{FromWire, IntoWire};
 
-use crate::convert;
-use crate::errors::{ApiError, Details, ICError};
-use crate::ledger_client::neuron_response::NeuronResponse;
-use crate::ledger_client::{
-    handle_add_hotkey::handle_add_hotkey,
-    handle_change_auto_stake_maturity::handle_change_auto_stake_maturity,
-    handle_disburse::handle_disburse, handle_follow::handle_follow,
-    handle_merge_maturity::handle_merge_maturity, handle_neuron_info::handle_neuron_info,
-    handle_register_vote::handle_register_vote, handle_remove_hotkey::handle_remove_hotkey,
-    handle_send::handle_send, handle_set_dissolve_timestamp::handle_set_dissolve_timestamp,
-    handle_spawn::handle_spawn, handle_stake::handle_stake,
-    handle_stake_maturity::handle_stake_maturity, handle_start_dissolve::handle_start_dissolve,
-    handle_stop_dissolve::handle_stop_dissolve,
+use crate::{
+    convert,
+    errors::{ApiError, Details, ICError},
+    ledger_client::{
+        handle_add_hotkey::handle_add_hotkey,
+        handle_change_auto_stake_maturity::handle_change_auto_stake_maturity,
+        handle_disburse::handle_disburse, handle_follow::handle_follow,
+        handle_merge_maturity::handle_merge_maturity, handle_neuron_info::handle_neuron_info,
+        handle_register_vote::handle_register_vote, handle_remove_hotkey::handle_remove_hotkey,
+        handle_send::handle_send, handle_set_dissolve_timestamp::handle_set_dissolve_timestamp,
+        handle_spawn::handle_spawn, handle_stake::handle_stake,
+        handle_stake_maturity::handle_stake_maturity, handle_start_dissolve::handle_start_dissolve,
+        handle_stop_dissolve::handle_stop_dissolve, neuron_response::NeuronResponse,
+    },
+    models::{EnvelopePair, SignedTransaction},
+    request::{request_result::RequestResult, transaction_results::TransactionResults, Request},
+    request_types::{RequestType, Status},
+    transaction_id::TransactionIdentifier,
 };
-use crate::models::{EnvelopePair, Object, SignedTransaction};
-use crate::request::request_result::RequestResult;
-use crate::request::transaction_results::TransactionResults;
-use crate::request::Request;
-use crate::request_types::{RequestType, Status};
-use crate::transaction_id::TransactionIdentifier;
+use rosetta_core::objects::ObjectMap;
 
-use self::proposal_info_response::ProposalInfoResponse;
+use self::{
+    handle_list_neurons::handle_list_neurons, list_neurons_response::ListNeuronsResponse,
+    proposal_info_response::ProposalInfoResponse,
+};
 
 struct LedgerBlocksSynchronizerMetricsImpl {}
 
@@ -102,7 +113,9 @@ pub trait LedgerAccess {
     ) -> Result<NeuronInfo, ApiError>;
     async fn proposal_info(&self, proposal_id: u64) -> Result<ProposalInfo, ApiError>;
     async fn pending_proposals(&self) -> Result<Vec<ProposalInfo>, ApiError>;
+    async fn list_known_neurons(&self) -> Result<Vec<KnownNeuron>, ApiError>;
     async fn transfer_fee(&self) -> Result<TransferFee, ApiError>;
+    async fn rosetta_blocks_mode(&self) -> RosettaBlocksMode;
 }
 
 pub struct LedgerClient {
@@ -121,6 +134,7 @@ pub enum OperationOutput {
     NeuronId(u64),
     NeuronResponse(NeuronResponse),
     ProposalInfoResponse(ProposalInfoResponse),
+    ListNeuronsResponse(ListNeuronsResponse),
 }
 
 fn public_key_to_der(key: ThresholdSigPublicKey) -> Result<Vec<u8>, ApiError> {
@@ -139,6 +153,7 @@ impl LedgerClient {
         store_max_blocks: Option<u64>,
         offline: bool,
         root_key: Option<ThresholdSigPublicKey>,
+        enable_rosetta_blocks: bool,
     ) -> Result<LedgerClient, ApiError> {
         let canister_access = if offline {
             None
@@ -163,6 +178,7 @@ impl LedgerClient {
             store_max_blocks,
             verification_info,
             Box::new(LedgerBlocksSynchronizerMetricsImpl {}),
+            enable_rosetta_blocks,
         )
         .await?;
 
@@ -206,7 +222,7 @@ impl LedgerClient {
             }
             Err(e) => {
                 if e.contains("has no query method") || e.contains("not found") {
-                    log::warn!("Symbol endpoint not present in the ledger canister. Couldn't verify token symbol.");
+                    tracing::warn!("Symbol endpoint not present in the ledger canister. Couldn't verify token symbol.");
                 } else {
                     return Err(ApiError::internal_error(format!(
                         "Failed to fetch symbol name from the ledger: {}",
@@ -247,14 +263,18 @@ impl LedgerAccess for LedgerClient {
         &self.token_symbol
     }
 
-    async fn submit(&self, envelopes: SignedTransaction) -> Result<TransactionResults, ApiError> {
+    async fn submit(
+        &self,
+        signed_transaction: SignedTransaction,
+    ) -> Result<TransactionResults, ApiError> {
         if self.offline {
             return Err(ApiError::NotAvailableOffline(false, Details::default()));
         }
         let start_time = Instant::now();
         let http_client = reqwest::Client::new();
 
-        let mut results: TransactionResults = envelopes
+        let mut results: TransactionResults = signed_transaction
+            .requests
             .iter()
             .map(|e| {
                 Request::try_from(e).map(|_type| RequestResult {
@@ -269,8 +289,10 @@ impl LedgerAccess for LedgerClient {
             .collect::<Result<Vec<_>, _>>()?
             .into();
 
-        for ((request_type, request), result) in
-            envelopes.into_iter().zip(results.operations.iter_mut())
+        for ((request_type, request), result) in signed_transaction
+            .requests
+            .into_iter()
+            .zip(results.operations.iter_mut())
         {
             if let Err(e) = self
                 .do_request(&http_client, start_time, request_type, request, result)
@@ -330,12 +352,13 @@ impl LedgerAccess for LedgerClient {
             return Err(ApiError::NotAvailableOffline(false, Details::default()));
         }
         let agent = &self.canister_access.as_ref().unwrap().agent;
+        let arg = Encode!().unwrap();
         let bytes = agent
             .query(
                 &self.governance_canister_id.get().0,
                 "get_pending_proposals",
             )
-            .with_arg(Encode!().unwrap())
+            .with_arg(arg)
             .call()
             .await
             .map_err(|e| ApiError::invalid_request(format!("{}", e)))?;
@@ -348,6 +371,30 @@ impl LedgerAccess for LedgerClient {
                 )),
             )
         })
+    }
+    async fn list_known_neurons(&self) -> Result<Vec<KnownNeuron>, ApiError> {
+        if self.offline {
+            return Err(ApiError::NotAvailableOffline(false, Details::default()));
+        }
+        let agent = &self.canister_access.as_ref().unwrap().agent;
+        let arg = Encode!().unwrap();
+        let bytes = agent
+            .query(&self.governance_canister_id.get().0, "list_known_neurons")
+            .with_arg(arg)
+            .call()
+            .await
+            .map_err(|e| ApiError::invalid_request(format!("{}", e)))?;
+        Decode!(bytes.as_slice(), ListKnownNeuronsResponse)
+            .map_err(|err| {
+                ApiError::InvalidRequest(
+                    false,
+                    Details::from(format!(
+                        "Could not decode ListKnownNeuronsResponse response: {}",
+                        err
+                    )),
+                )
+            })
+            .map(|res| res.known_neurons)
     }
     async fn neuron_info(
         &self,
@@ -443,6 +490,11 @@ impl LedgerAccess for LedgerClient {
             }),
         }
     }
+
+    async fn rosetta_blocks_mode(&self) -> RosettaBlocksMode {
+        let blockchain = self.ledger_blocks_synchronizer.blockchain.read().await;
+        blockchain.rosetta_blocks_mode
+    }
 }
 
 impl LedgerClient {
@@ -470,7 +522,7 @@ impl LedgerClient {
             .find(|EnvelopePair { update, .. }| {
                 let ingress_expiry =
                     ic_types::Time::from_nanos_since_unix_epoch(update.content.ingress_expiry());
-                let ingress_start = ingress_expiry.saturating_sub_duration(
+                let ingress_start = ingress_expiry.saturating_sub(
                     ic_constants::MAX_INGRESS_TTL.saturating_sub(ic_constants::PERMITTED_DRIFT),
                 );
                 ingress_start <= now && ingress_expiry > now
@@ -578,6 +630,8 @@ impl LedgerClient {
                 }
             }
 
+            // Sleep for 100 milliseconds to avoid spamming the ICP ledger in case of repeated errors
+            thread::sleep(time::Duration::from_millis(100));
             // Bump the poll interval and compute the next poll time (based on current wall
             // time, so we don't spin without delay after a slow poll).
             poll_interval = poll_interval
@@ -610,10 +664,13 @@ impl LedgerClient {
                         result.neuron_id = Some(neuron_id);
                     }
                     OperationOutput::NeuronResponse(response) => {
-                        result.response = Some(Object::from(response));
+                        result.response = Some(ObjectMap::try_from(response)?);
                     }
                     OperationOutput::ProposalInfoResponse(response) => {
-                        result.response = Some(Object::from(response));
+                        result.response = Some(ObjectMap::try_from(response)?);
+                    }
+                    OperationOutput::ListNeuronsResponse(response) => {
+                        result.response = Some(ObjectMap::try_from(response)?)
                     }
                 }
                 result.status = Status::Completed;
@@ -764,6 +821,7 @@ impl LedgerClient {
             RequestType::RegisterVote { .. } => handle_register_vote(bytes),
             RequestType::StakeMaturity { .. } => handle_stake_maturity(bytes),
             RequestType::NeuronInfo { .. } => handle_neuron_info(bytes),
+            RequestType::ListNeurons { .. } => handle_list_neurons(bytes),
             RequestType::RemoveHotKey { .. } => handle_remove_hotkey(bytes),
             RequestType::Send => handle_send(bytes),
             RequestType::SetDissolveTimestamp { .. } => handle_set_dissolve_timestamp(bytes),

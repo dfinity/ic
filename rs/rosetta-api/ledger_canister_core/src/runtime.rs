@@ -21,3 +21,15 @@ pub trait Runtime {
         In: ArgumentEncoder + Send,
         Out: for<'a> ArgumentDecoder<'a>;
 }
+
+/// Returns the total amount of memory (heap, stable memory, etc) that has been allocated.
+#[cfg(target_arch = "wasm32")]
+pub fn total_memory_size_bytes() -> usize {
+    const WASM_PAGE_SIZE_BYTES: usize = 65536;
+    core::arch::wasm32::memory_size(0) * WASM_PAGE_SIZE_BYTES
+}
+
+#[cfg(not(any(target_arch = "wasm32")))]
+pub fn total_memory_size_bytes() -> usize {
+    0
+}

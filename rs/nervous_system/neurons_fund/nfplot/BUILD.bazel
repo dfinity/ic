@@ -1,0 +1,25 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+# See rs/nervous_system/feature_test.md
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/nervous_system/neurons_fund",
+    "//rs/sns/governance",
+    "//rs/sns/swap",
+    "@crate_index//:candid",
+    "@crate_index//:colored",
+    "@crate_index//:ic-agent",
+    "@crate_index//:rgb",
+    "@crate_index//:rust_decimal",
+    "@crate_index//:serde",
+    "@crate_index//:textplots",
+    "@crate_index//:tokio",
+]
+
+rust_binary(
+    name = "nfplot",
+    srcs = ["src/main.rs"],
+    deps = DEPENDENCIES,
+)

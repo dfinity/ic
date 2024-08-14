@@ -20,7 +20,7 @@ pub(crate) fn get_propose_to_prepare_canister_migration_command(
     source_subnet_id: SubnetId,
     destination_subnet_id: SubnetId,
 ) -> IcAdmin {
-    let mut ic_admin = admin_helper.get_ic_admin_cmd_base(&admin_helper.neuron_args);
+    let mut ic_admin = admin_helper.get_ic_admin_cmd_base();
 
     ic_admin
         .add_positional_argument("propose-to-prepare-canister-migration")
@@ -32,7 +32,8 @@ pub(crate) fn get_propose_to_prepare_canister_migration_command(
             canister_id_ranges.iter().map(canister_id_range_to_string),
         );
 
-    AdminHelper::add_proposer_args(&mut ic_admin, &admin_helper.neuron_args);
+    admin_helper.add_proposer_args(&mut ic_admin);
+
     ic_admin
 }
 
@@ -45,7 +46,7 @@ pub(crate) fn get_propose_to_reroute_canister_ranges_command(
     source_subnet_id: SubnetId,
     destination_subnet_id: SubnetId,
 ) -> IcAdmin {
-    let mut ic_admin = admin_helper.get_ic_admin_cmd_base(&admin_helper.neuron_args);
+    let mut ic_admin = admin_helper.get_ic_admin_cmd_base();
 
     ic_admin
         .add_positional_argument("propose-to-reroute-canister-ranges")
@@ -57,7 +58,8 @@ pub(crate) fn get_propose_to_reroute_canister_ranges_command(
             canister_id_ranges.iter().map(canister_id_range_to_string),
         );
 
-    AdminHelper::add_proposer_args(&mut ic_admin, &admin_helper.neuron_args);
+    admin_helper.add_proposer_args(&mut ic_admin);
+
     ic_admin
 }
 
@@ -70,7 +72,7 @@ pub(crate) fn get_propose_to_complete_canister_migration_command(
     source_subnet_id: SubnetId,
     destination_subnet_id: SubnetId,
 ) -> IcAdmin {
-    let mut ic_admin = admin_helper.get_ic_admin_cmd_base(&admin_helper.neuron_args);
+    let mut ic_admin = admin_helper.get_ic_admin_cmd_base();
 
     ic_admin
         .add_positional_argument("propose-to-complete-canister-migration")
@@ -84,7 +86,8 @@ pub(crate) fn get_propose_to_complete_canister_migration_command(
             canister_id_ranges.iter().map(canister_id_range_to_string),
         );
 
-    AdminHelper::add_proposer_args(&mut ic_admin, &admin_helper.neuron_args);
+    admin_helper.add_proposer_args(&mut ic_admin);
+
     ic_admin
 }
 
@@ -96,12 +99,8 @@ pub(crate) fn get_halt_subnet_at_cup_height_command(
     subnet_id: SubnetId,
     key: &Option<String>,
 ) -> IcAdmin {
-    let mut ic_admin = admin_helper.get_ic_admin_cmd_base(&admin_helper.neuron_args);
-    AdminHelper::add_propose_to_update_subnet_base(
-        &mut ic_admin,
-        &admin_helper.neuron_args,
-        subnet_id,
-    );
+    let mut ic_admin = admin_helper.get_ic_admin_cmd_base();
+    admin_helper.add_propose_to_update_subnet_base(&mut ic_admin, subnet_id);
 
     ic_admin
         .add_argument(

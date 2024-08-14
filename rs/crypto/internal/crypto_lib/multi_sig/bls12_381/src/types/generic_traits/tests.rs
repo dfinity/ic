@@ -26,7 +26,7 @@ proptest! {
     #[test]
     fn debug_should_redact_secretkey_bytes(secret_key_bytes: SecretKeyBytes) {
         let debug_str = format!("{:?}", secret_key_bytes);
-        let raw_str = base64::encode(&secret_key_bytes.0.expose_secret());
+        let raw_str = base64::encode(secret_key_bytes.0.expose_secret());
         assert!(!debug_str.contains(&raw_str));
         assert_eq!(debug_str, "REDACTED");
     }

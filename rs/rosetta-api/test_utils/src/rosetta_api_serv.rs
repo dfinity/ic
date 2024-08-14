@@ -3,15 +3,17 @@ use ic_rosetta_api::models::*;
 use ic_types::CanisterId;
 
 use icp_ledger::{AccountIdentifier, BlockIndex};
+use rosetta_core::request_types::NetworkRequest;
 use slog::info;
 
 use crate::store_threshold_sig_pk;
-use ic_rosetta_api::models::operation::Operation;
+use ic_rosetta_api::models::Operation;
 use ic_types::messages::Blob;
 use rand::{seq::SliceRandom, thread_rng};
 use reqwest::Client as HttpClient;
 use reqwest::StatusCode as HttpStatusCode;
-use std::convert::TryFrom;
+use rosetta_core::request_types::MetadataRequest;
+use rosetta_core::response_types::NetworkListResponse;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -62,8 +64,6 @@ impl RosettaApiHandle {
         workspace_path: String,
         root_key_blob: Option<&Blob>,
     ) -> Self {
-        let log_conf_file = format!("{}/ic_rosetta_api_log_config.yml", workspace_path);
-
         let workspace = tempfile::Builder::new()
             .prefix("rosetta_api_tmp_")
             .tempdir_in(workspace_path)
@@ -88,9 +88,6 @@ impl RosettaApiHandle {
 
         args.push("--port".to_string());
         args.push(api_port);
-
-        args.push("--log-config-file".to_string());
-        args.push(log_conf_file);
 
         args.push("--store-location".to_string());
         args.push(format!("{}/data", workspace.path().display()));
@@ -222,9 +219,13 @@ impl RosettaApiHandle {
         let req = ConstructionDeriveRequest {
             network_identifier: self.network_id(),
             public_key: pk,
-            metadata: Some(ConstructionDeriveRequestMetadata {
-                account_type: AccountType::Neuron { neuron_index: 0 },
-            }),
+            metadata: Some(
+                ConstructionDeriveRequestMetadata {
+                    account_type: AccountType::Neuron { neuron_index: 0 },
+                }
+                .try_into()
+                .unwrap(),
+            ),
         };
         to_rosetta_response(
             self.post_json_request(
@@ -292,7 +293,7 @@ impl RosettaApiHandle {
     ) -> Result<Result<ConstructionMetadataResponse, RosettaError>, String> {
         let req = ConstructionMetadataRequest {
             network_identifier: self.network_id(),
-            options,
+            options: options.map(|op| op.try_into().unwrap()),
             public_keys,
         };
         to_rosetta_response(
@@ -331,7 +332,7 @@ impl RosettaApiHandle {
     ) -> Result<Result<ConstructionPayloadsResponse, RosettaError>, String> {
         let req = ConstructionPayloadsRequest {
             network_identifier: self.network_id(),
-            metadata,
+            metadata: metadata.map(|m| m.try_into().unwrap()),
             operations,
             public_keys,
         };
@@ -351,11 +352,11 @@ impl RosettaApiHandle {
         // Shuffle the messages to check whether the server picks a
         // valid one to send to the IC.
         let mut rng = thread_rng();
-        for request in signed_transaction.iter_mut() {
+        for request in signed_transaction.requests.iter_mut() {
             request.1.shuffle(&mut rng);
         }
 
-        let req = ConstructionSubmitRequest::new(self.network_id(), signed_transaction);
+        let req = ConstructionSubmitRequest::new(self.network_id(), signed_transaction.to_string());
 
         to_rosetta_response(
             self.post_json_request(
@@ -413,7 +414,7 @@ impl RosettaApiHandle {
             network_identifier: self.network_id(),
             account_identifier: ic_rosetta_api::convert::to_model_account_identifier(&acc),
             block_identifier: None,
-            metadata: Some(account_balance_metadata),
+            metadata: Some(account_balance_metadata.into()),
         };
 
         to_rosetta_response(
@@ -429,10 +430,12 @@ impl RosettaApiHandle {
         &self,
         acc: AccountIdentifier,
     ) -> Result<Result<AccountBalanceResponse, RosettaError>, String> {
-        let req = AccountBalanceRequest::new(
-            self.network_id(),
-            ic_rosetta_api::convert::to_model_account_identifier(&acc),
-        );
+        let req = AccountBalanceRequest {
+            network_identifier: self.network_id(),
+            account_identifier: ic_rosetta_api::convert::to_model_account_identifier(&acc),
+            block_identifier: None,
+            metadata: None,
+        };
 
         to_rosetta_response(
             self.post_json_request(
@@ -445,7 +448,7 @@ impl RosettaApiHandle {
 
     pub async fn block_at(&self, idx: u64) -> Result<Result<BlockResponse, RosettaError>, String> {
         let block_id = PartialBlockIdentifier {
-            index: Some(i64::try_from(idx).unwrap()),
+            index: Some(idx),
             hash: None,
         };
         let req = BlockRequest::new(self.network_id(), block_id);
@@ -486,7 +489,7 @@ impl RosettaApiHandle {
         let now = std::time::SystemTime::now();
         while now.elapsed().unwrap() < TIMEOUT {
             if let Ok(Ok(resp)) = self.network_status().await {
-                if resp.current_block_identifier.index as u64 >= tip_idx {
+                if resp.current_block_identifier.index >= tip_idx {
                     return Ok(());
                 }
             }

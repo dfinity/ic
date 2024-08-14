@@ -1,11 +1,11 @@
 //! The ingress pool public interface.
-use crate::artifact_pool::{UnvalidatedArtifact, ValidatedArtifact};
+use crate::{consensus_pool::ValidatedArtifact, p2p::consensus::UnvalidatedArtifact};
 use ic_types::{
-    artifact::{IngressMessageAttribute, IngressMessageId},
-    crypto::CryptoHash,
+    artifact::IngressMessageId,
     messages::{MessageId, SignedIngress},
     CountBytes, NodeId, Time,
 };
+
 // tag::interface[]
 
 /// IngressObject is the format stored in the unvalidated/validated sections of
@@ -56,13 +56,7 @@ pub type UnvalidatedIngressArtifact = UnvalidatedArtifact<IngressPoolObject>;
 /// Change set for processing unvalidated ingress messages
 pub type ChangeSet = Vec<ChangeAction>;
 
-pub type IngressChangeArtifact = (
-    IngressMessageId,
-    NodeId,
-    usize,
-    IngressMessageAttribute,
-    CryptoHash,
-);
+pub type IngressChangeArtifact = (IngressMessageId, NodeId);
 
 /// Change actions applicable to the ingress pool.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -108,34 +102,12 @@ pub trait PoolSection<T> {
 ///
 /// - The unvalidated section contains artifacts that have been received but
 ///   haven't yet been validated.
-pub trait IngressPool {
+pub trait IngressPool: Send + Sync {
     /// Validated Ingress Pool Section
     fn validated(&self) -> &dyn PoolSection<ValidatedIngressArtifact>;
 
     /// Unvalidated Ingress Pool Section
     fn unvalidated(&self) -> &dyn PoolSection<UnvalidatedIngressArtifact>;
-}
-
-/// Indicate whether something should be selected, and whether selection should
-/// continue:
-/// - 'Selected': select the object and continue;
-/// - 'Skip': skip the object and continue;
-/// - 'Abort': abort the selection process.
-pub enum SelectResult<T> {
-    Selected(T),
-    Skip,
-    Abort,
-}
-
-/// A query interface that selects qualifying artifacts from the validated pool.
-#[allow(clippy::type_complexity)]
-pub trait IngressPoolSelect: Send + Sync {
-    /// Select qualifying objects from the validated pool.
-    fn select_validated<'a>(
-        &self,
-        range: std::ops::RangeInclusive<Time>,
-        f: Box<dyn FnMut(&IngressPoolObject) -> SelectResult<SignedIngress> + 'a>,
-    ) -> Vec<SignedIngress>;
 }
 
 /// Interface to throttle user ingress messages

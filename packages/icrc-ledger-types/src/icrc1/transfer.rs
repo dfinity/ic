@@ -7,7 +7,7 @@ use std::fmt;
 pub type NumTokens = Nat;
 pub type BlockIndex = Nat;
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct TransferArg {
     #[serde(default)]
     pub from_subaccount: Option<Subaccount>,
@@ -51,7 +51,7 @@ impl From<Memo> for ByteBuf {
     }
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum TransferError {
     BadFee { expected_fee: NumTokens },
     BadBurn { min_burn_amount: NumTokens },

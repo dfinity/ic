@@ -8,22 +8,22 @@
 use std::{
     collections::BTreeMap,
     convert::TryInto,
-    fmt,
     fs::{self, File},
     io,
     path::{Path, PathBuf},
     str::FromStr,
 };
 
-use openssl::pkey;
+use prost::Message;
 use serde_json::Value;
 use thiserror::Error;
 use url::Url;
+use x509_cert::der; // re-export of der crate
+use x509_cert::spki; // re-export of spki crate
 
 use ic_interfaces_registry::{
     RegistryDataProvider, RegistryTransportRecord, ZERO_REGISTRY_VERSION,
 };
-use ic_nns_common::registry::encode_or_panic;
 use ic_protobuf::registry::firewall::v1::{
     FirewallAction, FirewallRule, FirewallRuleDirection, FirewallRuleSet,
 };
@@ -76,7 +76,7 @@ pub const IC_ROOT_PUB_KEY_PATH: &str = "nns_public_key.pem";
 ///
 /// For testing purposes, the bootstrapped nodes can be configured to have a
 /// node operator. The corresponding allowance is the number of configured
-/// initial nodes mulitplied by this value.
+/// initial nodes multiplied by this value.
 pub const INITIAL_NODE_ALLOWANCE_MULTIPLIER: usize = 2;
 
 pub const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
@@ -173,21 +173,6 @@ impl TopologyConfig {
     }
 }
 
-#[derive(Clone)]
-pub struct NodeOperatorPublicKey {
-    pkey_wrapper: pkey::PKey<pkey::Public>,
-}
-
-// We need to implement a wrapper and the debug trait since PKey does not
-// implement Debug
-impl fmt::Debug for NodeOperatorPublicKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NodeOperatorPublicKey")
-            .field("pkey_wrapper", &self.pkey_wrapper.public_key_to_der())
-            .finish()
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct NodeOperatorEntry {
     _name: String,
@@ -209,7 +194,7 @@ impl From<NodeOperatorEntry> for NodeOperatorRecord {
             node_provider_principal_id: item
                 .node_provider_principal_id
                 .map(|x| x.to_vec())
-                .unwrap_or_else(Vec::new),
+                .unwrap_or_default(),
             dc_id: item.dc_id.to_lowercase(),
             rewardable_nodes: item.rewardable_nodes,
             ipv6: item.ipv6,
@@ -272,12 +257,13 @@ pub struct IcConfig {
     /// run with --use_specified_ids_allocation_range flag.
     use_specified_ids_allocation_range: bool,
 
-    /// The hex-formatted SHA-256 hash measurement of the SEV guest launch context.
-    initial_guest_launch_measurement_sha256_hex: Option<String>,
-
     /// Whitelisted firewall prefixes for initial registry state, separated by
     /// commas.
     whitelisted_prefixes: Option<String>,
+
+    /// Whitelisted ports for the firewall prefixes, separated by
+    /// commas. Port 8080 is always included.
+    whitelisted_ports: Option<String>,
 }
 
 #[derive(Error, Debug)]
@@ -292,12 +278,6 @@ pub enum InitializeError {
     JsonError {
         #[from]
         source: serde_json::Error,
-    },
-
-    #[error("OpenSSL error: {source}")]
-    OpenSslError {
-        #[from]
-        source: openssl::error::ErrorStack,
     },
 
     #[error("principal did not parse: {source}")]
@@ -348,11 +328,15 @@ impl IcConfig {
         self.whitelisted_prefixes = whitelisted_prefixes;
     }
 
+    pub fn set_whitelisted_ports(&mut self, whitelisted_ports: Option<String>) {
+        self.whitelisted_ports = whitelisted_ports;
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new<P: AsRef<Path>>(
         target_dir: P,
         topology_config: TopologyConfig,
-        replica_version_id: Option<ReplicaVersion>,
+        replica_version_id: ReplicaVersion,
         generate_subnet_records: bool,
         nns_subnet_index: Option<u64>,
         release_package_url: Option<Url>,
@@ -361,12 +345,11 @@ impl IcConfig {
         initial_node_operator: Option<PrincipalId>,
         initial_node_provider: Option<PrincipalId>,
         ssh_readonly_access_to_unassigned_nodes: Vec<String>,
-        initial_guest_launch_measurement_sha256_hex: Option<String>,
     ) -> Self {
         Self {
             target_dir: PathBuf::from(target_dir.as_ref()),
             topology_config,
-            initial_replica_version_id: replica_version_id.unwrap_or_default(),
+            initial_replica_version_id: replica_version_id,
             generate_subnet_records,
             nns_subnet_index,
             initial_release_package_url: release_package_url,
@@ -378,8 +361,8 @@ impl IcConfig {
             initial_node_provider,
             ssh_readonly_access_to_unassigned_nodes,
             use_specified_ids_allocation_range: false,
-            initial_guest_launch_measurement_sha256_hex,
             whitelisted_prefixes: None,
+            whitelisted_ports: None,
         }
     }
 
@@ -400,19 +383,30 @@ impl IcConfig {
         let mut mutations = self.initial_mutations.clone();
 
         if let Some(prefixes) = self.whitelisted_prefixes {
+            let ports = if let Some(ports) = self.whitelisted_ports {
+                ports
+                    .split(',')
+                    .map(|port| port.parse::<u32>().unwrap())
+                    .chain(std::iter::once(8080))
+                    .collect()
+            } else {
+                vec![8080]
+            };
+
             mutations.extend(vec![insert(
                 make_firewall_rules_record_key(&FirewallRulesScope::Global),
-                encode_or_panic(&FirewallRuleSet {
+                FirewallRuleSet {
                     entries: vec![FirewallRule {
                         ipv4_prefixes: Vec::new(),
                         ipv6_prefixes: prefixes.split(',').map(|v| v.to_string()).collect(),
-                        ports: vec![8080],
+                        ports,
                         action: FirewallAction::Allow as i32,
                         comment: "Globally allow provided prefixes for testing".to_string(),
                         user: None,
                         direction: Some(FirewallRuleDirection::Inbound as i32),
                     }],
-                }),
+                }
+                .encode_to_vec(),
             )]);
         }
 
@@ -472,8 +466,12 @@ impl IcConfig {
         // Set the routing table after initializing the subnet ids
         let routing_table_record = if self.generate_subnet_records {
             PbRoutingTable::from(if self.use_specified_ids_allocation_range {
-                self.topology_config.get_routing_table_with_specified_ids_allocation_range(
-                ).expect("Failed to create a routing table with an allocation range for the creation of canisters with specified Canister IDs.")
+                self.topology_config
+                    .get_routing_table_with_specified_ids_allocation_range()
+                    .expect(
+                        "Failed to create a routing table with an allocation range \
+                         for the creation of canisters with specified Canister IDs.",
+                    )
             } else {
                 self.topology_config
                     .get_routing_table(self.nns_subnet_index.as_ref())
@@ -538,7 +536,7 @@ impl IcConfig {
         let replica_version_record = ReplicaVersionRecord {
             release_package_sha256_hex: self.initial_release_package_sha256_hex.unwrap_or_default(),
             release_package_urls: opturl_to_string_vec(self.initial_release_package_url),
-            guest_launch_measurement_sha256_hex: self.initial_guest_launch_measurement_sha256_hex,
+            guest_launch_measurement_sha256_hex: None,
         };
 
         let blessed_replica_versions_record = BlessedReplicaVersions {
@@ -640,16 +638,6 @@ impl IcConfig {
             let v = ZERO_REGISTRY_VERSION + RegistryVersion::from(i as u64 + 1);
             registry_store.store(v, cle)
         })?;
-
-        // Set certified time.
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Could not get system time");
-        let nanos = now.as_nanos() as u64;
-        registry_store
-            .update_certified_time(nanos)
-            .expect("Could not update certified time.");
 
         Ok(InitializedIc {
             target_dir: self.target_dir,
@@ -784,7 +772,18 @@ impl IcConfig {
                     }),
                 }?;
                 let provider_buf: Vec<u8> = fs::read(provider_path.as_path())?;
-                let _ = pkey::PKey::public_key_from_der(&provider_buf)?;
+
+                // Sanity check that public key is in DER format.
+                use der::Decode;
+                spki::SubjectPublicKeyInfoOwned::from_der(&provider_buf).map_err(|e| {
+                    InitializeError::IoError {
+                        source: io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("input is not a DER-encoded X.509 SubjectPublicKeyInfo (SPKI): {e}."),
+                        ),
+                    }
+                })?;
+
                 Some(PrincipalId::new_self_authenticating(&provider_buf))
             } else {
                 None

@@ -1,28 +1,29 @@
 use dfn_candid::{candid, candid_one};
 use ic_canister_client_sender::Sender;
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_KEYPAIR,
+    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
+    TEST_NEURON_2_OWNER_KEYPAIR,
 };
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance::{
-    governance::{TimeWarp, ONE_DAY_SECONDS},
-    pb::v1::{
-        add_or_remove_node_provider::Change,
-        manage_neuron::{self, Command, NeuronIdOrSubaccount},
-        manage_neuron_response::Command as CommandResponse,
-        neuron::DissolveState,
-        proposal::Action,
-        AddOrRemoveNodeProvider, ManageNeuron, ManageNeuronResponse, Neuron, NodeProvider,
-        Proposal, ProposalInfo, Vote,
-    },
+use ic_nns_governance::governance::TimeWarp;
+use ic_nns_governance_api::pb::v1::{
+    add_or_remove_node_provider::Change,
+    manage_neuron::{self, Command, NeuronIdOrSubaccount},
+    manage_neuron_response::Command as CommandResponse,
+    neuron::DissolveState,
+    proposal::Action,
+    AddOrRemoveNodeProvider, ManageNeuron, ManageNeuronResponse, Neuron, NodeProvider, Proposal,
+    ProposalInfo, Vote,
 };
 use ic_nns_test_utils::{
-    common::NnsInitPayloadsBuilder, ids::TEST_NEURON_2_ID, itest_helpers::NnsCanisters,
+    common::NnsInitPayloadsBuilder,
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
 };
 
 #[test]
 fn test_deadline_is_extended_with_wait_for_quiet() {
-    ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let mut nns_init_payload_builder = NnsInitPayloadsBuilder::new();
 
         nns_init_payload_builder.with_initial_invariant_compliant_mutations();
@@ -81,7 +82,11 @@ fn test_deadline_is_extended_with_wait_for_quiet() {
             .await
             .expect("Error calling the manage_neuron api.");
 
-        let pid = match result.expect("Error making proposal").command.unwrap() {
+        let pid = match result
+            .panic_if_error("Error making proposal")
+            .command
+            .unwrap()
+        {
             CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
             some_error => panic!(
                 "Cannot find proposal id in response. The response is: {:?}",

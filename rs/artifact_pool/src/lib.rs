@@ -3,8 +3,8 @@ pub mod certification_pool;
 pub mod consensus_pool;
 mod consensus_pool_cache;
 pub mod dkg_pool;
-pub mod ecdsa_pool;
 mod height_index;
+pub mod idkg_pool;
 pub mod ingress_pool;
 mod inmemory_pool;
 mod metrics;
@@ -16,12 +16,16 @@ pub mod backup;
 mod lmdb_iterator;
 mod lmdb_pool;
 
-#[cfg(feature = "rocksdb_backend")]
+// On macOS we have support for rocksdb in addition to lmdb as lmdb
+// historically caused issues.
+
+#[cfg(target_os = "macos")]
 mod rocksdb_iterator;
-#[cfg(feature = "rocksdb_backend")]
+#[cfg(target_os = "macos")]
 mod rocksdb_pool;
 
-use ic_types::ReplicaVersion;
+use ic_interfaces::{consensus_pool::ValidatedArtifact, p2p::consensus::UnvalidatedArtifact};
+use ic_types::{ReplicaVersion, Time};
 use std::convert::TryFrom;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -55,6 +59,40 @@ pub fn ensure_persistent_pool_replica_version_compatibility(pool_path: PathBuf) 
         }
         std::fs::create_dir_all(&pool_path).expect("Couldn't create a directory");
         set_replica_version(replica_version_file_path, &ReplicaVersion::default());
+    }
+}
+
+/// A trait to get timestamp.
+pub trait HasTimestamp {
+    fn timestamp(&self) -> Time;
+}
+
+impl<T> HasTimestamp for ValidatedArtifact<T> {
+    fn timestamp(&self) -> Time {
+        self.timestamp
+    }
+}
+
+impl<T> HasTimestamp for UnvalidatedArtifact<T> {
+    fn timestamp(&self) -> Time {
+        self.timestamp
+    }
+}
+
+/// A trait similar to Into, but without its restrictions.
+pub trait IntoInner<T>: AsRef<T> {
+    fn into_inner(self) -> T;
+}
+
+impl<T> IntoInner<T> for ValidatedArtifact<T> {
+    fn into_inner(self) -> T {
+        self.msg
+    }
+}
+
+impl<T> IntoInner<T> for UnvalidatedArtifact<T> {
+    fn into_inner(self) -> T {
+        self.message
     }
 }
 

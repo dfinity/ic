@@ -4,10 +4,8 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
-    fmt::Display,
     fs,
     io::{self, BufRead},
-    net::SocketAddr,
     path::{Path, PathBuf},
     str::FromStr,
     time::Duration,
@@ -17,30 +15,29 @@ use anyhow::{bail, Context, Result};
 use clap::Parser;
 use reqwest::blocking::ClientBuilder;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use thiserror::Error;
 use url::Url;
 
 use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
-    node::{NodeConfiguration, NodeIndex},
-    subnet_configuration::{SubnetConfig, SubnetIndex},
+    node::{Node, NodeConfiguration, NodeIndex},
+    subnet_configuration::{SubnetConfig, SubnetIndex, SubnetRunningState},
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, PrincipalId, ReplicaVersion};
 
 /// the filename of the update disk image, as published on the cdn
-const UPD_IMG_FILENAME: &str = "update-img.tar.gz";
+const UPD_IMG_FILENAME: &str = "update-img.tar.zst";
 /// in case the replica version id is specified on the command line, but not the
 /// release package url and hash, the following url-template will be used to
 /// fetch the sha256 of the corresponding image.
 const UPD_IMG_DEFAULT_SHA256_URL: &str =
-    "https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/SHA256SUMS";
+    "https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img-dev/SHA256SUMS";
 /// in case the replica version id is specified on the command line, but not the
 /// release package url and hash, the following url-template will be used to
 /// specify the update image.
 const UPD_IMG_DEFAULT_URL: &str =
-    "https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/update-img.tar.gz";
+    "https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img-dev/update-img.tar.zst";
 const CDN_HTTP_ATTEMPTS: usize = 3;
 const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(12);
@@ -55,37 +52,13 @@ struct CliArgs {
     #[clap(long, parse(try_from_str = ReplicaVersion::try_from))]
     pub replica_version: Option<ReplicaVersion>,
 
-    /// URL from which to download the replica binary
-    ///
-    /// deprecated.
-    #[clap(long, parse(try_from_str = url::Url::parse))]
-    pub replica_download_url: Option<Url>,
-
-    /// sha256-hash of the replica binary in hex.
-    ///
-    /// deprecated.
-    #[clap(long)]
-    pub replica_hash: Option<String>,
-
-    /// URL from which to download the orchestrator binary
-    ///
-    /// deprecated.
-    #[clap(long, parse(try_from_str = url::Url::parse))]
-    pub orchestrator_download_url: Option<Url>,
-
-    /// sha256-hash of the orchestrator binary in hex.
-    ///
-    /// deprecated.
-    #[clap(long)]
-    pub orchestrator_hash: Option<String>,
-
     /// The URL against which a HTTP GET request will return a release
     /// package that corresponds to this version.
     ///
     /// If replica-version is specified and both release-package-download-url
     /// and release-package-sha256-hex are unspecified, the
     /// release-package-download-url will default to
-    /// https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/update-img.tar.gz
+    /// https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/update-img.tar.zst
     #[clap(long, parse(try_from_str = url::Url::parse))]
     pub release_package_download_url: Option<Url>,
 
@@ -96,12 +69,12 @@ struct CliArgs {
     /// If replica-version is specified and both release-package-download-url
     /// and release-package-sha256-hex are unspecified, the
     /// release-package-download-url will downloaded from
-    /// https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img/SHA256SUMS
+    /// https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img-dev/SHA256SUMS
     #[clap(long)]
     pub release_package_sha256_hex: Option<String>,
 
-    /// List of tuples describing the nodes
-    #[clap(long, parse(try_from_str = parse_nodes_deprecated), group = "node_spec", multiple_values(true))]
+    /// JSON5 node definition
+    #[clap(long = "node", group = "node_spec", multiple_values(true), parse(try_from_str = Node::from_json5_without_braces))]
     pub nodes: Vec<Node>,
 
     /// Path to working directory for node states.
@@ -167,25 +140,30 @@ struct CliArgs {
     #[clap(long, allow_hyphen_values = true)]
     pub max_ingress_bytes_per_message: Option<i64>,
 
+    /// Maximum size of a block payload in bytes.
+    #[clap(long)]
+    pub max_block_payload_size: Option<u64>,
+
     /// if release-package-download-url is not specified and this option is
     /// specified, the corresponding update image field in the blessed replica
     /// version record is left empty.
     #[clap(long)]
     pub allow_empty_update_image: bool,
 
-    /// The hex-formatted SHA-256 hash measurement of the SEV guest launch context.
-    #[clap(long)]
-    pub guest_launch_measurement_sha256_hex: Option<String>,
-
     /// Whether or not to assign canister ID allocation range for specified IDs to subnet.
     /// Used only for local and testnet replicas.
-    #[clap(long = "use-specified-ids-allocation-range")]
+    #[clap(long)]
     use_specified_ids_allocation_range: bool,
 
     /// Whitelisted firewall prefixes for initial registry state, separated by
     /// commas.
-    #[clap(long = "whitelisted-prefixes")]
+    #[clap(long)]
     whitelisted_prefixes: Option<String>,
+
+    /// Whitelisted ports for the firewall prefixes, separated by
+    /// commas. Port 8080 is always included.
+    #[clap(long)]
+    whitelisted_ports: Option<String>,
 }
 
 fn main() -> Result<()> {
@@ -204,6 +182,7 @@ fn main() -> Result<()> {
         }
     }
 
+    let replica_version = valid_args.replica_version_id.unwrap_or_default();
     let root_subnet_idx = valid_args.nns_subnet_index.unwrap_or(0);
     let mut topology_config = TopologyConfig::default();
     for (i, (subnet_id, nodes)) in valid_args.subnets.iter().enumerate() {
@@ -212,27 +191,29 @@ fn main() -> Result<()> {
         } else {
             SubnetType::Application
         };
+
         let subnet_configuration = SubnetConfig::new(
             *subnet_id,
             nodes.to_owned(),
-            valid_args.replica_version_id.clone(),
-            None,
+            replica_version.clone(),
             valid_args.max_ingress_bytes_per_message,
-            None,
-            None,
-            None,
-            None,
+            /*max_ingress_messages_per_block=*/ None,
+            valid_args.max_block_payload_size,
+            /*unit_delay=*/ None,
+            /*initial_notary_delay=*/ None,
             valid_args.dkg_interval_length,
-            None,
+            /*dkg_dealings_per_block=*/ None,
             subnet_type,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
+            /*max_instructions_per_message=*/ None,
+            /*max_instructions_per_round=*/ None,
+            /*max_instructions_per_install_code=*/ None,
+            /*features=*/ None,
+            /*chain_key_config=*/ None,
+            /*max_number_of_canisters=*/ None,
             valid_args.ssh_readonly_access.clone(),
             valid_args.ssh_backup_access.clone(),
+            SubnetRunningState::Active,
+            None,
         );
         topology_config.insert_subnet(*subnet_id, subnet_configuration);
     }
@@ -242,7 +223,7 @@ fn main() -> Result<()> {
     let mut ic_config0 = IcConfig::new(
         valid_args.working_dir.as_path(),
         topology_config,
-        valid_args.replica_version_id,
+        replica_version,
         valid_args.generate_subnet_records,
         Some(root_subnet_idx),
         valid_args.release_package_download_url,
@@ -251,11 +232,12 @@ fn main() -> Result<()> {
         valid_args.initial_node_operator,
         valid_args.initial_node_provider,
         valid_args.ssh_readonly_access,
-        valid_args.guest_launch_measurement_sha256_hex,
     );
 
     ic_config0
         .set_use_specified_ids_allocation_range(valid_args.use_specified_ids_allocation_range);
+    ic_config0.set_whitelisted_prefixes(valid_args.whitelisted_prefixes);
+    ic_config0.set_whitelisted_ports(valid_args.whitelisted_ports);
 
     let ic_config = match valid_args.dc_pk_dir {
         Some(dir) => ic_config0.load_registry_node_operator_records_from_dir(
@@ -273,10 +255,6 @@ fn main() -> Result<()> {
 struct ValidatedArgs {
     pub working_dir: PathBuf,
     pub replica_version_id: Option<ReplicaVersion>,
-    pub replica_download_url: Option<Url>,
-    pub replica_hash: Option<String>,
-    pub orchestrator_download_url: Option<Url>,
-    pub orchestrator_hash: Option<String>,
     pub release_package_download_url: Option<Url>,
     pub release_package_sha256_hex: Option<String>,
     pub subnets: BTreeMap<SubnetIndex, BTreeMap<NodeIndex, NodeConfiguration>>,
@@ -292,129 +270,11 @@ struct ValidatedArgs {
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
     pub max_ingress_bytes_per_message: Option<u64>,
+    pub max_block_payload_size: Option<u64>,
     pub allow_empty_update_image: bool,
-    pub guest_launch_measurement_sha256_hex: Option<String>,
     pub use_specified_ids_allocation_range: bool,
     pub whitelisted_prefixes: Option<String>,
-}
-
-/// Structured definition of a node provided by the `--nodes` flag.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct Node {
-    /// Node index
-    node_index: u64,
-
-    /// Index of the subnet to add the node to. If the index is not set, the key
-    /// material and registry entries for the node will be generated, but the
-    /// node will not be added to a subnet.
-    subnet_index: Option<u64>,
-
-    /// The node's configuration
-    config: NodeConfiguration,
-}
-
-/// Parse a --nodes flag value in to a Node.
-///
-/// This approach is deprecated -- it doesn't support specifying multiple
-/// values for different endpoints, the protocols, and so on. It exists
-/// for backwards compatbility with deployment tooling, and will be removed
-/// when that has been updated.
-// TODO(O4-43) Remove --nodes flag
-fn parse_nodes_deprecated(src: &str) -> Result<Node> {
-    // We allow for both, the comma (',') and dash ('-'), to be used as separators
-    // of tuple components. The dash ('-') conflicts with using domain names
-    // containing dashes in place of ip addresses.
-    // TODO(RPL-255): The goal is to switch to commas (',') entirely, but we will
-    // remain backwards compatible for the moment.
-    let separator = if src.contains(',') { ',' } else { '-' };
-    let parts = src.splitn(6, separator).collect::<Vec<&str>>();
-    let node_index = parts[0].parse::<u64>().unwrap();
-
-    let subnet_part = parts[1];
-    let subnet_index = if subnet_part.is_empty() {
-        None
-    } else {
-        Some(subnet_part.parse::<u64>().unwrap())
-    };
-
-    // For most endpoints default to `http` as the protocol, which is consistent
-    // with existing behaviour for this flag.
-    let xnet_addr: SocketAddr = parts[3]
-        .parse()
-        .with_context(|| format!("did not parse {} as SocketAddr", parts[3]))?;
-
-    let http_addr: SocketAddr = parts[5]
-        .parse()
-        .with_context(|| format!("did not parse {} as SocketAddr", parts[5]))?;
-
-    let p2p_addr: SocketAddr = parts[2]
-        .parse()
-        .with_context(|| format!("did not parse {} as SocketAddr", parts[2]))?;
-
-    // chip_id is optional
-    let mut chip_id = vec![];
-    if parts.len() > 6 {
-        chip_id = hex::decode(parts[6])?;
-    }
-
-    Ok(Node {
-        node_index,
-        subnet_index,
-        config: NodeConfiguration {
-            xnet_api: xnet_addr,
-            public_api: http_addr,
-            p2p_addr,
-            node_operator_principal_id: None,
-            secret_key_store: None,
-            chip_id,
-        },
-    })
-}
-
-/// Values passed to the `--node` flag.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-struct NodeFlag {
-    idx: Option<u64>,
-    subnet_idx: Option<u64>,
-    pub xnet_api: Option<SocketAddr>,
-    pub public_api: Option<SocketAddr>,
-    /// The initial endpoint that P2P uses.
-    pub p2p_addr: Option<SocketAddr>,
-    pub chip_id: Option<Vec<u8>>,
-}
-
-#[derive(Error, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-enum MissingFieldError {
-    #[error("idx")]
-    NodeIndex,
-
-    #[error("subnet_idx")]
-    SubnetIndex,
-
-    #[error("xnet")]
-    Xnet,
-
-    #[error("public_api")]
-    PublicApi,
-
-    #[error("p2p_addr")]
-    P2PAddr,
-}
-
-impl Display for Node {
-    /// Displays the node in a format that will be accepted by the `--node`
-    /// flag.
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "idx:{}", self.node_index)?;
-        if let Some(subnet_index) = self.subnet_index {
-            write!(f, ",subnet_idx:{}", subnet_index)?;
-        }
-        write!(f, r#",public_api:"{}""#, self.config.public_api)?;
-        write!(f, r#",p2p_addr:"{}""#, self.config.p2p_addr)?;
-        write!(f, r#",xnet_api:"{}""#, self.config.xnet_api)?;
-
-        Ok(())
-    }
+    pub whitelisted_ports: Option<String>,
 }
 
 impl CliArgs {
@@ -437,8 +297,8 @@ impl CliArgs {
         for (
             i,
             Node {
-                node_index,
-                subnet_index,
+                idx: node_index,
+                subnet_idx: subnet_index,
                 config,
             },
         ) in self.nodes.iter().enumerate()
@@ -451,7 +311,7 @@ impl CliArgs {
             if let Some(subnet_index) = subnet_index {
                 subnets
                     .entry(*subnet_index)
-                    .or_insert_with(BTreeMap::<_, _>::new)
+                    .or_default()
                     .insert(*node_index, config);
             } else {
                 unassigned_nodes.insert(*node_index, config);
@@ -507,24 +367,6 @@ impl CliArgs {
             None => None,
         };
 
-        match (&self.replica_download_url, &self.replica_hash) {
-            (Some(_), None) => {
-                eprintln!("WARNING: missing replica hash when replica download url is given")
-            }
-            (None, Some(_)) => bail!("Missing replica download url when replica hash is given"),
-            _ => (),
-        }
-
-        match (&self.orchestrator_download_url, &self.orchestrator_hash) {
-            (Some(_), None) => eprintln!(
-                "WARNING: missing orchestrator hash when orchestrator download url is given"
-            ),
-            (None, Some(_)) => {
-                bail!("Missing orchestrator download url when orchestrator hash is given")
-            }
-            _ => (),
-        }
-
         match (
             &self.release_package_download_url,
             &self.release_package_sha256_hex,
@@ -540,11 +382,7 @@ impl CliArgs {
 
         Ok(ValidatedArgs {
             working_dir,
-            replica_hash: self.replica_hash,
             replica_version_id: self.replica_version,
-            replica_download_url: self.replica_download_url,
-            orchestrator_download_url: self.orchestrator_download_url,
-            orchestrator_hash: self.orchestrator_hash,
             release_package_download_url: self.release_package_download_url,
             release_package_sha256_hex: self.release_package_sha256_hex,
             subnets,
@@ -576,10 +414,11 @@ impl CliArgs {
                     None
                 }
             }),
+            max_block_payload_size: self.max_block_payload_size,
             allow_empty_update_image: self.allow_empty_update_image,
-            guest_launch_measurement_sha256_hex: self.guest_launch_measurement_sha256_hex,
             use_specified_ids_allocation_range: self.use_specified_ids_allocation_range,
             whitelisted_prefixes: self.whitelisted_prefixes,
+            whitelisted_ports: self.whitelisted_ports,
         })
     }
 }
@@ -651,48 +490,74 @@ fn fetch_replica_version_sha256(version_id: ReplicaVersion) -> Result<String> {
 }
 
 #[cfg(test)]
-mod test_flag_nodes_parser_deprecated {
+mod test_flag_node_parser {
     use super::*;
+    use assert_matches::assert_matches;
     use pretty_assertions::assert_eq;
 
-    /// Components separated by hyphens should parse correctly
+    const GOOD_FLAG: &str = r#"idx:1,subnet_idx:2,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82""#;
+
+    /// Verifies that a good flag parses correctly
     #[test]
-    fn valid_nodes_hyphen() {
-        let got = parse_nodes_deprecated("1-2-1.2.3.4:80-2.3.4.5:81-82-3.4.5.6:82").unwrap();
+    fn valid_flag() {
+        let got = Node::from_json5_without_braces(GOOD_FLAG).unwrap();
         let want = Node {
-            node_index: 1,
-            subnet_index: Some(2),
+            idx: 1,
+            subnet_idx: Some(2),
             config: NodeConfiguration {
-                xnet_api: SocketAddr::from_str("2.3.4.5:81").unwrap(),
-                public_api: SocketAddr::from_str("3.4.5.6:82").unwrap(),
-                p2p_addr: SocketAddr::from_str("1.2.3.4:80").unwrap(),
+                xnet_api: "1.2.3.4:81".parse().unwrap(),
+                public_api: "3.4.5.6:82".parse().unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
-                chip_id: vec![],
             },
         };
 
         assert_eq!(got, want);
     }
 
-    /// Components separated by commas should parse correctly
+    /// Verifies that flags with missing fields return an Err
     #[test]
-    fn valid_nodes_comma() {
-        // Identical to valid_nodes_hyphen, just using commas instead
-        let got = parse_nodes_deprecated("1,2,1.2.3.4:80,2.3.4.5:81,82,3.4.5.6:82").unwrap();
-        let want = Node {
-            node_index: 1,
-            subnet_index: Some(2),
-            config: NodeConfiguration {
-                xnet_api: SocketAddr::from_str("2.3.4.5:81").unwrap(),
-                public_api: SocketAddr::from_str("3.4.5.6:82").unwrap(),
-                p2p_addr: SocketAddr::from_str("1.2.3.4:80").unwrap(),
-                node_operator_principal_id: None,
-                secret_key_store: None,
-                chip_id: vec![],
-            },
-        };
+    fn missing_fields() {
+        // Each flag variant omits a field, starting with `idx`.
+        let flags = vec![
+            r#"subnet_idx:2,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82""#,
+            // Omitting subnet index yields an unassigned node.
+            // r#"idx:1,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82""#,
+            r#"idx:1,subnet_idx:2,public_api:"3.4.5.6:82""#,
+            r#"idx:1,subnet_idx:2,xnet_api:"1.2.3.4:81""#,
+        ];
 
-        assert_eq!(got, want);
+        for flag in flags {
+            assert_matches!(Node::from_json5_without_braces(flag), Err(_));
+        }
+    }
+
+    /// Verifies that unknown fields return an Err
+    #[test]
+    fn unknown_fields() {
+        let flag = format!("new_field:0,{}", GOOD_FLAG);
+        assert_matches!(Node::from_json5_without_braces(&flag), Err(_));
+    }
+
+    /// Verifies that the flag can roundrip through parsing
+    #[test]
+    fn roundtrip() {
+        let node = Node::from_json5_without_braces(GOOD_FLAG).unwrap();
+        let node_flag = node.to_string();
+
+        let new_node = Node::from_json5_without_braces(&node_flag).unwrap();
+
+        assert_eq!(node, new_node);
+    }
+
+    #[test]
+    #[ignore] // side-effectful unit tests are ignored
+    fn can_fetch_sha256() {
+        let version_id =
+            ReplicaVersion::try_from("963c47c0179fb302cb02b1e4712f51b14ea738b6").unwrap();
+        assert_eq!(
+            fetch_replica_version_sha256(version_id).unwrap(),
+            "d081ffe20488380b4cf90069f3fc23e2fa4a904e4103d6f175c85ea87b2634b5"
+        );
     }
 }

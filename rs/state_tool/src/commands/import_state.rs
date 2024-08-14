@@ -2,9 +2,8 @@
 
 use crate::commands::utils;
 use ic_state_layout::{CheckpointLayout, RwPolicy};
-use ic_sys::fs::clone_file;
+use ic_sys::fs::{clone_file, copy_file_sparse};
 use ic_types::Height;
-use ic_utils::fs::copy_file_sparse;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::string::ToString;

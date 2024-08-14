@@ -9,6 +9,7 @@ use ic_certification_test_utils::{
     CertificateData::CustomTree, CertificateData::SubnetData,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_tree_hash::{flatmap, Digest, Label, LabeledTree};
 use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key_from_der, public_key_to_der};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
@@ -79,11 +80,15 @@ fn should_validate_subnet_delegation_test_vector() {
 
 #[test]
 fn should_validate_certificate_without_delegation() {
+    let rng = &mut reproducible_rng();
     let certified_data = random_certified_data();
-    let (_cert, pk, cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: certified_data.clone(),
-    })
+    let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: canister_id(1),
+            certified_data: certified_data.clone(),
+        },
+        rng,
+    )
     .build();
 
     let verification_result = verify_certified_data_with_and_without_cache(
@@ -98,13 +103,17 @@ fn should_validate_certificate_without_delegation() {
 
 #[test]
 fn should_return_correct_time() {
+    let rng = &mut reproducible_rng();
     let certified_data = random_certified_data();
     let time = Time::from_nanos_since_unix_epoch(1);
 
-    let (_cert, pk, cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: certified_data.clone(),
-    })
+    let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: canister_id(1),
+            certified_data: certified_data.clone(),
+        },
+        rng,
+    )
     .with_time(time.as_nanos_since_unix_epoch())
     .build();
 
@@ -120,15 +129,22 @@ fn should_return_correct_time() {
 
 #[test]
 fn should_validate_certificate_with_delegation() {
+    let rng = &mut reproducible_rng();
     let certified_data = random_certified_data();
-    let (_cert, pk, cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: certified_data.clone(),
-    })
-    .with_delegation(CertificateBuilder::new(SubnetData {
-        subnet_id: subnet_id(1),
-        canister_id_ranges: vec![(canister_id(0), canister_id(10))],
-    }))
+    let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: canister_id(1),
+            certified_data: certified_data.clone(),
+        },
+        rng,
+    )
+    .with_delegation(CertificateBuilder::new_with_rng(
+        SubnetData {
+            subnet_id: subnet_id(1),
+            canister_id_ranges: vec![(canister_id(0), canister_id(10))],
+        },
+        rng,
+    ))
     .build();
 
     let verification_result = verify_certified_data_with_and_without_cache(
@@ -143,16 +159,23 @@ fn should_validate_certificate_with_delegation() {
 
 #[test]
 fn should_validate_certificate_with_delegation_lowest_canister_id() {
+    let rng = &mut reproducible_rng();
     let low_canister_id = canister_id(0);
     let certified_data = random_certified_data();
-    let (_cert, pk, cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: low_canister_id,
-        certified_data: certified_data.clone(),
-    })
-    .with_delegation(CertificateBuilder::new(SubnetData {
-        subnet_id: subnet_id(1),
-        canister_id_ranges: vec![(low_canister_id, canister_id(10))],
-    }))
+    let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: low_canister_id,
+            certified_data: certified_data.clone(),
+        },
+        rng,
+    )
+    .with_delegation(CertificateBuilder::new_with_rng(
+        SubnetData {
+            subnet_id: subnet_id(1),
+            canister_id_ranges: vec![(low_canister_id, canister_id(10))],
+        },
+        rng,
+    ))
     .build();
 
     let verification_result = verify_certified_data_with_and_without_cache(
@@ -167,16 +190,23 @@ fn should_validate_certificate_with_delegation_lowest_canister_id() {
 
 #[test]
 fn should_validate_certificate_with_delegation_highest_canister_id() {
+    let rng = &mut reproducible_rng();
     let high_canister_id = canister_id(10);
     let certified_data = random_certified_data();
-    let (_cert, pk, cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: high_canister_id,
-        certified_data: certified_data.clone(),
-    })
-    .with_delegation(CertificateBuilder::new(SubnetData {
-        subnet_id: subnet_id(1),
-        canister_id_ranges: vec![(canister_id(0), high_canister_id)],
-    }))
+    let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: high_canister_id,
+            certified_data: certified_data.clone(),
+        },
+        rng,
+    )
+    .with_delegation(CertificateBuilder::new_with_rng(
+        SubnetData {
+            subnet_id: subnet_id(1),
+            canister_id_ranges: vec![(canister_id(0), high_canister_id)],
+        },
+        rng,
+    ))
     .build();
     let verification_result = verify_certified_data_with_and_without_cache(
         &cbor,
@@ -190,16 +220,23 @@ fn should_validate_certificate_with_delegation_highest_canister_id() {
 
 #[test]
 fn should_validate_certificate_with_single_id_canister_id_range() {
+    let rng = &mut reproducible_rng();
     let canister_id = canister_id(1);
     let certified_data = random_certified_data();
-    let (_cert, pk, cbor) = CertificateBuilder::new(CanisterData {
-        canister_id,
-        certified_data: certified_data.clone(),
-    })
-    .with_delegation(CertificateBuilder::new(SubnetData {
-        subnet_id: subnet_id(1),
-        canister_id_ranges: vec![(canister_id, canister_id)],
-    }))
+    let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id,
+            certified_data: certified_data.clone(),
+        },
+        rng,
+    )
+    .with_delegation(CertificateBuilder::new_with_rng(
+        SubnetData {
+            subnet_id: subnet_id(1),
+            canister_id_ranges: vec![(canister_id, canister_id)],
+        },
+        rng,
+    ))
     .build();
     let verification_result = verify_certified_data_with_and_without_cache(
         &cbor,
@@ -213,20 +250,27 @@ fn should_validate_certificate_with_single_id_canister_id_range() {
 
 #[test]
 fn should_validate_certificate_with_delegation_with_multiple_canister_id_ranges() {
+    let rng = &mut reproducible_rng();
     let cid = canister_id(9);
     let certified_data = random_certified_data();
-    let (_cert, pk, cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: cid,
-        certified_data: certified_data.clone(),
-    })
-    .with_delegation(CertificateBuilder::new(SubnetData {
-        subnet_id: subnet_id(1),
-        canister_id_ranges: vec![
-            (canister_id(0), canister_id(2)),
-            (canister_id(4), canister_id(6)),
-            (canister_id(8), canister_id(10)),
-        ],
-    }))
+    let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: cid,
+            certified_data: certified_data.clone(),
+        },
+        rng,
+    )
+    .with_delegation(CertificateBuilder::new_with_rng(
+        SubnetData {
+            subnet_id: subnet_id(1),
+            canister_id_ranges: vec![
+                (canister_id(0), canister_id(2)),
+                (canister_id(4), canister_id(6)),
+                (canister_id(8), canister_id(10)),
+            ],
+        },
+        rng,
+    ))
     .build();
     let verification_result =
         verify_certified_data_with_and_without_cache(&cbor, &cid, &pk, certified_data.as_bytes());
@@ -236,14 +280,21 @@ fn should_validate_certificate_with_delegation_with_multiple_canister_id_ranges(
 
 #[test]
 fn should_fail_certificate_verification_with_empty_canister_id_range() {
-    let (_cert, pk, cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: random_certified_data(),
-    })
-    .with_delegation(CertificateBuilder::new(SubnetData {
-        subnet_id: subnet_id(1),
-        canister_id_ranges: vec![(canister_id(10), canister_id(0))],
-    }))
+    let rng = &mut reproducible_rng();
+    let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: canister_id(1),
+            certified_data: random_certified_data(),
+        },
+        rng,
+    )
+    .with_delegation(CertificateBuilder::new_with_rng(
+        SubnetData {
+            subnet_id: subnet_id(1),
+            canister_id_ranges: vec![(canister_id(10), canister_id(0))],
+        },
+        rng,
+    ))
     .build();
 
     let verification_result = verify_certified_data_with_and_without_cache(
@@ -261,10 +312,14 @@ fn should_fail_certificate_verification_with_empty_canister_id_range() {
 
 #[test]
 fn should_fail_certificate_with_invalid_signature() {
-    let (_cert, pk, cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: random_certified_data(),
-    })
+    let rng = &mut reproducible_rng();
+    let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: canister_id(1),
+            certified_data: random_certified_data(),
+        },
+        rng,
+    )
     .with_invalid_sig()
     .build();
 
@@ -282,12 +337,16 @@ fn should_fail_certificate_with_invalid_signature() {
 
 #[test]
 fn should_fail_certificate_validation_with_wrong_public_key() {
-    // public key taken from the identity testnet subnet info https://smartcontracts.org/docs/interface-spec/index.html#state-tree-subnet
+    let rng = &mut reproducible_rng();
+    // public key taken from the identity testnet subnet info https://internetcomputer.org/docs/interface-spec/index.html#state-tree-subnet
     let wrong_pk = parse_threshold_sig_key_from_der(&hex::decode("308182301D060D2B0601040182DC7C0503010201060C2B0601040182DC7C05030201036100923A67B791270CD8F5320212AE224377CF407D3A8A2F44F11FED5915A97EE67AD0E90BC382A44A3F14C363AD2006640417B4BBB3A304B97088EC6B4FC87A25558494FC239B47E129260232F79973945253F5036FD520DDABD1E2DE57ABFB40CB").unwrap()).unwrap();
-    let (_cert, pk, cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: random_certified_data(),
-    })
+    let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: canister_id(1),
+            certified_data: random_certified_data(),
+        },
+        rng,
+    )
     .with_invalid_sig()
     .build();
 
@@ -307,15 +366,22 @@ fn should_fail_certificate_validation_with_wrong_public_key() {
 
 #[test]
 fn should_fail_certificate_verification_with_invalid_delegation_signature() {
-    let (_cert, pk, cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: random_certified_data(),
-    })
+    let rng = &mut reproducible_rng();
+    let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: canister_id(1),
+            certified_data: random_certified_data(),
+        },
+        rng,
+    )
     .with_delegation(
-        CertificateBuilder::new(SubnetData {
-            subnet_id: subnet_id(1),
-            canister_id_ranges: vec![(canister_id(0), canister_id(10))],
-        })
+        CertificateBuilder::new_with_rng(
+            SubnetData {
+                subnet_id: subnet_id(1),
+                canister_id_ranges: vec![(canister_id(0), canister_id(10))],
+            },
+            rng,
+        )
         .with_invalid_sig(),
     )
     .build();
@@ -335,18 +401,25 @@ fn should_fail_certificate_verification_with_invalid_delegation_signature() {
 
 #[test]
 fn should_fail_certificate_verification_with_mismatched_delegation_subnet_id() {
+    let rng = &mut reproducible_rng();
     let cert_subnet_id = subnet_id(1);
     let delegation_subnet_id = subnet_id(2);
 
-    let (_cert, pk, cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: random_certified_data(),
-    })
+    let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: canister_id(1),
+            certified_data: random_certified_data(),
+        },
+        rng,
+    )
     .with_delegation_subnet_id(cert_subnet_id)
-    .with_delegation(CertificateBuilder::new(SubnetData {
-        subnet_id: delegation_subnet_id,
-        canister_id_ranges: vec![(canister_id(0), canister_id(10))],
-    }))
+    .with_delegation(CertificateBuilder::new_with_rng(
+        SubnetData {
+            subnet_id: delegation_subnet_id,
+            canister_id_ranges: vec![(canister_id(0), canister_id(10))],
+        },
+        rng,
+    ))
     .build();
 
     let verification_result = verify_certified_data_with_and_without_cache(
@@ -364,19 +437,29 @@ fn should_fail_certificate_verification_with_mismatched_delegation_subnet_id() {
 
 #[test]
 fn should_fail_certificate_verification_with_too_many_delegations() {
-    let (_cert, pk, cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: random_certified_data(),
-    })
+    let rng = &mut reproducible_rng();
+    let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: canister_id(1),
+            certified_data: random_certified_data(),
+        },
+        rng,
+    )
     .with_delegation(
-        CertificateBuilder::new(SubnetData {
-            subnet_id: subnet_id(1),
-            canister_id_ranges: vec![(canister_id(0), canister_id(10))],
-        })
-        .with_delegation(CertificateBuilder::new(SubnetData {
-            subnet_id: subnet_id(1),
-            canister_id_ranges: vec![(canister_id(0), canister_id(100))],
-        })),
+        CertificateBuilder::new_with_rng(
+            SubnetData {
+                subnet_id: subnet_id(1),
+                canister_id_ranges: vec![(canister_id(0), canister_id(10))],
+            },
+            rng,
+        )
+        .with_delegation(CertificateBuilder::new_with_rng(
+            SubnetData {
+                subnet_id: subnet_id(1),
+                canister_id_ranges: vec![(canister_id(0), canister_id(100))],
+            },
+            rng,
+        )),
     )
     .build();
 
@@ -395,14 +478,21 @@ fn should_fail_certificate_verification_with_too_many_delegations() {
 
 #[test]
 fn should_fail_certificate_verification_with_canister_id_out_of_range() {
-    let (_cert, pk, cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: random_certified_data(),
-    })
-    .with_delegation(CertificateBuilder::new(SubnetData {
-        subnet_id: subnet_id(1),
-        canister_id_ranges: vec![(canister_id(20), canister_id(30))],
-    }))
+    let rng = &mut reproducible_rng();
+    let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: canister_id(1),
+            certified_data: random_certified_data(),
+        },
+        rng,
+    )
+    .with_delegation(CertificateBuilder::new_with_rng(
+        SubnetData {
+            subnet_id: subnet_id(1),
+            canister_id_ranges: vec![(canister_id(20), canister_id(30))],
+        },
+        rng,
+    ))
     .build();
 
     let verification_result = verify_certified_data_with_and_without_cache(
@@ -420,17 +510,24 @@ fn should_fail_certificate_verification_with_canister_id_out_of_range() {
 
 #[test]
 fn should_fail_certificate_verification_with_canister_id_out_of_range_multiple_ranges() {
-    let (_cert, pk, cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: random_certified_data(),
-    })
-    .with_delegation(CertificateBuilder::new(SubnetData {
-        subnet_id: subnet_id(1),
-        canister_id_ranges: vec![
-            (canister_id(2), canister_id(3)),
-            (canister_id(20), canister_id(30)),
-        ],
-    }))
+    let rng = &mut reproducible_rng();
+    let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: canister_id(1),
+            certified_data: random_certified_data(),
+        },
+        rng,
+    )
+    .with_delegation(CertificateBuilder::new_with_rng(
+        SubnetData {
+            subnet_id: subnet_id(1),
+            canister_id_ranges: vec![
+                (canister_id(2), canister_id(3)),
+                (canister_id(20), canister_id(30)),
+            ],
+        },
+        rng,
+    ))
     .build();
 
     let verification_result = verify_certified_data_with_and_without_cache(
@@ -448,14 +545,18 @@ fn should_fail_certificate_verification_with_canister_id_out_of_range_multiple_r
 
 #[test]
 fn should_fail_on_certified_data_mismatch() {
+    let rng = &mut reproducible_rng();
     let certificate_certified_data = random_certified_data();
     let expected_certified_data = Digest([1; 32]);
     assert_ne!(certificate_certified_data, expected_certified_data);
 
-    let (_cert, pk, cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: certificate_certified_data,
-    })
+    let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: canister_id(1),
+            certified_data: certificate_certified_data,
+        },
+        rng,
+    )
     .build();
 
     let verification_result = verify_certified_data_with_and_without_cache(
@@ -473,8 +574,9 @@ fn should_fail_on_certified_data_mismatch() {
 
 #[test]
 fn should_fail_on_invalid_cbor() {
-    let pk =
-        CertificateBuilder::new(CustomTree(LabeledTree::Leaf(b"".to_vec()))).get_root_public_key();
+    let rng = &mut reproducible_rng();
+    let pk = CertificateBuilder::new_with_rng(CustomTree(LabeledTree::Leaf(b"".to_vec())), rng)
+        .get_root_public_key();
     let mut garbled_data: [u8; 128] = [0; 128];
     thread_rng().fill(&mut garbled_data);
 
@@ -493,10 +595,14 @@ fn should_fail_on_invalid_cbor() {
 
 #[test]
 fn should_fail_on_unexpected_tree() {
-    let (_cert, pk, cbor) = CertificateBuilder::new(CustomTree(LabeledTree::SubTree(flatmap![
-        Label::from("schubidu") => LabeledTree::Leaf(b"schubidu_data".to_vec()),
-        Label::from("time") => LabeledTree::Leaf(b"some_data".to_vec())
-    ])))
+    let rng = &mut reproducible_rng();
+    let (_cert, pk, cbor) = CertificateBuilder::new_with_rng(
+        CustomTree(LabeledTree::SubTree(flatmap![
+            Label::from("schubidu") => LabeledTree::Leaf(b"schubidu_data".to_vec()),
+            Label::from("time") => LabeledTree::Leaf(b"some_data".to_vec())
+        ])),
+        rng,
+    )
     .build();
 
     let verification_result = verify_certified_data_with_and_without_cache(
@@ -514,16 +620,23 @@ fn should_fail_on_unexpected_tree() {
 
 #[test]
 fn should_validate_delegation_cert() {
+    let rng = &mut reproducible_rng();
     let subnet_id = subnet_id(42);
 
-    let (cert, root_pk, _cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: random_certified_data(),
-    })
-    .with_delegation(CertificateBuilder::new(SubnetData {
-        subnet_id,
-        canister_id_ranges: vec![(canister_id(0), canister_id(10))],
-    }))
+    let (cert, root_pk, _cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: canister_id(1),
+            certified_data: random_certified_data(),
+        },
+        rng,
+    )
+    .with_delegation(CertificateBuilder::new_with_rng(
+        SubnetData {
+            subnet_id,
+            canister_id_ranges: vec![(canister_id(0), canister_id(10))],
+        },
+        rng,
+    ))
     .build();
     let delegation = cert.delegation.expect("missing delegation");
 
@@ -539,21 +652,31 @@ fn should_validate_delegation_cert() {
 
 #[test]
 fn should_fail_to_validate_delegation_cert_if_it_contains_further_delegations() {
+    let rng = &mut reproducible_rng();
     let subnet_id = subnet_id(42);
 
-    let (cert, root_pk, _cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: random_certified_data(),
-    })
+    let (cert, root_pk, _cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: canister_id(1),
+            certified_data: random_certified_data(),
+        },
+        rng,
+    )
     .with_delegation(
-        CertificateBuilder::new(SubnetData {
-            subnet_id,
-            canister_id_ranges: vec![(canister_id(0), canister_id(10))],
-        })
-        .with_delegation(CertificateBuilder::new(SubnetData {
-            subnet_id,
-            canister_id_ranges: vec![(canister_id(0), canister_id(100))],
-        })),
+        CertificateBuilder::new_with_rng(
+            SubnetData {
+                subnet_id,
+                canister_id_ranges: vec![(canister_id(0), canister_id(10))],
+            },
+            rng,
+        )
+        .with_delegation(CertificateBuilder::new_with_rng(
+            SubnetData {
+                subnet_id,
+                canister_id_ranges: vec![(canister_id(0), canister_id(100))],
+            },
+            rng,
+        )),
     )
     .build();
     let delegation = cert.delegation.expect("missing delegation");
@@ -570,17 +693,24 @@ fn should_fail_to_validate_delegation_cert_if_it_contains_further_delegations() 
 
 #[test]
 fn should_fail_to_validate_delegation_cert_with_invalid_signature() {
+    let rng = &mut reproducible_rng();
     let subnet_id = subnet_id(42);
 
-    let (cert, root_pk, _cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: random_certified_data(),
-    })
+    let (cert, root_pk, _cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: canister_id(1),
+            certified_data: random_certified_data(),
+        },
+        rng,
+    )
     .with_delegation(
-        CertificateBuilder::new(SubnetData {
-            subnet_id,
-            canister_id_ranges: vec![(canister_id(0), canister_id(10))],
-        })
+        CertificateBuilder::new_with_rng(
+            SubnetData {
+                subnet_id,
+                canister_id_ranges: vec![(canister_id(0), canister_id(10))],
+            },
+            rng,
+        )
         .with_invalid_sig(),
     )
     .build();
@@ -598,8 +728,10 @@ fn should_fail_to_validate_delegation_cert_with_invalid_signature() {
 
 #[test]
 fn should_fail_to_validate_delegation_cert_if_cert_tree_is_malformed() {
+    let rng = &mut reproducible_rng();
     let dummy_root_pk =
-        CertificateBuilder::new(CustomTree(LabeledTree::Leaf(b"".to_vec()))).get_root_public_key();
+        CertificateBuilder::new_with_rng(CustomTree(LabeledTree::Leaf(b"".to_vec())), rng)
+            .get_root_public_key();
 
     assert_matches!(
         validate_subnet_delegation_certificate_with_and_without_cache(&[42, 128], &subnet_id(42), &dummy_root_pk),
@@ -609,13 +741,14 @@ fn should_fail_to_validate_delegation_cert_if_cert_tree_is_malformed() {
 
 #[test]
 fn should_fail_to_validate_delegation_cert_if_time_missing() {
+    let rng = &mut reproducible_rng();
     let subnet_id = subnet_id(42);
 
-    let (cert, root_pk, _cbor) = CertificateBuilder::new(CanisterData {
+    let (cert, root_pk, _cbor) = CertificateBuilder::new_with_rng(CanisterData {
                     canister_id: canister_id(1),
                     certified_data: random_certified_data(),
-                })
-                .with_delegation(CertificateBuilder::new(CustomTree(LabeledTree::SubTree(
+                },rng)
+                .with_delegation(CertificateBuilder::new_with_rng(CustomTree(LabeledTree::SubTree(
                     flatmap![
                         Label::from("subnet") => LabeledTree::SubTree(flatmap![
                             Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
@@ -625,7 +758,7 @@ fn should_fail_to_validate_delegation_cert_if_time_missing() {
                         ]),
                         // time is missing here
                     ],
-                ))))
+                )),rng))
                 .with_delegation_subnet_id(subnet_id)
                 .build();
     let delegation = cert.delegation.expect("missing delegation");
@@ -639,13 +772,14 @@ fn should_fail_to_validate_delegation_cert_if_time_missing() {
 
 #[test]
 fn should_fail_to_validate_delegation_cert_if_time_malformed() {
+    let rng = &mut reproducible_rng();
     let subnet_id = subnet_id(42);
 
-    let (cert, root_pk, _cbor) = CertificateBuilder::new(CanisterData {
+    let (cert, root_pk, _cbor) = CertificateBuilder::new_with_rng(CanisterData {
                     canister_id: canister_id(1),
                     certified_data: random_certified_data(),
-                })
-                .with_delegation(CertificateBuilder::new(CustomTree(LabeledTree::SubTree(
+                },rng)
+                .with_delegation(CertificateBuilder::new_with_rng(CustomTree(LabeledTree::SubTree(
                     flatmap![
                     Label::from("subnet") => LabeledTree::SubTree(flatmap![
                         Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
@@ -655,7 +789,7 @@ fn should_fail_to_validate_delegation_cert_if_time_malformed() {
                     ]),
                     Label::from("time") => LabeledTree::Leaf(b"malformed_time".to_vec())
                 ],
-                ))))
+                )),rng))
                 .with_delegation_subnet_id(subnet_id)
                 .build();
     let delegation = cert.delegation.expect("missing delegation");
@@ -669,13 +803,14 @@ fn should_fail_to_validate_delegation_cert_if_time_malformed() {
 
 #[test]
 fn should_fail_to_validate_delegation_cert_if_subnet_public_key_missing() {
+    let rng = &mut reproducible_rng();
     let subnet_id = subnet_id(42);
 
-    let (cert, root_pk, _cbor) = CertificateBuilder::new(CanisterData {
+    let (cert, root_pk, _cbor) = CertificateBuilder::new_with_rng(CanisterData {
                     canister_id: canister_id(1),
                     certified_data: random_certified_data(),
-                })
-                .with_delegation(CertificateBuilder::new(CustomTree(LabeledTree::SubTree(
+                },rng)
+                .with_delegation(CertificateBuilder::new_with_rng(CustomTree(LabeledTree::SubTree(
                     flatmap![
                         Label::from("subnet") => LabeledTree::SubTree(flatmap![
                             Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
@@ -685,7 +820,7 @@ fn should_fail_to_validate_delegation_cert_if_subnet_public_key_missing() {
                         ]),
                         Label::from("time") => LabeledTree::Leaf(encoded_time(1234567))
                     ],
-                ))))
+                )),rng))
                 .with_delegation_subnet_id(subnet_id)
                 .build();
     let delegation = cert.delegation.expect("missing delegation");
@@ -699,14 +834,18 @@ fn should_fail_to_validate_delegation_cert_if_subnet_public_key_missing() {
 
 #[test]
 fn should_fail_to_validate_delegation_cert_if_subnet_canister_ranges_missing() {
+    let rng = &mut reproducible_rng();
     let subnet_id = subnet_id(42);
 
-    let (cert, root_pk, _cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: random_certified_data(),
-    })
-    .with_delegation(CertificateBuilder::new(CustomTree(LabeledTree::SubTree(
-        flatmap![
+    let (cert, root_pk, _cbor) = CertificateBuilder::new_with_rng(
+        CanisterData {
+            canister_id: canister_id(1),
+            certified_data: random_certified_data(),
+        },
+        rng,
+    )
+    .with_delegation(CertificateBuilder::new_with_rng(
+        CustomTree(LabeledTree::SubTree(flatmap![
             Label::from("subnet") => LabeledTree::SubTree(flatmap![
                 Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
                     // canister_ranges are missing here
@@ -714,8 +853,9 @@ fn should_fail_to_validate_delegation_cert_if_subnet_canister_ranges_missing() {
                 ])
             ]),
             Label::from("time") => LabeledTree::Leaf(encoded_time(1234567))
-        ],
-    ))))
+        ])),
+        rng,
+    ))
     .with_delegation_subnet_id(subnet_id)
     .build();
     let delegation = cert.delegation.expect("missing delegation");
@@ -729,14 +869,15 @@ fn should_fail_to_validate_delegation_cert_if_subnet_canister_ranges_missing() {
 
 #[test]
 fn should_fail_to_validate_delegation_cert_if_subnet_public_key_malformed() {
+    let rng = &mut reproducible_rng();
     let subnet_id = subnet_id(42);
     let canister_ranges: Vec<(CanisterId, CanisterId)> = vec![(canister_id(0), canister_id(10))];
 
-    let (cert, root_pk, _cbor) = CertificateBuilder::new(CanisterData {
+    let (cert, root_pk, _cbor) = CertificateBuilder::new_with_rng(CanisterData {
                     canister_id: canister_id(1),
                     certified_data: random_certified_data(),
-                })
-                .with_delegation(CertificateBuilder::new(CustomTree(LabeledTree::SubTree(
+                },rng)
+                .with_delegation(CertificateBuilder::new_with_rng(CustomTree(LabeledTree::SubTree(
                     flatmap![
                         Label::from("subnet") => LabeledTree::SubTree(flatmap![
                             Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
@@ -746,7 +887,7 @@ fn should_fail_to_validate_delegation_cert_if_subnet_public_key_malformed() {
                         ]),
                         Label::from("time") => LabeledTree::Leaf(encoded_time(1234567))
                     ],
-                ))))
+                )),rng))
                 .with_delegation_subnet_id(subnet_id)
                 .build();
     let delegation = cert.delegation.expect("missing delegation");
@@ -760,13 +901,14 @@ fn should_fail_to_validate_delegation_cert_if_subnet_public_key_malformed() {
 
 #[test]
 fn should_fail_to_validate_delegation_cert_if_subnet_canister_ranges_malformed() {
+    let rng = &mut reproducible_rng();
     let subnet_id = subnet_id(42);
 
-    let (cert, root_pk, _cbor) = CertificateBuilder::new(CanisterData {
+    let (cert, root_pk, _cbor) = CertificateBuilder::new_with_rng(CanisterData {
                     canister_id: canister_id(1),
                     certified_data: random_certified_data(),
-                })
-                .with_delegation(CertificateBuilder::new(CustomTree(LabeledTree::SubTree(
+                },rng)
+                .with_delegation(CertificateBuilder::new_with_rng(CustomTree(LabeledTree::SubTree(
                     flatmap![
                         Label::from("subnet") => LabeledTree::SubTree(flatmap![
                             Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
@@ -776,7 +918,7 @@ fn should_fail_to_validate_delegation_cert_if_subnet_canister_ranges_malformed()
                         ]),
                         Label::from("time") => LabeledTree::Leaf(encoded_time(1234567))
                     ],
-                ))))
+                )),rng))
                 .with_delegation_subnet_id(subnet_id)
                 .build();
     let delegation = cert.delegation.expect("missing delegation");

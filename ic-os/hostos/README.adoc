@@ -56,9 +56,7 @@ The root partition is formatted as an ext4 file system and is mounted as read-on
   # <file system> <mount point>   <type>  <options>              <dump>  <pass>
   /dev/rootfs     /               ext4    ro,errors=remount-ro   0       1
 
-For details, please refer to the +fstab+ file in:
-
-`ic/ic-os/hostos/rootfs/etc/fstab`
+For details, please refer to the HostOS +fstab+ file.
 
 == System Users
 
@@ -69,7 +67,6 @@ In addition to the regular, built-in Ubuntu user accounts, the following users a
 |backup       |var/lib/backup     |/bin/bash        |Backup subnet state
 |readonly     |/var/lib/readonly  |/bin/bash        |Administrative read-only account for Node Providers/Technicians
 |admin        |/var/lib/admin     |/bin/bash        |Administrative account for Node Providers/Technicians
-|journalbeat  |/home/journalbeat  |/usr/sbin/nologin|Journalbeat service account
 |node_exporter|/home/node_exporter|/usr/sbin/nologin|node_exporter service account
 |====
 
@@ -133,9 +130,7 @@ This configuration ensures that the physical CPU topology is reflected in the vi
 
 The hard-coded firewall ruleset is rather restrictive. A new disk-image has to be proposed and blessed in order to update the rules.
 
-Please find the raw NFTables ruleset in:
-
-  ic/ic-os/hostos/rootfs/etc/nftables.conf
+Please find the raw HostOS NFTables ruleset in `nftables.conf`
 
 === Filter
 

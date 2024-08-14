@@ -1,23 +1,30 @@
 [package]
 name = "icrc-ledger-types"
-version = "0.1.0"
-edition = "2021"
+version = "0.1.6"
 description = "Types for interacting with DFINITY's implementation of the ICRC-1 fungible token standard."
 license = "Apache-2.0"
 readme = "README.md"
 include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
 repository = "https://github.com/dfinity/ic"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
+base32 = "0.4.0"
 candid = { workspace = true }
-hex = "0.4.2"
-serde_bytes = "0.11"
-serde = "1"
-sha2 = "0.10"
-num-traits = "0.2.12"
-ciborium = "0.2.1"
+crc32fast = "1.2.0"
+hex = { workspace = true }
+itertools = { workspace = true }
+num-bigint = { workspace = true }
+num-traits = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+sha2 = { workspace = true }
+strum = { workspace = true}
+time = { workspace = true }
 
 [dev-dependencies]
-hex = "0.4"
+assert_matches = { workspace = true }
+hex = { workspace = true }
+proptest = "1.0.0"

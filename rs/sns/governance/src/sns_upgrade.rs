@@ -84,10 +84,12 @@ pub(crate) async fn get_wasm(
         .wasm
         .ok_or_else(|| "No WASM found using hash returned from SNS-WASM canister.".to_string())?;
 
-    let returned_canister_type =
-        SnsCanisterType::from_i32(wasm.canister_type).ok_or_else(|| {
-            "Could not convert response from SNS-WASM to valid SnsCanisterType".to_string()
-        })?;
+    let returned_canister_type = SnsCanisterType::try_from(wasm.canister_type).map_err(|err| {
+        format!(
+            "Could not convert response from SNS-WASM to valid SnsCanisterType: {}",
+            err
+        )
+    })?;
 
     if returned_canister_type != expected_sns_canister_type {
         return Err(format!(
@@ -98,6 +100,41 @@ pub(crate) async fn get_wasm(
     }
 
     Ok(wasm)
+}
+
+pub(crate) async fn get_proposal_id_that_added_wasm(
+    env: &dyn Environment,
+    wasm_hash: Vec<u8>,
+) -> Result<Option<u64>, String> {
+    let response = env
+        .call_canister(
+            SNS_WASM_CANISTER_ID,
+            "get_proposal_id_that_added_wasm",
+            Encode!(&GetProposalIdThatAddedWasmRequest { hash: wasm_hash }).map_err(|e| {
+                format!(
+                    "Could not encode GetProposalIdThatAddedWasmRequest: {:?}",
+                    e
+                )
+            })?,
+        )
+        .await
+        .map_err(|(code, message)| {
+            format!(
+                "Call to get_proposal_id_that_added_wasm failed: {} {}",
+                code.unwrap_or_default(),
+                message
+            )
+        })?;
+
+    let response = Decode!(&response, GetProposalIdThatAddedWasmResponse).map_err(|e| {
+        format!(
+            "Decoding GetProposalIdThatAddedWasmResponse failed: {:?}",
+            e
+        )
+    })?;
+    let proposal_id = response.proposal_id;
+
+    Ok(proposal_id)
 }
 
 async fn get_canisters_to_upgrade(
@@ -132,7 +169,7 @@ async fn get_canisters_to_upgrade(
                         label
                     )
                 })
-                .and_then(|principal| CanisterId::new(principal).map_err(|e| format!("{}", e)))
+                .map(CanisterId::unchecked_from_principal)
         })
         .collect()
 }
@@ -179,8 +216,12 @@ pub(crate) async fn get_running_version(
         dapps: _,
         archives,
         index: Some(index),
-    } = response else {
-        return Err(format!("CanisterSummary could not be fetched for all canisters: {:?}", response));
+    } = response
+    else {
+        return Err(format!(
+            "CanisterSummary could not be fetched for all canisters: {:?}",
+            response
+        ));
     };
 
     let get_hash = |canister_status: CanisterSummary, label: &str| {
@@ -505,9 +546,12 @@ pub(crate) struct GetWasmResponse {
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub(crate) struct SnsWasm {
     #[prost(bytes = "vec", tag = "1")]
+    #[serde(with = "serde_bytes")]
     pub wasm: ::prost::alloc::vec::Vec<u8>,
     #[prost(enumeration = "SnsCanisterType", tag = "2")]
     pub canister_type: i32,
+    #[prost(uint64, optional, tag = "3")]
+    pub proposal_id: ::core::option::Option<u64>,
 }
 /// Copied from ic-sns-wasm
 /// The type of canister a particular WASM is intended to be installed on.
@@ -539,4 +583,22 @@ pub(crate) enum SnsCanisterType {
     Archive = 5,
     /// The type for the ledger index canister
     Index = 6,
+}
+/// Copied from ic-sns-wasm
+/// Similar to GetWasmRequest, but only returns the NNS proposal ID that blessed the wasm.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetProposalIdThatAddedWasmRequest {
+    #[prost(bytes = "vec", tag = "1")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+}
+/// Copied from ic-sns-wasm
+/// The NNS proposal ID that blessed the wasm, if it was recorded.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetProposalIdThatAddedWasmResponse {
+    #[prost(uint64, optional, tag = "1")]
+    pub proposal_id: ::core::option::Option<u64>,
 }

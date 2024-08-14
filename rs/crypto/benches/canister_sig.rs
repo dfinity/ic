@@ -1,6 +1,7 @@
 use criterion::*;
+use ic_crypto_interfaces_sig_verification::CanisterSigVerifier;
 use ic_crypto_test_utils_canister_sigs::new_valid_sig_and_crypto_component;
-use ic_interfaces::crypto::CanisterSigVerifier;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
 criterion_group!(benches, crypto_canister_sig_verify);
 criterion_main!(benches);
@@ -14,12 +15,14 @@ fn crypto_canister_sig_verify(criterion: &mut Criterion) {
 fn crypto_canister_sig_verify_impl(criterion: &mut Criterion, group_suffix: &str) {
     let group = &mut criterion.benchmark_group(format!("crypto_canister_sig_{group_suffix}"));
 
+    let rng = &mut reproducible_rng();
+
     for benchmark_name in ["with_delegations", "without_delegations"] {
         group.bench_function(benchmark_name, |bench| {
             bench.iter_batched_ref(
                 || {
                     let data = new_valid_sig_and_crypto_component(
-                        &mut rand::thread_rng(),
+                        rng,
                         benchmark_name == "with_delegations",
                     );
                     if group_suffix == "cached" {

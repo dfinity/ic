@@ -1,0 +1,204 @@
+api:
+  enabled: true
+
+sources:
+  vector_metrics:
+    type: internal_metrics
+
+  nginx_socket:
+    type: socket
+
+    mode: unix_datagram
+    socket_file_mode: 666
+    path: /var/lib/vector/nginx.socket
+
+    decoding:
+      codec: syslog
+
+  journal:
+    type: journald
+    include_units:
+    - certificate-issuer
+    - certificate-syncer
+    - ic-boundary
+    - danted
+
+transforms:
+  nginx_access_parsed:
+    type: remap
+    inputs:
+    - nginx_socket
+
+    source: |
+      . = parse_json!(.message)
+
+      # Inject the environment
+      .env = "${ENV:?ENV must be provided}"
+
+  danted:
+    type: filter
+    inputs:
+    - journal
+    condition: ._SYSTEMD_UNIT == "danted.service"
+
+  danted_json:
+    type: remap
+    inputs:
+    - danted
+    source: |
+      preserved_fields = {}; preserved_keys = ["host", "timestamp"]
+
+      for_each(preserved_keys) -> |_, k| {
+        v = get!(., [k])
+        if v != null {
+          preserved_fields = set!(preserved_fields, [k], v)
+        }
+      }
+
+      .message = string!(.message)
+      addrs = split(.message, " [: ")[-1]
+      addrs = split(string!(addrs), " ")
+
+      client_addr_with_port = split(addrs[0], ".") ?? ["N/A", "N/A"]
+      server_addr_with_port = split(addrs[1], ".") ?? ["N/A", "N/A"]
+
+      . = merge({
+        "client_addr": client_addr_with_port[0],
+        "client_port": client_addr_with_port[1],
+        "server_addr": server_addr_with_port[0],
+        "server_port": server_addr_with_port[1],
+      }, preserved_fields)
+
+  danted_metrics:
+    type: log_to_metric
+    inputs:
+    - danted_json
+
+    metrics:
+    - type: counter
+      field: timestamp
+      name: requests_total
+      tags:
+        hostname: "{{ host }}"
+        client_addr: "{{ client_addr }}"
+        server_addr: "{{ server_addr }}"
+
+  certificate_issuer:
+    type: filter
+    inputs:
+    - journal
+
+    condition: ._SYSTEMD_UNIT == "certificate-issuer.service"
+
+  certificate_issuer_normalized:
+    type: remap
+    inputs:
+    - certificate_issuer
+
+    source: |
+      . = parse_json!(.message)
+
+      .service = "certificate-issuer"
+      .timestamp = parse_timestamp!(.timestamp, "%+")
+
+  certificate_syncer:
+    type: filter
+    inputs:
+    - journal
+
+    condition: ._SYSTEMD_UNIT == "certificate-syncer.service"
+
+  certificate_syncer_normalized:
+    type: remap
+    inputs:
+    - certificate_syncer
+
+    source: |
+      . = parse_json!(.message)
+
+      .service = "certificate-syncer"
+      .timestamp = parse_timestamp!(.timestamp, "%+")
+
+  ic_boundary:
+    type: filter
+    inputs:
+    - journal
+
+    condition: ._SYSTEMD_UNIT == "ic-boundary.service"
+
+  ic_boundary_normalized:
+    type: remap
+    inputs:
+    - ic_boundary
+
+    source: |
+      . = parse_json!(.message)
+
+      .service = "ic-boundary"
+      .timestamp = parse_timestamp!(.timestamp, "%+")
+
+  ic_boundary_filtered:
+    type: filter
+    inputs:
+    - ic_boundary_normalized
+
+    condition: |
+      !includes([
+          "check",
+          "http_request_in",
+      ], .action)
+
+sinks:
+  vector_exporter:
+    type: prometheus_exporter
+    inputs:
+    - vector_metrics
+
+    address: "${VECTOR_PROMETHUS_ADDR:?VECTOR_PROMETHUS_ADDR must be provided}"
+    default_namespace: vector
+    suppress_timestamp: true
+
+  prometheus_exporter_danted:
+    type: prometheus_exporter
+    inputs:
+    - danted_metrics
+
+    address: "${DANTED_PROMETHUS_ADDR:?DANTED_PROMETHUS_ADDR must be provided}"
+    default_namespace: danted
+    suppress_timestamp: true
+    flush_period_secs: 7200
+
+  vector_aws:
+    type: http
+    inputs:
+    - nginx_access_parsed
+
+    uri: "${LOGGING_URL:?LOGGING_URL must be provided}"
+    auth:
+      strategy: basic
+      user: "${LOGGING_USER:?LOGGING_USER must be provided}"
+      password: "${LOGGING_PASSWORD:?LOGGING_PASSWORD must be provided}"
+
+    compression: zstd
+    encoding:
+      codec: native
+
+    buffer:
+      type: memory
+      # nginx event json is usually < 2kb, even less if parsed, so 100k shouldn't take much memory
+      max_events: 100000
+
+    batch:
+      max_bytes: 10485760 # 10MB
+      max_events: 10000   # 10k
+      timeout_secs: 5
+
+  console:
+    type: console
+    inputs:
+    - certificate_issuer_normalized
+    - certificate_syncer_normalized
+    - ic_boundary_filtered
+
+    encoding:
+      codec: json

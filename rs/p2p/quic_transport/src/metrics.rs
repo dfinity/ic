@@ -1,28 +1,37 @@
-use ic_metrics::{tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry};
-use ic_types::NodeId;
-use prometheus::{GaugeVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
+use ic_base_types::NodeId;
+use ic_metrics::{
+    buckets::decimal_buckets, tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry,
+};
+use prometheus::{GaugeVec, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use quinn::Connection;
 use tokio_metrics::TaskMonitor;
 
 const CONNECTION_RESULT_LABEL: &str = "status";
 const PEER_ID_LABEL: &str = "peer";
 const REQUEST_TASK_MONITOR_NAME: &str = "quic_transport_request_handler";
-const REQUEST_HANDLER_STREAM_TYPE_LABEL: &str = "stream";
-const REQUEST_HANDLER_ERROR_TYPE_LABEL: &str = "error";
+const STREAM_TYPE_LABEL: &str = "stream";
+const HANDLER_LABEL: &str = "handler";
+const ERROR_TYPE_LABEL: &str = "error";
+const REQUEST_TYPE_LABEL: &str = "request";
 pub(crate) const CONNECTION_RESULT_SUCCESS_LABEL: &str = "success";
 pub(crate) const CONNECTION_RESULT_FAILED_LABEL: &str = "failed";
-pub(crate) const REQUEST_HANDLER_ERROR_TYPE_ACCEPT: &str = "accept";
-pub(crate) const REQUEST_HANDLER_ERROR_TYPE_APP: &str = "app";
-pub(crate) const REQUEST_HANDLER_ERROR_TYPE_FINISH: &str = "finish";
-pub(crate) const REQUEST_HANDLER_ERROR_TYPE_READ: &str = "read";
-pub(crate) const REQUEST_HANDLER_ERROR_TYPE_WRITE: &str = "write";
-pub(crate) const REQUEST_HANDLER_STREAM_TYPE_BIDI: &str = "bidi";
-pub(crate) const REQUEST_HANDLER_STREAM_TYPE_UNI: &str = "uni";
+pub(crate) const ERROR_TYPE_ACCEPT: &str = "accept";
+pub(crate) const ERROR_TYPE_OPEN: &str = "open";
+pub(crate) const ERROR_TYPE_APP: &str = "app";
+pub(crate) const ERROR_TYPE_FINISH: &str = "finish";
+pub(crate) const ERROR_TYPE_STOPPED: &str = "stopped";
+pub(crate) const ERROR_TYPE_READ: &str = "read";
+pub(crate) const ERROR_TYPE_WRITE: &str = "write";
+pub(crate) const STREAM_TYPE_BIDI: &str = "bidi";
+pub(crate) const STREAM_TYPE_UNI: &str = "uni";
+pub(crate) const REQUEST_TYPE_PUSH: &str = "push";
+pub(crate) const REQUEST_TYPE_RPC: &str = "rpc";
 
 #[derive(Debug, Clone)]
 pub struct QuicTransportMetrics {
     // Connection manager
     pub active_connections: IntGauge,
+    pub peer_map_size: IntGauge,
     pub topology_size: IntGauge,
     pub topology_changes_total: IntCounter,
     pub peers_removed_total: IntCounter,
@@ -35,12 +44,19 @@ pub struct QuicTransportMetrics {
     // Request handler
     pub request_task_monitor: TaskMonitor,
     pub request_handle_errors_total: IntCounterVec,
+    pub request_handle_bytes_received_total: IntCounterVec,
+    pub request_handle_bytes_sent_total: IntCounterVec,
+    pub request_handle_duration_seconds: HistogramVec,
+    // Connection handle
+    pub connection_handle_bytes_received_total: IntCounterVec,
+    pub connection_handle_bytes_sent_total: IntCounterVec,
+    pub connection_handle_duration_seconds: HistogramVec,
+    pub connection_handle_errors_total: IntCounterVec,
     // Quinn
-    quinn_frame_rx_data_blocked_total: IntGaugeVec,
-    quinn_frame_rx_stream_data_blocked_total: IntGaugeVec,
-    quinn_frame_rx_streams_blocked_bidi_total: IntGaugeVec,
-    quinn_path_rtt_duration: GaugeVec,
-    quinn_path_cwnd_size: IntGaugeVec,
+    quinn_path_rtt_seconds: GaugeVec,
+    quinn_path_congestion_window: IntGaugeVec,
+    quinn_path_sent_packets: IntGaugeVec,
+    quinn_path_lost_packets: IntGaugeVec,
 }
 
 impl QuicTransportMetrics {
@@ -55,6 +71,10 @@ impl QuicTransportMetrics {
             active_connections: metrics_registry.int_gauge(
                 "quic_transport_active_connections",
                 "Number of active quic connections.",
+            ),
+            peer_map_size: metrics_registry.int_gauge(
+                "quic_transport_peer_map_size",
+                "Number of connections stored in the peer map.",
             ),
             topology_size: metrics_registry.int_gauge(
                 "quic_transport_toplogy_size",
@@ -96,62 +116,89 @@ impl QuicTransportMetrics {
             request_handle_errors_total: metrics_registry.int_counter_vec(
                 "quic_transport_request_handle_errors_total",
                 "Request handler errors by stream type and error type.",
-                &[
-                    REQUEST_HANDLER_STREAM_TYPE_LABEL,
-                    REQUEST_HANDLER_ERROR_TYPE_LABEL,
-                ],
+                &[STREAM_TYPE_LABEL, ERROR_TYPE_LABEL],
             ),
+            request_handle_bytes_received_total: metrics_registry.int_counter_vec(
+                "quic_transport_request_handle_bytes_received_total",
+                "Request handler requests total by handler.",
+                &[HANDLER_LABEL],
+            ),
+            request_handle_bytes_sent_total: metrics_registry.int_counter_vec(
+                "quic_transport_request_handle_bytes_sent_total",
+                "Request handler requests total by handler.",
+                &[HANDLER_LABEL],
+            ),
+            request_handle_duration_seconds: metrics_registry.histogram_vec(
+                "quic_transport_request_handle_requests_duration_seconds",
+                "Request handler request execution duration by handler.",
+                decimal_buckets(-2, 0),
+                &[HANDLER_LABEL],
+            ),
+            // Connection handler
+            connection_handle_bytes_received_total: metrics_registry.int_counter_vec(
+                "quic_transport_connection_handle_bytes_received_total",
+                "Request handler requests total by handler.",
+                &[HANDLER_LABEL],
+            ),
+            connection_handle_bytes_sent_total: metrics_registry.int_counter_vec(
+                "quic_transport_connection_handle_bytes_sent_total",
+                "Request handler requests total by handler.",
+                &[HANDLER_LABEL],
+            ),
+            connection_handle_duration_seconds: metrics_registry.histogram_vec(
+                "quic_transport_connection_handle_duration_seconds",
+                "Request handler request execution duration by handler.",
+                decimal_buckets(-2, 0),
+                &[HANDLER_LABEL],
+            ),
+            connection_handle_errors_total: metrics_registry.int_counter_vec(
+                "quic_transport_connection_handle_errors_total",
+                "Request handler errors by stream type and error type.",
+                &[REQUEST_TYPE_LABEL, ERROR_TYPE_LABEL],
+            ),
+
             // Quinn stats
-            // Indicates that sending data is blocked due to connection level flow control.
-            quinn_frame_rx_data_blocked_total: metrics_registry.int_gauge_vec(
-                "quic_transport_quinn_frame_rx_data_blocked_total",
-                "Quinn connection stat.",
-                &[PEER_ID_LABEL],
-            ),
-            // Indicates that sending data is blocked due to stream level flow control.
-            quinn_frame_rx_stream_data_blocked_total: metrics_registry.int_gauge_vec(
-                "quic_transport_quinn_frame_rx_stream_data_blocked_total",
-                "Blocked stream data frames received.",
-                &[PEER_ID_LABEL],
-            ),
-            // Indicates that opening a new stream is blocked because already at bidi stream limit.
-            quinn_frame_rx_streams_blocked_bidi_total: metrics_registry.int_gauge_vec(
-                "quic_transport_quinn_frame_rx_streams_blocked_bidi_total",
-                "Blocked bidi stream frames received.",
-                &[PEER_ID_LABEL],
-            ),
-            quinn_path_rtt_duration: metrics_registry.gauge_vec(
-                "quic_transport_quinn_path_rtt_duration",
+            quinn_path_rtt_seconds: metrics_registry.gauge_vec(
+                "quic_transport_quinn_path_rtt_seconds",
                 "Estimated rtt of this connection.",
                 &[PEER_ID_LABEL],
             ),
-            // Congestion window of this connection.
-            quinn_path_cwnd_size: metrics_registry.int_gauge_vec(
-                "quic_transport_quinn_path_cwnd_size",
+            quinn_path_congestion_window: metrics_registry.int_gauge_vec(
+                "quic_transport_quinn_path_congestion_window",
                 "Congestion window of this connection.",
+                &[PEER_ID_LABEL],
+            ),
+            quinn_path_sent_packets: metrics_registry.int_gauge_vec(
+                "quic_transport_quinn_path_sent_packets",
+                "The amount of packets sent on this path.",
+                &[PEER_ID_LABEL],
+            ),
+            quinn_path_lost_packets: metrics_registry.int_gauge_vec(
+                "quic_transport_quinn_path_lost_packets",
+                "The amount of packets lost on this path.",
                 &[PEER_ID_LABEL],
             ),
         }
     }
 
     pub(crate) fn collect_quic_connection_stats(&self, conn: &Connection, peer_id: &NodeId) {
-        let stats = conn.stats();
-        // frame stats
-        self.quinn_frame_rx_data_blocked_total
-            .with_label_values(&[&peer_id.to_string()])
-            .set(stats.frame_rx.data_blocked as i64);
-        self.quinn_frame_rx_stream_data_blocked_total
-            .with_label_values(&[&peer_id.to_string()])
-            .set(stats.frame_rx.stream_data_blocked as i64);
-        self.quinn_frame_rx_streams_blocked_bidi_total
-            .with_label_values(&[&peer_id.to_string()])
-            .set(stats.frame_rx.streams_blocked_bidi as i64);
+        let path_stats = conn.stats().path;
+        let peer_id_label: [&str; 1] = [&peer_id.to_string()];
 
-        self.quinn_path_rtt_duration
-            .with_label_values(&[&peer_id.to_string()])
-            .set(stats.path.rtt.as_secs_f64());
-        self.quinn_path_cwnd_size
-            .with_label_values(&[&peer_id.to_string()])
-            .set(stats.path.cwnd as i64);
+        self.quinn_path_rtt_seconds
+            .with_label_values(&peer_id_label)
+            .set(path_stats.rtt.as_secs_f64());
+
+        self.quinn_path_congestion_window
+            .with_label_values(&peer_id_label)
+            .set(path_stats.cwnd as i64);
+
+        self.quinn_path_sent_packets
+            .with_label_values(&peer_id_label)
+            .set(path_stats.sent_packets as i64);
+
+        self.quinn_path_lost_packets
+            .with_label_values(&peer_id_label)
+            .set(path_stats.lost_packets as i64);
     }
 }

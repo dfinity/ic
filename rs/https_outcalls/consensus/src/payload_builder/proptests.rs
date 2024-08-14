@@ -1,10 +1,10 @@
 use crate::payload_builder::tests::{
     add_own_share_to_pool, add_received_shares_to_pool, default_validation_context,
-    metadata_to_share, metadata_to_shares, test_config_with_http_feature,
+    metadata_to_share, metadata_to_shares, test_config_with_http_feature, test_proposal_context,
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload};
-use ic_test_utilities::{mock_time, types::ids::canister_test_id};
+use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
     canister_http::{
         CanisterHttpReject, CanisterHttpResponse, CanisterHttpResponseContent,
@@ -12,6 +12,7 @@ use ic_types::{
     },
     crypto::{crypto_hash, CryptoHash, CryptoHashOf},
     messages::CallbackId,
+    time::UNIX_EPOCH,
     Height, NumBytes, RegistryVersion,
 };
 use proptest::{arbitrary::any, prelude::*};
@@ -47,7 +48,7 @@ fn run_proptest(
     shares: Vec<CanisterHttpResponseShare>,
 ) {
     let context = default_validation_context();
-    test_config_with_http_feature(SUBNET_SIZE, |payload_builder, canister_http_pool| {
+    test_config_with_http_feature(true, SUBNET_SIZE, |payload_builder, canister_http_pool| {
         {
             let mut pool_access = canister_http_pool.write().unwrap();
 
@@ -66,7 +67,7 @@ fn run_proptest(
                 .enumerate()
                 .map(|(height, payload)| PastPayload {
                     height: Height::new(height as u64 + 1),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                     block_hash: CryptoHashOf::new(CryptoHash([0; 32].to_vec())),
                     payload,
                 })
@@ -80,14 +81,15 @@ fn run_proptest(
                 &context,
             );
 
-            dbg!(payload_builder.metrics.unique_responses.get());
             assert!(payload_builder.metrics.unique_responses.get() != 0);
-
             assert!(payload.len() <= MAX_PAYLOAD_SIZE_BYTES);
 
-            let validation_result =
-                payload_builder.validate_payload(Height::new(height), &payload, &pp, &context);
-            dbg!(&validation_result);
+            let validation_result = payload_builder.validate_payload(
+                Height::new(height),
+                &test_proposal_context(&context),
+                &payload,
+                &pp,
+            );
             assert!(validation_result.is_ok());
 
             past_payloads.push(payload);
@@ -146,7 +148,7 @@ fn prop_artifacts(
         })
 }
 
-/// Generate a resonse and metadata supporting that response too
+/// Generate a response and metadata supporting that response too
 fn prop_response_with_shares(
     max_timeout: u64,
     max_size: usize,
@@ -189,7 +191,7 @@ fn prop_response(max_timeout: u64, max_size: usize) -> impl Strategy<Value = Can
         .prop_map(
             |((id, canister_id), timeout, content)| CanisterHttpResponse {
                 id: CallbackId::new(id),
-                timeout: mock_time() + Duration::from_millis(timeout),
+                timeout: UNIX_EPOCH + Duration::from_millis(timeout),
                 canister_id: canister_test_id(canister_id),
                 content,
             },
@@ -202,7 +204,7 @@ fn prop_random_metadata(max_timeout: u64) -> impl Strategy<Value = CanisterHttpR
     (any::<(u64, [u8; 32])>(), 100..max_timeout).prop_map(|((id, hash), timeout)| {
         CanisterHttpResponseMetadata {
             id: CallbackId::new(id),
-            timeout: mock_time() + Duration::from_millis(timeout),
+            timeout: UNIX_EPOCH + Duration::from_millis(timeout),
             content_hash: CryptoHashOf::new(CryptoHash(hash.to_vec())),
             registry_version: RegistryVersion::new(1),
         }

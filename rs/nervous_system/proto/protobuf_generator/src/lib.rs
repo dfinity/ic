@@ -54,6 +54,11 @@ pub fn generate_prost_files(proto_paths: ProtoPaths<'_>, out_dir: &Path) {
         );
     }
 
+    config.type_attribute(
+        "ic_nervous_system.pb.v1.Percentage",
+        "#[derive(PartialOrd, Ord)]",
+    );
+
     // Assert that all files and directories exist.
     assert!(src_file.exists());
     let search_paths = proto_paths.to_vec();

@@ -1,5 +1,6 @@
 /// Message corresponding to an error while performing
 /// an operation on the registry.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryError {
     #[prost(enumeration = "registry_error::Code", tag = "1")]
@@ -27,7 +28,7 @@ pub mod registry_error {
         /// The 'key' specified on the request was already present.
         KeyAlreadyPresent = 2,
         /// The 'version' specified in a precondition for a mutation
-        /// was not the lastest version.
+        /// was not the latest version.
         VersionNotLatest = 3,
         /// The 'version' specified in a precondition for a mutation
         /// is beyond the latest version in the registry.
@@ -50,9 +51,22 @@ pub mod registry_error {
                 Code::InternalError => "INTERNAL_ERROR",
             }
         }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "MALFORMED_MESSAGE" => Some(Self::MalformedMessage),
+                "KEY_NOT_PRESENT" => Some(Self::KeyNotPresent),
+                "KEY_ALREADY_PRESENT" => Some(Self::KeyAlreadyPresent),
+                "VERSION_NOT_LATEST" => Some(Self::VersionNotLatest),
+                "VERSION_BEYOND_LATEST" => Some(Self::VersionBeyondLatest),
+                "INTERNAL_ERROR" => Some(Self::InternalError),
+                _ => None,
+            }
+        }
     }
 }
 /// A single change made to a key in the registry.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryValue {
     /// The value that was set in this mutation. If the
@@ -67,6 +81,7 @@ pub struct RegistryValue {
     pub deletion_marker: bool,
 }
 /// A sequence of changes made to a key in the registry.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryDelta {
     #[prost(bytes = "vec", tag = "1")]
@@ -76,6 +91,7 @@ pub struct RegistryDelta {
 }
 /// Message to retrieve all the changes from the registry
 /// since 'version'.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryGetChangesSinceRequest {
     #[prost(uint64, tag = "1")]
@@ -83,6 +99,7 @@ pub struct RegistryGetChangesSinceRequest {
 }
 /// Message corresponding to the response from the registry
 /// canister to a get_latest_version() request.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryGetChangesSinceResponse {
     /// If anything went wrong, the registry canister
@@ -100,6 +117,7 @@ pub struct RegistryGetChangesSinceResponse {
 }
 /// Message to retrieve a version of some registry key
 /// from the registry canister.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryGetValueRequest {
     /// The version of the registry key to retrieve.
@@ -118,6 +136,7 @@ pub struct RegistryGetValueRequest {
 ///
 /// Both 'version' and 'value' are mandatorily set if 'error'
 /// is not set.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryGetValueResponse {
     /// If anything went wrong, the registry canister
@@ -136,6 +155,7 @@ pub struct RegistryGetValueResponse {
 }
 /// Message corresponding to the response from the canister
 /// to a get_latest_version() request.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryGetLatestVersionResponse {
     /// the latest registry version
@@ -143,7 +163,9 @@ pub struct RegistryGetLatestVersionResponse {
     pub version: u64,
 }
 /// A single mutation in the registry.
-#[derive(candid::CandidType, candid::Deserialize, Eq, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize, Eq)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryMutation {
     /// The type of the mutation to apply to the registry.
     /// Always required.
@@ -192,11 +214,23 @@ pub mod registry_mutation {
                 Type::Upsert => "UPSERT",
             }
         }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "INSERT" => Some(Self::Insert),
+                "UPDATE" => Some(Self::Update),
+                "DELETE" => Some(Self::Delete),
+                "UPSERT" => Some(Self::Upsert),
+                _ => None,
+            }
+        }
     }
 }
 /// A precondition on the version at which the value of a given key was
 /// last mutated.
-#[derive(candid::CandidType, candid::Deserialize, Eq, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize, Eq)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Precondition {
     #[prost(bytes = "vec", tag = "1")]
     pub key: ::prost::alloc::vec::Vec<u8>,
@@ -207,7 +241,9 @@ pub struct Precondition {
 }
 /// Message corresponding to a list of mutations to apply, atomically, to the
 /// registry canister. If any of the mutations fails, the whole operation will fail.
-#[derive(candid::CandidType, candid::Deserialize, Eq, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize, Eq)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryAtomicMutateRequest {
     /// The set of mutations to apply to the registry.
     #[prost(message, repeated, tag = "1")]
@@ -220,6 +256,7 @@ pub struct RegistryAtomicMutateRequest {
 /// mutations failed the corresponding errors will be reflected in 'errors'.
 /// Otherwise 'version' will contain the version under which all the mutations
 /// were applied.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryAtomicMutateResponse {
     /// If anything went wrong, the registry canister
@@ -231,6 +268,7 @@ pub struct RegistryAtomicMutateResponse {
     pub version: u64,
 }
 /// Message encoding a response to any *_certified method call.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CertifiedResponse {
     /// The hash tree encoding both the response and the intermediate

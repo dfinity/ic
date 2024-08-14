@@ -6,7 +6,7 @@ use ic_icrc1_index::{
     GetAccountTransactionsArgs, GetTransactions, GetTransactionsResult, InitArgs as IndexInitArgs,
     ListSubaccountsArgs, TransactionWithId,
 };
-use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
+use ic_icrc1_ledger::{FeatureFlags, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_icrc1_tokens_u64::U64;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::{
@@ -17,6 +17,7 @@ use ic_ledger_core::{
 use ic_ledger_hash_of::HashOf;
 use ic_state_machine_tests::{CanisterId, StateMachine};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
+use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::{
     icrc1::account::Account, icrc1::account::Subaccount, icrc3::archive::ArchiveInfo,
 };
@@ -92,6 +93,7 @@ fn default_archive_options() -> ArchiveOptions {
         node_max_memory_size_bytes: None,
         max_message_size_bytes: None,
         controller_id: PrincipalId::new_user_test_id(100),
+        more_controller_ids: None,
         cycles_for_archive_creation: None,
         max_transactions_per_response: None,
     }
@@ -109,7 +111,8 @@ fn install_ledger(
         .with_metadata_entry(INT_META_KEY, INT_META_VALUE)
         .with_metadata_entry(TEXT_META_KEY, TEXT_META_VALUE)
         .with_metadata_entry(BLOB_META_KEY, BLOB_META_VALUE)
-        .with_archive_options(archive_options);
+        .with_archive_options(archive_options)
+        .with_feature_flags(FeatureFlags { icrc2: true });
     for (account, amount) in initial_balances {
         builder = builder.with_initial_balance(account, amount);
     }
@@ -147,6 +150,28 @@ fn send_transfer(
         Result<Nat, TransferError>
     )
     .expect("failed to decode transfer response")
+    .map(|n| n.0.to_u64().unwrap())
+}
+
+fn send_approval(
+    env: &StateMachine,
+    ledger: CanisterId,
+    from: PrincipalId,
+    arg: &ApproveArgs,
+) -> Result<BlockIndex, ApproveError> {
+    Decode!(
+        &env.execute_ingress_as(
+            from,
+            ledger,
+            "icrc2_approve",
+            Encode!(arg)
+            .unwrap()
+        )
+        .expect("failed to create an approval")
+        .bytes(),
+        Result<Nat, ApproveError>
+    )
+    .expect("failed to decode approve response")
     .map(|n| n.0.to_u64().unwrap())
 }
 
@@ -189,6 +214,27 @@ fn check_transfer(
     )
 }
 
+fn check_approval(
+    id: u64,
+    from: Account,
+    spender: Account,
+    amount: u64,
+    transaction: &TransactionWithId,
+) {
+    assert_eq!("approve".to_string(), transaction.transaction.kind);
+    let approve = transaction.transaction.approve.as_ref().unwrap();
+    assert_eq!(
+        (
+            &transaction.id,
+            &approve.from,
+            &approve.spender,
+            &approve.amount,
+            &approve.memo
+        ),
+        (&Nat::from(id), &from, &spender, &Nat::from(amount), &None)
+    )
+}
+
 fn transfer(
     env: &StateMachine,
     ledger: CanisterId,
@@ -218,6 +264,31 @@ fn burn(env: &StateMachine, ledger: CanisterId, from: Account, amount: u64) -> B
 
 fn mint(env: &StateMachine, ledger: CanisterId, to: Account, amount: u64) -> BlockIndex {
     transfer(env, ledger, MINTER, to, amount)
+}
+
+fn approve(
+    env: &StateMachine,
+    ledger: CanisterId,
+    from: Account,
+    spender: Account,
+    amount: u64,
+) -> BlockIndex {
+    send_approval(
+        env,
+        ledger,
+        PrincipalId(from.owner),
+        &ApproveArgs {
+            from_subaccount: from.subaccount,
+            spender,
+            amount: Nat::from(amount),
+            expected_allowance: None,
+            expires_at: None,
+            fee: None,
+            memo: None,
+            created_at_time: None,
+        },
+    )
+    .unwrap()
 }
 
 fn archives(env: &StateMachine, ledger: CanisterId) -> Vec<ArchiveInfo> {
@@ -344,7 +415,7 @@ fn test() {
     assert_eq!(Some(Nat::from(offset)), txs.oldest_tx_id);
     let txs = txs.transactions;
     assert_eq!(5, txs.len());
-    check_burn(5 + offset, account(1), 10000, txs.get(0).unwrap());
+    check_burn(5 + offset, account(1), 10000, txs.first().unwrap());
     check_transfer(4 + offset, account(2), account(1), 20, txs.get(1).unwrap());
     check_transfer(3 + offset, account(2), account(1), 10, txs.get(2).unwrap());
     check_transfer(2 + offset, account(1), account(2), 1, txs.get(3).unwrap());
@@ -354,7 +425,7 @@ fn test() {
     assert_eq!(Some(Nat::from(1 + offset)), txs.oldest_tx_id);
     let txs = txs.transactions;
     assert_eq!(4, txs.len());
-    check_transfer(4 + offset, account(2), account(1), 20, txs.get(0).unwrap());
+    check_transfer(4 + offset, account(2), account(1), 20, txs.first().unwrap());
     check_transfer(3 + offset, account(2), account(1), 10, txs.get(1).unwrap());
     check_transfer(2 + offset, account(1), account(2), 1, txs.get(2).unwrap());
     check_mint(1 + offset, account(2), 200000, txs.get(3).unwrap());
@@ -363,21 +434,32 @@ fn test() {
     transfer(&env, ledger_id, account(1), account(3), 6); // block=6
     transfer(&env, ledger_id, account(1), account(2), 7); // block=7
 
+    // add an approval
+    approve(&env, ledger_id, account(1), account(4), 10); // block=8
+
     env.advance_time(Duration::from_secs(60));
     env.tick(); // trigger index heartbeat
 
-    // fetch the more recent transfers
-    let txs = get_account_transactions(&env, index_id, account(1), Some(offset + 8), 2);
+    // fetch the more recent transfers and approvals
+    let txs = get_account_transactions(&env, index_id, account(1), Some(offset + 9), 3);
     assert_eq!(Some(Nat::from(offset)), txs.oldest_tx_id);
     let txs = txs.transactions;
-    check_transfer(7 + offset, account(1), account(2), 7, txs.get(0).unwrap());
-    check_transfer(6 + offset, account(1), account(3), 6, txs.get(1).unwrap());
+    check_approval(8 + offset, account(1), account(4), 10, txs.first().unwrap());
+    check_transfer(7 + offset, account(1), account(2), 7, txs.get(1).unwrap());
+    check_transfer(6 + offset, account(1), account(3), 6, txs.get(2).unwrap());
+
+    // fetch transactions for the receiver of the approval
+    let txs = get_account_transactions(&env, index_id, account(4), Some(offset + 9), u64::MAX);
+    assert_eq!(Some(Nat::from(offset + 8)), txs.oldest_tx_id);
+    let txs = txs.transactions;
+    assert_eq!(1, txs.len());
+    check_approval(8 + offset, account(1), account(4), 10, txs.first().unwrap());
 
     // // fetch two older transaction by setting a start to the oldest tx id seen
     let txs = get_account_transactions(&env, index_id, account(1), Some(offset + 5), 2);
     assert_eq!(Some(Nat::from(offset)), txs.oldest_tx_id);
     let txs = txs.transactions;
-    check_burn(5 + offset, account(1), 10000, txs.get(0).unwrap());
+    check_burn(5 + offset, account(1), 10000, txs.first().unwrap());
     check_transfer(4 + offset, account(2), account(1), 20, txs.get(1).unwrap());
 
     // verify if we can query the first 1_000 subaccounts of a principal
@@ -452,7 +534,7 @@ fn test_upgrade() {
     let txs = get_account_transactions(&env, index_id, account(1), None, u64::MAX);
     let txs = txs.transactions;
     check_mint(0, account(1), 100000, txs.get(1).unwrap());
-    check_transfer(1, account(1), account(2), 1, txs.get(0).unwrap());
+    check_transfer(1, account(1), account(2), 1, txs.first().unwrap());
 }
 
 #[test]
@@ -470,7 +552,7 @@ fn test_ledger_stopped() {
     let txs = get_account_transactions(&env, index_id, account(1), None, u64::MAX);
     let txs = txs.transactions;
     check_mint(0, account(1), 100000, txs.get(1).unwrap());
-    check_transfer(1, account(1), account(2), 1, txs.get(0).unwrap());
+    check_transfer(1, account(1), account(2), 1, txs.first().unwrap());
 
     let stop_result = env.stop_canister(ledger_id);
     assert_matches!(stop_result, Ok(_));
@@ -489,7 +571,7 @@ fn test_ledger_stopped() {
     let txs = get_account_transactions(&env, index_id, account(1), None, u64::MAX);
     let txs = txs.transactions;
     check_mint(2, account(1), 100000, txs.get(1).unwrap());
-    check_transfer(3, account(1), account(2), 1, txs.get(0).unwrap());
+    check_transfer(3, account(1), account(2), 1, txs.first().unwrap());
 }
 
 #[test]
@@ -571,4 +653,25 @@ fn test_index_archived_txs_paging() {
     let actual_txids: Vec<u64> = txs.iter().map(|tx| tx.id.0.to_u64().unwrap()).collect();
     let expected_txids: Vec<u64> = (0..ARCHIVE_TRIGGER_THRESHOLD).rev().collect();
     assert_eq!(expected_txids, actual_txids);
+}
+
+mod metrics {
+    use crate::index_wasm;
+    use candid::Principal;
+    use ic_base_types::{CanisterId, PrincipalId};
+    use ic_icrc1_index::InitArgs;
+
+    #[test]
+    fn should_export_total_memory_usage_bytes_metrics() {
+        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_index_total_memory_bytes_metric(
+            index_wasm(),
+            encode_init_args,
+        );
+    }
+
+    fn encode_init_args(ledger_id: Principal) -> InitArgs {
+        InitArgs {
+            ledger_id: CanisterId::unchecked_from_principal(PrincipalId(ledger_id)),
+        }
+    }
 }

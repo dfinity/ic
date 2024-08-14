@@ -1,10 +1,11 @@
 load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
+load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/bitcoin/types/internal",
+    "//rs/bitcoin/replica_types",
     "//rs/constants",
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/sha2",
@@ -13,17 +14,13 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/types/base_types",
     "//rs/types/error_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/utils",
-    "@crate_index//:base32",
     "@crate_index//:base64",
     "@crate_index//:bincode",
-    "@crate_index//:byte-unit",
     "@crate_index//:candid",
     "@crate_index//:hex",
-    "@crate_index//:http",
     "@crate_index//:maplit",
-    "@crate_index//:num-traits",
     "@crate_index//:once_cell",
     "@crate_index//:prost",
     "@crate_index//:serde",
@@ -34,22 +31,24 @@ DEPENDENCIES = [
     "@crate_index//:strum",
     "@crate_index//:thiserror",
     "@crate_index//:thousands",
-    "@crate_index//:url",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/test_utils/canister_threshold_sigs",
-    "@crate_index//:anyhow",
+    "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
     "@crate_index//:hex-literal",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
+    "@crate_index//:rand_chacha",
     "@crate_index//:rusty-fork",
 ]
 
 MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/types/exhaustive_derive",
     "@crate_index//:proptest-derive",
 ]
@@ -59,11 +58,14 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_types",
     proc_macro_deps = [
-        "//rs/types/exhaustive_derive",
-        "@crate_index//:derive_more",
+        # Keep sorted.
         "@crate_index//:strum_macros",
     ],
-    version = "0.8.0",
+    rustc_flags = select({
+        "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+        "//conditions:default": [],
+    }),
+    version = "0.9.0",
     deps = DEPENDENCIES + select({
         "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
         "//conditions:default": ["@crate_index//:chrono"],

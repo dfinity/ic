@@ -1,4 +1,3 @@
-use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::ledger_client::LedgerClient;
 use crate::rosetta_tests::lib::{
     acc_id, assert_canister_error, check_balance, create_ledger_client, do_multiple_txn, do_txn,
@@ -7,21 +6,23 @@ use crate::rosetta_tests::lib::{
 };
 use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use crate::rosetta_tests::setup::{setup, TRANSFER_FEE};
-use crate::util::block_on;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_ledger_core::Tokens;
-use ic_rosetta_api::models::{EdKeypair, RosettaSupportedKeyPair};
+use ic_rosetta_api::models::EdKeypair;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_test_utils::RequestInfo;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::util::block_on;
 use icp_ledger::{AccountIdentifier, Operation};
 use lazy_static::lazy_static;
+use rosetta_core::models::RosettaSupportedKeyPair;
 use slog::{debug, info, Logger};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
 const PORT: u32 = 8102;
-const VM_NAME: &str = "rosetta-test-make-transaction";
+const VM_NAME: &str = "rosetta-make-transaction";
 
 lazy_static! {
     static ref FEE: Tokens = Tokens::from_e8s(10_000);
@@ -151,7 +152,7 @@ async fn test_make_transaction<T: RosettaSupportedKeyPair>(
         .unwrap()
         .unwrap()
         .current_block_identifier
-        .index as u64;
+        .index;
     let expected_idx = tip_idx + 1;
 
     let from = acc;
@@ -161,6 +162,7 @@ async fn test_make_transaction<T: RosettaSupportedKeyPair>(
     let t = Operation::Transfer {
         from,
         to,
+        spender: None,
         amount,
         fee,
     };
@@ -182,7 +184,7 @@ async fn test_make_transaction<T: RosettaSupportedKeyPair>(
     assert_eq!(block.transactions.len(), 1);
 
     let t = block.transactions.first().unwrap();
-    assert_eq!(t.transaction_identifier, tid);
+    assert_eq!(t.transaction_identifier, tid.into());
 
     check_balance(
         client,
@@ -297,7 +299,7 @@ async fn test_multiple_transfers(
         .unwrap()
         .unwrap()
         .current_block_identifier
-        .index as u64;
+        .index;
     let expected_idx = tip_idx + 3;
 
     let (tid, results, _fee) = do_multiple_txn(
@@ -307,6 +309,7 @@ async fn test_multiple_transfers(
                 request: Request::Transfer(Operation::Transfer {
                     from: acc,
                     to: dst_acc1,
+                    spender: None,
                     amount: amount1,
                     fee: *FEE,
                 }),
@@ -316,6 +319,7 @@ async fn test_multiple_transfers(
                 request: Request::Transfer(Operation::Transfer {
                     from: dst_acc1,
                     to: dst_acc2,
+                    spender: None,
                     amount: amount2,
                     fee: *FEE,
                 }),
@@ -325,6 +329,7 @@ async fn test_multiple_transfers(
                 request: Request::Transfer(Operation::Transfer {
                     from: dst_acc2,
                     to: dst_acc3,
+                    spender: None,
                     amount: amount3,
                     fee: *FEE,
                 }),
@@ -345,7 +350,7 @@ async fn test_multiple_transfers(
     assert_eq!(block.transactions.len(), 1);
 
     let t = block.transactions.first().unwrap();
-    assert_eq!(t.transaction_identifier, tid);
+    assert_eq!(t.transaction_identifier, tid.into());
 
     check_balance(
         ros,
@@ -393,7 +398,7 @@ async fn test_multiple_transfers_fail(
         .unwrap()
         .unwrap()
         .current_block_identifier
-        .index as u64;
+        .index;
     let expected_idx = tip_idx + 1;
 
     let err = do_multiple_txn(
@@ -403,6 +408,7 @@ async fn test_multiple_transfers_fail(
                 request: Request::Transfer(Operation::Transfer {
                     from: acc,
                     to: dst_acc1,
+                    spender: None,
                     amount: amount1,
                     fee: *FEE,
                 }),
@@ -412,6 +418,7 @@ async fn test_multiple_transfers_fail(
                 request: Request::Transfer(Operation::Transfer {
                     from: acc,
                     to: dst_acc3,
+                    spender: None,
                     amount: amount3,
                     fee: *FEE,
                 }),
@@ -421,6 +428,7 @@ async fn test_multiple_transfers_fail(
                 request: Request::Transfer(Operation::Transfer {
                     from: dst_acc1,
                     to: dst_acc2,
+                    spender: None,
                     amount: amount2,
                     fee: *FEE,
                 }),

@@ -20,7 +20,7 @@ pub fn algorithm_identifier() -> PkixAlgorithmIdentifier {
 /// * `pk` is the public key associated with this secret key
 /// # Errors
 /// * `MalformedPublicKey` if the public key could not be parsed
-/// * `MalformedSecretKey` if the secret key does not coorespond with the public
+/// * `MalformedSecretKey` if the secret key does not correspond with the public
 ///   key
 pub fn secret_key_from_components(
     sk_raw_bytes: &[u8],
@@ -120,7 +120,7 @@ pub fn sign(msg: &[u8], sk: &types::SecretKeyBytes) -> CryptoResult<types::Signa
                 }
             })?;
 
-    if let Some(sig_bytes) = signing_key.sign_digest(msg) {
+    if let Some(sig_bytes) = signing_key.sign_digest_with_ecdsa(msg) {
         Ok(types::SignatureBytes(sig_bytes))
     } else {
         Err(CryptoError::InvalidArgument {
@@ -155,7 +155,7 @@ pub fn verify(
 
     // Previously this crate was implemented using OpenSSL, which does not
     // check s-normalization, so we use the malleable verification here
-    match pubkey.verify_signature_prehashed_with_malleability(msg, &sig.0) {
+    match pubkey.verify_ecdsa_signature_prehashed_with_malleability(msg, &sig.0) {
         true => Ok(()),
         false => Err(CryptoError::SignatureVerification {
             algorithm: AlgorithmId::EcdsaSecp256k1,

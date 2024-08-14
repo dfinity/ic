@@ -1,13 +1,14 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use assert_matches::assert_matches;
 use candid::Encode;
 use ic_config::{
-    embedders::Config as EmbeddersConfig,
+    embedders::{Config as EmbeddersConfig, MeteringType},
     execution_environment::Config as HypervisorConfig,
     flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig},
 };
-use ic_ic00_types::{
+use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettingsArgsBuilder, EmptyBlob, InstallCodeArgs, Method, Payload,
     IC_00,
 };
@@ -19,6 +20,7 @@ use ic_state_machine_tests::{
 };
 use ic_types::{ingress::WasmResult, Cycles, NumInstructions};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use more_asserts::assert_ge;
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
@@ -91,13 +93,16 @@ fn wat2wasm(wat: &str) -> Vec<u8> {
 /// and sandboxing if it cannot find the sandboxing binaries, which happens in
 /// local builds with `cargo`.
 fn should_skip_test_due_to_disabled_dts() -> bool {
-    if !(std::env::var("SANDBOX_BINARY").is_ok() && std::env::var("LAUNCHER_BINARY").is_ok()) {
+    if !(std::env::var("SANDBOX_BINARY").is_ok()
+        && std::env::var("LAUNCHER_BINARY").is_ok()
+        && std::env::var("COMPILER_BINARY").is_ok())
+    {
         eprintln!(
             "Skipping the test because DTS is not supported without \
              canister sandboxing binaries.\n\
              To fix this:\n\
              - either run the test with `bazel test`\n\
-             - or define the SANDBOX_BINARY and LAUNCHER_BINARY environment variables \
+             - or define the SANDBOX_BINARY and LAUNCHER_BINARY and COMPILER_BINARY environment variables \
              with the paths to the corresponding binaries."
         );
         return true;
@@ -114,11 +119,12 @@ fn dts_subnet_config(
         scheduler_config: SchedulerConfig {
             max_instructions_per_install_code: message_instruction_limit,
             max_instructions_per_install_code_slice: slice_instruction_limit,
-            max_instructions_per_round: slice_instruction_limit + slice_instruction_limit,
+            // We should execute just one slice per round.
+            max_instructions_per_round: slice_instruction_limit + slice_instruction_limit / 2,
             max_instructions_per_message: message_instruction_limit,
             max_instructions_per_message_without_dts: slice_instruction_limit,
             max_instructions_per_slice: slice_instruction_limit,
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..subnet_config.scheduler_config
         },
@@ -144,18 +150,21 @@ fn dts_env(
     message_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
 ) -> StateMachine {
-    StateMachine::new_with_config(dts_state_machine_config(dts_subnet_config(
-        message_instruction_limit,
-        slice_instruction_limit,
-    )))
+    ic_state_machine_tests::StateMachineBuilder::new()
+        .with_config(Some(dts_state_machine_config(dts_subnet_config(
+            message_instruction_limit,
+            slice_instruction_limit,
+        ))))
+        .with_subnet_type(SubnetType::Application)
+        .build()
 }
 
 fn dts_install_code_env(
     message_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
-) -> StateMachine {
+) -> (StateMachine, DtsEnvConfig) {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
-    StateMachine::new_with_config(StateMachineConfig::new(
+    let config = DtsEnvConfig::new(
         SubnetConfig {
             scheduler_config: SchedulerConfig {
                 max_instructions_per_install_code: message_instruction_limit,
@@ -164,7 +173,7 @@ fn dts_install_code_env(
                 max_instructions_per_message: message_instruction_limit,
                 max_instructions_per_message_without_dts: slice_instruction_limit,
                 max_instructions_per_slice: message_instruction_limit,
-                instruction_overhead_per_message: NumInstructions::from(0),
+                instruction_overhead_per_execution: NumInstructions::from(0),
                 instruction_overhead_per_canister: NumInstructions::from(0),
                 ..subnet_config.scheduler_config
             },
@@ -174,7 +183,17 @@ fn dts_install_code_env(
             deterministic_time_slicing: FlagStatus::Enabled,
             ..Default::default()
         },
-    ))
+    );
+    (
+        ic_state_machine_tests::StateMachineBuilder::new()
+            .with_config(Some(StateMachineConfig::new(
+                config.subnet_config.clone(),
+                config.hypervisor_config.clone(),
+            )))
+            .with_subnet_type(SubnetType::Application)
+            .build(),
+        config,
+    )
 }
 
 /// Extracts the ingress state from the ingress status.
@@ -197,10 +216,43 @@ fn ingress_time(ingress_status: IngressStatus) -> Option<SystemTime> {
     }
 }
 
+struct DtsEnvConfig {
+    subnet_config: SubnetConfig,
+    hypervisor_config: HypervisorConfig,
+}
+
+impl DtsEnvConfig {
+    pub fn new(subnet_config: SubnetConfig, hypervisor_config: HypervisorConfig) -> Self {
+        Self {
+            subnet_config,
+            hypervisor_config,
+        }
+    }
+
+    fn dirty_page_overhead_cycles(&self, num_pages: u64) -> Cycles {
+        match self.hypervisor_config.embedders_config.metering_type {
+            MeteringType::New => {
+                let dirty_page_overhead = self
+                    .subnet_config
+                    .scheduler_config
+                    .dirty_page_overhead
+                    .get();
+
+                self.subnet_config
+                    .cycles_account_manager_config
+                    .ten_update_instructions_execution_fee
+                    * (num_pages * dirty_page_overhead / 10)
+            }
+            MeteringType::None => Cycles::new(0),
+        }
+    }
+}
+
 struct DtsInstallCode {
     env: StateMachine,
     canister_id: CanisterId,
     install_code_ingress_id: MessageId,
+    config: DtsEnvConfig,
 }
 
 /// A helper that:
@@ -240,7 +292,7 @@ fn setup_dts_install_code(
             (memory 0 20)
         )"#;
 
-    let env = dts_install_code_env(
+    let (env, config) = dts_install_code_env(
         NumInstructions::from(1_000_000),
         NumInstructions::from(1000),
     );
@@ -267,7 +319,6 @@ fn setup_dts_install_code(
             vec![],
             None,
             None,
-            None,
         )
         .encode(),
     );
@@ -276,20 +327,21 @@ fn setup_dts_install_code(
         env,
         canister_id,
         install_code_ingress_id,
+        config,
     }
 }
 
 // These numbers were obtained by running the test and printing the costs.
 // They need to be adjusted if we change fees or the Wasm source code.
-const INSTALL_CODE_INGRESS_COST: u128 = 1_966_000;
+const INSTALL_CODE_INGRESS_COST: u128 = 1_952_000;
 const NORMAL_INGRESS_COST: u128 = 1_224_000;
 const MAX_EXECUTION_COST: u128 = 990_000;
 const ACTUAL_EXECUTION_COST: u128 = match EmbeddersConfig::new()
     .feature_flags
     .wasm_native_stable_memory
 {
-    FlagStatus::Enabled => 988_412,
-    FlagStatus::Disabled => 868_412,
+    FlagStatus::Enabled => 984_090,
+    FlagStatus::Disabled => 864_092,
 };
 
 #[test]
@@ -311,6 +363,7 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
         env,
         canister_id,
         install_code_ingress_id,
+        config,
     } = setup_dts_install_code(initial_balance, 0);
 
     // Start execution of `install_code`.
@@ -324,8 +377,12 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
     assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
     assert_eq!(
         env.cycle_balance(canister_id),
-        (initial_balance - install_code_ingress_cost - normal_ingress_cost - actual_execution_cost)
-            .get()
+        (initial_balance
+            - install_code_ingress_cost
+            - normal_ingress_cost
+            - actual_execution_cost
+            - config.dirty_page_overhead_cycles(1))
+        .get()
     );
 }
 
@@ -347,6 +404,7 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
         env,
         canister_id,
         install_code_ingress_id,
+        config,
     } = setup_dts_install_code(initial_balance, 0);
 
     // Start execution of `install_code`.
@@ -361,11 +419,10 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
         err.description(),
         format!(
             "Canister {} is out of cycles: \
-             requested {} cycles but the available balance is \
-             {} cycles and the freezing threshold 0 cycles",
+             please top up the canister with at least {} additional cycles",
             canister_id,
-            normal_ingress_cost,
-            initial_balance - install_code_ingress_cost - max_execution_cost,
+            normal_ingress_cost
+                - (initial_balance - install_code_ingress_cost - max_execution_cost),
         )
     );
 
@@ -374,7 +431,11 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
     assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
     assert_eq!(
         env.cycle_balance(canister_id),
-        (initial_balance - install_code_ingress_cost - actual_execution_cost).get()
+        (initial_balance
+            - install_code_ingress_cost
+            - actual_execution_cost
+            - config.dirty_page_overhead_cycles(1))
+        .get()
     );
 }
 
@@ -399,6 +460,7 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
         env,
         canister_id,
         install_code_ingress_id,
+        config,
     } = setup_dts_install_code(initial_balance, 1);
 
     // Start execution of `install_code`.
@@ -413,12 +475,10 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
         err.description(),
         format!(
             "Canister {} is out of cycles: \
-             requested {} cycles but the available balance is \
-             {} cycles and the freezing threshold {} cycles",
+             please top up the canister with at least {} additional cycles",
             canister_id,
-            normal_ingress_cost,
-            initial_balance - install_code_ingress_cost - max_execution_cost,
-            freezing_threshold,
+            (freezing_threshold + normal_ingress_cost)
+                - (initial_balance - install_code_ingress_cost - max_execution_cost),
         )
     );
 
@@ -426,7 +486,11 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
     assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
     assert_eq!(
         env.cycle_balance(canister_id),
-        (initial_balance - install_code_ingress_cost - actual_execution_cost).get()
+        (initial_balance
+            - install_code_ingress_cost
+            - actual_execution_cost
+            - config.dirty_page_overhead_cycles(1))
+        .get()
     );
 }
 
@@ -439,7 +503,7 @@ fn dts_pending_upgrade_with_heartbeat() {
 
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(30_000),
     );
 
     let binary = wat2wasm(DTS_WAT);
@@ -475,7 +539,6 @@ fn dts_pending_upgrade_with_heartbeat() {
             canister,
             binary,
             vec![],
-            None,
             None,
             None,
         );
@@ -514,7 +577,7 @@ fn dts_pending_upgrade_with_heartbeat() {
     let result = env.await_ingress(read, 10).unwrap();
 
     let mut expected = vec![12; 10]; // heartbeat
-    expected.extend([13; 5].iter()); // global timer
+    expected.extend([78; 5].iter()); // global timer is disabled after upgrade
     expected.extend([78; 5].iter()); // work()
     assert_eq!(result, WasmResult::Reply(expected));
 }
@@ -526,8 +589,8 @@ fn dts_pending_upgrade_with_heartbeat() {
 ///
 /// The expectations:
 /// - the install code messages run one by one.
-/// - the canister status messages are blocked by the corresponding
-///   install code messages.
+/// - the canister status messages are completed immediately except for one
+///   for the canister on which the code install is running.
 #[test]
 fn dts_scheduling_of_install_code() {
     if should_skip_test_due_to_disabled_dts() {
@@ -535,7 +598,7 @@ fn dts_scheduling_of_install_code() {
         return;
     }
 
-    let env = dts_install_code_env(
+    let (env, _) = dts_install_code_env(
         NumInstructions::from(5_000_000_000),
         NumInstructions::from(10_000),
     );
@@ -581,7 +644,6 @@ fn dts_scheduling_of_install_code() {
             vec![],
             None,
             None,
-            None,
         );
         let install = wasm()
             .call_simple(
@@ -598,7 +660,7 @@ fn dts_scheduling_of_install_code() {
 
     for _ in 0..5 {
         // With checkpoints enabled, the first install code will be repeatedly
-        // aborted, so there will be no progress.
+        // aborted, so there will be no progress for other install code messages.
         env.tick();
     }
 
@@ -612,7 +674,8 @@ fn dts_scheduling_of_install_code() {
 
     let mut status = vec![];
 
-    // All other ingress messages are blocked by the first install code message.
+    // All other canister status messages are completed except for the canister
+    // on which the code install is running.
     for c in canister.iter().take(n - 1) {
         let id = env.send_ingress(
             user_id,
@@ -625,7 +688,7 @@ fn dts_scheduling_of_install_code() {
 
     for _ in 0..5 {
         // With checkpoints enabled, the first install code will be repeatedly
-        // aborted, so there will be no progress.
+        // aborted, so there will be no progress for other install code messages.
         env.tick();
     }
 
@@ -636,10 +699,18 @@ fn dts_scheduling_of_install_code() {
         }
     }
 
-    for s in status.iter().take(n - 1) {
-        assert_eq!(
+    // The canister status ingress message for the canister on which
+    // the code is installing is blocked.
+    assert_eq!(
+        ingress_state(env.ingress_status(&status[0])),
+        Some(IngressState::Received)
+    );
+
+    // Canister status ingress messages for all other canisters are executed.
+    for s in status.iter().take(n - 1).skip(1) {
+        assert_matches!(
             ingress_state(env.ingress_status(s)),
-            Some(IngressState::Received)
+            Some(IngressState::Completed(..))
         );
     }
 
@@ -689,7 +760,7 @@ fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() 
         return;
     }
 
-    let env = dts_install_code_env(
+    let (env, _) = dts_install_code_env(
         NumInstructions::from(5_000_000_000),
         NumInstructions::from(10_000),
     );
@@ -737,7 +808,6 @@ fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() 
             canister[i],
             binary.clone(),
             vec![],
-            None,
             None,
             None,
         );
@@ -865,7 +935,6 @@ fn dts_pending_execution_blocks_subnet_messages_to_the_same_canister() {
             vec![],
             None,
             None,
-            None,
         );
         env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
     };
@@ -939,7 +1008,6 @@ fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
             vec![],
             None,
             None,
-            None,
         );
         env.send_ingress(user_id, IC_00, Method::InstallCode, payload.encode())
     };
@@ -978,9 +1046,10 @@ fn dts_long_running_install_and_update() {
         return;
     }
 
+    let slice_instruction_limit = 15_000_000;
     let env = dts_env(
         NumInstructions::from(100_000_000),
-        NumInstructions::from(1_000_000),
+        NumInstructions::from(slice_instruction_limit),
     );
 
     let user_id = PrincipalId::new_anonymous();
@@ -1038,7 +1107,6 @@ fn dts_long_running_install_and_update() {
             vec![],
             None,
             None,
-            None,
         );
         let payload = wasm()
             .call_simple(
@@ -1058,7 +1126,7 @@ fn dts_long_running_install_and_update() {
 
     for i in 0..30 {
         let work = wasm()
-            .instruction_counter_is_at_least(1_000_000)
+            .instruction_counter_is_at_least(slice_instruction_limit)
             .message_payload()
             .append_and_reply()
             .build();
@@ -1153,9 +1221,8 @@ fn dts_long_running_calls() {
             .append_and_reply()
             .build();
         let payload = wasm()
-            .call_simple(
-                canister[(i + 1) % n].get(),
-                "update",
+            .inter_update(
+                canister[(i + 1) % n],
                 call_args().other_side(work.clone()).on_reply(work),
             )
             .build();
@@ -1240,7 +1307,6 @@ fn dts_unrelated_subnet_messages_make_progress() {
             vec![],
             None,
             None,
-            None,
         );
         env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
     };
@@ -1288,7 +1354,7 @@ fn dts_ingress_status_of_update_is_correct() {
         .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
         .unwrap();
 
-    let original_time = env.time();
+    let original_time = env.time_of_next_round();
     let update = env.send_ingress(user_id, canister, "update", vec![]);
 
     env.tick();
@@ -1358,7 +1424,7 @@ fn dts_ingress_status_of_install_is_correct() {
         .install_canister_with_cycles(binary.clone(), vec![], None, INITIAL_CYCLES_BALANCE)
         .unwrap();
 
-    let original_time = env.time();
+    let original_time = env.time_of_next_round();
 
     let install = {
         let args = InstallCodeArgs::new(
@@ -1366,7 +1432,6 @@ fn dts_ingress_status_of_install_is_correct() {
             canister,
             binary,
             vec![],
-            None,
             None,
             None,
         );
@@ -1440,7 +1505,7 @@ fn dts_ingress_status_of_upgrade_is_correct() {
         .install_canister_with_cycles(binary.clone(), vec![], None, INITIAL_CYCLES_BALANCE)
         .unwrap();
 
-    let original_time = env.time();
+    let original_time = env.time_of_next_round();
 
     let install = {
         let args = InstallCodeArgs::new(
@@ -1448,7 +1513,6 @@ fn dts_ingress_status_of_upgrade_is_correct() {
             canister,
             binary,
             vec![],
-            None,
             None,
             None,
         );
@@ -1538,10 +1602,10 @@ fn dts_ingress_status_of_update_with_call_is_correct() {
         .stable64_grow(1)
         .stable64_fill(0, 0, 10_000)
         .stable64_fill(0, 0, 10_000)
-        .call_simple(b_id, "update", call_args().other_side(b))
+        .inter_update(b_id, call_args().other_side(b))
         .build();
 
-    let original_time = env.time();
+    let original_time = env.time_of_next_round();
     let update = env.send_ingress(user_id, a_id, "update", a);
 
     env.tick();
@@ -1636,7 +1700,6 @@ fn dts_canister_uninstalled_due_to_resource_charges_with_aborted_updrade() {
             vec![],
             None,
             None,
-            None,
         );
         env.send_ingress(user_id, IC_00, Method::InstallCode, args.encode())
     };
@@ -1727,18 +1790,19 @@ fn dts_canister_uninstalled_due_resource_charges_with_aborted_update() {
                 assert_eq!(result, WasmResult::Reply(vec![]));
             }
             Err(err) => {
-                assert_eq!(
-                    err.description(),
-                    format!(
-                        "Attempt to execute a message on canister {} which contains no Wasm module",
+                err.assert_contains(
+                    ErrorCode::CanisterWasmModuleNotFound,
+                    &format!(
+                        "Error from Canister {}: Attempted to execute a message, \
+                        but the canister contains no Wasm module.",
                         canisters[i]
-                    )
+                    ),
                 );
                 errors += 1;
             }
         }
     }
-    assert!(errors >= 1);
+    assert_ge!(errors, 1);
 }
 
 #[test]

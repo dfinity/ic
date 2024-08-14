@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 package types.v1;
+
 import "types/v1/types.proto";
 
 message BasicSignature {

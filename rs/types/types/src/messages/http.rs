@@ -2,23 +2,27 @@
 #![cfg_attr(test, allow(clippy::unit_arg))]
 //! HTTP requests that the Internet Computer is prepared to handle.
 
-use super::Blob;
+use super::{query::QuerySource, Blob};
 use crate::{
     crypto::SignedBytesWithoutDomainSeparator,
     messages::{
-        message_id::hash_of_map, MessageId, ReadState, SignedIngressContent, UserQuery,
-        UserSignature,
+        message_id::hash_of_map, MessageId, Query, ReadState, SignedIngressContent, UserSignature,
     },
     Height, Time, UserId,
 };
-use derive_more::Display;
-use ic_base_types::{CanisterId, CanisterIdError, PrincipalId};
+use ic_base_types::{CanisterId, CanisterIdError, NodeId, PrincipalId};
 use ic_crypto_tree_hash::{MixedHashTree, Path};
 use maplit::btreemap;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
-use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, convert::TryFrom, error::Error, fmt};
+use serde::{ser::SerializeTuple, Deserialize, Serialize};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    convert::TryFrom,
+    error::Error,
+    fmt,
+};
+use strum_macros::AsRefStr;
 
 #[cfg(test)]
 mod tests;
@@ -29,7 +33,7 @@ pub(crate) enum CallOrQuery {
     Query,
 }
 
-pub(crate) fn representation_indepent_hash_call_or_query(
+pub(crate) fn representation_independent_hash_call_or_query(
     request_type: CallOrQuery,
     canister_id: Vec<u8>,
     method_name: &str,
@@ -71,7 +75,7 @@ pub(crate) fn representation_independent_hash_read_state(
                 .map(|p| {
                     RawHttpRequestVal::Array(
                         p.iter()
-                            .map(|b| RawHttpRequestVal::Bytes(b.clone().to_vec()))
+                            .map(|b| RawHttpRequestVal::Bytes(b.clone().into_vec()))
                             .collect(),
                     )
                 })
@@ -104,7 +108,7 @@ pub struct HttpCanisterUpdate {
 impl HttpCanisterUpdate {
     /// Returns the representation-independent hash.
     pub fn representation_independent_hash(&self) -> [u8; 32] {
-        representation_indepent_hash_call_or_query(
+        representation_independent_hash_call_or_query(
             CallOrQuery::Call,
             self.canister_id.0.clone(),
             &self.method_name,
@@ -222,7 +226,7 @@ impl HttpReadStateContent {
 impl HttpUserQuery {
     /// Returns the representation-independent hash.
     pub fn representation_independent_hash(&self) -> [u8; 32] {
-        representation_indepent_hash_call_or_query(
+        representation_independent_hash_call_or_query(
             CallOrQuery::Query,
             self.canister_id.0.clone(),
             &self.method_name,
@@ -277,28 +281,6 @@ pub enum Authentication {
     Anonymous,
 }
 
-// TODO(CRP-2004): replace with a private function
-impl<C> TryFrom<&HttpRequestEnvelope<C>> for Authentication {
-    type Error = HttpRequestError;
-
-    fn try_from(env: &HttpRequestEnvelope<C>) -> Result<Self, Self::Error> {
-        match (&env.sender_pubkey, &env.sender_sig, &env.sender_delegation) {
-            (Some(pubkey), Some(signature), delegation) => {
-                Ok(Authentication::Authenticated(UserSignature {
-                    signature: signature.0.clone(),
-                    signer_pubkey: pubkey.0.clone(),
-                    sender_delegation: delegation.clone(),
-                }))
-            }
-            (None, None, None) => Ok(Authentication::Anonymous),
-            rest => Err(Self::Error::MissingPubkeyOrSignature(format!(
-                "Got {:?}",
-                rest
-            ))),
-        }
-    }
-}
-
 /// Common attributes that all HTTP request contents should have.
 pub trait HttpRequestContent {
     fn id(&self) -> MessageId;
@@ -347,21 +329,30 @@ impl<C> HttpRequest<C> {
     }
 }
 
-impl HttpRequestContent for UserQuery {
+impl HttpRequestContent for Query {
     fn id(&self) -> MessageId {
         self.id()
     }
 
     fn sender(&self) -> UserId {
-        self.source
+        match self.source {
+            QuerySource::User { user_id, .. } => user_id,
+            QuerySource::Anonymous => UserId::from(PrincipalId::new_anonymous()),
+        }
     }
 
     fn ingress_expiry(&self) -> u64 {
-        self.ingress_expiry
+        match self.source {
+            QuerySource::User { ingress_expiry, .. } => ingress_expiry,
+            QuerySource::Anonymous => 0,
+        }
     }
 
     fn nonce(&self) -> Option<Vec<u8>> {
-        self.nonce.clone()
+        match &self.source {
+            QuerySource::User { nonce, .. } => nonce.clone(),
+            QuerySource::Anonymous => None,
+        }
     }
 }
 
@@ -383,14 +374,14 @@ impl HttpRequestContent for ReadState {
     }
 }
 
-impl TryFrom<HttpRequestEnvelope<HttpQueryContent>> for HttpRequest<UserQuery> {
+impl TryFrom<HttpRequestEnvelope<HttpQueryContent>> for HttpRequest<Query> {
     type Error = HttpRequestError;
 
     fn try_from(envelope: HttpRequestEnvelope<HttpQueryContent>) -> Result<Self, Self::Error> {
-        let auth = Authentication::try_from(&envelope)?;
+        let auth = to_authentication(&envelope)?;
         match envelope.content {
             HttpQueryContent::Query { query } => Ok(HttpRequest {
-                content: UserQuery::try_from(query)?,
+                content: Query::try_from(query)?,
                 auth,
             }),
         }
@@ -401,7 +392,7 @@ impl TryFrom<HttpRequestEnvelope<HttpReadStateContent>> for HttpRequest<ReadStat
     type Error = HttpRequestError;
 
     fn try_from(envelope: HttpRequestEnvelope<HttpReadStateContent>) -> Result<Self, Self::Error> {
-        let auth = Authentication::try_from(&envelope)?;
+        let auth = to_authentication(&envelope)?;
         match envelope.content {
             HttpReadStateContent::ReadState { read_state } => Ok(HttpRequest {
                 content: ReadState::try_from(read_state)?,
@@ -415,7 +406,7 @@ impl TryFrom<HttpRequestEnvelope<HttpCallContent>> for HttpRequest<SignedIngress
     type Error = HttpRequestError;
 
     fn try_from(envelope: HttpRequestEnvelope<HttpCallContent>) -> Result<Self, Self::Error> {
-        let auth = Authentication::try_from(&envelope)?;
+        let auth = to_authentication(&envelope)?;
         match envelope.content {
             HttpCallContent::Call { update } => Ok(HttpRequest {
                 content: SignedIngressContent::try_from(update)?,
@@ -506,13 +497,10 @@ impl Delegation {
             Some(targets) => {
                 let mut target_canister_ids = BTreeSet::new();
                 for target in targets {
-                    target_canister_ids.insert(
-                        CanisterId::new(
-                            PrincipalId::try_from(target.0.as_slice())
-                                .map_err(|e| format!("Error parsing canister ID: {}", e))?,
-                        )
-                        .map_err(|e| format!("Error parsing canister ID: {}", e))?,
-                    );
+                    target_canister_ids.insert(CanisterId::unchecked_from_principal(
+                        PrincipalId::try_from(target.0.as_slice())
+                            .map_err(|e| format!("Error parsing canister ID: {}", e))?,
+                    ));
                 }
                 Ok(Some(target_canister_ids))
             }
@@ -580,6 +568,7 @@ pub enum RawHttpRequestVal {
     String(String),
     U64(u64),
     Array(Vec<RawHttpRequestVal>),
+    Map(BTreeMap<String, RawHttpRequestVal>),
 }
 
 /// The reply to an update call.
@@ -590,8 +579,7 @@ pub enum HttpReply {
     Empty {},
 }
 
-/// The response to `/api/v2/canister/_/{read_state|query}` with `request_type`
-/// set to `query`.
+/// The response for a query call from the execution service.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "status")]
@@ -604,6 +592,103 @@ pub enum HttpQueryResponse {
         reject_code: u64,
         reject_message: String,
     },
+}
+
+/// Wraps the hash of a query response as described
+/// in the [IC interface-spec](https://internetcomputer.org/docs/current/references/ic-interface-spec#http-query).
+pub struct QueryResponseHash([u8; 32]);
+
+impl QueryResponseHash {
+    /// Creates a [`QueryResponseHash`] from a given query response, request and timestamp.
+    pub fn new(response: &HttpQueryResponse, request: &Query, timestamp: Time) -> Self {
+        use RawHttpRequestVal::*;
+
+        let self_map_representation = match response {
+            HttpQueryResponse::Replied { reply } => {
+                let map_of_reply = btreemap! {
+                    "arg".to_string() => RawHttpRequestVal::Bytes(reply.arg.0.clone()),
+                };
+
+                btreemap! {
+                    "request_id".to_string() => Bytes(request.id().as_bytes().to_vec()),
+                    "status".to_string() => String("replied".to_string()),
+                    "timestamp".to_string() => U64(timestamp.as_nanos_since_unix_epoch()),
+                    "reply".to_string() => Map(map_of_reply)
+                }
+            }
+            HttpQueryResponse::Rejected {
+                error_code,
+                reject_code,
+                reject_message,
+            } => {
+                btreemap! {
+                    "request_id".to_string() => Bytes(request.id().as_bytes().to_vec()),
+                    "status".to_string() => String("rejected".to_string()),
+                    "timestamp".to_string() => U64(timestamp.as_nanos_since_unix_epoch()),
+                    "reject_code".to_string() => U64(*reject_code),
+                    "reject_message".to_string() => String(reject_message.to_string()),
+                    "error_code".to_string() => String(error_code.to_string()),
+
+                }
+            }
+        };
+
+        let hash = hash_of_map(&self_map_representation);
+
+        Self(hash)
+    }
+
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+impl SignedBytesWithoutDomainSeparator for QueryResponseHash {
+    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
+        self.0.to_vec()
+    }
+}
+
+/// The response to `/api/v2/canister/_/query`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct HttpSignedQueryResponse {
+    #[serde(flatten)]
+    pub response: HttpQueryResponse,
+
+    /// The signature of this replica node for the query response.
+    ///
+    /// Note:
+    /// To follow the IC specification for signed query responses,
+    /// the serializer will during serialization:
+    /// - rename the field: `node_signature` -> `signatures`.
+    /// - Convert the signature to a 1-tuple containing only this signature.
+    #[serde(serialize_with = "serialize_node_signature_to_1_tuple")]
+    #[serde(rename = "signatures")]
+    pub node_signature: NodeSignature,
+}
+
+/// Serializes a `NodeSignature` to a 1-tuple containing only that one signature.
+fn serialize_node_signature_to_1_tuple<S>(
+    signature: &NodeSignature,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let mut tup = serializer.serialize_tuple(1)?;
+    tup.serialize_element(signature)?;
+    tup.end()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NodeSignature {
+    /// The time of creation of the signature (or the batch time).
+    pub timestamp: Time,
+    /// The actual signature.
+    pub signature: Blob,
+    /// The node id of the node that created this signature.
+    pub identity: NodeId,
 }
 
 /// The body of the `QueryResponse`
@@ -637,7 +722,7 @@ pub struct CertificateDelegation {
 
 /// Different stages required for the full initialization of the HTTPS endpoint.
 /// The fields are listed in order of execution/transition.
-#[derive(Debug, Display, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, AsRefStr)]
 #[serde(rename_all = "snake_case")]
 pub enum ReplicaHealthStatus {
     /// Marks the start state of the HTTPS endpoint. Some requests will fail
@@ -663,7 +748,7 @@ pub enum ReplicaHealthStatus {
     /// we should execute queries on "recent enough" state tree.
     CertifiedStateBehind,
     /// Signals that the replica can serve all types of API requests.
-    /// When users programatically access this information they should
+    /// When users programmatically access this information they should
     /// check only if 'ReplicaHealthStatus' is equal to 'Healthy' or not.
     Healthy,
 }
@@ -683,4 +768,21 @@ pub struct HttpStatusResponse {
     pub replica_health_status: Option<ReplicaHealthStatus>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub certified_height: Option<Height>,
+}
+
+fn to_authentication<C>(env: &HttpRequestEnvelope<C>) -> Result<Authentication, HttpRequestError> {
+    match (&env.sender_pubkey, &env.sender_sig, &env.sender_delegation) {
+        (Some(pubkey), Some(signature), delegation) => {
+            Ok(Authentication::Authenticated(UserSignature {
+                signature: signature.0.clone(),
+                signer_pubkey: pubkey.0.clone(),
+                sender_delegation: delegation.clone(),
+            }))
+        }
+        (None, None, None) => Ok(Authentication::Anonymous),
+        rest => Err(HttpRequestError::MissingPubkeyOrSignature(format!(
+            "Got {:?}",
+            rest
+        ))),
+    }
 }

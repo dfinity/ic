@@ -1,5 +1,4 @@
 use std::{
-    cmp::{max, min},
     collections::HashMap,
     fs::{self, File},
     net::SocketAddr,
@@ -11,7 +10,7 @@ use std::{
 
 use candid::{CandidType, Principal};
 use ic_agent::{
-    agent::http_transport::ReqwestHttpReplicaV2Transport, identity::BasicIdentity, Agent,
+    agent::http_transport::reqwest_transport::ReqwestTransport, identity::BasicIdentity, Agent,
 };
 use ic_utils::{
     canister::Argument,
@@ -27,18 +26,19 @@ use ic_utils::{
 
 use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
-use axum::{handler::Handler, routing::get, Extension, Router};
+use axum::{body::Body, handler::Handler, routing::get, Extension, Router};
 use clap::Parser;
-use futures::{future::TryFutureExt, stream::FuturesUnordered};
+use futures::stream::FuturesUnordered;
 use glob::glob;
-use hyper::{Body, Request, Response, StatusCode};
+use hyper::{Request, Response, StatusCode};
 use mockall::automock;
 use opentelemetry::baggage::BaggageExt;
-use opentelemetry::{global, sdk::Resource, KeyValue};
-use opentelemetry_prometheus::PrometheusExporter;
-use prometheus::{Encoder, TextEncoder};
+use opentelemetry::{metrics::MeterProvider, KeyValue};
+use opentelemetry_prometheus::exporter;
+use opentelemetry_sdk::metrics::MeterProviderBuilder;
+use prometheus::{labels, Encoder as PrometheusEncoder, Registry, TextEncoder};
 use serde::Deserialize;
-use tokio::{task, time::Instant};
+use tokio::{net::TcpListener, task, time::Instant};
 use tracing::info;
 
 mod metrics;
@@ -95,12 +95,19 @@ async fn main() -> Result<(), Error> {
 
     tracing::subscriber::set_global_default(subscriber).expect("failed to set global subscriber");
 
-    let exporter = opentelemetry_prometheus::exporter()
-        .with_resource(Resource::new(vec![KeyValue::new("service", SERVICE_NAME)]))
-        .init();
-    let meter = global::meter(SERVICE_NAME);
+    // Metrics
+    let registry: Registry = Registry::new_custom(
+        None,
+        Some(labels! {"service".into() => SERVICE_NAME.into()}),
+    )
+    .unwrap();
+    let exporter = exporter().with_registry(registry.clone()).build()?;
+    let provider = MeterProviderBuilder::default()
+        .with_reader(exporter)
+        .build();
+    let meter = provider.meter(SERVICE_NAME);
 
-    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { exporter }));
+    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { registry }));
     let metrics_router = Router::new().route("/metrics", get(metrics_handler));
 
     let loader = RoutesLoader::new(cli.routes_dir.clone());
@@ -195,11 +202,12 @@ async fn main() -> Result<(), Error> {
         }));
     }
 
-    futs.push(task::spawn(
-        axum::Server::bind(&cli.metrics_addr)
-            .serve(metrics_router.into_make_service())
-            .map_err(|err| anyhow!("server failed: {:?}", err)),
-    ));
+    futs.push(task::spawn(async move {
+        let listener = TcpListener::bind(&cli.metrics_addr).await.unwrap();
+        axum::serve(listener, metrics_router.into_make_service())
+            .await
+            .map_err(|err| anyhow!("server failed: {:?}", err))
+    }));
 
     for fut in futs {
         let _ = fut.await?;
@@ -318,10 +326,10 @@ where
                 .with_context(_ctx.clone())
                 .await;
 
-            tokio::time::sleep(max(
-                Duration::ZERO,
-                min(self.probe_interval, end_time - Instant::now()),
-            ))
+            tokio::time::sleep(
+                self.probe_interval
+                    .clamp(Duration::ZERO, end_time - Instant::now()),
+            )
             .await;
 
             if Instant::now() > end_time {
@@ -360,7 +368,7 @@ fn create_agent_fn(identity: Arc<BasicIdentity>, root_key: Option<Vec<u8>>) -> i
             socket_addr,
         } = node_route;
 
-        let transport = ReqwestHttpReplicaV2Transport::create(format!("http://{}", socket_addr))
+        let transport = ReqwestTransport::create(format!("http://{}", socket_addr))
             .context("failed to create transport")?;
 
         let identity = Arc::clone(&identity);
@@ -381,14 +389,14 @@ fn create_agent_fn(identity: Arc<BasicIdentity>, root_key: Option<Vec<u8>>) -> i
 
 #[derive(Clone)]
 struct MetricsHandlerArgs {
-    exporter: PrometheusExporter,
+    registry: Registry,
 }
 
 async fn metrics_handler(
-    Extension(MetricsHandlerArgs { exporter }): Extension<MetricsHandlerArgs>,
+    Extension(MetricsHandlerArgs { registry }): Extension<MetricsHandlerArgs>,
     _: Request<Body>,
 ) -> Response<Body> {
-    let metric_families = exporter.registry().gather();
+    let metric_families = registry.gather();
 
     let encoder = TextEncoder::new();
 
@@ -548,7 +556,7 @@ impl Install for Installer {
         canister_id: Principal,
     ) -> Result<(), Error> {
         let mut install_args = Argument::new();
-        install_args.push_idl_arg(CanisterInstall {
+        install_args.set_idl_arg(CanisterInstall {
             mode: InstallMode::Install,
             canister_id,
             wasm_module: self.wasm_module.clone(),
@@ -652,7 +660,7 @@ impl Stop for Stopper {
         }
 
         let mut stop_args = Argument::new();
-        stop_args.push_idl_arg(In { canister_id });
+        stop_args.set_idl_arg(In { canister_id });
 
         let principal = Principal::from_str(wallet_id).unwrap();
         let wallet = interfaces::WalletCanister::create(agent, principal)
@@ -702,7 +710,7 @@ impl Delete for Deleter {
         }
 
         let mut delete_args = Argument::new();
-        delete_args.push_idl_arg(In { canister_id });
+        delete_args.set_idl_arg(In { canister_id });
 
         let principal = Principal::from_str(wallet_id).unwrap();
         let wallet = interfaces::WalletCanister::create(agent, principal)
@@ -900,8 +908,8 @@ mod tests {
             assert_eq!(route.node_id, "node-1");
             assert_eq!(route.socket_addr, "socket-1");
 
-            let transport = ReqwestHttpReplicaV2Transport::create("http://test")
-                .context("failed to create transport")?;
+            let transport =
+                ReqwestTransport::create("http://test").context("failed to create transport")?;
 
             let agent = Agent::builder().with_transport(transport).build()?;
 

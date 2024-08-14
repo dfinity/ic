@@ -14,7 +14,7 @@ fn main() {
     for i in 0..50_000 {
         let canister_id = canister_test_id(i);
         let scheduler_state = SchedulerState::default();
-        let system_state = SystemState::new_running(
+        let system_state = SystemState::new_running_for_testing(
             canister_id,
             user_test_id(24).get(),
             Cycles::from_parts(1, 2),

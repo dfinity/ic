@@ -20,8 +20,12 @@ unsafe impl Sync for ScopedMmap {}
 unsafe impl Send for ScopedMmap {}
 
 impl ScopedMmap {
-    /// Creates a new mapping from a file descriptor and length.
-    pub fn from_readonly_file<FD: AsRawFd>(fd: &FD, len: usize) -> io::Result<Self> {
+    /// Creates a new mapping from a file descriptor, length (in bytes) and offset (in bytes).
+    pub fn from_readonly_file_with_offset<FD: AsRawFd>(
+        fd: &FD,
+        len: usize,
+        offset: i64,
+    ) -> io::Result<Self> {
         // mmap fails on 0-size requests, which is extremely annoying in
         // practice, so we construct a bogus 0-sized mapping instead.
         if len == 0 {
@@ -40,10 +44,15 @@ impl ScopedMmap {
                 ProtFlags::PROT_READ,
                 MapFlags::MAP_SHARED,
                 fd.as_raw_fd(),
-                /* offset = */ 0,
+                offset,
             )
         }?;
         Ok(Self { addr, len })
+    }
+
+    /// Creates a new mapping from a file descriptor and length.
+    pub fn from_readonly_file<FD: AsRawFd>(fd: &FD, len: usize) -> io::Result<Self> {
+        Self::from_readonly_file_with_offset(fd, len, 0)
     }
 
     /// Creates a new mapping for a file at specified `path`.
@@ -75,6 +84,11 @@ impl ScopedMmap {
 
     /// Returns a byte slice view of the memory mapping.
     pub fn as_slice(&self) -> &[u8] {
+        // A precondition for `from_raw_parts` is that the pointer must be non-null.
+        // Otherwise a panic will occur.
+        if self.addr().is_null() {
+            return &[];
+        }
         unsafe { std::slice::from_raw_parts(self.addr(), self.len()) }
     }
 }

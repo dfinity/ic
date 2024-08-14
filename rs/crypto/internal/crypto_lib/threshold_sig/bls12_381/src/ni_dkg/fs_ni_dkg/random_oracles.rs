@@ -123,7 +123,7 @@ impl<T: UniqueHash> UniqueHash for Vec<T> {
 /// digests of the entries in the array.
 impl<T: UniqueHash, const N: usize> UniqueHash for [T; N] {
     fn unique_hash(&self) -> [u8; UNIQUE_HASH_OUTPUT_LENGTH] {
-        // We use the VECTOR domain seperator here since historically
+        // We use the VECTOR domain separator here since historically
         // only Vec<T> was used
         let mut hasher = new_hasher_with_domain(DOMAIN_RO_VECTOR);
         for item in self.iter() {
@@ -247,8 +247,8 @@ pub fn random_oracle_to_scalar(domain: &str, data: &dyn UniqueHash) -> Scalar {
     use rand_chacha::rand_core::SeedableRng;
 
     let hash = random_oracle(domain, data);
-    let mut rng = rand_chacha::ChaChaRng::from_seed(hash);
-    Scalar::miracl_random(&mut rng)
+    let rng = &mut rand_chacha::ChaChaRng::from_seed(hash);
+    Scalar::miracl_random(rng)
 }
 
 /// Computes the hash of a struct using an hash function that can be modelled as

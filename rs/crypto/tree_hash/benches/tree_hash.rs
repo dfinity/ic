@@ -1,10 +1,21 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{
+    black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput,
+};
 use ic_crypto_tree_hash::{
     flatmap, lookup_path, FlatMap, HashTree, HashTreeBuilder, Label, LabeledTree, LabeledTree::*,
     MixedHashTree, WitnessGenerator,
 };
-use ic_crypto_tree_hash_test_utils::hash_tree_builder_from_labeled_tree;
-use ic_types_test_utils::ids::message_test_id;
+use ic_crypto_tree_hash_test_utils::{
+    hash_tree_builder_from_labeled_tree, mixed_hash_tree_digest_recursive,
+};
+
+// Do something similar to what ic_types_test_utils::ids::message_test_id() does
+// because it compiles *much* faster than importing the function.
+fn message_test_id(v: u64) -> Vec<u8> {
+    let mut id = vec![0; 32];
+    id[0..8].copy_from_slice(&v.to_be_bytes());
+    id
+}
 
 fn new_request_status_tree(num_subtrees: usize) -> LabeledTree<Vec<u8>> {
     let replied_tree = LabeledTree::SubTree(flatmap! {
@@ -38,6 +49,21 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let witness = witness_generator
             .witness(&labeled_tree)
             .expect("failed to create Witness");
+
+        {
+            let mut g: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> =
+                c.benchmark_group("drop");
+
+            g.throughput(Throughput::Elements(num_subtrees as u64));
+
+            g.bench_function(BenchmarkId::new("labeled_tree", num_subtrees), |b| {
+                b.iter_batched(
+                    || labeled_tree.clone(),
+                    std::mem::drop,
+                    BatchSize::SmallInput,
+                )
+            });
+        }
 
         {
             let mut g: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> =
@@ -112,7 +138,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             let mut g = c.benchmark_group("protobuf_serialization");
 
             g.bench_function(BenchmarkId::new("mixed_hash_tree", num_subtrees), |b| {
-                b.iter(|| black_box(PbTree::proxy_encode(mixed_hash_tree.clone()).unwrap()))
+                b.iter(|| black_box(PbTree::proxy_encode(mixed_hash_tree.clone())))
             });
 
             g.finish();
@@ -124,7 +150,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
             let mut g = c.benchmark_group("protobuf_deserialization");
 
-            let serialized_hash_tree = PbTree::proxy_encode(mixed_hash_tree.clone()).unwrap();
+            let serialized_hash_tree = PbTree::proxy_encode(mixed_hash_tree.clone());
             g.bench_function(BenchmarkId::new("mixed_hash_tree", num_subtrees), |b| {
                 b.iter(|| {
                     black_box(|| {
@@ -140,7 +166,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         {
             let mut g = c.benchmark_group("lookup");
 
-            let path = [message_test_id(121).as_bytes().to_vec(), b"reply".to_vec()];
+            let path = [message_test_id(121), b"reply".to_vec()];
 
             g.bench_function(BenchmarkId::new("mixed_hash_tree", num_subtrees), |b| {
                 b.iter(|| black_box(mixed_hash_tree.lookup(&path)));
@@ -198,8 +224,20 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 c.benchmark_group("compute_digest");
 
             g.bench_function(BenchmarkId::new("mixed_hash_tree", num_subtrees), |b| {
-                b.iter(|| black_box(mixed_hash_tree.digest()));
+                b.iter(|| {
+                    black_box(
+                        mixed_hash_tree_digest_recursive(&mixed_hash_tree)
+                            .expect("too deep recursion"),
+                    )
+                });
             });
+
+            g.bench_function(
+                BenchmarkId::new("mixed_hash_tree_iterative", num_subtrees),
+                |b| {
+                    b.iter(|| black_box(mixed_hash_tree.digest()));
+                },
+            );
 
             g.bench_function(BenchmarkId::new("witness", num_subtrees), |b| {
                 b.iter(|| {

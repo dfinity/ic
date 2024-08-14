@@ -1,6 +1,8 @@
 use crate::pb::v1::Canister;
 use ic_base_types::PrincipalId;
-use pb::v1::{Duration, GlobalTimeOfDay, Percentage, Tokens};
+use pb::v1::{Decimal as DecimalPb, Duration, GlobalTimeOfDay, Percentage, Principals, Tokens};
+use rust_decimal::Decimal;
+use std::str::FromStr;
 
 pub mod pb;
 
@@ -88,9 +90,88 @@ impl Percentage {
         }
     }
 
-    pub fn from_basis_points(basis_points: u64) -> Percentage {
+    pub const fn from_basis_points(basis_points: u64) -> Percentage {
         Percentage {
             basis_points: Some(basis_points),
         }
     }
 }
+
+impl std::fmt::Display for Percentage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.basis_points {
+            None => write!(f, "[unspecified]"),
+            Some(basis_points) => write!(f, "{}.{:02}%", basis_points / 100, basis_points % 100),
+        }
+    }
+}
+
+impl Tokens {
+    pub fn checked_add(&self, rhs: &Tokens) -> Option<Tokens> {
+        let e8s = self.e8s?.checked_add(rhs.e8s?)?;
+        Some(Tokens { e8s: Some(e8s) })
+    }
+
+    pub fn checked_sub(&self, rhs: &Tokens) -> Option<Tokens> {
+        let e8s = self.e8s?.checked_sub(rhs.e8s?)?;
+        Some(Tokens { e8s: Some(e8s) })
+    }
+}
+
+impl From<Decimal> for DecimalPb {
+    fn from(src: Decimal) -> DecimalPb {
+        let human_readable = Some(src.to_string());
+
+        DecimalPb { human_readable }
+    }
+}
+
+impl TryFrom<DecimalPb> for Decimal {
+    type Error = String;
+
+    fn try_from(src: DecimalPb) -> Result<Decimal, String> {
+        let human_readable = src.human_readable.as_ref();
+
+        const MAX_LEN: usize = 40;
+        let truncate_human_readable = || -> Option<String> {
+            human_readable.map(|human_readable| {
+                let mut human_readable = human_readable.clone();
+                human_readable.truncate(MAX_LEN);
+                human_readable
+            })
+        };
+
+        let is_garbage = human_readable
+            .map(|human_readable| human_readable.len() > MAX_LEN)
+            .unwrap_or(true);
+        if is_garbage {
+            return Err(format!(
+                "Unable to parse {:?} as a Decimal with at most 96 bits of significand.",
+                truncate_human_readable(),
+            ));
+        }
+
+        Decimal::from_str(human_readable.unwrap_or(&String::new())).map_err(|err| {
+            format!(
+                "Invalid DecimalPb: unable to parse {:?} as a Decimal: {:?}",
+                truncate_human_readable(),
+                err,
+            )
+        })
+    }
+}
+
+impl From<Vec<PrincipalId>> for Principals {
+    fn from(principals: Vec<PrincipalId>) -> Self {
+        Self { principals }
+    }
+}
+
+impl From<Principals> for Vec<PrincipalId> {
+    fn from(principals: Principals) -> Self {
+        principals.principals
+    }
+}
+
+#[cfg(test)]
+mod tests;

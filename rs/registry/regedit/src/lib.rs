@@ -43,7 +43,7 @@ fn registry_spec_to_delta_pb(
     // to (BaseRegistryVersion, [[(Key, Value)]]) where the vector indices
     // represent the registry version offset to BaseRegistryVersion
     let base_registry_version = registry_changelogs
-        .get(0)
+        .first()
         .ok_or_else(|| anyhow!("registry changelog empty"))?
         .version;
     let local_store_changelog = registry_changelogs.into_iter().fold(vec![], |mut cl, r| {
@@ -93,7 +93,7 @@ pub fn execute_command(cmd: Command) -> Result<Value> {
             let mut f = File::create(path)?;
             f.write_all(&pb)?;
             Value::String(format!(
-                "Succesfully written registry delta protbobuf for version range {}-{} to: {}",
+                "Successfully written registry delta protbobuf for version range {}-{} to: {}",
                 start_version, latest_registry_version_in_pb, pb_path
             ))
         }

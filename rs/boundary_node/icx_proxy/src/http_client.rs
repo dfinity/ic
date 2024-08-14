@@ -1,30 +1,37 @@
 use std::{
-    borrow::Cow,
+    cell::RefCell,
     collections::HashMap,
     fs::File,
+    future::Future,
     hash::{Hash, Hasher},
     io::{Cursor, Read},
     iter,
     net::SocketAddr,
     path::PathBuf,
+    pin::Pin,
     str::FromStr,
     sync::Arc,
+    task::{Context as TaskContext, Poll},
 };
 
 use anyhow::{Context, Error};
-use hyper::{
-    self,
-    body::Bytes,
-    client::{
-        connect::dns::{GaiResolver, Name},
+use http::{HeaderMap, HeaderName, HeaderValue};
+use http_body_util::Full;
+use hyper::{self, Uri};
+use hyper_rustls::HttpsConnectorBuilder;
+use hyper_util::client::legacy::{
+    connect::{
+        dns::{GaiResolver, Name},
         HttpConnector,
     },
-    service::Service,
     Client,
 };
-use hyper_rustls::HttpsConnectorBuilder;
-use ic_agent::agent::http_transport;
+use hyperlocal_next::UnixClientExt;
+use ic_agent::agent::http_transport::hyper_transport;
 use itertools::Either;
+use std::collections::VecDeque;
+use tokio::task_local;
+use tower::Service;
 
 use crate::domain_addr::DomainAddr;
 
@@ -44,49 +51,175 @@ pub struct HttpClientOpts<'a> {
     pub replicas: &'a Vec<DomainAddr>,
 }
 
-pub type Body = hyper::Body;
+pub type Body = Full<VecDeque<u8>>;
 
-pub trait HyperBody:
-    http_transport::HyperBody
-    + From<&'static [u8]>
-    + From<&'static str>
-    + From<Bytes>
-    + From<Cow<'static, [u8]>>
-    + From<Cow<'static, str>>
-    + From<String>
-    + From<Body>
-    + Into<Body>
-{
-}
+pub trait HyperBody: hyper_transport::HyperBody + From<Body> + Into<Body> {}
 
-impl<B> HyperBody for B where
-    B: http_transport::HyperBody
-        + From<&'static [u8]>
-        + From<&'static str>
-        + From<Bytes>
-        + From<Cow<'static, [u8]>>
-        + From<Cow<'static, str>>
-        + From<String>
-        + From<Body>
-        + Into<Body>
-{
-}
+impl<B> HyperBody for B where B: hyper_transport::HyperBody + From<Body> + Into<Body> {}
 
-/// Trait representing the contraints on [`Service`] that [`HyperReplicaV2Transport`] requires.
-pub trait HyperService<B1: HyperBody>:
-    http_transport::HyperService<B1, ResponseBody = Self::ResponseBody2>
-{
-    /// Values yielded in the `Body` of the `Response`.
-    type ResponseBody2: HyperBody;
-}
+/// Trait representing the constraints on [`Service`] that [`HyperTransport`] requires.
+pub trait HyperService<B1: HyperBody>: hyper_transport::HyperService<B1> {}
 
-impl<B1, B2, S> HyperService<B1> for S
+impl<B1, S> HyperService<B1> for S
 where
     B1: HyperBody,
-    B2: HyperBody,
-    S: http_transport::HyperService<B1, ResponseBody = B2>,
+    S: hyper_transport::HyperService<B1>,
 {
-    type ResponseBody2 = B2;
+}
+
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADER_X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADER_IC_SUBNET_ID: HeaderName = HeaderName::from_static("x-ic-subnet-id");
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADER_IC_SUBNET_TYPE: HeaderName = HeaderName::from_static("x-ic-subnet-type");
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADER_IC_NODE_ID: HeaderName = HeaderName::from_static("x-ic-node-id");
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_CANISTER_ID_CBOR: HeaderName = HeaderName::from_static("x-ic-canister-id-cbor");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_METHOD_NAME: HeaderName = HeaderName::from_static("x-ic-method-name");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_SENDER: HeaderName = HeaderName::from_static("x-ic-sender");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_REQUEST_TYPE: HeaderName = HeaderName::from_static("x-ic-request-type");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_RETRIES: HeaderName = HeaderName::from_static("x-ic-retries");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_ERROR_CAUSE: HeaderName = HeaderName::from_static("x-ic-error-cause");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_CACHE: HeaderName = HeaderName::from_static("x-ic-cache-status");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_CACHE_BYPASS_REASON: HeaderName =
+    HeaderName::from_static("x-ic-cache-bypass-reason");
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADER_X_REAL_IP: http::HeaderName = http::HeaderName::from_static("x-real-ip");
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADER_X_IC_COUNTRY_CODE: http::HeaderName =
+    http::HeaderName::from_static("x-ic-country-code");
+
+// Headers to pass from replica to the caller
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADERS_PASS_IN: [HeaderName; 11] = [
+    HEADER_IC_SUBNET_ID,
+    HEADER_IC_NODE_ID,
+    HEADER_IC_SUBNET_TYPE,
+    HEADER_IC_CANISTER_ID_CBOR,
+    HEADER_IC_METHOD_NAME,
+    HEADER_IC_SENDER,
+    HEADER_IC_REQUEST_TYPE,
+    HEADER_IC_RETRIES,
+    HEADER_IC_ERROR_CAUSE,
+    HEADER_IC_CACHE,
+    HEADER_IC_CACHE_BYPASS_REASON,
+];
+
+// Headers to pass from caller to replica
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADERS_PASS_OUT: [HeaderName; 2] = [HEADER_X_REQUEST_ID, HEADER_X_REAL_IP];
+
+pub struct RequestHeaders {
+    pub headers_in: HeaderMap<HeaderValue>,
+    pub headers_out: HeaderMap<HeaderValue>,
+}
+
+impl RequestHeaders {
+    pub fn new() -> RefCell<Self> {
+        RefCell::new(Self {
+            headers_in: HeaderMap::new(),
+            headers_out: HeaderMap::new(),
+        })
+    }
+}
+
+task_local! {
+    pub static REQUEST_HEADERS: RefCell<RequestHeaders>;
+}
+
+// Wrapper for the Hyper client (Hyper service) that uses thread local storage to pass specific HTTP headers back and forth
+#[derive(Clone)]
+pub struct HyperClientWrapper<S> {
+    uri_override: Option<Uri>,
+    inner: S,
+}
+
+impl<S> Service<http::Request<Body>> for HyperClientWrapper<S>
+where
+    S: Service<http::Request<Body>, Response = hyper::Response<hyper::body::Incoming>>
+        + Clone
+        + Send
+        + Sync
+        + 'static,
+    S::Future: Send,
+{
+    type Response = hyper::Response<hyper::body::Incoming>;
+    type Error = S::Error;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, _: &mut TaskContext<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, mut req: http::Request<Body>) -> Self::Future {
+        let clone = self.inner.clone();
+        let mut inner = std::mem::replace(&mut self.inner, clone);
+
+        // Override the URL host and schema if needed
+        // This is used to create Unix socket URL
+        if let Some(v) = &self.uri_override {
+            let uri = Uri::builder()
+                .scheme(v.scheme().unwrap().clone())
+                .authority(v.authority().unwrap().clone())
+                .path_and_query(req.uri().path_and_query().unwrap().clone())
+                .build()
+                .unwrap();
+
+            *req.uri_mut() = uri;
+        }
+
+        Box::pin(async move {
+            // Add selected headers to the request
+            // Check if the task local variable is set, do nothing otherwise since
+            // Agent can call the client outside task local variable context
+            let _ = REQUEST_HEADERS.try_with(|x| {
+                for (k, v) in x.borrow().headers_out.iter() {
+                    #[allow(clippy::borrow_interior_mutable_const)]
+                    if HEADERS_PASS_OUT.contains(k) {
+                        req.headers_mut().append(k, v.clone());
+                    }
+                }
+            });
+
+            let is_read_state = req.uri().to_string().ends_with("/read_state");
+
+            // Execute the request
+            let res = inner.call(req).await;
+
+            // Do not pass headers for the read_state calls
+            if is_read_state {
+                return res;
+            }
+
+            // If the request was a success - extract headers from it
+            if let Ok(v) = &res {
+                let _ = REQUEST_HEADERS.try_with(|x| {
+                    let mut m = x.borrow_mut();
+                    m.headers_in.clear();
+
+                    for (k, v) in v.headers() {
+                        #[allow(clippy::borrow_interior_mutable_const)]
+                        if HEADERS_PASS_IN.contains(k) {
+                            m.headers_in.append(k, v.clone());
+                        }
+                    }
+                });
+            }
+
+            res
+        })
+    }
 }
 
 pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
@@ -96,18 +229,18 @@ pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
         replicas,
     } = opts;
 
-    let builder = rustls::ClientConfig::builder().with_safe_defaults();
+    let builder = rustls::ClientConfig::builder();
     let tls_config = if !danger_accept_invalid_ssl {
-        use rustls::{Certificate, RootCertStore};
+        use rustls::RootCertStore;
 
         let mut root_cert_store = RootCertStore::empty();
 
-        if !ssl_root_certificate.is_empty() {
+        if ssl_root_certificate.is_empty() {
             match rustls_native_certs::load_native_certs() {
                 Err(e) => tracing::warn!("Could not load native certs: {}", e),
                 Ok(certs) => {
                     for cert in certs {
-                        if let Err(e) = root_cert_store.add(&rustls::Certificate(cert.0)) {
+                        if let Err(e) = root_cert_store.add(cert) {
                             tracing::warn!("Could not add native cert: {}", e);
                         }
                     }
@@ -130,19 +263,15 @@ pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
                         cert_path.display()
                     );
                     let mut pem = Cursor::new(buf);
-                    let certs = match rustls_pemfile::certs(&mut pem) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            tracing::warn!(
-                                "No valid certificate was found `{}`: {}",
-                                cert_path.display(),
-                                e
-                            );
-                            continue;
-                        }
-                    };
+                    let certs: Vec<_> = rustls_pemfile::certs(&mut pem)
+                        .filter_map(Result::ok)
+                        .collect();
+                    if certs.is_empty() {
+                        tracing::warn!("No valid certificate was found `{}`", cert_path.display(),);
+                        continue;
+                    }
                     for c in certs {
-                        if let Err(e) = root_cert_store.add(&rustls::Certificate(c)) {
+                        if let Err(e) = root_cert_store.add(c) {
                             tracing::warn!(
                                 "Could not add part of cert `{}`: {}",
                                 cert_path.display(),
@@ -156,7 +285,7 @@ pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
                         "adding DER cert `{}` to root certificates",
                         cert_path.display()
                     );
-                    if let Err(e) = root_cert_store.add(&Certificate(buf)) {
+                    if let Err(e) = root_cert_store.add(buf.into()) {
                         tracing::warn!("Could not add cert `{}`: {}", cert_path.display(), e);
                     }
                 }
@@ -171,52 +300,73 @@ pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
             .with_root_certificates(root_cert_store)
             .with_no_client_auth()
     } else {
-        use rustls::{
-            client::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerName},
-            DigitallySignedStruct,
+        use rustls::client::danger::{
+            HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier,
         };
+        use rustls::client::WebPkiServerVerifier;
+        use rustls::crypto::ring as provider;
+        use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
+        use rustls::{DigitallySignedStruct, SignatureScheme};
 
+        // The following struct `DummyServerAuth` is adopted from https://github.com/rustls/rustls/blob/bad9bd7454f5a5590cd0a39070530a88bb3e884d/rustls/examples/internal/bogo_shim.rs
         tracing::warn!("Allowing invalid certs. THIS VERY IS INSECURE.");
-        struct NoVerifier;
+        #[derive(Debug)]
+        struct DummyServerAuth {
+            parent: Arc<dyn ServerCertVerifier>,
+        }
 
-        impl ServerCertVerifier for NoVerifier {
+        impl DummyServerAuth {
+            fn new() -> Self {
+                DummyServerAuth {
+                    parent: WebPkiServerVerifier::builder_with_provider(
+                        Arc::new(rustls::RootCertStore::empty()),
+                        provider::default_provider().into(),
+                    )
+                    .build()
+                    .unwrap(),
+                }
+            }
+        }
+
+        impl ServerCertVerifier for DummyServerAuth {
             fn verify_server_cert(
                 &self,
-                _end_entity: &rustls::Certificate,
-                _intermediates: &[rustls::Certificate],
-                _server_name: &ServerName,
-                _scts: &mut dyn Iterator<Item = &[u8]>,
-                _ocsp_response: &[u8],
-                _now: std::time::SystemTime,
+                _end_entity: &CertificateDer<'_>,
+                _certs: &[CertificateDer<'_>],
+                _hostname: &ServerName<'_>,
+                _ocsp: &[u8],
+                _now: UnixTime,
             ) -> Result<ServerCertVerified, rustls::Error> {
                 Ok(ServerCertVerified::assertion())
             }
 
             fn verify_tls12_signature(
                 &self,
-                _message: &[u8],
-                _cert: &rustls::Certificate,
-                _dss: &DigitallySignedStruct,
+                message: &[u8],
+                cert: &CertificateDer<'_>,
+                dss: &DigitallySignedStruct,
             ) -> Result<HandshakeSignatureValid, rustls::Error> {
-                Ok(HandshakeSignatureValid::assertion())
+                self.parent.verify_tls12_signature(message, cert, dss)
             }
 
             fn verify_tls13_signature(
                 &self,
-                _message: &[u8],
-                _cert: &rustls::Certificate,
-                _dss: &DigitallySignedStruct,
+                message: &[u8],
+                cert: &CertificateDer<'_>,
+                dss: &DigitallySignedStruct,
             ) -> Result<HandshakeSignatureValid, rustls::Error> {
-                Ok(HandshakeSignatureValid::assertion())
+                self.parent.verify_tls13_signature(message, cert, dss)
+            }
+
+            fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+                self.parent.supported_verify_schemes()
             }
         }
         builder
-            .with_custom_certificate_verifier(Arc::new(NoVerifier))
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(DummyServerAuth::new()))
             .with_no_client_auth()
     };
-
-    // Advertise support for HTTP/2
-    //tls_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
 
     let domain_addrs: HashMap<Uncased, SocketAddr> = replicas
         .iter()
@@ -240,20 +390,27 @@ pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
     let mut connector = HttpConnector::new_with_resolver(resolver);
     connector.enforce_http(false);
 
-    let build = HttpsConnectorBuilder::new().with_tls_config(tls_config);
-
-    #[cfg(feature = "dev_proxy")]
-    let build = build.https_or_http();
-    #[cfg(not(feature = "dev_proxy"))]
-    let build = build.https_only();
-
-    let connector = build
+    let connector = HttpsConnectorBuilder::new()
+        .with_tls_config(tls_config)
+        .https_or_http()
         .enable_http1()
         .enable_http2()
         .wrap_connector(connector);
 
-    let client: Client<_, Body> = Client::builder().build(connector);
-    Ok(client)
+    let client: Client<_, Body> =
+        Client::builder(hyper_util::rt::TokioExecutor::new()).build(connector);
+    Ok(HyperClientWrapper {
+        uri_override: None,
+        inner: client,
+    })
+}
+
+pub fn setup_unix_socket(uri: Uri) -> Result<impl HyperService<Body>, Error> {
+    let client: Client<_, Body> = Client::unix();
+    Ok(HyperClientWrapper {
+        uri_override: Some(uri),
+        inner: client,
+    })
 }
 
 #[derive(Clone, Debug, Eq)]

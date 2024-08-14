@@ -17,22 +17,28 @@ DEPENDENCIES = [
     "//rs/registry/proto_data_provider",
     "//rs/test_utilities",
     "//rs/test_utilities/artifact_pool",
+    "//rs/test_utilities/consensus",
     "//rs/test_utilities/registry",
+    "//rs/test_utilities/state",
+    "//rs/test_utilities/time",
+    "//rs/test_utilities/types",
     "//rs/types/types",
-    "@crate_index//:mockall_0_7_2",
+    "@crate_index//:mockall",
     "@crate_index//:slog",
 ]
 
 rust_library(
     name = "mocks",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     crate_features = select({
         "//conditions:default": [],
     }),
     crate_name = "ic_consensus_mocks",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:strum_macros",
     ],
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )

@@ -12,13 +12,9 @@ use ic_nervous_system_clients::{
     canister_status::CanisterStatusResultV2,
     management_canister_client::{ManagementCanisterClient, ManagementCanisterClientImpl},
 };
-use ic_nervous_system_common::{
-    dfn_core_stable_mem_utils::BufferedStableMemReader, serve_logs, serve_logs_v2, serve_metrics,
-};
+use ic_nervous_system_common::{serve_logs, serve_logs_v2, serve_metrics};
 use ic_nervous_system_runtime::DfnRuntime;
-use ic_sns_governance::ledger::LedgerCanister;
 use ic_sns_swap::{
-    clients::RealSnsRootClient,
     logs::{ERROR, INFO},
     memory::UPGRADES_MEMORY,
     pb::v1::{
@@ -32,9 +28,7 @@ use ic_sns_swap::{
         ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
         ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
         NewSaleTicketRequest, NewSaleTicketResponse, NotifyPaymentFailureRequest,
-        NotifyPaymentFailureResponse, OpenRequest, OpenResponse, RefreshBuyerTokensRequest,
-        RefreshBuyerTokensResponse, RestoreDappControllersRequest, RestoreDappControllersResponse,
-        Swap,
+        NotifyPaymentFailureResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Swap,
     },
 };
 use ic_stable_structures::{writer::Writer, Memory};
@@ -128,33 +122,6 @@ fn list_community_fund_participants_(
 ) -> ListCommunityFundParticipantsResponse {
     log!(INFO, "list_community_fund_participants");
     swap().list_community_fund_participants(&request)
-}
-
-/// Try to open the swap.
-///
-/// See Swap.open.
-#[export_name = "canister_update open"]
-fn open() {
-    over_async(candid_one, open_)
-}
-
-/// See `open`.
-#[candid_method(update, rename = "open")]
-async fn open_(req: OpenRequest) -> OpenResponse {
-    log!(INFO, "open");
-    // Require authorization.
-    let allowed_canister = swap().init_or_panic().nns_governance_or_panic();
-    if caller() != PrincipalId::from(allowed_canister) {
-        panic!(
-            "This method can only be called by canister {}",
-            allowed_canister
-        );
-    }
-    let sns_ledger = create_real_icrc1_ledger(swap().init_or_panic().sns_ledger_or_panic());
-    match swap_mut().open(id(), &sns_ledger, now_seconds(), req).await {
-        Ok(res) => res,
-        Err(msg) => panic!("{}", msg),
-    }
 }
 
 /// See `Swap.refresh_buyer_token_e8`.
@@ -253,28 +220,6 @@ async fn get_buyers_total_(_request: GetBuyersTotalRequest) -> GetBuyersTotalRes
     swap().get_buyers_total()
 }
 
-/// Restores all dapp canisters to the fallback controllers as specified
-/// in the SNS initialization process, marking the Swap as aborted in the
-/// process. `restore_dapp_controllers` is only callable by NNS Governance.
-#[export_name = "canister_update restore_dapp_controllers"]
-fn restore_dapp_controllers() {
-    over_async(candid_one, restore_dapp_controllers_)
-}
-
-/// Restores all dapp canisters to the fallback controllers as specified
-/// in the SNS initialization process, marking the Swap as aborted in the
-/// process. `restore_dapp_controllers` is only callable by NNS Governance.
-#[candid_method(update, rename = "restore_dapp_controllers")]
-async fn restore_dapp_controllers_(
-    _request: RestoreDappControllersRequest,
-) -> RestoreDappControllersResponse {
-    log!(INFO, "restore_dapp_controllers");
-    let mut sns_root_client = RealSnsRootClient::new(swap().init_or_panic().sns_root_or_panic());
-    swap_mut()
-        .restore_dapp_controllers(&mut sns_root_client, caller())
-        .await
-}
-
 /// Return the current lifecycle stage (e.g. Open, Committed, etc)
 #[export_name = "canister_query get_lifecycle"]
 fn get_lifecycle() {
@@ -309,11 +254,9 @@ fn get_init() {
 
 /// Returns the initialization data of the canister
 #[candid_method(query, rename = "get_init")]
-async fn get_init_(_request: GetInitRequest) -> GetInitResponse {
+async fn get_init_(request: GetInitRequest) -> GetInitResponse {
     log!(INFO, "get_init");
-    GetInitResponse {
-        init: swap().init.clone(),
-    }
+    swap().get_init(&request)
 }
 
 /// Return the current derived state of the Swap
@@ -415,13 +358,6 @@ fn create_real_icp_ledger(id: CanisterId) -> ic_nervous_system_common::ledger::I
     ic_nervous_system_common::ledger::IcpLedgerCanister::new(id)
 }
 
-/// Returns a real ledger stub that communicates with the specified
-/// canister, which is assumed to be a canister that implements the
-/// ICRC1 interface.
-fn create_real_icrc1_ledger(id: CanisterId) -> LedgerCanister {
-    LedgerCanister::new(id)
-}
-
 #[export_name = "canister_init"]
 fn canister_init() {
     over_init(|CandidOne(arg)| canister_init_(arg))
@@ -486,51 +422,34 @@ fn canister_post_upgrade() {
 
     log!(INFO, "Executing post upgrade");
 
-    // This post_upgrade is done in two steps because of NNS1-2014:
-    //   1. First try to read the state as it was stored before NNS1-2014
-    //   2. If that fails then we try to read the state as it is stored since NNS1-2014
+    // Read the length of the state bytes.
+    let serialized_swap_message_len = UPGRADES_MEMORY.with(|um| {
+        let mut serialized_swap_message_len_bytes = [0; std::mem::size_of::<u32>()];
+        um.borrow()
+            .read(/* offset */ 0, &mut serialized_swap_message_len_bytes);
+        u32::from_le_bytes(serialized_swap_message_len_bytes) as usize
+    });
 
-    // First try to read the state using the same approach used before NNS1-2014
+    // Read the state bytes.
+    let decode_swap_result = UPGRADES_MEMORY.with(|um| {
+        let mut swap_bytes = vec![0; serialized_swap_message_len];
+        um.borrow().read(
+            /* offset */ std::mem::size_of::<u32>() as u64,
+            &mut swap_bytes,
+        );
+        Swap::decode(&swap_bytes[..])
+    });
 
-    const STABLE_MEM_BUFFER_SIZE: u32 = 1024 * 1024; // 1MiB
-    let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
-    match Swap::decode(reader) {
-        // if reading was successful then this canister was pre NNS1-2014,
-        // nothing else to do
-        Ok(proto) => set_state(proto),
-
-        // otherwise try to read the state using the approach implemented in NNS1-2014
-        Err(_) => {
-            // Read the length of the state bytes.
-            let serialized_swap_message_len = UPGRADES_MEMORY.with(|um| {
-                let mut serialized_swap_message_len_bytes = [0; std::mem::size_of::<u32>()];
-                um.borrow()
-                    .read(/* offset */ 0, &mut serialized_swap_message_len_bytes);
-                u32::from_le_bytes(serialized_swap_message_len_bytes) as usize
-            });
-
-            // Read the state bytes.
-            let decode_swap_result = UPGRADES_MEMORY.with(|um| {
-                let mut swap_bytes = vec![0; serialized_swap_message_len];
-                um.borrow().read(
-                    /* offset */ std::mem::size_of::<u32>() as u64,
-                    &mut swap_bytes,
-                );
-                Swap::decode(&swap_bytes[..])
-            });
-
-            // Deserialize and set the state
-            match decode_swap_result {
-                Err(err) => {
-                    panic!(
-                        "Error deserializing canister state post-upgrade. \
-                 CANISTER HAS BROKEN STATE!!!!. Error: {:?}",
-                        err
-                    );
-                }
-                Ok(proto) => set_state(proto),
-            }
+    // Deserialize and set the state
+    match decode_swap_result {
+        Err(err) => {
+            panic!(
+                "Error deserializing canister state post-upgrade. \
+                CANISTER HAS BROKEN STATE!!!!. Error: {:?}",
+                err
+            );
         }
+        Ok(proto) => set_state(proto),
     }
 
     // Rebuild the indexes if needed. If the rebuilding process fails, panic so the upgrade
@@ -567,12 +486,12 @@ pub fn serve_http(request: HttpRequest) -> HttpResponse {
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "sale_stable_memory_pages",
-        dfn_core::api::stable_memory_size_in_pages() as f64,
+        ic_nervous_system_common::stable_memory_num_pages() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "sale_stable_memory_bytes",
-        (dfn_core::api::stable_memory_size_in_pages() * 64 * 1024) as f64,
+        ic_nervous_system_common::stable_memory_size_bytes() as f64,
         "Size of the stable memory allocated by this canister.",
     )?;
     w.encode_gauge(
@@ -607,17 +526,17 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "sale_participant_total_icp_e8s",
-        swap().participant_total_icp_e8s() as f64,
+        swap().current_total_participation_e8s() as f64,
         "The total amount of ICP contributed by direct investors and the Community Fund",
     )?;
     w.encode_gauge(
         "sale_direct_investor_total_icp_e8s",
-        swap().direct_investor_total_icp_e8s() as f64,
+        swap().current_direct_participation_e8s() as f64,
         "The total amount of ICP contributed by direct investors",
     )?;
     w.encode_gauge(
         "sale_cf_total_icp_e8s",
-        swap().cf_total_icp_e8s() as f64,
+        swap().current_neurons_fund_participation_e8s() as f64,
         "The total amount of ICP contributed by the Community Fund",
     )?;
 
@@ -647,12 +566,11 @@ fn main() {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_nervous_system_clients::canister_status::{
-        DefiniteCanisterSettingsArgs, DefiniteCanisterSettingsFromManagementCanister,
-    };
     use ic_nervous_system_clients::{
         canister_status::{
             CanisterStatusResultFromManagementCanister, CanisterStatusResultV2, CanisterStatusType,
+            DefiniteCanisterSettingsArgs, DefiniteCanisterSettingsFromManagementCanister,
+            LogVisibility,
         },
         management_canister_client::{
             MockManagementCanisterClient, MockManagementCanisterClientReply,
@@ -689,13 +607,13 @@ mod tests {
             module_hash: Some(vec![0_u8]),
             settings: DefiniteCanisterSettingsArgs {
                 controllers: vec![PrincipalId::new_user_test_id(0)],
-                compute_allocation: candid::Nat::from(0),
-                memory_allocation: candid::Nat::from(0),
-                freezing_threshold: candid::Nat::from(0),
+                compute_allocation: candid::Nat::from(0_u32),
+                memory_allocation: candid::Nat::from(0_u32),
+                freezing_threshold: candid::Nat::from(0_u32),
             },
-            memory_size: candid::Nat::from(0),
-            cycles: candid::Nat::from(0),
-            idle_cycles_burned_per_day: candid::Nat::from(0),
+            memory_size: candid::Nat::from(0_u32),
+            cycles: candid::Nat::from(0_u32),
+            idle_cycles_burned_per_day: candid::Nat::from(0_u32),
         };
 
         let management_canister_client = MockManagementCanisterClient::new(vec![
@@ -703,15 +621,19 @@ mod tests {
                 CanisterStatusResultFromManagementCanister {
                     status: CanisterStatusType::Running,
                     module_hash: Some(vec![0_u8]),
-                    memory_size: candid::Nat::from(0),
+                    memory_size: candid::Nat::from(0_u32),
                     settings: DefiniteCanisterSettingsFromManagementCanister {
-                        controllers: vec![PrincipalId::new_user_test_id(0)],
-                        compute_allocation: candid::Nat::from(0),
-                        memory_allocation: candid::Nat::from(0),
-                        freezing_threshold: candid::Nat::from(0),
+                        controllers: vec![PrincipalId::new_user_test_id(0_u64)],
+                        compute_allocation: candid::Nat::from(0_u32),
+                        memory_allocation: candid::Nat::from(0_u32),
+                        freezing_threshold: candid::Nat::from(0_u32),
+                        reserved_cycles_limit: candid::Nat::from(0_u32),
+                        wasm_memory_limit: candid::Nat::from(0_u32),
+                        log_visibility: LogVisibility::Controllers,
                     },
-                    cycles: candid::Nat::from(0),
-                    idle_cycles_burned_per_day: candid::Nat::from(0),
+                    cycles: candid::Nat::from(0_u32),
+                    idle_cycles_burned_per_day: candid::Nat::from(0_u32),
+                    reserved_cycles: candid::Nat::from(0_u32),
                 },
             )),
         ]);

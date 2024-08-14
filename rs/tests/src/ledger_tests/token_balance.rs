@@ -28,27 +28,30 @@ Coverage::
 
 end::catalog[] */
 
-use crate::driver::ic::InternetComputer;
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-};
-use crate::util::{
-    block_on, get_icp_balance, runtime_from_url, transact_icp, transact_icp_subaccount,
-    UniversalCanister,
-};
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use futures::future::join_all;
 use ic_canister_client::Sender;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR,
+    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR,
 };
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID};
-use ic_nns_governance::pb::v1::{governance_error::ErrorType, GovernanceError, Neuron};
-use ic_nns_test_utils::ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID};
+use ic_nns_governance_api::pb::v1::{governance_error::ErrorType, GovernanceError, Neuron};
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
+    driver::{
+        ic::InternetComputer,
+        test_env::TestEnv,
+        test_env_api::{
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+        },
+    },
+    util::{
+        block_on, get_icp_balance, runtime_from_url, transact_icp, transact_icp_subaccount,
+        UniversalCanister,
+    },
+};
 use ic_types::CanisterId;
 use icp_ledger::{Subaccount, Tokens, DEFAULT_TRANSFER_FEE};
 use slog::info;
@@ -177,7 +180,7 @@ pub fn test(env: TestEnv) {
         }
 
         // check whether all accounts still sum up
-        let account_holders = vec![&lifeline, &can1, &can2, &can3, &can4, &can5];
+        let account_holders = [&lifeline, &can1, &can2, &can3, &can4, &can5];
         let obtainers = account_holders
             .iter()
             .map(|a| get_uc_balance(&ledger, a))

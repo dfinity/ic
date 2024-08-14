@@ -1,5 +1,5 @@
 use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, PastPayload},
+    batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
     consensus::PayloadValidationError,
 };
 use ic_types::{
@@ -43,9 +43,9 @@ impl BatchPayloadBuilder for FakeCanisterHttpPayloadBuilder {
     fn validate_payload(
         &self,
         _height: Height,
+        _proposal_context: &ProposalContext,
         _payload: &[u8],
         _past_payloads: &[PastPayload],
-        _context: &ValidationContext,
     ) -> Result<(), PayloadValidationError> {
         Ok(())
     }

@@ -1,4 +1,6 @@
+import random
 import re
+import string
 from unittest.mock import Mock
 
 import pytest
@@ -34,6 +36,8 @@ def jira_lib_mock():
 def jira_ds(jira_lib_mock):
     return JiraFindingDataSource([], jira_lib_mock)
 
+def random_string(n):
+    return ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(n))
 
 def test_get_risk_assessor_return_single_user(jira_ds, jira_lib_mock):
     user = Mock()
@@ -144,7 +148,7 @@ def assert_commit_has_block_exception_comments_called(jira_lib_mock, commit_type
     )
 
 
-def test_get_open_finding_return_none_or_empty_dict_if_no_issue_found(jira_ds, jira_lib_mock):
+def test_get_finding_return_none_or_empty_dict_if_no_issue_found(jira_ds, jira_lib_mock):
     jira_lib_mock.search_issues.return_value = []
 
     res1 = jira_ds.get_open_finding("repo", "scanner", "dep_id", "dep_ver")
@@ -154,8 +158,12 @@ def test_get_open_finding_return_none_or_empty_dict_if_no_issue_found(jira_ds, j
     assert res2 == {}
     jira_lib_mock.search_issues.assert_called_once()
 
+    res3 = jira_ds.get_deleted_findings("repo", "scanner", "dep_id")
 
-def test_get_open_finding_return_issue(jira_ds, jira_lib_mock):
+    assert res3 == []
+
+
+def test_get_finding_return_issue(jira_ds, jira_lib_mock):
     user1 = Mock(["accountId"])
     user1.accountId = "user1"
     user2 = Mock(["accountId", "displayName", "emailAddress"])
@@ -181,7 +189,7 @@ def test_get_open_finding_return_issue(jira_ds, jira_lib_mock):
         "|https://crates.io/crates/syn|syn|1.0|\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerabilities")[0]: "||*id*||*name*||*description*||*score*||*risk*||\n"
         "|https://rustsec.org/advisories/RUSTSEC-2020-0159|RUSTSEC-2020-0159|Potential segfault in localtime_r invocations|-1| |\n"
-        "|[https://rustsec.org/advisories/RUSTSEC-2022-0051|https://rustsec.org/advisories/RUSTSEC-2022-0051]|RUSTSEC-2022-0051|Memory corruption in liblz4|100|crit|\n",
+        "|[https://rustsec.org/advisories/RUSTSEC-2022-0051|https://rustsec.org/advisories/RUSTSEC-2022-0051]|RUSTSEC-2022-0051|Memory corruption in liblz4|100|crit: [look here for more info| https://example.com] or be smart [https://example.com|https://example.com|smart-link]|\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_versions")[
             0
         ]: "||*dep / vuln*||RUSTSEC-2020-0159||RUSTSEC-2022-0051||\n"
@@ -224,7 +232,7 @@ def test_get_open_finding_return_issue(jira_ds, jira_lib_mock):
     assert res1.vulnerabilities[1].name == "RUSTSEC-2022-0051"
     assert res1.vulnerabilities[1].description == "Memory corruption in liblz4"
     assert res1.vulnerabilities[1].score == 100
-    assert res1.vulnerabilities[1].risk_note == "crit"
+    assert res1.vulnerabilities[1].risk_note == "crit: [look here for more info| https://example.com] or be smart [https://example.com|https://example.com|smart-link]"
     assert len(res1.first_level_dependencies) == 1
     assert res1.first_level_dependencies[0].id == "https://crates.io/crates/syn"
     assert res1.first_level_dependencies[0].name == "syn"
@@ -246,6 +254,11 @@ def test_get_open_finding_return_issue(jira_ds, jira_lib_mock):
     assert res2[res1.id()] == res1
 
     jira_lib_mock.search_issues.assert_called_once()
+
+    res3 = jira_ds.get_deleted_findings("repo", "scanner", "https://crates.io/crates/chrono")
+
+    assert len(res3) == 1
+    assert res3[0] == res1
 
 
 def test_get_open_finding_raise_error_if_two_issues_with_same_id_returned(jira_ds, jira_lib_mock):
@@ -284,7 +297,7 @@ def test_get_open_finding_raise_error_if_two_issues_with_same_id_returned(jira_d
     jira_lib_mock.search_issues.assert_called()
 
 
-def test_get_open_finding_return_none_if_primary_key_of_finding_not_matching(jira_ds, jira_lib_mock):
+def test_get_finding_return_none_if_primary_key_of_finding_not_matching(jira_ds, jira_lib_mock):
     issue_data = {
         JIRA_FINDING_TO_CUSTOM_FIELD.get("repository")[0]: "repo",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("scanner")[0]: "scanner",
@@ -318,8 +331,12 @@ def test_get_open_finding_return_none_if_primary_key_of_finding_not_matching(jir
     assert len(res2) == 1
     jira_lib_mock.search_issues.assert_called_once()
 
+    res3 = jira_ds.get_deleted_findings("repo", "scanner", "https://crates.io/crates/chrono2")
 
-def test_get_open_finding_raise_error_if_no_dependency_data_available(jira_ds, jira_lib_mock):
+    assert res3 == []
+
+
+def test_get_finding_raise_error_if_no_dependency_data_available(jira_ds, jira_lib_mock):
     issue_data = {
         JIRA_FINDING_TO_CUSTOM_FIELD.get("repository")[0]: "repo",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("scanner")[0]: "scanner",
@@ -334,6 +351,9 @@ def test_get_open_finding_raise_error_if_no_dependency_data_available(jira_ds, j
 
     with pytest.raises(RuntimeError, match=r"dependencies"):
         jira_ds.get_open_findings_for_repo_and_scanner("repo", "scanner")
+
+    with pytest.raises(RuntimeError, match=r"dependencies"):
+        jira_ds.get_deleted_findings("repo", "scanner", "https://crates.io/crates/chrono")
 
     jira_lib_mock.search_issues.assert_called()
 
@@ -454,7 +474,7 @@ def test_create_finding_special_character_escaping(jira_ds, jira_lib_mock):
         "repo",
         "scanner",
         Dependency("id{code}and|pipe{code}", "{code}name{code}", "ver|sion", {"id{code}": ["123;456", ";789"]}),
-        [Vulnerability("id{code}", "{code}na|me{code}", "|description|", 0, "pipe|and{code}")],
+        [Vulnerability("id{code}", "{code}na|me{code}", "|description|", 0, "[url with pipe is fine|https://example.com] and{code}")],
         [Dependency("|id|", "{code}name", "ver{code}|sion", {"id{code}": [";321;", "98;7"]})],
         ["proj1{code}", "|proj2", "pr{code}oject3|"],
         [],
@@ -477,7 +497,7 @@ def test_create_finding_special_character_escaping(jira_ds, jira_lib_mock):
     )
     assert (
         mem.store[key][JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerabilities")[0]]
-        == "||*id*||*name*||*description*||*score*||*risk*||\n|id\\{code}|\\{code}na:me\\{code}|:description:|0|pipe:and\\{code}|\n"
+        == "||*id*||*name*||*description*||*score*||*risk*||\n|id\\{code}|\\{code}na:me\\{code}|:description:|0|[url with pipe is fine|https://example.com] and\\{code}|\n"
     )
     assert (
         mem.store[key][JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_versions")[0]]
@@ -487,6 +507,76 @@ def test_create_finding_special_character_escaping(jira_ds, jira_lib_mock):
         mem.store[key][JIRA_FINDING_TO_CUSTOM_FIELD.get("projects")[0]]
         == "* proj1\\{code}\n* :proj2\n* pr\\{code}oject3:\n"
     )
+
+
+def test_dont_create_finding_with_too_long_field(jira_ds, jira_lib_mock):
+    mem = InMemoryJira(jira_lib_mock)
+    finding_in = Finding(
+        "repo",
+        "scanner",
+        Dependency("dep_id", "dep_name", "dep_vers"),
+        [Vulnerability("vuln_id", "vuln_name", "vuln_version")],
+        [],
+        ["project"],
+        [],
+        None,
+        [],
+        [],
+        None,
+    )
+    for i in range(1000):
+        finding_in.vulnerabilities.append(Vulnerability(id=random_string(10),name=random_string(10),description=random_string(10),risk_note=random_string(10)))
+    jira_lib_mock.search_issues.return_value = []
+
+    jira_ds.create_or_update_open_finding(finding_in)
+
+    assert len(mem.store) == 0
+
+
+def test_dont_update_finding_with_too_long_field(jira_ds, jira_lib_mock):
+    issue_data = {
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("repository")[0]: "repo",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("scanner")[0]: "scanner",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerable_dependency_id")[0]: "dep_id",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerable_dependency_version")[0]: "dep_vers",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("scanner")[0]: "scanner",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("dependencies")[0]: "||*id*||*name*||*version*||\n"
+                                                             "|dep_id|dep_name|dep_vers|\n",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerabilities")[0]: "||*id*||*name*||*description*||*score*||*risk*||\n"
+                                                                "|vuln_id|vuln_name|vuln_version|-1| |\n",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_versions")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("projects")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("risk_assessor")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("risk")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("owning_teams")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_responsible")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("due_date")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("score")[0]: None,
+    }
+    issue = Mock()
+    issue.get_field.side_effect = lambda x: issue_data[x]
+    issue.permalink.return_value = "https://dfinity.atlassian.net/browse/SCAVM-4"
+    jira_lib_mock.search_issues.return_value = [issue]
+
+    finding_in = Finding(
+        "repo",
+        "scanner",
+        Dependency("dep_id", "dep_name", "dep_vers"),
+        [Vulnerability("vuln_id", "vuln_name", "vuln_version")],
+        [],
+        [],
+        [],
+        None,
+        [],
+        [],
+        None,
+    )
+    for i in range(1000):
+        finding_in.vulnerabilities.append(Vulnerability(id=random_string(10),name=random_string(10),description=random_string(10),risk_note=random_string(10)))
+
+    jira_ds.create_or_update_open_finding(finding_in)
+
+    issue.update.assert_not_called()
 
 
 def test_delete_finding():
@@ -544,9 +634,8 @@ def test_owning_team_mapping_complete(jira_ds, jira_lib_mock):
 
 
 class InMemoryJira:
-    store = {}
-
     def __init__(self, jira_lib_mock):
+        self.store = {}
         jira_lib_mock.create_issue.side_effect = lambda x: self.create_issue(x)
         # jira_lib_mock.search_issues.side_effect = lambda x: self.query_issue(x)
 

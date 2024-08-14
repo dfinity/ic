@@ -1,0 +1,21 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "icrc_ledger_client",
+    srcs = [
+        "src/lib.rs",
+    ],
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
+    deps = [
+        # Keep sorted.
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
+    ],
+)

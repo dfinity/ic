@@ -26,10 +26,10 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
 mod crypto {
-    pub use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::EncryptionKeyPop;
+
     pub use crate::ni_dkg::fs_ni_dkg::forward_secure::{
         dec_chunks, enc_chunks, kgen, verify_ciphertext_integrity, EncryptionWitness,
-        FsEncryptionCiphertext, PlaintextChunks, PublicKeyWithPop, SecretKey, SysParam,
+        FsEncryptionCiphertext, PlaintextChunks, SecretKey, SysParam,
     };
     pub use crate::ni_dkg::fs_ni_dkg::nizk_chunking::{
         prove_chunking, verify_chunking, ChunkingInstance, ChunkingWitness, ProofChunking,
@@ -55,9 +55,9 @@ pub fn create_forward_secure_key_pair(
     seed: Seed,
     associated_data: &[u8],
 ) -> FsEncryptionKeySetWithPop {
-    let mut rng = seed.into_rng();
+    let rng = &mut seed.into_rng();
     let (lib_public_key_with_pop, lib_secret_key) =
-        crypto::kgen(associated_data, crypto::SysParam::global(), &mut rng);
+        crypto::kgen(associated_data, crypto::SysParam::global(), rng);
     let (public_key, pop) = lib_public_key_with_pop.serialize();
     let secret_key = lib_secret_key.serialize();
     FsEncryptionKeySetWithPop {
@@ -80,10 +80,10 @@ pub fn create_forward_secure_key_pair(
 /// * `epoch` - The earliest epoch at which to retain keys.
 /// * `seed` - Randomness used in updating the secret key to the given `epoch`.
 pub fn update_key_inplace_to_epoch(secret_key: &mut crypto::SecretKey, epoch: Epoch, seed: Seed) {
-    let mut rng = seed.into_rng();
+    let rng = &mut seed.into_rng();
     if let Some(current_epoch) = secret_key.current_epoch() {
         if current_epoch < epoch {
-            secret_key.update_to(epoch, crypto::SysParam::global(), &mut rng);
+            secret_key.update_to(epoch, crypto::SysParam::global(), rng);
         }
     }
 }
@@ -137,13 +137,13 @@ pub fn encrypt_and_prove(
         v
     };
 
-    let mut rng = seed.into_rng();
+    let rng = &mut seed.into_rng();
     let (ciphertext, encryption_witness) = crypto::enc_chunks(
         &keys_and_messages,
         epoch,
         associated_data,
         crypto::SysParam::global(),
-        &mut rng,
+        rng,
     );
 
     let chunking_proof = prove_chunking(
@@ -151,7 +151,7 @@ pub fn encrypt_and_prove(
         &ciphertext,
         &plaintext_chunks,
         &encryption_witness,
-        &mut rng,
+        rng,
     );
 
     let public_coefficients = G2Affine::batch_deserialize(&public_coefficients.coefficients)
@@ -163,7 +163,7 @@ pub fn encrypt_and_prove(
         &ciphertext,
         &plaintext_chunks,
         &encryption_witness,
-        &mut rng,
+        rng,
     );
 
     #[cfg(test)]
@@ -365,6 +365,8 @@ pub fn verify_zk_proofs(
             message: error.to_string(),
         })
     })?;
+
+    // TODO(CRP-2525) The proofs can be verified independently
 
     crypto::verify_ciphertext_integrity(
         &ciphertext,

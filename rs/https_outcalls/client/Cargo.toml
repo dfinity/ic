@@ -7,26 +7,27 @@ edition = "2021"
 [dependencies]
 
 candid = { workspace = true }
-futures = "0.3.21"
-ic-adapter-metrics = { path = "../../monitoring/adapter_metrics" }
+futures = { workspace = true }
+ic-adapter-metrics-client = { path = "../../monitoring/adapter_metrics/client" }
 ic-async-utils = { path = "../../async_utils" }
 ic-config = { path = "../../config" }
 ic-error-types = { path = "../../types/error_types" }
 ic-https-outcalls-service = { path = "../service" }
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
-ic-protobuf = { path = "../../protobuf" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-types = { path = "../../types/types" }
-prometheus = { version = "0.12.0", features = [ "process" ] }
-slog = "2.7.0"
-tokio = { version = "1.15.0", features = ["full"] }
-tonic = "0.8.2"
-tower = { version = "0.4.8", features = ["util"] }
+prometheus = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
+tonic = { workspace = true }
+tower = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
+ic-test-utilities-time = { path = "../../test_utilities/time" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
 tower-test = "0.4.0"
-ic-test-utilities = { path = "../../test_utilities" }

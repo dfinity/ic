@@ -12,7 +12,7 @@ message NodeOperatorRecord {
   //
   // This must be unique across NodeOperatorRecords.
   bytes node_operator_principal_id = 1;
-  
+
   // The remaining number of nodes that could be added by this node operator.
   // This number should never go below 0.
   uint64 node_allowance = 2;

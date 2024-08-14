@@ -4,12 +4,12 @@
 == Introduction
 
 The public endpoint is responsible for processing https requests as specified in the
-https://sdk.dfinity.org/docs/interface-spec/index.html#http-interface[IC specification]. Processing semantics include:
+https://internetcomputer.org/docs/current/references/ic-interface-spec#http-interface[IC specification]. Processing semantics include:
 
 * accepting TCP connections
 * TLS handshake for connections using HTTPS
 * forwarding, potentially after a transform, each request to the corresponding upstream component
-* request validation according to the https://sdk.dfinity.org/docs/interface-spec/index.html[interface specification of the IC]
+* request validation according to the https://internetcomputer.org/docs/current/references/ic-interface-spec#http-interface[interface specification of the IC]
 * async accepting and serving of connections 
 * DoS mitigation, as described in the link:rs/http_endpoints/README.adoc[parent README.adoc]
 
@@ -32,7 +32,7 @@ For each HTTP(s) endpoint there is a module that processes the corresponding req
 
 ==== Call
 
-According to the https://smartcontracts.org/docs/interface-spec/index.html[IC spec], first steps of the high-level workflow of calling a canister are:
+According to the https://internetcomputer.org/docs/interface-spec/index.html[IC spec], first steps of the high-level workflow of calling a canister are:
 
 . A user submits a call via the HTTPS Interface. No useful information is returned in the immediate response (as such information cannot be trustworthy anyways).
 . For a certain amount of time, the IC behaves as if it does not know about the call.

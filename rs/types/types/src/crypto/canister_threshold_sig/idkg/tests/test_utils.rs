@@ -6,20 +6,22 @@ use crate::crypto::canister_threshold_sig::idkg::{
 use crate::crypto::AlgorithmId;
 use crate::{Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_test_utils_canister_threshold_sigs::node_id;
-use rand::Rng;
+use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
 
 // Due to a quasi-circular dependency with ic-types
 // the test utilities here cannot be replaced by the ones in
 // ic-crypto-test-utils-canister-threshold-sigs
-pub fn create_params_for_dealers(
+pub fn create_idkg_params<R: Rng + CryptoRng>(
     dealer_set: &BTreeSet<NodeId>,
+    receiver_set: &BTreeSet<NodeId>,
     operation: IDkgTranscriptOperation,
+    rng: &mut R,
 ) -> IDkgTranscriptParams {
     IDkgTranscriptParams::new(
-        random_transcript_id(),
+        random_transcript_id(rng),
         dealer_set.clone(),
-        dealer_set.clone(),
+        receiver_set.clone(),
         RegistryVersion::from(0),
         AlgorithmId::ThresholdEcdsaSecp256k1,
         operation,
@@ -28,9 +30,7 @@ pub fn create_params_for_dealers(
 }
 
 // A randomized way to get non-repeating IDs.
-pub fn random_transcript_id() -> IDkgTranscriptId {
-    let rng = &mut rand::thread_rng();
-
+pub fn random_transcript_id<R: Rng + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
     let id = rng.gen();
     let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
     let height = Height::from(rng.gen::<u64>());
@@ -38,9 +38,9 @@ pub fn random_transcript_id() -> IDkgTranscriptId {
     IDkgTranscriptId::new(subnet, id, height)
 }
 
-pub fn mock_unmasked_transcript_type() -> IDkgTranscriptType {
+pub fn mock_unmasked_transcript_type<R: Rng + CryptoRng>(rng: &mut R) -> IDkgTranscriptType {
     IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
-        random_transcript_id(),
+        random_transcript_id(rng),
     ))
 }
 
@@ -48,9 +48,10 @@ pub fn mock_masked_transcript_type() -> IDkgTranscriptType {
     IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random)
 }
 
-pub fn mock_transcript(
+pub fn mock_transcript<R: Rng + CryptoRng>(
     receivers: Option<BTreeSet<NodeId>>,
     transcript_type: IDkgTranscriptType,
+    rng: &mut R,
 ) -> IDkgTranscript {
     let receivers = match receivers {
         Some(receivers) => receivers,
@@ -64,7 +65,7 @@ pub fn mock_transcript(
     };
 
     IDkgTranscript {
-        transcript_id: random_transcript_id(),
+        transcript_id: random_transcript_id(rng),
         receivers: IDkgReceivers::new(receivers).unwrap(),
         registry_version: RegistryVersion::from(314),
         verified_dealings: BTreeMap::new(),

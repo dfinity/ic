@@ -1,6 +1,7 @@
 //! Prunes a replicated state, as part of a subnet split.
 use crate::{
     checkpoint::{load_checkpoint, make_checkpoint},
+    flush_canister_snapshots_and_page_maps,
     tip::spawn_tip_thread,
     StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
 };
@@ -64,7 +65,7 @@ pub fn split(
     // Load latest checkpoint under `root`.
     let config = Config::new(root);
     let state_layout =
-        StateLayout::try_new(log.clone(), config.state_root, metrics_registry).unwrap();
+        StateLayout::try_new(log.clone(), config.state_root.clone(), metrics_registry).unwrap();
 
     // A thread pool to use for reading and writing checkpoints.
     let mut thread_pool = Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
@@ -73,7 +74,7 @@ pub fn split(
     let fd_factory: Arc<dyn PageAllocatorFileDescriptor> =
         Arc::new(TestPageAllocatorFileDescriptorImpl::new());
 
-    let metrics = StateManagerMetrics::new(metrics_registry);
+    let metrics = StateManagerMetrics::new(metrics_registry, log.clone());
     let (cp, state) = read_checkpoint(
         &state_layout,
         &mut thread_pool,
@@ -89,15 +90,16 @@ pub fn split(
         .map_err(|e| format!("{:?}", e))?;
 
     // Split the state.
-    let split_state = state.split(subnet_id, &routing_table, new_subnet_batch_time)?;
+    let mut split_state = state.split(subnet_id, &routing_table, new_subnet_batch_time)?;
 
     // Write the split state as a new checkpoint.
     write_checkpoint(
-        &split_state,
+        &mut split_state,
         state_layout,
         &cp,
         &mut thread_pool,
         fd_factory,
+        &config,
         &metrics,
         log,
     )
@@ -169,11 +171,12 @@ fn read_checkpoint(
 /// Writes the given `ReplicatedState` into a new checkpoint under
 /// `state_layout`, based off of `old_cp`.
 fn write_checkpoint(
-    state: &ReplicatedState,
+    state: &mut ReplicatedState,
     state_layout: StateLayout,
     old_cp: &CheckpointLayout<ReadOnly>,
     thread_pool: &mut Pool,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    config: &Config,
     metrics: &StateManagerMetrics,
     log: ReplicaLogger,
 ) -> Result<(), String> {
@@ -181,23 +184,40 @@ fn write_checkpoint(
 
     let mut tip_handler = state_layout.capture_tip_handler();
     tip_handler
-        .reset_tip_to(&state_layout, old_cp, Some(thread_pool))
+        .reset_tip_to(
+            &state_layout,
+            old_cp,
+            config.lsmt_config.lsmt_status,
+            Some(thread_pool),
+        )
         .map_err(|e| e.to_string())?;
     let (_tip_thread, tip_channel) = spawn_tip_thread(
         log,
         tip_handler,
         state_layout,
+        config.lsmt_config.clone(),
         metrics.clone(),
         MaliciousFlags::default(),
     );
 
+    let new_height = old_height.increment();
+
+    // We need to flush to handle the deletion of canister snapshots.
+    flush_canister_snapshots_and_page_maps(
+        state,
+        new_height,
+        &tip_channel,
+        &metrics.checkpoint_metrics,
+    );
+
     make_checkpoint(
         state,
-        old_height.increment(),
+        new_height,
         &tip_channel,
         &metrics.checkpoint_metrics,
         thread_pool,
         fd_factory,
+        config.lsmt_config.lsmt_status,
     )
     .map_err(|e| format!("Failed to write checkpoint: {}", e))?;
 

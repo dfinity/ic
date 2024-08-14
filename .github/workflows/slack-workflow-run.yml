@@ -1,0 +1,53 @@
+name: Slack Workflow Run
+
+on:
+  workflow_run:
+    types:
+      - completed
+    branches:
+      - master
+      - rc--*
+    workflows:
+      - Schedule Daily
+      - Schedule Weekly
+      - Release Testing
+      - Container IC Base Images
+
+jobs:
+  slack-workflow-run:
+    name: Send Notification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Message and Channels
+        id: setup
+        shell: bash
+        run: |
+          TRIGGERING_WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
+          CHANNEL="eng-idx-alerts"
+          FULL_MESSAGE="nothing"
+
+          if [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(success)$ ]]; then
+            FULL_MESSAGE=":white_check_mark: ${MESSAGE} :relaxed:"
+          elif [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(failure|timed_out)$ ]]; then
+            FULL_MESSAGE=":fire: ${MESSAGE} :disappointed:"
+          fi
+
+          if [[ "$TRIGGERING_WORKFLOW_NAME" == "Release Testing" ]]; then
+            CHANNEL="release-management-alerts"
+            COMMIT="${{ github.event.workflow_run.head_sha }}"
+            FULL_MESSAGE="${FULL_MESSAGE} commit: ${COMMIT}"
+          fi
+
+          echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
+          echo "message=${FULL_MESSAGE}" >> $GITHUB_OUTPUT
+        env:
+          MESSAGE: "*${{github.event.workflow_run.name}}* ${{github.event.workflow_run.conclusion}} on ${{github.event.workflow_run.head_branch}} - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.event.workflow_run.id}}|Run#${{github.event.workflow_run.id}}>"
+
+      - name: Post Slack Notification
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        if: ${{ steps.setup.outputs.message != 'nothing' }}
+        with:
+          channel-id: ${{ steps.setup.outputs.channel }}
+          slack-message: "${{ steps.setup.outputs.message }}"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}

@@ -24,14 +24,14 @@ pub fn should_generate_and_store_dealing_encryption_key_pair_multiple_times(
             idkg_dealing_encryption_pk_to_proto(public_key.clone())
         );
         let key_id = KeyId::try_from(&public_key).expect("invalid key ID");
-        assert!(csp_vault.sks_contains(&key_id).expect("error reading SKS"));
+        assert!(csp_vault.sks_contains(key_id).expect("error reading SKS"));
 
         assert!(key_ids.insert(key_id));
     }
     // Ensure that previously generated secret keys were not
     // deleted/overwritten by the generation of new keys.
     for key_id in key_ids {
-        assert!(csp_vault.sks_contains(&key_id).expect("error reading SKS"));
+        assert!(csp_vault.sks_contains(key_id).expect("error reading SKS"));
     }
 }
 

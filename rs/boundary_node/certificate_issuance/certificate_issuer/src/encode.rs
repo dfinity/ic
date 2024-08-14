@@ -6,7 +6,7 @@ use chacha20poly1305::{
     aead::{rand_core::RngCore, Aead, OsRng},
     XChaCha20Poly1305, XNonce,
 };
-use opentelemetry::{Context, KeyValue};
+use opentelemetry::KeyValue;
 use tracing::info;
 
 use crate::metrics::{MetricParams, WithMetrics};
@@ -75,10 +75,8 @@ impl<T: Encode> Encode for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        let cx = Context::current();
-
-        counter.add(&cx, 1, labels);
-        recorder.record(&cx, duration, labels);
+        counter.add(1, labels);
+        recorder.record(duration, labels);
 
         info!(action = action.as_str(), status, duration, error = ?out.as_ref().err());
 
@@ -129,10 +127,8 @@ impl<T: Decode> Decode for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        let cx = Context::current();
-
-        counter.add(&cx, 1, labels);
-        recorder.record(&cx, duration, labels);
+        counter.add(1, labels);
+        recorder.record(duration, labels);
 
         info!(action = action.as_str(), status, duration, error = ?out.as_ref().err());
 

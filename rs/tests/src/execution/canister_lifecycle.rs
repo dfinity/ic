@@ -21,29 +21,36 @@ The test (module `execution::canister_lifecycle`) currently covers (at least) th
 . Attempting to install a canister on a subnet with an exhausted compute allocation fails.
 . After deleting a canister, a new canister can be installed taking up the freed compute allocation.
 . A controller can control (install/stop/delete) a controllee across different subnets.
+. Changing settings of a frozen canister succeeds.
 
 AKA:: Testcase 2.4
 
 
 end::catalog[] */
 
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
-use crate::types::*;
-use crate::util::*;
 use candid::{Decode, Encode};
 use futures::future::join_all;
 use ic_agent::{agent::RejectCode, export::Principal, identity::Identity, AgentError};
-use ic_ic00_types::{
+use ic_management_canister_types::{
     CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CreateCanisterArgs,
     EmptyBlob, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
+use ic_system_test_driver::types::*;
+use ic_system_test_driver::util::*;
 use ic_types::{Cycles, PrincipalId};
 use ic_universal_canister::{call_args, management, wasm, CallInterface, UNIVERSAL_CANISTER_WASM};
 use ic_utils::call::AsyncCall;
-use ic_utils::interfaces::{management_canister::builders::InstallMode, ManagementCanister};
+use ic_utils::interfaces::{
+    management_canister::{
+        builders::{CanisterUpgradeOptions, InstallMode},
+        UpdateCanisterBuilder,
+    },
+    ManagementCanister,
+};
 use slog::info;
 
 pub fn create_canister_via_ingress_fails(env: TestEnv) {
@@ -96,74 +103,134 @@ pub fn create_canister_via_canister_succeeds(env: TestEnv) {
     });
 }
 
-pub fn create_canister_with_controller_and_controllers_fails(env: TestEnv) {
+pub fn update_settings_of_frozen_canister(env: TestEnv) {
+    use ic_base_types::NumBytes;
+    use ic_cdk::api::management_canister::main::{CanisterSettings, UpdateSettingsArgument};
+    use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
+    use ic_cycles_account_manager::CyclesAccountManager;
+
     let logger = env.logger();
-    let node = env.get_first_healthy_node_snapshot();
-    let agent = node.build_default_agent();
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let agent = app_node.build_default_agent();
     block_on({
         async move {
-            let canister_a =
-                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
-                    .await;
+            let mgr = ManagementCanister::create(&agent);
+            let canister = UniversalCanister::new_with_retries(
+                &agent,
+                app_node.effective_canister_id(),
+                &logger,
+            )
+            .await;
 
-            assert_reject(
-                canister_a
-                    .update(
-                        wasm().call(
-                            management::create_canister(
-                                Cycles::from(2_000_000_000_000u64).into_parts(),
-                            )
-                            // Setting both of these should result in an error.
-                            .with_controllers(vec![canister_a.canister_id()])
-                            .with_controller(canister_a.canister_id()),
-                        ),
-                    )
-                    .await
-                    .map(|res| {
-                        Decode!(res.as_slice(), CreateCanisterResult)
-                            .unwrap()
-                            .canister_id
-                    }),
-                RejectCode::CanisterReject,
-            );
-        }
-    });
-}
-
-pub fn update_settings_with_controller_and_controllers_fails(env: TestEnv) {
-    let logger = env.logger();
-    let node = env.get_first_healthy_node_snapshot();
-    let agent = node.build_default_agent();
-    block_on({
-        async move {
-            let canister_a =
-                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
-                    .await;
-
-            let canister_b = canister_a
-                .update(wasm().call(management::create_canister(
-                    Cycles::from(2_000_000_000_000u64).into_parts(),
-                )))
+            // Construct large `UpdateSettings` argument.
+            let mut controllers = mgr
+                .canister_status(&canister.canister_id())
+                .call_and_wait()
                 .await
-                .map(|res| {
-                    Decode!(res.as_slice(), CreateCanisterResult)
-                        .unwrap()
-                        .canister_id
-                })
+                .unwrap()
+                .0
+                .settings
+                .controllers;
+            for i in 0..9 {
+                controllers.push(PrincipalId::new_derived(&controllers[0].into(), &[i]).into());
+            }
+            let low_freezing_threshold = 30u32 * 24 * 3600; // 30 days default
+            let arg = UpdateSettingsArgument {
+                canister_id: canister.canister_id(),
+                settings: CanisterSettings {
+                    controllers: Some(controllers),
+                    compute_allocation: None,
+                    memory_allocation: None,
+                    freezing_threshold: Some(low_freezing_threshold.into()),
+                    reserved_cycles_limit: None,
+                },
+            };
+            let bytes = Encode!(&arg).unwrap();
+
+            // Check that the canister is not frozen.
+            canister
+                .update(wasm().reply_data(&[]).build())
+                .await
                 .unwrap();
 
-            assert_reject(
-                canister_a
-                    .update(
-                        wasm().call(
-                            management::update_settings(canister_b)
-                                // Setting both of these should result in an error.
-                                .with_controllers(vec![canister_a.canister_id()])
-                                .with_controller(canister_a.canister_id()),
-                        ),
-                    )
-                    .await,
-                RejectCode::CanisterReject,
+            // Update freezing threshold to a very high value to make the canister frozen.
+            let high_freezing_threshold = 1_u64 << 62;
+            UpdateCanisterBuilder::builder(&mgr, &canister.canister_id())
+                .with_optional_freezing_threshold(Some(high_freezing_threshold))
+                .call_and_wait()
+                .await
+                .expect("setting freezing threshold on unfrozen canister failed");
+
+            // Check that the canister is indeed frozen.
+            canister
+                .update(wasm().reply_data(&[]).build())
+                .await
+                .unwrap_err();
+
+            // Updating freezing threshold on a frozen canister back to a low value
+            // fails if `UpdateSettings` argument is too large.
+            mgr.update_("update_settings")
+                .with_arg_raw(bytes.clone())
+                .with_effective_canister_id(canister.canister_id())
+                .build::<((),)>()
+                .call_and_wait()
+                .await
+                .unwrap_err();
+
+            // Update freezing threshold on a frozen canister back to a low value.
+            let low_freezing_threshold = 30 * 24 * 3600; // 30 days default
+            UpdateCanisterBuilder::builder(&mgr, &canister.canister_id())
+                .with_optional_freezing_threshold(Some(low_freezing_threshold))
+                .call_and_wait()
+                .await
+                .expect("setting freezing threshold on frozen canister failed");
+
+            // Check that the canister is not frozen anymore.
+            canister
+                .update(wasm().reply_data(&[]).build())
+                .await
+                .unwrap();
+
+            let balance_before = mgr
+                .canister_status(&canister.canister_id())
+                .call_and_wait()
+                .await
+                .unwrap()
+                .0
+                .cycles;
+
+            // Updating freezing threshold on a not frozen canister to a low value
+            // now succeeds also if `UpdateSettings` argument is too large
+            // and charges the canister appropriately.
+            mgr.update_("update_settings")
+                .with_arg_raw(bytes.clone())
+                .with_effective_canister_id(canister.canister_id())
+                .build::<((),)>()
+                .call_and_wait()
+                .await
+                .unwrap();
+
+            let balance_after = mgr
+                .canister_status(&canister.canister_id())
+                .call_and_wait()
+                .await
+                .unwrap()
+                .0
+                .cycles;
+
+            let cycles_account_manager = CyclesAccountManager::new(
+                SchedulerConfig::application_subnet().max_instructions_per_message,
+                SubnetType::Application,
+                app_node.subnet_id().unwrap(),
+                CyclesAccountManagerConfig::application_subnet(),
+            );
+
+            assert!(
+                balance_after < balance_before
+                    && balance_before - balance_after
+                        > cycles_account_manager
+                            .ingress_induction_cost_from_bytes(NumBytes::new(bytes.len() as u64), 1)
+                            .get()
             );
         }
     });
@@ -566,7 +633,10 @@ pub fn managing_a_canister_with_wrong_controller_fails(env: TestEnv) {
             info!(logger, "Asserting that upgrading the canister fails.");
             assert_http_submit_fails(
                 mgr.install_code(&wallet_canister.canister_id(), UNIVERSAL_CANISTER_WASM)
-                    .with_mode(InstallMode::Upgrade)
+                    .with_mode(InstallMode::Upgrade(Some(CanisterUpgradeOptions {
+                        skip_pre_upgrade: Some(false),
+                        wasm_memory_persistence: None,
+                    })))
                     .call()
                     .await,
                 RejectCode::CanisterError,
@@ -732,7 +802,7 @@ pub fn canister_large_initial_memory_small_memory_allocation(env: TestEnv) {
                 .await;
             assert_reject(res, RejectCode::CanisterReject);
 
-            // Install the wasm with 3GiB memory alloction, it should succeed.
+            // Install the wasm with 3GiB memory allocation, it should succeed.
             mgr.update_settings(&canister_id)
                 .with_memory_allocation(3_u64 << 30)
                 .call_and_wait()
@@ -876,7 +946,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(env: TestEnv) {
                 &agent,
                 app_node.effective_canister_id(),
                 MAX_COMP_ALLOC,
-                Some(std::u64::MAX as u128),
+                Some(u64::MAX as u128),
                 None,
                 &logger,
             )
@@ -891,7 +961,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(env: TestEnv) {
             &agent,
             app_node.effective_canister_id(),
             MAX_COMP_ALLOC,
-            Some(std::u64::MAX as u128),
+            Some(u64::MAX as u128),
             None,
         )
         .await;
@@ -923,7 +993,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(env: TestEnv) {
             &agent,
             app_node.effective_canister_id(),
             Some(0),
-            Some(std::u64::MAX as u128),
+            Some(u64::MAX as u128),
             None,
             &logger,
         )
@@ -1015,7 +1085,7 @@ pub fn canisters_with_low_balance_are_deallocated(env: TestEnv) {
 
             // Canister has been emptied, memory freed.
             assert_eq!(canister_status.module_hash, None);
-            assert_eq!(canister_status.memory_size, candid::Nat::from(0));
+            assert_eq!(canister_status.memory_size, candid::Nat::from(0_u8));
         }
     })
 }
@@ -1081,7 +1151,7 @@ pub fn canisters_are_deallocated_when_their_balance_falls(env: TestEnv) {
                 canister_status.cycles,
                 candid::Nat::from(initial_cycles - create_canister_cycles - transfer_cycles - 1)
             );
-            assert_eq!(canister_status.memory_size, candid::Nat::from(0));
+            assert_eq!(canister_status.memory_size, candid::Nat::from(0_u8));
         }
     });
 }

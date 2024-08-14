@@ -4,11 +4,11 @@ mod config_tests;
 mod tests;
 
 use hyper::{Body, Request, Response, StatusCode};
-use ic_crypto_tls_interfaces::TlsHandshake;
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, info, warn, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry, Timer};
+use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::ProtoProxy;
 use ic_registry_client_helpers::node::NodeRegistry;
@@ -19,6 +19,7 @@ use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Instant;
 use threadpool::ThreadPool;
 use tokio::{
     runtime,
@@ -141,7 +142,7 @@ impl XNetEndpoint {
     pub fn new(
         runtime_handle: runtime::Handle,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        tls: Arc<dyn TlsHandshake + Send + Sync>,
+        tls: Arc<dyn TlsConfig + Send + Sync>,
         registry_client: Arc<dyn RegistryClient + Send + Sync>,
         config: XNetEndpointConfig,
         metrics: &MetricsRegistry,
@@ -369,7 +370,7 @@ fn route_request(
     certified_stream_store: &dyn CertifiedStreamStore,
     metrics: &XNetEndpointMetrics,
 ) -> Response<Body> {
-    let timer = Timer::start();
+    let since = Instant::now();
     let mut resource = RESOURCE_ERROR;
     let response = match url.path() {
         API_URL_STREAMS => {
@@ -429,7 +430,7 @@ fn route_request(
     metrics
         .request_duration
         .with_label_values(&[resource, response.status().as_str()])
-        .observe(timer.elapsed());
+        .observe(since.elapsed().as_secs_f64());
 
     response
 }
@@ -516,7 +517,7 @@ pub(crate) fn proto_response<R, M>(r: R) -> (Response<Body>, usize)
 where
     M: ProtoProxy<R>,
 {
-    let buf = M::proxy_encode(r).expect("Could not serialize response");
+    let buf = M::proxy_encode(r);
     let size_bytes = buf.len();
 
     // Headers borrowed from Spring Framework -- https://bit.ly/32EDqoo -- and Google's Protobuf
@@ -596,7 +597,7 @@ impl XNetEndpointConfig {
     fn try_from(registry: Arc<dyn RegistryClient>, node_id: NodeId) -> Option<XNetEndpointConfig> {
         let version = registry.get_latest_version();
         let node_record = registry
-            .get_transport_info(node_id, version)
+            .get_node_record(node_id, version)
             .unwrap_or_else(|e| {
                 panic!(
                     "Could not retrieve registry record for node {}: {}",

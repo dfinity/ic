@@ -1,13 +1,17 @@
 [package]
 name = "ic-crypto-internal-logmon"
 description = "Logging and monitoring for crypto"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
-convert_case = "0.6.0"
 ic-metrics = { path = "../../../monitoring/metrics" }
-prometheus = { version = "0.12.0", features = [ "process" ] }
-strum = "0.23.0"
-strum_macros = "0.23.0"
+prometheus = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+
+[dev-dependencies]
+convert_case = "0.6.0"
+

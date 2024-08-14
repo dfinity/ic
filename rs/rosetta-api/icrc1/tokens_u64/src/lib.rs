@@ -1,10 +1,11 @@
 use candid::Nat;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, Zero};
-use ic_stable_structures::storable::{BoundedStorable, Storable};
+use ic_stable_structures::storable::{Bound, Storable};
 use num_traits::{Bounded, ToPrimitive};
 use serde::{de::Deserializer, Deserialize, Serialize};
 use std::borrow::Cow;
 use std::fmt;
+use std::str::FromStr;
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Hash)]
 #[serde(transparent)]
@@ -25,9 +26,24 @@ impl U64 {
     }
 }
 
+impl FromStr for U64 {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(U64(s.parse().map_err(|_| {
+            format!("Could not parse string to u64: {}", s)
+        })?))
+    }
+}
+
 impl fmt::Display for U64 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.0.fmt(f)
+    }
+}
+
+impl From<u64> for U64 {
+    fn from(n: u64) -> Self {
+        Self::new(n)
     }
 }
 
@@ -55,11 +71,8 @@ impl Storable for U64 {
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         Self(u64::from_bytes(bytes))
     }
-}
 
-impl BoundedStorable for U64 {
-    const IS_FIXED_SIZE: bool = <u64 as BoundedStorable>::IS_FIXED_SIZE;
-    const MAX_SIZE: u32 = <u64 as BoundedStorable>::MAX_SIZE;
+    const BOUND: Bound = <u64 as Storable>::BOUND;
 }
 
 impl Bounded for U64 {

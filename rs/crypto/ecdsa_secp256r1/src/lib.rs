@@ -123,7 +123,7 @@ fn der_decode_rfc5915_privatekey(der: &[u8]) -> Result<Vec<u8>, KeyDecodingError
         .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
 
     let seq = match der.len() {
-        1 => der.get(0),
+        1 => der.first(),
         x => {
             return Err(KeyDecodingError::InvalidKeyEncoding(format!(
                 "Unexpected number of elements {}",
@@ -134,7 +134,7 @@ fn der_decode_rfc5915_privatekey(der: &[u8]) -> Result<Vec<u8>, KeyDecodingError
 
     if let Some(ASN1Block::Sequence(_, seq)) = seq {
         // mandatory field: version, should be equal to 1
-        match seq.get(0) {
+        match seq.first() {
             Some(ASN1Block::Integer(_, _version)) => {}
             _ => {
                 return Err(KeyDecodingError::InvalidKeyEncoding(
@@ -300,7 +300,7 @@ impl PrivateKey {
         Some(sig.to_bytes().into())
     }
 
-    /// Return the public key cooresponding to this private key
+    /// Return the public key corresponding to this private key
     pub fn public_key(&self) -> PublicKey {
         let key = self.key.verifying_key();
         PublicKey { key: *key }
@@ -318,6 +318,8 @@ impl PublicKey {
     ///
     /// This is just the encoding of the point. Both compressed and uncompressed
     /// points are accepted
+    ///
+    /// See SEC1 <https://www.secg.org/sec1-v2.pdf> section 2.3.3 for details of the format
     pub fn deserialize_sec1(bytes: &[u8]) -> Result<Self, KeyDecodingError> {
         let key = p256::ecdsa::VerifyingKey::from_sec1_bytes(bytes)
             .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
@@ -346,6 +348,8 @@ impl PublicKey {
     /// Serialize a public key in SEC1 format
     ///
     /// The point can optionally be compressed
+    ///
+    /// See SEC1 <https://www.secg.org/sec1-v2.pdf> section 2.3.3 for details of the format
     pub fn serialize_sec1(&self, compressed: bool) -> Vec<u8> {
         self.key.to_encoded_point(compressed).to_bytes().to_vec()
     }

@@ -68,7 +68,7 @@ pub fn uints_to_public_coefficients(integer_coefficients: &[u32]) -> PublicCoeff
 
 mod public_coefficients {
     //! Third parties should be able to verify that the public part of a key
-    //! share is indeed consistent with the committment. Additionally, the
+    //! share is indeed consistent with the commitment. Additionally, the
     //! share holder should be able to verify that their secret key matches the
     //! public key assigned to them.
     //!
@@ -188,7 +188,7 @@ mod public_coefficients {
 
     #[test]
     fn test_lagrange_coefficients_at_zero_rejects_duplicate_points() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
 
         for num_coefficients in 1..50 {
             let mut inputs = vec![];

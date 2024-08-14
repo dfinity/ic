@@ -5,7 +5,8 @@ use ic_canonical_state::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState};
-use ic_test_utilities::{state::arb_stream, types::ids::subnet_test_id};
+use ic_test_utilities_state::arb_stream;
+use ic_test_utilities_types::ids::subnet_test_id;
 use proptest::prelude::*;
 
 /// A fixture consisting of a `ReplicatedState` wrapping a single stream;

@@ -7,8 +7,9 @@ use crate::models::{
 use crate::request::Request;
 use crate::request_handler::{verify_network_id, RosettaRequestHandler};
 use crate::request_types::{
-    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, MergeMaturity, NeuronInfo, RegisterVote,
-    RemoveHotKey, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
+    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity, NeuronInfo,
+    RegisterVote, RemoveHotKey, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve,
+    StopDissolve,
 };
 use icp_ledger::Operation;
 use std::collections::HashSet;
@@ -40,7 +41,7 @@ impl RosettaRequestHandler {
 
         Ok(ConstructionPreprocessResponse {
             required_public_keys: Some(required_public_keys),
-            options,
+            options: options.map(|op| op.try_into()).transpose()?,
         })
     }
 }
@@ -48,7 +49,14 @@ impl RosettaRequestHandler {
 /// Return the public key required to complete a request.
 fn required_public_key(request: Request) -> Result<icp_ledger::AccountIdentifier, ApiError> {
     match request {
-        Request::Transfer(Operation::Transfer { from, .. }) => Ok(from),
+        Request::Transfer(Operation::Transfer { from, spender, .. }) => {
+            if spender.is_some() {
+                return Err(ApiError::invalid_request(
+                    "TransferFrom operations are not supported through Rosetta.",
+                ));
+            }
+            Ok(from)
+        }
         Request::Transfer(Operation::Burn { .. }) => Err(ApiError::invalid_request(
             "Burn operations are not supported through rosetta",
         )),
@@ -57,9 +65,6 @@ fn required_public_key(request: Request) -> Result<icp_ledger::AccountIdentifier
         )),
         Request::Transfer(Operation::Approve { .. }) => Err(ApiError::invalid_request(
             "Approve operations are not supported through rosetta",
-        )),
-        Request::Transfer(Operation::TransferFrom { .. }) => Err(ApiError::invalid_request(
-            "TransferFrom operations are not supported through rosetta",
         )),
         Request::Stake(Stake { account, .. })
         | Request::SetDissolveTimestamp(SetDissolveTimestamp { account, .. })
@@ -74,6 +79,7 @@ fn required_public_key(request: Request) -> Result<icp_ledger::AccountIdentifier
         | Request::MergeMaturity(MergeMaturity { account, .. })
         | Request::StakeMaturity(StakeMaturity { account, .. })
         | Request::NeuronInfo(NeuronInfo { account, .. })
+        | Request::ListNeurons(ListNeurons { account, .. })
         | Request::Follow(Follow { account, .. }) => Ok(account),
     }
 }

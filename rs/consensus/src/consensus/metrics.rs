@@ -1,5 +1,6 @@
 use ic_consensus_utils::{get_block_hash_string, pool_reader::PoolReader};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
+use ic_interfaces::ingress_manager::IngressSelector;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,
@@ -7,8 +8,8 @@ use ic_metrics::{
 use ic_types::{
     batch::BatchPayload,
     consensus::{
-        ecdsa::{CompletedReshareRequest, CompletedSignature, EcdsaPayload, KeyTranscriptCreation},
-        Block, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank,
+        idkg::{CompletedReshareRequest, CompletedSignature, IDkgPayload, KeyTranscriptCreation},
+        Block, BlockPayload, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank,
     },
     CountBytes, Height,
 };
@@ -16,6 +17,11 @@ use prometheus::{
     GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
 };
 use std::sync::RwLock;
+
+use crate::idkg::metrics::{
+    count_by_master_public_key_id, expected_keys, key_id_label, CounterPerMasterPublicKeyId,
+    KEY_ID_LABEL,
+};
 
 // For certain metrics, we record metrics based on block's rank.
 // Since we can only record limited number of them, the follow is
@@ -25,9 +31,6 @@ const RANKS_TO_RECORD: [&str; 6] = ["0", "1", "2", "3", "4", "5"];
 pub(crate) const CRITICAL_ERROR_PAYLOAD_TOO_LARGE: &str = "consensus_payload_too_large";
 pub(crate) const CRITICAL_ERROR_VALIDATION_NOT_PASSED: &str = "consensus_validation_not_passed";
 pub(crate) const CRITICAL_ERROR_SUBNET_RECORD_ISSUE: &str = "consensus_subnet_record_issue";
-pub(crate) const CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING: &str = "ecdsa_key_transcript_missing";
-pub(crate) const CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS: &str =
-    "ecdsa_retain_active_transcripts_error";
 
 pub struct BlockMakerMetrics {
     pub get_payload_calls: IntCounterVec,
@@ -107,31 +110,12 @@ impl ConsensusMetrics {
     }
 }
 
-pub struct ConsensusGossipMetrics {
-    pub get_priority_update_block_duration: HistogramVec,
-}
-
-impl ConsensusGossipMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
-        Self {
-            get_priority_update_block_duration: metrics_registry.histogram_vec(
-                "consensus_get_priority_update_block_duration",
-                "The time it took to execute the update_block sections of get_priority",
-                // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
-                // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
-                decimal_buckets(-4, 2),
-                &["block_type"],
-            ),
-        }
-    }
-}
-
 // Block related stats
 pub struct BlockStats {
     pub block_hash: String,
     pub block_height: u64,
     pub block_context_certified_height: u64,
-    pub ecdsa_stats: Option<EcdsaStats>,
+    pub idkg_stats: Option<IDkgStats>,
 }
 
 impl From<&Block> for BlockStats {
@@ -140,7 +124,7 @@ impl From<&Block> for BlockStats {
             block_hash: get_block_hash_string(block),
             block_height: block.height().get(),
             block_context_certified_height: block.context.certified_height.get(),
-            ecdsa_stats: block.payload.as_ref().as_ecdsa().map(EcdsaStats::from),
+            idkg_stats: block.payload.as_ref().as_idkg().map(IDkgStats::from),
         }
     }
 }
@@ -173,50 +157,63 @@ impl BatchStats {
     }
 }
 
-// Ecdsa payload stats
-pub struct EcdsaStats {
-    pub key_transcript_created: u64,
+// IDkg payload stats
+pub struct IDkgStats {
     pub signature_agreements: usize,
-    pub ongoing_signatures: usize,
-    pub available_quadruples: usize,
-    pub quadruples_in_creation: usize,
-    pub ongoing_xnet_reshares: usize,
-    pub xnet_reshare_agreements: usize,
+    pub key_transcripts_created: CounterPerMasterPublicKeyId,
+    pub available_pre_signatures: CounterPerMasterPublicKeyId,
+    pub pre_signatures_in_creation: CounterPerMasterPublicKeyId,
+    pub ongoing_xnet_reshares: CounterPerMasterPublicKeyId,
+    pub xnet_reshare_agreements: CounterPerMasterPublicKeyId,
 }
 
-impl From<&EcdsaPayload> for EcdsaStats {
-    fn from(payload: &EcdsaPayload) -> Self {
-        let mut key_transcript_created = 0;
-        if let KeyTranscriptCreation::Created(transcript) = payload.key_transcript.next_in_creation
-        {
-            let transcript_id = &transcript.as_ref().transcript_id;
-            let current_transcript_id = payload
-                .key_transcript
-                .current
-                .as_ref()
-                .map(|transcript| &transcript.as_ref().transcript_id);
-            if Some(transcript_id) != current_transcript_id
-                && payload.idkg_transcripts.get(transcript_id).is_some()
-            {
-                key_transcript_created = 1;
+impl From<&IDkgPayload> for IDkgStats {
+    fn from(payload: &IDkgPayload) -> Self {
+        let mut key_transcripts_created = CounterPerMasterPublicKeyId::new();
+
+        for (key_id, key_transcript) in &payload.key_transcripts {
+            if let KeyTranscriptCreation::Created(transcript) = &key_transcript.next_in_creation {
+                let transcript_id = &transcript.as_ref().transcript_id;
+                let current_transcript_id = key_transcript
+                    .current
+                    .as_ref()
+                    .map(|transcript| &transcript.as_ref().transcript_id);
+                if Some(transcript_id) != current_transcript_id
+                    && payload.idkg_transcripts.contains_key(transcript_id)
+                {
+                    *key_transcripts_created.entry(key_id.clone()).or_default() += 1;
+                }
             }
         }
+
+        let keys = expected_keys(payload);
+
         Self {
-            key_transcript_created,
+            key_transcripts_created,
             signature_agreements: payload
                 .signature_agreements
                 .values()
                 .filter(|status| matches!(status, CompletedSignature::Unreported(_)))
                 .count(),
-            ongoing_signatures: payload.ongoing_signatures.len(),
-            available_quadruples: payload.available_quadruples.len(),
-            quadruples_in_creation: payload.quadruples_in_creation.len(),
-            ongoing_xnet_reshares: payload.ongoing_xnet_reshares.len(),
-            xnet_reshare_agreements: payload
-                .xnet_reshare_agreements
-                .values()
-                .filter(|status| matches!(status, CompletedReshareRequest::Unreported(_)))
-                .count(),
+            available_pre_signatures: count_by_master_public_key_id(
+                payload.available_pre_signatures.values(),
+                &keys,
+            ),
+            pre_signatures_in_creation: count_by_master_public_key_id(
+                payload.pre_signatures_in_creation.values(),
+                &keys,
+            ),
+            ongoing_xnet_reshares: count_by_master_public_key_id(
+                payload.ongoing_xnet_reshares.keys(),
+                &keys,
+            ),
+            xnet_reshare_agreements: count_by_master_public_key_id(
+                payload
+                    .xnet_reshare_agreements
+                    .iter()
+                    .filter(|(_, status)| matches!(status, CompletedReshareRequest::Unreported(_))),
+                &keys,
+            ),
         }
     }
 }
@@ -228,14 +225,13 @@ pub struct FinalizerMetrics {
     pub ingress_message_bytes_delivered: Histogram,
     pub xnet_bytes_delivered: Histogram,
     pub finalization_certified_state_difference: IntGauge,
-    // ecdsa payload related metrics
-    pub ecdsa_key_transcript_created: IntCounter,
-    pub ecdsa_signature_agreements: IntCounter,
-    pub ecdsa_ongoing_signatures: IntGauge,
-    pub ecdsa_available_quadruples: IntGauge,
-    pub ecdsa_quadruples_in_creation: IntGauge,
-    pub ecdsa_ongoing_xnet_reshares: IntGauge,
-    pub ecdsa_xnet_reshare_agreements: IntCounter,
+    // idkg payload related metrics
+    pub master_key_transcripts_created: IntCounterVec,
+    pub threshold_signature_agreements: IntCounter,
+    pub idkg_available_pre_signatures: IntGaugeVec,
+    pub idkg_pre_signatures_in_creation: IntGaugeVec,
+    pub idkg_ongoing_xnet_reshares: IntGaugeVec,
+    pub idkg_xnet_reshare_agreements: IntCounterVec,
     // canister http payload metrics
     pub canister_http_success_delivered: IntCounter,
     pub canister_http_timeouts_delivered: IntCounter,
@@ -276,34 +272,37 @@ impl FinalizerMetrics {
                 // 0, 1, 2, 5, 10, 20, 50, 100, ..., 10MB, 20MB, 50MB
                 decimal_buckets_with_zero(0, 7),
             ),
-            ecdsa_key_transcript_created: metrics_registry.int_counter(
-                "consensus_ecdsa_key_transcript_created",
-                "The number of times ECDSA key transcript is created",
+            // idkg payload related metrics
+            master_key_transcripts_created: metrics_registry.int_counter_vec(
+                "consensus_master_key_transcripts_created",
+                "The number of times a master key transcript is created",
+                &[KEY_ID_LABEL],
             ),
-            ecdsa_signature_agreements: metrics_registry.int_counter(
-                "consensus_ecdsa_signature_agreements",
-                "Total number of ECDSA signature agreements created",
+            threshold_signature_agreements: metrics_registry.int_counter(
+                "consensus_threshold_signature_agreements",
+                "Total number of threshold signature agreements created",
             ),
-            ecdsa_ongoing_signatures: metrics_registry.int_gauge(
-                "consensus_ecdsa_ongoing_signatures",
-                "The number of ongoing ECDSA signatures",
+            idkg_available_pre_signatures: metrics_registry.int_gauge_vec(
+                "consensus_idkg_available_pre_signatures",
+                "The number of available IDKG pre-signatures",
+                &[KEY_ID_LABEL],
             ),
-            ecdsa_available_quadruples: metrics_registry.int_gauge(
-                "consensus_ecdsa_available_quadruples",
-                "The number of avaiable ECDSA quadruples",
+            idkg_pre_signatures_in_creation: metrics_registry.int_gauge_vec(
+                "consensus_idkg_pre_signatures_in_creation",
+                "The number of IDKG pre-signatures in creation",
+                &[KEY_ID_LABEL],
             ),
-            ecdsa_quadruples_in_creation: metrics_registry.int_gauge(
-                "consensus_ecdsa_quadruples_in_creation",
-                "The number of ECDSA quadruples in creation",
+            idkg_ongoing_xnet_reshares: metrics_registry.int_gauge_vec(
+                "consensus_idkg_ongoing_xnet_reshares",
+                "The number of ongoing IDKG xnet reshares",
+                &[KEY_ID_LABEL],
             ),
-            ecdsa_ongoing_xnet_reshares: metrics_registry.int_gauge(
-                "consensus_ecdsa_ongoing_xnet_reshares",
-                "The number of ongoing ECDSA xnet reshares",
+            idkg_xnet_reshare_agreements: metrics_registry.int_counter_vec(
+                "consensus_idkg_reshare_agreements",
+                "Total number of IDKG reshare agreements created",
+                &[KEY_ID_LABEL],
             ),
-            ecdsa_xnet_reshare_agreements: metrics_registry.int_counter(
-                "consensus_ecdsa_reshare_agreements",
-                "Total number of ECDSA reshare agreements created",
-            ),
+            // canister http payload metrics
             canister_http_success_delivered: metrics_registry.int_counter(
                 "canister_http_success_delivered",
                 "Total number of canister http messages successfully delivered",
@@ -337,21 +336,46 @@ impl FinalizerMetrics {
             .inc_by(batch_stats.canister_http.timeouts as u64);
         self.canister_http_divergences_delivered
             .inc_by(batch_stats.canister_http.divergence_responses as u64);
-        if let Some(ecdsa) = &block_stats.ecdsa_stats {
-            self.ecdsa_key_transcript_created
-                .inc_by(ecdsa.key_transcript_created);
-            self.ecdsa_signature_agreements
-                .inc_by(ecdsa.signature_agreements as u64);
-            self.ecdsa_ongoing_signatures
-                .set(ecdsa.ongoing_signatures as i64);
-            self.ecdsa_available_quadruples
-                .set(ecdsa.available_quadruples as i64);
-            self.ecdsa_quadruples_in_creation
-                .set(ecdsa.quadruples_in_creation as i64);
-            self.ecdsa_ongoing_xnet_reshares
-                .set(ecdsa.ongoing_xnet_reshares as i64);
-            self.ecdsa_xnet_reshare_agreements
-                .inc_by(ecdsa.xnet_reshare_agreements as u64);
+
+        if let Some(idkg) = &block_stats.idkg_stats {
+            let set = |metric: &IntGaugeVec, counts: &CounterPerMasterPublicKeyId| {
+                for (key_id, count) in counts.iter() {
+                    metric
+                        .with_label_values(&[&key_id_label(Some(key_id))])
+                        .set(*count as i64);
+                }
+            };
+
+            let inc_by = |metric: &IntCounterVec, counts: &CounterPerMasterPublicKeyId| {
+                for (key_id, count) in counts.iter() {
+                    metric
+                        .with_label_values(&[&key_id_label(Some(key_id))])
+                        .inc_by(*count as u64);
+                }
+            };
+
+            inc_by(
+                &self.master_key_transcripts_created,
+                &idkg.key_transcripts_created,
+            );
+            self.threshold_signature_agreements
+                .inc_by(idkg.signature_agreements as u64);
+            set(
+                &self.idkg_available_pre_signatures,
+                &idkg.available_pre_signatures,
+            );
+            set(
+                &self.idkg_pre_signatures_in_creation,
+                &idkg.pre_signatures_in_creation,
+            );
+            set(
+                &self.idkg_ongoing_xnet_reshares,
+                &idkg.ongoing_xnet_reshares,
+            );
+            inc_by(
+                &self.idkg_xnet_reshare_agreements,
+                &idkg.xnet_reshare_agreements,
+            );
         }
     }
 }
@@ -438,10 +462,16 @@ pub struct ValidatorMetrics {
     pub(crate) dkg_validator: IntCounterVec,
     // Used to sum the values within a single validator run
     dkg_time_per_validator_run: RwLock<f64>,
-    pub(crate) ecdsa_validation_duration: HistogramVec,
+    pub(crate) idkg_validation_duration: HistogramVec,
     pub(crate) validation_random_tape_shares_count: IntGauge,
     pub(crate) validation_random_beacon_shares_count: IntGauge,
     pub(crate) validation_share_batch_size: HistogramVec,
+    // Payload metrics
+    pub(crate) ingress_messages: Histogram,
+    // The number of messages in a block which are not (yet) present in the Ingress Pool.
+    // This is a temporary metrics needed for a hashes in blocks experiment.
+    // TODO(CON-1312): Delete this once not necessary anymore
+    pub(crate) missing_ingress_messages: Histogram,
 }
 
 impl ValidatorMetrics {
@@ -450,7 +480,7 @@ impl ValidatorMetrics {
         Self {
             time_to_receive_block: metrics_registry.histogram_vec(
                 "consensus_time_to_receive_block",
-                "The duration to receive a block since round start, labelled by ranks, in seconds.",
+                "The duration to receive a block since round start, labeled by ranks, in seconds.",
                 vec![
                     0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0,
                     3.5, 4.0, 4.5, 5.0, 6.0, 8.0, 10.0, 15.0, 20.0,
@@ -476,9 +506,9 @@ impl ValidatorMetrics {
                 &["type"],
             ),
             dkg_time_per_validator_run: RwLock::new(0.0),
-            ecdsa_validation_duration: metrics_registry.histogram_vec(
-                "consensus_ecdsa_validation_duration_seconds",
-                "Time to validate ECDSA component, in seconds",
+            idkg_validation_duration: metrics_registry.histogram_vec(
+                "consensus_idkg_validation_duration_seconds",
+                "Time to validate IDKG component, in seconds",
                 // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
                 // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
                 decimal_buckets(-4, 2),
@@ -498,6 +528,46 @@ impl ValidatorMetrics {
                 linear_buckets(1.0, 1.0, 10),
                 &["type"],
             ),
+            ingress_messages: metrics_registry.histogram(
+                "consensus_ingress_messages_in_block",
+                "The number of ingress messages in a validated block",
+                // 0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000
+                decimal_buckets_with_zero(0, 3),
+            ),
+            missing_ingress_messages: metrics_registry.histogram(
+                "consensus_missing_ingress_messages_in_block",
+                "The number of ingress messages in a validated block \
+                which are not present in the ingress pool",
+                // 0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000
+                decimal_buckets_with_zero(0, 3),
+            ),
+        }
+    }
+
+    pub(crate) fn observe_data_payload(
+        &self,
+        proposal: &BlockProposal,
+        ingress_selector: Option<&dyn IngressSelector>,
+    ) {
+        let BlockPayload::Data(payload) = proposal.as_ref().payload.as_ref() else {
+            // Skip if it's a summary block.
+            return;
+        };
+
+        let total_ingress_messages = payload.batch.ingress.message_count();
+        self.ingress_messages.observe(total_ingress_messages as f64);
+
+        if let Some(ingress_selector) = ingress_selector {
+            let missing_ingress_messages = payload
+                .batch
+                .ingress
+                .message_ids()
+                .iter()
+                .filter(|message_id| !ingress_selector.has_message(message_id))
+                .count();
+
+            self.missing_ingress_messages
+                .observe(missing_ingress_messages as f64);
         }
     }
 
@@ -513,7 +583,9 @@ impl ValidatorMetrics {
                     if timestamp >= start_time {
                         self.time_to_receive_block
                             .with_label_values(&[RANKS_TO_RECORD[rank]])
-                            .observe((timestamp.saturating_sub(start_time)).as_secs_f64());
+                            .observe(
+                                (timestamp.saturating_duration_since(start_time)).as_secs_f64(),
+                            );
                     }
                 }
             }
@@ -539,6 +611,7 @@ pub struct PurgerMetrics {
     pub validated_pool_purge_height: IntGauge,
     pub replicated_state_purge_height: IntGauge,
     pub replicated_state_purge_height_disk: IntGauge,
+    pub validated_pool_bounds_exceeded: IntCounter,
 }
 
 impl PurgerMetrics {
@@ -560,386 +633,9 @@ impl PurgerMetrics {
                 "replicated_state_purge_height_disk",
                 "The height below which on-disk replicated states (checkpoints) are purged",
             ),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct EcdsaClientMetrics {
-    pub on_state_change_duration: HistogramVec,
-    pub client_metrics: IntCounterVec,
-    pub client_errors: IntCounterVec,
-    /// critical error when retain_active_transcripts fails
-    pub critical_error_ecdsa_retain_active_transcripts: IntCounter,
-}
-
-impl EcdsaClientMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
-        Self {
-            on_state_change_duration: metrics_registry.histogram_vec(
-                "ecdsa_on_state_change_duration_seconds",
-                "The time it took to execute ECDSA on_state_change(), in seconds",
-                // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
-                // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
-                decimal_buckets(-4, 2),
-                &["sub_component"],
-            ),
-            client_metrics: metrics_registry.int_counter_vec(
-                "ecdsa_client_metrics",
-                "ECDSA client related metrics",
-                &["type"],
-            ),
-            client_errors: metrics_registry.int_counter_vec(
-                "ecdsa_client_errors",
-                "ECDSA client related errors",
-                &["type"],
-            ),
-            critical_error_ecdsa_retain_active_transcripts: metrics_registry
-                .error_counter(CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct EcdsaGossipMetrics {
-    pub dropped_adverts: IntCounterVec,
-}
-
-impl EcdsaGossipMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
-        Self {
-            dropped_adverts: metrics_registry.int_counter_vec(
-                "ecdsa_priority_fn_dropped_adverts",
-                "ECDSA adverts dropped by priority fn",
-                &["type"],
-            ),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct EcdsaPreSignerMetrics {
-    pub on_state_change_duration: HistogramVec,
-    pub pre_sign_metrics: IntCounterVec,
-    pub pre_sign_errors: IntCounterVec,
-}
-
-impl EcdsaPreSignerMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
-        Self {
-            on_state_change_duration: metrics_registry.histogram_vec(
-                "ecdsa_pre_signer_on_state_change_duration_seconds",
-                "The time it took to execute pre-signer on_state_change(), in seconds",
-                // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
-                // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
-                decimal_buckets(-4, 2),
-                &["sub_component"],
-            ),
-            pre_sign_metrics: metrics_registry.int_counter_vec(
-                "ecdsa_pre_signer_metrics",
-                "Pre-signing related metrics",
-                &["type"],
-            ),
-            pre_sign_errors: metrics_registry.int_counter_vec(
-                "ecdsa_pre_signer_errors",
-                "Pre-signing related errors",
-                &["type"],
-            ),
-        }
-    }
-
-    pub fn pre_sign_metrics_inc(&self, label: &str) {
-        self.pre_sign_metrics.with_label_values(&[label]).inc();
-    }
-
-    pub fn pre_sign_errors_inc(&self, label: &str) {
-        self.pre_sign_errors.with_label_values(&[label]).inc();
-    }
-}
-
-#[derive(Clone)]
-pub struct EcdsaSignerMetrics {
-    pub on_state_change_duration: HistogramVec,
-    pub sign_metrics: IntCounterVec,
-    pub sign_errors: IntCounterVec,
-}
-
-impl EcdsaSignerMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
-        Self {
-            on_state_change_duration: metrics_registry.histogram_vec(
-                "ecdsa_signer_on_state_change_duration_seconds",
-                "The time it took to execute signer on_state_change(), in seconds",
-                // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
-                // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
-                decimal_buckets(-4, 2),
-                &["sub_component"],
-            ),
-            sign_metrics: metrics_registry.int_counter_vec(
-                "ecdsa_signer_metrics",
-                "Signing related metrics",
-                &["type"],
-            ),
-            sign_errors: metrics_registry.int_counter_vec(
-                "ecdsa_signer_errors",
-                "Signing related errors",
-                &["type"],
-            ),
-        }
-    }
-    pub fn sign_metrics_inc(&self, label: &str) {
-        self.sign_metrics.with_label_values(&[label]).inc();
-    }
-
-    pub fn sign_errors_inc(&self, label: &str) {
-        self.sign_errors.with_label_values(&[label]).inc();
-    }
-}
-
-pub struct EcdsaPayloadMetrics {
-    pub payload_metrics: IntGaugeVec,
-    pub payload_errors: IntCounterVec,
-    pub transcript_builder_metrics: IntCounterVec,
-    pub transcript_builder_errors: IntCounterVec,
-    pub transcript_builder_duration: HistogramVec,
-    /// Critical error for failure to create/reshare key transcript
-    pub critical_error_ecdsa_key_transcript_missing: IntCounter,
-}
-
-impl EcdsaPayloadMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
-        Self {
-            payload_metrics: metrics_registry.int_gauge_vec(
-                "ecdsa_payload_metrics",
-                "ECDSA payload related metrics",
-                &["type"],
-            ),
-            payload_errors: metrics_registry.int_counter_vec(
-                "ecdsa_payload_errors",
-                "ECDSA payload related errors",
-                &["type"],
-            ),
-            transcript_builder_metrics: metrics_registry.int_counter_vec(
-                "ecdsa_transcript_builder_metrics",
-                "ECDSA transcript builder metrics",
-                &["type"],
-            ),
-            transcript_builder_errors: metrics_registry.int_counter_vec(
-                "ecdsa_transcript_builder_errors",
-                "ECDSA transcript builder related errors",
-                &["type"],
-            ),
-            transcript_builder_duration: metrics_registry.histogram_vec(
-                "ecdsa_transcript_builder_duration_seconds",
-                "Time taken by transcript builder, in seconds",
-                // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
-                // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
-                decimal_buckets(-4, 2),
-                &["sub_component"],
-            ),
-            critical_error_ecdsa_key_transcript_missing: metrics_registry
-                .error_counter(CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING),
-        }
-    }
-
-    pub fn payload_metrics_set(&self, label: &str, value: i64) {
-        self.payload_metrics.with_label_values(&[label]).set(value);
-    }
-
-    pub fn payload_metrics_inc(&self, label: &str) {
-        self.payload_metrics.with_label_values(&[label]).inc();
-    }
-
-    pub fn payload_errors_inc(&self, label: &str) {
-        self.payload_errors.with_label_values(&[label]).inc();
-    }
-
-    pub fn transcript_builder_metrics_inc(&self, label: &str) {
-        self.transcript_builder_metrics
-            .with_label_values(&[label])
-            .inc();
-    }
-
-    pub fn transcript_builder_metrics_inc_by(&self, value: u64, label: &str) {
-        self.transcript_builder_metrics
-            .with_label_values(&[label])
-            .inc_by(value);
-    }
-
-    pub fn transcript_builder_errors_inc(&self, label: &str) {
-        self.transcript_builder_errors
-            .with_label_values(&[label])
-            .inc();
-    }
-}
-
-pub fn timed_call<F, R>(label: &str, call_fn: F, metric: &HistogramVec) -> R
-where
-    F: FnOnce() -> R,
-{
-    let _timer = metric.with_label_values(&[label]).start_timer();
-    (call_fn)()
-}
-
-#[derive(Clone)]
-pub struct EcdsaComplaintMetrics {
-    pub on_state_change_duration: HistogramVec,
-    pub complaint_metrics: IntCounterVec,
-    pub complaint_errors: IntCounterVec,
-}
-
-impl EcdsaComplaintMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
-        Self {
-            on_state_change_duration: metrics_registry.histogram_vec(
-                "ecdsa_complaint_on_state_change_duration_seconds",
-                "The time it took to execute complaint on_state_change(), in seconds",
-                // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
-                // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
-                decimal_buckets(-4, 2),
-                &["sub_component"],
-            ),
-            complaint_metrics: metrics_registry.int_counter_vec(
-                "ecdsa_complaint_metrics",
-                "Complaint related metrics",
-                &["type"],
-            ),
-            complaint_errors: metrics_registry.int_counter_vec(
-                "ecdsa_complaint_errors",
-                "Complaint related errors",
-                &["type"],
-            ),
-        }
-    }
-
-    pub fn complaint_metrics_inc(&self, label: &str) {
-        self.complaint_metrics.with_label_values(&[label]).inc();
-    }
-
-    pub fn complaint_errors_inc(&self, label: &str) {
-        self.complaint_errors.with_label_values(&[label]).inc();
-    }
-}
-
-#[derive(Clone)]
-pub struct EcdsaTranscriptMetrics {
-    pub active_transcripts: IntGauge,
-    pub support_validation_duration: HistogramVec,
-    pub support_validation_total_duration: HistogramVec,
-    pub support_aggregation_duration: HistogramVec,
-    pub support_aggregation_total_duration: HistogramVec,
-    pub create_transcript_duration: HistogramVec,
-    pub create_transcript_total_duration: HistogramVec,
-    pub transcript_e2e_latency: HistogramVec,
-}
-
-impl EcdsaTranscriptMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
-        Self {
-            active_transcripts: metrics_registry
-                .int_gauge("ecdsa_active_transcripts", "Currently active transcripts"),
-            support_validation_duration: metrics_registry.histogram_vec(
-                "ecdsa_support_validation_duration",
-                "Support validation duration, in msec",
-                decimal_buckets(0, 2),
-                &["type"],
-            ),
-            support_validation_total_duration: metrics_registry.histogram_vec(
-                "ecdsa_support_validation_total_duration",
-                "Total support validation duration, in msec",
-                decimal_buckets(0, 4),
-                &["type"],
-            ),
-            support_aggregation_duration: metrics_registry.histogram_vec(
-                "ecdsa_support_aggregation_duration",
-                "Support aggregation duration, in msec",
-                decimal_buckets(0, 2),
-                &["type"],
-            ),
-            support_aggregation_total_duration: metrics_registry.histogram_vec(
-                "ecdsa_support_aggregation_total_duration",
-                "Total support aggregation duration, in msec",
-                decimal_buckets(0, 4),
-                &["type"],
-            ),
-            create_transcript_duration: metrics_registry.histogram_vec(
-                "ecdsa_create_transcript_duration",
-                "Time to create transcript, in msec",
-                decimal_buckets(0, 5),
-                &["type"],
-            ),
-            create_transcript_total_duration: metrics_registry.histogram_vec(
-                "ecdsa_create_transcript_total_duration",
-                "Total time to create transcript, in msec",
-                decimal_buckets(0, 5),
-                &["type"],
-            ),
-            transcript_e2e_latency: metrics_registry.histogram_vec(
-                "ecdsa_transcript_e2e_latency",
-                "End to end latency to build the transcript, in sec",
-                linear_buckets(0.5, 0.5, 30),
-                &["type"],
-            ),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct EcdsaQuadrupleMetrics {
-    pub quadruple_e2e_latency: Histogram,
-}
-
-impl EcdsaQuadrupleMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
-        Self {
-            quadruple_e2e_latency: metrics_registry.histogram(
-                "ecdsa_quadruple_e2e_latency",
-                "End to end latency to build the quadruple, in sec",
-                linear_buckets(2.0, 0.5, 60),
-            ),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct EcdsaSignatureMetrics {
-    pub active_signatures: IntGauge,
-    pub sig_share_validation_duration: Histogram,
-    pub sig_share_validation_total_duration: Histogram,
-    pub sig_share_aggregation_duration: Histogram,
-    pub sig_share_aggregation_total_duration: Histogram,
-    pub signature_e2e_latency: Histogram,
-}
-
-impl EcdsaSignatureMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
-        Self {
-            active_signatures: metrics_registry
-                .int_gauge("ecdsa_active_signatures", "Currently active signatures"),
-            sig_share_validation_duration: metrics_registry.histogram(
-                "ecdsa_sig_share_validation_duration",
-                "Sig share validation duration, in msec",
-                decimal_buckets(0, 2),
-            ),
-            sig_share_validation_total_duration: metrics_registry.histogram(
-                "ecdsa_sig_share_validation_total_duration",
-                "Total sig share validation duration, in msec",
-                decimal_buckets(0, 4),
-            ),
-            sig_share_aggregation_duration: metrics_registry.histogram(
-                "ecdsa_sig_share_aggregation_duration",
-                "Sig share aggregation duration, in msec",
-                decimal_buckets(0, 2),
-            ),
-            sig_share_aggregation_total_duration: metrics_registry.histogram(
-                "ecdsa_sig_share_aggregation_total_duration",
-                "Total sig share aggregation duration, in msec",
-                decimal_buckets(0, 4),
-            ),
-            signature_e2e_latency: metrics_registry.histogram(
-                "ecdsa_signature_e2e_latency",
-                "End to end latency to build the signature, in sec",
-                linear_buckets(0.5, 0.5, 30),
+            validated_pool_bounds_exceeded: metrics_registry.int_counter(
+                "validated_pool_bounds_exceeded",
+                "The validated pool exceeded its size bounds",
             ),
         }
     }

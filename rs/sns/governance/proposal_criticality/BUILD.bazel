@@ -1,0 +1,23 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs/sns/governance:__pkg__"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/nervous_system/proto",
+]
+
+LIB_SRCS = glob(
+    ["src/**"],
+    # Ensures that we do not need to rebuild just because a _test.rs file
+    # changed.
+    exclude = ["**/*_tests.rs"],
+)
+
+rust_library(
+    name = "proposal_criticality",
+    srcs = LIB_SRCS,
+    crate_name = "ic_sns_governance_proposal_criticality",
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)

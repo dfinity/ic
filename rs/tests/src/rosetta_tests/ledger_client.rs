@@ -1,11 +1,11 @@
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasPublicApiUrl, IcNodeContainer};
 use crate::rosetta_tests::setup::subnet_sys;
-use crate::util::{assert_create_agent, block_on};
 use candid::{Decode, Encode, Principal};
 use dfn_protobuf::ProtoBuf;
 use ic_agent::Agent;
 use ic_ledger_core::block::BlockIndex;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, IcNodeContainer};
+use ic_system_test_driver::util::{assert_create_agent, block_on};
 use icp_ledger::protobuf::TipOfChainRequest;
 use icp_ledger::{AccountBalanceArgs, AccountIdentifier, Certification, TipOfChainRes, Tokens};
 use on_wire::{FromWire, IntoWire};
@@ -41,7 +41,7 @@ impl LedgerClient {
     pub async fn get_account_balance(&self, account: AccountIdentifier) -> Tokens {
         debug!(&self.logger, "[ledger_client] Getting account balance");
         let arg = AccountBalanceArgs { account };
-        let arg = &Encode!(&arg).expect("Error while encoding arg.");
+        let arg = Encode!(&arg).expect("Error while encoding arg.");
         let res = self
             .agent
             .update(&self.ledger_canister_id, "account_balance_dfx")

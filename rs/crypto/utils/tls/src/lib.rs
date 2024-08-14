@@ -1,76 +1,71 @@
+//! Useful utilities for dealing with TLS handshakes in the IC.
+//!
+//! Function signatures in this crate
+//! should include only primitive or local types. Avoid using 'rustls' types.
+//! Otherwise upgrading 'rustls' requires upgrading all callers.
+
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 
 use std::str::FromStr;
 
 use ic_base_types::{NodeId, PrincipalId};
-use ic_crypto_tls_interfaces::{MalformedPeerCertificateError, TlsPublicKeyCert};
-use openssl::{
-    nid::Nid,
-    string::OpensslString,
-    x509::{X509NameEntries, X509NameEntryRef},
-};
-use tokio_rustls::rustls::{Certificate, CertificateError, Error};
+use thiserror::Error;
+use x509_parser::certificate::X509Certificate;
 
-/// Parses rustls Certificates to `TlsPublicKeyCert`.
-/// Certificate is considered well encoded iff:
-///     - It contains exactly one cert.
-///     - The certificate is X509 DER formatted.
-pub fn tls_pubkey_cert_from_rustls_certs(certs: &[Certificate]) -> Result<TlsPublicKeyCert, Error> {
-    if certs.len() > 1 {
-        return Err(Error::General(
-            "peer sent more than one certificate, but expected only a single one".to_string(),
-        ));
-    }
-    let end_entity = certs.first().ok_or(Error::NoCertificatesPresented)?;
-    let tls_cert = TlsPublicKeyCert::new_from_der(end_entity.0.clone())
-        .map_err(|_| Error::InvalidCertificate(CertificateError::BadEncoding))?;
-    Ok(tls_cert)
+#[derive(Error, Debug)]
+pub enum NodeIdFromCertificateDerError {
+    /// The passed certificate could not be decoded.
+    #[error("Invalid der encoded certificate: `{0}`.")]
+    InvalidCertificate(String),
+    /// Unexpected content in the certificate. This signals an application error.
+    #[error("Invalid content in the certificate: `{0}`.")]
+    UnexpectedContent(String),
 }
 
-/// Extracts the NodeId from a tls certificate iff:
-///     - There is exactly one name entry.
-///     - The name entry is parsable into a principal id.
-pub fn node_id_from_cert_subject_common_name(
-    cert: &TlsPublicKeyCert,
-) -> Result<NodeId, MalformedPeerCertificateError> {
-    let common_name_entry = ensure_exactly_one_subject_common_name_entry(cert)?;
-    let common_name = common_name_entry_as_string(common_name_entry)?;
-    let principal_id = parse_principal_id(common_name)?;
+/// Tries to extract a single NodeId from a Rustls certificate chain.
+///
+/// # Errors
+///
+/// Fails if
+/// * the chain is empty or contains more than one certificate
+/// * the single certificate in the chain does not have the expected
+///   format (e.g., invalid DER, not just a single subject common name,
+///   invalid principal)
+pub fn node_id_from_certificate_der(
+    certificate_der: &[u8],
+) -> Result<NodeId, NodeIdFromCertificateDerError> {
+    let (remainder, x509_cert) = x509_parser::parse_x509_certificate(certificate_der)
+        .map_err(|err| NodeIdFromCertificateDerError::InvalidCertificate(format!("{err}")))?;
+    if !remainder.is_empty() {
+        return Err(NodeIdFromCertificateDerError::InvalidCertificate(
+            "Input remains after parsing.".to_string(),
+        ));
+    }
+
+    let subject_cn = single_subject_cn_as_str(&x509_cert)?;
+    let principal_id = PrincipalId::from_str(subject_cn)
+        .map_err(|err| NodeIdFromCertificateDerError::UnexpectedContent(format!("{err}")))?;
+
     Ok(NodeId::from(principal_id))
 }
 
-fn ensure_exactly_one_subject_common_name_entry(
-    cert: &TlsPublicKeyCert,
-) -> Result<&X509NameEntryRef, MalformedPeerCertificateError> {
-    if common_name_entries(cert).count() > 1 {
-        return Err(MalformedPeerCertificateError::new(
-            "Too many X509NameEntryRefs",
+fn single_subject_cn_as_str<'a>(
+    x509_cert: &'a X509Certificate,
+) -> Result<&'a str, NodeIdFromCertificateDerError> {
+    let name = x509_cert.subject();
+    let mut cn_iter = name.iter_common_name();
+    let first_cn_str = cn_iter
+        .next()
+        .ok_or(NodeIdFromCertificateDerError::UnexpectedContent(
+            "Missing common name (CN)".to_string(),
+        ))?
+        .as_str()
+        .map_err(|err| NodeIdFromCertificateDerError::UnexpectedContent(format!("{err}")))?;
+    if cn_iter.next().is_some() {
+        return Err(NodeIdFromCertificateDerError::UnexpectedContent(
+            "found second common name (CN) entry, but expected a single one".to_string(),
         ));
     }
-    common_name_entries(cert)
-        .next()
-        .ok_or_else(|| MalformedPeerCertificateError::new("Missing X509NameEntryRef"))
-}
-
-fn common_name_entry_as_string(
-    common_name_entry: &X509NameEntryRef,
-) -> Result<OpensslString, MalformedPeerCertificateError> {
-    common_name_entry.data().as_utf8().map_err(|e| {
-        MalformedPeerCertificateError::new(&format!("ASN1 to UTF-8 conversion error: {}", e))
-    })
-}
-
-fn parse_principal_id(
-    common_name: OpensslString,
-) -> Result<PrincipalId, MalformedPeerCertificateError> {
-    PrincipalId::from_str(common_name.as_ref()).map_err(|e| {
-        MalformedPeerCertificateError::new(&format!("Principal ID parse error: {}", e))
-    })
-}
-
-fn common_name_entries(cert: &TlsPublicKeyCert) -> X509NameEntries {
-    cert.as_x509()
-        .subject_name()
-        .entries_by_nid(Nid::COMMONNAME)
+    Ok(first_cn_str)
 }

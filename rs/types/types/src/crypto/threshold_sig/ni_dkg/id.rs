@@ -1,5 +1,7 @@
 //! Types related to the non-interactive DKG ID.
 use super::*;
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::types::v1 as pb;
 
 #[cfg(test)]
@@ -7,6 +9,7 @@ mod tests;
 
 /// The ID for non-interactive DKG. Identifies a DKG epoch.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct NiDkgId {
     /// This field refers to the height of the block denoting the start of the
     /// computation of this DKG instance (resulting into a transcript later).

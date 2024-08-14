@@ -23,7 +23,7 @@ i389XZmdlKFbsLkUI9dDQgMP98YnUA==
 "#;
     /// An invalid pem; the base64 is invalid.
     ///
-    /// (A trailing A== is missing from the base64 of an otherwse valid secp256k1 key.)
+    /// (A trailing A== is missing from the base64 of an otherwise valid secp256k1 key.)
     pub const SAMPLE_MALFORMED_BASE64: &str = r#"-----BEGIN EC PRIVATE KEY-----
 MHQCAQEEIJQhkGfs2ep0VGU5BgJvcc4NVWG0GCc+aqkH7b3DL6aZoAcGBSuBBAAK
 oUQDQgAENBexvaA6VKI60UxeTDHiocVBcf+y/irJOHzvQSlwiZM3MCDu6lxaP/Bw

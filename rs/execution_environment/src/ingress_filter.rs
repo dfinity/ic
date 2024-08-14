@@ -1,5 +1,5 @@
 use crate::query_handler::QueryScheduler;
-use crate::ExecutionEnvironment;
+use crate::{metrics::IngressFilterMetrics, ExecutionEnvironment};
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{ExecutionMode, IngressFilterService};
 use ic_interfaces_state_manager::StateReader;
@@ -15,27 +15,30 @@ use tokio::sync::oneshot;
 use tower::{util::BoxCloneService, Service};
 
 #[derive(Clone)]
-pub(crate) struct IngressFilter {
+pub(crate) struct IngressFilterServiceImpl {
     exec_env: Arc<ExecutionEnvironment>,
+    metrics: Arc<IngressFilterMetrics>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     query_scheduler: QueryScheduler,
 }
 
-impl IngressFilter {
+impl IngressFilterServiceImpl {
     pub(crate) fn new_service(
         query_scheduler: QueryScheduler,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         exec_env: Arc<ExecutionEnvironment>,
+        metrics: Arc<IngressFilterMetrics>,
     ) -> IngressFilterService {
         BoxCloneService::new(Self {
             exec_env,
+            metrics,
             state_reader,
             query_scheduler,
         })
     }
 }
 
-impl Service<(ProvisionalWhitelist, SignedIngressContent)> for IngressFilter {
+impl Service<(ProvisionalWhitelist, SignedIngressContent)> for IngressFilterServiceImpl {
     type Response = Result<(), UserError>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -50,6 +53,7 @@ impl Service<(ProvisionalWhitelist, SignedIngressContent)> for IngressFilter {
         (provisional_whitelist, ingress): (ProvisionalWhitelist, SignedIngressContent),
     ) -> Self::Future {
         let exec_env = Arc::clone(&self.exec_env);
+        let metrics = Arc::clone(&self.metrics);
         let state_reader = Arc::clone(&self.state_reader);
         let (tx, rx) = oneshot::channel();
         let canister_id = ingress.canister_id();
@@ -62,6 +66,7 @@ impl Service<(ProvisionalWhitelist, SignedIngressContent)> for IngressFilter {
                     &provisional_whitelist,
                     &ingress,
                     ExecutionMode::NonReplicated,
+                    &metrics,
                 );
                 let _ = tx.send(Ok(v));
             }

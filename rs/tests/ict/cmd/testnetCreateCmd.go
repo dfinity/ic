@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,7 +18,7 @@ import (
 )
 
 // This defines timeout on the Bazel level.
-var TESTNET_DEPLOYMENT_TIMEOUT_SEC = 1200
+var TESTNET_DEPLOYMENT_TIMEOUT_SEC = 5400
 
 var FARM_BASE_URL = "https://farm.dfinity.systems"
 var FARM_API = FARM_BASE_URL + "/swagger-ui"
@@ -25,13 +26,13 @@ var FARM_GROUP_KEEPALIVE_TTL_SEC = 90
 var KEEPALIVE_PERIOD = 30 * time.Second
 
 // This restriction is defined in an ad-hoc way to avoid accidental resources abuse.
-var MAX_TESTNET_LIFETIME_MINS = 180
+var MAX_TESTNET_LIFETIME_MINS = 1440 * 7
 
 // All output files are saved in this folder, if output-dir is not provided explicitly.
 var DEFAULT_RESULTS_DIR = "ict_testnets"
 
 // Logs are streamed into this file during testnet deployment.
-var SUFFIX_LOG_FILE = "log.txt"
+var SUFFIX_LOG_FILE = ".log"
 
 // Filenames are prefixed with this datetime format up to milliseconds.
 var DATE_TIME_FORMAT = "2006-01-02_15-04-05.000"
@@ -40,7 +41,7 @@ var DATE_TIME_FORMAT = "2006-01-02_15-04-05.000"
 const MAX_TOKEN_CAPACITY = 1024 * 1024
 
 // These events are collected from test-driver logs during the testnet deployment.
-const FARM_GROUP_NAME_CREATED_EVENT = "farm_group_name_created_event"
+const INFRA_GROUP_NAME_CREATED_EVENT = "infra_group_name_created_event"
 const KIBANA_URL_CREATED_EVENT = "kibana_url_created_event"
 const FARM_VM_CREATED_EVENT = "farm_vm_created_event"
 const BN_AAAA_RECORDS_CREATED_EVENT = "bn_aaaa_records_created_event"
@@ -52,6 +53,9 @@ const VM_CONSOLE_LINK_CREATED_EVENT = "vm_console_link_created_event"
 
 // This event signals the end of testnet deployment.
 const JSON_REPORT_CREATED_EVENT = "json_report_created_event"
+
+// This is the name of bazel target used to spawn a testnet from file configuration
+const FROM_CONFIG = "from_config"
 
 // Definition of this event is aligned with rs/tests/src/driver/log_events.rs
 type TestDriverEvent struct {
@@ -65,17 +69,19 @@ type OutputFilepath struct {
 
 func NewOutputFilepath(outputDir string, time time.Time) *OutputFilepath {
 	return &OutputFilepath{
-		logPath: filepath.Join(outputDir, fmt.Sprintf("%s_%s", time.Format(DATE_TIME_FORMAT), SUFFIX_LOG_FILE)),
+		logPath: filepath.Join(outputDir, fmt.Sprintf("%s%s", time.Format(DATE_TIME_FORMAT), SUFFIX_LOG_FILE)),
 	}
 }
 
 type TestnetConfig struct {
-	isDetached   bool
-	outputDir    string
-	verbose      bool
-	lifetimeMins int
-	isFuzzyMatch bool
-	isDryRun     bool
+	isDetached           bool
+	outputDir            string
+	verbose              bool
+	lifetimeMins         int
+	isFuzzyMatch         bool
+	isDryRun             bool
+	requiredHostFeatures string
+	icConfigPath         string
 }
 
 // Testnet config summary published to json file.
@@ -106,7 +112,7 @@ func (summary *Summary) add_event(event *TestDriverEvent) {
 		summary.IcProgressClock = event.Body
 	} else if event.EventName == FARM_VM_CREATED_EVENT {
 		summary.FarmVMs = append(summary.FarmVMs, event.Body)
-	} else if event.EventName == FARM_GROUP_NAME_CREATED_EVENT {
+	} else if event.EventName == INFRA_GROUP_NAME_CREATED_EVENT {
 		summary.FarmGroup = event.Body
 	} else if event.EventName == KIBANA_URL_CREATED_EVENT {
 		summary.KibanaUrl = event.Body
@@ -122,12 +128,37 @@ func ValidateTestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []
 		if cfg.lifetimeMins <= 0 || cfg.lifetimeMins > MAX_TESTNET_LIFETIME_MINS {
 			return fmt.Errorf("flag --lifetime-mins should be in range 0 < lifetime-mins <= %d mins", MAX_TESTNET_LIFETIME_MINS)
 		}
+		if cfg.icConfigPath != "" {
+			if _, err := os.Stat(cfg.icConfigPath); os.IsNotExist(err) {
+				return fmt.Errorf("ic config path '%s' does not exist", cfg.icConfigPath)
+			}
+		}
 		return nil
 	}
 }
 
 func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
+		config := ""
+		if cfg.icConfigPath != "" {
+			if len(args) > 0 {
+				return fmt.Errorf("Cannot provide both `--from-ic-config-path` and a name for testnet configuration: %s", args[0])
+			}
+			args = append(args, FROM_CONFIG)
+			json_bytes, err := os.ReadFile(cfg.icConfigPath)
+			if err != nil {
+				return err
+			}
+			if !json.Valid(json_bytes) {
+				return fmt.Errorf("File provided isn't valid json")
+			}
+			dst := &bytes.Buffer{}
+			if err := json.Compact(dst, json_bytes); err != nil {
+				return fmt.Errorf("Cannot minify json: %s", err)
+			}
+			config = dst.String()
+		}
+
 		// If the target name is not fully qualified, we make it to be such.
 		target, err := make_fully_qualified_target(args[0])
 		if err != nil {
@@ -148,14 +179,21 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 			}
 		}
 		command := []string{"bazel", "test", target, "--config=systest"}
-		// Append all bazel args following the --, i.e. "ict test target -- --verbose_explanations ..."
-		command = append(command, args[1:]...)
 		command = append(command, "--cache_test_results=no")
-		lifetimeMins := fmt.Sprintf("--test_timeout=%s", strconv.Itoa(TESTNET_DEPLOYMENT_TIMEOUT_SEC))
-		command = append(command, lifetimeMins)
+		command = append(command, fmt.Sprintf("--test_timeout=%s", strconv.Itoa(TESTNET_DEPLOYMENT_TIMEOUT_SEC)))
 		// We let the test-driver (and Bazel command) finish without deleting Farm group.
 		// Afterwards, we interact with the group's ttl via Farm API.
 		command = append(command, "--test_arg=--no-delete-farm-group")
+		if len(cfg.requiredHostFeatures) > 0 {
+			command = append(command, "--test_arg=--set-required-host-features="+cfg.requiredHostFeatures)
+		}
+		// If the user provided a special config path we add it as an environment variable
+		if config != "" {
+			command = append(command, fmt.Sprintf("--test_env=IC_CONFIG='%s'", config))
+		}
+		// Append all bazel args following the --, i.e. "ict test target -- --verbose_explanations --test_timeout=20 ..."
+		// Note: arguments provided by the user might override the ones above, i.e. test_timeout, cache_test_results, etc.
+		command = append(command, args[1:]...)
 		// Print Bazel command for debugging puroposes.
 		cmd.PrintErrln(CYAN + "Raw Bazel command to be invoked: \n$ " + strings.Join(command, " ") + NC)
 		if cfg.isDryRun {
@@ -220,7 +258,7 @@ func NewTestnetCreateCmd() *cobra.Command {
 		Use:               "create <testnet_name> [flags] [-- <bazel_args>]",
 		Short:             "Create IC testnet for the desired time period. This command blocks the terminal.",
 		Example:           "ict testnet create small --lifetime-mins=20\nict testnet create small --lifetime-mins=20 --verbose --output-dir=./tmp -- --test_tmpdir=./tmp (store artifacts, such as SSH keys)",
-		Args:              cobra.MinimumNArgs(1),
+		Args:              cobra.MinimumNArgs(0),
 		PersistentPreRunE: ValidateTestnetCommand(&cfg),
 		RunE:              TestnetCommand(&cfg),
 	}
@@ -230,6 +268,8 @@ func NewTestnetCreateCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&cfg.isFuzzyMatch, "fuzzy", "", false, "Use fuzzy matching to find similar testnet names. Default: substring match")
 	cmd.Flags().BoolVarP(&cfg.isDryRun, "dry-run", "n", false, "Print raw Bazel command to be invoked without execution")
 	cmd.Flags().BoolVarP(&cfg.isDetached, "experimental-detached", "", false, fmt.Sprintf("Create a testnet without blocking the console\nNOTE: extending testnet lifetime (ttl) should be done manually\nSee Farm API %s", FARM_API))
+	cmd.Flags().StringVarP(&cfg.icConfigPath, "from-ic-config-path", "", "", "Provide a custom config describing the desired layout of the network to be deployed")
+	cmd.PersistentFlags().StringVarP(&cfg.requiredHostFeatures, "set-required-host-features", "", "", "Set and override required host features of all hosts spawned.\nFeatures must be one or more of [dc=<dc-name>, host=<host-name>, AMD-SEV-SNP, SNS-load-test, performance], separated by comma (see Examples).")
 	cmd.SetOut(os.Stdout)
 	return cmd
 }
@@ -262,12 +302,19 @@ func ProcessLogs(reader io.ReadCloser, cmd *cobra.Command, outputFiles *OutputFi
 			if err != nil {
 				return "", fmt.Errorf("testnet deployment failed: %v", err)
 			}
-			prettyJson, err := json.MarshalIndent(summary, "", "  ")
+			var buffer bytes.Buffer
+			encoder := json.NewEncoder(&buffer)
+			// Here we change the default encoding behavior, as urls can contain special symbols like &. We don't want to escape those.
+			encoder.SetEscapeHTML(false)
+			encoder.SetIndent("", "  ")
+			err = encoder.Encode(summary)
 			if err != nil {
 				return "", fmt.Errorf("marshalling summary failed with err: %v", err)
+			} else {
+				prettyJson := buffer.String()
+				// Only this line goes to stdout, so that the command output can be piped to jq.
+				cmd.Println(string(prettyJson))
 			}
-			// Only this line goes to stdout, so that the command output can be piped to jq.
-			cmd.Println(string(prettyJson))
 			group, err = ExtractFarmGroup(&summary)
 			if err != nil {
 				return "", err
@@ -373,7 +420,7 @@ func ExtractFarmGroup(summary *Summary) (string, error) {
 	if val, ok := jsonMap["group"]; ok {
 		return val.(string), nil
 	}
-	return "", fmt.Errorf("couldn't extract Farm group from %s", FARM_GROUP_NAME_CREATED_EVENT)
+	return "", fmt.Errorf("couldn't extract infra group from %s", INFRA_GROUP_NAME_CREATED_EVENT)
 }
 
 func GetTestnetExpiration(group string) (string, error) {

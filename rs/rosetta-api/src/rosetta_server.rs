@@ -1,17 +1,16 @@
+use crate::{
+    errors::{self, ApiError},
+    ledger_client::LedgerAccess,
+    models::*,
+    request_handler::RosettaRequestHandler,
+    request_types::RosettaStatus,
+};
 use actix_rt::time::interval;
 use actix_web::{
     dev::{Server, ServerHandle},
     get, post, web, App, HttpResponse, HttpServer,
 };
 
-use crate::{
-    errors::{self, ApiError},
-    ledger_client::LedgerAccess,
-    models::*,
-    request_handler::RosettaRequestHandler,
-};
-
-use log::{debug, error, info};
 use prometheus::{
     register_gauge, register_histogram, register_histogram_vec, register_int_counter,
     register_int_counter_vec, register_int_gauge, Encoder, Gauge, Histogram, HistogramVec,
@@ -31,6 +30,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::Mutex;
+use tracing::{debug, error, info};
 
 use lazy_static::lazy_static;
 
@@ -206,7 +206,7 @@ async fn construction_submit(
 
 #[post("/network/list")]
 async fn network_list(
-    msg: web::Json<MetadataRequest>,
+    msg: web::Json<rosetta_core::request_types::MetadataRequest>,
     req_handler: web::Data<RosettaRequestHandler>,
 ) -> HttpResponse {
     let res = req_handler.network_list(msg.into_inner()).await;
@@ -287,7 +287,7 @@ fn to_rosetta_response<S: serde::Serialize>(result: Result<S, ApiError>) -> Http
             let err = errors::convert_to_error(&err);
             match serde_json::to_string(&err) {
                 Ok(resp) => {
-                    let err_code = format!("{}", err.code);
+                    let err_code = format!("{}", err.0.code);
                     ENDPOINTS_METRICS
                         .rosetta_api_status_total
                         .with_label_values(&[&err_code])
@@ -319,6 +319,14 @@ async fn rosetta_metrics() -> HttpResponse {
     HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
         .body(String::from_utf8(buffer).unwrap())
+}
+
+#[get("/status")]
+async fn status(req_handler: web::Data<RosettaRequestHandler>) -> HttpResponse {
+    let rosetta_blocks_mode = req_handler.rosetta_blocks_mode().await;
+    to_rosetta_response(Ok(RosettaStatus {
+        rosetta_blocks_mode,
+    }))
 }
 
 enum ServerState {
@@ -376,7 +384,8 @@ impl RosettaApiServer {
                 .service(network_list)
                 .service(network_options)
                 .service(network_status)
-                .service(search_transactions);
+                .service(search_transactions)
+                .service(status);
             if expose_metrics {
                 app.service(rosetta_metrics)
             } else {
@@ -398,7 +407,7 @@ impl RosettaApiServer {
             });
             std::fs::write(
                 listen_port_file,
-                server.addrs().get(0).unwrap().port().to_string(),
+                server.addrs().first().unwrap().port().to_string(),
             )
             .unwrap_or_else(|e| panic!("Unable to write to listen_port_file! Error: {}", e));
         }

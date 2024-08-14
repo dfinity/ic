@@ -1,0 +1,63 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = [
+    "//rs/p2p:__subpackages__",
+    "//rs/replica:__subpackages__",
+])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/interfaces",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/p2p/quic_transport",
+    "//rs/phantom_newtype",
+    "//rs/protobuf",
+    "//rs/types/base_types",
+    "//rs/types/types",
+    "@crate_index//:axum",
+    "@crate_index//:backoff",
+    "@crate_index//:bytes",
+    "@crate_index//:prometheus",
+    "@crate_index//:prost",
+    "@crate_index//:rand",
+    "@crate_index//:slog",
+    "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
+    "@crate_index//:tracing",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/p2p/test_utils",
+    "//rs/test_utilities/logger",
+    "//rs/types/types_test_utils",
+    "@crate_index//:anyhow",
+    "@crate_index//:futures",
+    "@crate_index//:mockall",
+    "@crate_index//:tower",
+    "@crate_index//:turmoil",
+]
+
+rust_library(
+    name = "consensus_manager",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_consensus_manager",
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "consensus_manager_test",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_consensus_manager",
+    version = "0.9.0",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "consensus_manager_integration",
+    srcs = ["tests/test.rs"],
+    flaky = True,
+    deps = [":consensus_manager"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)

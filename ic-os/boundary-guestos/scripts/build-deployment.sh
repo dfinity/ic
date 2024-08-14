@@ -45,16 +45,17 @@ Arguments:
        --denylist=                      a deny list of canisters
        --prober-identity=               specify an identity file for the prober
        --geolite2-country-db=           specify path to GeoLite2 Country Database
-       --geolite2-city-db=              specify path to GeoLite2 City Database
        --cert-issuer-creds              specify a credentials file for certificate-issuer
        --cert-issuer-identity           specify an identity file for certificate-issuer
        --cert-issuer-enc-key            specify an encryption key for certificate-issuer
+       --ic-boundary-config             specify a path to the ic-boundary config file
+       --ic-boundary-ratelimits         specify a path to the ic-boundary ratelimits file
        --pre-isolation-canisters        specify a set of pre-domain-isolation canisters
-       --ip-hash-salt                   specify a salt for hashing ip values
        --logging-url                    specify an endpoint for our logging backend
        --logging-user                   specify a user for our logging backend
        --logging-password               specify a password for our logging backend
-       --logging-2xx-sample-rate        specify a sampling rate for logging 2XX requests (1 / N)
+       --crowdsec-api-url               speficy a Crowdsec API URL
+       --crowdsec-api-key               speficy a Crowdsec API key
   -x,  --debug                          enable verbose console output
 '
     exit 1
@@ -107,9 +108,6 @@ for argument in "${@}"; do
         --geolite2-country-db=*)
             GEOLITE2_COUNTRY_DB="${argument#*=}"
             ;;
-        --geolite2-city-db=*)
-            GEOLITE2_CITY_DB="${argument#*=}"
-            ;;
         --cert-issuer-creds=*)
             CERTIFICATE_ISSUER_CREDENTIALS="${argument#*=}"
             ;;
@@ -119,11 +117,14 @@ for argument in "${@}"; do
         --cert-issuer-enc-key=*)
             CERTIFICATE_ISSUER_ENCRYPTION_KEY="${argument#*=}"
             ;;
+        --ic-boundary-config=*)
+            IC_BOUNDARY_CONFIG="${argument#*=}"
+            ;;
+        --ic-boundary-ratelimits=*)
+            IC_BOUNDARY_RATELIMITS="${argument#*=}"
+            ;;
         --pre-isolation-canisters=*)
             PRE_ISOLATION_CANISTERS="${argument#*=}"
-            ;;
-        --ip-hash-salt=*)
-            IP_HASH_SALT="${argument#*=}"
             ;;
         --logging-url=*)
             LOGGING_URL="${argument#*=}"
@@ -134,8 +135,11 @@ for argument in "${@}"; do
         --logging-password=*)
             LOGGING_PASSWORD="${argument#*=}"
             ;;
-        --logging-2xx-sample-rate=*)
-            LOGGING_2XX_SAMPLE_RATE="${argument#*=}"
+        --crowdsec-api-url=*)
+            CROWDSEC_API_URL="${argument#*=}"
+            ;;
+        --crowdsec-api-key=*)
+            CROWDSEC_API_KEY="${argument#*=}"
             ;;
         *)
             echo "Error: Argument \"${argument#}\" is not supported for $0"
@@ -420,11 +424,10 @@ function copy_deny_list() {
 
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
             if [[ -f "${DENY_LIST:-}" ]]; then
-                echo "Using deny list ${DENY_LIST}"
-                cp "${DENY_LIST}" "${CONFIG_DIR}/${NODE_PREFIX}/denylist.map"
+                echo "Using denylist ${DENY_LIST}"
+                cp "${DENY_LIST}" "${CONFIG_DIR}/${NODE_PREFIX}/denylist.json"
             else
-                echo "Using empty denylist"
-                touch "${CONFIG_DIR}/${NODE_PREFIX}/denylist.map"
+                echo "No denylist provided"
             fi
         fi
     done
@@ -452,8 +455,8 @@ function copy_certs() {
 }
 
 function copy_geolite2_dbs() {
-    if [[ -z "${GEOLITE2_COUNTRY_DB:-}" || -z "${GEOLITE2_CITY_DB:-}" ]]; then
-        err "geolite2 dbs have not been provided, therefore geolocation capabilities will be disabled"
+    if [[ -z "${GEOLITE2_COUNTRY_DB:-}" ]]; then
+        err "geolite2 db has not been provided, therefore geolocation capabilities will be disabled"
         return
     fi
 
@@ -469,7 +472,6 @@ function copy_geolite2_dbs() {
 
         mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}/geolite2_dbs"
         cp "${GEOLITE2_COUNTRY_DB}" "${CONFIG_DIR}/${NODE_PREFIX}/geolite2_dbs/"
-        cp "${GEOLITE2_CITY_DB}" "${CONFIG_DIR}/${NODE_PREFIX}/geolite2_dbs/"
     done
 }
 
@@ -485,13 +487,15 @@ function generate_certificate_issuer_config() {
             "certificate_orchestrator_uri") readonly CERTIFICATE_ORCHESTRATOR_URI="${value:-}" ;;
             "certificate_orchestrator_canister_id") readonly CERTIFICATE_ORCHESTRATOR_CANISTER_ID="${value:-}" ;;
             "certificate_issuer_delegation_domain") readonly CERTIFICATE_ISSUER_DELEGATION_DOMAIN="${value:-}" ;;
+            "certificate_issuer_acme_provider_url") readonly CERTIFICATE_ISSUER_ACME_PROVIDER_URL="${value:-}" ;;
             "certificate_issuer_acme_id") readonly CERTIFICATE_ISSUER_ACME_ID="${value:-}" ;;
             "certificate_issuer_acme_key") readonly CERTIFICATE_ISSUER_ACME_KEY="${value:-}" ;;
             "certificate_issuer_cloudflare_api_key") readonly CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY="${value:-}" ;;
+            "certificate_issuer_important_domains") readonly CERTIFICATE_ISSUER_IMPORTANT_DOMAINS="${value:-}" ;;
         esac
     done <"${CERTIFICATE_ISSUER_CREDENTIALS}"
 
-    if [[ -z "${CERTIFICATE_ORCHESTRATOR_URI}" || -z "${CERTIFICATE_ORCHESTRATOR_CANISTER_ID}" || -z "${CERTIFICATE_ISSUER_DELEGATION_DOMAIN}" || -z "${CERTIFICATE_ISSUER_IDENTITY}" || -z "${CERTIFICATE_ISSUER_ENCRYPTION_KEY}" || -z "${CERTIFICATE_ISSUER_ACME_ID}" || -z "${CERTIFICATE_ISSUER_ACME_KEY}" || -z "${CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY}" ]]; then
+    if [[ -z "${CERTIFICATE_ORCHESTRATOR_URI}" || -z "${CERTIFICATE_ORCHESTRATOR_CANISTER_ID}" || -z "${CERTIFICATE_ISSUER_DELEGATION_DOMAIN}" || -z "${CERTIFICATE_ISSUER_IDENTITY}" || -z "${CERTIFICATE_ISSUER_ENCRYPTION_KEY}" || -z "${CERTIFICATE_ISSUER_ACME_PROVIDER_URL}" || -z "${CERTIFICATE_ISSUER_ACME_ID}" || -z "${CERTIFICATE_ISSUER_ACME_KEY}" || -z "${CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY}" ]]; then
         err "ERROR: Missing certificate-issuer configuration."
         exit_usage
     fi
@@ -513,11 +517,55 @@ function generate_certificate_issuer_config() {
 certificate_orchestrator_uri=${CERTIFICATE_ORCHESTRATOR_URI}
 certificate_orchestrator_canister_id=${CERTIFICATE_ORCHESTRATOR_CANISTER_ID}
 certificate_issuer_delegation_domain=${CERTIFICATE_ISSUER_DELEGATION_DOMAIN}
+certificate_issuer_acme_provider_url=${CERTIFICATE_ISSUER_ACME_PROVIDER_URL}
 certificate_issuer_acme_id=${CERTIFICATE_ISSUER_ACME_ID}
 certificate_issuer_acme_key=${CERTIFICATE_ISSUER_ACME_KEY}
 certificate_issuer_cloudflare_api_key=${CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY}
+certificate_issuer_important_domains=${CERTIFICATE_ISSUER_IMPORTANT_DOMAINS}
 EOF
         fi
+    done
+}
+
+function copy_ic_boundary_config() {
+    if [[ -z "${IC_BOUNDARY_CONFIG:-}" ]]; then
+        err "ic-boundary config file has not been provided, proceeding without copying it"
+        return
+    fi
+
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" != "boundary" ]]; then
+            continue
+        fi
+
+        local SUBNET_IDX="${NODE["subnet_idx"]}"
+        local NODE_IDX="${NODE["node_idx"]}"
+        local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
+
+        mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}"
+        cp "${IC_BOUNDARY_CONFIG}" "${CONFIG_DIR}/${NODE_PREFIX}/ic_boundary.conf"
+    done
+}
+
+function copy_ic_boundary_ratelimits() {
+    if [[ -z "${IC_BOUNDARY_RATELIMITS:-}" ]]; then
+        err "ratelimits file has not been provided, proceeding without copying it"
+        return
+    fi
+
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" != "boundary" ]]; then
+            continue
+        fi
+
+        local SUBNET_IDX="${NODE["subnet_idx"]}"
+        local NODE_IDX="${NODE["node_idx"]}"
+        local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
+
+        mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}"
+        cp "${IC_BOUNDARY_RATELIMITS}" "${CONFIG_DIR}/${NODE_PREFIX}/canister-ratelimit.yml"
     done
 }
 
@@ -542,26 +590,6 @@ function copy_pre_isolation_canisters() {
     done
 }
 
-function copy_ip_hash_salt() {
-    if [[ -z "${IP_HASH_SALT:-}" ]]; then
-        err "ip hashing salt has not been provided, proceeding without copying it"
-        return
-    fi
-
-    for n in $NODES; do
-        declare -n NODE=$n
-        if [[ "${NODE["type"]}" != "boundary" ]]; then
-            continue
-        fi
-
-        local SUBNET_IDX="${NODE["subnet_idx"]}"
-        local NODE_IDX="${NODE["node_idx"]}"
-        local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
-
-        echo "ip_hash_salt=${IP_HASH_SALT}" >>"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
-    done
-}
-
 function copy_logging_credentials() {
     if [[ -z "${LOGGING_URL:-}" || -z "${LOGGING_USER:-}" || -z "${LOGGING_PASSWORD:-}" ]]; then
         err "logging credentials have not been provided, continuing without configuring logging"
@@ -578,13 +606,30 @@ function copy_logging_credentials() {
         local NODE_IDX="${NODE["node_idx"]}"
         local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
 
-        # Default values
-        LOGGING_2XX_SAMPLE_RATE=${LOGGING_2XX_SAMPLE_RATE:-1}
-
         echo "logging_url=${LOGGING_URL}" >>"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
         echo "logging_user=${LOGGING_USER}" >>"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
         echo "logging_password=${LOGGING_PASSWORD}" >>"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
-        echo "logging_2xx_sample_rate=${LOGGING_2XX_SAMPLE_RATE}" >>"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
+    done
+}
+
+function copy_crowdsec_credentials() {
+    if [[ -z "${CROWDSEC_API_URL:-}" || -z "${CROWDSEC_API_KEY:-}" ]]; then
+        err "Crowdsec credentials have not been provided, continuing without configuring crowdsec"
+        return
+    fi
+
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" != "boundary" ]]; then
+            continue
+        fi
+
+        local SUBNET_IDX="${NODE["subnet_idx"]}"
+        local NODE_IDX="${NODE["node_idx"]}"
+        local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
+
+        echo "crowdsec_api_url=${CROWDSEC_API_URL}" >>"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
+        echo "crowdsec_api_key=${CROWDSEC_API_KEY}" >>"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
     done
 }
 
@@ -638,10 +683,12 @@ function main() {
     copy_certs
     copy_deny_list
     copy_geolite2_dbs
+    copy_ic_boundary_config
+    copy_ic_boundary_ratelimits
     generate_certificate_issuer_config
     copy_pre_isolation_canisters
-    copy_ip_hash_salt
     copy_logging_credentials
+    copy_crowdsec_credentials
     build_tarball
     build_removable_media
     remove_temporary_directories

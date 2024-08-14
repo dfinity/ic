@@ -149,6 +149,10 @@ pub fn write_bytes(file: &Path, bytes: Vec<u8>) -> RecoveryResult<()> {
     fs::write(file, bytes).map_err(|e| RecoveryError::file_error(file, e))
 }
 
+pub fn read_bytes(file: &Path) -> RecoveryResult<Vec<u8>> {
+    fs::read(file).map_err(|e| RecoveryError::file_error(file, e))
+}
+
 pub fn read_file(file: &Path) -> RecoveryResult<String> {
     fs::read_to_string(file).map_err(|e| RecoveryError::file_error(file, e))
 }
@@ -216,6 +220,6 @@ mod tests {
                 "/tmp/src",
                 "/tmp/target",
                 "-e",
-                "ssh -o StrictHostKeyChecking=no -o NumberOfPasswordPrompts=0 -o ConnectionAttempts=30 -o ConnectTimeout=60 -A -i /tmp/key_file"]);
+                "ssh -o StrictHostKeyChecking=no -o NumberOfPasswordPrompts=0 -o ConnectionAttempts=4 -o ConnectTimeout=15 -A -i /tmp/key_file"]);
     }
 }

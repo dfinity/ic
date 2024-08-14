@@ -7,36 +7,41 @@ use ic_cdk_macros::{init, post_upgrade, query};
 use ic_cdk_timers::TimerId;
 use ic_crypto_sha2::Sha256;
 use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_block};
+use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc1::{Block, Operation};
 use ic_icrc1_index_ng::{
     FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
-    GetAccountTransactionsResult, IndexArg, ListSubaccountsArgs, Log, LogEntry, Status,
-    TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+    GetAccountTransactionsResult, GetBlocksMethod, IndexArg, InitArg, ListSubaccountsArgs, Log,
+    LogEntry, Status, TransactionWithId, UpgradeArg, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
+use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex as BlockIndex64, BlockType, EncodedBlock};
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, Zero};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
-use ic_stable_structures::storable::Blob;
+use ic_stable_structures::storable::{Blob, Bound};
 use ic_stable_structures::{
-    memory_manager::MemoryManager, BoundedStorable, DefaultMemoryImpl, StableBTreeMap, StableCell,
-    StableLog, Storable,
+    memory_manager::MemoryManager, DefaultMemoryImpl, StableBTreeMap, StableCell, StableLog,
+    Storable,
 };
+use icrc_ledger_types::icrc::generic_value::Value;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
 use icrc_ledger_types::icrc3::blocks::{
-    BlockRange, GenericBlock, GetBlocksRequest, GetBlocksResponse,
+    ArchivedBlocks, BlockRange, BlockWithId, GenericBlock, GetBlocksRequest, GetBlocksResponse,
+    GetBlocksResult,
 };
-use icrc_ledger_types::icrc3::transactions::{Approve, Burn, Mint, Transaction, Transfer};
+use icrc_ledger_types::icrc3::transactions::Transaction;
 use num_traits::ToPrimitive;
-use scopeguard::{guard, ScopeGuard};
+use scopeguard::guard;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp::Reverse;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::io::Read;
 use std::ops::Bound::{Excluded, Included};
 use std::ops::Range;
 use std::time::Duration;
@@ -51,10 +56,13 @@ const BLOCK_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(2);
 const ACCOUNT_BLOCK_IDS_MEMORY_ID: MemoryId = MemoryId::new(3);
 const ACCOUNT_DATA_MEMORY_ID: MemoryId = MemoryId::new(4);
 
-const DEFAULT_MAX_WAIT_TIME: Duration = Duration::from_secs(2);
-const DEFAULT_RETRY_WAIT_TIME: Duration = Duration::from_secs(1);
+const DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL: Duration = Duration::from_secs(1);
 
+#[cfg(not(feature = "u256-tokens"))]
 type Tokens = ic_icrc1_tokens_u64::U64;
+
+#[cfg(feature = "u256-tokens")]
+type Tokens = ic_icrc1_tokens_u256::U256;
 
 type VM = VirtualMemory<DefaultMemoryImpl>;
 type StateCell = StableCell<State, VM>;
@@ -98,11 +106,15 @@ thread_local! {
 
     /// Profiling data to understand cycles usage
     static PROFILING_DATA: RefCell<SpanStats> = RefCell::new(SpanStats::default());
+
+    /// Cache of the canister, i.e. ephemeral data that doesn't need to be
+    /// persistent between upgrades
+    static CACHE: RefCell<Cache> = RefCell::new(Cache::default());
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct State {
-    // Equals to `true` while the [build_index] task runs.
+    /// Equals to `true` while the [build_index] task runs.
     is_build_index_running: bool,
 
     /// The principal of the ledger canister that is indexed by this index.
@@ -111,11 +123,26 @@ struct State {
     /// The maximum number of transactions returned by [get_blocks].
     max_blocks_per_response: u64,
 
-    // Last wait time in nanoseconds.
+    /// Last wait time in nanoseconds.
     pub last_wait_time: Duration,
 
-    // The fees collectors with the ranges of blocks for which they collected the fee.
+    /// The fees collectors with the ranges of blocks for which they collected the fee.
     fee_collectors: HashMap<Account, Vec<Range<BlockIndex64>>>,
+
+    /// This fee is used if no fee nor effetive_fee is found in Approve blocks.
+    pub last_fee: Option<Tokens>,
+
+    /// The interval for retrieving blocks from the ledger and archive(s) for (re)building the
+    /// index. Lower values will result in a more responsive UI, but higher costs due to increased
+    /// cycle burn for the index, ledger and archive(s).
+    retrieve_blocks_from_ledger_interval: Option<Duration>,
+}
+
+impl State {
+    pub fn retrieve_blocks_from_ledger_interval(&self) -> Duration {
+        self.retrieve_blocks_from_ledger_interval
+            .unwrap_or(DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL)
+    }
 }
 
 // NOTE: the default configuration is dysfunctional, but it's convenient to have
@@ -128,6 +155,8 @@ impl Default for State {
             max_blocks_per_response: DEFAULT_MAX_BLOCKS_PER_RESPONSE,
             last_wait_time: Duration::from_secs(0),
             fee_collectors: Default::default(),
+            last_fee: None,
+            retrieve_blocks_from_ledger_interval: None,
         }
     }
 }
@@ -142,6 +171,8 @@ impl Storable for State {
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         ciborium::de::from_reader(&bytes[..]).expect("failed to decode index options")
     }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -170,6 +201,17 @@ impl Storable for AccountDataType {
             panic!("Unknown AccountDataType {}", bytes[0]);
         }
     }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 1,
+        is_fixed_size: true,
+    };
+}
+
+// Ephemeral data that doesn't need to be saved between upgrades
+#[derive(Clone, Debug, Default)]
+struct Cache {
+    pub get_blocks_method: Option<GetBlocksMethod>,
 }
 
 #[test]
@@ -178,11 +220,6 @@ fn test_account_data_type_storable() {
         AccountDataType::Balance,
         AccountDataType::from_bytes(AccountDataType::Balance.to_bytes())
     );
-}
-
-impl BoundedStorable for AccountDataType {
-    const MAX_SIZE: u32 = 1;
-    const IS_FIXED_SIZE: bool = true;
 }
 
 /// A helper function to access the scalar state.
@@ -238,20 +275,15 @@ fn get_balance(account: Account) -> Tokens {
     with_account_data(|account_data| {
         account_data
             .get(&balance_key(account))
-            .unwrap_or_else(|| Tokens::zero())
+            .unwrap_or_else(Tokens::zero)
     })
 }
 
 /// A helper function to change the balance of an account.
-/// It removes an account balance if the balance is 0.
 fn change_balance(account: Account, f: impl FnOnce(Tokens) -> Tokens) {
     let key = balance_key(account);
     let new_balance = f(get_balance(account));
-    if Tokens::is_zero(&new_balance) {
-        with_account_data(|account_data| account_data.remove(&key));
-    } else {
-        with_account_data(|account_data| account_data.insert(key, new_balance));
-    }
+    with_account_data(|account_data| account_data.insert(key, new_balance));
 }
 
 fn balance_key(account: Account) -> (AccountDataType, (Blob<29>, [u8; 32])) {
@@ -265,24 +297,119 @@ fn balance_key(account: Account) -> (AccountDataType, (Blob<29>, [u8; 32])) {
 #[init]
 #[candid_method(init)]
 fn init(index_arg: Option<IndexArg>) {
-    let init_arg = match index_arg {
+    let InitArg {
+        ledger_id,
+        retrieve_blocks_from_ledger_interval_seconds,
+    } = match index_arg {
         Some(IndexArg::Init(arg)) => arg,
         _ => trap("Index initialization must take in input an InitArg argument"),
     };
 
     // stable memory initialization
     mutate_state(|state| {
-        state.ledger_id = init_arg.ledger_id;
+        state.ledger_id = ledger_id;
+        state.retrieve_blocks_from_ledger_interval =
+            retrieve_blocks_from_ledger_interval_seconds.map(Duration::from_secs);
     });
 
     // set the first build_index to be called after init
-    set_build_index_timer(Duration::from_secs(0));
+    set_build_index_timer(with_state(|state| {
+        state.retrieve_blocks_from_ledger_interval()
+    }));
 }
 
+// The part of the legacy index (//rs/rosetta-api/icrc1/index) state
+// that reads the ledger_id. This struct is used to deserialize
+// the state of the legacy index during post_upgrade in case
+// the upgrade is from the legacy index to the index-ng.
+#[derive(Serialize, Deserialize, Debug)]
+struct LegacyIndexState {
+    pub ledger_id: ic_base_types::CanisterId,
+}
+
+const MAX_LEGACY_STATE_BYTES: u64 = 100_000_000;
+
 #[post_upgrade]
-fn post_upgrade() {
+fn post_upgrade(index_arg: Option<IndexArg>) {
+    // Attempts to read the ledger_id using the legacy index
+    // storage scheme. This trick allows SNSes to update the legacy
+    // index to index-ng.
+    if let Ok(old_state) = ciborium::de::from_reader::<LegacyIndexState, _>(
+        ic_cdk::api::stable::StableReader::default().take(MAX_LEGACY_STATE_BYTES),
+    ) {
+        log!(
+            P1,
+            "Found the state of the old index. ledger-id: {}",
+            old_state.ledger_id
+        );
+        mutate_state(|state| {
+            state.ledger_id = old_state.ledger_id.into();
+        })
+    }
+
+    match index_arg {
+        Some(IndexArg::Upgrade(upgrade)) => {
+            log!(P1, "Possible upgrade configuration changes: {:#?}", upgrade,);
+
+            let UpgradeArg {
+                ledger_id,
+                retrieve_blocks_from_ledger_interval_seconds,
+            } = upgrade;
+
+            mutate_state(|state| {
+                if let Some(new_value) = ledger_id {
+                    state.ledger_id = new_value;
+                }
+
+                if let Some(new_value) = retrieve_blocks_from_ledger_interval_seconds {
+                    state.retrieve_blocks_from_ledger_interval =
+                        Some(Duration::from_secs(new_value));
+                }
+            });
+        }
+        Some(IndexArg::Init(..)) => trap("Index upgrade argument cannot be of variant Init"),
+        _ => (),
+    };
+
     // set the first build_index to be called after init
-    set_build_index_timer(Duration::from_secs(0));
+    set_build_index_timer(with_state(|state| {
+        state.retrieve_blocks_from_ledger_interval()
+    }));
+}
+
+async fn get_supported_standards_from_ledger() -> Vec<String> {
+    let ledger_id = with_state(|state| state.ledger_id);
+    log!(
+        P1,
+        "[get_supported_standards_from_ledger]: making the call..."
+    );
+    let res = ic_cdk::api::call::call::<_, (Vec<StandardRecord>,)>(
+        ledger_id,
+        "icrc1_supported_standards",
+        (),
+    )
+    .await;
+    match res {
+        Ok((res,)) => {
+            let supported_standard_names = res.into_iter().map(|s| s.name).collect::<Vec<_>>();
+            log!(
+                P1,
+                "[get_supported_standards_from_ledger]: ledger {} supports {:?}",
+                ledger_id,
+                supported_standard_names,
+            );
+            supported_standard_names
+        }
+        Err((code, msg)) => {
+            // log the error but do not propagate it
+            log!(
+                P0,
+                "[get_supported_standards_from_ledger]: failed to call get_supported_standards_from_ledger on ledger {}. Error code: {:?} message: {}",
+                ledger_id, code, msg
+            );
+            vec![]
+        }
+    }
 }
 
 async fn measured_call<I, O>(
@@ -357,6 +484,70 @@ async fn get_blocks_from_archive(
     }
 }
 
+async fn icrc3_get_blocks_from_ledger(start: u64) -> Option<GetBlocksResult> {
+    let (ledger_id, length) = with_state(|state| (state.ledger_id, state.max_blocks_per_response));
+    let req = vec![GetBlocksRequest {
+        start: Nat::from(start),
+        length: Nat::from(length),
+    }];
+    log!(P1, "[icrc3_get_blocks_from_ledger]: making the call...");
+    let res = measured_call(
+        "build_index.icrc3_get_blocks_from_ledger.encode",
+        "build_index.icrc3_get_blocks_from_ledger.decode",
+        ledger_id,
+        "icrc3_get_blocks",
+        &req,
+    )
+    .await;
+    match res {
+        Ok(res) => Some(res),
+        Err(err) => {
+            log!(
+                P0,
+                "[icrc3_get_blocks_from_ledger] failed to get blocks: {}",
+                err
+            );
+            None
+        }
+    }
+}
+
+async fn icrc3_get_blocks_from_archive(archived: &ArchivedBlocks) -> Option<GetBlocksResult> {
+    let res = measured_call(
+        "build_index.icrc3_get_blocks_from_archive.encode",
+        "build_index.icrc3_get_blocks_from_archive.decode",
+        archived.callback.canister_id,
+        &archived.callback.method,
+        &archived.args,
+    )
+    .await;
+    match res {
+        Ok(res) => Some(res),
+        Err(err) => {
+            log!(
+                P0,
+                "[icrc3_get_blocks_from_archive] failed to get blocks: {}",
+                err
+            );
+            None
+        }
+    }
+}
+
+async fn find_get_blocks_method() -> GetBlocksMethod {
+    if let Some(get_blocks_method) = CACHE.with(|cache| cache.borrow().get_blocks_method) {
+        return get_blocks_method;
+    }
+    let standards = get_supported_standards_from_ledger().await;
+    let get_blocks_method = if standards.into_iter().any(|standard| standard == "ICRC-3") {
+        GetBlocksMethod::ICRC3GetBlocks
+    } else {
+        GetBlocksMethod::GetBlocks
+    };
+    CACHE.with(|cache| cache.borrow_mut().get_blocks_method = Some(get_blocks_method));
+    get_blocks_method
+}
+
 pub async fn build_index() -> Option<()> {
     if with_state(|state| state.is_build_index_running) {
         return None;
@@ -369,12 +560,25 @@ pub async fn build_index() -> Option<()> {
             state.is_build_index_running = false;
         });
     });
-    let failure_guard = guard((), |_| {
-        set_build_index_timer(DEFAULT_RETRY_WAIT_TIME);
-    });
-    let next_txid = with_blocks(|blocks| blocks.len());
-    let res = get_blocks_from_ledger(next_txid).await?;
-    let mut tx_indexed_count: usize = 0;
+    let num_indexed = match find_get_blocks_method().await {
+        GetBlocksMethod::GetBlocks => fetch_blocks_via_get_blocks().await?,
+        GetBlocksMethod::ICRC3GetBlocks => fetch_blocks_via_icrc3().await?,
+    };
+    let retrieve_blocks_from_ledger_interval =
+        with_state(|state| state.retrieve_blocks_from_ledger_interval());
+    log!(
+        P1,
+        "Indexed: {} waiting : {:?}",
+        num_indexed,
+        retrieve_blocks_from_ledger_interval
+    );
+    Some(())
+}
+
+async fn fetch_blocks_via_get_blocks() -> Option<u64> {
+    let mut num_indexed = 0;
+    let next_id = with_blocks(|blocks| blocks.len());
+    let res = get_blocks_from_ledger(next_id).await?;
     for archived in res.archived_blocks {
         let mut remaining = archived.length.clone();
         let mut next_archived_txid = archived.start.clone();
@@ -386,44 +590,90 @@ pub async fn build_index() -> Option<()> {
             };
             let res = get_blocks_from_archive(&archived).await?;
             next_archived_txid += res.blocks.len();
-            tx_indexed_count += res.blocks.len();
+            num_indexed += res.blocks.len();
             remaining -= res.blocks.len();
             append_blocks(res.blocks);
         }
     }
-    tx_indexed_count += res.blocks.len();
+    num_indexed += res.blocks.len();
     append_blocks(res.blocks);
-    let wait_time = compute_wait_time(tx_indexed_count);
-    log!(
-        P1,
-        "Indexed: {} waiting : {:?}",
-        tx_indexed_count,
-        wait_time
-    );
-    mutate_state(|state| state.last_wait_time = wait_time);
-    ScopeGuard::into_inner(failure_guard);
-    set_build_index_timer(wait_time);
-    Some(())
+    Some(num_indexed as u64)
+}
+
+async fn fetch_blocks_via_icrc3() -> Option<u64> {
+    // The current number of blocks is also the id of the next
+    // block to query from the Ledger.
+    let previous_num_blocks = with_blocks(|blocks| blocks.len());
+    let res = icrc3_get_blocks_from_ledger(previous_num_blocks).await?;
+
+    // The Ledger should return archives in order but there is
+    // no guarantee of this. In order to avoid issues we sort
+    // and rearrange the archived_blocks.
+    let mut archived_blocks = BTreeMap::new();
+    for ArchivedBlocks { args, callback } in res.archived_blocks {
+        for arg in args {
+            archived_blocks.insert(arg, callback.clone());
+        }
+    }
+
+    for (mut arg, callback) in archived_blocks.into_iter() {
+        // The archive can return less than arg.length blocks.
+        // The client canister must make sure to call icrc3_get_blocks
+        // until all blocks in `arg` have been retrieved.
+        while arg.length != 0u64 {
+            // sanity check that the next index to fetch is the correct
+            // one, i.e. next_id + num_indexed
+            let expected_id = with_blocks(|blocks| blocks.len());
+            if arg.start != expected_id {
+                log!(
+                    P0,
+                    "[fetch_blocks_via_icrc3]: wrong start index in archive args. Expected: {} actual: {}",
+                    expected_id,
+                    arg.start,
+                );
+                return None;
+            }
+
+            let archived = ArchivedBlocks {
+                args: vec![arg.clone()],
+                callback: callback.clone(),
+            };
+            let res = icrc3_get_blocks_from_archive(&archived).await?;
+
+            // sanity check: the index does not support nested archives
+            if !res.archived_blocks.is_empty() {
+                log!(
+                    P0,
+                    "[fetch_blocks_via_icrc3]: The archive callback {:?} with arg {:?} returned one or more archived blocks and the index is currently not supporting nested archived blocks. Archived blocks returned are {:?}",
+                    callback.clone(),
+                    arg.clone(),
+                    res.archived_blocks,
+                );
+                return None;
+            }
+
+            // change `arg` for the next iteration
+            arg.start += res.blocks.len();
+            arg.length -= res.blocks.len();
+
+            append_icrc3_blocks(res.blocks)?;
+        }
+    }
+
+    append_icrc3_blocks(res.blocks)?;
+    let num_blocks = with_blocks(|blocks| blocks.len());
+    match num_blocks.checked_sub(previous_num_blocks) {
+        None => panic!("The number of blocks {} is smaller than the number of blocks before indexing {}. This is impossible. I'm trapping to reset the state", num_blocks, previous_num_blocks),
+        Some(new_blocks_indexed) => Some(new_blocks_indexed),
+    }
 }
 
 fn set_build_index_timer(after: Duration) -> TimerId {
-    ic_cdk_timers::set_timer(after, || {
+    ic_cdk_timers::set_timer_interval(after, || {
         ic_cdk::spawn(async {
             let _ = build_index().await;
         })
     })
-}
-
-/// Compute the waiting time before next indexing
-pub fn compute_wait_time(indexed_tx_count: usize) -> Duration {
-    let max_blocks_per_response = with_state(|state| state.max_blocks_per_response);
-    if indexed_tx_count as u64 >= max_blocks_per_response {
-        // If we indexed more than max_blocks_per_response,
-        // we index again on the next build_index call.
-        return Duration::ZERO;
-    }
-    let numerator = 1f64 - (indexed_tx_count as f64 / max_blocks_per_response as f64);
-    DEFAULT_MAX_WAIT_TIME * (100f64 * numerator) as u32 / 100
 }
 
 fn append_block(block_index: BlockIndex64, block: GenericBlock) {
@@ -464,13 +714,39 @@ fn append_blocks(new_blocks: Vec<GenericBlock>) {
     }
 }
 
+fn append_icrc3_blocks(new_blocks: Vec<BlockWithId>) -> Option<()> {
+    let mut blocks = vec![];
+    let start_id = with_blocks(|blocks| blocks.len());
+    for BlockWithId { id, block } in new_blocks {
+        // sanity check
+        let expected_id = start_id + blocks.len() as u64;
+        if id != expected_id {
+            log!(
+                P0,
+                "[fetch_blocks_via_icrc3]: wrong block index returned by ledger. Expected: {} actual: {}",
+                expected_id,
+                id,
+            );
+            return None;
+        }
+        // This conversion is safe as `Value`
+        // can represent any `ICRC3Value`.
+        blocks.push(Value::from(block));
+    }
+    append_blocks(blocks);
+    Some(())
+}
+
 fn index_fee_collector(block_index: BlockIndex64, block: &Block<Tokens>) {
     if let Some(fee_collector) = get_fee_collector(block_index, block) {
         mutate_state(|s| {
             s.fee_collectors
                 .entry(fee_collector)
                 .and_modify(|blocks_ranges| push_block(blocks_ranges, block_index))
-                .or_insert_with(|| vec![block_index..block_index + 1]);
+                .or_insert(vec![Range {
+                    start: block_index,
+                    end: block_index + 1,
+                }]);
         });
     }
 }
@@ -511,6 +787,7 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                         block_index
                     ))
                 });
+                mutate_state(|s| s.last_fee = Some(fee));
                 debit(
                     block_index,
                     from,
@@ -525,13 +802,33 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                     credit(block_index, fee_collector, fee);
                 }
             }
-            Operation::Approve { from, fee, .. } => {
-                let fee = block.effective_fee.or(fee).unwrap_or_else(|| {
-                    ic_cdk::trap(&format!(
-                        "Block {} is of type Approve but has no fee or effective fee!",
-                        block_index
-                    ))
-                });
+            Operation::Approve {
+                from, fee, spender, ..
+            } => {
+                let fee = match fee.or(block.effective_fee) {
+                    Some(fee) => fee,
+                    // NB. There was a bug in the ledger which would create
+                    // approve blocks with the fee fields unset. The bug was
+                    // quickly fixed, but there are a few blocks on the mainnet
+                    // that don't have their fee fields populated.
+                    None => match with_state(|state| state.last_fee) {
+                        Some(last_fee) => {
+                            log!(
+                                P1,
+                                "fee and effective_fee aren't set in block {block_index}, using last transfer fee {last_fee}"
+                            );
+                            last_fee
+                        }
+                        None => ic_cdk::trap(&format!("bug: index is stuck because block with index {block_index} doesn't contain a fee and no fee has been recorded before")),
+                    }
+                };
+
+                // It is possible that the spender account has not existed prior to this approve transaction.
+                // Until a transfer_from transaction occurs such account would not show up in a `list_subaccounts` query as the spender is not involved in any credit or debit calls at this point.
+                // To ensure that the account still shows up in the `list_subaccount` query we can simply call `change_balance` without actually changing the balance.
+                // If the account is new, this will add it to the AccountDataMap with balance 0 and thus show up in a `list_subaccount` query.
+                change_balance(spender, |balance| balance);
+
                 debit(block_index, from, fee);
             }
         },
@@ -669,7 +966,8 @@ fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransa
         account_block_ids
             .range(key..)
             // old txs of the requested account and skip the start index
-            .filter(|(k, _)| k.0 == key.0 && k.1 .0 != start)
+            .take_while(|(k, _)| k.0 == key.0)
+            .filter(|(k, _)| k.1 .0 < start)
             .take(length)
             .map(|(k, _)| k.1 .0)
             .collect::<Vec<BlockIndex64>>()
@@ -709,72 +1007,7 @@ fn encoded_block_bytes_to_flat_transaction(
             block_index, e
         ))
     });
-    let timestamp = block.timestamp;
-    let created_at_time = block.transaction.created_at_time;
-    let memo = block.transaction.memo;
-    match block.transaction.operation {
-        Operation::Burn {
-            from,
-            amount,
-            spender,
-        } => Transaction::burn(
-            Burn {
-                from,
-                spender,
-                amount: amount.into(),
-                created_at_time,
-                memo,
-            },
-            timestamp,
-        ),
-        Operation::Mint { to, amount } => Transaction::mint(
-            Mint {
-                to,
-                amount: amount.into(),
-                created_at_time,
-                memo,
-            },
-            timestamp,
-        ),
-        Operation::Transfer {
-            from,
-            to,
-            spender,
-            amount,
-            fee,
-        } => Transaction::transfer(
-            Transfer {
-                from,
-                to,
-                spender,
-                amount: amount.into(),
-                fee: fee.map(|fee| fee.into()),
-                created_at_time,
-                memo,
-            },
-            timestamp,
-        ),
-        Operation::Approve {
-            from,
-            spender,
-            amount,
-            expected_allowance,
-            expires_at,
-            fee,
-        } => Transaction::approve(
-            Approve {
-                from,
-                spender,
-                amount: amount.into(),
-                expected_allowance: expected_allowance.map(Into::into),
-                expires_at: expires_at.map(|exp| exp.as_nanos_since_unix_epoch()),
-                fee: fee.map(|fee| fee.into()),
-                created_at_time,
-                memo,
-            },
-            timestamp,
-        ),
-    }
+    block.into()
 }
 
 fn get_oldest_tx_id(account: Account) -> Option<BlockIndex64> {
@@ -788,7 +1021,8 @@ fn get_oldest_tx_id(account: Account) -> Option<BlockIndex64> {
         account_block_ids.get(&last_key).map(|_| 0).or_else(|| {
             account_block_ids
                 .iter_upper_bound(&last_key)
-                .find(|((account_bytes, _), _)| account_bytes == &last_key.0)
+                .take_while(|(k, _)| k.0 == account_sha256(account))
+                .next()
                 .map(|(key, _)| key.1 .0)
         })
     })
@@ -834,8 +1068,7 @@ fn list_subaccounts(args: ListSubaccountsArgs) -> Vec<Subaccount> {
     })
 }
 
-#[candid_method(query)]
-#[query]
+#[query(hidden = true)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -874,13 +1107,18 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "index_stable_memory_pages",
-        ic_cdk::api::stable::stable_size() as f64,
+        ic_cdk::api::stable::stable64_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "index_stable_memory_bytes",
-        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
+        (ic_cdk::api::stable::stable64_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister.",
+    )?;
+    w.encode_gauge(
+        "index_total_memory_bytes",
+        total_memory_size_bytes() as f64,
+        "Total amount of memory (heap, stable memory, etc) that has been allocated by this canister.",
     )?;
 
     let cycle_balance = ic_cdk::api::canister_balance128() as f64;
@@ -938,13 +1176,13 @@ candid::export_service!();
 
 #[test]
 fn check_candid_interface() {
-    use candid::utils::{service_compatible, CandidSource};
+    use candid_parser::utils::{service_equal, CandidSource};
     use std::path::PathBuf;
 
     let new_interface = __export_service();
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let old_interface = manifest_dir.join("index-ng.did");
-    service_compatible(
+    service_equal(
         CandidSource::Text(&new_interface),
         CandidSource::File(old_interface.as_path()),
     )
@@ -955,22 +1193,4 @@ fn check_candid_interface() {
             e
         )
     });
-}
-
-#[test]
-fn compute_wait_time_test() {
-    fn blocks(n: u64) -> usize {
-        let max_blocks = DEFAULT_MAX_BLOCKS_PER_RESPONSE as f64;
-        (max_blocks * n as f64 / 100f64) as usize
-    }
-
-    fn wait_time(n: u32) -> Duration {
-        DEFAULT_MAX_WAIT_TIME * n / 100
-    }
-
-    assert_eq!(wait_time(100), compute_wait_time(blocks(0)));
-    assert_eq!(wait_time(75), compute_wait_time(blocks(25)));
-    assert_eq!(wait_time(50), compute_wait_time(blocks(50)));
-    assert_eq!(wait_time(25), compute_wait_time(blocks(75)));
-    assert_eq!(wait_time(0), compute_wait_time(blocks(100)));
 }

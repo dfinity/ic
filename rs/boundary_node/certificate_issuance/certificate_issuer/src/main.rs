@@ -1,8 +1,11 @@
 use std::{
     fs::File,
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     path::PathBuf,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -15,33 +18,27 @@ use axum::{
     middleware::{self, Next},
     response::IntoResponse,
     routing::{delete, get, post, put},
-    Extension, Router, Server,
+    Extension, Router,
 };
-use candid::Principal;
+use candid::{DecoderConfig, Principal};
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
 use clap::Parser;
-use futures::future::TryFutureExt;
 use ic_agent::{
-    agent::http_transport::ReqwestHttpReplicaV2Transport, identity::Secp256k1Identity, Agent,
+    agent::http_transport::reqwest_transport::ReqwestTransport, identity::Secp256k1Identity, Agent,
 };
-use instant_acme::{Account, AccountCredentials};
+use instant_acme::{Account, AccountCredentials, NewAccount};
 use opentelemetry::{
-    global,
-    metrics::{Counter, Histogram},
-    sdk::{
-        export::metrics::aggregation,
-        metrics::{controllers, processors, selectors},
-        Resource,
-    },
+    metrics::{Counter, Histogram, MeterProvider as _},
+    sdk::metrics::MeterProvider,
     KeyValue,
 };
-use opentelemetry_prometheus::{ExporterBuilder, PrometheusExporter};
-use prometheus::{Encoder as PrometheusEncoder, TextEncoder};
-use tokio::{sync::Semaphore, task, time::sleep};
+use opentelemetry_prometheus::exporter;
+use prometheus::{labels, Encoder as PrometheusEncoder, Registry, TextEncoder};
+use tokio::{net::TcpListener, sync::Semaphore, task, time::sleep};
 use tower::ServiceBuilder;
 use tracing::info;
 use trust_dns_resolver::{
-    config::{ResolverConfig, ResolverOpts},
+    config::{NameServerConfigGroup, ResolverConfig, ResolverOpts, GOOGLE_IPS},
     TokioAsyncResolver,
 };
 
@@ -59,7 +56,10 @@ use crate::{
     metrics::{MetricParams, WithMetrics},
     registration::{Create, Get, Remove, State, Update, UpdateType},
     verification::CertificateVerifier,
-    work::{Dispense, DispenseError, Peek, PeekError, Process, Queue, WithDetectRenewal},
+    work::{
+        Dispense, DispenseError, Peek, PeekError, Process, Queue, WithDetectImportance,
+        WithDetectRenewal,
+    },
 };
 
 mod acme;
@@ -70,12 +70,27 @@ mod check;
 mod cloudflare;
 mod dns;
 mod encode;
+mod headers;
 mod metrics;
 mod registration;
 mod verification;
 mod work;
 
 const SERVICE_NAME: &str = "certificate-issuer";
+
+pub(crate) static TASK_DELAY_SEC: AtomicU64 = AtomicU64::new(60);
+pub(crate) static TASK_ERROR_DELAY_SEC: AtomicU64 = AtomicU64::new(10 * 60);
+
+/// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
+/// The value of 10_000 follows the Candid recommendation.
+const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
+
+pub(crate) fn decoder_config() -> DecoderConfig {
+    let mut config = DecoderConfig::new();
+    config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
+    config.set_full_error_message(false);
+    config
+}
 
 #[derive(Parser)]
 #[command(name = SERVICE_NAME)]
@@ -104,23 +119,43 @@ struct Cli {
     #[arg(long)]
     delegation_domain: String,
 
-    #[arg(long)]
-    acme_account_id: String,
+    /// A set of DNS name servers the issuer will use
+    #[arg(long, value_delimiter = ',')]
+    name_servers: Option<Vec<IpAddr>>,
+
+    #[arg(long, default_value = "53")]
+    name_servers_port: u16,
 
     #[arg(long)]
-    acme_account_key: String,
+    acme_account_id: Option<String>,
+
+    #[arg(long)]
+    acme_account_key_path: Option<PathBuf>,
 
     #[arg(long, default_value = "https://acme-v02.api.letsencrypt.org")]
     acme_provider_url: String,
 
+    #[arg(long, default_value = "https://api.cloudflare.com/client/v4/")]
+    cloudflare_api_url: String,
+
     #[arg(long)]
-    cloudflare_api_key: String,
+    cloudflare_api_key_path: PathBuf,
 
     #[arg(long, default_value = "60")]
     peek_sleep_sec: u64,
 
+    /// A set of important domains, to be used in metrics
+    #[arg(long, default_value = "", value_delimiter = ',')]
+    important_domains: Vec<String>,
+
     #[arg(long, default_value = "127.0.0.1:9090")]
     metrics_addr: SocketAddr,
+
+    #[arg(long)]
+    task_delay_sec: Option<u64>,
+
+    #[arg(long)]
+    task_error_delay_sec: Option<u64>,
 }
 
 #[tokio::main]
@@ -137,33 +172,34 @@ async fn main() -> Result<(), Error> {
         .context("failed to set global subscriber")?;
 
     // Metrics
-    let exporter = ExporterBuilder::new(
-        controllers::basic(
-            processors::factory(
-                selectors::simple::histogram([]),
-                aggregation::cumulative_temporality_selector(),
-            )
-            .with_memory(true),
-        )
-        .with_resource(Resource::new(vec![KeyValue::new("service", SERVICE_NAME)]))
-        .build(),
+    let registry: Registry = Registry::new_custom(
+        None,
+        Some(labels! {"service".into() => SERVICE_NAME.into()}),
     )
-    .init();
+    .unwrap();
+    let exporter = exporter().with_registry(registry.clone()).build()?;
+    let provider = MeterProvider::builder().with_reader(exporter).build();
+    let meter = provider.meter(SERVICE_NAME);
 
-    let meter = global::meter(SERVICE_NAME);
-
-    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { exporter }));
+    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { registry }));
     let metrics_router = Router::new().route("/metrics", get(metrics_handler));
+
+    // Task delays
+    if let Some(task_delay_sec) = cli.task_delay_sec {
+        TASK_DELAY_SEC.store(task_delay_sec, Ordering::SeqCst);
+    }
+
+    if let Some(task_error_delay_sec) = cli.task_error_delay_sec {
+        TASK_ERROR_DELAY_SEC.store(task_error_delay_sec, Ordering::SeqCst);
+    }
 
     // Orchestrator
     let agent = {
         static USER_AGENT: &str = "Ic-Certificate-Issuer";
         let client = reqwest::Client::builder().user_agent(USER_AGENT).build()?;
 
-        let transport = ReqwestHttpReplicaV2Transport::create_with_client(
-            cli.orchestrator_uri.to_string(),
-            client,
-        )?;
+        let transport =
+            ReqwestTransport::create_with_client(cli.orchestrator_uri.to_string(), client)?;
 
         let f = File::open(cli.identity_path).context("failed to open identity file")?;
         let identity = Secp256k1Identity::from_pem(f).context("failed to create basic identity")?;
@@ -187,10 +223,29 @@ async fn main() -> Result<(), Error> {
     };
 
     // DNS
-    let resolver = Resolver(TokioAsyncResolver::tokio(
-        ResolverConfig::default(),
-        ResolverOpts::default(),
-    )?);
+    let name_servers = cli.name_servers.unwrap_or_else(
+        || GOOGLE_IPS.to_owned(), // default
+    );
+
+    let resolver = {
+        let mut opts = ResolverOpts::default();
+
+        // Disable caching of DNS results
+        opts.cache_size = 0;
+
+        Resolver(TokioAsyncResolver::tokio(
+            ResolverConfig::from_parts(
+                None,
+                vec![],
+                NameServerConfigGroup::from_ips_clear(
+                    &name_servers,         // ips
+                    cli.name_servers_port, // port
+                    true,                  // trust_nx_responses
+                ),
+            ),
+            opts,
+        )?)
+    };
 
     let resolver = WithMetrics(resolver, MetricParams::new(&meter, SERVICE_NAME, "resolve"));
 
@@ -206,7 +261,6 @@ async fn main() -> Result<(), Error> {
     let encoder = Arc::new(encoder);
 
     let decoder = Decoder::new(cipher.clone());
-    let decoder = WithMetrics(decoder, MetricParams::new(&meter, SERVICE_NAME, "decrypt"));
     let decoder = Arc::new(decoder);
 
     // Registration
@@ -351,38 +405,69 @@ async fn main() -> Result<(), Error> {
             .layer(Extension(MetricsMiddlewareArgs {
                 counter: meter
                     .u64_counter("requests_total")
-                    .with_description("Counts occurences of requests")
+                    .with_description("Counts occurrences of requests")
                     .init(),
                 recorder: meter
                     .f64_histogram("request_duration")
                     .with_description("Duration of requests")
                     .init(),
             }))
-            .layer(middleware::from_fn(metrics_mw)),
+            .layer(middleware::from_fn(metrics_mw))
+            .layer(middleware::from_fn(headers::middleware)),
     );
 
     // ACME
     let Cli {
         acme_account_id,
-        acme_account_key,
+        acme_account_key_path,
         acme_provider_url,
         ..
     } = cli;
 
-    let acme_credentials: AccountCredentials = serde_json::from_str(&format!(
-        r#"{{
-            "id": "{acme_provider_url}/acme/acct/{acme_account_id}",
-            "key_pkcs8": "{acme_account_key}",
-            "urls": {{
-                "newNonce": "{acme_provider_url}/acme/new-nonce",
-                "newAccount": "{acme_provider_url}/acme/new-acct",
-                "newOrder": "{acme_provider_url}/acme/new-order"
-            }}
-        }}"#,
-    ))?;
+    let acme_account = match (acme_account_id, acme_account_key_path) {
+        // Re-use existing account
+        (Some(id), Some(path)) => {
+            let key =
+                std::fs::read_to_string(path).context("failed to open acme account key file")?;
 
-    let acme_account = Account::from_credentials(acme_credentials)
-        .context("failed to create acme account from credentials")?;
+            let acme_credentials: AccountCredentials = serde_json::from_str(&format!(
+                r#"{{
+                    "id": "{acme_provider_url}/acme/acct/{id}",
+                    "key_pkcs8": "{key}",
+                    "urls": {{
+                        "newNonce": "{acme_provider_url}/acme/new-nonce",
+                        "newAccount": "{acme_provider_url}/acme/new-acct",
+                        "newOrder": "{acme_provider_url}/acme/new-order"
+                    }}
+                }}"#,
+            ))?;
+
+            Account::from_credentials(acme_credentials)
+                .await
+                .context("failed to create acme account from credentials")?
+        }
+        (Some(_), None) | (None, Some(_)) => {
+            return Err(anyhow!(
+                "must provide both acme_account_id and acme_account_key"
+            ))
+        }
+
+        // Create new ACME cccount
+        _ => {
+            Account::create(
+                &NewAccount {
+                    contact: &[],
+                    terms_of_service_agreed: true,
+                    only_return_existing: false,
+                },
+                &acme_provider_url,
+                None,
+            )
+            .await
+            .context("failed to create acme account")?
+            .0
+        }
+    };
 
     let acme_client = Acme::new(acme_account);
 
@@ -405,13 +490,20 @@ async fn main() -> Result<(), Error> {
     );
 
     // Cloudflare
-    let dns_creator = Cloudflare::new(&cli.cloudflare_api_key)?;
+    let dns_creator = {
+        let cloudflare_api_key = std::fs::read_to_string(cli.cloudflare_api_key_path.clone())
+            .context("failed to open cloudflare api key file")?;
+        Cloudflare::new(&cli.cloudflare_api_url, &cloudflare_api_key)?
+    };
     let dns_creator = WithMetrics(
         dns_creator,
         MetricParams::new(&meter, SERVICE_NAME, "dns_create"),
     );
 
-    let dns_deleter = Cloudflare::new(&cli.cloudflare_api_key)?;
+    let dns_deleter = {
+        let cloudflare_api_key = std::fs::read_to_string(cli.cloudflare_api_key_path)?;
+        Cloudflare::new(&cli.cloudflare_api_url, &cloudflare_api_key)?
+    };
     let dns_deleter = WithMetrics(
         dns_deleter,
         MetricParams::new(&meter, SERVICE_NAME, "dns_delete"),
@@ -443,6 +535,7 @@ async fn main() -> Result<(), Error> {
         MetricParams::new(&meter, SERVICE_NAME, "process"),
     );
     let processor = WithDetectRenewal::new(processor, certificate_getter.clone());
+    let processor = WithDetectImportance::new(processor, cli.important_domains);
     let processor = Arc::new(processor);
 
     let sem = Arc::new(Semaphore::new(10));
@@ -530,16 +623,32 @@ async fn main() -> Result<(), Error> {
                 });
             }
         }),
-        task::spawn(
-            Server::bind(&cli.api_addr)
-                .serve(api_router.into_make_service())
+        task::spawn(async move {
+            let listener = TcpListener::bind(&cli.api_addr).await;
+            if let Err(error) = listener {
+                return Err(anyhow!(
+                    "Failed to create the TcpListener for api_addr: {:?}",
+                    error
+                ));
+            }
+            let listener = listener.unwrap();
+            axum::serve(listener, api_router.into_make_service())
+                .await
                 .map_err(|err| anyhow!("server failed: {:?}", err))
-        ),
-        task::spawn(
-            Server::bind(&cli.metrics_addr)
-                .serve(metrics_router.into_make_service())
+        }),
+        task::spawn(async move {
+            let listener = TcpListener::bind(&cli.metrics_addr).await;
+            if let Err(error) = listener {
+                return Err(anyhow!(
+                    "Failed to create the TcpListener for metrics_addr: {:?}",
+                    error
+                ));
+            }
+            let listener = listener.unwrap();
+            axum::serve(listener, metrics_router.into_make_service())
+                .await
                 .map_err(|err| anyhow!("server failed: {:?}", err))
-        ),
+        }),
     )
     .context(format!("{SERVICE_NAME} failed to run"))?;
 
@@ -548,13 +657,13 @@ async fn main() -> Result<(), Error> {
 
 #[derive(Clone)]
 struct MetricsHandlerArgs {
-    exporter: PrometheusExporter,
+    registry: Registry,
 }
 
 async fn metrics_handler(
-    Extension(MetricsHandlerArgs { exporter }): Extension<MetricsHandlerArgs>,
+    Extension(MetricsHandlerArgs { registry }): Extension<MetricsHandlerArgs>,
 ) -> Response<Body> {
-    let metric_families = exporter.registry().gather();
+    let metric_families = registry.gather();
 
     let encoder = TextEncoder::new();
 
@@ -578,9 +687,7 @@ struct MetricsMiddlewareArgs {
     recorder: Histogram<f64>,
 }
 
-async fn metrics_mw<B>(req: Request<B>, next: Next<B>) -> impl IntoResponse {
-    let cx = opentelemetry::Context::current();
-
+async fn metrics_mw(req: Request<Body>, next: Next) -> impl IntoResponse {
     let MetricsMiddlewareArgs { counter, recorder } = req
         .extensions()
         .get::<MetricsMiddlewareArgs>()
@@ -611,8 +718,8 @@ async fn metrics_mw<B>(req: Request<B>, next: Next<B>) -> impl IntoResponse {
         KeyValue::new("status_code", status_code),
     ];
 
-    counter.add(&cx, 1, labels);
-    recorder.record(&cx, request_duration, labels);
+    counter.add(1, labels);
+    recorder.record(request_duration, labels);
 
     response
 }

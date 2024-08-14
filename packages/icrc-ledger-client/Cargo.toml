@@ -1,0 +1,19 @@
+[package]
+name = "icrc-ledger-client"
+version = "0.1.2"
+description = "ICRC-1 compliant client library."
+license = "Apache-2.0"
+readme = "README.md"
+include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
+repository = "https://github.com/dfinity/ic"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-trait = { workspace = true }
+candid = { workspace = true }
+icrc-ledger-types = { path = "../icrc-ledger-types", version = "0.1.2" }
+serde = { workspace = true }

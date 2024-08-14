@@ -1,5 +1,5 @@
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{
+use ic_management_canister_types::{
     BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsResponse, BitcoinSendTransactionInternalArgs,
     Payload,
 };
@@ -82,7 +82,7 @@ pub fn send_transaction_internal(
     privileged_access: &[CanisterId],
     request: &Request,
     state: &mut ReplicatedState,
-) -> Result<Option<Vec<u8>>, UserError> {
+) -> Result<(), UserError> {
     if !privileged_access.contains(&request.sender()) {
         return Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
@@ -103,7 +103,7 @@ pub fn send_transaction_internal(
                 ),
             );
 
-            Ok(None)
+            Ok(())
         }
         Err(err) => Err(err),
     }
@@ -111,17 +111,20 @@ pub fn send_transaction_internal(
 
 #[cfg(test)]
 mod tests {
-    use ic_ic00_types::{BitcoinGetSuccessorsArgs, Method, Payload as Ic00Payload, IC_00};
-    use ic_test_utilities::types::ids::canister_test_id;
+    use ic_management_canister_types::{
+        BitcoinGetSuccessorsArgs, Method, Payload as Ic00Payload, IC_00,
+    };
     use ic_test_utilities::universal_canister::{call_args, wasm};
     use ic_test_utilities_execution_environment::ExecutionTestBuilder;
+    use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::{CanisterId, PrincipalId};
     use std::str::FromStr;
 
     #[test]
     fn clears_state_of_former_bitcoin_canisters() {
-        let bitcoin_canister_id =
-            CanisterId::new(PrincipalId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap()).unwrap();
+        let bitcoin_canister_id = CanisterId::unchecked_from_principal(
+            PrincipalId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap(),
+        );
 
         let mut test = ExecutionTestBuilder::new()
             // Set the bitcoin canister to be the ID of the canister about to be created.

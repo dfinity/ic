@@ -1,0 +1,205 @@
+type OrchestratorArg = variant {
+    UpgradeArg : UpgradeArg;
+    InitArg : InitArg;
+    AddErc20Arg : AddErc20Arg;
+};
+
+type InitArg = record {
+    // All canisters that will be spawned off by the orchestrator will be controlled by the orchestrator
+    // and *additionally* by the following controllers.
+    more_controller_ids : vec principal;
+
+    // Canister ID of the minter that will be notified when new ERC-20 tokens are added.
+    minter_id: opt principal;
+
+    // Controls the cycles management of the canisters managed by the orchestrator.
+    cycles_management: opt CyclesManagement;
+};
+
+type UpgradeArg = record {
+    // Hexadecimal encoding of the SHA-1 git commit hash used for this upgrade, e.g.,
+    // "51d01d3936498d4010de54505d6433e9ad5cc62b", corresponding to a git revision in the
+    // [IC repository](https://github.com/dfinity/ic).
+    // If this field is present, the orchestrator will register all embedded wasms (ledger, index, and archive) in its stable memory,
+    // so that those exact wasms can be used to upgrade managed canisters as specified below.
+    git_commit_hash: opt text;
+
+   // Hexadecimal encoding of the SHA2-256 ledger compressed wasm hash, e.g.,
+   // "3148f7a9f1b0ee39262c8abe3b08813480cf78551eee5a60ab1cf38433b5d9b0".
+   // This exact version will be used for upgrading all existing ledger canisters managed by the orchestrator.
+   // Leaving this field empty will not upgrade the ledger canisters.
+   ledger_compressed_wasm_hash: opt text;
+
+   // Hexadecimal encoding of the SHA2-256 index compressed wasm hash, e.g.,
+   // "3a6d39b5e94cdef5203bca62720e75a28cd071ff434d22b9746403ac7ae59614".
+   // This exact version will be used for upgrading all existing index canisters managed by the orchestrator.
+   // Leaving this field empty will not upgrade the index canisters.
+   index_compressed_wasm_hash: opt text;
+
+   // Hexadecimal encoding of the SHA2-256 archive compressed wasm hash, e.g.,
+   // "b24812976b2cc64f12faf813cf592631f3062bfda837334f77ab807361d64e82".
+   // This exact version will be used for upgrading all existing archive canisters managed by the orchestrator.
+   // Leaving this field empty will not upgrade the archive canisters.
+   archive_compressed_wasm_hash: opt text;
+
+   // Update the cycles management of the canisters managed by the orchestrator.
+   cycles_management: opt UpdateCyclesManagement;
+};
+
+type AddErc20Arg = record {
+   contract: Erc20Contract;
+   ledger_init_arg: LedgerInitArg;
+};
+
+type Erc20Contract = record {
+   chain_id: nat;
+   address: text;
+};
+
+// ICRC1 ledger initialization argument that will be used when the orchestrator spawns a new ledger canister.
+// Other fields, such as `archive_options`, needed to initialize a new ledger will be set by the orchestrator.
+type LedgerInitArg = record {
+    transfer_fee : nat;
+    decimals : nat8;
+    token_symbol : text;
+    token_name : text;
+    token_logo : text;
+};
+
+type ManagedCanisterIds = record {
+   ledger: opt principal;
+   index: opt principal;
+   archives: vec principal;
+};
+
+type CyclesManagement = record {
+   //Number of cycles when creating a new ICRC1 ledger canister.
+   cycles_for_ledger_creation: nat;
+
+   //Number of cycles when creating a new ICRC1 archive canister.
+   cycles_for_archive_creation: nat;
+
+   //Number of cycles when creating a new ICRC1 index canister.
+   cycles_for_index_creation: nat;
+
+   //Number of cycles to add to a canister managed by the orchestrator whose cycles balance is running low.
+   cycles_top_up_increment: nat;
+};
+
+type ManagedCanisterStatus = variant {
+    // Canister created with the given principal but wasm module is not yet installed.
+    Created : record { canister_id : principal };
+
+    // Canister created and wasm module installed.
+    // The wasm_hash reflects the installed wasm module by the orchestrator
+    // but *may differ* from the one being currently deployed (if another controller did an upgrade)
+    Installed : record { canister_id : principal; installed_wasm_hash : text };
+};
+
+type ManagedCanisters = record {
+    // Corresponding ERC20 contract
+    erc20_contract: Erc20Contract;
+
+    // ckERC20 Token symbol
+    ckerc20_token_symbol : text;
+
+    // Status of the ledger canister
+    ledger : opt ManagedCanisterStatus;
+
+    // Status of the index canister
+    index : opt ManagedCanisterStatus;
+
+    // List of archive canister ids
+    archives : vec principal;
+};
+
+type OrchestratorInfo = record {
+    // List of managed canisters data for each ERC20 contract.
+    managed_canisters : vec ManagedCanisters;
+
+    // Cycle management parameters.
+    cycles_management : CyclesManagement;
+
+    // Additional controllers that new canisters will be spawned with.
+    more_controller_ids : vec principal;
+
+    // ckETH minter canister id.
+    minter_id : opt principal;
+
+   // Ledger suite version that will be used to spawn off a new ledger suite (ledger and index canisters) when an ERC-20 token is added.
+   ledger_suite_version: opt LedgerSuiteVersion;
+};
+
+type LedgerSuiteVersion = record {
+   // Hexadecimal encoding of the SHA2-256 ledger compressed wasm hash, e.g.,
+   // "3148f7a9f1b0ee39262c8abe3b08813480cf78551eee5a60ab1cf38433b5d9b0".
+   // This exact version will be used to spawn off a new ledger canister when an ERC-20 token is added.
+   ledger_compressed_wasm_hash: text;
+
+   // Hexadecimal encoding of the SHA2-256 index compressed wasm hash, e.g.,
+   // "3a6d39b5e94cdef5203bca62720e75a28cd071ff434d22b9746403ac7ae59614".
+   // This exact version will be used to spawn off a new index canister when an ERC-20 token is added.
+   index_compressed_wasm_hash: text;
+
+   // Hexadecimal encoding of the SHA2-256 archive compressed wasm hash, e.g.,
+   // "e59ec306ef67d0ec2e8919e8f6366aff31c666346e238d07d52f616bef61ccab".
+   archive_compressed_wasm_hash: text;
+};
+
+type UpdateCyclesManagement = record {
+   // Change the number of cycles when creating a new ICRC1 ledger canister.
+   // Previously created canisters are not affected.
+   cycles_for_ledger_creation: opt nat;
+
+   // Change the number of cycles when creating a new ICRC1 archive canister.
+   // Previously created canisters are not affected.
+   cycles_for_archive_creation: opt nat;
+
+   // Change the number of cycles when creating a new ICRC1 index canister.
+   // Previously created canisters are not affected.
+   cycles_for_index_creation: opt nat;
+
+   // Change the number of cycles to add to a canister managed by the orchestrator whose cycles balance is running low.
+   cycles_top_up_increment: opt nat;
+};
+
+type CanisterStatusResponse = record {
+  query_stats : QueryStats;
+  status : CanisterStatusType;
+  memory_size : nat;
+  cycles : nat;
+  settings : DefiniteCanisterSettings;
+  idle_cycles_burned_per_day : nat;
+  module_hash : opt vec nat8;
+  reserved_cycles : nat;
+};
+
+type CanisterStatusType = variant { stopped; stopping; running };
+
+type DefiniteCanisterSettings = record {
+  freezing_threshold : nat;
+  controllers : vec principal;
+  memory_allocation : nat;
+  compute_allocation : nat;
+  reserved_cycles_limit : nat;
+};
+
+type QueryStats = record {
+  response_payload_bytes_total : nat;
+  num_instructions_total : nat;
+  num_calls_total : nat;
+  request_payload_bytes_total : nat;
+};
+
+service : (OrchestratorArg) -> {
+
+   // Managed canister IDs for a given ERC20 contract
+   canister_ids : (Erc20Contract) -> (opt ManagedCanisterIds) query;
+
+   // Return internal orchestrator parameters
+   get_orchestrator_info : () -> (OrchestratorInfo) query;
+
+   // Retrieve the status of the canister.
+   get_canister_status : () -> (CanisterStatusResponse);
+
+}

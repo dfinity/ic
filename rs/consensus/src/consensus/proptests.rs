@@ -1,15 +1,12 @@
 use crate::consensus::payload_builder::test::make_test_payload_impl;
 use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
-use ic_interfaces::consensus::PayloadBuilder;
-use ic_test_utilities::{
-    consensus::fake::Fake,
-    mock_time,
-    types::{
-        ids::{node_test_id, subnet_test_id},
-        messages::SignedIngressBuilder,
-    },
-};
+use ic_interfaces::{batch_payload::ProposalContext, consensus::PayloadBuilder};
+use ic_test_utilities_consensus::fake::Fake;
 use ic_test_utilities_registry::SubnetRecordBuilder;
+use ic_test_utilities_types::{
+    ids::{node_test_id, subnet_test_id},
+    messages::SignedIngressBuilder,
+};
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::{
@@ -21,6 +18,7 @@ use ic_types::{
     crypto::{CryptoHash, Signed},
     messages::SignedIngress,
     signature::ThresholdSignature,
+    time::UNIX_EPOCH,
     xnet::CertifiedStreamSlice,
     CryptoHashOfPartialState, Height, RegistryVersion, SubnetId,
 };
@@ -69,24 +67,29 @@ fn proptest_round(
             vec![(1, subnet_record)],
         );
 
-        let context = ValidationContext {
+        let validation_context = ValidationContext {
             certified_height: Height::from(height),
             registry_version: RegistryVersion::from(1),
-            time: mock_time(),
+            time: UNIX_EPOCH,
+        };
+        let proposal_context = ProposalContext {
+            proposer: node_test_id(0),
+            validation_context: &validation_context,
         };
 
         let payload_builder =
             make_test_payload_impl(registry, vec![ingress], vec![xnet], vec![], vec![]);
 
         // Build the payload and validate it
-        let payload = payload_builder.get_payload(Height::from(0), &[], &context, &subnet_records);
+        let payload =
+            payload_builder.get_payload(Height::from(0), &[], &validation_context, &subnet_records);
 
         let wrapped_payload = wrap_batch_payload(0, payload);
         payload_builder
-            .validate_payload(Height::from(0), &wrapped_payload, &[], &context)
+            .validate_payload(Height::from(0), &proposal_context, &wrapped_payload, &[])
             .unwrap();
 
-        // Check that no critical errors occured during the run.
+        // Check that no critical errors occurred during the run.
         assert_eq!(payload_builder.count_critical_errors(), 0);
     });
 }
@@ -96,10 +99,7 @@ fn prop_ingress_vec(
     max_messages: usize,
     max_size: usize,
 ) -> impl Strategy<Value = Vec<SignedIngress>> {
-    prop::collection::vec(
-        (0..max_size).prop_map(|size| make_ingress(size)),
-        1..max_messages,
-    )
+    prop::collection::vec((0..max_size).prop_map(make_ingress), 1..max_messages)
 }
 
 fn make_ingress(size: usize) -> SignedIngress {
@@ -113,8 +113,8 @@ fn prop_xnet_slice(
     max_size: usize,
 ) -> impl Strategy<Value = BTreeMap<SubnetId, CertifiedStreamSlice>> {
     prop::collection::btree_map(
-        (0..3u64).prop_map(|id| subnet_test_id(id)),
-        (0..max_size).prop_map(|size| make_xnet_slice(size)),
+        (0..3u64).prop_map(subnet_test_id),
+        (0..max_size).prop_map(make_xnet_slice),
         1..max_messages,
     )
 }
@@ -145,7 +145,7 @@ fn wrap_batch_payload(height: u64, payload: BatchPayload) -> Payload {
         BlockPayload::Data(DataPayload {
             batch: payload,
             dealings: Dealings::new_empty(Height::from(height)),
-            ecdsa: None,
+            idkg: None,
         }),
     )
 }

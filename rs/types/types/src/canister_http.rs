@@ -3,37 +3,37 @@
 //! The lifecycle of a request looks as follows:
 //!
 //! 1a. When a canister makes a http request, the [`CanisterHttpRequestContext`] is stored in the state.
-//! The canister http pool manager (which is a thread that continously checks for requests)
-//! will take the request and pass it to the network layer to make the actual request.
+//!     The canister http pool manager (which is a thread that continuously checks for requests)
+//!     will take the request and pass it to the network layer to make the actual request.
 //!
 //! 1b. The response may be passed to a transform function, which can make arbitrary changes to the response.
-//! The purpose of the transform function is to give the canister developer the ability to shrink the response to
-//! only contain the data that they are interested in. Furthermore, it allows the canister developer to remove
-//! non-determistic parts of the response (such as timestamps) from the response, to help reaching consensus on
-//! the response.
-//! Afterwards it is returned to the consensus layer as a [`CanisterHttpResponseContent`].
+//!     The purpose of the transform function is to give the canister developer the ability to shrink the response to
+//!     only contain the data that they are interested in. Furthermore, it allows the canister developer to remove
+//!     non-determistic parts of the response (such as timestamps) from the response, to help reaching consensus on
+//!     the response.
+//!     Afterwards it is returned to the consensus layer as a [`CanisterHttpResponseContent`].
 //!
 //! 2. Now we need to get consensus of the content. Since the actual [`CanisterHttpResponseContent`] could be large and we
-//! require n-to-n communication, we will turn the content into a much smaller [`CanisterHttpResponseMetadata`] object,
-//! that contains all the the important information (such as the response hash) required to archieve consensus.
+//!    require n-to-n communication, we will turn the content into a much smaller [`CanisterHttpResponseMetadata`] object,
+//!    that contains all the the important information (such as the response hash) required to achieve consensus.
 //!
 //! 3a. We sign the metadata to get the [`CanisterHttpResponseShare`] and store it in the pool.
 //!
 //! 3b. We gossip [`CanisterHttpResponseShare`]s, until we have enough shares to aggregate them into a
-//! [`CanisterHttpResponseProof`]. Together with the content, this artifact forms the [`CanisterHttpResponseWithConsensus`],
-//! which is the artifact we can include into the block to prove consensus on the response.
+//!     [`CanisterHttpResponseProof`]. Together with the content, this artifact forms the [`CanisterHttpResponseWithConsensus`],
+//!     which is the artifact we can include into the block to prove consensus on the response.
 //!
 //! 4a. Once the [`CanisterHttpResponseWithConsensus`] has made it into a finalized block, the response is delivered
-//! to execution to resume the initial call.
+//!     to execution to resume the initial call.
 //!
 //! 4b. Since there is no guarantee that all nodes will get the same [`CanisterHttpResponseContent`] back from the server,
-//! there is no guarantee to reach consensus on a single [`CanisterHttpResponseMetadata`] either.
-//! This can often be detected by the block maker, allowing to return an error as soon as possible
-//! to the canister, such that execution to resume faster.
-//! The blockmaker compiles a [`CanisterHttpResponseDivergence`] proof and includes it in it's payload.
-//! Once the proof has made it into a finalized block, the request is answered with an error message.
+//!     there is no guarantee to reach consensus on a single [`CanisterHttpResponseMetadata`] either.
+//!     This can often be detected by the block maker, allowing to return an error as soon as possible
+//!     to the canister, such that execution to resume faster.
+//!     The blockmaker compiles a [`CanisterHttpResponseDivergence`] proof and includes it in it's payload.
+//!     Once the proof has made it into a finalized block, the request is answered with an error message.
 //!
-//! Early detection of non-determinsitic server responses is not guaranteed to work if malicious nodes are present,
+//! Early detection of non-deterministic server responses is not guaranteed to work if malicious nodes are present,
 //! which sign multiple different responses for the same request.
 //! In that case, the non-determisitic server responses will time out using the timeout mechanism (see 4c).
 //!
@@ -42,6 +42,7 @@
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
+    artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
     crypto::{CryptoHashOf, Signed},
     messages::{CallbackId, RejectContext, Request},
     signature::*,
@@ -51,17 +52,20 @@ use ic_base_types::{NumBytes, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_ic00_types::{CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext};
+use ic_management_canister_types::{
+    CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext,
+};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::system_metadata::v1 as pb_metadata,
 };
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use std::{convert::Infallible, time::Duration};
 use std::{
     convert::{TryFrom, TryInto},
     mem::size_of,
 };
+use strum_macros::EnumIter;
 
 /// Time after which a response is considered timed out and a timeout error will be returned to execution
 pub const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(60);
@@ -157,6 +161,7 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
 
 impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestContext {
     type Error = ProxyDecodeError;
+
     fn try_from(context: pb_metadata::CanisterHttpRequestContext) -> Result<Self, Self::Error> {
         let request: Request =
             try_from_option_field(context.request, "CanisterHttpRequestContext::request")?;
@@ -197,8 +202,8 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
                 })
                 .collect(),
             body: context.body,
-            http_method: pb_metadata::HttpMethod::from_i32(context.http_method)
-                .ok_or(ProxyDecodeError::ValueOutOfRange {
+            http_method: pb_metadata::HttpMethod::try_from(context.http_method)
+                .map_err(|_| ProxyDecodeError::ValueOutOfRange {
                     typ: "ic_protobuf::state::system_metadata::v1::HttpMethod",
                     err: format!(
                         "{} is not one of the expected variants of HttpMethod",
@@ -303,7 +308,10 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
         }
 
         let request_body = args.body;
-        validate_http_headers_and_body(&args.headers, request_body.as_ref().unwrap_or(&vec![]))?;
+        validate_http_headers_and_body(
+            args.headers.get(),
+            request_body.as_ref().unwrap_or(&vec![]),
+        )?;
 
         Ok(CanisterHttpRequestContext {
             request: request.clone(),
@@ -311,6 +319,7 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
             max_response_bytes,
             headers: args
                 .headers
+                .get()
                 .clone()
                 .into_iter()
                 .map(|h| CanisterHttpHeader {
@@ -499,7 +508,7 @@ pub struct CanisterHttpReject {
 
 impl From<&CanisterHttpReject> for RejectContext {
     fn from(value: &CanisterHttpReject) -> RejectContext {
-        RejectContext::new(value.reject_code, value.message.clone())
+        RejectContext::new(value.reject_code, &value.message)
     }
 }
 
@@ -517,11 +526,11 @@ pub struct CanisterHttpHeader {
 }
 
 /// Specifies the HTTP method that is used in the [`CanisterHttpRequest`].
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, EnumIter, Hash, PartialEq, Serialize, Deserialize)]
 pub enum CanisterHttpMethod {
-    GET,
-    POST,
-    HEAD,
+    GET = 1,
+    POST = 2,
+    HEAD = 3,
 }
 
 impl From<&CanisterHttpMethod> for pb_metadata::HttpMethod {
@@ -608,6 +617,25 @@ impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpResponseMe
 pub type CanisterHttpResponseShare =
     Signed<CanisterHttpResponseMetadata, BasicSignature<CanisterHttpResponseMetadata>>;
 
+impl IdentifiableArtifact for CanisterHttpResponseShare {
+    const NAME: &'static str = "canisterhttp";
+    type Id = CanisterHttpResponseId;
+    type Attribute = ();
+    fn id(&self) -> Self::Id {
+        self.clone()
+    }
+    fn attribute(&self) -> Self::Attribute {}
+}
+
+impl PbArtifact for CanisterHttpResponseShare {
+    type PbId = ic_protobuf::types::v1::CanisterHttpShare;
+    type PbIdError = ProxyDecodeError;
+    type PbMessage = ic_protobuf::types::v1::CanisterHttpShare;
+    type PbMessageError = ProxyDecodeError;
+    type PbAttribute = ();
+    type PbAttributeError = Infallible;
+}
+
 /// A signature of of [`CanisterHttpResponseMetadata`].
 pub type CanisterHttpResponseProof =
     Signed<CanisterHttpResponseMetadata, BasicSignatureBatch<CanisterHttpResponseMetadata>>;
@@ -618,33 +646,13 @@ impl CountBytes for CanisterHttpResponseProof {
     }
 }
 
-/// Used by the artifact pool as to differentiate [`CanisterHttpResponse`] artifacts
-///
-/// The current implementation of the canister http feature only has a single type of
-/// artifact, which is shares and therefore needs an attribute.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum CanisterHttpResponseAttribute {
-    /// Attributes of a [`CanisterHttpResponseShare`].
-    ///
-    /// It is not sufficient to differentiate the [`CanisterHttpResponseShare`]s by their
-    /// [`CanisterHttpRequestId`]. The reason is, that if the membership of the subnet changes
-    /// while a [`CanisterHttpRequest`] is in progress, the new nodes can not get consensus on
-    /// the old nodes [`CanisterHttpResponseShare`]s.
-    ///
-    /// Instead, they need to make new shares, which is why the [`RegistryVersion`]
-    /// under which they where generated and signed is part of the attribute.
-    Share(
-        RegistryVersion,
-        CanisterHttpRequestId,
-        CryptoHashOf<CanisterHttpResponse>,
-    ),
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::{time::UNIX_EPOCH, Cycles};
+    use crate::{messages::NO_DEADLINE, time::UNIX_EPOCH, Cycles};
 
     use super::*;
+
+    use strum::IntoEnumIterator;
 
     #[test]
     fn test_request_arg_variable_size() {
@@ -668,6 +676,8 @@ mod tests {
                 payment: Cycles::new(10),
                 method_name: "tansform".to_string(),
                 method_payload: Vec::new(),
+                metadata: None,
+                deadline: NO_DEADLINE,
             },
             time: UNIX_EPOCH,
         };
@@ -708,6 +718,8 @@ mod tests {
                 payment: Cycles::new(10),
                 method_name: "tansform".to_string(),
                 method_payload: Vec::new(),
+                metadata: None,
+                deadline: NO_DEADLINE,
             },
             time: UNIX_EPOCH,
         };
@@ -719,6 +731,28 @@ mod tests {
         assert_eq!(
             context.variable_parts_size(),
             NumBytes::from(expected_size as u64)
+        );
+    }
+
+    #[test]
+    fn canister_http_method_proto_round_trip() {
+        for initial in CanisterHttpMethod::iter() {
+            let encoded = pb_metadata::HttpMethod::from(&initial);
+            let round_trip = CanisterHttpMethod::try_from(encoded).unwrap();
+
+            assert_eq!(initial, round_trip);
+        }
+    }
+
+    #[test]
+    fn compatibility_for_canister_http_method() {
+        // If this fails, you are making a potentially incompatible change to `CanisterHttpMethod`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        assert_eq!(
+            CanisterHttpMethod::iter()
+                .map(|x| x as i32)
+                .collect::<Vec<i32>>(),
+            [1, 2, 3]
         );
     }
 }

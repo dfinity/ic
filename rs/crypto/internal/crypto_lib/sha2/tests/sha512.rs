@@ -115,7 +115,7 @@ fn test_sha512_with_nonempty_context_and_nonempty_input() {
 }
 
 #[test]
-fn test_sha512_with_empty_context_and_emtpy_data() {
+fn test_sha512_with_empty_context_and_empty_data() {
     let context = TestContext::new(&[]);
     let data = b"";
 
@@ -137,7 +137,7 @@ fn test_sha512_with_empty_context_and_emtpy_data() {
 }
 
 #[test]
-fn test_sha512_with_nonempty_context_and_emtpy_input() {
+fn test_sha512_with_nonempty_context_and_empty_input() {
     let context = TestContext::new(&[0x11, 0x22, 0x33, 0x44]);
     let data = b"";
 
@@ -168,22 +168,6 @@ fn test_sha512_with_empty_context_and_nonempty_input() {
     let digest = state.finish();
 
     assert_eq!(digest, EXPECTED_DIGEST);
-}
-
-#[test]
-fn should_produce_same_sha512_digest_as_if_openssl_sha512_was_used_directly() {
-    let context = TestContext::new(b"context");
-
-    let mut lib_state = Sha512::new_with_context(&context);
-    lib_state.write(b"some data!");
-    let lib_digest = lib_state.finish();
-
-    let mut openssl_state = openssl::sha::Sha512::new();
-    openssl_state.update(context.as_bytes());
-    openssl_state.update(b"some data!");
-    let openssl_digest = openssl_state.finish();
-
-    assert_eq!(lib_digest, openssl_digest);
 }
 
 #[derive(Debug)]

@@ -1,22 +1,25 @@
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/dfn_core",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
     "@crate_index//:rand_pcg",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/canister_test",
     "//rs/state_machine_tests",
     "//rs/test_utilities",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
-    "//rs/types/ic00_types",
 ]
 
 rust_library(
@@ -40,19 +43,15 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_test(
+rust_ic_test(
     name = "memory_test_integration_test",
     srcs = ["test/test.rs"],
     data = [
         ":memory_test_canister",
-        "//rs/canister_sandbox",
-        "//rs/canister_sandbox/sandbox_launcher",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/rust_canisters/memory_test",
         "MEMORY_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/memory_test:memory_test_canister)",
-        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
-        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

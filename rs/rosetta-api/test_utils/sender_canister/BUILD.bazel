@@ -1,0 +1,39 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPS = [
+    # Keep sorted.
+    "@crate_index//:candid",
+    "@crate_index//:futures",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:serde",
+]
+
+rust_library(
+    name = "ic_sender_canister_lib",
+    srcs = ["src/lib.rs"],
+    deps = DEPS,
+)
+
+rust_canister(
+    name = "ic-sender-canister",
+    srcs = ["src/main.rs"],
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:ic-cdk-macros",
+    ],
+    service_file = ":sender.did",
+    deps = DEPS + [":ic_sender_canister_lib"],
+)
+
+rust_test(
+    name = "ic-sender-canister-unit-test",
+    srcs = ["src/main.rs"],
+    data = [":sender.did"],
+    deps = DEPS + [
+        ":ic_sender_canister_lib",
+        "@crate_index//:candid_parser",
+    ],
+)

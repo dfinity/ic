@@ -1,25 +1,26 @@
-use crate::address::Address;
-use std::str::FromStr;
+use crate::address::ecdsa_public_key_to_address;
 
 #[test]
 fn deserialize_block_spec() {
     use crate::eth_rpc::*;
+    use crate::numeric::BlockNumber;
 
     assert_eq!(
-        BlockSpec::Number(Quantity::new(0xffff)),
+        BlockSpec::Number(BlockNumber::new(0xffff)),
         serde_json::from_str("\"0xffff\"").unwrap()
     );
+
     assert_eq!(
-        BlockSpec::Tag(BlockTag::Earliest),
-        serde_json::from_str("\"earliest\"").unwrap()
+        BlockSpec::Tag(BlockTag::Latest),
+        serde_json::from_str("\"latest\"").unwrap()
+    );
+    assert_eq!(
+        BlockSpec::Tag(BlockTag::Safe),
+        serde_json::from_str("\"safe\"").unwrap()
     );
     assert_eq!(
         BlockSpec::Tag(BlockTag::Finalized),
         serde_json::from_str("\"finalized\"").unwrap()
-    );
-    assert_eq!(
-        BlockSpec::Tag(BlockTag::Pending),
-        serde_json::from_str("\"pending\"").unwrap()
     );
 }
 
@@ -47,12 +48,12 @@ fn deserialize_json_reply() {
 }
 
 mod eth_get_logs {
-    use crate::address::Address;
-    use crate::endpoints::ReceivedEthEvent;
-    use crate::eth_rpc::{FixedSizeData, LogEntry};
-    use assert_matches::assert_matches;
-    use candid::{Nat, Principal};
+    use crate::eth_logs::{ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
+    use crate::eth_rpc::LogEntry;
+    use crate::numeric::{BlockNumber, Erc20Value, LogIndex, Wei};
+    use candid::Principal;
     use ic_crypto_sha3::Keccak256;
+    use ic_ethereum_types::Address;
     use std::str::FromStr;
 
     #[test]
@@ -89,7 +90,7 @@ mod eth_get_logs {
                 transaction_hash: Some(hash_from_hex("5618f72c485bd98a3df58d900eabe9e24bfaa972a6fe5227e02233fad2db1154")),
                 transaction_index: Some(Quantity::new(0x06)),
                 block_hash: Some(hash_from_hex("908e6b84d26d71421bfaa08e7966e0afcef3883a28a53a0a7a31104caf1e94c2")),
-                log_index: Some(Quantity::new(0x08)),
+                log_index: Some(LogIndex::from(0x08_u8)),
                 removed: false,
             }]
         );
@@ -97,7 +98,7 @@ mod eth_get_logs {
 
     #[test]
     fn should_have_correct_topic() {
-        use crate::eth_logs::RECEIVED_ETH_EVENT_TOPIC;
+        use crate::deposit::RECEIVED_ETH_EVENT_TOPIC;
 
         //must match event signature in minter.sol
         let event_signature = "ReceivedEth(address,uint256,bytes32)";
@@ -123,59 +124,101 @@ mod eth_get_logs {
             "removed": false
         }"#;
         let parsed_event =
-            ReceivedEthEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap()).unwrap();
+            ReceivedEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap()).unwrap();
         let expected_event = ReceivedEthEvent {
             transaction_hash: "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3"
-                .to_string(),
-            block_number: Nat::from(3974279),
-            log_index: Nat::from(39),
-            from_address: "0xdd2851cdd40ae6536831558dd46db62fac7a844d".to_string(),
-            value: Nat::from(10_000_000_000_000_000_u128),
+                .parse()
+                .unwrap(),
+            block_number: BlockNumber::new(3974279),
+            log_index: LogIndex::from(39_u8),
+            from_address: "0xdd2851cdd40ae6536831558dd46db62fac7a844d"
+                .parse()
+                .unwrap(),
+            value: Wei::from(10_000_000_000_000_000_u128),
             principal: Principal::from_str("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap(),
-        };
+        }
+        .into();
 
         assert_eq!(parsed_event, expected_event);
     }
 
     #[test]
-    fn should_deserialize_address_from_32_bytes_hex_string() {
-        let address_hex = FixedSizeData::from_str(
-            "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
-        )
-        .unwrap();
+    fn should_parse_received_erc20_event() {
+        let event = r#"{
+            "address": "0xE1788E4834c896F1932188645cc36c54d1b80AC1",
+            "topics": [
+                "0x4d69d0bd4287b7f66c548f90154dc81bc98f65a1b362775df5ae171a2ccd262b",
+                "0x0000000000000000000000007439e9bb6d8a84dd3a23fe621a30f95403f87fb9",
+                "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
+                "0x1d9facb184cbe453de4841b6b9d9cc95bfc065344e485789b550544529020000"
+            ],
+            "data": "0x0000000000000000000000000000000000000000000000008ac7230489e80000",
+            "blockNumber": "0x5146a4",
+            "transactionHash": "0x44d8e93a8f4bbc89ad35fc4fbbdb12cb597b4832da09c0b2300777be180fde87",
+            "transactionIndex": "0x22",
+            "blockHash": "0x0cbfb260e2e589ef110e63314279eb3ef2e307e46fa5409f08c101976858f80a",
+            "logIndex": "0x27",
+            "removed": false
+        }"#;
+        let parsed_event =
+            ReceivedEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap()).unwrap();
+        let expected_event = ReceivedErc20Event {
+            transaction_hash: "0x44d8e93a8f4bbc89ad35fc4fbbdb12cb597b4832da09c0b2300777be180fde87"
+                .parse()
+                .unwrap(),
+            block_number: BlockNumber::new(5326500),
+            log_index: LogIndex::from(39_u8),
+            from_address: "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d"
+                .parse()
+                .unwrap(),
+            value: Erc20Value::from(10_000_000_000_000_000_000_u128),
+            principal: Principal::from_str(
+                "hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe",
+            )
+            .unwrap(),
+            erc20_contract_address: "0x7439e9bb6d8a84dd3a23fe621a30f95403f87fb9"
+                .parse()
+                .unwrap(),
+        }
+        .into();
 
-        let address = Address::try_from(&address_hex.0).unwrap();
-
-        assert_eq!(
-            format!("{:x}", address),
-            "0xdd2851cdd40ae6536831558dd46db62fac7a844d".to_string()
-        );
+        assert_eq!(parsed_event, expected_event);
     }
 
     #[test]
-    fn should_fail_deserializing_address_when_non_leading_zero() {
-        let address_hex = FixedSizeData::from_str(
-            "0x000000000100000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
-        )
-        .unwrap();
+    fn should_not_parse_removed_event() {
+        use crate::eth_logs::{EventSource, EventSourceError, ReceivedEventError};
+        let event = r#"{
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "topics": [
+                "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
+                "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
+                "0x09efcdab00000000000100000000000000000000000000000000000000000000"
+            ],
+            "data": "0x000000000000000000000000000000000000000000000000002386f26fc10000",
+            "blockNumber": "0x3ca487",
+            "transactionHash": "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3",
+            "transactionIndex": "0x22",
+            "blockHash": "0x8436209a391f7bc076123616ecb229602124eb6c1007f5eae84df8e098885d3c",
+            "logIndex": "0x27",
+            "removed": true
+        }"#;
 
-        assert_matches!(
-            Address::try_from(&address_hex.0),
-            Err(err) if err.starts_with("address has leading non-zero bytes")
-        );
-    }
-
-    #[test]
-    fn should_fail_deserializing_when_address_larger_than_20_bytes() {
-        let address_hex = FixedSizeData::from_str(
-            "0x000000000100000000000001dd2851cdd40ae6536831558dd46db62fac7a844d",
-        )
-        .unwrap();
-
-        assert_matches!(
-            Address::try_from(&address_hex.0),
-            Err(err) if err.starts_with("address has leading non-zero bytes")
-        );
+        let parsed_event =
+            ReceivedEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap());
+        let expected_error = Err(ReceivedEventError::InvalidEventSource {
+            source: EventSource {
+                transaction_hash:
+                    "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3"
+                        .parse()
+                        .unwrap(),
+                log_index: LogIndex::from(39_u8),
+            },
+            error: EventSourceError::InvalidEvent(
+                "this event has been removed from the chain".to_string(),
+            ),
+        });
+        assert_eq!(parsed_event, expected_error);
     }
 }
 
@@ -197,76 +240,149 @@ fn address_from_pubkey() {
     for (pk_bytes, address) in EXAMPLES {
         let sec1_bytes = hex::decode(pk_bytes).unwrap();
         let pk = PublicKey::deserialize_sec1(&sec1_bytes).unwrap();
-        assert_eq!(&Address::from_pubkey(&pk).to_string(), address);
+        assert_eq!(&ecdsa_public_key_to_address(&pk).to_string(), address);
     }
 }
 
-// See https://eips.ethereum.org/EIPS/eip-55#test-cases
-#[test]
-fn address_display() {
-    use crate::address::*;
+mod rlp_encoding {
+    use crate::numeric::{GasAmount, TransactionNonce, Wei, WeiPerGas};
+    use crate::tx::{
+        AccessList, Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
+    };
+    use ethnum::u256;
+    use ic_ethereum_types::Address;
+    use rlp::Encodable;
+    use std::str::FromStr;
 
-    const EXAMPLES: &[&str] = &[
-        // All caps
-        "0x52908400098527886E0F7030069857D2E4169EE7",
-        "0x8617E340B3D01FA5F11F306F4090FD50E238070D",
-        // All Lower
-        "0xde709f2102306220921060314715629080e2fb77",
-        "0x27b1fdb04752bbc536007a920d24acb045561c26",
-        // Normal
-        "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
-        "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
-        "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
-        "0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb",
-    ];
-    for example in EXAMPLES {
-        let addr = Address::from_str(example).unwrap();
-        assert_eq!(&addr.to_string(), example);
+    const SEPOLIA_TEST_CHAIN_ID: u64 = 11155111;
+
+    #[test]
+    fn test_rlp_encoding() {
+        use crate::tx::{AccessList, Eip1559TransactionRequest};
+        use ethers_core::abi::ethereum_types::H160;
+        use ethers_core::types::transaction::eip1559::Eip1559TransactionRequest as EthersCoreEip1559TransactionRequest;
+        use ethers_core::types::transaction::eip2930::AccessList as EthersCoreAccessList;
+        use ethers_core::types::Signature as EthersCoreSignature;
+        use ethers_core::types::{Bytes, U256};
+        use ethnum::u256;
+
+        let address_bytes: [u8; 20] = [
+            180, 75, 94, 117, 106, 137, 71, 117, 252, 50, 237, 223, 51, 20, 187, 27, 25, 68, 220,
+            52,
+        ];
+
+        let ethers_core_tx = EthersCoreEip1559TransactionRequest {
+            from: None,
+            to: Some(ethers_core::types::NameOrAddress::Address(H160::from(
+                address_bytes,
+            ))),
+            gas: Some(1.into()),
+            value: Some(2.into()),
+            data: Some(Bytes::new()),
+            nonce: Some(0.into()),
+            access_list: EthersCoreAccessList::from(vec![]),
+            max_priority_fee_per_gas: Some(3.into()),
+            max_fee_per_gas: Some(4.into()),
+            chain_id: Some(1.into()),
+        };
+        let minter_tx = Eip1559TransactionRequest {
+            chain_id: 1,
+            destination: Address::new(address_bytes),
+            nonce: 0_u64.into(),
+            gas_limit: 1_u32.into(),
+            max_fee_per_gas: 4_u64.into(),
+            amount: 2_u64.into(),
+            data: vec![],
+            access_list: AccessList::new(),
+            max_priority_fee_per_gas: 3_u64.into(),
+        };
+        assert_eq!(
+            minter_tx.rlp_bytes().to_vec(),
+            ethers_core_tx.rlp().to_vec()
+        );
+
+        let signature = Eip1559Signature {
+            signature_y_parity: true,
+            r: u256::from_str_radix(
+                "b92224ecdb5295f3b889059621909c6b7a2308ccd0e5f13812409d80706b13cd",
+                16,
+            )
+            .unwrap(),
+            s: u256::from_str_radix(
+                "0bec9da278e6388a9d6934c911684234e16db1610c2227545c7b192db277c4b1",
+                16,
+            )
+            .unwrap(),
+        };
+
+        assert_eq!(
+            SignedEip1559TransactionRequest::from((minter_tx, signature))
+                .rlp_bytes()
+                .to_vec(),
+            ethers_core_tx
+                .rlp_signed(&EthersCoreSignature {
+                    v: 1,
+                    r: U256::from_str_radix(
+                        "b92224ecdb5295f3b889059621909c6b7a2308ccd0e5f13812409d80706b13cd",
+                        16
+                    )
+                    .unwrap(),
+                    s: U256::from_str_radix(
+                        "0bec9da278e6388a9d6934c911684234e16db1610c2227545c7b192db277c4b1",
+                        16
+                    )
+                    .unwrap(),
+                })
+                .to_vec()
+        );
     }
-}
 
-#[test]
-fn test_encoding() {
-    use crate::tx::TransactionRequest;
-    use ethers_core::abi::ethereum_types::H160;
-    use ethers_core::types::transaction::eip1559::Eip1559TransactionRequest;
-    use ethers_core::types::transaction::eip2930::AccessList;
-    use ethers_core::types::Bytes;
+    #[test]
+    fn should_compute_correct_rlp_encoding_of_signed_transaction() {
+        // see https://sepolia.etherscan.io/getRawTx?tx=0x66a9a218ea720ac6d2c9e56f7e44836c1541c186b7627bda220857ce34e2df7f
+        let signature = Eip1559Signature {
+            signature_y_parity: true,
+            r: u256::from_str_hex(
+                "0x7d097b81dc8bf5ad313f8d6656146d4723d0e6bb3fb35f1a709e6a3d4426c0f3",
+            )
+            .unwrap(),
+            s: u256::from_str_hex(
+                "0x4f8a618d959e7d96e19156f0f5f2ed321b34e2004a0c8fdb7f02bc7d08b74441",
+            )
+            .unwrap(),
+        };
+        let transaction = Eip1559TransactionRequest {
+            chain_id: SEPOLIA_TEST_CHAIN_ID,
+            nonce: TransactionNonce::from(6_u8),
+            max_priority_fee_per_gas: WeiPerGas::new(0x59682f00),
+            max_fee_per_gas: WeiPerGas::new(0x598653cd),
+            gas_limit: GasAmount::new(56_511),
+            destination: Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap(),
+            amount: Wei::new(1_000_000_000_000_000),
+            data: hex::decode(
+                "b214faa51d882d15b09f8e81e29606305f5fefc5eff3e2309620a3557ecae39d62020000",
+            )
+            .unwrap(),
+            access_list: AccessList::new(),
+        };
+        let tx_hash = transaction.hash();
+        assert_eq!(
+            tx_hash.to_string(),
+            "0x2d9e6453d9864cff7453ca35dcab86be744c641ba4891c2fe9aeaa2f767b9758"
+        );
 
-    let other_raw_tx = Eip1559TransactionRequest {
-        from: None,
-        to: Some(ethers_core::types::NameOrAddress::Address(H160::zero())),
-        gas: Some(1.into()),
-        value: Some(2.into()),
-        data: Some(Bytes::new()),
-        nonce: Some(0.into()),
-        access_list: AccessList::from(vec![]),
-        max_priority_fee_per_gas: Some(3.into()),
-        max_fee_per_gas: Some(4.into()),
-        chain_id: Some(1.into()),
-    };
-    let raw_tx = TransactionRequest {
-        chain_id: 1,
-        to: crate::address::Address::new([0; 20]),
-        nonce: 0_u32.into(),
-        gas_limit: 1_u32.into(),
-        max_fee_per_gas: 4_u32.into(),
-        value: 2_u32.into(),
-        data: vec![],
-        transaction_type: 0,
-        access_list: vec![],
-        max_priority_fee_per_gas: 3_u32.into(),
-    };
-    assert_eq!(
-        raw_tx.encode_eip1559_payload(None)[1..],
-        other_raw_tx.rlp().to_vec()
-    );
+        let signed_transaction = SignedEip1559TransactionRequest::from((transaction, signature));
+        assert_eq!(signed_transaction.raw_transaction_hex(), "0x02f89883aa36a7068459682f0084598653cd82dcbf94b44b5e756a894775fc32eddf3314bb1b1944dc3487038d7ea4c68000a4b214faa51d882d15b09f8e81e29606305f5fefc5eff3e2309620a3557ecae39d62020000c001a07d097b81dc8bf5ad313f8d6656146d4723d0e6bb3fb35f1a709e6a3d4426c0f3a04f8a618d959e7d96e19156f0f5f2ed321b34e2004a0c8fdb7f02bc7d08b74441");
+        assert_eq!(
+            signed_transaction.hash().to_string(),
+            "0x66a9a218ea720ac6d2c9e56f7e44836c1541c186b7627bda220857ce34e2df7f"
+        );
+    }
 }
 
 mod eth_get_block_by_number {
-    use crate::eth_rpc::{
-        into_nat, Block, BlockNumber, BlockSpec, BlockTag, GetBlockByNumberParams, Quantity,
-    };
+    use crate::eth_rpc::{into_nat, Block, BlockSpec, BlockTag, GetBlockByNumberParams, Quantity};
+    use crate::numeric::{BlockNumber, Wei};
 
     #[test]
     fn should_serialize_get_block_by_number_params_as_tuple() {
@@ -604,7 +720,7 @@ mod eth_get_block_by_number {
             block,
             Block {
                 number: BlockNumber::new(0x10eb3c6),
-                base_fee_per_gas: Quantity::new(0x4b85a0fcd),
+                base_fee_per_gas: Wei::new(0x4b85a0fcd),
             }
         )
     }
@@ -618,9 +734,8 @@ mod eth_get_block_by_number {
 }
 
 mod eth_fee_history {
-    use crate::eth_rpc::{
-        BlockNumber, BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, Quantity,
-    };
+    use crate::eth_rpc::{BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, Quantity};
+    use crate::numeric::{BlockNumber, WeiPerGas};
 
     #[test]
     fn should_serialize_fee_history_params_as_tuple() {
@@ -688,38 +803,38 @@ mod eth_fee_history {
             FeeHistory {
                 oldest_block: BlockNumber::new(0x10f73fc),
                 base_fee_per_gas: vec![
-                    Quantity::new(0x729d3f3b3),
-                    Quantity::new(0x766e503ea),
-                    Quantity::new(0x75b51b620),
-                    Quantity::new(0x74094f2b4),
-                    Quantity::new(0x716724f03),
-                    Quantity::new(0x73b467f76)
+                    WeiPerGas::new(0x729d3f3b3),
+                    WeiPerGas::new(0x766e503ea),
+                    WeiPerGas::new(0x75b51b620),
+                    WeiPerGas::new(0x74094f2b4),
+                    WeiPerGas::new(0x716724f03),
+                    WeiPerGas::new(0x73b467f76)
                 ],
                 reward: vec![
                     vec![
-                        Quantity::new(0x5f5e100),
-                        Quantity::new(0x5f5e100),
-                        Quantity::new(0x68e7780)
+                        WeiPerGas::new(0x5f5e100),
+                        WeiPerGas::new(0x5f5e100),
+                        WeiPerGas::new(0x68e7780)
                     ],
                     vec![
-                        Quantity::new(0x55d4a80),
-                        Quantity::new(0x5f5e100),
-                        Quantity::new(0x5f5e100)
+                        WeiPerGas::new(0x55d4a80),
+                        WeiPerGas::new(0x5f5e100),
+                        WeiPerGas::new(0x5f5e100)
                     ],
                     vec![
-                        Quantity::new(0x5f5e100),
-                        Quantity::new(0x5f5e100),
-                        Quantity::new(0x5f5e100)
+                        WeiPerGas::new(0x5f5e100),
+                        WeiPerGas::new(0x5f5e100),
+                        WeiPerGas::new(0x5f5e100)
                     ],
                     vec![
-                        Quantity::new(0x5f5e100),
-                        Quantity::new(0x5f5e100),
-                        Quantity::new(0x5f5e100)
+                        WeiPerGas::new(0x5f5e100),
+                        WeiPerGas::new(0x5f5e100),
+                        WeiPerGas::new(0x5f5e100)
                     ],
                     vec![
-                        Quantity::new(0x5f5e100),
-                        Quantity::new(0x5f5e100),
-                        Quantity::new(0x180789e0)
+                        WeiPerGas::new(0x5f5e100),
+                        WeiPerGas::new(0x5f5e100),
+                        WeiPerGas::new(0x180789e0)
                     ]
                 ],
             }

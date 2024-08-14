@@ -27,8 +27,9 @@ pub use tree_hash::*;
 /// - If you have a single [`Label`], use `Path::from(Label)`.
 ///
 /// - If you have an iterator that contains [`Label`] or `&Label` use
-/// `Path::from_iter(iterator)`.
-// Implemented as a newtype to allow implementation of traits like
+///   `Path::from_iter(iterator)`.
+///
+// Implemented as a new type to allow implementation of traits like
 // `fmt::Display`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct Path(Vec<Label>);
@@ -97,12 +98,12 @@ impl Path {
 ///
 /// Note that
 /// - `Label`s are compared by comparing their byte representation.
-/// Therefore, `Label`s casted from other representations must not
-/// necessarily retain their original ordering, e.g., if `Label`s are
-/// obtained via `From<String>`.
+///   Therefore, `Label`s casted from other representations must not
+///   necessarily retain their original ordering, e.g., if `Label`s are
+///   obtained via `From<String>`.
 /// - `Label`s that hold a reference to an object are compared with
-/// other labels by comparing the bytes of the underlying representation,
-/// i.e., as if the `Label` would hold the bytes and not the reference.
+///   other labels by comparing the bytes of the underlying representation,
+///   i.e., as if the `Label` would hold the bytes and not the reference.
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(from = "&serde_bytes::Bytes")]
 #[serde(into = "serde_bytes::ByteBuf")]
@@ -121,7 +122,7 @@ enum LabelRepr {
     /// first byte of the array indicates the number of bytes that should be
     /// used as label value, so we can fit up to SMALL_LABEL_SIZE bytes.
     Value([u8; SMALL_LABEL_SIZE + 1]),
-    /// Label of size SMALL_LABEL_SIZE or longer.
+    /// Label of size above SMALL_LABEL_SIZE.
     Ref(Vec<u8>),
 }
 
@@ -149,20 +150,28 @@ impl Ord for Label {
 
 impl PartialOrd for Label {
     fn partial_cmp(&self, rhs: &Self) -> Option<std::cmp::Ordering> {
-        self.as_bytes().partial_cmp(rhs.as_bytes())
+        Some(self.cmp(rhs))
     }
 }
 
 impl Label {
+    #[inline]
     pub fn as_bytes(&self) -> &[u8] {
         match &self.0 {
-            LabelRepr::Value(bytes) => &bytes[1..=bytes[0] as usize],
+            LabelRepr::Value(bytes) => {
+                debug_assert!(bytes[0] as usize <= SMALL_LABEL_SIZE);
+                &bytes[1..=bytes[0] as usize]
+            }
             LabelRepr::Ref(v) => &v[..],
         }
     }
 
-    pub fn to_vec(&self) -> Vec<u8> {
-        self.as_bytes().to_vec()
+    #[inline]
+    pub fn into_vec(self) -> Vec<u8> {
+        match self {
+            Label(LabelRepr::Ref(v)) => v,
+            l => l.as_bytes().to_vec(),
+        }
     }
 }
 
@@ -199,7 +208,7 @@ impl From<Label> for String {
 
 impl From<Label> for serde_bytes::ByteBuf {
     fn from(val: Label) -> Self {
-        Self::from(val.to_vec())
+        Self::from(val.into_vec())
     }
 }
 
@@ -214,6 +223,7 @@ where
             let mut buf = [0u8; SMALL_LABEL_SIZE + 1];
             buf[0] = n as u8;
             buf[1..=n].copy_from_slice(slice);
+            debug_assert!(buf[0] as usize <= SMALL_LABEL_SIZE);
             Self(LabelRepr::Value(buf))
         } else {
             Self(LabelRepr::Ref(slice.to_vec()))
@@ -278,6 +288,38 @@ pub enum LabeledTree<T> {
     Leaf(T),
     /// Internal node with an arbitrary number of sorted, labeled children.
     SubTree(FlatMap<Label, LabeledTree<T>>),
+}
+
+impl<T> Default for LabeledTree<T> {
+    fn default() -> Self {
+        Self::SubTree(FlatMap::new())
+    }
+}
+
+impl<T> Drop for LabeledTree<T> {
+    fn drop(&mut self) {
+        #[inline]
+        fn take_if_subtree<T>(t: &mut LabeledTree<T>, to_drop: &mut Vec<LabeledTree<T>>) {
+            match t {
+                LabeledTree::Leaf(_) => {}
+                LabeledTree::SubTree(children) => {
+                    for (_, child) in std::mem::take(children) {
+                        if matches!(child, LabeledTree::SubTree(_)) {
+                            to_drop.push(child);
+                        }
+                    }
+                }
+            }
+        }
+
+        //  allocate a vector of a small constant size to not have many reallocations
+        //  for small trees
+        let mut to_drop = Vec::with_capacity(100);
+        take_if_subtree(self, &mut to_drop);
+        while let Some(ref mut t) = to_drop.pop() {
+            take_if_subtree(t, &mut to_drop);
+        }
+    }
 }
 
 /// Descends into the subtree of `t` following the given `path`.
@@ -443,15 +485,64 @@ impl MixedHashTree {
     /// Recomputes root hash of the full tree that this mixed tree was
     /// constructed from.
     pub fn digest(&self) -> Digest {
-        match self {
-            Self::Empty => tree_hash::empty_subtree_hash(),
-            Self::Fork(lr) => tree_hash::compute_fork_digest(&lr.0.digest(), &lr.1.digest()),
-            Self::Labeled(label, subtree) => {
-                tree_hash::compute_node_digest(label, &subtree.digest())
-            }
-            Self::Leaf(buf) => tree_hash::compute_leaf_digest(&buf[..]),
-            Self::Pruned(digest) => digest.clone(),
+        #[derive(Debug)]
+        enum StackItem<'a> {
+            Expand(&'a MixedHashTree),
+            Collect(&'a MixedHashTree),
         }
+
+        impl<'a> StackItem<'a> {
+            fn to_collect(&self) -> Self {
+                match self {
+                    Self::Expand(t) => Self::Collect(t),
+                    Self::Collect(_) => panic!("expected Expand, got Collect"),
+                }
+            }
+        }
+
+        let mut stack: Vec<StackItem<'_>> = Vec::new();
+        let mut digests: Vec<Digest> = Vec::new();
+
+        stack.push(StackItem::Expand(self));
+
+        while let Some(t) = stack.pop() {
+            match t {
+                StackItem::Expand(Self::Fork(lr)) => {
+                    stack.push(t.to_collect());
+                    stack.push(StackItem::Expand(&lr.1));
+                    stack.push(StackItem::Expand(&lr.0));
+                }
+                StackItem::Expand(Self::Labeled(_, subtree)) => {
+                    stack.push(t.to_collect());
+                    stack.push(StackItem::Expand(subtree));
+                }
+                StackItem::Collect(Self::Fork(_)) => {
+                    let right = digests.pop().expect("bug: missing right subtree digest");
+                    let left = digests.pop().expect("bug: missing left subtree digest");
+                    digests.push(tree_hash::compute_fork_digest(&left, &right));
+                }
+                StackItem::Collect(Self::Labeled(label, _)) => {
+                    let subtree_digest = digests.pop().expect("bug: missing subtree digest");
+                    let labeled_digest = tree_hash::compute_node_digest(label, &subtree_digest);
+                    digests.push(labeled_digest);
+                }
+                StackItem::Collect(Self::Leaf(buf)) => {
+                    digests.push(tree_hash::compute_leaf_digest(&buf[..]))
+                }
+                StackItem::Collect(Self::Pruned(digest)) => digests.push(digest.clone()),
+                StackItem::Collect(Self::Empty) => digests.push(tree_hash::empty_subtree_hash()),
+                t /* Expand of Leaf, Pruned or Empty */ => stack.push(t.to_collect()),
+            }
+        }
+
+        assert_eq!(
+            digests.len(),
+            1,
+            "bug: reduced tree to not exactly one digest: {digests:?}"
+        );
+        assert!(stack.is_empty(), "bug: stack is not empty: {stack:?}");
+
+        digests[0].clone()
     }
 
     /// Finds a label in a hash tree.
@@ -512,62 +603,6 @@ impl MixedHashTree {
         }
         LookupStatus::Found(t)
     }
-
-    /// Merges two trees into a tree that combines the data parts of both inputs
-    /// and has the same root hash.
-    ///
-    /// Precondition: lhs.digest() == rhs.digest()
-    ///
-    /// Postconditions:
-    ///
-    /// ```text
-    ///     merge(lhs, rhs).digest() == lhs.digest() == rhs.digest()
-    ///
-    ///     ∀ p  Ok(v) = lookup(lhs, p) ⇒ lookup(merge(lhs, rhs), p) == Ok(v)
-    ///        ∧ Ok(v) = lookup(rhs, p) ⇒ lookup(merge(lhs, rhs), p) == Ok(v)
-    /// ```
-    ///
-    /// This function errors if the structure of the passed [`MixedHashTree`]s
-    /// is inconsistent and produces an invalid [`MixedHashTree`] if the
-    /// precondition is otherwise not met.
-    ///
-    /// # Errors
-    ///
-    /// * If the recursion depth is too large.
-    /// * If `lhs` and `rhs` do not match.
-    pub fn merge(lhs: Self, rhs: Self) -> Result<Self, MergeError<MixedHashTree>> {
-        fn merge_impl(
-            lhs: MixedHashTree,
-            rhs: MixedHashTree,
-            depth: usize,
-        ) -> Result<MixedHashTree, MergeError<MixedHashTree>> {
-            use MixedHashTree::*;
-
-            if depth > MAX_HASH_TREE_DEPTH {
-                return Err(MergeError::<MixedHashTree>::TooDeepRecursion(
-                    MAX_HASH_TREE_DEPTH as u32,
-                ));
-            }
-
-            let result = match (lhs, rhs) {
-                (Pruned(_), r) => r,
-                (l, Pruned(_)) => l,
-                (Empty, Empty) => Empty,
-                (Fork(l), Fork(r)) => Fork(Box::new((
-                    merge_impl(l.0, r.0, depth + 1)?,
-                    merge_impl(l.1, r.1, depth + 1)?,
-                ))),
-                (Labeled(label, l), Labeled(rlabel, r)) if label == rlabel => {
-                    Labeled(label, Box::new(merge_impl(*l, *r, depth + 1)?))
-                }
-                (Leaf(l), Leaf(r)) if l == r => Leaf(l),
-                (l, r) => return Err(MergeError::<MixedHashTree>::InconsistentWitnesses(l, r)),
-            };
-
-            Ok(result)
-        }
-        merge_impl(lhs, rhs, 1)
-    }
 }
 
 /// An error indicating that a hash tree doesn't correspond to a valid
@@ -608,7 +643,11 @@ pub enum MixedHashTreeConversionError {
 }
 
 /// The maximum recursion depth of [`serde_cbor`] deserialization is currently 128.
-const MAX_HASH_TREE_DEPTH: usize = 128;
+const MAX_HASH_TREE_DEPTH: u8 = 128;
+// error handling does not work if `MAX_HASH_TREE_DEPTH == u8::MAX`, since we
+// cannot reach the error bound of `u8::MAX + 1` with `u8`
+#[allow(clippy::assertions_on_constants)]
+const _: () = assert!(MAX_HASH_TREE_DEPTH < u8::MAX);
 
 /// Extracts the data part from a mixed hash tree by removing all forks and
 /// pruned nodes.
@@ -621,7 +660,7 @@ impl TryFrom<MixedHashTree> for LabeledTree<Vec<u8>> {
         fn collect_children(
             t: MixedHashTree,
             children: &mut FlatMap<Label, LabeledTree<Vec<u8>>>,
-            depth: usize,
+            depth: u8,
         ) -> Result<(), E> {
             if depth > MAX_HASH_TREE_DEPTH {
                 return Err(E::TooDeepRecursion);
@@ -662,7 +701,7 @@ impl TryFrom<MixedHashTree> for LabeledTree<Vec<u8>> {
             }
         }
 
-        fn try_from_impl(root: MixedHashTree, depth: usize) -> Result<LabeledTree<Vec<u8>>, E> {
+        fn try_from_impl(root: MixedHashTree, depth: u8) -> Result<LabeledTree<Vec<u8>>, E> {
             Ok(match root {
                 MixedHashTree::Leaf(data) => LabeledTree::Leaf(data),
                 MixedHashTree::Labeled(_, _) | MixedHashTree::Fork(_) => {
@@ -683,7 +722,7 @@ impl TryFrom<MixedHashTree> for LabeledTree<Vec<u8>> {
 
 impl Serialize for MixedHashTree {
     // Serialize a `MixedHashTree` per the CDDL of the public spec.
-    // See https://sdk.dfinity.org/docs/interface-spec/index.html#_encoding_of_certificates
+    // See https://internetcomputer.org/docs/current/references/ic-interface-spec#certification-encoding
     #[inline]
     fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
     where
@@ -887,101 +926,23 @@ pub enum Witness {
     Known(),
 }
 
-impl Witness {
-    /// Merges two witnesses produced from the same tree.
-    ///
-    /// Precondition:
-    ///
-    /// ```text
-    ///     ∃ t : Ok(h) = recompute_digest(lhs, t)
-    ///         ∧ Ok(h) = recompute_digest(rhs, t)
-    /// ```
-    ///
-    /// Postcondition:
-    ///
-    /// ```text
-    ///     ∀ t : Ok(h) = recompute_digest(lhs, t)
-    ///         ∧ Ok(h) = recompute_digest(rhs, t)
-    ///         ⇒ recompute_digest(merge(lhs, rhs)) == Ok(h)
-    /// ```
-    ///
-    /// This function errors if the structure of the passed [`Witness`]s
-    /// is inconsistent and produces an invalid [`Witness`] if the
-    /// precondition is otherwise not met.
-    ///
-    /// # Errors
-    ///
-    /// * If the recursion depth is too large.
-    /// * If `lhs` and `rhs` do not match.
-    pub fn merge(lhs: Self, rhs: Self) -> Result<Self, MergeError<Witness>> {
-        fn merge_impl(
-            lhs: Witness,
-            rhs: Witness,
-            depth: usize,
-        ) -> Result<Witness, MergeError<Witness>> {
-            use Witness::*;
-
-            if depth > MAX_HASH_TREE_DEPTH {
-                return Err(MergeError::<Witness>::TooDeepRecursion(
-                    MAX_HASH_TREE_DEPTH as u32,
-                ));
-            }
-
-            let result = match (lhs, rhs) {
-                (Pruned { .. }, r) => r,
-                (l, Pruned { .. }) => l,
-                (Known(), Known()) => Known(),
-                (
-                    Fork {
-                        left_tree: ll,
-                        right_tree: lr,
-                    },
-                    Fork {
-                        left_tree: rl,
-                        right_tree: rr,
-                    },
-                ) => Fork {
-                    left_tree: Box::new(merge_impl(*ll, *rl, depth + 1)?),
-                    right_tree: Box::new(merge_impl(*lr, *rr, depth + 1)?),
-                },
-                (
-                    Node {
-                        label,
-                        sub_witness: lw,
-                    },
-                    Node {
-                        sub_witness: rw, ..
-                    },
-                ) => Node {
-                    label,
-                    sub_witness: Box::new(merge_impl(*lw, *rw, depth + 1)?),
-                },
-                (l, r) => return Err(MergeError::<Witness>::InconsistentWitnesses(l, r)),
-            };
-            Ok(result)
-        }
-
-        merge_impl(lhs, rhs, 1)
-    }
-}
-
 fn write_witness(witness: &Witness, level: u8, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    let indent =
-        String::from_utf8(vec![b' '; (level * 8) as usize]).expect("String was not valid utf8");
+    let indent = String::from_utf8(vec![b' '; (level.saturating_mul(8)) as usize])
+        .expect("String was not valid utf8");
     match witness {
         Witness::Known() => writeln!(f, "{}** KNOWN **", indent),
         Witness::Pruned { digest } => writeln!(f, "{}\\__pruned:{:?}", indent, digest),
         Witness::Node { label, sub_witness } => {
             writeln!(f, "{}+-- node:{:?}", indent, label)?;
-            write_witness(sub_witness, level + 1, f)
+            write_witness(sub_witness, level.saturating_add(1), f)
         }
         Witness::Fork {
             left_tree,
             right_tree,
         } => {
             writeln!(f, "{}+-- fork:", indent)?;
-            write_witness(left_tree, level + 1, f)?;
-            write_witness(right_tree, level + 1, f)
+            write_witness(left_tree, level.saturating_add(1), f)?;
+            write_witness(right_tree, level.saturating_add(1), f)
         }
     }
 }
@@ -1008,18 +969,30 @@ pub trait WitnessGenerator {
     /// an error is returned.
     ///
     /// Does not `panic!`.
-    fn witness(&self, partial_tree: &LabeledTree<Vec<u8>>) -> Result<Witness, TreeHashError>;
+    fn witness(
+        &self,
+        partial_tree: &LabeledTree<Vec<u8>>,
+    ) -> Result<Witness, WitnessGenerationError<Witness>>;
 
     fn mixed_hash_tree(
         &self,
         partial_tree: &LabeledTree<Vec<u8>>,
-    ) -> Result<MixedHashTree, TreeHashError>;
+    ) -> Result<MixedHashTree, WitnessGenerationError<MixedHashTree>>;
+}
+
+/// Error produced by generating a witness of type `W` from [`WitnessGenerator`].
+#[derive(thiserror::Error, Debug, PartialEq, Clone)]
+pub enum WitnessGenerationError<W: WitnessBuilder> {
+    #[error("Generating a witness failed due to too deep recursion (depth={0})")]
+    TooDeepRecursion(u8),
+    #[error("Merging witnesses failed due to their inconsistency at:\nleft={0:?}\nright={1:?}")]
+    MergingInconsistentWitnesses(W, W),
 }
 
 /// `HashTreeBuilder` enables an iterative construction of a [`LabeledTree`],
 /// which can also be accessed in form of a [`HashTree`].
 /// The constructed [`LabeledTree`] is a part of the state of the Builder,
-/// and is build successively by adding leaves and subtrees.
+/// and is built successively by adding leaves and subtrees.
 /// During the construction, the builder maintains an auxiliary state
 /// that describes the current position in the [`LabeledTree`] under
 /// construction. The auxiliary state is a list of nodes that corresponds to the

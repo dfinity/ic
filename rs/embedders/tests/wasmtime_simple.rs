@@ -19,7 +19,7 @@ pub fn wasmtime_instantiate_and_call_run(wasm: &BinaryEncodedWasm) {
             r#"
             (module
                 (func (export "out_of_instructions"))
-                (func (export "update_available_memory") (param i32 i32 i32) (result i32)
+                (func (export "try_grow_wasm_memory") (param i32 i32) (result i32)
                     i32.const 42
                 )
                 (func (export "try_grow_stable_memory") (param i64 i64 i32) (result i64)
@@ -34,7 +34,7 @@ pub fn wasmtime_instantiate_and_call_run(wasm: &BinaryEncodedWasm) {
         let i = wasmtime.instantiate(&HashMap::new(), &imports_wasm);
         let mut e = HashMap::new();
         e.insert("out_of_instructions".to_string(), 0);
-        e.insert("update_available_memory".to_string(), 1);
+        e.insert("try_grow_wasm_memory".to_string(), 1);
         e.insert("try_grow_stable_memory".to_string(), 2);
         e.insert("deallocate_pages".to_string(), 3);
         e.insert("internal_trap".to_string(), 4);
@@ -98,7 +98,7 @@ pub type ModuleRegistry = HashMap<String, (Instance, HashMap<String, usize>)>;
 #[allow(clippy::new_without_default)]
 impl WasmtimeSimple {
     pub fn new() -> Self {
-        let engine = Engine::new(&WasmtimeEmbedder::initial_wasmtime_config(
+        let engine = Engine::new(&WasmtimeEmbedder::wasmtime_execution_config(
             &EmbeddersConfig::default(),
         ))
         .expect("Failed to initialize Wasmtime engine");

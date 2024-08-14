@@ -1,7 +1,7 @@
-use crate::public_key_store::PublicKeyGenerationTimestamps;
 use crate::public_key_store::{
     PublicKeyAddError, PublicKeyRetainError, PublicKeySetOnceError, PublicKeyStore,
 };
+use crate::public_key_store::{PublicKeyGenerationTimestamps, PublicKeyRetainCheckError};
 use ic_logger::{debug, ReplicaLogger};
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
@@ -64,7 +64,7 @@ impl ProtoPublicKeyStore {
     fn write_node_public_keys_proto_to_disk(&mut self) -> Result<(), io::Error> {
         // Setting the version to CURRENT_PKS_VERSION to unify all stores in production.
         self.keys.version = CURRENT_PKS_VERSION;
-        ic_utils::fs::write_protobuf_using_tmp_file(&self.proto_file, &self.keys)
+        ic_sys::fs::write_protobuf_using_tmp_file(&self.proto_file, &self.keys)
     }
 }
 
@@ -155,7 +155,7 @@ impl PublicKeyStore for ProtoPublicKeyStore {
             .map_err(PublicKeyAddError::Io)
     }
 
-    fn retain_most_recent_idkg_public_keys_up_to_inclusive(
+    fn retain_idkg_public_keys_since(
         &mut self,
         oldest_public_key_to_keep: &PublicKeyProto,
     ) -> Result<bool, PublicKeyRetainError> {
@@ -166,7 +166,7 @@ impl PublicKeyStore for ProtoPublicKeyStore {
         for (index, public_key_proto) in self.keys.idkg_dealing_encryption_pks.iter().enumerate() {
             if !keep && public_key_proto.equal_ignoring_timestamp(oldest_public_key_to_keep) {
                 if index == 0 {
-                    //oldest public key is the first key -> NOP
+                    //oldest public key is the first key -> keystore will not be modified
                     return Ok(false);
                 }
                 keep = true;
@@ -197,6 +197,23 @@ impl PublicKeyStore for ProtoPublicKeyStore {
         self.write_node_public_keys_proto_to_disk()
             .map_err(PublicKeyRetainError::Io)?;
         Ok(true)
+    }
+
+    fn would_retain_idkg_public_keys_modify_pubkey_store(
+        &self,
+        oldest_public_key_to_keep: &PublicKeyProto,
+    ) -> Result<bool, PublicKeyRetainCheckError> {
+        for (index, public_key_proto) in self.keys.idkg_dealing_encryption_pks.iter().enumerate() {
+            if public_key_proto.equal_ignoring_timestamp(oldest_public_key_to_keep) {
+                if index == 0 {
+                    // oldest public key is the first key -> keystore will not be modified
+                    return Ok(false);
+                }
+                // oldest public key is not the first key -> keystore will be modified
+                return Ok(true);
+            }
+        }
+        Err(PublicKeyRetainCheckError::OldestPublicKeyNotFound)
     }
 
     fn idkg_dealing_encryption_pubkeys(&self) -> Vec<PublicKeyProto> {

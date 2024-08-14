@@ -1,0 +1,25 @@
+[package]
+name = "ic-validator-ingress-message-test-canister"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+build-info = { workspace = true }
+
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
+ic-types = { path = "../../../types/types" }
+ic-validator-ingress-message = { path = ".." }
+
+[build-dependencies]
+build-info-build = { workspace = true }
+
+[dev-dependencies]
+canister-test = { path = "../../../rust_canisters/canister_test" }
+ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-types = { path = "../../../types/types" }
+tokio = { workspace = true }

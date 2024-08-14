@@ -1,0 +1,13 @@
+[package]
+name = "ic-interfaces-mocks"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-interfaces = { path = "../" }
+ic-protobuf = { path = "../../protobuf" }
+ic-types = { path = "../../types/types" }
+mockall = { workspace = true }

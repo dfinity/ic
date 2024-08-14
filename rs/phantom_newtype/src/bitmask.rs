@@ -131,7 +131,7 @@ impl<Unit, Repr> BitMask<Unit, Repr>
 where
     Unit: DisplayerOf<BitMask<Unit, Repr>>,
 {
-    /// `display` provides a machanism to implement a custom display
+    /// `display` provides a mechanism to implement a custom display
     /// for phantom types.
     ///
     /// ```
@@ -176,7 +176,7 @@ impl<Unit, Repr: Copy> From<Repr> for BitMask<Unit, Repr> {
 
 impl<Unit, Repr: Copy> Clone for BitMask<Unit, Repr> {
     fn clone(&self) -> Self {
-        BitMask(self.0, PhantomData)
+        *self
     }
 }
 

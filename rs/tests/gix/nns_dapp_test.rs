@@ -16,23 +16,20 @@ end::catalog[] */
 use anyhow::{bail, Result};
 
 use candid::Principal;
-use hyper::client::connect::HttpConnector;
-use hyper::Client;
-use hyper_tls::HttpsConnector;
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::{
+use ic_system_test_driver::driver::{
     boundary_node::{BoundaryNode, BoundaryNodeVm},
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
-    test_env_api::{retry, secs, HasTopologySnapshot, NnsCanisterWasmStrategy},
+    test_env_api::{secs, HasTopologySnapshot},
 };
+use ic_system_test_driver::systest;
+use ic_system_test_driver::util::block_on;
 use ic_tests::nns_dapp::{
-    install_ii_and_nns_dapp, nns_dapp_customizations, set_authorized_subnets,
+    install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
 };
-use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
-use ic_tests::systest;
-use ic_tests::util::block_on;
 use libflate::gzip::Decoder;
 use std::io::Read;
 
@@ -54,7 +51,6 @@ pub fn setup(env: TestEnv) {
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         nns_dapp_customizations(),
     );
     BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
@@ -69,52 +65,55 @@ pub fn setup(env: TestEnv) {
 
 fn get_html(env: &TestEnv, farm_url: &str, canister_id: Principal, dapp_anchor: &str) {
     let log = env.logger();
-    retry(log.clone(), secs(600), secs(30), || {
-        block_on(async {
-            let mut http_connector = HttpConnector::new();
-            http_connector.enforce_http(false);
-            let mut https_connector = HttpsConnector::new_with_connector(http_connector);
-            https_connector.https_only(true);
-            let client = Client::builder().build::<_, hyper::Body>(https_connector);
+    let dapp_url = &format!("https://{}.{}", canister_id, farm_url);
+    ic_system_test_driver::retry_with_msg!(
+        format!("get html from {}", dapp_url),
+        log.clone(),
+        secs(600),
+        secs(30),
+        || {
+            block_on(async {
+                let client = reqwest::Client::builder()
+                    .use_rustls_tls()
+                    .https_only(true)
+                    .http1_only()
+                    .build()?;
 
-            let dapp_url = format!("https://{}.{}", canister_id, farm_url);
-            let req = hyper::Request::builder()
-                .method(hyper::Method::GET)
-                .uri(dapp_url)
-                .header("Accept-Encoding", "gzip")
-                .header("User-Agent", "systest") // to prevent getting the service worker
-                .body(hyper::Body::from(""))?;
+                let resp = client
+                    .get(dapp_url)
+                    .header("Accept-Encoding", "gzip")
+                    .header("User-Agent", "systest") // to prevent getting the service worker
+                    .send()
+                    .await?;
 
-            let resp = client.request(req).await?;
+                let body_bytes = resp.bytes().await?.to_vec();
+                if let Ok(body) = String::from_utf8(body_bytes.clone()) {
+                    if body.contains("503 Service Temporarily Unavailable") {
+                        bail!("BN is not ready yet!");
+                    } else if body.contains(dapp_anchor) {
+                        return Ok(());
+                    } else {
+                        panic!("Unexpected response from BN!");
+                    }
+                };
 
-            let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
-            if let Ok(body) = String::from_utf8(body_bytes.to_vec()) {
-                if body.contains("503 Service Temporarily Unavailable") {
-                    bail!("BN is not ready yet!");
-                } else if body.contains(dapp_anchor) {
-                    return Ok(());
-                } else {
-                    panic!("Unexpected response from BN!");
-                }
-            };
+                let mut decoder = Decoder::new(&body_bytes[..]).unwrap();
+                let mut decoded_data = Vec::new();
+                decoder.read_to_end(&mut decoded_data).unwrap();
 
-            let body_vec = body_bytes.to_vec();
-            let mut decoder = Decoder::new(&body_vec[..]).unwrap();
-            let mut decoded_data = Vec::new();
-            decoder.read_to_end(&mut decoded_data).unwrap();
+                let body = String::from_utf8(decoded_data.to_vec()).unwrap();
+                assert!(body.contains(dapp_anchor));
 
-            let body = String::from_utf8(decoded_data.to_vec()).unwrap();
-            assert!(body.contains(dapp_anchor));
-
-            Ok(())
-        })
-    })
+                Ok(())
+            })
+        }
+    )
     .unwrap_or_else(|_| panic!("{} should deliver a proper HTML page!", canister_id));
 }
 
 pub fn test(env: TestEnv) {
     let (ii_canister_id, nns_dapp_canister_id) =
-        install_ii_and_nns_dapp(&env, BOUNDARY_NODE_NAME, None);
+        install_ii_nns_dapp_and_subnet_rental(&env, BOUNDARY_NODE_NAME, None);
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
         .unwrap()
@@ -123,7 +122,7 @@ pub fn test(env: TestEnv) {
     let farm_url = boundary_node.get_playnet().unwrap();
 
     let ii_anchor = "<title>Internet Identity</title>";
-    let nns_dapp_anchor = "<title>Network Nervous System frontend dapp</title>";
+    let nns_dapp_anchor = "<title>NNS Dapp</title>";
     get_html(&env, &farm_url, ii_canister_id, ii_anchor);
     get_html(&env, &farm_url, nns_dapp_canister_id, nns_dapp_anchor);
 }

@@ -1,31 +1,34 @@
 // This module defines common helper functions.
 // TODO(RUN-60): Move helper functions here.
 
-use ic_registry_subnet_type::SubnetType;
-use lazy_static::lazy_static;
-use std::sync::atomic::{AtomicU64, Ordering};
-
+use crate::execution_environment::ExecutionResponse;
+use crate::{as_round_instructions, metrics::CallTreeMetrics, ExecuteMessageResult, RoundLimits};
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_embedders::wasm_executor::{CanisterStateChanges, SliceExecutionOutput};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
 };
-use ic_interfaces::messages::{CanisterCall, CanisterCallOrTask};
 use ic_logger::{error, fatal, warn, ReplicaLogger};
+use ic_management_canister_types::CanisterStatusType;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
     SystemState,
 };
-use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
+use ic_system_api::sandbox_safe_system_state::{RequestMetadataStats, SystemStateChanges};
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
-use ic_types::messages::{CallContextId, CallbackId, MessageId, Payload, RejectContext, Response};
+use ic_types::messages::{
+    CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, Payload, RejectContext,
+    Response,
+};
 use ic_types::methods::{Callback, WasmMethod};
-use ic_types::{Cycles, MemoryAllocation, NumInstructions, Time, UserId};
-
-use crate::execution_environment::ExecutionResponse;
-use crate::{as_round_instructions, ExecuteMessageResult, RoundLimits};
+use ic_types::time::CoarseTime;
+use ic_types::{Cycles, NumInstructions, Time, UserId};
+use lazy_static::lazy_static;
+use prometheus::IntCounter;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 lazy_static! {
     /// Track how many system task errors have been encountered
@@ -58,6 +61,7 @@ pub(crate) fn action_to_response(
     call_origin: CallOrigin,
     time: Time,
     log: &ReplicaLogger,
+    ingress_with_cycles_error: &IntCounter,
 ) -> ExecutionResponse {
     match call_origin {
         CallOrigin::Ingress(user_id, message_id) => action_to_ingress_response(
@@ -67,9 +71,10 @@ pub(crate) fn action_to_response(
             message_id,
             time,
             log,
+            ingress_with_cycles_error,
         ),
-        CallOrigin::CanisterUpdate(caller_canister_id, callback_id) => {
-            action_to_request_response(canister, action, caller_canister_id, callback_id)
+        CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline) => {
+            action_to_request_response(canister, action, caller_canister_id, callback_id, deadline)
         }
         CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => fatal!(
             log,
@@ -90,50 +95,42 @@ pub(crate) fn action_to_request_response(
     action: CallContextAction,
     originator: CanisterId,
     reply_callback_id: CallbackId,
+    deadline: CoarseTime,
 ) -> ExecutionResponse {
-    let response_payload_and_refund = match action {
-        CallContextAction::NotYetResponded | CallContextAction::AlreadyResponded => None,
-        CallContextAction::NoResponse { refund } => Some((
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterError,
-                message: "No response".to_string(),
-            }),
-            refund,
-        )),
+    let (response_payload, refund) = match action {
+        CallContextAction::NotYetResponded | CallContextAction::AlreadyResponded => {
+            return ExecutionResponse::Empty
+        }
 
-        CallContextAction::Reject { payload, refund } => Some((
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterReject,
-                message: payload,
-            }),
+        CallContextAction::NoResponse { refund } => (
+            Payload::Reject(RejectContext::new(RejectCode::CanisterError, "No response")),
             refund,
-        )),
+        ),
 
-        CallContextAction::Reply { payload, refund } => Some((Payload::Data(payload), refund)),
+        CallContextAction::Reject { payload, refund } => (
+            Payload::Reject(RejectContext::new(RejectCode::CanisterReject, payload)),
+            refund,
+        ),
+
+        CallContextAction::Reply { payload, refund } => (Payload::Data(payload), refund),
 
         CallContextAction::Fail { error, refund } => {
             let user_error = error.into_user_error(&canister.canister_id());
-            Some((
-                Payload::Reject(RejectContext {
-                    code: user_error.reject_code(),
-                    message: user_error.to_string(),
-                }),
+            (
+                Payload::Reject(RejectContext::new(user_error.reject_code(), user_error)),
                 refund,
-            ))
+            )
         }
     };
 
-    if let Some((response_payload, refund)) = response_payload_and_refund {
-        ExecutionResponse::Request(Response {
-            originator,
-            respondent: canister.canister_id(),
-            originator_reply_callback: reply_callback_id,
-            refund,
-            response_payload,
-        })
-    } else {
-        ExecutionResponse::Empty
-    }
+    ExecutionResponse::Request(Response {
+        originator,
+        respondent: canister.canister_id(),
+        originator_reply_callback: reply_callback_id,
+        refund,
+        response_payload,
+        deadline,
+    })
 }
 
 pub(crate) fn action_to_ingress_response(
@@ -143,6 +140,7 @@ pub(crate) fn action_to_ingress_response(
     message_id: MessageId,
     time: Time,
     log: &ReplicaLogger,
+    ingress_with_cycles_error: &IntCounter,
 ) -> ExecutionResponse {
     let mut refund_amount = Cycles::zero();
     let receiver = canister_id.get();
@@ -194,7 +192,9 @@ pub(crate) fn action_to_ingress_response(
         }),
         CallContextAction::AlreadyResponded => None,
     };
+    debug_assert!(refund_amount.is_zero());
     if !refund_amount.is_zero() {
+        ingress_with_cycles_error.inc();
         warn!(
             log,
             "[EXC-BUG] No funds can be included with an ingress message: user {}, canister_id {}, message_id {}.",
@@ -240,13 +240,14 @@ pub(crate) fn wasm_result_to_query_response(
         CallOrigin::Ingress(user_id, message_id) => {
             wasm_result_to_ingress_response(result, canister, user_id, message_id, time)
         }
-        CallOrigin::CanisterUpdate(caller_canister_id, callback_id) => {
+        CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline) => {
             let response = Response {
                 originator: caller_canister_id,
                 respondent: canister.canister_id(),
                 originator_reply_callback: callback_id,
                 refund,
                 response_payload: Payload::from(result),
+                deadline,
             };
             ExecutionResponse::Request(response)
         }
@@ -335,13 +336,16 @@ pub fn get_call_context_and_callback(
     canister: &CanisterState,
     response: &Response,
     logger: &ReplicaLogger,
+    unexpected_response_error: &IntCounter,
 ) -> Option<(Callback, CallbackId, CallContext, CallContextId)> {
+    debug_assert_ne!(canister.status(), CanisterStatusType::Stopped);
     let call_context_manager = match canister.status() {
         CanisterStatusType::Stopped => {
             // A canister by definition can only be stopped when no open call contexts.
             // Hence, if we receive a response for a stopped canister then that is
             // a either a bug in the code or potentially a faulty (or
             // malicious) subnet generating spurious messages.
+            unexpected_response_error.inc();
             error!(
                 logger,
                 "[EXC-BUG] Stopped canister got a response.  originator {} respondent {}.",
@@ -358,10 +362,12 @@ pub fn get_call_context_and_callback(
 
     let callback_id = response.originator_reply_callback;
 
-    let callback = match call_context_manager.peek_callback(callback_id) {
+    debug_assert!(call_context_manager.callback(callback_id).is_some());
+    let callback = match call_context_manager.callback(callback_id) {
         Some(callback) => callback.clone(),
         None => {
             // Received an unknown callback ID. Nothing to do.
+            unexpected_response_error.inc();
             error!(
                 logger,
                 "[EXC-BUG] Canister got a response with unknown callback ID {}.  originator {} respondent {}.",
@@ -374,10 +380,12 @@ pub fn get_call_context_and_callback(
     };
 
     let call_context_id = callback.call_context_id;
+    debug_assert!(call_context_manager.call_context(call_context_id).is_some());
     let call_context = match call_context_manager.call_context(call_context_id) {
         Some(call_context) => call_context.clone(),
         None => {
             // Unknown call context. Nothing to do.
+            unexpected_response_error.inc();
             error!(
                 logger,
                 "[EXC-BUG] Canister got a response for unknown request.  originator {} respondent {} callback id {}.",
@@ -394,8 +402,6 @@ pub fn get_call_context_and_callback(
 
 pub fn update_round_limits(round_limits: &mut RoundLimits, slice: &SliceExecutionOutput) {
     round_limits.instructions -= as_round_instructions(slice.executed_instructions);
-    round_limits.execution_complexity =
-        &round_limits.execution_complexity - &slice.execution_complexity;
 }
 
 /// Tries to apply the given canister changes to the given system state and
@@ -410,17 +416,14 @@ fn try_apply_canister_state_changes(
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
     log: &ReplicaLogger,
-) -> HypervisorResult<()> {
-    match &system_state.memory_allocation {
-        MemoryAllocation::BestEffort => subnet_available_memory
-            .try_decrement(
-                output.allocated_bytes,
-                output.allocated_message_bytes,
-                NumBytes::from(0),
-            )
-            .map_err(|_| HypervisorError::OutOfMemory)?,
-        MemoryAllocation::Reserved(_) => (),
-    }
+) -> HypervisorResult<RequestMetadataStats> {
+    subnet_available_memory
+        .try_decrement(
+            output.allocated_bytes,
+            output.allocated_message_bytes,
+            NumBytes::from(0),
+        )
+        .map_err(|_| HypervisorError::OutOfMemory)?;
 
     system_state_changes.apply_changes(time, system_state, network_topology, subnet_id, log)
 }
@@ -444,6 +447,9 @@ pub fn apply_canister_state_changes(
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
     log: &ReplicaLogger,
+    state_changes_error: &IntCounter,
+    call_tree_metrics: &dyn CallTreeMetrics,
+    call_context_creation_time: Time,
 ) {
     if let Some(CanisterStateChanges {
         globals,
@@ -466,7 +472,7 @@ pub fn apply_canister_state_changes(
             subnet_id,
             log,
         ) {
-            Ok(()) => {
+            Ok(request_stats) => {
                 execution_state.wasm_memory = wasm_memory;
                 execution_state.stable_memory = stable_memory;
                 execution_state.exported_globals = globals;
@@ -475,11 +481,14 @@ pub fn apply_canister_state_changes(
                 // i.e., `(start)`, `canister_init`, `canister_pre_upgrade`, and `canister_post_upgrade`)
                 // call this `apply_canister_state_change` to finish execution.
                 system_state.canister_version += 1;
+
+                call_tree_metrics.observe(request_stats, call_context_creation_time, time);
             }
             Err(err) => {
+                debug_assert_eq!(err, HypervisorError::OutOfMemory);
                 match &err {
                     HypervisorError::WasmEngineError(err) => {
-                        // TODO(RUN-299): Increment a critical error counter here.
+                        state_changes_error.inc();
                         error!(
                             log,
                             "[EXC-BUG]: Failed to apply state changes due to a bug: {}", err
@@ -489,7 +498,7 @@ pub fn apply_canister_state_changes(
                         warn!(log, "Failed to apply state changes due to DTS: {}", err)
                     }
                     _ => {
-                        // TODO(RUN-299): Increment a critical error counter here.
+                        state_changes_error.inc();
                         error!(
                             log,
                             "[EXC-BUG]: Failed to apply state changes due to an unexpected error: {}", err
@@ -521,6 +530,7 @@ pub(crate) fn finish_call_with_error(
                 originator_reply_callback: request.sender_reply_callback,
                 refund: request.payment,
                 response_payload: Payload::from(Err(user_error)),
+                deadline: request.deadline,
             };
             ExecutionResponse::Request(response)
         }
@@ -560,6 +570,7 @@ pub(crate) fn finish_call_with_error(
         response,
         instructions_used,
         heap_delta: NumBytes::from(0),
+        call_duration: Some(Duration::from_secs(0)),
     }
 }
 
@@ -573,13 +584,14 @@ mod test {
     use ic_logger::ReplicaLogger;
     use ic_replicated_state::{CanisterState, SchedulerState, SystemState};
     use ic_types::messages::CallbackId;
+    use ic_types::messages::NO_DEADLINE;
     use ic_types::Cycles;
     use ic_types::Time;
 
     #[test]
-    fn test_wasm_result_to_query_response_refunds_correclty() {
+    fn test_wasm_result_to_query_response_refunds_correctly() {
         let scheduler_state = SchedulerState::default();
-        let system_state = SystemState::new_running(
+        let system_state = SystemState::new_running_for_testing(
             CanisterId::from_u64(42),
             CanisterId::from(100u64).into(),
             Cycles::new(1 << 36),
@@ -599,6 +611,7 @@ mod test {
             ic_replicated_state::CallOrigin::CanisterUpdate(
                 CanisterId::from(123u64),
                 CallbackId::new(2),
+                NO_DEADLINE,
             ),
             &log,
             Cycles::from(1000u128),

@@ -18,6 +18,13 @@ fn hash2curve(c: &mut Criterion) {
                 EccPoint::hash_to_point(EccCurveType::K256, input, dst).expect("hash2curve failed");
         })
     });
+
+    c.bench_function("hash to curve Ed25519", |b| {
+        b.iter(|| {
+            let _pt = EccPoint::hash_to_point(EccCurveType::Ed25519, input, dst)
+                .expect("hash2curve failed");
+        })
+    });
 }
 
 criterion_group!(benches, hash2curve);

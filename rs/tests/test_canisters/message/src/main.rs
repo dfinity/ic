@@ -5,7 +5,7 @@ use ic_message::ForwardParams;
 use std::cell::RefCell;
 
 thread_local! {
-    static MSG: RefCell<Option<String>> = RefCell::new(None);
+    static MSG: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
 #[ic_cdk_macros::update]
@@ -32,7 +32,7 @@ pub async fn forward(
         payload,
     }: ForwardParams,
 ) -> Result<Vec<u8>, String> {
-    ic_cdk::api::call::call_raw128(receiver, &method, payload.as_ref(), cycles)
+    ic_cdk::api::call::call_raw128(receiver, &method, &payload, cycles)
         .await
         .map_err(|err| err.1)
 }

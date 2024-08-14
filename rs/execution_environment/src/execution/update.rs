@@ -1,30 +1,32 @@
 // This module defines how update messages and canister tasks are executed.
-// See https://smartcontracts.org/docs/interface-spec/index.html#rule-message-execution
+// See https://internetcomputer.org/docs/interface-spec/index.html#rule-message-execution
 
 use crate::execution::common::{
     action_to_response, apply_canister_state_changes, finish_call_with_error,
     ingress_status_with_processing_state, update_round_limits, validate_message,
 };
 use crate::execution_environment::{
-    ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
+    log_dirty_pages, ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
 };
+use crate::metrics::CallTreeMetrics;
 use ic_base_types::CanisterId;
+use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
-use ic_interfaces::messages::{CanisterCall, CanisterMessageOrTask, CanisterTask};
-use ic_interfaces::messages::{CanisterCallOrTask, CanisterMessage};
 use ic_logger::{info, ReplicaLogger};
-use ic_replicated_state::{CallOrigin, CanisterState};
-use ic_types::messages::CallContextId;
+use ic_management_canister_types::IC_00;
+use ic_replicated_state::{num_bytes_try_from, CallOrigin, CanisterState};
+use ic_system_api::{ApiType, ExecutionParameters};
+use ic_types::messages::{
+    CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
+    CanisterTask, RequestMetadata,
+};
+use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{CanisterTimer, Cycles, NumBytes, NumInstructions, Time};
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
-
-use ic_system_api::{ApiType, ExecutionParameters};
-use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 
 #[cfg(test)]
 mod tests;
@@ -41,6 +43,8 @@ pub fn execute_update(
     round: RoundContext,
     round_limits: &mut RoundLimits,
     subnet_size: usize,
+    call_tree_metrics: &dyn CallTreeMetrics,
+    log_dirty_pages: FlagStatus,
 ) -> ExecuteMessageResult {
     let (clean_canister, prepaid_execution_cycles, resuming_aborted) =
         match prepaid_execution_cycles {
@@ -48,13 +52,20 @@ pub fn execute_update(
             None => {
                 let mut canister = clean_canister;
                 let memory_usage = canister.memory_usage();
+                let message_memory_usage = canister.message_memory_usage();
+                let reveal_top_up = call_or_task
+                    .caller()
+                    .map(|caller| canister.controllers().contains(&caller))
+                    .unwrap_or_default();
                 let prepaid_execution_cycles =
                     match round.cycles_account_manager.prepay_execution_cycles(
                         &mut canister.system_state,
                         memory_usage,
+                        message_memory_usage,
                         execution_parameters.compute_allocation,
                         execution_parameters.instruction_limits.message(),
                         subnet_size,
+                        reveal_top_up,
                     ) {
                         Ok(cycles) => cycles,
                         Err(err) => {
@@ -77,10 +88,19 @@ pub fn execute_update(
         clean_canister.system_state.freeze_threshold,
         clean_canister.system_state.memory_allocation,
         clean_canister.memory_usage(),
+        clean_canister.message_memory_usage(),
         clean_canister.compute_allocation(),
         subnet_size,
         clean_canister.system_state.reserved_balance(),
     );
+
+    let request_metadata = match &call_or_task {
+        CanisterCallOrTask::Call(CanisterCall::Request(request)) => match &request.metadata {
+            Some(metadata) => metadata.for_downstream_call(),
+            None => RequestMetadata::for_new_call_tree(time),
+        },
+        _ => RequestMetadata::for_new_call_tree(time),
+    };
 
     let original = OriginalContext {
         call_origin: CallOrigin::from(&call_or_task),
@@ -90,8 +110,10 @@ pub fn execute_update(
         execution_parameters,
         subnet_size,
         time,
+        request_metadata,
         freezing_threshold,
         canister_id: clean_canister.canister_id(),
+        log_dirty_pages,
     };
 
     let helper = match UpdateHelper::new(&clean_canister, &original) {
@@ -127,16 +149,25 @@ pub fn execute_update(
             time,
             helper.call_context_id(),
         ),
+        CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) => ApiType::system_task(
+            IC_00.get(),
+            SystemMethod::CanisterOnLowWasmMemory,
+            time,
+            helper.call_context_id(),
+        ),
     };
 
     let memory_usage = helper.canister().memory_usage();
+    let message_memory_usage = helper.canister().message_memory_usage();
     let result = round.hypervisor.execute_dts(
         api_type,
         helper.canister().execution_state.as_ref().unwrap(),
         &helper.canister().system_state,
         memory_usage,
+        message_memory_usage,
         original.execution_parameters.clone(),
         FuncRef::Method(original.method.clone()),
+        original.request_metadata.clone(),
         round_limits,
         round.network_topology,
     );
@@ -185,6 +216,7 @@ pub fn execute_update(
                 original,
                 round,
                 round_limits,
+                call_tree_metrics,
             )
         }
     }
@@ -202,9 +234,11 @@ fn finish_err(
 ) -> ExecuteMessageResult {
     let mut canister = clean_canister;
 
-    canister
-        .system_state
-        .apply_ingress_induction_cycles_debit(canister.canister_id(), round.log);
+    canister.system_state.apply_ingress_induction_cycles_debit(
+        canister.canister_id(),
+        round.log,
+        round.counters.charging_from_balance_error,
+    );
 
     let instruction_limit = original.execution_parameters.instruction_limits.message();
     round.cycles_account_manager.refund_unused_execution_cycles(
@@ -212,7 +246,7 @@ fn finish_err(
         instructions_left,
         instruction_limit,
         original.prepaid_execution_cycles,
-        round.execution_refund_error_counter,
+        round.counters.execution_refund_error,
         original.subnet_size,
         round.log,
     );
@@ -239,8 +273,10 @@ struct OriginalContext {
     execution_parameters: ExecutionParameters,
     subnet_size: usize,
     time: Time,
+    request_metadata: RequestMetadata,
     freezing_threshold: Cycles,
     canister_id: CanisterId,
+    log_dirty_pages: FlagStatus,
 }
 
 /// Contains fields of `UpdateHelper` that are necessary for resuming an update
@@ -266,6 +302,29 @@ impl UpdateHelper {
 
         validate_message(&canister, &original.method)?;
 
+        if let CanisterCallOrTask::Call(_) = original.call_or_task {
+            // TODO(RUN-957): Enforce the limit in heartbeat and timer after
+            // canister logging ships by removing the `if` above.
+
+            let wasm_memory_usage = canister
+                .execution_state
+                .as_ref()
+                .map_or(NumBytes::new(0), |es| {
+                    num_bytes_try_from(es.wasm_memory.size).unwrap()
+                });
+
+            if let Some(wasm_memory_limit) = clean_canister.system_state.wasm_memory_limit {
+                // A Wasm memory limit of 0 means unlimited.
+                if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
+                    let err = HypervisorError::WasmMemoryLimitExceeded {
+                        bytes: wasm_memory_usage,
+                        limit: wasm_memory_limit,
+                    };
+                    return Err(err.into_user_error(&canister.canister_id()));
+                }
+            }
+        }
+
         let call_context_id = canister
             .system_state
             .call_context_manager_mut()
@@ -274,12 +333,15 @@ impl UpdateHelper {
                 original.call_origin.clone(),
                 original.call_or_task.cycles(),
                 original.time,
+                original.request_metadata.clone(),
             );
 
         let initial_cycles_balance = canister.system_state.balance();
 
         match original.call_or_task {
-            CanisterCallOrTask::Call(_) | CanisterCallOrTask::Task(CanisterTask::Heartbeat) => {}
+            CanisterCallOrTask::Call(_)
+            | CanisterCallOrTask::Task(CanisterTask::Heartbeat)
+            | CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) => {}
             CanisterCallOrTask::Task(CanisterTask::GlobalTimer) => {
                 // The global timer is one-off.
                 canister.system_state.global_timer = CanisterTimer::Inactive;
@@ -325,7 +387,7 @@ impl UpdateHelper {
     }
 
     /// Finishes an update call execution that could have run multiple rounds
-    /// due to determnistic time slicing.
+    /// due to deterministic time slicing.
     fn finish(
         mut self,
         mut output: WasmExecutionOutput,
@@ -334,22 +396,33 @@ impl UpdateHelper {
         original: OriginalContext,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
+        self.canister.append_log(&mut output.canister_log);
         self.canister
             .system_state
-            .apply_ingress_induction_cycles_debit(self.canister.canister_id(), round.log);
+            .apply_ingress_induction_cycles_debit(
+                self.canister.canister_id(),
+                round.log,
+                round.counters.charging_from_balance_error,
+            );
 
         // Check that the cycles balance does not go below the freezing
         // threshold after applying the Wasm execution state changes.
         if let Some(state_changes) = &canister_state_changes {
             let old_balance = self.canister.system_state.balance();
             let requested = state_changes.system_state_changes.removed_cycles();
+            let reveal_top_up = self
+                .canister
+                .controllers()
+                .contains(&original.call_origin.get_principal());
             if old_balance < requested + original.freezing_threshold {
                 let err = CanisterOutOfCyclesError {
                     canister_id: self.canister.canister_id(),
                     available: old_balance,
                     requested,
                     threshold: original.freezing_threshold,
+                    reveal_top_up,
                 };
                 let err = UserError::new(ErrorCode::CanisterOutOfCycles, err);
                 info!(
@@ -359,6 +432,7 @@ impl UpdateHelper {
                     clean_canister.canister_id(),
                     err,
                 );
+                // Perf counter: no need to update the call context, as it won't be saved.
                 return finish_err(
                     clean_canister,
                     output.num_instructions_left,
@@ -379,36 +453,17 @@ impl UpdateHelper {
             round.network_topology,
             round.hypervisor.subnet_id(),
             round.log,
+            round.counters.state_changes_error,
+            call_tree_metrics,
+            original.time,
         );
+
         let heap_delta = if output.wasm_result.is_ok() {
-            NumBytes::from((output.instance_stats.dirty_pages * ic_sys::PAGE_SIZE) as u64)
+            NumBytes::from((output.instance_stats.dirty_pages() * ic_sys::PAGE_SIZE) as u64)
         } else {
             NumBytes::from(0)
         };
 
-        let action = self
-            .canister
-            .system_state
-            .call_context_manager_mut()
-            .unwrap()
-            .on_canister_result(self.call_context_id, None, output.wasm_result);
-
-        let response = action_to_response(
-            &self.canister,
-            action,
-            original.call_origin,
-            round.time,
-            round.log,
-        );
-        round.cycles_account_manager.refund_unused_execution_cycles(
-            &mut self.canister.system_state,
-            output.num_instructions_left,
-            original.execution_parameters.instruction_limits.message(),
-            original.prepaid_execution_cycles,
-            round.execution_refund_error_counter,
-            original.subnet_size,
-            round.log,
-        );
         let instructions_used = NumInstructions::from(
             original
                 .execution_parameters
@@ -417,11 +472,53 @@ impl UpdateHelper {
                 .get()
                 .saturating_sub(output.num_instructions_left.get()),
         );
+        let (action, call_context) = self
+            .canister
+            .system_state
+            .call_context_manager_mut()
+            .unwrap()
+            .on_canister_result(
+                self.call_context_id,
+                None,
+                output.wasm_result,
+                instructions_used,
+            );
+
+        let response = action_to_response(
+            &self.canister,
+            action,
+            original.call_origin,
+            round.time,
+            round.log,
+            round.counters.ingress_with_cycles_error,
+        );
+        round.cycles_account_manager.refund_unused_execution_cycles(
+            &mut self.canister.system_state,
+            output.num_instructions_left,
+            original.execution_parameters.instruction_limits.message(),
+            original.prepaid_execution_cycles,
+            round.counters.execution_refund_error,
+            original.subnet_size,
+            round.log,
+        );
+
+        if original.log_dirty_pages == FlagStatus::Enabled {
+            log_dirty_pages(
+                round.log,
+                &original.canister_id,
+                &original.method.name(),
+                output.instance_stats.dirty_pages(),
+                instructions_used,
+            );
+        }
+
         ExecuteMessageResult::Finished {
             canister: self.canister,
             response,
             instructions_used,
             heap_delta,
+            call_duration: call_context
+                .map(|call_context| round.time.saturating_duration_since(call_context.time())),
         }
     }
 
@@ -448,6 +545,7 @@ impl PausedExecution for PausedCallExecution {
         round: RoundContext,
         round_limits: &mut RoundLimits,
         _subnet_size: usize,
+        call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
         info!(
             round.log,
@@ -506,17 +604,19 @@ impl PausedExecution for PausedCallExecution {
                 }
             }
             WasmExecutionResult::Finished(slice, output, state_changes) => {
+                let instructions_consumed = self
+                    .original
+                    .execution_parameters
+                    .instruction_limits
+                    .message()
+                    - output.num_instructions_left;
                 info!(
                     round.log,
                     "[DTS] Finished {:?} execution of canister {} after {} / {} instructions.",
                     self.original.method,
                     clean_canister.canister_id(),
-                    slice.executed_instructions,
-                    self.original
-                        .execution_parameters
-                        .instruction_limits
-                        .message()
-                        - output.num_instructions_left,
+                    slice.executed_instructions.display(),
+                    instructions_consumed.display(),
                 );
                 update_round_limits(round_limits, &slice);
                 helper.finish(
@@ -526,6 +626,7 @@ impl PausedExecution for PausedCallExecution {
                     self.original,
                     round,
                     round_limits,
+                    call_tree_metrics,
                 )
             }
         }
@@ -539,15 +640,23 @@ impl PausedExecution for PausedCallExecution {
             self.original.canister_id,
         );
         self.paused_wasm_execution.abort();
-        let message_or_task = match self.original.call_or_task {
-            CanisterCallOrTask::Call(CanisterCall::Request(r)) => {
-                CanisterMessageOrTask::Message(CanisterMessage::Request(r))
-            }
-            CanisterCallOrTask::Call(CanisterCall::Ingress(i)) => {
-                CanisterMessageOrTask::Message(CanisterMessage::Ingress(i))
-            }
-            CanisterCallOrTask::Task(task) => CanisterMessageOrTask::Task(task),
-        };
+        let message_or_task = into_message_or_task(self.original.call_or_task);
         (message_or_task, self.original.prepaid_execution_cycles)
+    }
+
+    fn input(&self) -> CanisterMessageOrTask {
+        into_message_or_task(self.original.call_or_task.clone())
+    }
+}
+
+fn into_message_or_task(call_or_task: CanisterCallOrTask) -> CanisterMessageOrTask {
+    match call_or_task {
+        CanisterCallOrTask::Call(CanisterCall::Request(r)) => {
+            CanisterMessageOrTask::Message(CanisterMessage::Request(r))
+        }
+        CanisterCallOrTask::Call(CanisterCall::Ingress(i)) => {
+            CanisterMessageOrTask::Message(CanisterMessage::Ingress(i))
+        }
+        CanisterCallOrTask::Task(task) => CanisterMessageOrTask::Task(task),
     }
 }

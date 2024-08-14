@@ -63,23 +63,23 @@ pub trait NiDkgAlgorithm {
     /// Creates a non-interactive DKG dealing.
     ///
     /// # Errors
-    /// * `DkgCreateDealingError::InvalidTranscript` if the
-    ///   `resharing_transcript` in the `config` cannot be parsed.
-    /// * `DkgCreateDealingError::NotADealer` if the `self.node_id` is not
+    /// * [`DkgCreateDealingError::ReshareKeyIdComputationError`] if a key ID cannot be computed
+    ///   from the `resharing_transcript` in the `config`.
+    /// * [`DkgCreateDealingError::NotADealer`] if the `self.node_id` is not
     ///   contained in the `config`'s dealers.
-    /// * `DkgCreateDealingError::FsEncryptionPublicKeyNotInRegistry` if a
+    /// * [`DkgCreateDealingError::FsEncryptionPublicKeyNotInRegistry`] if a
     ///   forward secure encryption public key is not in the registry.
-    /// * `DkgCreateDealingError::Registry` if the registry client returns an
+    /// * [`DkgCreateDealingError::Registry`] if the registry client returns an
     ///   error, e.g. because the `registry_version` in the `config` is not
     ///   available.
-    /// * `DkgCreateDealingError::MalformedFsEncryptionPublicKey` if the
+    /// * [`DkgCreateDealingError::MalformedFsEncryptionPublicKey`] if the
     ///   encryption public key fetched from the registry is malformed.
-    /// * `DkgCreateDealingError::ThresholdSigningKeyNotInSecretKeyStore` if the
+    /// * [`DkgCreateDealingError::ThresholdSigningKeyNotInSecretKeyStore`] if the
     ///   threshold signing key to be reshared (in the case of resharing) is not
     ///   in the secret key store.  This error indicates that
-    ///   `NiDkgAlgorithm::load_transcript`  must be called prior to calling
+    ///   [`NiDkgAlgorithm::load_transcript`]  must be called prior to calling
     ///   this method.
-    /// * `DkgCreateDealingError::TransientInternalError` if there is a transient internal error,
+    /// * [`DkgCreateDealingError::TransientInternalError`] if there is a transient internal error,
     ///    e.g., an RPC error when calling a remote CSP vault.
     fn create_dealing(&self, config: &NiDkgConfig) -> Result<NiDkgDealing, DkgCreateDealingError>;
 
@@ -201,8 +201,14 @@ pub trait NiDkgAlgorithm {
     ///   transcripts}` cannot be obtained or is malformed. In this case the FS
     ///   decryption key is not updated, but the removal of threshold signing
     ///   keys is still ensured.
-    /// * `FsKeyNotInSecretKeyStoreError::FsKeyNotInSecretKeyStoreError`: If the
+    /// * `DkgKeyRemovalError::FsKeyNotInSecretKeyStoreError`: If the
     ///   forward secure key to be updated is not found in the secret key store.
+    /// * `DkgKeyRemovalError::TransientInternalError`: if there was a transient error while
+    ///   retaining the active keys, e.g., if there was an error communicating with the remote
+    ///   CSP vault.
+    /// * `DkgKeyRemovalError::KeyNotFoundError`: if a key could not be found.
+    /// * `DkgKeyRemovalError::KeyIdInstantiationError`: if a key ID could not be computed from
+    ///   the public coefficients in the transcript.
     fn retain_only_active_keys(
         &self,
         transcripts: HashSet<NiDkgTranscript>,

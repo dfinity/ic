@@ -7,12 +7,12 @@ pub mod common;
 
 #[test]
 fn test_basic_storage() {
-    let machine = set_up_state_machine_with_nns(vec![]);
+    let machine = set_up_state_machine_with_nns();
 
     let sns_wasm = test_wasm(SnsCanisterType::Governance, None);
     let expected_hash = sns_wasm.sha256_hash();
 
-    // Ensure it is not aleady there
+    // Ensure it is not already there
     let get_wasm_response = sns_wasm::get_wasm(&machine, SNS_WASM_CANISTER_ID, &expected_hash);
     assert!(get_wasm_response.wasm.is_none());
 

@@ -1,9 +1,12 @@
 [package]
 name = "ic-crypto-test-utils-keys"
-version = "0.8.0"
-edition = "2021"
 description = "Test utility containing hard-coded keys"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
 
 [dependencies]
-hex = "0.4.2"
+hex = { workspace = true }
 ic-protobuf = { path = "../../../protobuf" }
+ic-types = { path = "../../../types/types" }

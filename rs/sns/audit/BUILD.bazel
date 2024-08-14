@@ -1,0 +1,34 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/nervous_system/neurons_fund",
+    "//rs/nns/common",
+    "//rs/nns/governance/api",
+    "//rs/sns/governance",
+    "//rs/sns/swap",
+    "@crate_index//:candid",
+    "@crate_index//:colored",
+    "@crate_index//:csv",
+    "@crate_index//:ic-agent",
+    "@crate_index//:rgb",
+    "@crate_index//:rust_decimal",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:textplots",
+    "@crate_index//:tokio",
+]
+
+rust_library(
+    name = "ic-sns-audit",
+    srcs = ["src/lib.rs"],
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "sns-audit",
+    srcs = ["src/main.rs"],
+    deps = DEPENDENCIES + [":ic-sns-audit"],
+)

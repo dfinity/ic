@@ -2,7 +2,10 @@
 //! Internet Computer.
 mod errors;
 
-pub use errors::{WasmEngineError, WasmError, WasmInstrumentationError, WasmValidationError};
+pub use errors::{
+    AsErrorHelp, ErrorHelp, WasmEngineError, WasmError, WasmInstrumentationError,
+    WasmValidationError,
+};
 use ic_types::CountBytes;
 use ic_utils::byte_slice_fmt::truncate_and_format;
 use std::{
@@ -156,6 +159,15 @@ impl From<&CanisterModule> for WasmHash {
 impl From<[u8; WASM_HASH_LENGTH]> for WasmHash {
     fn from(item: [u8; WASM_HASH_LENGTH]) -> Self {
         Self(item)
+    }
+}
+
+impl TryFrom<Vec<u8>> for WasmHash {
+    type Error = Vec<u8>;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let array: [u8; WASM_HASH_LENGTH] = value.try_into()?;
+        Ok(Self::from(array))
     }
 }
 

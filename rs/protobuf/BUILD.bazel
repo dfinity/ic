@@ -1,5 +1,6 @@
-load("//bazel:prost.bzl", "generated_files_check")
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
+load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -14,13 +15,17 @@ rust_library(
         "src/**",
     ]),
     crate_name = "ic_protobuf",
-    version = "0.8.0",
+    rustc_flags = select({
+        "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+        "//conditions:default": [],
+    }),
+    version = "0.9.0",
     deps = [
+        # Keep sorted.
         "@crate_index//:bincode",
         "@crate_index//:candid",
         "@crate_index//:erased-serde",
         "@crate_index//:hex",
-        "@crate_index//:maplit",
         "@crate_index//:prost",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
@@ -31,6 +36,10 @@ rust_library(
 rust_test(
     name = "protobuf_test",
     crate = ":protobuf",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:maplit",
+    ],
 )
 
 rust_doc_test(
@@ -46,6 +55,7 @@ generated_files_check(
     ]) + [":protos"],
     manifest_dir = "rs/protobuf",
     deps = [
+        # Keep sorted.
         "//rs/protobuf/generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",

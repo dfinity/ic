@@ -1,22 +1,21 @@
 mod setup;
 
-use ic_ic00_types::{
-    CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method as Ic00Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, IC_00,
-};
 use ic_interfaces::{execution_environment::IngressHistoryReader, messaging::MessageRouting};
 use ic_interfaces_state_manager::{
     PermanentStateHashError::*, StateHashError, StateManager, StateReader,
     TransientStateHashError::*,
 };
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method as Ic00Method, Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, IC_00,
+};
 use ic_messaging::MessageRoutingImpl;
 use ic_state_manager::StateManagerImpl;
-use ic_test_utilities::types::messages::SignedIngressBuilder;
+use ic_test_utilities_types::messages::SignedIngressBuilder;
 use ic_types::{
-    artifact::SignedIngress,
-    batch::{Batch, BatchMessages},
+    batch::{Batch, BatchMessages, BlockmakerMetrics},
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::MessageId,
+    messages::{MessageId, SignedIngress},
     time::UNIX_EPOCH,
     CanisterId, CryptoHashOfState, Randomness, RegistryVersion,
 };
@@ -26,29 +25,35 @@ use std::{collections::BTreeMap, convert::TryFrom, sync::Arc, thread::sleep, tim
 fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -> Batch {
     Batch {
         batch_number: message_routing.expected_batch_height(),
+        batch_summary: None,
         requires_full_state_hash: false,
         messages: BatchMessages {
             signed_ingress_msgs: msgs,
             ..BatchMessages::default()
         },
         randomness: Randomness::from([0; 32]),
-        ecdsa_subnet_public_keys: BTreeMap::new(),
+        idkg_subnet_public_keys: BTreeMap::new(),
+        idkg_pre_signature_ids: BTreeMap::new(),
         registry_version: RegistryVersion::from(1),
         time: UNIX_EPOCH,
         consensus_responses: vec![],
+        blockmaker_metrics: BlockmakerMetrics::new_for_test(),
     }
 }
 
 fn build_batch_with_full_state_hash(message_routing: &dyn MessageRouting) -> Batch {
     Batch {
         batch_number: message_routing.expected_batch_height(),
+        batch_summary: None,
         requires_full_state_hash: true,
         messages: BatchMessages::default(),
         randomness: Randomness::from([0; 32]),
-        ecdsa_subnet_public_keys: BTreeMap::new(),
+        idkg_subnet_public_keys: BTreeMap::new(),
+        idkg_pre_signature_ids: BTreeMap::new(),
         registry_version: RegistryVersion::from(1),
         time: UNIX_EPOCH,
         consensus_responses: vec![],
+        blockmaker_metrics: BlockmakerMetrics::new_for_test(),
     }
 }
 
@@ -177,7 +182,6 @@ fn install_canister(
                 canister_id,
                 wasm,
                 vec![],
-                None,
                 None,
                 None,
             )

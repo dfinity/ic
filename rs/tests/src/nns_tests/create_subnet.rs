@@ -22,27 +22,28 @@ use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::time::Duration;
 
-use crate::driver::ic::{InternetComputer, Subnet};
 use ic_base_types::{NodeId, SubnetId};
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use slog::info;
 
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 
-use crate::canister_http::lib::install_nns_canisters;
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer};
-use crate::nns::get_subnet_list_from_registry;
-use crate::nns::{
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+};
+use ic_system_test_driver::nns::get_subnet_list_from_registry;
+use ic_system_test_driver::nns::{
     self, get_software_version_from_snapshot, submit_create_application_subnet_proposal,
     vote_execute_proposal_assert_executed,
 };
 
-use crate::util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister};
+use ic_system_test_driver::util::{
+    assert_create_agent, block_on, runtime_from_url, UniversalCanister,
+};
 
-const NNS_SUBNET_SIZE: usize = 40;
-const APP_SUBNET_SIZE: usize = 34; // f*3+1 with f=11
 const NNS_PRE_MASTER: usize = 4;
 const APP_PRE_MASTER: usize = 4;
 
@@ -53,7 +54,7 @@ pub fn pre_master_config(env: TestEnv) {
             Subnet::fast(SubnetType::System, NNS_PRE_MASTER)
                 .with_dkg_interval_length(Height::from(NNS_PRE_MASTER as u64 * 2)),
         )
-        .with_unassigned_nodes(APP_PRE_MASTER as i32)
+        .with_unassigned_nodes(APP_PRE_MASTER)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
     env.topology_snapshot().subnets().for_each(|subnet| {
@@ -196,11 +197,24 @@ pub fn test(env: TestEnv) {
     info!(
         log,
         "Successfully created an app subnet of size {} from an NNS subnet of size {}",
-        APP_SUBNET_SIZE,
-        NNS_SUBNET_SIZE
+        APP_PRE_MASTER,
+        NNS_PRE_MASTER
     );
 }
 
 fn set<H: Clone + std::cmp::Eq + std::hash::Hash>(data: &[H]) -> HashSet<H> {
     HashSet::from_iter(data.iter().cloned())
+}
+
+pub fn install_nns_canisters(env: &TestEnv) {
+    let nns_node = env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .expect("there is no NNS node");
+    NnsInstallationBuilder::new()
+        .install(&nns_node, env)
+        .expect("NNS canisters not installed");
+    info!(&env.logger(), "NNS canisters installed");
 }

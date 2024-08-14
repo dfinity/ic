@@ -1,33 +1,16 @@
-use crate::pb::v1::{
-    create_service_nervous_system,
-    create_service_nervous_system::swap_parameters::NeuronBasketConstructionParameters, proposal,
-    CreateServiceNervousSystem, Proposal,
-};
-use ic_nervous_system_common::SECONDS_PER_DAY;
+use crate::pb::v1::{create_service_nervous_system, CreateServiceNervousSystem};
 use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay};
-use ic_sns_init::pb::v1::{
-    self as sns_init_pb, sns_init_payload, NeuronsFundParticipants, SnsInitPayload,
-};
-use ic_sns_swap::pb::v1::{self as sns_swap_pb, CfParticipant};
-
-// TODO(NNS1-1919): Make this feature generally available by deleting this chunk
-// of code (and updating callers).
-#[cfg(feature = "test")]
-pub(crate) fn create_service_nervous_system_proposals_is_enabled() -> bool {
-    true
-}
-#[cfg(not(feature = "test"))]
-pub(crate) fn create_service_nervous_system_proposals_is_enabled() -> bool {
-    false
-}
+use ic_sns_init::pb::v1::{self as sns_init_pb, sns_init_payload, SnsInitPayload};
+use ic_sns_swap::pb::v1::NeuronsFundParticipationConstraints;
 
 #[derive(Clone, Debug)]
 pub struct ExecutedCreateServiceNervousSystemProposal {
     pub current_timestamp_seconds: u64,
     pub create_service_nervous_system: CreateServiceNervousSystem,
     pub proposal_id: u64,
-    pub neurons_fund_participants: Vec<CfParticipant>,
     pub random_swap_start_time: GlobalTimeOfDay,
+    /// Information about the Neurons' Fund participation needed by the Swap canister.
+    pub neurons_fund_participation_constraints: Option<NeuronsFundParticipationConstraints>,
 }
 
 impl TryFrom<ExecutedCreateServiceNervousSystemProposal> for SnsInitPayload {
@@ -38,9 +21,7 @@ impl TryFrom<ExecutedCreateServiceNervousSystemProposal> for SnsInitPayload {
 
         let current_timestamp_seconds = src.current_timestamp_seconds;
         let nns_proposal_id = Some(src.proposal_id);
-        let neurons_fund_participants = Some(NeuronsFundParticipants {
-            participants: src.neurons_fund_participants,
-        });
+        let neurons_fund_participation_constraints = src.neurons_fund_participation_constraints;
         let start_time = src
             .create_service_nervous_system
             .swap_parameters
@@ -71,9 +52,9 @@ impl TryFrom<ExecutedCreateServiceNervousSystemProposal> for SnsInitPayload {
         let mut result = SnsInitPayload::try_from(src.create_service_nervous_system)?;
 
         result.nns_proposal_id = nns_proposal_id;
-        result.neurons_fund_participants = neurons_fund_participants;
         result.swap_start_timestamp_seconds = swap_start_timestamp_seconds;
         result.swap_due_timestamp_seconds = swap_due_timestamp_seconds;
+        result.neurons_fund_participation_constraints = neurons_fund_participation_constraints;
 
         result.validate_post_execution()?;
 
@@ -82,56 +63,6 @@ impl TryFrom<ExecutedCreateServiceNervousSystemProposal> for SnsInitPayload {
 }
 
 impl CreateServiceNervousSystem {
-    pub fn upgrade_to_proposal(self) -> Proposal {
-        let Self {
-            name,
-            url,
-            description,
-            ..
-        } = &self;
-
-        let name = name.clone().unwrap_or_else(|| "A Profound".to_string());
-        let title = Some(format!("Create {} Service Nervous System", name));
-
-        let description = description.clone().unwrap_or_else(|| {
-            "Ladies and gentlemen,
-             it is with great pleasure that present to you, \
-             a fabulous new SNS for the good of all humankind. \
-             You will surely be in awe of its grandeur, \
-             once your eyes have beheld is glorious majesty."
-                .to_string()
-        });
-
-        let url = url.clone().unwrap_or_default();
-
-        let summary = {
-            let url_line = if url.is_empty() {
-                "".to_string()
-            } else {
-                format!("URL: {}\n", url)
-            };
-
-            format!(
-                "Name: {}\n\
-                 {}\
-                 \n\
-                 ## Description\n\
-                 \n\
-                 {}",
-                name, url_line, description,
-            )
-        };
-
-        let action = Some(proposal::Action::CreateServiceNervousSystem(self));
-
-        Proposal {
-            title,
-            summary,
-            url,
-            action,
-        }
-    }
-
     pub fn sns_token_e8s(&self) -> Option<u64> {
         self.initial_token_distribution
             .as_ref()?
@@ -173,45 +104,11 @@ impl CreateServiceNervousSystem {
         duration: Duration,
         swap_approved_timestamp_seconds: u64,
     ) -> Result<(u64, u64), String> {
-        let start_time_of_day = start_time_of_day
-            .seconds_after_utc_midnight
-            .ok_or("`seconds_after_utc_midnight` should not be None")?;
-        let duration = duration.seconds.ok_or("`seconds` should not be None")?;
-
-        // TODO(NNS1-2298): we should also add 27 leap seconds to this, to avoid
-        // having the swap start half a minute earlier than expected.
-        let midnight_after_swap_approved_timestamp_seconds = swap_approved_timestamp_seconds
-            .saturating_sub(swap_approved_timestamp_seconds % SECONDS_PER_DAY) // floor to midnight
-            .saturating_add(SECONDS_PER_DAY); // add one day
-
-        let swap_start_timestamp_seconds = {
-            let mut possible_swap_starts = (0..2).map(|i| {
-                midnight_after_swap_approved_timestamp_seconds
-                    .saturating_add(SECONDS_PER_DAY * i)
-                    .saturating_add(start_time_of_day)
-            });
-            // Find the earliest time that's at least 24h after the swap was approved.
-            possible_swap_starts
-                .find(|&timestamp| timestamp > swap_approved_timestamp_seconds + SECONDS_PER_DAY)
-                .ok_or(format!(
-                    "Unable to find a swap start time after the swap was approved. \
-                     swap_approved_timestamp_seconds = {}, \
-                     midnight_after_swap_approved_timestamp_seconds = {}, \
-                     start_time_of_day = {}, \
-                     duration = {} \
-                     This is probably a bug.",
-                    swap_approved_timestamp_seconds,
-                    midnight_after_swap_approved_timestamp_seconds,
-                    start_time_of_day,
-                    duration,
-                ))?
-        };
-
-        let swap_due_timestamp_seconds = duration
-            .checked_add(swap_start_timestamp_seconds)
-            .ok_or("`duration` should not be None")?;
-
-        Ok((swap_start_timestamp_seconds, swap_due_timestamp_seconds))
+        ic_nns_governance_api::pb::v1::CreateServiceNervousSystem::swap_start_and_due_timestamps(
+            start_time_of_day,
+            duration,
+            swap_approved_timestamp_seconds,
+        )
     }
 }
 
@@ -265,10 +162,12 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             transaction_fee,
             token_name,
             token_symbol,
-            token_logo: _, // Not used.
+            token_logo,
         } = ledger_parameters;
 
         let transaction_fee_e8s = transaction_fee.and_then(|tokens| tokens.e8s);
+
+        let token_logo = token_logo.and_then(|image| image.base64_encoding);
 
         let proposal_reject_cost_e8s = governance_parameters
             .proposal_rejection_fee
@@ -372,9 +271,38 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
 
         let min_participants = swap_parameters.minimum_participants;
 
-        let min_icp_e8s = swap_parameters.minimum_icp.and_then(|tokens| tokens.e8s);
+        let min_direct_participation_icp_e8s = swap_parameters
+            .minimum_direct_participation_icp
+            .and_then(|tokens| tokens.e8s);
 
-        let max_icp_e8s = swap_parameters.maximum_icp.and_then(|tokens| tokens.e8s);
+        let max_direct_participation_icp_e8s = swap_parameters
+            .maximum_direct_participation_icp
+            .and_then(|tokens| tokens.e8s);
+
+        // Check if the deprecated fields are set.
+        if let Some(neurons_fund_investment_icp) = swap_parameters.neurons_fund_investment_icp {
+            defects.push(format!(
+                "neurons_fund_investment_icp ({:?}) is deprecated; please set \
+                    neurons_fund_participation instead.",
+                neurons_fund_investment_icp,
+            ));
+        }
+        if let Some(minimum_icp) = swap_parameters.minimum_icp {
+            defects.push(format!(
+                "minimum_icp ({:?}) is deprecated; please set \
+                    min_direct_participation_icp_e8s instead.",
+                minimum_icp,
+            ));
+        };
+        if let Some(maximum_icp) = swap_parameters.maximum_icp {
+            defects.push(format!(
+                "maximum_icp ({:?}) is deprecated; please set \
+                    max_direct_participation_icp_e8s instead.",
+                maximum_icp,
+            ));
+        };
+
+        let neurons_fund_participation = swap_parameters.neurons_fund_participation;
 
         let min_participant_icp_e8s = swap_parameters
             .minimum_participant_icp
@@ -398,7 +326,7 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
 
         if !defects.is_empty() {
             return Err(format!(
-                "Failed to convert proposal to SnsInitPayload:\n{}",
+                "Failed to convert CreateServiceNervousSystem proposal to SnsInitPayload:\n{}",
                 defects.join("\n"),
             ));
         }
@@ -427,20 +355,26 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             wait_for_quiet_deadline_increase_seconds,
             dapp_canisters,
             min_participants,
-            min_icp_e8s,
-            max_icp_e8s,
+            min_direct_participation_icp_e8s,
+            max_direct_participation_icp_e8s,
             min_participant_icp_e8s,
             max_participant_icp_e8s,
             neuron_basket_construction_parameters,
             confirmation_text,
             restricted_countries,
+            token_logo,
+            neurons_fund_participation,
 
             // These are not known from only the CreateServiceNervousSystem
             // proposal. See TryFrom<ExecutedCreateServiceNervousSystemProposal>
             nns_proposal_id: None,
-            neurons_fund_participants: None,
             swap_start_timestamp_seconds: None,
             swap_due_timestamp_seconds: None,
+            neurons_fund_participation_constraints: None,
+
+            // Deprecated fields should be set to `None`.
+            min_icp_e8s: None,
+            max_icp_e8s: None,
         };
 
         result.validate_pre_execution()?;
@@ -629,29 +563,5 @@ for sns_init_pb::NeuronDistribution
             dissolve_delay_seconds,
             vesting_period_seconds,
         })
-    }
-}
-
-impl TryFrom<NeuronBasketConstructionParameters>
-    for sns_swap_pb::NeuronBasketConstructionParameters
-{
-    type Error = String;
-
-    fn try_from(
-        neuron_basket_construction_parameters: NeuronBasketConstructionParameters,
-    ) -> Result<Self, Self::Error> {
-        let NeuronBasketConstructionParameters {
-            count,
-            dissolve_delay_interval,
-        } = neuron_basket_construction_parameters;
-
-        let params = sns_swap_pb::NeuronBasketConstructionParameters {
-            count: count.ok_or("`count` should not be None")?,
-            dissolve_delay_interval_seconds: dissolve_delay_interval
-                .ok_or("`dissolve_delay_interval` should not be None")?
-                .seconds
-                .ok_or("`seconds` should not be None")?,
-        };
-        Ok(params)
     }
 }

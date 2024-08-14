@@ -1,22 +1,19 @@
 //! We define a cache for consensus objects/values that is updated whenever
 //! consensus updates the consensus pool.
-use crate::consensus_pool::BlockChainIterator;
 use ic_interfaces::consensus_pool::{
     ChainIterator, ChangeAction, ConsensusBlockCache, ConsensusBlockChain, ConsensusBlockChainErr,
-    ConsensusPool, ConsensusPoolCache,
+    ConsensusPool, ConsensusPoolCache, ConsensusTime,
 };
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
-    consensus::{
-        ecdsa::EcdsaPayload, Block, CatchUpPackage, ConsensusMessage, Finalization, HasHeight,
-    },
+    consensus::{Block, CatchUpPackage, ConsensusMessage, Finalization, HasHeight, HashedBlock},
     Height, Time,
 };
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 
-/// Implementation of ConsensusCache and ConsensusPoolCache.
+/// Implementation of [`ConsensusBlockCache`] and [`ConsensusPoolCache`].
 pub(crate) struct ConsensusCacheImpl {
     cache: RwLock<CachedData>,
 }
@@ -28,7 +25,7 @@ pub(crate) enum CacheUpdateAction {
     CatchUpPackage,
 }
 
-// Internal cached data held by the the ConsensusCache.
+/// Internal cached data held by the [`ConsensusCacheImpl`].
 struct CachedData {
     finalized_block: Block,
     summary_block: Block,
@@ -58,11 +55,84 @@ impl CachedData {
     }
 }
 
-impl ConsensusPoolCache for ConsensusCacheImpl {
-    fn finalized_block(&self) -> Block {
-        self.cache.read().unwrap().finalized_block.clone()
+/// A cached iterator for block ancestors.
+struct CachedChainIterator<'a> {
+    consensus_pool: &'a dyn ConsensusPool,
+    finalized_chain: Arc<dyn ConsensusBlockChain>,
+    to_block: Option<HashedBlock>,
+    cursor: Option<Block>,
+}
+
+impl<'a> CachedChainIterator<'a> {
+    fn new(
+        consensus_pool: &'a dyn ConsensusPool,
+        finalized_chain: Arc<dyn ConsensusBlockChain>,
+        from_block: Block,
+        to_block: Option<HashedBlock>,
+    ) -> Self {
+        CachedChainIterator {
+            consensus_pool,
+            finalized_chain,
+            to_block,
+            cursor: Some(from_block),
+        }
     }
 
+    fn get_parent_block(&self, block: &Block) -> Option<Block> {
+        let height = block.height();
+        if height == Height::from(0) {
+            return None;
+        }
+        let parent_height = height.decrement();
+        let parent_hash = &block.parent;
+        if let Some(to_block) = &self.to_block {
+            match parent_height.cmp(&to_block.height()) {
+                std::cmp::Ordering::Less => {
+                    return None;
+                }
+                std::cmp::Ordering::Equal => {
+                    if parent_hash == to_block.get_hash() {
+                        return Some(to_block.as_ref().clone());
+                    } else {
+                        return None;
+                    }
+                }
+                _ => (),
+            }
+        }
+        // Use cached blocks if the height is finalized
+        if parent_height <= self.finalized_chain.tip().height() {
+            if let Ok(block) = self.finalized_chain.get_block_by_height(parent_height) {
+                return Some(block.clone());
+            }
+        }
+        self.consensus_pool
+            .validated()
+            .block_proposal()
+            .get_by_height(parent_height)
+            .find_map(|proposal| {
+                if proposal.content.get_hash() == parent_hash {
+                    Some(proposal.content.into_inner())
+                } else {
+                    None
+                }
+            })
+    }
+}
+
+impl<'a> Iterator for CachedChainIterator<'a> {
+    type Item = Block;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let parent = self
+            .cursor
+            .as_ref()
+            .and_then(|block| self.get_parent_block(block));
+        std::mem::replace(&mut self.cursor, parent)
+    }
+}
+
+impl ConsensusTime for ConsensusCacheImpl {
     fn consensus_time(&self) -> Option<Time> {
         let cache = &*self.cache.read().unwrap();
         if cache.finalized_block.height() == Height::from(0) {
@@ -70,6 +140,12 @@ impl ConsensusPoolCache for ConsensusCacheImpl {
         } else {
             Some(cache.finalized_block.context.time)
         }
+    }
+}
+
+impl ConsensusPoolCache for ConsensusCacheImpl {
+    fn finalized_block(&self) -> Block {
+        self.cache.read().unwrap().finalized_block.clone()
     }
 
     fn catch_up_package(&self) -> CatchUpPackage {
@@ -82,6 +158,19 @@ impl ConsensusPoolCache for ConsensusCacheImpl {
 
     fn summary_block(&self) -> Block {
         self.cache.read().unwrap().summary_block.clone()
+    }
+
+    fn chain_iterator<'a>(
+        &self,
+        pool: &'a dyn ConsensusPool,
+        block: Block,
+    ) -> Box<dyn Iterator<Item = Block> + 'a> {
+        Box::new(CachedChainIterator::new(
+            pool,
+            self.finalized_chain(),
+            block,
+            Some(self.catch_up_package().content.block),
+        ))
     }
 }
 
@@ -121,14 +210,15 @@ impl ConsensusCacheImpl {
         change_set
             .iter()
             .filter_map(|change_action| match change_action {
-                ChangeAction::AddToValidated(ConsensusMessage::Finalization(x)) => {
-                    cache.check_finalization(x)
+                ChangeAction::AddToValidated(validated_consensus_artifact) => {
+                    match &validated_consensus_artifact.msg {
+                        ConsensusMessage::Finalization(x) => cache.check_finalization(x),
+                        ConsensusMessage::CatchUpPackage(x) => cache.check_catch_up_package(x),
+                        _ => None,
+                    }
                 }
                 ChangeAction::MoveToValidated(ConsensusMessage::Finalization(x)) => {
                     cache.check_finalization(x)
-                }
-                ChangeAction::AddToValidated(ConsensusMessage::CatchUpPackage(x)) => {
-                    cache.check_catch_up_package(x)
                 }
                 ChangeAction::MoveToValidated(ConsensusMessage::CatchUpPackage(x)) => {
                     cache.check_catch_up_package(x)
@@ -267,9 +357,13 @@ impl ConsensusBlockChainImpl {
     ) -> Self {
         let mut blocks = BTreeMap::new();
         match summary_block.height().cmp(&tip.height()) {
-            Ordering::Less | Ordering::Equal => {
-                Self::add_blocks(consensus_pool, summary_block.height(), tip, &mut blocks)
-            }
+            Ordering::Less | Ordering::Equal => Self::add_blocks(
+                consensus_pool,
+                summary_block.height(),
+                summary_block,
+                tip,
+                &mut blocks,
+            ),
             Ordering::Greater => {
                 panic!(
                     "ConsensusBlockChainImpl::new(): summary height {} > tip height {}",
@@ -319,7 +413,13 @@ impl ConsensusBlockChainImpl {
             cur_summary_height,
             summary_block.height(),
         );
-        Self::add_blocks(consensus_pool, start_height, tip, &mut self.blocks)
+        Self::add_blocks(
+            consensus_pool,
+            start_height,
+            summary_block,
+            tip,
+            &mut self.blocks,
+        )
     }
 
     /// Adds the blocks in the range [start_height, tip.height()] to the
@@ -327,10 +427,17 @@ impl ConsensusBlockChainImpl {
     fn add_blocks(
         consensus_pool: &dyn ConsensusPool,
         start_height: Height,
+        summary_block: &Block,
         tip: &Block,
         blocks: &mut BTreeMap<Height, Block>,
     ) {
-        BlockChainIterator::new(consensus_pool, tip.clone())
+        // ChainIterator may miss the summary block if it only exists
+        // as part of the CUP in the pool. We make sure it is included here.
+        let summary_height = summary_block.height();
+        if summary_height >= start_height && summary_height <= tip.height() {
+            blocks.insert(summary_height, summary_block.clone());
+        }
+        ChainIterator::new(consensus_pool, tip.clone(), None)
             .take_while(|block| block.height() >= start_height)
             .for_each(|block| {
                 blocks.insert(block.height(), block);
@@ -344,12 +451,10 @@ impl ConsensusBlockChain for ConsensusBlockChainImpl {
         block
     }
 
-    fn ecdsa_payload(&self, height: Height) -> Result<&EcdsaPayload, ConsensusBlockChainErr> {
+    fn get_block_by_height(&self, height: Height) -> Result<&Block, ConsensusBlockChainErr> {
         self.blocks
             .get(&height)
             .ok_or(ConsensusBlockChainErr::BlockNotFound(height))
-            .map(|block| block.payload.as_ref().as_ecdsa())?
-            .ok_or(ConsensusBlockChainErr::EcdsaPayloadNotFound(height))
     }
 
     fn len(&self) -> usize {
@@ -361,20 +466,15 @@ impl ConsensusBlockChain for ConsensusBlockChainImpl {
 mod test {
     use super::*;
     use crate::test_utils::fake_block_proposal;
-    use ic_ic00_types::EcdsaKeyId;
-    use ic_interfaces::consensus_pool::HEIGHT_CONSIDERED_BEHIND;
+    use ic_interfaces::consensus_pool::{ValidatedConsensusArtifact, HEIGHT_CONSIDERED_BEHIND};
     use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};
-    use ic_test_utilities::{
-        consensus::fake::*,
-        crypto::CryptoReturningOk,
-        mock_time,
-        state_manager::FakeStateManager,
-        types::ids::{node_test_id, subnet_test_id},
-        FastForwardTimeSource,
-    };
+    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::FakeStateManager};
+    use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
-    use ic_types::{batch::BatchPayload, consensus::*};
-    use std::str::FromStr;
+    use ic_test_utilities_time::FastForwardTimeSource;
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_types::consensus::*;
+    use ic_types::time::UNIX_EPOCH;
     use std::sync::Arc;
     use std::time::Duration;
 
@@ -384,7 +484,7 @@ mod test {
         assert_eq!(finalized_chain.len(), expected.len());
 
         for height in expected {
-            assert!(finalized_chain.ecdsa_payload(*height).is_err());
+            assert!(finalized_chain.get_block_by_height(*height).is_ok());
         }
 
         assert_eq!(
@@ -410,6 +510,7 @@ mod test {
             let state_manager = FakeStateManager::new();
             let state_manager = Arc::new(state_manager);
             let mut pool = TestConsensusPool::new(
+                node_test_id(0),
                 subnet_id,
                 pool_config,
                 time_source,
@@ -428,7 +529,7 @@ mod test {
 
             assert_eq!(pool.advance_round_normal_operation_n(2), Height::from(2));
             let mut block = pool.make_next_block();
-            let time = mock_time() + Duration::from_secs(10);
+            let time = UNIX_EPOCH + Duration::from_secs(10);
             block.content.as_mut().context.time = time;
             // recompute the hash to make sure it's still correct
             block.update_content();
@@ -441,7 +542,10 @@ mod test {
 
             // 2. Cache can be updated by finalization
             let updates = consensus_cache.prepare(&[ChangeAction::AddToValidated(
-                finalization.clone().into_message(),
+                ValidatedConsensusArtifact {
+                    msg: finalization.clone().into_message(),
+                    timestamp: time,
+                },
             )]);
             assert_eq!(updates, vec![CacheUpdateAction::Finalization]);
             pool.insert_validated(finalization);
@@ -467,7 +571,10 @@ mod test {
             );
             let catch_up_package = pool.make_catch_up_package(Height::from(4));
             let updates = consensus_cache.prepare(&[ChangeAction::AddToValidated(
-                catch_up_package.clone().into_message(),
+                ValidatedConsensusArtifact {
+                    msg: catch_up_package.clone().into_message(),
+                    timestamp: time,
+                },
             )]);
             assert_eq!(updates, vec![CacheUpdateAction::CatchUpPackage]);
             pool.insert_validated(catch_up_package.clone());
@@ -490,6 +597,7 @@ mod test {
             )];
 
             let mut pool = TestConsensusPool::new(
+                node_test_id(0),
                 subnet_test_id(1),
                 pool_config,
                 FastForwardTimeSource::new(),
@@ -534,41 +642,18 @@ mod test {
         let height = Height::new(100);
         assert_eq!(chain.len(), 0);
         assert_eq!(
-            chain.ecdsa_payload(height).err().unwrap(),
+            chain.get_block_by_height(height).err().unwrap(),
             ConsensusBlockChainErr::BlockNotFound(height)
         );
         let block = fake_block_proposal(height).as_ref().clone();
         chain.blocks.insert(height, block);
         assert_eq!(chain.len(), 1);
-        assert_eq!(
-            chain.ecdsa_payload(height).err().unwrap(),
-            ConsensusBlockChainErr::EcdsaPayloadNotFound(height)
-        );
+        assert!(chain.get_block_by_height(height).is_ok());
 
         let height = Height::new(200);
-        let mut block = fake_block_proposal(height).as_ref().clone();
-        let block_payload = BlockPayload::from((
-            BatchPayload::default(),
-            dkg::Dealings::new_empty(height),
-            Some(EcdsaPayload {
-                signature_agreements: BTreeMap::new(),
-                ongoing_signatures: BTreeMap::new(),
-                available_quadruples: BTreeMap::new(),
-                quadruples_in_creation: BTreeMap::new(),
-                uid_generator: ecdsa::EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0)),
-                idkg_transcripts: BTreeMap::new(),
-                ongoing_xnet_reshares: BTreeMap::new(),
-                xnet_reshare_agreements: BTreeMap::new(),
-                key_transcript: ecdsa::EcdsaKeyTranscript {
-                    current: None,
-                    next_in_creation: ecdsa::KeyTranscriptCreation::Begin,
-                    key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
-                },
-            }),
-        ));
-        block.payload = Payload::new(ic_types::crypto::crypto_hash, block_payload);
+        let block = fake_block_proposal(height).as_ref().clone();
         chain.blocks.insert(height, block);
         assert_eq!(chain.len(), 2);
-        assert!(chain.ecdsa_payload(height).is_ok());
+        assert!(chain.get_block_by_height(height).is_ok());
     }
 }

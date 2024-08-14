@@ -1,17 +1,19 @@
 use super::hash::{chunk_hasher, file_hasher, ManifestHash};
 use super::{validate_manifest_internal_consistency, write_chunk_hash, ManifestValidationError};
+use crate::state_sync::types::{
+    ChunkInfo, FileInfo, Manifest, ManifestData, DEFAULT_CHUNK_SIZE,
+    MAX_SUPPORTED_STATE_SYNC_VERSION,
+};
 use ic_base_types::{subnet_id_into_protobuf, SubnetId};
 use ic_protobuf::state::system_metadata::v1 as pb_metadata;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::SystemMetadata;
 use ic_state_layout::{
-    canister_id_from_path, INGRESS_HISTORY_FILE, SPLIT_MARKER_FILE, SUBNET_QUEUES_FILE,
+    canister_id_from_path, INGRESS_HISTORY_FILE, SPLIT_MARKER_FILE, STATS_FILE, SUBNET_QUEUES_FILE,
     SYSTEM_METADATA_FILE,
 };
-use ic_types::state_sync::{
-    ChunkInfo, FileInfo, Manifest, ManifestData, StateSyncVersion, MAX_SUPPORTED_STATE_SYNC_VERSION,
-};
+use ic_types::state_sync::StateSyncVersion;
 use ic_types::Time;
 use prost::Message;
 use std::path::PathBuf;
@@ -118,6 +120,16 @@ pub fn split_manifest(
                     // Replace with default on subnet B.
                     manifest_b.append_system_metadata(subnet_b, subnet_type, batch_time);
                 }
+                Some(STATS_FILE) => {
+                    // Append empty stats file
+                    let empty_stats = ic_protobuf::state::stats::v1::Stats { query_stats: None };
+                    let as_protobuf = empty_stats.encode_to_vec();
+
+                    // Don't write the file if it's empty. This is an optimization done by MR
+                    // If the serialized protobuf will ever not be empty, need to write the
+                    // file via append_single_chunk_file
+                    assert_eq!(as_protobuf.len(), 0);
+                }
                 _ => {
                     return Err(ManifestValidationError::InconsistentManifest {
                         reason: format!("unknown file in manifest: {}", path.display()),
@@ -207,6 +219,7 @@ impl ManifestBuilder {
 
     /// Appends a single-chunk file to the manifest.
     fn append_single_chunk_file(&mut self, path: &str, data: &[u8]) {
+        assert!(data.len() <= DEFAULT_CHUNK_SIZE as usize);
         let mut file_hasher = file_hasher();
 
         if data.is_empty() {

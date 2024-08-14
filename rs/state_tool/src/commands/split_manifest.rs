@@ -5,8 +5,8 @@ use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, RoutingTable}
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::manifest::split::split_manifest;
 use ic_state_manager::manifest::{manifest_hash, validate_manifest};
+use ic_state_manager::state_sync::types::Manifest;
 use ic_types::crypto::CryptoHash;
-use ic_types::state_sync::Manifest;
 use ic_types::{CanisterId, CryptoHashOfState, SubnetId, Time};
 use std::fs::File;
 use std::path::PathBuf;
@@ -31,7 +31,8 @@ pub fn do_split_manifest(
     let (version, files, chunks, hash) = parse_manifest(
         File::open(&path)
             .map_err(|e| format!("Failed to parse manifest at {}: {}", path.display(), e))?,
-    );
+    )
+    .map_err(|e| format!("Failed to parse manifest at {}: {}", path.display(), e))?;
     let manifest = Manifest::new(version, files, chunks);
 
     // Sanity check: ensure that the parsed manifest is internally consistent; and

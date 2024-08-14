@@ -9,8 +9,7 @@ fn labeled_tree_roundtrip() {
     let labeled_tree = labeled_tree_for_test();
     assert_eq!(
         labeled_tree.clone(),
-        v1::LabeledTree::proxy_decode(&v1::LabeledTree::proxy_encode(labeled_tree).unwrap())
-            .unwrap()
+        v1::LabeledTree::proxy_decode(&v1::LabeledTree::proxy_encode(labeled_tree)).unwrap()
     );
 }
 
@@ -19,8 +18,7 @@ fn large_labeled_tree_roundtrip() {
     let labeled_tree = large_labeled_tree_for_test();
     assert_eq!(
         labeled_tree.clone(),
-        v1::LabeledTree::proxy_decode(&v1::LabeledTree::proxy_encode(labeled_tree).unwrap())
-            .unwrap()
+        v1::LabeledTree::proxy_decode(&v1::LabeledTree::proxy_encode(labeled_tree)).unwrap()
     );
 }
 
@@ -29,7 +27,7 @@ fn witness_roundtrip() {
     let witness = witness_for_test();
     assert_eq!(
         witness.clone(),
-        v1::Witness::proxy_decode(&v1::Witness::proxy_encode(witness).unwrap()).unwrap()
+        v1::Witness::proxy_decode(&v1::Witness::proxy_encode(witness)).unwrap()
     );
 }
 
@@ -38,7 +36,7 @@ fn large_witness_roundtrip() {
     let witness = large_witness_for_test();
     assert_eq!(
         witness.clone(),
-        v1::Witness::proxy_decode(&v1::Witness::proxy_encode(witness).unwrap()).unwrap()
+        v1::Witness::proxy_decode(&v1::Witness::proxy_encode(witness)).unwrap()
     );
 }
 
@@ -50,7 +48,7 @@ fn error_invalid_digest() {
             digest: vec![3, 2, 1, 0],
         })),
     };
-    let witness_vec = v1::Witness::proxy_encode(witness).unwrap();
+    let witness_vec = v1::Witness::proxy_encode(witness);
 
     match <v1::Witness as ProtoProxy<Witness>>::proxy_decode(&witness_vec) {
         Err(ProxyDecodeError::InvalidDigestLength { actual: 4, .. }) => (),

@@ -31,19 +31,24 @@ impl TryFrom<&Operation> for Send {
             Operation::Transfer {
                 from,
                 to,
+                spender,
                 amount,
                 fee,
-            } => Ok(Send {
-                from,
-                to,
-                amount,
-                fee,
-            }),
+            } => {
+                if spender.is_some() {
+                    return Err(
+                        "Transfer from operations are not supported through Rosetta".to_string()
+                    );
+                }
+                Ok(Send {
+                    from,
+                    to,
+                    amount,
+                    fee,
+                })
+            }
             Operation::Approve { .. } => {
                 Err("Approve operations are not supported through Rosetta".to_string())
-            }
-            Operation::TransferFrom { .. } => {
-                Err("Transfer from operations are not supported through Rosetta".to_string())
             }
             Operation::Burn { .. } => {
                 Err("Burn operations are not supported through rosetta".to_owned())
@@ -66,6 +71,7 @@ impl From<Send> for Operation {
         Operation::Transfer {
             from,
             to,
+            spender: None,
             amount,
             fee,
         }

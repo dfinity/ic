@@ -8,8 +8,8 @@ use std::time::Instant;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_hash_of::HashOf;
 use icp_ledger::{Block, TipOfChainRes};
-use log::{debug, error, info, trace, warn};
 use tokio::sync::RwLock;
+use tracing::{debug, error, info, trace, warn};
 
 use crate::blocks::BlockStoreError;
 use crate::blocks::{Blocks, HashedBlock};
@@ -40,14 +40,6 @@ pub trait LedgerBlocksSynchronizerMetrics {
     fn set_verified_height(&self, height: u64);
 }
 
-struct NopMetrics {}
-
-impl LedgerBlocksSynchronizerMetrics for NopMetrics {
-    fn set_target_height(&self, _height: u64) {}
-    fn set_synced_height(&self, _height: u64) {}
-    fn set_verified_height(&self, _height: u64) {}
-}
-
 /// Downloads the blocks of the Ledger to either an in-memory store or to
 /// a local sqlite store
 pub struct LedgerBlocksSynchronizer<B>
@@ -69,10 +61,11 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         store_max_blocks: Option<u64>,
         verification_info: Option<VerificationInfo>,
         metrics: Box<dyn LedgerBlocksSynchronizerMetrics + Send + Sync>,
+        enable_rosetta_blocks: bool,
     ) -> Result<LedgerBlocksSynchronizer<B>, Error> {
         let mut blocks = match store_location {
-            Some(loc) => Blocks::new_persistent(loc)?,
-            None => Blocks::new_in_memory()?,
+            Some(loc) => Blocks::new_persistent(loc, enable_rosetta_blocks)?,
+            None => Blocks::new_in_memory(enable_rosetta_blocks)?,
         };
 
         if let Some(blocks_access) = &blocks_access {
@@ -155,6 +148,8 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             }
         }
 
+        // https://github.com/rust-lang/rust-clippy/issues/4530
+        #[allow(clippy::unnecessary_unwrap)]
         if first_block.is_some() && first_block.as_ref().unwrap().index > 0 {
             let first_block = first_block.unwrap();
             let queried_block = canister_access
@@ -233,7 +228,13 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         ))?;
         let block = Block::decode(encoded_block.clone())?;
         if let Some(info) = &self.verification_info {
-            let hash = HashedBlock::hash_block(encoded_block, block.parent_hash, tip_index).hash;
+            let hash = HashedBlock::hash_block(
+                encoded_block,
+                block.parent_hash,
+                tip_index,
+                block.timestamp,
+            )
+            .hash;
             verify_block_hash(&certification, hash, info)?;
         }
         Ok(BlockWithIndex {
@@ -293,6 +294,8 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             tip.index
         );
 
+        let tip_index = tip.index;
+
         self.sync_range_of_blocks(
             Range {
                 start: next_block_index,
@@ -304,6 +307,8 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             &mut blockchain,
         )
         .await?;
+
+        blockchain.make_rosetta_blocks_if_enabled(tip_index)?;
 
         info!(
             "You are all caught up to block {}",
@@ -391,7 +396,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 if i == tip.index && block != tip.block {
                     return Err(Error::invalid_tip_of_chain(tip.index, tip.block, block));
                 }
-                let hb = HashedBlock::hash_block(raw_block, last_block_hash, i);
+                let hb = HashedBlock::hash_block(raw_block, last_block_hash, i, block.timestamp);
                 last_block_hash = Some(hb.hash);
                 block_batch.push(hb);
                 i += 1;
@@ -433,7 +438,15 @@ mod test {
     use crate::blocks_access::BlocksAccess;
     use crate::ledger_blocks_sync::LedgerBlocksSynchronizer;
 
-    use super::NopMetrics;
+    use super::LedgerBlocksSynchronizerMetrics;
+
+    struct NopMetrics {}
+
+    impl LedgerBlocksSynchronizerMetrics for NopMetrics {
+        fn set_target_height(&self, _height: u64) {}
+        fn set_synced_height(&self, _height: u64) {}
+        fn set_verified_height(&self, _height: u64) {}
+    }
 
     struct RangeOfBlocks {
         pub blocks: Vec<EncodedBlock>,
@@ -482,6 +495,7 @@ mod test {
             /* store_max_blocks = */ None,
             /* verification_info = */ None,
             Box::new(NopMetrics {}),
+            false,
         )
         .await
         .unwrap()
@@ -497,6 +511,7 @@ mod test {
                 icp_ledger::Operation::Transfer {
                     from,
                     to,
+                    spender: None,
                     amount,
                     fee,
                 }

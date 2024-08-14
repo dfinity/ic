@@ -1,9 +1,0 @@
-load("//ic-os:defs.bzl", "boundary_node_icos_build")
-load("//ic-os/boundary-guestos:defs.bzl", "image_deps")
-
-boundary_node_icos_build(
-    name = "prod-sev",
-    image_deps = image_deps,
-    mode = "prod",
-    sev = True,
-)

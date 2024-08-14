@@ -1,7 +1,3 @@
-type AuthzChangeOp = variant {
-  Authorize : record { add_self : bool };
-  Deauthorize;
-};
 type CanisterCallError = record { code : opt int32; description : text };
 type CanisterIdRecord = record { canister_id : principal };
 type CanisterInstallMode = variant { reinstall; upgrade; install };
@@ -10,7 +6,9 @@ type CanisterStatusResult = record {
   memory_size : nat;
   cycles : nat;
   settings : DefiniteCanisterSettings;
-  module_hash : opt vec nat8;
+  idle_cycles_burned_per_day : opt nat;
+  module_hash : opt blob;
+  reserved_cycles : opt nat;
 };
 type CanisterStatusResultV2 = record {
   status : CanisterStatusType;
@@ -18,25 +16,31 @@ type CanisterStatusResultV2 = record {
   cycles : nat;
   settings : DefiniteCanisterSettingsArgs;
   idle_cycles_burned_per_day : nat;
-  module_hash : opt vec nat8;
+  module_hash : opt blob;
 };
 type CanisterStatusType = variant { stopped; stopping; running };
 type CanisterSummary = record {
   status : opt CanisterStatusResultV2;
   canister_id : opt principal;
 };
-type ChangeCanisterProposal = record {
-  arg : vec nat8;
-  wasm_module : vec nat8;
+type ChangeCanisterRequest = record {
+  arg : blob;
+  wasm_module : blob;
   stop_before_installing : bool;
   mode : CanisterInstallMode;
   canister_id : principal;
-  query_allocation : opt nat;
-  authz_changes : vec MethodAuthzChange;
   memory_allocation : opt nat;
   compute_allocation : opt nat;
 };
-type DefiniteCanisterSettings = record { controllers : vec principal };
+type DefiniteCanisterSettings = record {
+  freezing_threshold : opt nat;
+  controllers : vec principal;
+  reserved_cycles_limit : opt nat;
+  log_visibility : opt LogVisibility;
+  wasm_memory_limit : opt nat;
+  memory_allocation : opt nat;
+  compute_allocation : opt nat;
+};
 type DefiniteCanisterSettingsArgs = record {
   freezing_threshold : nat;
   controllers : vec principal;
@@ -66,12 +70,17 @@ type ListSnsCanistersResponse = record {
   dapps : vec principal;
   archives : vec principal;
 };
-type MethodAuthzChange = record {
-  "principal" : opt principal;
-  method_name : text;
-  canister : principal;
-  operation : AuthzChangeOp;
+type LogVisibility = variant { controllers; public };
+type ManageDappCanisterSettingsRequest = record {
+  freezing_threshold : opt nat64;
+  canister_ids : vec principal;
+  reserved_cycles_limit : opt nat64;
+  log_visibility : opt int32;
+  wasm_memory_limit : opt nat64;
+  memory_allocation : opt nat64;
+  compute_allocation : opt nat64;
 };
+type ManageDappCanisterSettingsResponse = record { failure_reason : opt text };
 type RegisterDappCanisterRequest = record { canister_id : opt principal };
 type RegisterDappCanistersRequest = record { canister_ids : vec principal };
 type SetDappControllersRequest = record {
@@ -91,12 +100,15 @@ type SnsRootCanister = record {
 };
 service : (SnsRootCanister) -> {
   canister_status : (CanisterIdRecord) -> (CanisterStatusResult);
-  change_canister : (ChangeCanisterProposal) -> ();
+  change_canister : (ChangeCanisterRequest) -> ();
   get_build_metadata : () -> (text) query;
   get_sns_canisters_summary : (GetSnsCanistersSummaryRequest) -> (
       GetSnsCanistersSummaryResponse,
     );
   list_sns_canisters : (record {}) -> (ListSnsCanistersResponse) query;
+  manage_dapp_canister_settings : (ManageDappCanisterSettingsRequest) -> (
+      ManageDappCanisterSettingsResponse,
+    );
   register_dapp_canister : (RegisterDappCanisterRequest) -> (record {});
   register_dapp_canisters : (RegisterDappCanistersRequest) -> (record {});
   set_dapp_controllers : (SetDappControllersRequest) -> (

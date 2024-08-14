@@ -1,8 +1,11 @@
 [package]
 name = "ic-canister-profiler"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-ic0 = "0.18.9"
 ic-metrics-encoder = "1.1.0"
+ic0 = "0.18.9"

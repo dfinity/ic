@@ -8,12 +8,11 @@ mod ingress_selector;
 #[cfg(test)]
 mod proptests;
 
+use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::{
-    consensus_pool::ConsensusPoolCache,
-    crypto::IngressSigVerifier,
-    execution_environment::IngressHistoryReader,
-    ingress_pool::{IngressPoolObject, IngressPoolSelect, SelectResult},
+    consensus_pool::ConsensusTime, execution_environment::IngressHistoryReader,
+    ingress_pool::IngressPool, time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
@@ -24,7 +23,7 @@ use ic_registry_client_helpers::subnet::{IngressMessageSettings, SubnetRegistry}
 use ic_replicated_state::ReplicatedState;
 use ic_types::messages::{HttpRequest, HttpRequestContent, SignedIngressContent};
 use ic_types::{
-    artifact::{IngressMessageId, SignedIngress},
+    artifact::IngressMessageId,
     consensus::BlockPayload,
     crypto::CryptoHashOf,
     malicious_flags::MaliciousFlags,
@@ -35,9 +34,10 @@ use ic_validator::{
     CanisterIdSet, HttpRequestVerifier, HttpRequestVerifierImpl, RequestValidationError,
 };
 use prometheus::{Histogram, IntGauge};
+use std::collections::hash_map::{DefaultHasher, RandomState};
+use std::hash::BuildHasher;
 use std::{
     collections::{BTreeMap, HashSet},
-    ops::RangeInclusive,
     sync::{Arc, RwLock},
 };
 
@@ -45,34 +45,10 @@ use std::{
 /// tuple (Height, HashOfBatchPayload) for two reasons:
 /// 1. We want to purge this cache by height, for those below certified height.
 /// 2. There could be more than one payloads at a given height due to blockchain
-/// branching.
+///    branching.
 type IngressPayloadCache =
     BTreeMap<(Height, CryptoHashOf<BlockPayload>), Arc<HashSet<IngressMessageId>>>;
 
-/// A wrapper for the ingress pool that delays locking until the member function
-/// of `IngressPoolSelect` is actually called.
-struct IngressPoolSelectWrapper {
-    pool: Arc<RwLock<dyn IngressPoolSelect>>,
-}
-
-impl IngressPoolSelectWrapper {
-    /// The constructor creates a `IngressPoolSelectWrapper` instance.
-    pub fn new(pool: &Arc<RwLock<dyn IngressPoolSelect>>) -> Self {
-        IngressPoolSelectWrapper { pool: pool.clone() }
-    }
-}
-
-/// `IngressPoolSelectWrapper` implements the `IngressPoolSelect` trait.
-impl IngressPoolSelect for IngressPoolSelectWrapper {
-    fn select_validated<'a>(
-        &self,
-        range: RangeInclusive<Time>,
-        f: Box<dyn FnMut(&IngressPoolObject) -> SelectResult<SignedIngress> + 'a>,
-    ) -> Vec<SignedIngress> {
-        let pool = self.pool.read().unwrap();
-        pool.select_validated(range, f)
-    }
-}
 /// Keeps the metrics to be exported by the IngressManager
 struct IngressManagerMetrics {
     ingress_handler_time: Histogram,
@@ -96,7 +72,7 @@ impl IngressManagerMetrics {
             ),
             ingress_selector_validate_payload_time: metrics_registry.histogram(
                 "ingress_selector_validate_payload_time",
-                "Ingress Selector vaidate_payload execution time in seconds",
+                "Ingress Selector validate_payload execution time in seconds",
                 decimal_buckets(-3, 1),
             ),
             ingress_payload_cache_size: metrics_registry.int_gauge(
@@ -107,14 +83,53 @@ impl IngressManagerMetrics {
     }
 }
 
+/// The kind of RandomState you want to generate.
+pub enum RandomStateKind {
+    /// Creates random states using the default [`std::collections::hash_map::RandomState`].
+    Random,
+    /// Creates a deterministic default random state. Use it for testing purposes,
+    /// to create a repeatable element order.
+    Deterministic,
+}
+
+impl RandomStateKind {
+    /// Creates a custom random state of the given kind, which can be used
+    /// to seed data structures like hashmaps.
+    fn create_state(&self) -> CustomRandomState {
+        match self {
+            Self::Random => CustomRandomState::Random(RandomState::new()),
+            Self::Deterministic => CustomRandomState::Deterministic,
+        }
+    }
+}
+
+/// A custom RandomState we can use to control the randomness of a hashmap.
+#[derive(Clone)]
+enum CustomRandomState {
+    Random(RandomState),
+    Deterministic,
+}
+
+impl BuildHasher for CustomRandomState {
+    type Hasher = DefaultHasher;
+
+    fn build_hasher(&self) -> DefaultHasher {
+        match self {
+            Self::Deterministic => DefaultHasher::new(),
+            Self::Random(r) => r.build_hasher(),
+        }
+    }
+}
+
 /// This struct is responsible for ingresses. It validates, invalidates,
 /// advertizes, purges ingresses, and selects the ingresses to be included in
 /// the blocks.
 pub struct IngressManager {
-    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+    time_source: Arc<dyn TimeSource>,
+    consensus_time: Arc<dyn ConsensusTime>,
     ingress_hist_reader: Box<dyn IngressHistoryReader>,
     ingress_payload_cache: Arc<RwLock<IngressPayloadCache>>,
-    ingress_pool: IngressPoolSelectWrapper,
+    ingress_pool: Arc<RwLock<dyn IngressPool>>,
     registry_client: Arc<dyn RegistryClient>,
     request_validator:
         Arc<dyn HttpRequestVerifier<SignedIngressContent, RegistryRootOfTrustProvider>>,
@@ -127,15 +142,20 @@ pub struct IngressManager {
     pub(crate) last_purge_time: RwLock<Time>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     cycles_account_manager: Arc<CyclesAccountManager>,
+
+    /// A determinism flag for testing. Used for making hashmaps in the ingress selector
+    /// deterministic. Set to `RandomStateKind::Random` in production.
+    random_state: RandomStateKind,
 }
 
 impl IngressManager {
     #[allow(clippy::too_many_arguments)]
     /// Constructs an IngressManager
     pub fn new(
-        consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+        time_source: Arc<dyn TimeSource>,
+        consensus_time: Arc<dyn ConsensusTime>,
         ingress_hist_reader: Box<dyn IngressHistoryReader>,
-        ingress_pool: Arc<RwLock<dyn IngressPoolSelect>>,
+        ingress_pool: Arc<RwLock<dyn IngressPool>>,
         registry_client: Arc<dyn RegistryClient>,
         ingress_signature_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
         metrics_registry: MetricsRegistry,
@@ -144,6 +164,7 @@ impl IngressManager {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         cycles_account_manager: Arc<CyclesAccountManager>,
         malicious_flags: MaliciousFlags,
+        random_state: RandomStateKind,
     ) -> Self {
         let request_validator = if malicious_flags.maliciously_disable_ingress_validation {
             pub struct DisabledHttpRequestVerifier;
@@ -164,10 +185,11 @@ impl IngressManager {
             Arc::new(HttpRequestVerifierImpl::new(ingress_signature_crypto)) as Arc<_>
         };
         Self {
-            consensus_pool_cache,
+            time_source,
+            consensus_time,
             ingress_hist_reader,
             ingress_payload_cache: Arc::new(RwLock::new(BTreeMap::new())),
-            ingress_pool: IngressPoolSelectWrapper::new(&ingress_pool),
+            ingress_pool,
             registry_client,
             request_validator,
             metrics: IngressManagerMetrics::new(metrics_registry),
@@ -177,6 +199,7 @@ impl IngressManager {
             messages_to_purge: RwLock::new(Vec::new()),
             state_reader,
             cycles_account_manager,
+            random_state,
         }
     }
 
@@ -232,14 +255,7 @@ impl IngressManager {
 pub(crate) mod tests {
     use super::*;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
-    use ic_interfaces::{
-        artifact_pool::{ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
-        ingress_pool::{
-            ChangeSet, IngressPool, PoolSection, UnvalidatedIngressArtifact,
-            ValidatedIngressArtifact,
-        },
-        time_source::TimeSource,
-    };
+    use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_metrics::MetricsRegistry;
     use ic_registry_client::client::RegistryClientImpl;
@@ -247,19 +263,16 @@ pub(crate) mod tests {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities::{
         artifact_pool_config::with_test_pool_config,
-        consensus::MockConsensusCache,
         crypto::temp_crypto_component_with_fake_registry,
         cycles_account_manager::CyclesAccountManagerBuilder,
-        history::MockIngressHistory,
-        state::ReplicatedStateBuilder,
-        types::ids::{node_test_id, subnet_test_id},
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::test_subnet_record;
-    use ic_types::{
-        artifact_kind::IngressArtifact, ingress::IngressStatus, Height, RegistryVersion, SubnetId,
-    };
-    use std::sync::{Arc, RwLockWriteGuard};
+    use ic_test_utilities_state::{MockIngressHistory, ReplicatedStateBuilder};
+    use ic_test_utilities_time::FastForwardTimeSource;
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_types::{ingress::IngressStatus, Height, RegistryVersion, SubnetId};
+    use std::{ops::DerefMut, sync::Arc};
 
     pub(crate) fn setup_registry(
         subnet_id: SubnetId,
@@ -287,7 +300,7 @@ pub(crate) mod tests {
     pub(crate) fn setup_with_params(
         ingress_hist_reader: Option<Box<dyn IngressHistoryReader>>,
         registry_and_subnet_id: Option<(Arc<dyn RegistryClient>, SubnetId)>,
-        consensus_pool_cache: Option<Arc<dyn ConsensusPoolCache>>,
+        consensus_time: Option<Arc<dyn ConsensusTime>>,
         state: Option<ReplicatedState>,
         run: impl FnOnce(IngressManager, Arc<RwLock<IngressPoolImpl>>),
     ) {
@@ -302,8 +315,7 @@ pub(crate) mod tests {
             let subnet_id = subnet_test_id(0);
             (setup_registry(subnet_id, 60 * 1024 * 1024), subnet_id)
         });
-        let consensus_pool_cache =
-            consensus_pool_cache.unwrap_or_else(|| Arc::new(MockConsensusCache::new()));
+        let consensus_time = consensus_time.unwrap_or_else(|| Arc::new(MockConsensusTime::new()));
 
         let mut state_manager = MockStateManager::new();
         state_manager.expect_get_state_at().return_const(Ok(
@@ -330,9 +342,12 @@ pub(crate) mod tests {
                     metrics_registry.clone(),
                     log.clone(),
                 )));
+                let time_source = FastForwardTimeSource::new();
+                time_source.set_time(UNIX_EPOCH).unwrap();
                 run(
                     IngressManager::new(
-                        consensus_pool_cache,
+                        time_source,
+                        consensus_time,
                         ingress_hist_reader,
                         ingress_pool.clone(),
                         registry,
@@ -343,6 +358,7 @@ pub(crate) mod tests {
                         Arc::new(state_manager),
                         cycles_account_manager,
                         MaliciousFlags::default(),
+                        RandomStateKind::Random,
                     ),
                     ingress_pool,
                 )
@@ -354,59 +370,11 @@ pub(crate) mod tests {
         setup_with_params(None, None, None, None, run)
     }
 
-    /// This is a wrapper around the `RwLockWriteGuard` of an `IngressPoolImpl`, which implements `IngressPool`
-    /// related traits, allowing easy manipulation of the `IngressPool` for testing.
-    pub(crate) struct IngressPoolTestAccess<'a>(RwLockWriteGuard<'a, IngressPoolImpl>);
-
     /// This function takes a lock on the ingress pool and allows the closure to access it.
-    pub(crate) fn access_ingress_pool<'a, F, T>(
-        ingress_pool: &'a Arc<RwLock<IngressPoolImpl>>,
-        f: F,
-    ) -> T
+    pub(crate) fn access_ingress_pool<F, T>(ingress_pool: &Arc<RwLock<IngressPoolImpl>>, f: F) -> T
     where
-        F: FnOnce(IngressPoolTestAccess<'a>) -> T,
+        F: FnOnce(&mut IngressPoolImpl) -> T,
     {
-        f(IngressPoolTestAccess(ingress_pool.write().unwrap()))
-    }
-
-    impl<'a> IngressPool for IngressPoolTestAccess<'a> {
-        fn validated(&self) -> &dyn PoolSection<ValidatedIngressArtifact> {
-            self.0.validated()
-        }
-
-        fn unvalidated(&self) -> &dyn PoolSection<UnvalidatedIngressArtifact> {
-            self.0.unvalidated()
-        }
-    }
-
-    impl<'a> MutablePool<IngressArtifact, ChangeSet> for IngressPoolTestAccess<'a> {
-        fn insert(&mut self, unvalidated_artifact: UnvalidatedArtifact<SignedIngress>) {
-            self.0.insert(unvalidated_artifact)
-        }
-
-        fn apply_changes(
-            &mut self,
-            time_source: &dyn TimeSource,
-            change_set: ChangeSet,
-        ) -> ChangeResult<IngressArtifact> {
-            self.0.apply_changes(time_source, change_set)
-        }
-    }
-
-    impl<'a> ValidatedPoolReader<IngressArtifact> for IngressPoolTestAccess<'a> {
-        fn contains(&self, id: &IngressMessageId) -> bool {
-            self.0.contains(id)
-        }
-
-        fn get_validated_by_identifier(&self, _id: &IngressMessageId) -> Option<SignedIngress> {
-            unimplemented!()
-        }
-
-        fn get_all_validated_by_filter(
-            &self,
-            _filter: &(),
-        ) -> Box<dyn Iterator<Item = SignedIngress> + '_> {
-            unimplemented!()
-        }
+        f(ingress_pool.write().unwrap().deref_mut())
     }
 }

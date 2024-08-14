@@ -1,0 +1,37 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/tree_hash",
+    "@crate_index//:itertools",
+    "@crate_index//:leb128",
+    "@crate_index//:scoped_threadpool",
+    "@crate_index//:thiserror",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/canonical_state/tree_hash/test_utils",
+    "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/crypto/tree_hash/test_utils",
+    "@crate_index//:assert_matches",
+    "@crate_index//:proptest",
+    "@crate_index//:rand",
+    "@crate_index//:rand_chacha",
+]
+
+rust_library(
+    name = "tree_hash",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_canonical_state_tree_hash",
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "tree_hash_integration",
+    srcs = glob(["tests/**/*.rs"]),
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":tree_hash"],
+)

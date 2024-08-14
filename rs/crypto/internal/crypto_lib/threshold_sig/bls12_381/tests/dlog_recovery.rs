@@ -4,8 +4,7 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
 
 // Returns a random element of Gt
-fn gt_rand() -> Gt {
-    let mut rng = reproducible_rng();
+fn gt_rand<R: Rng>(rng: &mut R) -> Gt {
     let g1 = G1Affine::hash(b"ic-crypto-test-gt-random", &rng.gen::<[u8; 32]>());
     let g2 = G2Affine::generator();
     Gt::pairing(&g1, g2)
@@ -14,38 +13,95 @@ fn gt_rand() -> Gt {
 #[test]
 fn baby_giant_empty_range() {
     let base = Gt::generator().clone();
-    let baby_giant = BabyStepGiantStep::new(&base, 0, 0);
+    let baby_giant = BabyStepGiantStep::new(&base, 0, 0, 512, 10);
 
     assert_eq!(baby_giant.solve(&base), None);
 }
 
 #[test]
-fn baby_giant_1000() {
-    let base = gt_rand();
-    let baby_giant = BabyStepGiantStep::new(&base, -24, 1024);
+fn baby_giant_tiny_range() {
+    let rng = &mut reproducible_rng();
+    let base = gt_rand(rng);
 
+    let max_range = 100;
+
+    let sums = {
+        let mut sums = Vec::with_capacity(max_range);
+
+        let mut accum = Gt::identity();
+
+        for _ in 0..max_range {
+            sums.push(accum.clone());
+            accum += &base;
+        }
+
+        sums
+    };
+
+    for range in 4..max_range {
+        let baby_giant = BabyStepGiantStep::new(&base, 0, range, 512, 1);
+
+        for (i, sum) in sums.iter().enumerate().take(range) {
+            assert_eq!(baby_giant.solve(sum), Some(Scalar::from_usize(i)));
+        }
+    }
+}
+
+#[test]
+fn baby_giant_1000() {
+    let rng = &mut reproducible_rng();
+    let base = gt_rand(rng);
+    let baby_giant = BabyStepGiantStep::new(&base, -24, 1024, 512, 10);
+
+    // Test that we can solve in the negative range:
+    let mut accum = &base * Scalar::from_usize(24).neg();
+    for x in -24..0 {
+        assert_eq!(baby_giant.solve(&accum), Some(Scalar::from_isize(x)));
+        accum += &base;
+    }
+
+    // Test that we can solve in the postive range:
     let mut accum = Gt::identity();
     for x in 0..1000 {
         assert_eq!(baby_giant.solve(&accum), Some(Scalar::from_usize(x)));
         accum += &base;
     }
 
-    // now out of range:
-    for _ in 1000..2000 {
-        assert_eq!(baby_giant.solve(&accum), None);
+    // Outside the range BSGS might still succeed, but it might not.
+    // We allow it to fail, but if it returns an answer it must be correct.
+    for i in 1000..=3000 {
+        if let Some(dlog) = baby_giant.solve(&accum) {
+            assert_eq!(dlog, Scalar::from_usize(i));
+        }
+
         accum += &base;
     }
 }
 
 #[test]
 fn baby_giant_negative() {
-    let base = gt_rand();
-    let baby_giant = BabyStepGiantStep::new(&base, -999, 1024);
+    let rng = &mut reproducible_rng();
+    let base = gt_rand(rng);
 
-    for x in 0..1000 {
-        let x = Scalar::from_isize(-x);
+    let lo = -999;
+    let range = 1024;
+
+    let hi = range as isize + lo;
+
+    let max_mem = 128;
+    let max_mult = 1;
+
+    let baby_giant = BabyStepGiantStep::new(&base, lo, range, max_mem, max_mult);
+
+    for i in -1200..200 {
+        let out_of_range = i < lo || i >= hi;
+        let x = Scalar::from_isize(i);
         let tgt = &base * &x;
-        assert_eq!(baby_giant.solve(&tgt), Some(x))
+
+        match baby_giant.solve(&tgt) {
+            Some(dlog) => assert_eq!(dlog, x),
+            None => assert!(out_of_range, "{:?}", x),
+        }
     }
 }
 
@@ -54,14 +110,19 @@ fn baby_giant_negative() {
 // (This is not the entire cost. We must also search for a cofactor Delta.)
 #[test]
 fn baby_giant_big_range() {
-    let x = (1 << 39) + 123;
-    let base = gt_rand();
-    let baby_giant = BabyStepGiantStep::new(&base, -(1 << 10), 1 << 40);
+    let rng = &mut reproducible_rng();
 
-    let x = Scalar::from_isize(x);
-    let tgt = &base * &x;
+    let lower_bound = -(1 << 10);
+    let upper_bound = 1 << 40;
 
-    assert_eq!(baby_giant.solve(&tgt), Some(x));
+    let base = gt_rand(rng);
+    let baby_giant = BabyStepGiantStep::new(&base, lower_bound, upper_bound, 2048, 3);
+
+    for _trial in 0..30 {
+        let x = Scalar::from_isize((rng.gen::<u64>() % upper_bound as u64) as isize + lower_bound);
+        let tgt = &base * &x;
+        assert_eq!(baby_giant.solve(&tgt), Some(x));
+    }
 }
 
 // Exhaustive test for honest dealer
@@ -70,7 +131,6 @@ fn baby_giant_big_range() {
 #[test]
 #[ignore]
 fn honest_dealer_search_works_exhaustive_test() {
-    println!("gen table");
     let search = HonestDealerDlogLookupTable::new();
 
     let mut accum = Gt::identity();
@@ -97,7 +157,7 @@ fn honest_dealer_search_works_exhaustive_test() {
 fn honest_dealer_search_works_randomized_test() {
     let search = HonestDealerDlogLookupTable::new();
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     let mut dlogs = (0..500).map(|_| rng.gen::<u16>()).collect::<Vec<_>>();
 
@@ -193,35 +253,4 @@ fn slightly_dishonest_dlog() {
     let mut answer = Scalar::from_usize(5).inverse().expect("Inverse exists");
     answer *= Scalar::from_isize(-12345678);
     assert_eq!(cheat_solver.solve(&(base * &answer)), Some(answer));
-}
-
-fn cheating_dlog_instance(m: usize) -> (Scalar, Gt) {
-    let mut rng = reproducible_rng();
-
-    let z = 1069531200 * 16 * m as u64;
-
-    let s = Scalar::from_u64(rng.gen::<u64>() % z);
-
-    let delta = std::cmp::max(1, rng.gen::<u16>() % 10) as u64;
-    let delta = Scalar::from_u64(delta);
-
-    let delta_inv = delta.inverse().expect("Delta not invertible");
-
-    let s_div_delta = s * delta_inv;
-
-    let p = Gt::generator() * &s_div_delta;
-    (s_div_delta, p)
-}
-
-#[test]
-fn test_that_cheating_dealer_solver_can_solve_instance() {
-    let m = 29;
-    let solver = CheatingDealerDlogSolver::new(m, 16);
-
-    let (solution, target) = cheating_dlog_instance(m);
-
-    assert_eq!(
-        solution,
-        solver.solve(&target).expect("Unable to solve dlog")
-    );
 }

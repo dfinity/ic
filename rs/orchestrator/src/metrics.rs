@@ -6,17 +6,15 @@ pub const PROMETHEUS_HTTP_PORT: u16 = 9091;
 
 #[derive(Clone)]
 pub struct OrchestratorMetrics {
-    pub heart_beat_count: IntCounter,
-    pub resident_mem_used: IntGauge,
-    /// Registry version last used to succesfully fetch datacenter information
-    pub datacenter_registry_version: IntGauge,
     pub ssh_access_registry_version: IntGauge,
     pub firewall_registry_version: IntGauge,
+    pub ipv4_registry_version: IntGauge,
     pub reboot_duration: IntGauge,
     pub orchestrator_info: IntGaugeVec,
     pub key_rotation_status: IntGaugeVec,
-    pub ecdsa_key_changed_errors: IntCounterVec,
+    pub master_public_key_changed_errors: IntCounterVec,
     pub failed_consecutive_upgrade_checks: IntCounter,
+    pub critical_error_cup_deserialization_failed: IntCounter,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
@@ -45,18 +43,6 @@ impl KeyRotationStatus {
 impl OrchestratorMetrics {
     pub fn new(metrics_registry: &ic_metrics::MetricsRegistry) -> Self {
         Self {
-            heart_beat_count: metrics_registry.int_counter(
-                "replica_heart_beat_count",
-                "Number of times a process heart beat has been observed for the Subnet Replica",
-            ),
-            resident_mem_used: metrics_registry.int_gauge(
-                "replica_resident_memory_used",
-                "Resident memory allocated by the Subnet Replica in bytes",
-            ),
-            datacenter_registry_version: metrics_registry.int_gauge(
-                "datacenter_registry_version",
-                "Registry version last used to successfully fetch datacenter information",
-            ),
             ssh_access_registry_version: metrics_registry.int_gauge(
                 "ssh_access_registry_version",
                 "Registry version last used to update the SSH public keys",
@@ -64,6 +50,10 @@ impl OrchestratorMetrics {
             firewall_registry_version: metrics_registry.int_gauge(
                 "firewall_registry_version",
                 "Latest registry version used for firewall configuration",
+            ),
+            ipv4_registry_version: metrics_registry.int_gauge(
+                "ipv4_registry_version",
+                "Latest registry version used for the IPv4 configuration",
             ),
             reboot_duration: metrics_registry.int_gauge(
                 "reboot_duration_seconds",
@@ -79,14 +69,18 @@ impl OrchestratorMetrics {
                 "The current key rotation status.",
                 &["status"],
             ),
-            ecdsa_key_changed_errors: metrics_registry.int_counter_vec(
-                "orchestrator_tecdsa_key_changed_errors_total",
-                "Critical error counter monitoring changed tECDSA public keys",
+            master_public_key_changed_errors: metrics_registry.int_counter_vec(
+                "orchestrator_master_public_key_changed_errors_total",
+                "Critical error counter monitoring changed threshold master public keys",
                 &["key_id"],
             ),
             failed_consecutive_upgrade_checks: metrics_registry.int_counter(
                 "orchestrator_failed_consecutive_upgrade_checks_total",
                 "Number of times the upgrade check failed consecutively",
+            ),
+            critical_error_cup_deserialization_failed: metrics_registry.int_counter(
+                "orchestrator_cup_deserialization_failed_total",
+                "Number of times the deserialization of the locally persisted CUP failed",
             ),
         }
     }

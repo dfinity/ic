@@ -1,15 +1,15 @@
-use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry};
 
 use std::convert::TryFrom;
 
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use serde::Serialize;
-
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_transport::upsert;
+use prost::Message;
+use serde::Serialize;
 
 impl Registry {
     /// Adds the nodes to an existing subnet record in the registry.
@@ -21,6 +21,9 @@ impl Registry {
             "{}do_add_nodes_to_subnet started: {:?}",
             LOG_PREFIX, payload
         );
+
+        // Validate payload
+        self.validate_add_nodes_to_subnet_payload(&payload);
 
         let mut nodes_to_add = payload.node_ids.clone();
         let subnet_id = SubnetId::from(payload.subnet_id);
@@ -37,7 +40,7 @@ impl Registry {
         self.replace_subnet_record_membership(subnet_id, &mut subnet_record, nodes_to_add);
         let mutations = vec![upsert(
             make_subnet_record_key(subnet_id),
-            encode_or_panic(&subnet_record),
+            subnet_record.encode_to_vec(),
         )];
 
         // Check invariants before applying mutations
@@ -47,6 +50,16 @@ impl Registry {
             "{}do_add_nodes_to_subnet finished: {:?}",
             LOG_PREFIX, payload
         );
+    }
+
+    /// Ensure all nodes for new subnet are not already assigned as ApiBoundaryNode
+    pub fn validate_add_nodes_to_subnet_payload(&self, payload: &AddNodesToSubnetPayload) {
+        // Ensure that none of the Nodes are assigned as ApiBoundaryNode
+        payload.node_ids.iter().cloned().for_each(|id| {
+            if self.get_api_boundary_node_record(id).is_some() {
+                panic!("Some Nodes are already assigned as ApiBoundaryNode");
+            }
+        });
     }
 }
 

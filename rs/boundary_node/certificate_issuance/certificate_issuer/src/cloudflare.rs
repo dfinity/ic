@@ -8,11 +8,7 @@ use cloudflare::{
         },
         zone::{ListZones, ListZonesParams, Zone},
     },
-    framework::{
-        async_api::{ApiClient, Client},
-        auth::Credentials,
-        Environment, HttpApiClientConfig,
-    },
+    framework::{async_api::Client, auth::Credentials, Environment, HttpApiClientConfig},
 };
 
 use crate::dns::{Create, Delete, Record};
@@ -33,7 +29,7 @@ pub struct Cloudflare {
 }
 
 impl Cloudflare {
-    pub fn new(key: &str) -> Result<Self, Error> {
+    pub fn new(url: &str, key: &str) -> Result<Self, Error> {
         let credentials = Credentials::UserAuthToken {
             token: key.to_owned(),
         };
@@ -41,7 +37,7 @@ impl Cloudflare {
         let client = Client::new(
             credentials,
             HttpApiClientConfig::default(),
-            Environment::Production,
+            Environment::Custom(url.try_into().context("invalid api url")?),
         )
         .context("failed to initialize cloudflare api client")?;
 
@@ -73,7 +69,7 @@ impl Create for Cloudflare {
             None => return Err(anyhow!("missing zone")),
         };
 
-        // Check for existance
+        // Check for existence
         let resp = self
             .client
             .request(&ListDnsRecords {
@@ -113,7 +109,6 @@ impl Create for Cloudflare {
 
         match cmd {
             Some(Command::Create) => {
-                println!("create");
                 self.client
                     .request(&CreateDnsRecord {
                         zone_identifier: zone_id,
@@ -128,7 +123,6 @@ impl Create for Cloudflare {
                     .await?
             }
             Some(Command::Update(id)) => {
-                println!("update");
                 self.client
                     .request(&UpdateDnsRecord {
                         zone_identifier: zone_id,
@@ -143,7 +137,6 @@ impl Create for Cloudflare {
                     .await?
             }
             None => {
-                println!("skip");
                 return Ok(());
             }
         };
@@ -176,7 +169,7 @@ impl Delete for Cloudflare {
             None => return Err(anyhow!("missing zone")),
         };
 
-        // Check for existance
+        // Check for existence
         let resp = self
             .client
             .request(&ListDnsRecords {

@@ -1,10 +1,12 @@
+use std::borrow::Cow;
+
 use assert_matches::assert_matches;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_utils::{
         validate_and_instrument_for_testing,
         validation::{extract_custom_section_name, RESERVED_SYMBOLS},
-        WasmImportsDetails, WasmValidationDetails,
+        Complexity, WasmImportsDetails, WasmValidationDetails,
     },
     WasmtimeEmbedder,
 };
@@ -17,8 +19,8 @@ use ic_replicated_state::canister_state::execution_state::{
 };
 use ic_types::{NumBytes, NumInstructions};
 use maplit::btreemap;
-use wasmtime_environ::WASM_PAGE_SIZE;
 
+const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 const KB: u32 = 1024;
 
 fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wat::Error> {
@@ -85,6 +87,7 @@ fn can_validate_valid_export_section() {
     let wasm = wat2wasm(
         r#"(module
                   (func $x)
+                  (export "some_function_is_ok" (func $x))
                   (export "canister_init" (func $x))
                   (export "canister_heartbeat" (func $x))
                   (export "canister_global_timer" (func $x))
@@ -99,8 +102,32 @@ fn can_validate_valid_export_section() {
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Ok(WasmValidationDetails {
             largest_function_instruction_count: NumInstructions::new(1),
+            max_complexity: Complexity(1),
             ..Default::default()
         })
+    );
+}
+
+#[test]
+fn can_validate_valid_export_section_with_no_space_after_canister_query() {
+    let wasm = wat2wasm(
+        r#"(module
+                  (func $x)
+                  (export "canister_init" (func $x))
+                  (export "canister_heartbeat" (func $x))
+                  (export "canister_global_timer" (func $x))
+                  (export "canister_pre_upgrade" (func $x))
+                  (export "canister_post_upgrade" (func $x))
+                  (export "canister_query read" (func $x))
+                  (export "some_function_is_ok" (func $x))
+                  (export "canister_query" (func $x)))"#,
+    )
+    .unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::InvalidExportSection(
+            "Exporting reserved function 'canister_query' with \"canister_\" prefix".to_string()
+        ))
     );
 }
 
@@ -116,18 +143,15 @@ fn can_validate_valid_export_section_with_reserved_functions() {
                   (export "canister_post_upgrade" (func $x))
                   (export "canister_query read" (func $x))
                   (export "some_function_is_ok" (func $x))
-                  (export "canister_query" (func $x))
-                  (export "canister_bar_is_reserved" (func $x))
-                  (export "canister_foo_is_reserved" (func $x)))"#,
+                  (export "canister_bar_is_reserved" (func $x)))"#,
     )
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Ok(WasmValidationDetails {
-            reserved_exports: 3,
-            largest_function_instruction_count: NumInstructions::new(1),
-            ..Default::default()
-        })
+        Err(WasmValidationError::InvalidExportSection(
+            "Exporting reserved function 'canister_bar_is_reserved' with \"canister_\" prefix"
+                .to_string()
+        ))
     );
 }
 
@@ -310,7 +334,7 @@ fn can_validate_duplicate_update_and_query_methods() {
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::InvalidExportSection(
+        Err(WasmValidationError::UserInvalidExportSection(
             "Duplicate function 'read' exported multiple times \
              with different call types: update, query, or composite_query."
                 .to_string()
@@ -329,7 +353,7 @@ fn can_validate_duplicate_update_and_composite_query_methods() {
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::InvalidExportSection(
+        Err(WasmValidationError::UserInvalidExportSection(
             "Duplicate function 'read' exported multiple times \
              with different call types: update, query, or composite_query."
                 .to_string()
@@ -348,7 +372,7 @@ fn can_validate_duplicate_query_and_composite_query_methods() {
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::InvalidExportSection(
+        Err(WasmValidationError::UserInvalidExportSection(
             "Duplicate function 'read' exported multiple times \
              with different call types: update, query, or composite_query."
                 .to_string()
@@ -381,6 +405,7 @@ fn can_validate_many_exported_functions() {
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Ok(WasmValidationDetails {
             largest_function_instruction_count: NumInstructions::new(1),
+            max_complexity: Complexity(1),
             ..Default::default()
         })
     );
@@ -391,7 +416,7 @@ fn can_validate_too_many_exported_functions() {
     let wasm = wat2wasm(&many_exported_functions(1001)).unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::InvalidExportSection(
+        Err(WasmValidationError::UserInvalidExportSection(
             "The number of exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds 1000.".to_string()
         ))
     );
@@ -415,6 +440,7 @@ fn can_validate_large_sum_exported_function_name_lengths() {
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Ok(WasmValidationDetails {
             largest_function_instruction_count: NumInstructions::new(1),
+            max_complexity: Complexity(1),
             ..Default::default()
         })
     );
@@ -436,7 +462,7 @@ fn can_validate_too_large_sum_exported_function_name_lengths() {
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::InvalidExportSection(
+        Err(WasmValidationError::UserInvalidExportSection(
             "The sum of `<name>` lengths in exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds 20000.".to_string()
         ))
     );
@@ -456,6 +482,7 @@ fn can_validate_canister_query_update_method_name_with_whitespace() {
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Ok(WasmValidationDetails {
             largest_function_instruction_count: NumInstructions::new(1),
+            max_complexity: Complexity(1),
             ..Default::default()
         })
     );
@@ -610,16 +637,16 @@ fn can_reject_module_with_too_many_functions() {
 fn can_validate_module_with_custom_sections() {
     let mut module = wasm_encoder::Module::new();
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:private name1",
-        data: &[0, 1],
+        name: Cow::Borrowed("icp:private name1"),
+        data: Cow::Borrowed(&[0, 1]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:public name2",
-        data: &[0, 2],
+        name: Cow::Borrowed("icp:public name2"),
+        data: Cow::Borrowed(&[0, 2]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "name3",
-        data: &[0, 2],
+        name: Cow::Borrowed("name3"),
+        data: Cow::Borrowed(&[0, 2]),
     });
     let wasm = BinaryEncodedWasm::new(module.finish());
 
@@ -645,16 +672,16 @@ fn can_validate_module_with_custom_sections() {
 fn can_reject_module_with_too_many_custom_sections() {
     let mut module = wasm_encoder::Module::new();
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:private name1",
-        data: &[0, 1],
+        name: Cow::Borrowed("icp:private name1"),
+        data: Cow::Borrowed(&[0, 1]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:public name2",
-        data: &[0, 2],
+        name: Cow::Borrowed("icp:public name2"),
+        data: Cow::Borrowed(&[0, 2]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "name3",
-        data: &[0, 2],
+        name: Cow::Borrowed("name3"),
+        data: Cow::Borrowed(&[0, 2]),
     });
     let wasm = BinaryEncodedWasm::new(module.finish());
 
@@ -680,13 +707,13 @@ fn can_reject_module_with_custom_sections_too_big() {
     let mut module = wasm_encoder::Module::new();
     // Size of this custom section is 12 bytes.
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:public name",
-        data: &content,
+        name: Cow::Borrowed("icp:public name"),
+        data: Cow::Borrowed(&content),
     });
     // Adding the size of this custom section will exceed the `max_custom_sections_size`.
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:private custom_section",
-        data: &content,
+        name: Cow::Borrowed("icp:private custom_section"),
+        data: Cow::Borrowed(&content),
     });
     let wasm = BinaryEncodedWasm::new(module.finish());
 
@@ -711,16 +738,16 @@ fn can_reject_module_with_custom_sections_too_big() {
 fn can_reject_module_with_duplicate_custom_sections() {
     let mut module = wasm_encoder::Module::new();
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:private custom1",
-        data: &[0, 1],
+        name: Cow::Borrowed("icp:private custom1"),
+        data: Cow::Borrowed(&[0, 1]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:public custom2",
-        data: &[0, 2],
+        name: Cow::Borrowed("icp:public custom2"),
+        data: Cow::Borrowed(&[0, 2]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:public custom1",
-        data: &[0, 3],
+        name: Cow::Borrowed("icp:public custom1"),
+        data: Cow::Borrowed(&[0, 3]),
     });
     let wasm = BinaryEncodedWasm::new(module.finish());
 
@@ -743,16 +770,16 @@ fn can_reject_module_with_duplicate_custom_sections() {
 fn can_reject_module_with_invalid_custom_sections() {
     let mut module = wasm_encoder::Module::new();
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:private custom1",
-        data: &[0, 1],
+        name: Cow::Borrowed("icp:private custom1"),
+        data: Cow::Borrowed(&[0, 1]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:public custom2",
-        data: &[0, 2],
+        name: Cow::Borrowed("icp:public custom2"),
+        data: Cow::Borrowed(&[0, 2]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:dummy custom3",
-        data: &[0, 3],
+        name: Cow::Borrowed("icp:dummy custom3"),
+        data: Cow::Borrowed(&[0, 3]),
     });
     let wasm = BinaryEncodedWasm::new(module.finish());
 
@@ -877,18 +904,24 @@ fn can_validate_module_cycles_related_imports() {
 }
 
 #[test]
-fn can_validate_valid_export_section_with_invalid_function_index() {
-    let wasm = BinaryEncodedWasm::new(
-        include_bytes!("instrumentation-test-data/export_section_invalid_function_index.wasm")
-            .to_vec(),
-    );
-    assert_matches!(
-        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::InvalidFunctionIndex {
-            index: 0,
-            import_count: 1
-        })
-    );
+fn can_validate_export_section_exporting_import() {
+    let wasm = wat2wasm(
+        r#"
+        (module
+            (type (;0;) (func))
+            (import "env" "memory" (memory (;0;) 529))
+            (import "env" "table" (table (;0;) 33 33 funcref))
+            (import "ic0" "msg_reply" (func (;0;) (type 0)))
+            (func (;1;) (type 0))
+            (func (;2;) (type 0))
+            (func (;3;) (type 0))
+            (export "canister_heartbeat" (func 1))
+            (export "canister_pre_upgrade" (func 2))
+            (export "canister_post_upgrade" (func 0)))
+        "#,
+    )
+    .unwrap();
+    validate_wasm_binary(&wasm, &EmbeddersConfig::default()).unwrap();
 }
 
 #[test]
@@ -948,7 +981,7 @@ fn function_with_result_is_invalid() {
 #[test]
 fn complex_function_rejected() {
     let mut wat = "(module (func) (func".to_string();
-    for _ in 0..15_001 {
+    for _ in 0..20_001 {
         wat.push_str("(loop)");
     }
     wat.push_str("))");
@@ -957,8 +990,8 @@ fn complex_function_rejected() {
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Err(WasmValidationError::FunctionComplexityTooHigh {
             index: 1,
-            complexity: 15_001,
-            allowed: 15_000
+            complexity: 1_020_052,
+            allowed: 1_000_000
         })
     )
 }

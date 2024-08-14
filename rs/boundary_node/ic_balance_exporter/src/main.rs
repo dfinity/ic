@@ -8,21 +8,22 @@ use std::{
 
 use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
-use axum::{handler::Handler, routing::get, Extension, Router};
-use candid::{CandidType, Decode, Encode, Principal};
+use axum::{body::Body, handler::Handler, routing::get, Extension, Router};
+use candid::{CandidType, Decode, DecoderConfig, Encode, Principal};
 use clap::Parser;
 use dashmap::DashMap;
-use futures::{future::TryFutureExt, stream::FuturesUnordered};
-use hyper::{Body, Request, Response, StatusCode};
+use futures::stream::FuturesUnordered;
+use hyper::{Request, Response, StatusCode};
 use ic_agent::{
-    agent::http_transport::ReqwestHttpReplicaV2Transport, identity::BasicIdentity, Agent,
+    agent::http_transport::reqwest_transport::ReqwestTransport, identity::BasicIdentity, Agent,
 };
 use mockall::automock;
-use opentelemetry::{global, sdk::Resource, KeyValue};
-use opentelemetry_prometheus::PrometheusExporter;
-use prometheus::{Encoder, TextEncoder};
+use opentelemetry::{metrics::MeterProvider, KeyValue};
+use opentelemetry_prometheus::exporter;
+use opentelemetry_sdk::metrics::MeterProviderBuilder;
+use prometheus::{labels, Encoder, Registry, TextEncoder};
 use serde::Deserialize;
-use tokio::{task, time::Instant};
+use tokio::{net::TcpListener, task, time::Instant};
 use tracing::info;
 
 mod metrics;
@@ -61,20 +62,26 @@ async fn main() -> Result<(), Error> {
 
     tracing::subscriber::set_global_default(subscriber).expect("failed to set global subscriber");
 
-    let exporter = opentelemetry_prometheus::exporter()
-        .with_resource(Resource::new(vec![KeyValue::new(
-            "service",
-            "ic-balance-exporter",
-        )]))
-        .init();
+    // Metrics
+    let service_name = "ic-balance-exporter";
 
-    let meter = global::meter("ic-balance-exporter");
+    let registry: Registry = Registry::new_custom(
+        None,
+        Some(labels! {"service".into() => service_name.into()}),
+    )
+    .unwrap();
+    let exporter = exporter().with_registry(registry.clone()).build()?;
+    let provider = MeterProviderBuilder::default()
+        .with_reader(exporter)
+        .build();
+    let meter = provider.meter(service_name);
 
     let wallet_balances: Arc<DashMap<String, u64>> = Arc::new(DashMap::new());
     let wallet_balances_m = Arc::clone(&wallet_balances);
 
     meter
-        .u64_value_observer("wallet_balance", move |o| {
+        .u64_observable_gauge("wallet_balance")
+        .with_callback(move |o| {
             for r in wallet_balances_m.iter() {
                 let (wallet, balance) = (r.key(), r.value());
                 o.observe(*balance, &[KeyValue::new("wallet", wallet.clone())]);
@@ -83,7 +90,7 @@ async fn main() -> Result<(), Error> {
         .with_description("wallet balance")
         .init();
 
-    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { exporter }));
+    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { registry }));
     let metrics_router = Router::new().route("/metrics", get(metrics_handler));
 
     let f = File::open(cli.identity_path).context("failed to open identity file")?;
@@ -95,8 +102,8 @@ async fn main() -> Result<(), Error> {
         .transpose()
         .context("failed to open root key")?;
 
-    let transport = ReqwestHttpReplicaV2Transport::create(cli.replica_endpoint)
-        .context("failed to create transport")?;
+    let transport =
+        ReqwestTransport::create(cli.replica_endpoint).context("failed to create transport")?;
 
     let agent = Agent::builder()
         .with_transport(transport)
@@ -130,11 +137,12 @@ async fn main() -> Result<(), Error> {
                 let _ = runner.run().await;
             }
         }),
-        task::spawn(
-            axum::Server::bind(&cli.metrics_addr)
-                .serve(metrics_router.into_make_service())
+        task::spawn(async move {
+            let listener = TcpListener::bind(&cli.metrics_addr).await.unwrap();
+            axum::serve(listener, metrics_router.into_make_service())
+                .await
                 .map_err(|err| anyhow!("server failed: {:?}", err))
-        )
+        })
     )
     .context("service failed to run")?;
 
@@ -143,14 +151,14 @@ async fn main() -> Result<(), Error> {
 
 #[derive(Clone)]
 struct MetricsHandlerArgs {
-    exporter: PrometheusExporter,
+    registry: Registry,
 }
 
 async fn metrics_handler(
-    Extension(MetricsHandlerArgs { exporter }): Extension<MetricsHandlerArgs>,
+    Extension(MetricsHandlerArgs { registry }): Extension<MetricsHandlerArgs>,
     _: Request<Body>,
 ) -> Response<Body> {
-    let metric_families = exporter.registry().gather();
+    let metric_families = registry.gather();
 
     let encoder = TextEncoder::new();
 
@@ -219,16 +227,23 @@ impl Scraper {
 impl Scrape for Scraper {
     async fn scrape(&self, wallet: &Principal) -> Result<u64, Error> {
         let agent = Arc::clone(&self.0);
-
+        let arg = candid::Encode!()?;
         let result = agent
             .query(wallet, "wallet_balance")
-            .with_arg(candid::Encode!()?)
+            .with_arg(arg)
             .call()
             .await
             .context("failed to query canister")?;
 
+        // Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
+        // The value of 10_000 follows the Candid recommendation.
+        const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
+        let mut config = DecoderConfig::new();
+        config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
+        config.set_full_error_message(false);
+
         let Amount { amount } =
-            candid::Decode!(&result, Amount).context("failed to decode result")?;
+            candid::Decode!([config]; &result, Amount).context("failed to decode result")?;
 
         Ok(amount)
     }

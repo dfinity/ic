@@ -4,10 +4,12 @@ use crate::secret_key_store::{
     SecretKeyStore, SecretKeyStoreInsertionError, SecretKeyStoreWriteError,
 };
 use crate::types::CspSecretKey;
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_types::scope::Scope;
 use std::fs;
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;
+use std::sync::Arc;
 use tempfile::TempDir;
 
 /// This store is opened in a newly created temporary directory, which will
@@ -33,7 +35,12 @@ impl TempSecretKeyStore {
             )
         });
         let temp_file = "temp_sks_data.pb";
-        let store = ProtoSecretKeyStore::open(temp_dir.path(), temp_file, None);
+        let store = ProtoSecretKeyStore::open(
+            temp_dir.path(),
+            temp_file,
+            None,
+            Arc::new(CryptoMetrics::none()),
+        );
         TempSecretKeyStore {
             store,
             _temp_dir: temp_dir,
@@ -72,14 +79,17 @@ impl SecretKeyStore for TempSecretKeyStore {
         self.store.remove(id)
     }
 
-    fn retain<F: 'static>(
-        &mut self,
-        filter: F,
-        scope: Scope,
-    ) -> Result<(), SecretKeyStoreWriteError>
+    fn retain<F>(&mut self, filter: F, scope: Scope) -> Result<(), SecretKeyStoreWriteError>
     where
-        F: Fn(&KeyId, &CspSecretKey) -> bool,
+        F: Fn(&KeyId, &CspSecretKey) -> bool + 'static,
     {
         self.store.retain(filter, scope)
+    }
+
+    fn retain_would_modify_keystore<F>(&self, filter: F, scope: Scope) -> bool
+    where
+        F: Fn(&KeyId, &CspSecretKey) -> bool + 'static,
+    {
+        self.store.retain_would_modify_keystore(filter, scope)
     }
 }

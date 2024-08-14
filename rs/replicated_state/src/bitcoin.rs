@@ -1,13 +1,13 @@
 use crate::{ReplicatedState, StateError};
-use ic_btc_types_internal::{
+use ic_btc_replica_types::{
     BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, BlockBlob,
     GetSuccessorsResponseComplete, GetSuccessorsResponsePartial,
 };
 use ic_error_types::RejectCode;
-use ic_ic00_types::{BitcoinGetSuccessorsResponse, EmptyBlob, Payload as _};
+use ic_management_canister_types::{BitcoinGetSuccessorsResponse, EmptyBlob, Payload as _};
 use ic_types::{
-    messages::{CallbackId, Payload, RejectContext, Response},
-    CanisterId,
+    batch::ConsensusResponse,
+    messages::{CallbackId, Payload, RejectContext},
 };
 use std::cmp::min;
 
@@ -38,7 +38,7 @@ pub fn push_response(
                     callback_id: callback_id.get(),
                 })?;
 
-            let response_payload = match maybe_split_response(r) {
+            let payload = match maybe_split_response(r) {
                 Ok((initial_response, follow_ups)) => {
                     // Store the follow-ups for later (overwrites previous ones).
                     state
@@ -48,46 +48,55 @@ pub fn push_response(
 
                     Payload::Data(initial_response.encode())
                 }
-                Err(err) => Payload::Reject(RejectContext {
-                    code: RejectCode::CanisterError,
-                    message: format!("Received invalid response from adapter: {:?}", err),
-                }),
+                Err(err) => Payload::Reject(RejectContext::new(
+                    RejectCode::CanisterError,
+                    format!("Received invalid response from adapter: {:?}", err),
+                )),
             };
 
             // Add response to the consensus queue.
-            state.consensus_queue.push(Response {
-                originator: context.request.sender(),
-                respondent: CanisterId::ic_00(),
-                originator_reply_callback: callback_id,
-                refund: context.request.take_cycles(),
-                response_payload,
-            });
+            state
+                .consensus_queue
+                .push(ConsensusResponse::new(callback_id, payload));
 
             Ok(())
         }
         BitcoinAdapterResponseWrapper::SendTransactionResponse(_) => {
             // Retrieve the associated request from the call context manager.
             let callback_id = CallbackId::from(response.callback_id);
-            let context = state
-                .metadata
-                .subnet_call_context_manager
-                .bitcoin_send_transaction_internal_contexts
-                .get_mut(&callback_id)
-                .ok_or_else(|| StateError::BitcoinNonMatchingResponse {
-                    callback_id: callback_id.get(),
-                })?;
-
             // The response to a `send_transaction` call is always the empty blob.
-            let response_payload = Payload::Data(EmptyBlob.encode());
+            let payload = Payload::Data(EmptyBlob.encode());
 
             // Add response to the consensus queue.
-            state.consensus_queue.push(Response {
-                originator: context.request.sender(),
-                respondent: CanisterId::ic_00(),
-                originator_reply_callback: callback_id,
-                refund: context.request.take_cycles(),
-                response_payload,
-            });
+            state
+                .consensus_queue
+                .push(ConsensusResponse::new(callback_id, payload));
+
+            Ok(())
+        }
+        BitcoinAdapterResponseWrapper::GetSuccessorsReject(reject) => {
+            // Retrieve the associated request from the call context manager.
+            let callback_id = CallbackId::from(response.callback_id);
+            let reject_payload =
+                Payload::Reject(RejectContext::new(reject.reject_code, reject.message));
+
+            // Add response to the consensus queue.
+            state
+                .consensus_queue
+                .push(ConsensusResponse::new(callback_id, reject_payload));
+
+            Ok(())
+        }
+        BitcoinAdapterResponseWrapper::SendTransactionReject(reject) => {
+            // Retrieve the associated request from the call context manager.
+            let callback_id = CallbackId::from(response.callback_id);
+            let reject_payload =
+                Payload::Reject(RejectContext::new(reject.reject_code, reject.message));
+
+            // Add response to the consensus queue.
+            state
+                .consensus_queue
+                .push(ConsensusResponse::new(callback_id, reject_payload));
 
             Ok(())
         }

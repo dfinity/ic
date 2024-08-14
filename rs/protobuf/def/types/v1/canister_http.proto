@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package types.v1;
+
+import "types/v1/errors.proto";
+import "types/v1/types.proto";
+
+message HttpHeader {
+  string name = 1;
+  bytes value = 2;
+}
+
+message CanisterHttpRequest {
+  string url = 1;
+  bytes body = 2;
+  repeated HttpHeader headers = 3;
+}
+
+message CanisterHttpResponse {
+  uint64 id = 1;
+  uint64 timeout = 2;
+  types.v1.CanisterId canister_id = 4;
+  CanisterHttpResponseContent content = 3;
+}
+
+message CanisterHttpResponseMetadata {
+  uint64 id = 1;
+  uint64 timeout = 2;
+  bytes content_hash = 3;
+  uint64 registry_version = 4;
+}
+
+message CanisterHttpResponseContent {
+  reserved 1;
+  oneof status {
+    CanisterHttpReject reject = 2;
+    bytes success = 3;
+  }
+}
+
+message CanisterHttpReject {
+  reserved 1;
+  reserved "reject_code_old";
+  types.v1.RejectCode reject_code = 3;
+  string message = 2;
+}
+
+message CanisterHttpResponseSignature {
+  bytes signer = 1;
+  bytes signature = 2;
+}
+
+message CanisterHttpResponseWithConsensus {
+  CanisterHttpResponse response = 1;
+  bytes hash = 2;
+  uint64 registry_version = 3;
+  reserved 4;
+  reserved 5;
+  reserved 6;
+  repeated CanisterHttpResponseSignature signatures = 7;
+}
+
+message CanisterHttpShare {
+  CanisterHttpResponseMetadata metadata = 1;
+  CanisterHttpResponseSignature signature = 2;
+}
+
+message CanisterHttpResponseDivergence {
+  repeated CanisterHttpShare shares = 1;
+}
+
+message CanisterHttpResponseMessage {
+  oneof message_type {
+    CanisterHttpResponseWithConsensus response = 1;
+    uint64 timeout = 2;
+    CanisterHttpResponseDivergence divergence_response = 3;
+  }
+}

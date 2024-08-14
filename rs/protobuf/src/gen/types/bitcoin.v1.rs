@@ -1,4 +1,3 @@
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Transaction {
@@ -11,7 +10,6 @@ pub struct Transaction {
     #[prost(message, repeated, tag = "4")]
     pub output: ::prost::alloc::vec::Vec<TxOut>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TxIn {
@@ -24,7 +22,6 @@ pub struct TxIn {
     #[prost(bytes = "vec", repeated, tag = "4")]
     pub witness: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TxOut {
@@ -33,7 +30,6 @@ pub struct TxOut {
     #[prost(bytes = "vec", tag = "2")]
     pub script_pubkey: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct OutPoint {
@@ -42,7 +38,6 @@ pub struct OutPoint {
     #[prost(uint32, tag = "2")]
     pub vout: u32,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlockHeader {
@@ -59,7 +54,6 @@ pub struct BlockHeader {
     #[prost(uint32, tag = "6")]
     pub nonce: u32,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Block {
@@ -68,7 +62,6 @@ pub struct Block {
     #[prost(message, repeated, tag = "2")]
     pub txdata: ::prost::alloc::vec::Vec<Transaction>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SendTransactionRequest {
@@ -77,12 +70,10 @@ pub struct SendTransactionRequest {
     #[prost(bytes = "vec", tag = "2")]
     pub transaction: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SendTransactionResponse {}
 /// Wraps the different types of requests to the Bitcoin Adapter.
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinAdapterRequestWrapper {
@@ -91,7 +82,6 @@ pub struct BitcoinAdapterRequestWrapper {
 }
 /// Nested message and enum types in `BitcoinAdapterRequestWrapper`.
 pub mod bitcoin_adapter_request_wrapper {
-    #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum R {
@@ -102,16 +92,14 @@ pub mod bitcoin_adapter_request_wrapper {
     }
 }
 /// Wraps the different types of responses from the Bitcoin Adapter.
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinAdapterResponseWrapper {
-    #[prost(oneof = "bitcoin_adapter_response_wrapper::R", tags = "3, 4")]
+    #[prost(oneof = "bitcoin_adapter_response_wrapper::R", tags = "3, 4, 5, 6")]
     pub r: ::core::option::Option<bitcoin_adapter_response_wrapper::R>,
 }
 /// Nested message and enum types in `BitcoinAdapterResponseWrapper`.
 pub mod bitcoin_adapter_response_wrapper {
-    #[derive(serde::Serialize, serde::Deserialize)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum R {
@@ -119,11 +107,14 @@ pub mod bitcoin_adapter_response_wrapper {
         GetSuccessorsResponse(super::GetSuccessorsResponseComplete),
         #[prost(message, tag = "4")]
         SendTransactionResponse(super::SendTransactionResponse),
+        #[prost(message, tag = "5")]
+        GetSuccessorsReject(super::GetSuccessorsReject),
+        #[prost(message, tag = "6")]
+        SendTransactionReject(super::SendTransactionReject),
     }
 }
 /// A Bitcoin Adapter request, used to store the requests in the
 /// `ReplicatedState`.
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinAdapterRequest {
@@ -137,7 +128,6 @@ pub struct BitcoinAdapterRequest {
 }
 /// A Bitcoin Adapter response, used to store the responses in the
 /// `ReplicatedState`.
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinAdapterResponse {
@@ -150,7 +140,6 @@ pub struct BitcoinAdapterResponse {
     pub callback_id: u64,
 }
 /// A request to retrieve new blocks from the specified Bitcoin network.
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetSuccessorsRequestInitial {
@@ -162,7 +151,6 @@ pub struct GetSuccessorsRequestInitial {
     pub anchor: ::prost::alloc::vec::Vec<u8>,
 }
 /// A response containing new successor blocks from the Bitcoin network.
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetSuccessorsResponseComplete {
@@ -171,8 +159,24 @@ pub struct GetSuccessorsResponseComplete {
     #[prost(bytes = "vec", repeated, tag = "2")]
     pub next: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
+/// A `GetSucceessors` reject response containing additional information about the rejection.
 #[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetSuccessorsReject {
+    #[prost(enumeration = "super::super::types::v1::RejectCode", tag = "3")]
+    pub reject_code: i32,
+    #[prost(string, tag = "2")]
+    pub message: ::prost::alloc::string::String,
+}
+/// A `SendTransaction` reject response containing additional information about the rejection.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SendTransactionReject {
+    #[prost(enumeration = "super::super::types::v1::RejectCode", tag = "3")]
+    pub reject_code: i32,
+    #[prost(string, tag = "2")]
+    pub message: ::prost::alloc::string::String,
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum Network {
@@ -192,6 +196,16 @@ impl Network {
             Network::Testnet => "NETWORK_TESTNET",
             Network::Mainnet => "NETWORK_MAINNET",
             Network::Regtest => "NETWORK_REGTEST",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "NETWORK_UNSPECIFIED" => Some(Self::Unspecified),
+            "NETWORK_TESTNET" => Some(Self::Testnet),
+            "NETWORK_MAINNET" => Some(Self::Mainnet),
+            "NETWORK_REGTEST" => Some(Self::Regtest),
+            _ => None,
         }
     }
 }

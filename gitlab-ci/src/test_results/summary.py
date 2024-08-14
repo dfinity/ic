@@ -19,7 +19,7 @@ class Colors:
 
 
 NODE_LOGS = "/app/kibana#/discover?_g=(time:(from:now-1y,to:now))&_a=(columns:!(_source),index:c8cf8e20-593f-11ec-9f11-0fb8445c6897,interval:auto,query:(language:kuery,query:'tags:%22{}%22'),sort:!(!('@timestamp',desc)))"
-KIBANA_BASE_URL = "https://kibana.testnet.dfinity.systems"
+KIBANA_BASE_URL = "https://kibana.testnet.dfinity.network"
 TAB_SIZE = 2
 MAX_DISPLAY_ERROR_SIZE = 300
 
@@ -70,7 +70,7 @@ def summarize(root, working_dir: str, pot_setup_file: str, pot_setup_result_file
             group_name_file = all_pots_setup_files[search_idx]
             with open(group_name_file) as file:
                 data = json.load(file)
-                group_name = data["farm_group_name"]
+                group_name = data["infra_group_name"]
         except Exception:
             print(f"Couldn't establish `group_name` of the pot {p.name}.")
         if verbose or pot_result == "Failed":

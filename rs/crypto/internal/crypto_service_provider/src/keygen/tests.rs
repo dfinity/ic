@@ -1,17 +1,15 @@
 #![allow(clippy::unwrap_used)]
-use super::*;
 use crate::keygen::fixtures::multi_bls_test_vector;
 use crate::keygen::utils::node_signing_pk_to_proto;
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
+use crate::Csp;
+use crate::CspPublicKey;
 use crate::KeyId;
 use crate::LocalCspVault;
 use assert_matches::assert_matches;
 use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_byte_vec};
+use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types_test_utils::ids::node_test_id;
-use openssl::x509::X509NameEntries;
-use openssl::{asn1::Asn1Time, bn::BigNum, nid::Nid, x509::X509};
-use rand::CryptoRng;
-use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
@@ -19,12 +17,12 @@ const FIXED_SEED: u64 = 42;
 
 mod gen_node_siging_key_pair_tests {
     use super::*;
-    use crate::CspPublicKeyStore;
+    use crate::vault::api::CspBasicSignatureKeygenError;
 
     #[test]
     fn should_correctly_generate_node_signing_keys() {
         let csp = csp_with_fixed_seed();
-        let public_key = csp.gen_node_signing_key_pair().unwrap();
+        let public_key = csp.csp_vault.gen_node_signing_key_pair().unwrap();
         let key_id = KeyId::try_from(&public_key).unwrap();
 
         assert_eq!(
@@ -40,7 +38,8 @@ mod gen_node_siging_key_pair_tests {
             )
         );
         assert_eq!(
-            csp.current_node_public_keys()
+            csp.csp_vault
+                .current_node_public_keys()
                 .expect("Failed to retrieve node public keys")
                 .node_signing_public_key
                 .expect("missing key"),
@@ -52,15 +51,15 @@ mod gen_node_siging_key_pair_tests {
     fn should_fail_with_internal_error_if_node_signing_public_key_already_set() {
         let csp = Csp::builder_for_test().build();
 
-        assert!(csp.gen_node_signing_key_pair().is_ok());
-        let result = csp.gen_node_signing_key_pair();
+        assert!(csp.csp_vault.gen_node_signing_key_pair().is_ok());
+        let result = csp.csp_vault.gen_node_signing_key_pair();
 
         assert_matches!(result,
             Err(CspBasicSignatureKeygenError::InternalError { internal_error })
             if internal_error.contains("node signing public key already set")
         );
 
-        assert_matches!(csp.gen_node_signing_key_pair(),
+        assert_matches!(csp.csp_vault.gen_node_signing_key_pair(),
             Err(CspBasicSignatureKeygenError::InternalError { internal_error })
             if internal_error.contains("node signing public key already set")
         );
@@ -80,14 +79,15 @@ mod gen_node_siging_key_pair_tests {
             )
             .build();
 
-        let result = csp.gen_node_signing_key_pair();
+        let result = csp.csp_vault.gen_node_signing_key_pair();
 
         assert_matches!(result, Err(CspBasicSignatureKeygenError::DuplicateKeyId {key_id}) if key_id == duplicated_key_id)
     }
 }
 
 mod gen_key_pair_with_pop_tests {
-    use crate::{api::CspPublicKeyStore, keygen::utils::committee_signing_pk_to_proto};
+    use crate::keygen::utils::committee_signing_pk_to_proto;
+    use crate::vault::api::CspMultiSignatureKeygenError;
 
     use super::*;
 
@@ -95,7 +95,7 @@ mod gen_key_pair_with_pop_tests {
     fn should_correctly_generate_committee_signing_keys() {
         let test_vector = multi_bls_test_vector();
         let csp = csp_seeded_with(test_vector.seed);
-        let (public_key, pop) = csp.gen_committee_signing_key_pair().unwrap();
+        let (public_key, pop) = csp.csp_vault.gen_committee_signing_key_pair().unwrap();
         let key_id = KeyId::try_from(&public_key).unwrap();
 
         assert_eq!(key_id, test_vector.key_id);
@@ -103,7 +103,8 @@ mod gen_key_pair_with_pop_tests {
         assert_eq!(pop, test_vector.proof_of_possession);
 
         assert_eq!(
-            csp.current_node_public_keys()
+            csp.csp_vault
+                .current_node_public_keys()
                 .expect("Failed to retrieve node public keys")
                 .committee_signing_public_key
                 .expect("missing key"),
@@ -125,7 +126,7 @@ mod gen_key_pair_with_pop_tests {
             )
             .build();
 
-        let result = csp.gen_committee_signing_key_pair();
+        let result = csp.csp_vault.gen_committee_signing_key_pair();
 
         assert_matches!(result, Err(CspMultiSignatureKeygenError::DuplicateKeyId {key_id}) if key_id == duplicated_key_id)
     }
@@ -134,11 +135,11 @@ mod gen_key_pair_with_pop_tests {
     fn should_fail_with_internal_error_if_committee_signing_public_key_already_set() {
         let csp = Csp::builder_for_test().build();
 
-        assert!(csp.gen_committee_signing_key_pair().is_ok());
+        assert!(csp.csp_vault.gen_committee_signing_key_pair().is_ok());
 
-        // the attemtps after the first one should fail
+        // the attempts after the first one should fail
         for _ in 0..5 {
-            assert_matches!(csp.gen_committee_signing_key_pair(),
+            assert_matches!(csp.csp_vault.gen_committee_signing_key_pair(),
                 Err(CspMultiSignatureKeygenError::InternalError { internal_error })
                 if internal_error.contains("committee signing public key already set")
             );
@@ -154,13 +155,13 @@ mod idkg_create_mega_key_pair_tests {
         secret_key_store_with_io_error_on_insert,
         secret_key_store_with_serialization_error_on_insert,
     };
-    use crate::CspIDkgProtocol;
 
     #[test]
     fn should_correctly_create_mega_key_pair() {
         let test_vector = mega_test_vector();
         let csp = csp_seeded_with(test_vector.seed);
         let public_key = csp
+            .csp_vault
             .idkg_gen_dealing_encryption_key_pair()
             .expect("failed creating MEGa key pair");
 
@@ -181,7 +182,7 @@ mod idkg_create_mega_key_pair_tests {
             )
             .build();
 
-        let result = csp.idkg_gen_dealing_encryption_key_pair();
+        let result = csp.csp_vault.idkg_gen_dealing_encryption_key_pair();
 
         assert_matches!(
             result,
@@ -202,7 +203,7 @@ mod idkg_create_mega_key_pair_tests {
             )
             .build();
 
-        let result = csp.idkg_gen_dealing_encryption_key_pair();
+        let result = csp.csp_vault.idkg_gen_dealing_encryption_key_pair();
 
         assert_matches!(
             result,
@@ -222,7 +223,7 @@ mod idkg_create_mega_key_pair_tests {
             )
             .build();
 
-        let result = csp.idkg_gen_dealing_encryption_key_pair();
+        let result = csp.csp_vault.idkg_gen_dealing_encryption_key_pair();
 
         assert_matches!(
             result,
@@ -271,50 +272,58 @@ fn should_correctly_convert_tls_cert_hash_as_key_id() {
     assert_matches!(key_id, Ok(actual) if actual == expected_key_id);
 }
 
-fn csprng_seeded_with(seed: u64) -> impl CryptoRng + Rng {
-    ChaCha20Rng::seed_from_u64(seed)
-}
-
 mod tls {
     use super::*;
-    use ic_interfaces::time_source::TimeSource;
-    use ic_test_utilities::FastForwardTimeSource;
-    use openssl::x509::X509VerifyResult;
-    use std::collections::BTreeSet;
-    use std::sync::Arc;
+    use crate::vault::api::CspTlsKeygenError;
 
     const NODE_1: u64 = 4241;
-    const NOT_AFTER: &str = "99991231235959Z";
 
     #[test]
-    fn should_return_self_signed_certificate() {
-        let csp = Csp::builder_for_test().build();
-
+    fn should_correctly_generate_tls_certificate() {
+        let csp = csp_with_fixed_seed();
         let cert = csp
-            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
-            .expect("error generating TLS certificate");
-        let x509_cert = cert.as_x509();
+            .csp_vault
+            .gen_tls_key_pair(node_test_id(NODE_1))
+            .expect("Generation of TLS keys failed.");
+        let key_id = KeyId::try_from(&cert).unwrap();
 
-        let public_key = x509_cert.public_key().unwrap();
-        assert_eq!(x509_cert.verify(&public_key).ok(), Some(true));
-        assert_eq!(x509_cert.issued(x509_cert), X509VerifyResult::OK);
+        assert_eq!(
+            key_id,
+            KeyId::from(hex_to_32_bytes(
+                "3315cdead5f0368cfff6cb9c4c162ec49c14f1e912d4887271fba940a46efa68"
+            )),
+        );
+        assert_eq!(
+            &csp.csp_vault
+                .current_node_public_keys()
+                .expect("Failed to retrieve node public keys")
+                .tls_certificate
+                .expect("missing tls certificate")
+                .certificate_der,
+            cert.as_der()
+        );
     }
 
     #[test]
-    fn should_not_set_subject_alt_name() {
+    fn should_fail_with_internal_error_if_node_signing_public_key_already_set() {
         let csp = Csp::builder_for_test().build();
 
-        let cert = csp
-            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
-            .expect("error generating TLS certificate");
-        let x509_cert = cert.as_x509();
+        assert!(csp.csp_vault.gen_tls_key_pair(node_test_id(NODE_1)).is_ok());
+        let result = csp.csp_vault.gen_tls_key_pair(node_test_id(NODE_1));
 
-        let subject_alt_names = x509_cert.subject_alt_names();
-        assert!(subject_alt_names.is_none());
+        assert_matches!(result,
+            Err(CspTlsKeygenError::InternalError { internal_error })
+            if internal_error.contains("TLS certificate already set")
+        );
+
+        assert_matches!(csp.csp_vault.gen_tls_key_pair(node_test_id(NODE_1)),
+            Err(CspTlsKeygenError::InternalError { internal_error })
+            if internal_error.contains("TLS certificate already set")
+        );
     }
 
     #[test]
-    fn should_not_panic_if_secret_key_insertion_yields_duplicate_error() {
+    fn should_not_panic_upon_duplicate_key() {
         let duplicated_key_id = KeyId::from([42; 32]);
         let csp = Csp::builder_for_test()
             .with_vault(
@@ -327,217 +336,9 @@ mod tls {
             )
             .build();
 
-        let result = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+        let result = csp.csp_vault.gen_tls_key_pair(node_test_id(NODE_1));
 
         assert_matches!(result, Err(CspTlsKeygenError::DuplicateKeyId {key_id}) if key_id == duplicated_key_id)
-    }
-
-    #[test]
-    fn should_return_der_encoded_self_signed_certificate() {
-        let csp = Csp::builder_for_test().build();
-
-        let cert = csp
-            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
-            .expect("error generating TLS certificate");
-
-        let x509_cert = cert.as_x509();
-        let public_key = x509_cert.public_key().unwrap();
-        assert_eq!(x509_cert.verify(&public_key).ok(), Some(true));
-        assert_eq!(x509_cert.issued(x509_cert), X509VerifyResult::OK);
-    }
-
-    #[test]
-    fn should_set_cert_subject_cn_as_node_id() {
-        let csp = Csp::builder_for_test().build();
-
-        let cert = csp
-            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
-            .expect("error generating TLS certificate");
-        let x509_cert = cert.as_x509();
-
-        assert_eq!(cn_entries(x509_cert).count(), 1);
-        let subject_cn = cn_entries(x509_cert).next().unwrap();
-        let expected_subject_cn = node_test_id(NODE_1).get().to_string();
-        assert_eq!(expected_subject_cn.as_bytes(), subject_cn.data().as_slice());
-    }
-
-    #[test]
-    fn should_use_stable_node_id_string_representation_as_subject_cn() {
-        let csp = Csp::builder_for_test().build();
-
-        let cert = csp
-            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
-            .expect("error generating TLS certificate");
-
-        let subject_cn = cn_entries(cert.as_x509()).next().unwrap();
-        assert_eq!(b"w43gn-nurca-aaaaa-aaaap-2ai", subject_cn.data().as_slice());
-    }
-
-    #[test]
-    fn should_set_cert_issuer_cn_as_node_id() {
-        let csp = Csp::builder_for_test().build();
-
-        let cert = csp
-            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
-            .expect("error generating TLS certificate");
-
-        let issuer_cn = cert
-            .as_x509()
-            .issuer_name()
-            .entries_by_nid(Nid::COMMONNAME)
-            .next()
-            .unwrap();
-        let expected_issuer_cn = node_test_id(NODE_1).get().to_string();
-        assert_eq!(expected_issuer_cn.as_bytes(), issuer_cn.data().as_slice());
-    }
-
-    #[test]
-    fn should_not_set_cert_subject_alt_name() {
-        let csp = Csp::builder_for_test().build();
-
-        let cert = csp
-            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
-            .expect("error generating TLS certificate");
-
-        let subject_alt_names = cert.as_x509().subject_alt_names();
-        assert!(subject_alt_names.is_none());
-    }
-
-    #[test]
-    fn should_set_random_cert_serial_number() {
-        let csp = csp_with_fixed_seed();
-
-        let cert = csp
-            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
-            .expect("error generating TLS certificate");
-
-        let cert_serial = cert.as_x509().serial_number().to_bn().unwrap();
-        let expected_randomness = csprng_seeded_with(FIXED_SEED).gen::<[u8; 19]>();
-        let expected_serial = BigNum::from_slice(&expected_randomness).unwrap();
-        assert_eq!(expected_serial, cert_serial);
-    }
-
-    #[test]
-    fn should_set_different_serial_numbers_for_multiple_certs() {
-        const SAMPLE_SIZE: usize = 20;
-        let mut serial_samples = BTreeSet::new();
-        for i in 0..SAMPLE_SIZE {
-            let cert = csp_seeded_with(i as u64)
-                .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
-                .expect("error generating TLS certificate");
-            serial_samples.insert(serial_number(&cert));
-        }
-        assert_eq!(serial_samples.len(), SAMPLE_SIZE);
-    }
-
-    #[test]
-    fn should_set_cert_not_before_correctly() {
-        use chrono::prelude::*;
-        use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-        use ic_types::time::Time;
-        use std::time::{Duration, UNIX_EPOCH};
-        // ~31.7 years
-        const MAX_TIME_SECS: u64 = 1_000_000_000;
-        let mut rng = reproducible_rng();
-        for _ in 0..100 {
-            let random_time_secs = rng.gen_range(0..MAX_TIME_SECS);
-            let time_source = FastForwardTimeSource::new();
-            time_source
-                .set_time(
-                    Time::from_secs_since_unix_epoch(random_time_secs)
-                        .expect("failed to convert time"),
-                )
-                .expect("failed to set time");
-            // We are deliberately not using `Asn1Time::from_unix` used in
-            // productiong to ensure the right time unit is passed.
-            let expected_not_before = {
-                let millis = time_source.get_relative_time().as_millis_since_unix_epoch();
-                let utc = DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_millis(millis));
-                utc.format("%b %e %H:%M:%S %Y GMT").to_string()
-            };
-            let csp = Csp::builder_for_test()
-                .with_vault(
-                    LocalCspVault::builder_for_test()
-                        .with_time_source(time_source)
-                        .build(),
-                )
-                .build();
-
-            let cert = csp
-                .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
-                .expect("error generating TLS certificate");
-
-            assert_eq!(cert.as_x509().not_before().to_string(), expected_not_before);
-        }
-    }
-
-    #[test]
-    fn should_set_cert_not_after_correctly() {
-        let csp = Csp::builder_for_test().build();
-        let not_after = NOT_AFTER;
-
-        let cert = csp
-            .gen_tls_key_pair(node_test_id(NODE_1), not_after)
-            .expect("error generating TLS certificate");
-
-        assert!(cert.as_x509().not_after() == Asn1Time::from_str_x509(not_after).unwrap());
-    }
-
-    #[test]
-    fn should_fail_on_invalid_not_after_date() {
-        let csp = Csp::builder_for_test().build();
-        let invalid_not_after = "invalid_not_after_date";
-
-        let result = csp.gen_tls_key_pair(node_test_id(NODE_1), invalid_not_after);
-        assert_matches!(result, Err(CspTlsKeygenError::InvalidNotAfterDate { message, not_after })
-            if message.eq("invalid X.509 certificate expiration date (not_after)") && not_after.eq(invalid_not_after)
-        );
-    }
-
-    #[test]
-    fn should_fail_if_not_after_date_is_not_after_not_before_date() {
-        let time_source = FastForwardTimeSource::new();
-        let csp = Csp::builder_for_test()
-            .with_vault(
-                LocalCspVault::builder_for_test()
-                    .with_time_source(Arc::clone(&time_source) as _)
-                    .build(),
-            )
-            .build();
-        const UNIX_EPOCH: &str = "19700101000000Z";
-        const UNIX_EPOCH_AS_TIME_DATE: &str = "(Jan  1 00:00:00 1970 GMT)";
-
-        let result = csp.gen_tls_key_pair(node_test_id(NODE_1), UNIX_EPOCH);
-        let expected_message = format!("'not after' date {UNIX_EPOCH_AS_TIME_DATE} must be after 'not before' date {UNIX_EPOCH_AS_TIME_DATE}");
-        assert_matches!(result, Err(CspTlsKeygenError::InvalidNotAfterDate { message, not_after })
-            if  message == expected_message && not_after == UNIX_EPOCH
-        );
-    }
-
-    #[test]
-    fn should_fail_with_internal_error_if_tls_public_key_certificate_already_set() {
-        let csp = Csp::builder_for_test().build();
-
-        assert!(csp
-            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
-            .is_ok());
-
-        // the attempts after the first one should fail
-        for _ in 0..5 {
-            assert_matches!(csp
-                .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER),
-                Err(CspTlsKeygenError::InternalError { internal_error })
-                if internal_error.contains("TLS certificate already set")
-            );
-        }
-    }
-
-    fn cn_entries(x509_cert: &X509) -> X509NameEntries {
-        x509_cert.subject_name().entries_by_nid(Nid::COMMONNAME)
-    }
-
-    fn serial_number(cert: &TlsPublicKeyCert) -> BigNum {
-        cert.as_x509().serial_number().to_bn().unwrap()
     }
 }
 

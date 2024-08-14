@@ -36,7 +36,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Constant which controls the upper limit of epochs
 ///
-/// Specifically 2**LAMBDA_T NI-DKG epochs cann occur
+/// Specifically 2**LAMBDA_T NI-DKG epochs can occur
 ///
 /// See Section 7.1 of <https://eprint.iacr.org/2021/339.pdf>
 pub const LAMBDA_T: usize = 32;
@@ -624,7 +624,7 @@ impl SecretKey {
 /// Forward secure ciphertexts
 ///
 /// This is (C,R,S,Z) tuple of section 5.2, with multiple C values,
-/// one for each recipent.
+/// one for each recipient.
 #[derive(Debug)]
 pub struct FsEncryptionCiphertext {
     cc: Vec<[G1Affine; NUM_CHUNKS]>,
@@ -814,6 +814,7 @@ pub fn dec_chunks(
 
     let mut powers = Vec::with_capacity(m);
 
+    // TODO(CRP-2550) These multipairings could be computed in parallel
     for i in 0..m {
         let x = Gt::multipairing(&[
             (&cj[i], G2Prepared::generator()),
@@ -837,6 +838,7 @@ pub fn dec_chunks(
 
             for i in 0..dlogs.len() {
                 if dlogs[i].is_none() {
+                    // TODO(CRP-2550) All BSGS could be run in parallel
                     // It may take hours to brute force a cheater's discrete log.
                     dlogs[i] = cheating_solver.solve(&powers[i]);
                 }
@@ -888,6 +890,7 @@ pub fn verify_ciphertext_integrity(
     let g1_neg = G1Affine::generator().neg();
     let precomp_id = G2Prepared::from(&id);
 
+    // TODO(CRP-2550) Each of these checks could be run in parallel
     for i in 0..NUM_CHUNKS {
         let r = &crsz.rr[i];
         let s = &crsz.ss[i];

@@ -1,8 +1,11 @@
 [package]
 name = "ic-test-utilities-load-wasm"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-escargot = { version = "0.5.7", features = ["print"] }
 cargo_metadata = "0.14.2"
+escargot = { version = "0.5.7", features = ["print"] }

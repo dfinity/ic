@@ -1,20 +1,8 @@
-// Including this clippy allow to circumvent clippy errors spawned by MockAll
-// internal expansion.  Should be removed when DFN-860 is resolved.
-// Specifically relevant to the Vec<> parameter.
-#![allow(clippy::ptr_arg)]
-
-use ic_interfaces::messaging::{
-    MessageRouting, MessageRoutingError, XNetPayloadBuilder, XNetPayloadValidationError,
-};
+use ic_interfaces::messaging::{MessageRouting, MessageRoutingError};
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_replicated_state::ReplicatedState;
-use ic_types::{
-    batch::{Batch, ValidationContext, XNetPayload},
-    Height, NumBytes,
-};
+use ic_types::{batch::Batch, Height};
 use std::sync::{Arc, RwLock};
-
-use mockall::*;
 
 pub struct FakeMessageRouting {
     pub batches: RwLock<Vec<Batch>>,
@@ -64,10 +52,15 @@ impl MessageRouting for FakeMessageRouting {
         };
         if batch.batch_number == expected_height {
             *next_batch_height = batch.batch_number.increment();
-            self.batches.write().unwrap().push(batch);
+            self.batches.write().unwrap().push(batch.clone());
             if let Some(state_manager) = &self.state_manager {
                 let (_height, state) = state_manager.take_tip();
-                state_manager.commit_and_certify(state, expected_height, scope);
+                state_manager.commit_and_certify(
+                    state,
+                    expected_height,
+                    scope,
+                    batch.batch_summary,
+                );
             }
             return Ok(());
         }
@@ -78,34 +71,5 @@ impl MessageRouting for FakeMessageRouting {
     }
     fn expected_batch_height(&self) -> Height {
         *self.next_batch_height.read().unwrap()
-    }
-}
-
-mock! {
-    pub MessageRouting {}
-
-    trait MessageRouting {
-        fn deliver_batch(& self, b: Batch) -> Result<(), MessageRoutingError>;
-        fn expected_batch_height(&self) -> Height;
-    }
-}
-
-mock! {
-    pub XNetPayloadBuilder {}
-
-    trait XNetPayloadBuilder{
-        fn get_xnet_payload<'a>(
-            &self,
-            validation_context: &ValidationContext,
-            past_payloads: &[&'a XNetPayload],
-            byte_limit : NumBytes,
-        ) -> (XNetPayload, NumBytes);
-
-        fn validate_xnet_payload<'a>(
-            &self,
-            payload: &XNetPayload,
-            validation_context: &ValidationContext,
-            past_payloads: &[&'a XNetPayload]
-        ) -> Result<NumBytes, XNetPayloadValidationError>;
     }
 }

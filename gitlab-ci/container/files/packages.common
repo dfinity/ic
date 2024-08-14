@@ -2,6 +2,7 @@
 curl
 build-essential
 git
+git-lfs
 gnupg
 node-json5
 uuid-dev
@@ -10,6 +11,8 @@ fish
 clang
 iproute2
 shellcheck
+xxd
+vim
 
 # Bitcoin core (for bitcoin adapter integration test)
 libtool
@@ -26,6 +29,7 @@ qemu-system-x86
 
 # Test
 rsync
+lcov
 
 # RUST
 gcc
@@ -42,19 +46,25 @@ llvm
 liblmdb-dev
 liblzma-dev
 
+# Haskell
+libtinfo5
+libtinfo-dev
+libffi-dev
+libgmp-dev
+
 # IC-OS
-python3
-python-is-python3
-python3-pip
-fakeroot
-android-sdk-ext4-utils
 cryptsetup-bin
-zstd
-lsb-release
-grub-efi-amd64-bin
-libsystemd-dev
-faketime
 dosfstools
+fakeroot
+faketime
+grub-efi-amd64-bin
+iputils-ping
 libselinux-dev
-mtools
+libsystemd-dev
+lsb-release
 lvm2
+mtools
+python-is-python3
+python3
+python3-pip
+zstd

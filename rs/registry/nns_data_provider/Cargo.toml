@@ -1,35 +1,26 @@
 [package]
 name = "ic-registry-nns-data-provider"
-version = "0.8.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
+chrono = { workspace = true }
 ic-canister-client = { path = "../../canister_client" }
 ic-certification = { path = "../../certification" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
-ic-crypto-utils-threshold-sig = { path = "../../crypto/utils/threshold_sig" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-nns-constants = { path = "../../nns/constants" }
-ic-protobuf = { path = "../../protobuf" }
-ic-registry-common-proto = { path = "../proto" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
-ic-utils = { path = "../../utils" }
-bytes = "1.0.1"
-chrono = "0.4.19"
-hyper = "0.14.18"
-hyper-tls = "0.5.0"
-prost = "0.11.0"
-rand = "0.8"
-serde = { version = "1.0", features = ["derive"] }
-serde_cbor = "0.11.1"
-tokio = { version = "1.15.0", features = ["full"] }
+prost = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
 tree-deserializer = { path = "../../tree_deserializer" }
-lazy_static = "1.4.0"
-url = { version = "2.1.1", features = ["serde"] }
-tempfile = "3.0"
+url = { workspace = true }
 
 [dev-dependencies]
-ic-crypto = { path = "../../crypto" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 leb128 = "0.2.4"

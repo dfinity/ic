@@ -3,16 +3,18 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/constants",
-    "//rs/crypto",
-    "//rs/nns/common",
     "//rs/crypto/node_key_generation",
     "//rs/crypto/node_key_validation",
     "//rs/crypto/test_utils/ni-dkg",
-    "//rs/http_utils",
+    "//rs/crypto/utils/threshold_sig_der",
+    "//rs/interfaces",
     "//rs/interfaces/registry",
+    "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
     "//rs/protobuf",
     "//rs/registry/client",
     "//rs/registry/keys",
@@ -20,21 +22,20 @@ DEPENDENCIES = [
     "//rs/registry/proto_data_provider",
     "//rs/registry/provisional_whitelist",
     "//rs/registry/routing_table",
+    "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
     "//rs/registry/transport",
-    "//rs/types/ic00_types",
+    "//rs/state_manager",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:anyhow",
     "@crate_index//:base64",
-    "@crate_index//:chrono",
-    "@crate_index//:clap",
+    "@crate_index//:clap_3_2_25",
     "@crate_index//:fs_extra",
-    "@crate_index//:hex",
     "@crate_index//:json5",
     "@crate_index//:maplit",
-    "@crate_index//:openssl",
     "@crate_index//:prost",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
     "@crate_index//:reqwest",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
@@ -42,11 +43,13 @@ DEPENDENCIES = [
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
     "@crate_index//:url",
+    "@crate_index//:x509-cert",
 ]
 
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:assert_matches",
     "@crate_index//:pretty_assertions",
 ]
@@ -57,6 +60,7 @@ ALIASES = {}
 
 rust_library(
     name = "prep",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_prep_lib",
@@ -66,6 +70,7 @@ rust_library(
 
 rust_binary(
     name = "ic-prep",
+    testonly = True,
     srcs = ["src/bin/prep.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -74,6 +79,7 @@ rust_binary(
 
 rust_binary(
     name = "ic-principal-id",
+    testonly = True,
     srcs = ["src/bin/principal_id.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,

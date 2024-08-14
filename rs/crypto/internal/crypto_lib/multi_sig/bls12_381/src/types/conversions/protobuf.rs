@@ -12,7 +12,9 @@ impl TryFrom<&PublicKeyProto> for PublicKeyBytes {
     type Error = PublicKeyBytesFromProtoError;
 
     fn try_from(pk_proto: &PublicKeyProto) -> Result<Self, Self::Error> {
-        if AlgorithmIdProto::from_i32(pk_proto.algorithm) != Some(AlgorithmIdProto::MultiBls12381) {
+        if AlgorithmIdProto::try_from(pk_proto.algorithm).ok()
+            != Some(AlgorithmIdProto::MultiBls12381)
+        {
             return Err(PublicKeyBytesFromProtoError {
                 key_bytes: pk_proto.clone().key_value,
                 internal_error: format!("Unknown algorithm: {}", pk_proto.algorithm),
@@ -56,7 +58,9 @@ impl TryFrom<&PublicKeyProto> for PopBytes {
     type Error = PopBytesFromProtoError;
 
     fn try_from(pk_proto: &PublicKeyProto) -> Result<Self, Self::Error> {
-        if AlgorithmIdProto::from_i32(pk_proto.algorithm) != Some(AlgorithmIdProto::MultiBls12381) {
+        if AlgorithmIdProto::try_from(pk_proto.algorithm).ok()
+            != Some(AlgorithmIdProto::MultiBls12381)
+        {
             return Err(PopBytesFromProtoError::UnknownAlgorithm {
                 algorithm: pk_proto.algorithm,
             });

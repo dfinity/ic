@@ -1,10 +1,10 @@
 use crate::{
     pb::v1::{
-        add_wasm_response, update_allowed_principals_response, AddWasmResponse,
-        GetNextSnsVersionResponse, InsertUpgradePathEntriesResponse, ListUpgradeStep,
-        PrettySnsVersion, SnsCanisterIds, SnsCanisterType, SnsSpecificSnsUpgrade, SnsUpgrade,
-        SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex, StableCanisterState,
-        UpdateAllowedPrincipalsResponse, UpdateSnsSubnetListResponse,
+        add_wasm_response, get_deployed_sns_by_proposal_id_response, AddWasmResponse, DeployedSns,
+        GetDeployedSnsByProposalIdResponse, GetNextSnsVersionResponse,
+        InsertUpgradePathEntriesResponse, ListUpgradeStep, PrettySnsVersion, SnsCanisterIds,
+        SnsCanisterType, SnsSpecificSnsUpgrade, SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError,
+        SnsWasmStableIndex, StableCanisterState, UpdateSnsSubnetListResponse,
         UpgradePath as StableUpgradePath,
     },
     sns_wasm::{vec_to_hash, SnsWasmCanister, UpgradePath},
@@ -49,18 +49,6 @@ impl InsertUpgradePathEntriesResponse {
     }
 }
 
-impl UpdateAllowedPrincipalsResponse {
-    pub fn error(message: String) -> Self {
-        Self {
-            update_allowed_principals_result: Some(
-                update_allowed_principals_response::UpdateAllowedPrincipalsResult::Error(
-                    SnsWasmError { message },
-                ),
-            ),
-        }
-    }
-}
-
 impl UpdateSnsSubnetListResponse {
     pub fn error(message: &str) -> Self {
         Self {
@@ -72,6 +60,28 @@ impl UpdateSnsSubnetListResponse {
 
     pub fn ok() -> Self {
         Self { error: None }
+    }
+}
+
+impl GetDeployedSnsByProposalIdResponse {
+    pub fn error(message: String) -> Self {
+        Self {
+            get_deployed_sns_by_proposal_id_result: Some(
+                get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult::Error(
+                    SnsWasmError { message },
+                ),
+            ),
+        }
+    }
+
+    pub fn ok(deployed_sns: DeployedSns) -> Self {
+        Self {
+            get_deployed_sns_by_proposal_id_result: Some(
+                get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult::DeployedSns(
+                    deployed_sns
+                )
+            )
+        }
     }
 }
 
@@ -89,7 +99,7 @@ impl SnsWasm {
 
     /// Return the SnsCanisterType if it's valid, else return an error
     pub fn checked_sns_canister_type(&self) -> Result<SnsCanisterType, String> {
-        match SnsCanisterType::from_i32(self.canister_type) {
+        match SnsCanisterType::try_from(self.canister_type).ok() {
             None => Err(
                 "Invalid value for SnsWasm::canister_type.  See documentation for valid values"
                     .to_string(),
@@ -133,24 +143,24 @@ impl Display for SnsVersion {
 impl SnsCanisterIds {
     /// Get Root CanisterId
     pub fn root(&self) -> CanisterId {
-        CanisterId::new(self.root.unwrap()).unwrap()
+        CanisterId::unchecked_from_principal(self.root.unwrap())
     }
     /// Get Governance CanisterId
     pub fn governance(&self) -> CanisterId {
-        CanisterId::new(self.governance.unwrap()).unwrap()
+        CanisterId::unchecked_from_principal(self.governance.unwrap())
     }
     /// Get Ledger CanisterId
     pub fn ledger(&self) -> CanisterId {
-        CanisterId::new(self.ledger.unwrap()).unwrap()
+        CanisterId::unchecked_from_principal(self.ledger.unwrap())
     }
     /// Get Swap CanisterId
     pub fn swap(&self) -> CanisterId {
-        CanisterId::new(self.swap.unwrap()).unwrap()
+        CanisterId::unchecked_from_principal(self.swap.unwrap())
     }
 
     /// Get Index CanisterId
     pub fn index(&self) -> CanisterId {
-        CanisterId::new(self.index.unwrap()).unwrap()
+        CanisterId::unchecked_from_principal(self.index.unwrap())
     }
 }
 
@@ -196,6 +206,7 @@ impl<M: StableMemory + Clone + Default> From<StableCanisterState> for SnsWasmCan
             stable_memory: SnsWasmStableMemory::<M>::default(),
             access_controls_enabled: stable_canister_state.access_controls_enabled,
             allowed_principals: stable_canister_state.allowed_principals,
+            nns_proposal_to_deployed_sns: stable_canister_state.nns_proposal_to_deployed_sns,
         }
     }
 }
@@ -212,6 +223,7 @@ impl<M: StableMemory + Clone + Default> From<SnsWasmCanister<M>> for StableCanis
         let upgrade_path = Some(state.upgrade_path.into());
         let access_controls_enabled = state.access_controls_enabled;
         let allowed_principals = state.allowed_principals;
+        let nns_proposal_to_deployed_sns = state.nns_proposal_to_deployed_sns;
 
         StableCanisterState {
             wasm_indexes,
@@ -220,6 +232,7 @@ impl<M: StableMemory + Clone + Default> From<SnsWasmCanister<M>> for StableCanis
             upgrade_path,
             access_controls_enabled,
             allowed_principals,
+            nns_proposal_to_deployed_sns,
         }
     }
 }
@@ -312,7 +325,8 @@ impl SnsCanisterIds {
         ]
         .into_iter()
         .flat_map(|(label, principal_id)| {
-            principal_id.map(|principal_id| (label, CanisterId::new(principal_id).unwrap()))
+            principal_id
+                .map(|principal_id| (label, CanisterId::unchecked_from_principal(principal_id)))
         })
         .collect()
     }

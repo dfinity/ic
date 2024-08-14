@@ -19,10 +19,11 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::StateManagerImpl;
-use ic_test_utilities::{consensus::fake::FakeVerifier, types::ids::subnet_test_id};
+use ic_test_utilities_consensus::fake::FakeVerifier;
 use ic_test_utilities_registry::{
     add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
+use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
     malicious_flags::MaliciousFlags, replica_config::ReplicaConfig, NodeId, PrincipalId,
     RegistryVersion, SubnetId,
@@ -118,6 +119,7 @@ pub(crate) fn setup() -> (
         subnet_id,
         subnet_config.cycles_account_manager_config,
     ));
+
     let state_manager = Arc::new(StateManagerImpl::new(
         Arc::new(FakeVerifier::new()),
         replica_config.subnet_id,
@@ -129,6 +131,8 @@ pub(crate) fn setup() -> (
         ic_types::malicious_flags::MaliciousFlags::default(),
     ));
 
+    let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
+
     let execution_services = ExecutionServices::setup_execution(
         log.clone().into(),
         &metrics_registry,
@@ -139,6 +143,7 @@ pub(crate) fn setup() -> (
         Arc::clone(&cycles_account_manager),
         Arc::clone(&state_manager) as Arc<_>,
         Arc::clone(&state_manager.get_fd_factory()),
+        completed_execution_messages_tx,
     );
 
     let message_routing = MessageRoutingImpl::new(

@@ -1,24 +1,33 @@
 mod checkpoint;
 pub mod int_map;
 mod page_allocator;
+pub mod storage;
+pub mod test_utils;
 
-use checkpoint::Checkpoint;
+use bit_vec::BitVec;
 pub use checkpoint::{CheckpointSerialization, MappingSerialization};
-use ic_sys::PageBytes;
+use ic_config::flag_status::FlagStatus;
+use ic_config::state_manager::LsmtConfig;
+use ic_metrics::buckets::{decimal_buckets, linear_buckets};
+use ic_metrics::MetricsRegistry;
+use ic_sys::{fs::write_all_vectored, PageBytes};
 pub use ic_sys::{PageIndex, PAGE_SIZE};
-use ic_utils::{deterministic_operations::deterministic_copy_from_slice, fs::write_all_vectored};
+use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 pub use page_allocator::{
     allocated_pages_count, PageAllocator, PageAllocatorRegistry, PageAllocatorSerialization,
     PageDeltaSerialization, PageSerialization,
 };
+pub use storage::{
+    BaseFileSerialization, MergeCandidate, OverlayFileSerialization, Shard, StorageLayout,
+    StorageResult, StorageSerialization, MAX_NUMBER_OF_FILES,
+};
+use storage::{OverlayFile, OverlayVersion, Storage};
 
-// NOTE: We use a persistent map to make snapshotting of a PageMap a cheap
-// operation. This allows us to simplify canister state management: we can
-// simply have a copy of the whole PageMap in every canister snapshot.
-use ic_types::{Height, NumPages, MAX_STABLE_MEMORY_IN_BYTES};
-use int_map::IntMap;
+use ic_types::{Height, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES};
+use int_map::{Bounds, IntMap};
 use libc::off_t;
 use page_allocator::Page;
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
@@ -29,6 +38,93 @@ use std::sync::Arc;
 
 // When persisting data we expand dirty pages to an aligned bucket of given size.
 const WRITE_BUCKET_PAGES: u64 = 16;
+
+const LABEL_OP: &str = "op";
+const LABEL_TYPE: &str = "type";
+const LABEL_OP_FLUSH: &str = "flush";
+const LABEL_OP_MERGE: &str = "merge";
+const LABEL_TYPE_PAGE_DATA: &str = "data";
+const LABEL_TYPE_INDEX: &str = "index";
+
+#[derive(Clone)]
+pub struct StorageMetrics {
+    /// How many bytes are written as part of storage operations, broken down by data vs index and merge vs flush.
+    write_bytes: IntCounterVec,
+    /// Timings of how long it takes to write overlay files.
+    write_duration: HistogramVec,
+    /// Number of overlays not written because they would have been empty.
+    empty_delta_writes: IntCounter,
+    /// For each merge, amount of input files we merged.
+    num_merged_files: Histogram,
+    /// The number of files in a shard before merging.
+    num_files_by_shard: Histogram,
+    /// The storage overhead of a shard before merging.
+    storage_overhead_by_shard: Histogram,
+}
+
+impl StorageMetrics {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+        let write_bytes = metrics_registry.int_counter_vec(
+            "storage_layer_write_bytes",
+            "Number of bytes written to disk, broken down by data vs index and merge vs flush.",
+            &[LABEL_OP, LABEL_TYPE],
+        );
+
+        for op in &[LABEL_OP_FLUSH, LABEL_OP_MERGE] {
+            for tp in &[LABEL_TYPE_PAGE_DATA, LABEL_TYPE_INDEX] {
+                write_bytes.with_label_values(&[*op, *tp]);
+            }
+        }
+
+        let write_duration = metrics_registry.histogram_vec(
+            "storage_layer_write_duration_seconds",
+            "Duration of write operation ('flush', 'merge').",
+            // 100µs, 200µs, 500µs, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, …, 100s, 200s, 500s
+            decimal_buckets(-4, 2),
+            &[LABEL_OP],
+        );
+
+        for tp in &[LABEL_OP_FLUSH, LABEL_OP_MERGE] {
+            write_duration.with_label_values(&[*tp]);
+        }
+
+        let empty_delta_writes = metrics_registry.int_counter(
+            "storage_layer_empty_delta_writes",
+            "The number of PageMaps that did not receive any deltas since the last write attempt.",
+        );
+
+        let num_merged_files = metrics_registry.histogram(
+            "storage_layer_num_merged_files",
+            "For each merge, number of input files we merged.",
+            linear_buckets(0.0, 1.0, 20),
+        );
+
+        let num_files_by_shard = metrics_registry.histogram(
+            "storage_layer_merge_num_files_by_shard",
+            "Number of files per PageMap shard before merging.",
+            linear_buckets(0.0, 1.0, 20),
+        );
+
+        let storage_overhead_by_shard = metrics_registry.histogram(
+            "storage_layer_merge_storage_overhead_by_shard",
+            "Storage overhead per PageMap shard before merging.",
+            // Extra resolution in the 1 - 1.25 range.
+            vec![
+                0.5, 0.75, 1.0, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0,
+                3.5, 4.0, 4.5, 5.0, 6.0, 7.0,
+            ],
+        );
+
+        Self {
+            write_bytes,
+            write_duration,
+            empty_delta_writes,
+            num_merged_files,
+            num_files_by_shard,
+            storage_overhead_by_shard,
+        }
+    }
+}
 
 struct WriteBuffer<'a> {
     content: Vec<&'a [u8]>,
@@ -64,8 +160,12 @@ impl<'a> WriteBuffer<'a> {
 }
 
 /// `PageDelta` represents a changeset of the module heap.
+///
+/// NOTE: We use a persistent map to make snapshotting of a PageMap a cheap
+/// operation. This allows us to simplify canister state management: we can
+/// simply have a copy of the whole PageMap in every canister snapshot.
 #[derive(Clone, Default, Debug)]
-struct PageDelta(IntMap<Page>);
+pub(crate) struct PageDelta(IntMap<Page>);
 
 impl PageDelta {
     /// Gets content of the page at the specified index.
@@ -82,10 +182,13 @@ impl PageDelta {
         self.0.get(page_index.get())
     }
 
-    /// Gets an inclusive range of pages that contains the given page.
-    fn bounds(&self, page_index: PageIndex) -> (Option<PageIndex>, Option<PageIndex>) {
+    /// Returns (lower, upper), where:
+    /// - lower is the largest index/page smaller or equal to the given page index.
+    /// - upper is the smallest index/page larger or equal to the given page index.
+    fn bounds(&self, page_index: PageIndex) -> Bounds<PageIndex, Page> {
         let (lower, upper) = self.0.bounds(page_index.get());
-        (lower.map(PageIndex::new), upper.map(PageIndex::new))
+        let map_index = |(k, v)| (PageIndex::new(k), v);
+        (lower.map(map_index), upper.map(map_index))
     }
 
     /// Modifies this delta in-place by applying all the entries in `rhs` to it.
@@ -107,6 +210,11 @@ impl PageDelta {
     /// If the page delta is empty, then it returns `None`.
     fn max_page_index(&self) -> Option<PageIndex> {
         self.0.max_key().map(PageIndex::from)
+    }
+
+    /// Returns the number of pages in the page delta.
+    fn len(&self) -> usize {
+        self.0.len()
     }
 }
 
@@ -140,8 +248,16 @@ pub enum PersistenceError {
         file_size: usize,
         page_size: usize,
     },
+    /// Overlay data is broken.
+    InvalidOverlay { path: String, message: String },
     /// (Slice) size is not equal to page size.
     BadPageSize { expected: usize, actual: usize },
+    /// Some overlay file has a larger version number than the replica supports
+    VersionMismatch {
+        path: String,
+        file_version: u32,
+        supported: OverlayVersion,
+    },
 }
 
 impl PersistenceError {
@@ -182,10 +298,22 @@ impl std::fmt::Display for PersistenceError {
                 "Size of heap file {} is {}, which is not a multiple of the page size {}",
                 path, file_size, page_size
             ),
+            PersistenceError::InvalidOverlay { path, message } => {
+                write!(f, "Overlay file {} is broken: {}", path, message)
+            }
             PersistenceError::BadPageSize { expected, actual } => write!(
                 f,
                 "Bad slice size: expected {}, actual {}",
                 expected, actual
+            ),
+            PersistenceError::VersionMismatch {
+                path,
+                file_version,
+                supported,
+            } => write!(
+                f,
+                "Unsupported overlay version for {}: file version {}, max supported {:?}",
+                path, file_version, supported,
             ),
         }
     }
@@ -202,21 +330,94 @@ pub struct FileDescriptor {
 /// to simplify arithmetic operations.
 pub type FileOffset = off_t;
 
-/// The result of the `get_memory_region(page_index)` function. It specifies the
-/// largest contiguous page range that contains the given page such that all
-/// pages share the same backing store. There are three possible cases:
-/// - The page is not in the current `PageMap` and it is zero initialized.
-/// - The page maps to the checkpoint file.
-/// - The page is in the page delta of the current `PageMap`. In this case the
-///   range is a singleton and its contents need to be copied out.
+/// The result of the get_memory_instructions() function.
+/// Contains sequence of `instructions` for either a range that can be memory mapped, or a data
+/// that can be copied. The total range covered is given by `range`.
+/// The ranges in `instructions` can overlap. To correctly apply the instructions they have to be applied
+/// in order.
+/// The vector can be empty, in which case nothing needs to be done.
+/// Note: For an entry in `instructions` of the form `(range, Data(bytes))`, the lengths of range and bytes
+/// will be consistent. For an entry of the form `(range, MemoryMap(fd, offset))` the length
+/// of the memory map can be inferred from `range`.
 #[derive(Debug, PartialEq)]
-pub enum MemoryRegion<'a> {
-    Zeros(Range<PageIndex>),
-    BackedByFile(Range<PageIndex>, FileDescriptor),
-    BackedByPage(&'a PageBytes),
+pub struct MemoryInstructions<'a> {
+    pub range: Range<PageIndex>,
+    pub instructions: Vec<MemoryInstruction<'a>>,
 }
 
-/// PageMap is a data structure that represents an image of a canister virtual
+/// A single memory instruction for a range, see `MemoryInstructions`.
+pub type MemoryInstruction<'a> = (Range<PageIndex>, MemoryMapOrData<'a>);
+
+/// Description of range of pages.
+/// See also `MemoryInstructions`.
+#[derive(Debug, PartialEq)]
+pub enum MemoryMapOrData<'a> {
+    MemoryMap(FileDescriptor, usize),
+    Data(&'a [u8]),
+}
+
+impl<'a> MemoryInstructions<'a> {
+    // Filters and cuts any instructions that do not fall into `new_range`.
+    pub fn restrict_to_range(&mut self, new_range: &Range<PageIndex>) {
+        self.range = PageIndex::new(std::cmp::max(self.range.start.get(), new_range.start.get()))
+            ..PageIndex::new(std::cmp::min(self.range.end.get(), new_range.end.get()));
+        let instructions = std::mem::take(&mut self.instructions);
+        self.instructions = instructions
+            .into_iter()
+            .filter_map(|(range, instruction)| {
+                if range.end.get() <= self.range.start.get()
+                    || range.start.get() >= self.range.end.get()
+                {
+                    // The entire instruction is outside of `new_range` and can be dropped.
+                    None
+                } else {
+                    // Cut off from the left.
+                    let (range, instruction) = if range.start.get() < self.range.start.get() {
+                        let shift = (self.range.start.get() - range.start.get()) as usize;
+                        let range = self.range.start..range.end;
+                        match instruction {
+                            MemoryMapOrData::MemoryMap(fd, offset) => (
+                                range,
+                                MemoryMapOrData::MemoryMap(fd, offset + shift * PAGE_SIZE),
+                            ),
+                            MemoryMapOrData::Data(data) => {
+                                (range, MemoryMapOrData::Data(&data[(shift * PAGE_SIZE)..]))
+                            }
+                        }
+                    } else {
+                        (range, instruction)
+                    };
+
+                    // Cut off from the right.
+                    let (range, instruction) = if range.end.get() > self.range.end.get() {
+                        let shift = (range.end.get() - self.range.end.get()) as usize;
+                        let range = range.start..self.range.end;
+                        match instruction {
+                            MemoryMapOrData::MemoryMap(fd, offset) => {
+                                (range, MemoryMapOrData::MemoryMap(fd, offset))
+                            }
+                            MemoryMapOrData::Data(data) => {
+                                debug_assert!(data.len() > shift * PAGE_SIZE);
+                                (
+                                    range,
+                                    MemoryMapOrData::Data(
+                                        &data[..(data.len() - shift * PAGE_SIZE)],
+                                    ),
+                                )
+                            }
+                        }
+                    } else {
+                        (range, instruction)
+                    };
+
+                    Some((range, instruction))
+                }
+            })
+            .collect();
+    }
+}
+
+/// `PageMap` is a data structure that represents an image of a canister virtual
 /// memory.  The memory is viewed as a collection of _pages_. `PageMap` uses
 /// 4KiB host OS pages to track the heap contents, not 64KiB Wasm pages.
 ///
@@ -235,12 +436,12 @@ pub enum MemoryRegion<'a> {
 pub struct PageMap {
     /// The checkpoint that is used for all the pages that can not be found in
     /// the `page_delta`.
-    checkpoint: Checkpoint,
+    storage: Storage,
 
     /// The height of the checkpoint that backs the page map.
     pub base_height: Option<Height>,
 
-    /// The map containing pages overriding pages from the `checkpoint`.
+    /// The map containing pages overriding pages from `storage`.
     /// We need these pages to be able to reconstruct the full heap.
     /// It is reset when `strip_all_deltas()` method is called.
     page_delta: PageDelta,
@@ -258,14 +459,13 @@ pub struct PageMap {
     page_allocator: PageAllocator,
 }
 
-#[cfg_attr(feature = "cargo-clippy", allow(clippy::new_without_default))]
 impl PageMap {
     /// Creates a new page map that always returns zeroed pages.
     /// The allocator of this page map is backed by the file descriptor
     /// the page map is instantiated with.
     pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
         Self {
-            checkpoint: Default::default(),
+            storage: Default::default(),
             base_height: Default::default(),
             page_delta: Default::default(),
             unflushed_delta: Default::default(),
@@ -277,7 +477,7 @@ impl PageMap {
     /// Creates a new page map for testing purposes.
     pub fn new_for_testing() -> Self {
         Self {
-            checkpoint: Default::default(),
+            storage: Default::default(),
             base_height: Default::default(),
             page_delta: Default::default(),
             unflushed_delta: Default::default(),
@@ -290,13 +490,12 @@ impl PageMap {
     ///
     /// Note that the file is assumed to be read-only.
     pub fn open(
-        heap_file: &Path,
+        storage_layout: &dyn StorageLayout,
         base_height: Height,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Result<Self, PersistenceError> {
-        let checkpoint = Checkpoint::open(heap_file)?;
         Ok(Self {
-            checkpoint,
+            storage: Storage::load(storage_layout)?,
             base_height: Some(base_height),
             page_delta: Default::default(),
             unflushed_delta: Default::default(),
@@ -308,7 +507,7 @@ impl PageMap {
     /// Returns a serialization-friendly representation of the page-map.
     pub fn serialize(&self) -> PageMapSerialization {
         PageMapSerialization {
-            checkpoint: self.checkpoint.serialize(),
+            storage: self.storage.serialize(),
             base_height: self.base_height,
             page_delta: self
                 .page_allocator
@@ -330,14 +529,14 @@ impl PageMap {
         page_map: PageMapSerialization,
         registry: &PageAllocatorRegistry,
     ) -> Result<Self, PersistenceError> {
-        let checkpoint = Checkpoint::deserialize(page_map.checkpoint)?;
+        let storage = Storage::deserialize(page_map.storage)?;
         let page_allocator = PageAllocator::deserialize(page_map.page_allocator, registry);
         let page_delta =
             PageDelta::from(page_allocator.deserialize_page_delta(page_map.page_delta));
         let unflushed_delta =
             PageDelta::from(page_allocator.deserialize_page_delta(page_map.unflushed_delta));
         Ok(Self {
-            checkpoint,
+            storage,
             base_height: page_map.base_height,
             page_delta,
             unflushed_delta,
@@ -363,7 +562,7 @@ impl PageMap {
     }
 
     /// Modifies this page map by adding the given dirty pages to it.
-    /// Returns a list of dirty page indicies and an indication of whether the
+    /// Returns a list of dirty page indices and an indication of whether the
     /// page allocator was created or not, which is used for synchronization
     /// with the sandbox process.
     pub fn update(&mut self, pages: &[(PageIndex, &PageBytes)]) -> Vec<PageIndex> {
@@ -374,14 +573,62 @@ impl PageMap {
 
     /// Persists the heap delta contained in this page map to the specified
     /// destination.
-    pub fn persist_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
-        self.persist_to_file(&self.page_delta, dst)
+    pub fn persist_delta(
+        &self,
+        storage_layout: &dyn StorageLayout,
+        height: Height,
+        lsmt_config: &LsmtConfig,
+        metrics: &StorageMetrics,
+    ) -> Result<(), PersistenceError> {
+        match lsmt_config.lsmt_status {
+            FlagStatus::Disabled => self.persist_to_file(&self.page_delta, &storage_layout.base()),
+            FlagStatus::Enabled => self.persist_to_overlay(
+                &self.page_delta,
+                storage_layout,
+                height,
+                lsmt_config,
+                metrics,
+            ),
+        }
     }
 
     /// Persists the unflushed delta contained in this page map to the specified
     /// destination.
-    pub fn persist_unflushed_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
-        self.persist_to_file(&self.unflushed_delta, dst)
+    pub fn persist_unflushed_delta(
+        &self,
+        storage_layout: &dyn StorageLayout,
+        height: Height,
+        lsmt_config: &LsmtConfig,
+        metrics: &StorageMetrics,
+    ) -> Result<(), PersistenceError> {
+        match lsmt_config.lsmt_status {
+            FlagStatus::Disabled => {
+                self.persist_to_file(&self.unflushed_delta, &storage_layout.base())
+            }
+            FlagStatus::Enabled => self.persist_to_overlay(
+                &self.unflushed_delta,
+                storage_layout,
+                height,
+                lsmt_config,
+                metrics,
+            ),
+        }
+    }
+
+    fn persist_to_overlay(
+        &self,
+        page_delta: &PageDelta,
+        storage_layout: &dyn StorageLayout,
+        height: Height,
+        lsmt_config: &LsmtConfig,
+        metrics: &StorageMetrics,
+    ) -> Result<(), PersistenceError> {
+        if !page_delta.is_empty() {
+            OverlayFile::write(page_delta, storage_layout, height, lsmt_config, metrics)
+        } else {
+            metrics.empty_delta_writes.inc();
+            Ok(())
+        }
     }
 
     /// Returns the iterator over host pages managed by this `PageMap`.
@@ -392,50 +639,181 @@ impl PageMap {
         })
     }
 
+    /// Returns the iterator over delta pages in this `PageMap`
+    pub fn delta_pages_iter(&self) -> impl Iterator<Item = (PageIndex, &PageBytes)> + '_ {
+        self.page_delta
+            .iter()
+            .map(|(index, page)| (index, page.contents()))
+    }
+
     /// Returns the page with the specified `page_index`.
     pub fn get_page(&self, page_index: PageIndex) -> &PageBytes {
         match self.page_delta.get_page(page_index) {
             Some(page) => page,
-            None => self.checkpoint.get_page(page_index),
+            None => self.storage.get_page(page_index),
         }
     }
 
-    /// Returns the largest contiguous range of pages that contains the given
-    /// page such that all pages share the same backing store.
-    pub fn get_memory_region(&self, page_index: PageIndex) -> MemoryRegion {
-        match self.page_delta.get_page(page_index) {
-            Some(page) => MemoryRegion::BackedByPage(page),
-            None => {
-                let (start, end) = self.page_delta.bounds(page_index);
-                let start = match start {
-                    None => PageIndex::new(0),
-                    Some(start) => {
-                        // Here `start` is a page in `page_delta`. We need to skip that page to
-                        // get to the start of the checkpoint region that contains `page_index`.
-                        PageIndex::new(start.get() + 1)
+    /// Returns a sequence of instructions on how to prepare a memory region. It always returns instructions for at least `min_range`,
+    /// but the range can be as large as `max_range`. The result only extends past `min_range`, if it does not require any extra instructions
+    /// to do so.
+    /// Assumptions:
+    ///       * `min_range` ⊆ `max_range`
+    ///       * The entire memory has already been initialized according to `get_base_memory_instructions`
+    ///       * MemoryInstructions are applied in the correct order, see description of `MemoryInstructions`
+    /// Guarantees:
+    ///       * `min_range` ⊆ result.range ⊆ `max_range`
+    ///       * For any page in result.range, reading that page from the memory region is equal to calling
+    ///         `get_page(page)`.
+    pub fn get_memory_instructions(
+        &self,
+        min_range: Range<PageIndex>,
+        max_range: Range<PageIndex>,
+    ) -> MemoryInstructions {
+        debug_assert!(min_range.start >= max_range.start && min_range.end <= max_range.end);
+
+        let mut delta_instructions = Vec::new();
+
+        // Grow result_range to the right.
+        // If `include` is false, stop just short of the next delta page, otherwise include it into instructions.
+        fn grow_right<'a>(
+            page_delta: &'a PageDelta,
+            instructions: &mut Vec<MemoryInstruction<'a>>,
+            result_range: &mut Range<PageIndex>,
+            max_range: &Range<PageIndex>,
+            include: bool,
+        ) {
+            debug_assert!(result_range.end <= max_range.end);
+            if result_range.end < max_range.end {
+                let (_, upper_bound) = page_delta.bounds(result_range.end);
+                match upper_bound {
+                    Some((key, page)) if key < max_range.end => {
+                        if include {
+                            let end = PageIndex::new(key.get() + 1);
+                            instructions.push((key..end, MemoryMapOrData::Data(page.contents())));
+                            result_range.end = end;
+                        } else {
+                            result_range.end = key;
+                        }
                     }
-                };
-                let end = match end {
-                    None => PageIndex::new(u64::MAX),
-                    Some(end) => {
-                        // Here `end` is a page in `page_delta`. Since we will use it as the end of
-                        // half-open `Range`, so we can take it as is without decrementing.
-                        end
-                    }
-                };
-                let range = Range { start, end };
-                assert!(range.contains(&page_index));
-                self.checkpoint.get_memory_region(page_index, range)
+                    _ => result_range.end = max_range.end,
+                }
             }
         }
+
+        // Grow result_range to the left.
+        // If `include` is false, stop just short of the next delta page, otherwise include it into instructions.
+        // Never grows past `max_range`.
+        fn grow_left<'a>(
+            page_delta: &'a PageDelta,
+            instructions: &mut Vec<MemoryInstruction<'a>>,
+            result_range: &mut Range<PageIndex>,
+            max_range: &Range<PageIndex>,
+            include: bool,
+        ) {
+            debug_assert!(result_range.start >= max_range.start);
+            if result_range.start > max_range.start {
+                debug_assert!(result_range.start.get() > 0);
+                let (lower_bound, _) =
+                    page_delta.bounds(PageIndex::new(result_range.start.get() - 1));
+                match lower_bound {
+                    Some((key, page)) if key >= max_range.start => {
+                        let end = PageIndex::new(key.get() + 1);
+                        if include {
+                            instructions.push((key..end, MemoryMapOrData::Data(page.contents())));
+                            result_range.start = key;
+                        } else {
+                            result_range.start = end;
+                        }
+                    }
+                    _ => result_range.start = max_range.start,
+                }
+            }
+        }
+
+        let mut result_range = min_range.start..min_range.start;
+
+        // Find all deltas in min_range
+        while result_range != min_range {
+            grow_right(
+                &self.page_delta,
+                &mut delta_instructions,
+                &mut result_range,
+                &min_range, // Only grow to min_range in the first step.
+                true,
+            );
+        }
+
+        // Grow `result_range` to the edge of the next deltas, but do not include them.
+        grow_left(
+            &self.page_delta,
+            &mut delta_instructions,
+            &mut result_range,
+            &max_range,
+            false,
+        );
+        grow_right(
+            &self.page_delta,
+            &mut delta_instructions,
+            &mut result_range,
+            &max_range,
+            false,
+        );
+
+        let mut filter = BitVec::from_elem(
+            (result_range.end.get() - result_range.start.get()) as usize,
+            false,
+        );
+        for (delta, _) in &delta_instructions {
+            filter.set(
+                (delta.start.get() - result_range.start.get()) as usize,
+                true,
+            );
+        }
+
+        let mut storage_instructions = self
+            .storage
+            .get_memory_instructions(result_range.clone(), &mut filter)
+            .instructions;
+        storage_instructions.extend(delta_instructions);
+
+        // Find left and right cutoff point to have no instructions fully outside of `min_range`.
+        let mut cut_left = result_range.start;
+        for instruction in &storage_instructions {
+            // We explicitly do not consider instructions that start within `min_range`,
+            // and end outside, as they do not add additional instructions.
+            if instruction.0.end.get() > cut_left.get()
+                && instruction.0.end.get() <= min_range.start.get()
+            {
+                cut_left = instruction.0.end;
+            }
+        }
+        let mut cut_right = result_range.end;
+        for instruction in &storage_instructions {
+            if instruction.0.start.get() < cut_right.get()
+                && instruction.0.start.get() >= min_range.end.get()
+            {
+                cut_right = instruction.0.start;
+            }
+        }
+
+        let result_range = cut_left..cut_right;
+
+        let mut result = MemoryInstructions {
+            range: result_range.clone(),
+            instructions: storage_instructions,
+        };
+
+        result.restrict_to_range(&result_range);
+        result
     }
 
-    /// Returns the whole checkpoint memory region.
-    pub fn get_checkpoint_memory_region(&self) -> MemoryRegion {
-        let start = PageIndex::new(0);
-        let end = PageIndex::new(u64::MAX);
-        self.checkpoint
-            .get_memory_region(start, Range { start, end })
+    /// Returns how to memory map the base layer of this PageMap
+    /// These instructions are generally cheap and are supposed to be used to initialize a memory region.
+    /// The intention is that the instructions from this function are applied first and only once. The more expensive
+    /// instructions from `get_memory_instructions(range)` are then applied on top.
+    pub fn get_base_memory_instructions(&self) -> MemoryInstructions {
+        self.storage.get_base_memory_instructions()
     }
 
     /// Removes the page delta from this page map.
@@ -485,7 +863,7 @@ impl PageMap {
     /// ∀ n . n ≥ self.num_host_pages() ⇒ self.get_page(n) = ZERO_PAGE
     /// ```
     pub fn num_host_pages(&self) -> usize {
-        let pages_in_checkpoint = self.checkpoint.num_pages();
+        let pages_in_checkpoint = self.storage.num_logical_pages();
         pages_in_checkpoint.max(
             self.page_delta
                 .max_page_index()
@@ -497,7 +875,7 @@ impl PageMap {
     /// Switches the checkpoint file of the current page map to the one provided
     /// by the given page map. Page deltas of both page maps must be empty.
     pub fn switch_to_checkpoint(&mut self, checkpointed_page_map: &PageMap) {
-        self.checkpoint = checkpointed_page_map.checkpoint.clone();
+        self.storage = checkpointed_page_map.storage.clone();
         // Also copy the base height to reflect the height of the new checkpoint.
         self.base_height = checkpointed_page_map.base_height;
         assert!(self.page_delta.is_empty());
@@ -523,6 +901,7 @@ impl PageMap {
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
+            .truncate(false)
             .open(dst)
             .map_err(|err| PersistenceError::FileSystemError {
                 path: dst.display().to_string(),
@@ -575,6 +954,11 @@ impl PageMap {
         }
 
         Ok(())
+    }
+
+    /// Returns the number of delta pages included in this PageMap.
+    pub fn num_delta_pages(&self) -> usize {
+        self.page_delta.len()
     }
 }
 
@@ -665,9 +1049,9 @@ impl Buffer {
     ///
     /// This function assumes the write doesn't extend beyond the maximum stable
     /// memory size (in which case the memory would fail anyway).
-    pub fn dirty_pages_from_write(&self, offset: u64, size: u64) -> NumPages {
+    pub fn dirty_pages_from_write(&self, offset: u64, size: u64) -> NumOsPages {
         if size == 0 {
-            return NumPages::from(0);
+            return NumOsPages::from(0);
         }
         let first_page = offset / (PAGE_SIZE as u64);
         let last_page = offset
@@ -677,7 +1061,7 @@ impl Buffer {
         let dirty_page_count = (first_page..=last_page)
             .filter(|p| !self.dirty_pages.contains_key(&PageIndex::new(*p)))
             .count();
-        NumPages::new(dirty_page_count as u64)
+        NumOsPages::new(dirty_page_count as u64)
     }
 
     pub fn dirty_pages(&self) -> impl Iterator<Item = (PageIndex, &PageBytes)> {
@@ -729,9 +1113,9 @@ impl std::fmt::Debug for PageMap {
 /// It contains sufficient information to reconstruct `PageMap`
 /// in another process. Note that canister sandboxing does not
 /// need `unflushed_delta`, but the field is kept for consistency here.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct PageMapSerialization {
-    pub checkpoint: CheckpointSerialization,
+    pub storage: StorageSerialization,
     pub base_height: Option<Height>,
     pub page_delta: PageDeltaSerialization,
     pub unflushed_delta: PageDeltaSerialization,

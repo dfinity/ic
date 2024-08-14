@@ -171,6 +171,7 @@ mod test {
         },
     };
     use ic_base_types::PrincipalId;
+    use maplit::btreemap;
 
     #[test]
     fn test_stable_write_and_read_u32() {
@@ -248,6 +249,7 @@ mod test {
             upgrade_path,
             access_controls_enabled: true,
             allowed_principals: vec![],
+            nns_proposal_to_deployed_sns: btreemap! {1 => 0,},
         }
     }
 
@@ -268,6 +270,7 @@ mod test {
         let sns_wasm = SnsWasm {
             wasm: vec![189, 201, 248],
             canister_type: 1,
+            ..SnsWasm::default()
         };
         let (offset, size) = stable_memory.write_wasm(sns_wasm.clone()).unwrap();
         assert_eq!(stable_memory.read_wasm(offset, size).unwrap(), sns_wasm);

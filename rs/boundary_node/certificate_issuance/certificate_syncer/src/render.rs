@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use anyhow::Error;
-use opentelemetry::{Context as OtContext, KeyValue};
+use opentelemetry::KeyValue;
 use serde::Serialize;
 
 use crate::metrics::{MetricParams, WithMetrics};
@@ -9,6 +9,7 @@ use crate::metrics::{MetricParams, WithMetrics};
 #[derive(Debug, PartialEq, Serialize)]
 pub struct Context<'a> {
     pub name: &'a str,
+    pub canister_id: &'a str,
     pub ssl_certificate_key_path: &'a str,
     pub ssl_certificate_path: &'a str,
 }
@@ -18,21 +19,22 @@ pub trait Render: Sync + Send {
 }
 
 pub struct Renderer {
-    tmpl: String,
+    template: String,
 }
 
 impl Renderer {
-    pub fn new(tmpl: &str) -> Self {
+    pub fn new(template: &str) -> Self {
         Self {
-            tmpl: tmpl.to_owned(),
+            template: template.to_owned(),
         }
     }
 }
 
 impl Render for Renderer {
     fn render(&self, cx: &Context) -> Result<String, Error> {
-        let out = self.tmpl.clone();
+        let out = self.template.clone();
         let out = out.replace("{name}", cx.name);
+        let out = out.replace("{canister_id}", cx.canister_id);
         let out = out.replace("{ssl_certificate_key_path}", cx.ssl_certificate_key_path);
         let out = out.replace("{ssl_certificate_path}", cx.ssl_certificate_path);
 
@@ -55,10 +57,8 @@ impl<T: Render> Render for WithMetrics<T> {
             counter, recorder, ..
         } = &self.1;
 
-        let cx = OtContext::current();
-
-        counter.add(&cx, 1, labels);
-        recorder.record(&cx, duration, labels);
+        counter.add(1, labels);
+        recorder.record(duration, labels);
 
         out
     }
@@ -70,16 +70,29 @@ mod tests {
 
     #[test]
     fn test_render() {
-        let r = Renderer::new("{name}|{ssl_certificate_key_path}|{ssl_certificate_path}");
+        let r =
+            Renderer::new("{name}|{canister_id}|{ssl_certificate_key_path}|{ssl_certificate_path}");
 
         let out = r
             .render(&Context {
-                name: "1",
+                name: "A",
+                canister_id: "B",
                 ssl_certificate_key_path: "2",
                 ssl_certificate_path: "3",
             })
             .expect("failed to render");
 
-        assert_eq!(out, "1|2|3");
+        assert_eq!(out, "A|B|2|3");
+
+        let out = r
+            .render(&Context {
+                name: "X",
+                canister_id: "Y",
+                ssl_certificate_key_path: "2",
+                ssl_certificate_path: "3",
+            })
+            .expect("failed to render");
+
+        assert_eq!(out, "X|Y|2|3");
     }
 }

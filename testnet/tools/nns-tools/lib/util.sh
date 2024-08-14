@@ -74,9 +74,9 @@ hex_to_idl_byte_array() {
 disk_image_exists() {
     GIT_REVISION=$1
     curl --output /dev/null --silent --head --fail \
-        "https://download.dfinity.systems/ic/${GIT_REVISION}/guest-os/disk-img-dev/disk-img.tar.gz" \
+        "https://download.dfinity.systems/ic/${GIT_REVISION}/guest-os/disk-img-dev/disk-img.tar.zst" \
         || curl --output /dev/null --silent --head --fail \
-            "https://download.dfinity.systems/ic/${GIT_REVISION}/guest-os/disk-img.tar.gz"
+            "https://download.dfinity.systems/ic/${GIT_REVISION}/guest-os/disk-img.tar.zst"
 }
 
 ##: latest_commit_with_prebuilt_artifacts
@@ -86,7 +86,8 @@ latest_commit_with_prebuilt_artifacts() {
     IC_REPO=$(repo_root)
     pushd "$IC_REPO" >/dev/null
 
-    RECENT_CHANGES=$(git log -n 100 --pretty=format:'%H')
+    git fetch origin master
+    RECENT_CHANGES=$(git log origin/master -n 100 --pretty=format:'%H')
 
     for HASH in $RECENT_CHANGES; do
         echo >&2 "Checking $HASH..."

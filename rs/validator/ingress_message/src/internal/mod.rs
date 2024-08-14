@@ -1,14 +1,11 @@
 use crate::{AuthenticationError, HttpRequestVerifier, RequestValidationError};
-use ic_interfaces::crypto::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
-use ic_interfaces::time_source::TimeSource;
+use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
 use ic_types::crypto::threshold_sig::{IcRootOfTrust, RootOfTrustProvider};
 use ic_types::crypto::{BasicSigOf, CanisterSigOf, CryptoResult, Signable, UserPublicKey};
 use ic_types::messages::{HttpRequest, HttpRequestContent};
-use ic_types::time::UNIX_EPOCH;
 use ic_types::Time;
 use std::convert::Infallible;
 use std::sync::Arc;
-use std::time::SystemTime;
 
 #[cfg(test)]
 mod tests;
@@ -17,13 +14,13 @@ mod tests;
 const IC_NNS_ROOT_PUBLIC_KEY_BASE64: &str = r#"MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAIFMDm7HH6tYOwi9gTc8JVw8NxsuhIY8mKTx4It0I10U+12cDNVG2WhfkToMCyzFNBWDv0tDkuRn25bWW5u0y3FxEvhHLg1aTRRQX/10hLASkQkcX4e5iINGP5gJGguqrg=="#;
 
 /// An implementation of [`HttpRequestVerifier`] to verify ingress messages.
-pub struct IngressMessageVerifier {
-    root_of_trust_provider: ConstantRootOfTrustProvider,
-    time_source: Arc<dyn TimeSource>,
+pub struct IngressMessageVerifier<P: RootOfTrustProvider> {
+    root_of_trust_provider: P,
+    time_source: TimeProvider,
     validator: ic_validator::HttpRequestVerifierImpl,
 }
 
-impl Default for IngressMessageVerifier {
+impl Default for IngressMessageVerifier<ConstantRootOfTrustProvider> {
     /// Default verifier for ingress messages that is suitable for production.
     ///
     /// It uses the following defaults:
@@ -73,18 +70,15 @@ impl Default for IngressMessageVerifier {
     /// }
     /// ```
     fn default() -> Self {
-        IngressMessageVerifier::builder()
+        IngressMessageVerifier::<ConstantRootOfTrustProvider>::builder()
             .with_root_of_trust(nns_root_public_key())
             .with_time_provider(TimeProvider::SystemTime)
             .build()
     }
 }
 
-impl IngressMessageVerifier {
-    fn new_internal<T: Into<IcRootOfTrust>>(
-        root_of_trust: T,
-        time_source: Arc<dyn TimeSource>,
-    ) -> Self {
+impl IngressMessageVerifier<ConstantRootOfTrustProvider> {
+    fn new_internal<T: Into<IcRootOfTrust>>(root_of_trust: T, time_source: TimeProvider) -> Self {
         IngressMessageVerifier {
             root_of_trust_provider: ConstantRootOfTrustProvider::new(root_of_trust),
             time_source,
@@ -157,10 +151,10 @@ fn nns_root_public_key() -> IcRootOfTrust {
     )
 }
 
-impl<C: HttpRequestContent> HttpRequestVerifier<C> for IngressMessageVerifier
+impl<C: HttpRequestContent, P: RootOfTrustProvider> HttpRequestVerifier<C>
+    for IngressMessageVerifier<P>
 where
-    ic_validator::HttpRequestVerifierImpl:
-        ic_validator::HttpRequestVerifier<C, ConstantRootOfTrustProvider>,
+    ic_validator::HttpRequestVerifierImpl: ic_validator::HttpRequestVerifier<C, P>,
 {
     fn validate_request(&self, request: &HttpRequest<C>) -> Result<(), RequestValidationError> {
         ic_validator::HttpRequestVerifier::validate_request(
@@ -205,6 +199,9 @@ fn to_validation_error(error: ic_validator::RequestValidationError) -> RequestVa
         }
         ic_validator::RequestValidationError::PathTooLongError { length, maximum } => {
             RequestValidationError::PathTooLongError { length, maximum }
+        }
+        ic_validator::RequestValidationError::NonceTooBigError { num_bytes, maximum } => {
+            RequestValidationError::NonceTooBigError { num_bytes, maximum }
         }
     }
 }
@@ -259,8 +256,8 @@ impl IngressMessageVerifierBuilder {
         self
     }
 
-    pub fn build(self) -> IngressMessageVerifier {
-        IngressMessageVerifier::new_internal(self.root_of_trust, Arc::new(self.time_provider))
+    pub fn build(self) -> IngressMessageVerifier<ConstantRootOfTrustProvider> {
+        IngressMessageVerifier::new_internal(self.root_of_trust, self.time_provider)
     }
 }
 
@@ -272,15 +269,24 @@ pub enum TimeProvider {
     SystemTime,
 }
 
-impl TimeSource for TimeProvider {
+impl TimeProvider {
     fn get_relative_time(&self) -> Time {
         match &self {
             TimeProvider::Constant(time) => *time,
             TimeProvider::SystemTime => {
-                UNIX_EPOCH
-                    + SystemTime::now()
-                        .duration_since(SystemTime::UNIX_EPOCH)
-                        .expect("SystemTime is before UNIX EPOCH!")
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    Time::from_nanos_since_unix_epoch(
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .expect("SystemTime is before UNIX EPOCH!")
+                            .as_nanos() as u64,
+                    )
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    Time::from_nanos_since_unix_epoch(ic_cdk::api::time())
+                }
             }
         }
     }
@@ -306,7 +312,8 @@ impl RootOfTrustProvider for ConstantRootOfTrustProvider {
     }
 }
 
-struct StandaloneIngressSigVerifier;
+/// A zero-sized struct that implements the `IngressSigVerifier` trait.
+pub struct StandaloneIngressSigVerifier;
 
 impl<S: Signable> BasicSigVerifierByPublicKey<S> for StandaloneIngressSigVerifier {
     fn verify_basic_sig_by_public_key(

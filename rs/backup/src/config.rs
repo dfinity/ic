@@ -27,7 +27,6 @@ pub struct ColdStorage {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
-    pub version: u32,
     pub push_metrics: bool,
     pub metrics_urls: Vec<Url>,
     pub network_name: String,
@@ -37,7 +36,8 @@ pub struct Config {
     pub root_dir: PathBuf,
     pub excluded_dirs: Vec<String>,
     pub ssh_private_key: PathBuf,
-    pub disk_threshold_warn: u32,
+    pub hot_disk_resource_threshold_percentage: u32,
+    pub cold_disk_resource_threshold_percentage: u32,
     pub slack_token: String,
     pub cold_storage: Option<ColdStorage>,
     pub blacklisted_nodes: Option<Vec<IpAddr>>,
@@ -55,8 +55,11 @@ impl ConfigValidate for Config {
                 self.ssh_private_key
             ));
         }
-        if self.disk_threshold_warn > 100 {
-            return Err("Disk threshhold warning value is > 100".to_string());
+        if self.hot_disk_resource_threshold_percentage >= 100 {
+            return Err("Hot disk threshold warning should be below 100%".to_string());
+        }
+        if self.cold_disk_resource_threshold_percentage >= 100 {
+            return Err("Cold disk threshold warning should be below 100%".to_string());
         }
         // we accept no subnets in the config at the initial stage only
         if self.subnets.is_empty() && self.slack_token != "<INSERT SLACK TOKEN>" {

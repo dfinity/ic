@@ -1,19 +1,21 @@
 //! Types for non-interactive distributed key generation (NI-DKG).
 pub use crate::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use crate::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
-use crate::crypto::threshold_sig::ThresholdSigPublicKey;
+#[cfg(test)]
+use crate::NodeId;
 use crate::NumberOfNodes;
-use crate::{
-    Height, IDkgId, NodeId, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, SubnetId,
-};
+use crate::{Height, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, SubnetId};
 use core::fmt;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{CspNiDkgDealing, CspNiDkgTranscript};
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::types::v1 as pb;
 use ic_protobuf::types::v1::NiDkgId as NiDkgIdProto;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use strum_macros::EnumIter;
+use thiserror::Error;
 
 pub mod config;
 pub mod errors;
@@ -32,6 +34,7 @@ mod tests;
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, EnumIter,
 )]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum NiDkgTag {
     LowThreshold = 1,
     HighThreshold = 2,
@@ -48,6 +51,7 @@ impl From<&NiDkgTag> for pb::NiDkgTag {
 
 /// The subnet for which the DKG generates keys.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum NiDkgTargetSubnet {
     /// `Local` means the subnet creates keys for itself.
     Local,
@@ -67,6 +71,7 @@ pub enum NiDkgTargetSubnet {
 /// Please refer to the rustdoc of `NiDkgTargetSubnet::Remote` for an
 /// explanation of why this is needed.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct NiDkgTargetId([u8; NiDkgTargetId::SIZE]);
 ic_crypto_internal_types::derive_serde!(NiDkgTargetId, NiDkgTargetId::SIZE);
 
@@ -109,22 +114,6 @@ impl TryFrom<i32> for NiDkgTag {
     }
 }
 
-/// An ID identifying a DKG epoch.
-///
-/// This is either for interactive DKG (`IDkgId`) or for non-interactive DKG
-/// (`NiDkgId`).
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum DkgId {
-    IDkgId(IDkgId),
-    NiDkgId(NiDkgId),
-}
-
-impl fmt::Display for DkgId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", &self)
-    }
-}
-
 /// A dealer's contribution (called dealing) to distributed key generation.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NiDkgDealing {
@@ -157,6 +146,12 @@ impl From<NiDkgDealing> for CspNiDkgDealing {
     fn from(dealing: NiDkgDealing) -> Self {
         dealing.internal_dealing
     }
+}
+
+#[derive(Error, Debug)]
+pub enum ThresholdSigPublicKeyError {
+    #[error("threshold signature public key coefficients empty")]
+    CoefficientsEmpty,
 }
 
 /// Summarizes a distributed key generation.
@@ -233,8 +228,8 @@ impl From<&NiDkgTranscript> for CspNiDkgTranscript {
     }
 }
 
+#[cfg(test)]
 impl NiDkgTranscript {
-    #[allow(clippy::new_without_default)]
     pub fn dummy_transcript_for_tests_with_params(
         committee: Vec<NodeId>,
         dkg_tag: NiDkgTag,
@@ -253,7 +248,7 @@ impl NiDkgTranscript {
             committee: NiDkgReceivers::new(committee.into_iter().collect())
                 .expect("Couldn't create non-interactive DKG committee"),
             registry_version: RegistryVersion::from(registry_version),
-            internal_csp_transcript: CspNiDkgTranscript::placeholder_to_delete(),
+            internal_csp_transcript: dummy_internal_transcript(),
         }
     }
     pub fn dummy_transcript_for_tests() -> Self {
@@ -263,13 +258,6 @@ impl NiDkgTranscript {
             1,
             0,
         )
-    }
-}
-
-impl NiDkgTranscript {
-    /// Computes the threshold-committee public key from the transcript.
-    pub fn public_key(&self) -> ThresholdSigPublicKey {
-        ThresholdSigPublicKey::from(self)
     }
 }
 
@@ -292,4 +280,16 @@ impl From<NiDkgTranscript> for InitialNiDkgTranscriptRecord {
                 .expect("failed to serialize CSP NI-DKG transcript to CBOR"),
         }
     }
+}
+
+#[cfg(test)]
+fn dummy_internal_transcript() -> CspNiDkgTranscript {
+    use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381;
+    use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
+    CspNiDkgTranscript::Groth20_Bls12_381(ni_dkg_groth20_bls12_381::Transcript {
+        public_coefficients: ni_dkg_groth20_bls12_381::PublicCoefficientsBytes {
+            coefficients: vec![PublicKeyBytes([0; PublicKeyBytes::SIZE])],
+        },
+        receiver_data: std::collections::BTreeMap::new(),
+    })
 }

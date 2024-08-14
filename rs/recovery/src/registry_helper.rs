@@ -17,7 +17,7 @@ use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_replicator::RegistryReplicator;
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
-use ic_registry_subnet_features::EcdsaConfig;
+use ic_registry_subnet_features::ChainKeyConfig;
 use prost::Message;
 use slog::{error, info, warn, Logger};
 use url::Url;
@@ -108,10 +108,13 @@ impl RegistryHelper {
         })
     }
 
-    /// Returns the Ecdsa config of the given subnet.
-    pub fn get_ecdsa_config(&self, subnet_id: SubnetId) -> VersionedRecoveryResult<EcdsaConfig> {
+    /// Returns Chain key config of the given subnet
+    pub fn get_chain_key_config(
+        &self,
+        subnet_id: SubnetId,
+    ) -> VersionedRecoveryResult<ChainKeyConfig> {
         self.get(|registry_version, registry_client| {
-            registry_client.get_ecdsa_config(subnet_id, registry_version)
+            registry_client.get_chain_key_config(subnet_id, registry_version)
         })
     }
 
@@ -227,7 +230,7 @@ fn download_nns_pem(nns_url: &Url, nns_pem_path: &Path, logger: &Logger) -> Reco
         RecoveryError::RegistryError(format!("Error decoding subnet list from registry: {}", e))
     })?;
 
-    let maybe_id = list.subnets.get(0).map(|x| {
+    let maybe_id = list.subnets.first().map(|x| {
         SubnetId::from(
             PrincipalId::try_from(x.clone().as_slice()).expect("failed parsing principal id"),
         )

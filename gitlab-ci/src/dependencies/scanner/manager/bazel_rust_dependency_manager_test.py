@@ -20,7 +20,6 @@ def open_test_file(rel_path):
 def test_project_root_bazel(bazel_test):
     assert bazel_test.root.exists()
     assert bazel_test.root.is_dir()
-    assert bazel_test.root.name == "ic"
 
 
 def test_cargo_lock_exists(bazel_test):
@@ -52,10 +51,10 @@ def test_transitive_bazel_string_to_dependency(bazel_test):
     assert dependency.version == "0.4.19"
 
 
-def test_transitive_bazel_string_to_dependency_hypenated(bazel_test):
-    bazel_string_hypenated_crate = "@crate_index__build-info-common-0.4.19//"
+def test_transitive_bazel_string_to_dependency_hyphenated(bazel_test):
+    bazel_string_hyphenated_crate = "@crate_index__build-info-common-0.4.19//"
     dependency = bazel_test._BazelRustDependencyManager__transitive_bazel_string_to_dependency(
-        bazel_string_hypenated_crate
+        bazel_string_hyphenated_crate
     )
     assert dependency.name == "build-info-common"
     assert dependency.version == "0.4.19"
@@ -310,7 +309,7 @@ def test_get_findings_for_bazel_repo():
         executor = MockBazelCargoExecutor(expected_cargo_audit_output=json.load(audit), expected_bazel_queries=expected_queries, expected_bazel_responses=expected_responses)
         bazel_test = BazelRustDependencyManager(executor=executor)
 
-        findings = bazel_test.get_findings("ic", None, None)
+        findings = bazel_test.get_findings("ic", Project("ic", "ic"), None)
 
         assert findings is not None
         assert len(findings) == 3
@@ -351,7 +350,7 @@ def test_get_findings_for_bazel_repo():
                            fix_version_for_vulnerability={}),
                 Dependency(id='https://crates.io/crates/x509-parser', name='x509-parser', version='0.12.0',
                            fix_version_for_vulnerability={})]
-            assert findings[0].projects == ['rs/backup', 'rs/canister_client/sender', 'rs/crypto', 'rs/crypto/ecdsa_secp256k1', 'rs/crypto/ecdsa_secp256r1', 'rs/crypto/internal/crypto_lib/basic_sig/cose', 'rs/crypto/internal/crypto_lib/basic_sig/der_utils', 'rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1', 'rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1', 'rs/crypto/internal/crypto_lib/basic_sig/ed25519', 'rs/crypto/internal/crypto_lib/basic_sig/iccsa', 'rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1', 'rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils', 'rs/crypto/internal/crypto_service_provider', 'rs/crypto/node_key_validation', 'rs/crypto/node_key_validation/tls_cert_validation', 'rs/crypto/utils/basic_sig', 'rs/elastic_common_schema', 'rs/ic_p8s_service_discovery/log', 'rs/monitoring/logger', 'rs/monitoring/onchain_observability/adapter', 'rs/nervous_system/common', 'rs/nns/cmc', 'rs/nns/governance', 'rs/nns/gtc', 'rs/nns/handlers/root/impl', 'rs/nns/handlers/root/interface', 'rs/nns/sns-wasm', 'rs/prep', 'rs/registry/canister', 'rs/registry/nns_data_provider', 'rs/rosetta-api', 'rs/rosetta-api/icrc1/ledger/sm-tests', 'rs/rosetta-api/ledger_canister_blocks_synchronizer', 'rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils', 'rs/scenario_tests', 'rs/sns/governance', 'rs/sns/root', 'rs/sns/swap', 'rs/tests', 'rs/types/types', 'rs/validator', 'rs/validator/http_request_test_utils']
+            assert findings[0].projects == ['rs/backup', 'rs/canister_client/sender', 'rs/crypto', 'rs/crypto/ecdsa_secp256k1', 'rs/crypto/ecdsa_secp256r1', 'rs/crypto/internal/crypto_lib/basic_sig/cose', 'rs/crypto/internal/crypto_lib/basic_sig/der_utils', 'rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1', 'rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1', 'rs/crypto/internal/crypto_lib/basic_sig/ed25519', 'rs/crypto/internal/crypto_lib/basic_sig/iccsa', 'rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1', 'rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils', 'rs/crypto/internal/crypto_service_provider', 'rs/crypto/node_key_validation', 'rs/crypto/node_key_validation/tls_cert_validation', 'rs/crypto/utils/basic_sig', 'rs/elastic_common_schema', 'rs/monitoring/logger', 'rs/monitoring/onchain_observability/adapter', 'rs/nervous_system/common', 'rs/nns/cmc', 'rs/nns/governance', 'rs/nns/gtc', 'rs/nns/handlers/root/impl', 'rs/nns/handlers/root/interface', 'rs/nns/sns-wasm', 'rs/prep', 'rs/registry/canister', 'rs/registry/nns_data_provider', 'rs/rosetta-api', 'rs/rosetta-api/icrc1/ledger/sm-tests', 'rs/rosetta-api/ledger_canister_blocks_synchronizer', 'rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils', 'rs/scenario_tests', 'rs/sns/governance', 'rs/sns/root', 'rs/sns/swap', 'rs/tests', 'rs/types/types', 'rs/validator', 'rs/validator/http_request_test_utils']
             assert findings[0].score == -1
 
             # unique fields for second finding
@@ -405,7 +404,7 @@ def test_get_findings_for_bazel_repo():
                                 fix_version_for_vulnerability={}),
                      Dependency(id='https://crates.io/crates/x509-parser', name='x509-parser', version='0.12.0',
                                 fix_version_for_vulnerability={})]
-            assert findings[2].projects == ['rs/backup', 'rs/canister_client/sender', 'rs/crypto', 'rs/crypto/ecdsa_secp256k1', 'rs/crypto/ecdsa_secp256r1', 'rs/crypto/internal/crypto_lib/basic_sig/cose', 'rs/crypto/internal/crypto_lib/basic_sig/der_utils', 'rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1', 'rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1', 'rs/crypto/internal/crypto_lib/basic_sig/ed25519', 'rs/crypto/internal/crypto_lib/basic_sig/iccsa', 'rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1', 'rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils', 'rs/crypto/internal/crypto_service_provider', 'rs/crypto/node_key_validation', 'rs/crypto/node_key_validation/tls_cert_validation', 'rs/crypto/utils/basic_sig', 'rs/elastic_common_schema', 'rs/ic_p8s_service_discovery/log', 'rs/monitoring/logger', 'rs/monitoring/onchain_observability/adapter', 'rs/nervous_system/common', 'rs/nns/cmc', 'rs/nns/governance', 'rs/nns/gtc', 'rs/nns/handlers/root/impl', 'rs/nns/handlers/root/interface', 'rs/nns/sns-wasm', 'rs/prep', 'rs/registry/canister', 'rs/registry/nns_data_provider', 'rs/replica', 'rs/rosetta-api', 'rs/rosetta-api/icrc1/ledger/sm-tests', 'rs/rosetta-api/ledger_canister_blocks_synchronizer', 'rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils', 'rs/scenario_tests', 'rs/sns/governance', 'rs/sns/root', 'rs/sns/swap', 'rs/tests', 'rs/types/types', 'rs/validator', 'rs/validator/http_request_test_utils']
+            assert findings[2].projects == ['rs/backup', 'rs/canister_client/sender', 'rs/crypto', 'rs/crypto/ecdsa_secp256k1', 'rs/crypto/ecdsa_secp256r1', 'rs/crypto/internal/crypto_lib/basic_sig/cose', 'rs/crypto/internal/crypto_lib/basic_sig/der_utils', 'rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1', 'rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1', 'rs/crypto/internal/crypto_lib/basic_sig/ed25519', 'rs/crypto/internal/crypto_lib/basic_sig/iccsa', 'rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1', 'rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils', 'rs/crypto/internal/crypto_service_provider', 'rs/crypto/node_key_validation', 'rs/crypto/node_key_validation/tls_cert_validation', 'rs/crypto/utils/basic_sig', 'rs/elastic_common_schema', 'rs/monitoring/logger', 'rs/monitoring/onchain_observability/adapter', 'rs/nervous_system/common', 'rs/nns/cmc', 'rs/nns/governance', 'rs/nns/gtc', 'rs/nns/handlers/root/impl', 'rs/nns/handlers/root/interface', 'rs/nns/sns-wasm', 'rs/prep', 'rs/registry/canister', 'rs/registry/nns_data_provider', 'rs/replica', 'rs/rosetta-api', 'rs/rosetta-api/icrc1/ledger/sm-tests', 'rs/rosetta-api/ledger_canister_blocks_synchronizer', 'rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils', 'rs/scenario_tests', 'rs/sns/governance', 'rs/sns/root', 'rs/sns/swap', 'rs/tests', 'rs/types/types', 'rs/validator', 'rs/validator/http_request_test_utils']
             assert findings[2].score == 6
 
 class MockBazelCargoExecutor(BazelCargoExecutor):

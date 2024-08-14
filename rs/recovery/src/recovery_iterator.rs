@@ -38,28 +38,37 @@ pub trait RecoveryIterator<
         }
     }
 
+    fn get_skipped_steps(&self) -> Vec<StepType> {
+        vec![]
+    }
+
     fn next_step(&mut self) -> Option<(StepType, Box<dyn Step>)> {
+        let skipped_steps = self.get_skipped_steps();
         let result = if let Some(current_step) = self.get_step_iterator().next() {
-            super::cli::print_step(self.get_logger(), &format!("{:?}", current_step));
-            if let Some(explanation) = current_step.get_documentation() {
-                info!(self.get_logger(), "\n\n{}\n", format(explanation));
-            }
-            if self.interactive() {
-                self.read_step_params(current_step);
-            }
-            match self.get_step_impl(current_step) {
-                Ok(step) => Some((current_step, step)),
-                Err(RecoveryError::StepSkipped) => {
-                    info!(self.get_logger(), "Skipping step {:?}", current_step);
-                    self.next_step()
+            if skipped_steps.contains(&current_step) {
+                self.next_step()
+            } else {
+                super::cli::print_step(self.get_logger(), &format!("{:?}", current_step));
+                if let Some(explanation) = current_step.get_documentation() {
+                    info!(self.get_logger(), "\n\n{}\n", explanation);
                 }
-                Err(e) => {
-                    warn!(
-                        self.get_logger(),
-                        "Step generation of {:?} failed: {}", current_step, e
-                    );
-                    warn!(self.get_logger(), "Skipping step...");
-                    self.next_step()
+                if self.interactive() {
+                    self.read_step_params(current_step);
+                }
+                match self.get_step_impl(current_step) {
+                    Ok(step) => Some((current_step, step)),
+                    Err(RecoveryError::StepSkipped) => {
+                        info!(self.get_logger(), "Skipping step {:?}", current_step);
+                        self.next_step()
+                    }
+                    Err(e) => {
+                        warn!(
+                            self.get_logger(),
+                            "Step generation of {:?} failed: {}", current_step, e
+                        );
+                        warn!(self.get_logger(), "Skipping step...");
+                        self.next_step()
+                    }
                 }
             }
         } else {
@@ -68,6 +77,7 @@ pub trait RecoveryIterator<
 
         let next_step = self.get_step_iterator().peek().copied();
         self.store_next_step(next_step);
+
         result
     }
 }
@@ -91,23 +101,6 @@ impl Iterator for NNSRecoveryFailoverNodes {
     fn next(&mut self) -> Option<Self::Item> {
         self.next_step()
     }
-}
-
-// Creates line breaks so that no line is longer than 80 characters.
-fn format(description: &str) -> String {
-    let iter = description.split(' ');
-    let mut lines = Vec::new();
-    let mut line = String::new();
-    for word in iter {
-        if line.len() + word.len() > 80 {
-            lines.push(line.clone());
-            line.clear();
-        }
-        line += word;
-        line += " ";
-    }
-    lines.push(line);
-    lines.join("\n")
 }
 
 #[cfg(test)]

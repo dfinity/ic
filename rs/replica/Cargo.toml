@@ -1,14 +1,14 @@
 [package]
 name = "ic-replica"
-version = "0.8.0"
-authors = ["The Internet Computer Project Developers"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-base64 = "0.11.0"
-clap = { version = "3.1.6", features = ["derive"] }
-crossbeam-channel = "0.5.5"
-hex = "0.4.2"
+clap = { version = "3.2.25", features = ["derive"] }
+hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-async-utils = { path = "../async_utils" }
 ic-btc-adapter-client = { path = "../bitcoin/client" }
@@ -17,92 +17,77 @@ ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
-ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
-ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
-ic-error-types = { path = "../types/error_types" }
 ic-execution-environment = { path = "../execution_environment" }
+ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
-ic-icos-sev = { path = "../ic_os/sev" }
 ic-interfaces = { path = "../interfaces" }
-ic-interfaces-adapter-client = { path = "../interfaces/adapter_client" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
+ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-logger = { path = "../monitoring/logger" }
 ic-messaging = { path = "../messaging" }
 ic-metrics = { path = "../monitoring/metrics" }
-ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
-ic-nns-constants = { path = "../nns/constants" }
-ic-onchain-observability-server = { path = "../monitoring/onchain_observability/server" }
-ic-p2p = { path = "../p2p" }
 ic-pprof = { path = "../monitoring/pprof" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
-ic-replica-setup-ic-network =  { path = "./setup_ic_network" }
+ic-replica-setup-ic-network = { path = "./setup_ic_network" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-manager = { path = "../state_manager" }
 ic-sys = { path = "../sys" }
+ic-tracing = { path = "../monitoring/tracing" }
 ic-types = { path = "../types/types" }
-ic-utils = { path = "../utils" }
 ic-xnet-endpoint = { path = "../xnet/endpoint" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
-jemalloc-ctl = "0.3.3"
-jemallocator = "0.3.2"
-libc = "0.2.91"
-nix = "0.23.0"
+libc = { workspace = true }
+nix = { workspace = true }
 num_cpus = "1.13.1"
-pprof = { version = "0.10.1", default-features = false, features = ["flamegraph", "prost-codec"], optional = true }
-prometheus = "0.12.0"
-prost = "0.11.0"
-rand = "0.8"
-regex = "1.3.9"
-serde = { version = "1.0.99", features = [ "derive" ] }
-serde_bytes = "0.11.5"
-serde_cbor = "0.11.1"
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
-slog-async = "2.5.0"
-static_assertions = "0.3.4"
-tempfile = "3.1.0"
-thread_profiler = { version = "0.3", optional = true }
-tokio = { version = "1.15.0", features = ["full"] }
-tracing = "0.1.13"
-tower = { version = "0.4.11", features = ["util"] }
+opentelemetry = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+pprof = { workspace = true, optional = true }
+prometheus = { workspace = true }
+rand = { workspace = true }
+regex = { workspace = true }
+slog = { workspace = true }
+tempfile = { workspace = true }
+tikv-jemalloc-ctl = "0.5"
+tikv-jemallocator = "0.5"
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-flame = "0.2.0"
+tracing-opentelemetry = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # this library uses libunwind, which is only applicable to Linux
 ic-backtrace = { path = "../monitoring/backtrace" }
 
 [dev-dependencies]
-assert_cmd = "0.12"
+assert_cmd = "2.0.12"
 canister-test = { path = "../rust_canisters/canister_test" }
-criterion = "0.3"
-ic-ic00-types = { path = "../types/ic00_types" }
+criterion = { workspace = true }
 ic-interfaces-registry-mocks = { path = "../interfaces/registry/mocks" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-test-utilities = { path = "../test_utilities" }
-predicates = "1.0.1"
+predicates = "3.0.4"
 wat = "1.0.52"
 
 [[bench]]
 name = "calls"
 harness = false
 
-# TODO(RPL-268)
-# [[bench]]
-# name = "execution_only_update"
-# harness = false
-
 [[bin]]
 name = "replica"
 path = "src/main.rs"
 
 [features]
-profiler = ["thread_profiler/thread_profiler", "pprof"]
+profiler = ["pprof"]
 malicious_code = [
-  "ic-consensus/malicious_code",
-  "ic-http-endpoints-public/malicious_code",
-  "ic-state-manager/malicious_code",
+    "ic-consensus/malicious_code",
+    "ic-state-manager/malicious_code",
 ]

@@ -1,0 +1,32 @@
+load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary")
+
+package(default_visibility = ["//visibility:private"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:bitcoin",
+    "@crate_index//:libfuzzer-sys",
+]
+
+MACRO_DEPENDENCIES = []
+
+rust_fuzz_test_binary(
+    name = "deserialize_bitcoin_transaction",
+    srcs = ["fuzz_targets/deserialize_bitcoin_transaction.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_fuzz_test_binary(
+    name = "deserialize_bitcoin_block",
+    srcs = ["fuzz_targets/deserialize_bitcoin_block.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_fuzz_test_binary(
+    name = "deserialize_bitcoin_raw_network_message",
+    srcs = ["fuzz_targets/deserialize_bitcoin_raw_network_message.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)

@@ -1,11 +1,14 @@
 [package]
 name = "ic-btc-service"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-prost = "0.11.0"
-tonic = "0.8.2"
+prost = { workspace = true }
+tonic = { workspace = true }
 
 [build-dependencies]
-tonic-build = "0.8.2"
+tonic-build = { workspace = true }

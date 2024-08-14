@@ -31,7 +31,7 @@ fn should_parse_valid_proto_as_ni_dkg_id() {
     let target_id = [42; NiDkgTargetId::SIZE];
     let height = 7;
 
-    for val in vec![None, Some(target_id.to_vec())].iter() {
+    for val in [None, Some(target_id.to_vec())].iter() {
         let proto = NiDkgIdProto {
             start_block_height: height,
             dealer_subnet: principal_id_blob.clone(),

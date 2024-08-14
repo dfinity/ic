@@ -8,11 +8,14 @@ use crate::consensus::{
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::consensus_pool::{ChangeAction, ChangeSet, HeightRange};
 use ic_logger::{info, trace, ReplicaLogger};
-use ic_types::consensus::{
-    hashed, Block, BlockProposal, ConsensusMessage, ConsensusMessageHashable, FinalizationContent,
-    FinalizationShare, NotarizationShare, Rank,
+use ic_types::{
+    consensus::{
+        hashed, Block, BlockMetadata, BlockProposal, ConsensusMessage, ConsensusMessageHashable,
+        FinalizationContent, FinalizationShare, HasHeight, HashedBlock, NotarizationShare, Rank,
+    },
+    malicious_flags::MaliciousFlags,
+    Time,
 };
-use ic_types::malicious_flags::MaliciousFlags;
 use std::time::Duration;
 
 /// Return a `ChangeSet` that moves all block proposals in the range to the
@@ -111,8 +114,12 @@ fn maliciously_propose_blocks(
                             new_block.context.time += Duration::from_nanos(i);
                             let hashed_block =
                                 hashed::Hashed::new(ic_types::crypto::crypto_hash, new_block);
-                            if let Ok(signature) = block_maker.crypto.sign(
+                            let metadata = BlockMetadata::from_block(
                                 &hashed_block,
+                                &block_maker.replica_config,
+                            );
+                            if let Ok(signature) = block_maker.crypto.sign(
+                                &metadata,
                                 block_maker.replica_config.node_id,
                                 registry_version,
                             ) {
@@ -155,19 +162,18 @@ fn maliciously_propose_empty_block(
     block_maker: &BlockMaker,
     pool: &PoolReader<'_>,
     rank: Rank,
-    parent: Block,
+    parent: HashedBlock,
 ) -> Option<BlockProposal> {
-    let parent_hash = ic_types::crypto::crypto_hash(&parent);
-    let height = parent.height.increment();
+    let height = parent.height().increment();
     let certified_height = block_maker.state_manager.latest_certified_height();
-    let context = parent.context.clone();
+    let context = parent.as_ref().context.clone();
 
     // Note that we will skip blockmaking if registry versions or replica_versions
     // are missing or temporarily not retrievable.
     let registry_version = pool.registry_version(height)?;
 
     // Get the subnet records that are relevant to making a block
-    let stable_registry_version = block_maker.get_stable_registry_version(&parent)?;
+    let stable_registry_version = block_maker.get_stable_registry_version(parent.as_ref())?;
     let subnet_records = block_maker::subnet_records_for_registry_version(
         block_maker,
         registry_version,
@@ -178,7 +184,6 @@ fn maliciously_propose_empty_block(
         pool,
         context,
         parent,
-        parent_hash,
         height,
         certified_height,
         rank,
@@ -310,6 +315,7 @@ pub fn maliciously_alter_changeset(
     finalizer: &Finalizer,
     notary: &Notary,
     logger: &ReplicaLogger,
+    timestamp: Time,
 ) -> ChangeSet {
     let mut changeset = honest_changeset;
 
@@ -322,17 +328,20 @@ pub fn maliciously_alter_changeset(
             changeset.retain(|change_action| {
                 !matches!(
                     change_action,
-                    ChangeAction::AddToValidated(ConsensusMessage::BlockProposal(_))
+                    ChangeAction::AddToValidated(x) if matches!(x.msg ,ConsensusMessage::BlockProposal(_))
                 )
             });
         }
 
-        changeset.append(&mut add_all_to_validated(maliciously_propose_blocks(
-            block_maker,
-            pool,
-            malicious_flags.maliciously_propose_empty_blocks,
-            malicious_flags.maliciously_propose_equivocating_blocks,
-        )));
+        changeset.append(&mut add_all_to_validated(
+            timestamp,
+            maliciously_propose_blocks(
+                block_maker,
+                pool,
+                malicious_flags.maliciously_propose_empty_blocks,
+                malicious_flags.maliciously_propose_equivocating_blocks,
+            ),
+        ));
     }
 
     if malicious_flags.maliciously_notarize_all {
@@ -352,9 +361,10 @@ pub fn maliciously_alter_changeset(
         changeset.append(&mut maliciously_validate_all_blocks(pool, logger));
 
         // Notarize all valid block proposals
-        changeset.append(&mut add_all_to_validated(maliciously_notarize_all(
-            notary, pool,
-        )));
+        changeset.append(&mut add_all_to_validated(
+            timestamp,
+            maliciously_notarize_all(notary, pool),
+        ));
     }
 
     if malicious_flags.maliciously_finalize_all {
@@ -363,14 +373,15 @@ pub fn maliciously_alter_changeset(
         changeset.retain(|change_action| {
             !matches!(
                 change_action,
-                ChangeAction::AddToValidated(ConsensusMessage::FinalizationShare(_))
+                ChangeAction::AddToValidated(x) if matches!(x.msg, ConsensusMessage::FinalizationShare(_))
             )
         });
 
         // Finalize all block proposals
-        changeset.append(&mut add_all_to_validated(maliciously_finalize_all(
-            finalizer, pool,
-        )));
+        changeset.append(&mut add_all_to_validated(
+            timestamp,
+            maliciously_finalize_all(finalizer, pool),
+        ));
     }
 
     changeset

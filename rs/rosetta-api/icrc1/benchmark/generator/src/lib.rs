@@ -15,7 +15,7 @@ const SEED: u64 = 5000;
 const NANO: u64 = 1_000_000_000;
 
 thread_local! {
-    static STATE: RefCell<GeneratorState> = RefCell::new(GeneratorState::new());
+    static STATE: RefCell<GeneratorState> = const { RefCell::new(GeneratorState::new()) };
 }
 
 #[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
@@ -131,7 +131,7 @@ pub fn encode_metrics(
 ) -> std::io::Result<()> {
     metrics.encode_gauge(
         "icrc1_benchmark_generator_stable_memory_bytes",
-        ic_cdk::api::stable::stable_size() as f64,
+        ic_cdk::api::stable::stable64_size() as f64,
         "Size of the stable memory allocated by this canister.",
     )?;
     Ok(())

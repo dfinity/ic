@@ -7,6 +7,7 @@ use crate::{
     types::IndividualSignature, types::PublicKey, types::SecretKey, types::SecretKeyBytes,
 };
 use ic_crypto_internal_bls12_381_type::G1Projective;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
 fn check_single_point_signature_verifies(
     secret_key: &SecretKey,
@@ -112,8 +113,8 @@ mod basic_functionality {
 
         #[test]
         fn keypair_from_rng_works(seed: [u8; 32]) {
-            let mut rng = ChaCha20Rng::from_seed(seed);
-            multi_crypto::keypair_from_rng(&mut rng);
+            let rng = &mut ChaCha20Rng::from_seed(seed);
+            multi_crypto::keypair_from_rng(rng);
         }
     }
 
@@ -140,10 +141,10 @@ mod basic_functionality {
     #[test]
     fn test_distinct_public_keys_yield_distinct_hashes() {
         let number_of_public_keys = 100;
-        let mut csprng = ChaCha20Rng::seed_from_u64(42);
+        let rng = &mut reproducible_rng();
         let points: HashSet<_> = (0..number_of_public_keys as u64)
             .map(|_| {
-                let (_secret_key, public_key) = multi_crypto::keypair_from_rng(&mut csprng);
+                let (_secret_key, public_key) = multi_crypto::keypair_from_rng(rng);
                 let public_key_bytes = PublicKeyBytes::from(&public_key);
                 let g1 = multi_crypto::hash_public_key_to_g1(&public_key_bytes.0[..]);
                 let bytes = g1.serialize();

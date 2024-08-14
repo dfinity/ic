@@ -4,11 +4,11 @@ use crate::key_id::KeyId;
 use crate::keygen::utils::dkg_dealing_encryption_pk_to_proto;
 use crate::types::CspPublicCoefficients;
 use crate::vault::api::CspVault;
-use crate::vault::test_utils;
 use crate::vault::test_utils::ni_dkg::fixtures::{
     random_algorithm_id, MockDkgConfig, MockNetwork, MockNode, StateWithConfig, StateWithDealings,
     StateWithTranscript, StateWithVerifiedDealings,
 };
+use crate::vault::{test_utils, KeyIdInstantiationError};
 use assert_matches::assert_matches;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
@@ -35,11 +35,11 @@ pub fn test_ni_dkg_should_work_with_all_players_acting_correctly(
     num_reshares: i32,
     csp_vault_factory: impl Fn() -> Arc<dyn CspVault>,
 ) {
-    let mut rng = ChaCha20Rng::from_seed(seed);
-    let network = MockNetwork::random(&mut rng, network_size, csp_vault_factory);
-    let config = MockDkgConfig::from_network(&mut rng, &network, None);
+    let rng = &mut ChaCha20Rng::from_seed(seed);
+    let network = MockNetwork::random(rng, network_size, csp_vault_factory);
+    let config = MockDkgConfig::from_network(rng, &network, None);
     let mut state = state_with_transcript(&config, network);
-    threshold_signatures_should_work(&state.network, &config, &state.transcript, &mut rng);
+    threshold_signatures_should_work(&state.network, &config, &state.transcript, rng);
     let public_key = state.public_key();
     // Resharing
     for _ in 0..num_reshares {
@@ -48,9 +48,9 @@ pub fn test_ni_dkg_should_work_with_all_players_acting_correctly(
             transcript,
             config,
         } = state;
-        let config = MockDkgConfig::from_network(&mut rng, &network, Some((config, transcript)));
+        let config = MockDkgConfig::from_network(rng, &network, Some((config, transcript)));
         state = state_with_transcript(&config, network);
-        threshold_signatures_should_work(&state.network, &config, &state.transcript, &mut rng);
+        threshold_signatures_should_work(&state.network, &config, &state.transcript, rng);
         assert_eq!(public_key, state.public_key());
     }
 }
@@ -88,7 +88,8 @@ fn threshold_signatures_should_work(
     };
     let public_coefficients = CspPublicCoefficients::Bls12_381(public_coefficients);
     let signatories: Vec<(Arc<dyn CspVault>, KeyId)> = {
-        let key_id = KeyId::from(&public_coefficients);
+        let key_id = KeyId::try_from(&public_coefficients)
+            .expect("computing key id from public coefficients should succeed");
         config
             .receivers
             .get()
@@ -137,9 +138,9 @@ fn threshold_signatures_should_work(
 pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
     let seed = [69u8; 32];
     let network_size = 4;
-    let mut rng = ChaCha20Rng::from_seed(seed);
-    let network = MockNetwork::random(&mut rng, network_size, csp_vault_factory);
-    let config = MockDkgConfig::from_network(&mut rng, &network, None);
+    let rng = &mut ChaCha20Rng::from_seed(seed);
+    let network = MockNetwork::random(rng, network_size, csp_vault_factory);
+    let config = MockDkgConfig::from_network(rng, &network, None);
     let mut state = state_with_transcript(&config, network);
 
     state.load_keys();
@@ -163,20 +164,22 @@ pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
         let node: &mut MockNode = get_one_node(&mut state);
 
         // Verify that the key is there:
-        let key_id = KeyId::from(&internal_public_coefficients);
+        let key_id = KeyId::try_from(&internal_public_coefficients)
+            .expect("computing key id from public coefficients should succeed");
         node.csp_vault
             .threshold_sign(
                 AlgorithmId::ThresBls12_381,
-                &b"Here's a howdyedo!"[..],
+                b"Here's a howdyedo!".to_vec(),
                 key_id,
             )
             .expect("The key should be there initially");
 
         // Call retain, keeping the threshold key:
-        let active_key_ids: BTreeSet<KeyId> = vec![internal_public_coefficients.clone()]
+        let active_key_ids = [internal_public_coefficients.clone()]
             .iter()
-            .map(KeyId::from)
-            .collect();
+            .map(KeyId::try_from)
+            .collect::<Result<BTreeSet<KeyId>, KeyIdInstantiationError>>()
+            .expect("computing key ids from public coefficients should succeed");
         node.csp_vault
             .retain_threshold_keys_if_present(active_key_ids)
             .expect("Retaining threshold keys failed");
@@ -185,7 +188,7 @@ pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
         node.csp_vault
             .threshold_sign(
                 AlgorithmId::ThresBls12_381,
-                &b"Here's a state of things!"[..],
+                b"Here's a state of things!".to_vec(),
                 key_id,
             )
             .expect("The key should have been retained");
@@ -199,9 +202,12 @@ pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
             different_public_coefficients != internal_public_coefficients,
             "Public coefficients should be different - the different one has no entries after all!"
         );
-        let active_key_ids = vec![different_public_coefficients]
+        let active_key_ids = [different_public_coefficients]
             .iter()
-            .map(KeyId::from)
+            .map(|public_coefficients| {
+                KeyId::try_from(public_coefficients)
+                    .expect("computing key id from public coefficients should succeed")
+            })
             .collect();
         node.csp_vault
             .retain_threshold_keys_if_present(active_key_ids)
@@ -211,7 +217,7 @@ pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
         node.csp_vault
             .threshold_sign(
                 AlgorithmId::ThresBls12_381,
-                &b"To her life she clings!"[..],
+                b"To her life she clings!".to_vec(),
                 key_id,
             )
             .expect_err("The key should have been removed");
@@ -229,11 +235,12 @@ pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
         let node = get_one_node(&mut state);
 
         // Verify that the threshold key has been reloaded:
-        let key_id = KeyId::from(&internal_public_coefficients);
+        let key_id = KeyId::try_from(&internal_public_coefficients)
+            .expect("computing key id from public coefficients should succeed");
         node.csp_vault
             .threshold_sign(
                 AlgorithmId::ThresBls12_381,
-                &b"Here's a howdyedo!"[..],
+                b"Here's a howdyedo!".to_vec(),
                 key_id,
             )
             .expect("The key should be there initially");
@@ -247,14 +254,14 @@ pub fn test_create_dealing_should_detect_errors(
     _num_reshares: i32,
     csp_vault_factory: impl Fn() -> Arc<dyn CspVault>,
 ) {
-    let mut rng = ChaCha20Rng::from_seed(seed);
-    let network = MockNetwork::random(&mut rng, network_size, csp_vault_factory);
-    let config = MockDkgConfig::from_network(&mut rng, &network, None);
+    let rng = &mut ChaCha20Rng::from_seed(seed);
+    let network = MockNetwork::random(rng, network_size, csp_vault_factory);
+    let config = MockDkgConfig::from_network(rng, &network, None);
     let state = StateWithConfig { network, config };
     // Dealing errors:
-    state.deal_with_incorrect_algorithm_id_should_fail(&mut rng);
-    state.deal_with_incorrect_threshold_should_fail(&mut rng);
-    state.deal_with_incorrect_receiver_ids_should_fail(&mut rng);
+    state.deal_with_incorrect_algorithm_id_should_fail(rng);
+    state.deal_with_incorrect_threshold_should_fail(rng);
+    state.deal_with_incorrect_receiver_ids_should_fail(rng);
     // MalformedFsPublicKeyError is untested as we have no Fs keys yet.
     // SizeError is untested because of the impracticality of making over 4
     // billion receivers.
@@ -436,7 +443,7 @@ pub fn should_generate_dealing_encryption_key_pair_and_store_keys(csp_vault: Arc
 
     assert_matches!(public_key, CspFsEncryptionPublicKey::Groth20_Bls12_381(_));
     assert_matches!(pop, CspFsEncryptionPop::Groth20WithPop_Bls12_381(_));
-    assert!(csp_vault.sks_contains(&KeyId::from(&public_key)).is_ok());
+    assert!(csp_vault.sks_contains(KeyId::from(&public_key)).is_ok());
     assert_eq!(
         csp_vault
             .current_node_public_keys()

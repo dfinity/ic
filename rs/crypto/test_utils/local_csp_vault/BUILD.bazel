@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/crypto_lib/seed",
     "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
@@ -10,8 +11,9 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_service_provider",
     "//rs/crypto/node_key_validation",
     "//rs/crypto/tls_interfaces",
+    "//rs/protobuf",
     "//rs/types/types",
-    "@crate_index//:mockall_0_7_2",
+    "@crate_index//:mockall",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -20,6 +22,7 @@ ALIASES = {}
 
 rust_library(
     name = "local_csp_vault",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_test_utils_local_csp_vault",

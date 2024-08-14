@@ -1,12 +1,11 @@
 // This module defines how response callbacks are executed.
-// See https://smartcontracts.org/docs/interface-spec/index.html#_callback_invocation.
+// See https://internetcomputer.org/docs/interface-spec/index.html#callback-invocation
 
 use std::sync::Arc;
 
 use ic_base_types::CanisterId;
 use ic_constants::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
-use prometheus::IntCounter;
 
 use ic_embedders::wasm_executor::{
     wasm_execution_error, CanisterStateChanges, PausedWasmExecution, WasmExecutionResult,
@@ -14,13 +13,15 @@ use ic_embedders::wasm_executor::{
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
-use ic_interfaces::messages::{CanisterMessage, CanisterMessageOrTask};
 use ic_logger::{error, info, ReplicaLogger};
 use ic_replicated_state::{CallContext, CallOrigin, CanisterState};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::ingress::WasmResult;
-use ic_types::messages::{CallContextId, CallbackId, Payload, Response};
+use ic_types::messages::{
+    CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RequestMetadata,
+    Response,
+};
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use ic_types::Cycles;
 use ic_types::{NumBytes, NumInstructions, Time};
@@ -30,8 +31,11 @@ use crate::execution::common::{
     self, action_to_response, apply_canister_state_changes, update_round_limits,
 };
 use crate::execution_environment::{
-    ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext, RoundLimits,
+    log_dirty_pages, ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext,
+    RoundLimits,
 };
+use crate::metrics::CallTreeMetrics;
+use ic_config::flag_status::FlagStatus;
 
 #[cfg(test)]
 mod tests;
@@ -124,7 +128,6 @@ impl ResponseHelper {
     fn new(
         clean_canister: &CanisterState,
         response: &Response,
-        error_counter: &IntCounter,
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
@@ -135,7 +138,9 @@ impl ResponseHelper {
         //
         // Therefore, the cycles in the response must not exceed the cycles in
         // the request. Otherwise, there might be potentially malicious faults.
+        debug_assert!(response.refund <= original.callback.cycles_sent);
         let refund_for_sent_cycles = if response.refund > original.callback.cycles_sent {
+            round.counters.response_cycles_refund_error.inc();
             error!(
                 round.log,
                 "[EXC-BUG] Canister got a response with too many cycles. \
@@ -156,20 +161,13 @@ impl ResponseHelper {
         // possible response when the request is being sent. Now that we
         // have received the response, we can refund the cycles based on
         // the actual size of the response.
-        let prepayment_for_response_transmission =
-            match original.callback.prepayment_for_response_transmission {
-                Some(cycles) => cycles,
-                None => round
-                    .cycles_account_manager
-                    .prepayment_for_response_transmission(original.subnet_size),
-            };
         let refund_for_response_transmission = round
             .cycles_account_manager
             .refund_for_response_transmission(
                 round.log,
-                error_counter,
+                round.counters.response_cycles_refund_error,
                 response,
-                prepayment_for_response_transmission,
+                original.callback.prepayment_for_response_transmission,
                 original.subnet_size,
             );
 
@@ -226,9 +224,11 @@ impl ResponseHelper {
     ) -> Result<ResponseHelper, ExecuteMessageResult> {
         // If the call context was deleted (e.g. in uninstall), then do not execute anything.
         if call_context.is_deleted() {
+            debug_assert!(call_context.has_responded());
             if !call_context.has_responded() {
                 // This case is unreachable because `is_deleted() => has_responded()`
                 // is a critical invariant and should hold.
+                round.counters.invalid_canister_state_error.inc();
                 error!(
                     round.log,
                     "[EXC-BUG] Canister {} has a deleted context that has not responded",
@@ -242,6 +242,7 @@ impl ResponseHelper {
                     heap_delta: NumBytes::from(0),
                     instructions_used: NumInstructions::from(0),
                     response: ExecutionResponse::Empty,
+                    call_duration: Some(round.time.saturating_duration_since(call_context.time())),
                 });
             }
             // Since the call context has responded, passing `Ok(None)` will produce
@@ -251,7 +252,9 @@ impl ResponseHelper {
         }
 
         // Validate that the canister has an `ExecutionState`.
+        debug_assert!(self.canister.execution_state.is_some());
         if self.canister.execution_state.is_none() {
+            round.counters.invalid_canister_state_error.inc();
             error!(
                 round.log,
                 "[EXC-BUG] Canister {} is attempting to execute a response, but the execution state does not exist.",
@@ -299,9 +302,13 @@ impl ResponseHelper {
         // the callback have been checked in `execute_response()`.
         // Note that we cannot return an error here because the cleanup callback
         // cannot be invoked without a valid call context and a callback.
-        let (_, _, call_context, _) =
-            common::get_call_context_and_callback(clean_canister, &original.message, round.log)
-                .expect("Failed to resume DTS response: get call context and callback");
+        let (_, _, call_context, _) = common::get_call_context_and_callback(
+            clean_canister,
+            &original.message,
+            round.log,
+            round.counters.unexpected_response_error,
+        )
+        .expect("Failed to resume DTS response: get call context and callback");
 
         let mut helper = Self {
             canister: clean_canister.clone(),
@@ -344,10 +351,19 @@ impl ResponseHelper {
         round: &RoundContext,
         round_limits: &mut RoundLimits,
         reserved_cleanup_instructions: NumInstructions,
+        call_tree_metrics: &dyn CallTreeMetrics,
     ) -> Result<ExecuteMessageResult, (Self, HypervisorError, NumInstructions)> {
         self.canister
             .system_state
-            .apply_ingress_induction_cycles_debit(self.canister.canister_id(), round.log);
+            .canister_log
+            .append(&mut output.canister_log);
+        self.canister
+            .system_state
+            .apply_ingress_induction_cycles_debit(
+                self.canister.canister_id(),
+                round.log,
+                round.counters.charging_from_balance_error,
+            );
 
         // Check that the cycles balance does not go below zero after applying
         // the Wasm execution state changes.
@@ -356,11 +372,16 @@ impl ResponseHelper {
             let requested = state_changes.system_state_changes.removed_cycles();
             // Note that we ignore the freezing threshold as required by the spec.
             if old_balance < requested {
+                let reveal_top_up = self
+                    .canister
+                    .controllers()
+                    .contains(&original.call_origin.get_principal());
                 let err = CanisterOutOfCyclesError {
                     canister_id: self.canister.canister_id(),
                     available: old_balance,
                     requested,
                     threshold: original.freezing_threshold,
+                    reveal_top_up,
                 };
                 info!(
                     round.log,
@@ -368,11 +389,10 @@ impl ResponseHelper {
                     self.canister.canister_id(),
                     err,
                 );
-                let err = HypervisorError::InsufficientCyclesBalance(err);
                 // Return total instructions: wasm executor leftovers + cleanup reservation.
                 return Err((
                     self,
-                    err,
+                    HypervisorError::InsufficientCyclesBalance(err),
                     output.num_instructions_left + reserved_cleanup_instructions,
                 ));
             }
@@ -388,14 +408,18 @@ impl ResponseHelper {
             round.network_topology,
             round.hypervisor.subnet_id(),
             round.log,
+            round.counters.state_changes_error,
+            call_tree_metrics,
+            original.call_context_creation_time,
         );
+
         // Return total instructions: wasm executor leftovers + cleanup reservation.
         let instructions_available = output.num_instructions_left + reserved_cleanup_instructions;
         match output.wasm_result {
             Ok(_) => Ok(self.finish(
                 output.wasm_result,
                 instructions_available,
-                NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64),
+                NumBytes::from((output.instance_stats.dirty_pages() * PAGE_SIZE) as u64),
                 original,
                 round,
                 round_limits,
@@ -414,10 +438,19 @@ impl ResponseHelper {
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
+        call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
         self.canister
             .system_state
-            .apply_ingress_induction_cycles_debit(self.canister.canister_id(), round.log);
+            .canister_log
+            .append(&mut output.canister_log);
+        self.canister
+            .system_state
+            .apply_ingress_induction_cycles_debit(
+                self.canister.canister_id(),
+                round.log,
+                round.counters.charging_from_balance_error,
+            );
 
         if let Some(state_changes) = &canister_state_changes {
             let requested = state_changes.system_state_changes.removed_cycles();
@@ -435,6 +468,9 @@ impl ResponseHelper {
             round.network_topology,
             round.hypervisor.subnet_id(),
             round.log,
+            round.counters.state_changes_error,
+            call_tree_metrics,
+            original.call_context_creation_time,
         );
 
         match output.wasm_result {
@@ -444,7 +480,7 @@ impl ResponseHelper {
                 self.finish(
                     Err(callback_err),
                     output.num_instructions_left,
-                    NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64),
+                    NumBytes::from((output.instance_stats.dirty_pages() * PAGE_SIZE) as u64),
                     original,
                     round,
                     round_limits,
@@ -482,42 +518,40 @@ impl ResponseHelper {
     ) -> ExecuteMessageResult {
         self.revert_subnet_memory_reservation(original, round_limits);
 
-        let action = self
+        let instructions_used = NumInstructions::from(
+            original
+                .message_instruction_limit
+                .get()
+                .saturating_sub(instructions_left.get()),
+        );
+        let (action, call_context) = self
             .canister
             .system_state
             .call_context_manager_mut()
             .unwrap()
-            .on_canister_result(original.call_context_id, Some(original.callback_id), result);
+            .on_canister_result(
+                original.call_context_id,
+                Some(original.callback_id),
+                result,
+                instructions_used,
+            );
         let response = action_to_response(
             &self.canister,
             action,
             original.call_origin.clone(),
             round.time,
             round.log,
+            round.counters.ingress_with_cycles_error,
         );
-
-        let prepayment_for_response_execution =
-            match original.callback.prepayment_for_response_execution {
-                Some(cycles) => cycles,
-                None => round
-                    .cycles_account_manager
-                    .prepayment_for_response_execution(original.subnet_size),
-            };
 
         round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
             instructions_left,
             original.message_instruction_limit,
-            prepayment_for_response_execution,
-            round.execution_refund_error_counter,
+            original.callback.prepayment_for_response_execution,
+            round.counters.execution_refund_error,
             original.subnet_size,
             round.log,
-        );
-        let instructions_used = NumInstructions::from(
-            original
-                .message_instruction_limit
-                .get()
-                .saturating_sub(instructions_left.get()),
         );
 
         if self.refund_for_sent_cycles.get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
@@ -530,15 +564,27 @@ impl ResponseHelper {
             );
         }
 
+        if original.log_dirty_pages == FlagStatus::Enabled {
+            log_dirty_pages(
+                round.log,
+                &original.canister_id,
+                format!("reponse_to_{}", original.message.originator).as_str(),
+                heap_delta.get() as usize / PAGE_SIZE,
+                instructions_used,
+            );
+        }
+
         ExecuteMessageResult::Finished {
             canister: self.canister,
             response,
             instructions_used,
             heap_delta,
+            call_duration: call_context
+                .map(|call_context| round.time.saturating_duration_since(call_context.time())),
         }
     }
 
-    /// Completes execution of the respose and cleanup callbacks without
+    /// Completes execution of the response and cleanup callbacks without
     /// consuming any instructions and without producing any heap delta.
     fn early_finish(
         self,
@@ -606,12 +652,16 @@ struct OriginalContext {
     callback_id: CallbackId,
     call_origin: CallOrigin,
     time: Time,
+    call_context_creation_time: Time,
+    request_metadata: RequestMetadata,
     message_instruction_limit: NumInstructions,
     message: Arc<Response>,
     subnet_size: usize,
     freezing_threshold: Cycles,
     canister_id: CanisterId,
     subnet_memory_reservation: NumBytes,
+    instructions_executed: NumInstructions,
+    log_dirty_pages: FlagStatus,
 }
 
 /// Struct used to hold necessary information for the
@@ -641,6 +691,7 @@ impl PausedExecution for PausedResponseExecution {
         round: RoundContext,
         round_limits: &mut RoundLimits,
         _subnet_size: usize,
+        call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
         info!(
             round.log,
@@ -688,6 +739,7 @@ impl PausedExecution for PausedResponseExecution {
             self.original,
             round,
             round_limits,
+            call_tree_metrics,
         )
     }
 
@@ -702,6 +754,10 @@ impl PausedExecution for PausedResponseExecution {
         let message = CanisterMessage::Response(self.original.message);
         // No cycles were prepaid for execution during this DTS execution.
         (CanisterMessageOrTask::Message(message), Cycles::zero())
+    }
+
+    fn input(&self) -> CanisterMessageOrTask {
+        CanisterMessageOrTask::Message(CanisterMessage::Response(self.original.message.clone()))
     }
 }
 
@@ -730,6 +786,7 @@ impl PausedExecution for PausedCleanupExecution {
         round: RoundContext,
         round_limits: &mut RoundLimits,
         _subnet_size: usize,
+        call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
         info!(
             round.log,
@@ -780,6 +837,7 @@ impl PausedExecution for PausedCleanupExecution {
             self.original,
             round,
             round_limits,
+            call_tree_metrics,
         )
     }
 
@@ -795,6 +853,10 @@ impl PausedExecution for PausedCleanupExecution {
         // No cycles were prepaid for execution during this DTS execution.
         (CanisterMessageOrTask::Message(message), Cycles::zero())
     }
+
+    fn input(&self) -> CanisterMessageOrTask {
+        CanisterMessageOrTask::Message(CanisterMessage::Response(self.original.message.clone()))
+    }
 }
 
 /// Executes the response callback.
@@ -808,14 +870,20 @@ pub fn execute_response(
     response: Arc<Response>,
     time: Time,
     execution_parameters: ExecutionParameters,
-    error_counter: &IntCounter,
     round: RoundContext,
     round_limits: &mut RoundLimits,
     subnet_size: usize,
     subnet_memory_reservation: NumBytes,
+    call_tree_metrics: &dyn CallTreeMetrics,
+    log_dirty_pages: FlagStatus,
 ) -> ExecuteMessageResult {
     let (callback, callback_id, call_context, call_context_id) =
-        match common::get_call_context_and_callback(&clean_canister, &response, round.log) {
+        match common::get_call_context_and_callback(
+            &clean_canister,
+            &response,
+            round.log,
+            round.counters.unexpected_response_error,
+        ) {
             Some(r) => r,
             None => {
                 // This case is unreachable because the call context and
@@ -825,6 +893,7 @@ pub fn execute_response(
                     instructions_used: NumInstructions::from(0),
                     heap_delta: NumBytes::from(0),
                     response: ExecutionResponse::Empty,
+                    call_duration: None,
                 };
             }
         };
@@ -833,6 +902,7 @@ pub fn execute_response(
         clean_canister.system_state.freeze_threshold,
         clean_canister.system_state.memory_allocation,
         clean_canister.memory_usage(),
+        clean_canister.message_memory_usage(),
         clean_canister.compute_allocation(),
         subnet_size,
         clean_canister.system_state.reserved_balance(),
@@ -844,22 +914,20 @@ pub fn execute_response(
         callback_id,
         call_origin: call_context.call_origin().clone(),
         time,
+        call_context_creation_time: call_context.time(),
+        request_metadata: call_context.metadata().clone(),
         message_instruction_limit: execution_parameters.instruction_limits.message(),
         message: Arc::clone(&response),
         subnet_size,
         freezing_threshold,
         canister_id: clean_canister.canister_id(),
         subnet_memory_reservation,
+        instructions_executed: call_context.instructions_executed(),
+        log_dirty_pages,
     };
 
-    let mut helper = ResponseHelper::new(
-        &clean_canister,
-        &response,
-        error_counter,
-        &original,
-        &round,
-        round_limits,
-    );
+    let mut helper =
+        ResponseHelper::new(&clean_canister, &response, &original, &round, round_limits);
     helper.apply_initial_refunds();
     let helper = match helper.validate(&call_context, &original, &round, round_limits) {
         Ok(helper) => helper,
@@ -874,9 +942,9 @@ pub fn execute_response(
     };
 
     let func_ref = match original.call_origin {
-        CallOrigin::Ingress(_, _) | CallOrigin::CanisterUpdate(_, _) | CallOrigin::SystemTask => {
-            FuncRef::UpdateClosure(closure)
-        }
+        CallOrigin::Ingress(_, _)
+        | CallOrigin::CanisterUpdate(_, _, _)
+        | CallOrigin::SystemTask => FuncRef::UpdateClosure(closure),
         CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => FuncRef::QueryClosure(closure),
     };
 
@@ -889,6 +957,7 @@ pub fn execute_response(
             call_context_id,
             call_context.has_responded(),
             execution_parameters.execution_mode.clone(),
+            call_context.instructions_executed(),
         ),
         Payload::Reject(context) => ApiType::reject_callback(
             time,
@@ -898,6 +967,7 @@ pub fn execute_response(
             call_context_id,
             call_context.has_responded(),
             execution_parameters.execution_mode.clone(),
+            call_context.instructions_executed(),
         ),
     };
 
@@ -909,8 +979,10 @@ pub fn execute_response(
         helper.canister().execution_state.as_ref().unwrap(),
         &helper.canister().system_state,
         helper.canister().memory_usage(),
+        helper.canister().message_memory_usage(),
         execution_parameters.clone(),
         func_ref,
+        original.request_metadata.clone(),
         round_limits,
         round.network_topology,
     );
@@ -924,6 +996,7 @@ pub fn execute_response(
         original,
         round,
         round_limits,
+        call_tree_metrics,
     )
 }
 
@@ -953,14 +1026,15 @@ fn execute_response_cleanup(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    call_tree_metrics: &dyn CallTreeMetrics,
 ) -> ExecuteMessageResult {
     execution_parameters
         .instruction_limits
         .update(instructions_left);
     let func_ref = match original.call_origin {
-        CallOrigin::Ingress(_, _) | CallOrigin::CanisterUpdate(_, _) | CallOrigin::SystemTask => {
-            FuncRef::UpdateClosure(cleanup_closure)
-        }
+        CallOrigin::Ingress(_, _)
+        | CallOrigin::CanisterUpdate(_, _, _)
+        | CallOrigin::SystemTask => FuncRef::UpdateClosure(cleanup_closure),
         CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
             FuncRef::QueryClosure(cleanup_closure)
         }
@@ -969,12 +1043,16 @@ fn execute_response_cleanup(
         ApiType::Cleanup {
             caller: original.call_origin.get_principal(),
             time: original.time,
+            execution_mode: execution_parameters.execution_mode.clone(),
+            call_context_instructions_executed: original.instructions_executed,
         },
         helper.canister().execution_state.as_ref().unwrap(),
         &helper.canister().system_state,
         helper.canister().memory_usage(),
+        helper.canister().message_memory_usage(),
         execution_parameters.clone(),
         func_ref,
+        original.request_metadata.clone(),
         round_limits,
         round.network_topology,
     );
@@ -987,6 +1065,7 @@ fn execute_response_cleanup(
         original,
         round,
         round_limits,
+        call_tree_metrics,
     )
 }
 
@@ -1002,6 +1081,7 @@ fn process_response_result(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    call_tree_metrics: &dyn CallTreeMetrics,
 ) -> ExecuteMessageResult {
     match result {
         WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
@@ -1037,8 +1117,8 @@ fn process_response_result(
                     "[DTS] Finished response callback {:} of canister {} after {} / {} instructions.",
                     original.callback_id,
                     clean_canister.canister_id(),
-                    slice.executed_instructions,
-                    instructions_used,
+                    slice.executed_instructions.display(),
+                    instructions_used.display(),
                 );
             }
             update_round_limits(round_limits, &slice);
@@ -1049,6 +1129,7 @@ fn process_response_result(
                 &round,
                 round_limits,
                 reserved_cleanup_instructions,
+                call_tree_metrics,
             ) {
                 Ok(result) => result,
                 Err((helper, err, instructions_left)) => {
@@ -1065,6 +1146,7 @@ fn process_response_result(
                             original,
                             round,
                             round_limits,
+                            call_tree_metrics,
                         ),
                         None => {
                             // No cleanup closure present. Return the callback error as-is.
@@ -1094,6 +1176,7 @@ fn process_cleanup_result(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
+    call_tree_metrics: &dyn CallTreeMetrics,
 ) -> ExecuteMessageResult {
     match result {
         WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
@@ -1129,8 +1212,8 @@ fn process_cleanup_result(
                     "[DTS] Finished cleanup callback {:?} of canister {} after {} / {} instructions.",
                     original.callback_id,
                     clean_canister.canister_id(),
-                    slice.executed_instructions,
-                    instructions_used,
+                    slice.executed_instructions.display(),
+                    instructions_used.display(),
                 );
             }
             update_round_limits(round_limits, &slice);
@@ -1141,6 +1224,7 @@ fn process_cleanup_result(
                 &original,
                 &round,
                 round_limits,
+                call_tree_metrics,
             )
         }
     }

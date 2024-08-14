@@ -9,7 +9,8 @@ use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_test_utils_keys::public_keys::{
     valid_committee_signing_public_key, valid_dkg_dealing_encryption_public_key,
-    valid_idkg_dealing_encryption_public_key, valid_node_signing_public_key, valid_tls_certificate,
+    valid_idkg_dealing_encryption_public_key, valid_node_signing_public_key,
+    valid_tls_certificate_and_validation_time,
 };
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
 use ic_logger::replica_logger::no_op_logger;
@@ -337,10 +338,13 @@ fn should_deserialize_existing_public_key_store() {
         store.idkg_dealing_encryption_pubkeys(),
         vec![(valid_idkg_dealing_encryption_public_key())]
     );
-    assert_eq!(store.tls_certificate(), Some(valid_tls_certificate()));
+    assert_eq!(
+        store.tls_certificate(),
+        Some(valid_tls_certificate_and_validation_time().0)
+    );
 }
 
-fn equal_ignoring_timestamp(left: &Vec<PublicKey>, right: &Vec<PublicKey>) -> bool {
+fn equal_ignoring_timestamp(left: &[PublicKey], right: &[PublicKey]) -> bool {
     left.len() == right.len()
         && left
             .iter()
@@ -555,7 +559,7 @@ mod timestamps {
     }
 }
 
-mod retain_most_recent_idkg_public_keys_up_to_inclusive {
+mod retain_idkg_public_keys_since {
     use super::*;
     use crate::public_key_store::PublicKeyRetainError;
     use std::time::Duration;
@@ -566,7 +570,7 @@ mod retain_most_recent_idkg_public_keys_up_to_inclusive {
         let mut store = public_key_store(&temp_dir);
         let oldest_public_key = public_key_with_key_value(42);
 
-        let result = store.retain_most_recent_idkg_public_keys_up_to_inclusive(&oldest_public_key);
+        let result = store.retain_idkg_public_keys_since(&oldest_public_key);
 
         assert_matches!(result, Err(PublicKeyRetainError::OldestPublicKeyNotFound));
     }
@@ -581,10 +585,7 @@ mod retain_most_recent_idkg_public_keys_up_to_inclusive {
             Ok(())
         );
 
-        assert_matches!(
-            store.retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key),
-            Ok(false)
-        );
+        assert_matches!(store.retain_idkg_public_keys_since(&public_key), Ok(false));
 
         assert_eq!(store.idkg_dealing_encryption_pubkeys(), vec![public_key]);
     }
@@ -605,8 +606,7 @@ mod retain_most_recent_idkg_public_keys_up_to_inclusive {
         );
 
         assert_matches!(
-            store
-                .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(2)),
+            store.retain_idkg_public_keys_since(&public_key_with_key_value(2)),
             Ok(true)
         );
 
@@ -636,8 +636,7 @@ mod retain_most_recent_idkg_public_keys_up_to_inclusive {
         );
 
         assert_matches!(
-            store
-                .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(2)),
+            store.retain_idkg_public_keys_since(&public_key_with_key_value(2)),
             Ok(true)
         );
 
@@ -667,14 +666,12 @@ mod retain_most_recent_idkg_public_keys_up_to_inclusive {
         );
 
         assert_matches!(
-            store
-                .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(2)),
+            store.retain_idkg_public_keys_since(&public_key_with_key_value(2)),
             Ok(true)
         );
         let keys_after_first_retain = store.idkg_dealing_encryption_pubkeys();
         assert_matches!(
-            store
-                .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(2)),
+            store.retain_idkg_public_keys_since(&public_key_with_key_value(2)),
             Ok(false)
         );
         let keys_after_second_retain = store.idkg_dealing_encryption_pubkeys();
@@ -697,8 +694,7 @@ mod retain_most_recent_idkg_public_keys_up_to_inclusive {
         );
 
         assert_matches!(
-            store
-                .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(1)),
+            store.retain_idkg_public_keys_since(&public_key_with_key_value(1)),
             Ok(true)
         );
 
@@ -731,8 +727,7 @@ mod retain_most_recent_idkg_public_keys_up_to_inclusive {
         );
 
         assert_matches!(
-            store
-                .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(1)),
+            store.retain_idkg_public_keys_since(&public_key_with_key_value(1)),
             Ok(true)
         );
 
@@ -766,8 +761,7 @@ mod retain_most_recent_idkg_public_keys_up_to_inclusive {
         //ensure that system clock moved past `last_modification_time_before_retain`
         std::thread::sleep(Duration::from_millis(100));
         assert_matches!(
-            store
-                .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(0)),
+            store.retain_idkg_public_keys_since(&public_key_with_key_value(0)),
             Ok(false)
         );
         let last_modification_time_after_retain =
@@ -800,8 +794,7 @@ mod retain_most_recent_idkg_public_keys_up_to_inclusive {
         );
 
         assert_matches!(
-            store
-                .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(2)),
+            store.retain_idkg_public_keys_since(&public_key_with_key_value(2)),
             Ok(true)
         );
 
@@ -812,6 +805,72 @@ mod retain_most_recent_idkg_public_keys_up_to_inclusive {
             .has_only_one_message_containing(&Level::Debug, "Retaining IDKG dealing encryption public key 'PublicKey { version: 1, algorithm: Ed25519, key_value: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2]")
             .has_only_one_message_containing(&Level::Debug, "Retaining IDKG dealing encryption public key 'PublicKey { version: 1, algorithm: Ed25519, key_value: [3, 3, 3, 3, 3, 3, 3, 3, 3, 3]")
             .has_only_one_message_containing(&Level::Debug, "Retaining IDKG dealing encryption public key 'PublicKey { version: 1, algorithm: Ed25519, key_value: [4, 4, 4, 4, 4, 4, 4, 4, 4, 4]");
+    }
+}
+
+mod would_retain_idkg_public_keys_modify_pubkey_store {
+    use super::*;
+    use crate::public_key_store::PublicKeyRetainCheckError;
+
+    #[test]
+    fn should_return_true_if_retain_would_modify_keystore() {
+        let temp_dir = temp_dir();
+        let mut store = public_key_store(&temp_dir);
+        add_idkg_dealing_encryption_public_keys(&mut store, vec_of_pub_keys_0_to_2());
+
+        assert_matches!(
+            store.would_retain_idkg_public_keys_modify_pubkey_store(&public_key_with_key_value(2)),
+            Ok(true)
+        );
+    }
+
+    #[test]
+    fn should_not_modify_keystore_even_if_retain_would_modify_it() {
+        let temp_dir = temp_dir();
+        let mut store = public_key_store(&temp_dir);
+        add_idkg_dealing_encryption_public_keys(&mut store, vec_of_pub_keys_0_to_2());
+
+        assert_matches!(
+            store.would_retain_idkg_public_keys_modify_pubkey_store(&public_key_with_key_value(2)),
+            Ok(true)
+        );
+
+        assert_eq!(
+            store.idkg_dealing_encryption_pubkeys(),
+            vec_of_pub_keys_0_to_2()
+        );
+    }
+
+    #[test]
+    fn should_return_false_if_retain_would_not_modify_keystore() {
+        let temp_dir = temp_dir();
+        let mut store = public_key_store(&temp_dir);
+        add_idkg_dealing_encryption_public_keys(&mut store, vec_of_pub_keys_0_to_2());
+
+        assert_matches!(
+            store.would_retain_idkg_public_keys_modify_pubkey_store(&public_key_with_key_value(0)),
+            Ok(false)
+        );
+    }
+
+    #[test]
+    fn should_return_error_if_public_key_not_found_in_keystore() {
+        let temp_dir = temp_dir();
+        let mut store = public_key_store(&temp_dir);
+        add_idkg_dealing_encryption_public_keys(&mut store, vec_of_pub_keys_0_to_2());
+
+        assert_matches!(
+            store.would_retain_idkg_public_keys_modify_pubkey_store(&public_key_with_key_value(42)),
+            Err(PublicKeyRetainCheckError::OldestPublicKeyNotFound)
+        );
+    }
+
+    fn vec_of_pub_keys_0_to_2() -> Vec<PublicKey> {
+        vec![
+            public_key_with_key_value(0),
+            public_key_with_key_value(1),
+            public_key_with_key_value(2),
+        ]
     }
 }
 

@@ -8,8 +8,8 @@ fn main() {
     );
     let out = manifest_dir.join("../src/gen");
     let root_proto = manifest_dir.join("../proto");
-    let base_types_proto = manifest_dir.join("../../../../types/base_types/proto");
-    let nns_common_proto = manifest_dir.join("../../../common/proto");
+    let base_types_proto = manifest_dir.join("../../../../../types/base_types/proto");
+    let nns_common_proto = manifest_dir.join("../../../../common/proto");
 
     match std::fs::remove_dir_all(&out) {
         Ok(_) => (),

@@ -1,22 +1,31 @@
 //! Tests that rely on interleaving two method calls on the governance canister
 //! (in particular, when one method is suspended when it calls out to the ledger
 //! canister).
+use assert_matches::assert_matches;
 use common::{increase_dissolve_delay_raw, set_dissolve_delay_raw};
 use fixtures::{principal, NNSBuilder, NeuronBuilder, NNS};
 use futures::{channel::mpsc, future::FutureExt, StreamExt};
 use ic_nervous_system_common::{ledger::IcpLedger, E8};
+use ic_neurons_fund::{
+    NeuronsFundParticipationLimits, PolynomialMatchingFunction, SerializableFunction,
+};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance::{
     governance::{Environment, Governance},
     pb::v1::{
-        manage_neuron::Disburse, proposal::Action, settle_community_fund_participation,
-        settle_community_fund_participation::Committed, NetworkEconomics, OpenSnsTokenSwap,
-        Proposal, ProposalData, SettleCommunityFundParticipation,
+        manage_neuron::Disburse, neuron::DissolveState,
+        neurons_fund_snapshot::NeuronsFundNeuronPortion, proposal::Action,
+        settle_neurons_fund_participation_request, CreateServiceNervousSystem,
+        IdealMatchedParticipationFunction, NetworkEconomics, NeuronsFundData,
+        NeuronsFundParticipation, NeuronsFundSnapshot, Proposal, ProposalData,
+        SettleNeuronsFundParticipationRequest, SwapParticipationLimits,
     },
 };
-use ic_sns_swap::pb::v1::{CfNeuron, CfParticipant, Lifecycle};
+use ic_sns_swap::pb::v1::Lifecycle;
+use ic_sns_wasm::pb::v1::DeployedSns;
 use icp_ledger::AccountIdentifier;
 use interleaving::{InterleavingTestLedger, LedgerControlMessage};
+use rust_decimal_macros::dec;
 use std::{
     pin::Pin,
     sync::{atomic, atomic::Ordering as AOrdering},
@@ -24,9 +33,7 @@ use std::{
 };
 
 mod common;
-
 mod fixtures;
-
 mod interleaving;
 
 // Test for NNS1-829
@@ -40,6 +47,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
 
     // We use channels to control how the disbursing and delay increase are
     // interleaved
+    #[allow(clippy::disallowed_methods)]
     let (tx, mut rx) = mpsc::unbounded::<LedgerControlMessage>();
     // Once we're done with disbursing, we will need to manually close the above
     // channel to terminate the test.
@@ -48,7 +56,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
     let nns = NNSBuilder::new()
         .add_neuron(
             NeuronBuilder::new(neuron_id_u64, 10, owner)
-                .set_dissolve_state(None)
+                .set_dissolve_state(Some(DissolveState::WhenDissolvedTimestampSeconds(0)))
                 .set_kyc_verified(true),
         )
         .add_ledger_transform(Box::new(move |l| {
@@ -139,49 +147,118 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
     });
 }
 
-/// Test that interleaving calls to settle_community_fund_participation is not possible. Interleaved
-/// calls should return a successful result without doing any work.
+/// Test that interleaving calls to settle_neurons_fund_participation are handled correctly.
+/// Interleaved calls should return a successful result without doing any work.
 #[test]
-fn test_cant_interleave_calls_to_settle_community_fund() {
+fn test_cant_interleave_calls_to_settle_neurons_fund() {
     // Prepare identifiers used throughout the test
     let swap_canister_id = principal(1);
     let sns_governance_canister_id = principal(2);
+    let nf_neurons_controller = principal(3);
+    let nf_neuron_id_u64 = 42_u64;
+    let nf_neuron_maturity = 2_000_000 * E8;
     let proposal_id = ProposalId { id: 1 };
     let sns_governance_treasury_account = AccountIdentifier::new(sns_governance_canister_id, None);
+    let total_nf_maturity_equivalent_icp_e8s = 2_000_000 * E8;
+    let min_direct_participation_icp_e8s = 50_000 * E8;
+    let max_direct_participation_icp_e8s = 200_000 * E8;
+    let effective_direct_participation_icp_e8s = 100_000 * E8;
+    let effective_nf_participation_icp_e8s = 5_015_003_742_481;
+    let max_participant_icp_e8s = 100_000 * E8;
+    let matching_function = PolynomialMatchingFunction::new(
+        total_nf_maturity_equivalent_icp_e8s,
+        NeuronsFundParticipationLimits {
+            max_theoretical_neurons_fund_participation_amount_icp: dec!(333_000.0),
+            contribution_threshold_icp: dec!(33_000.0),
+            one_third_participation_milestone_icp: dec!(100_000.0),
+            full_participation_milestone_icp: dec!(167_000.0),
+        },
+    )
+    .unwrap();
 
     // We use channels to control how the cals are interleaved
+    #[allow(clippy::disallowed_methods)]
     let (tx, mut rx) = mpsc::unbounded::<LedgerControlMessage>();
     // Once we're done with the successful settle, we will need to manually close the above
     // channel to terminate the test.
     let finish_tx = tx.clone();
 
-    let nns = NNSBuilder::new()
-        // Add the proposal that will be used in the settle_cf_participant method
+    #[allow(deprecated)]
+    let initial_neurons_fund_participation = NeuronsFundParticipation {
+        ideal_matched_participation_function: Some(IdealMatchedParticipationFunction {
+            serialized_representation: Some(matching_function.serialize()),
+        }),
+        neurons_fund_reserves: Some(NeuronsFundSnapshot {
+            neurons_fund_neuron_portions: vec![NeuronsFundNeuronPortion {
+                nns_neuron_id: Some(NeuronId {
+                    id: nf_neuron_id_u64,
+                }),
+                amount_icp_e8s: Some(max_direct_participation_icp_e8s),
+                maturity_equivalent_icp_e8s: Some(nf_neuron_maturity),
+                controller: Some(nf_neurons_controller),
+                hotkeys: Vec::new(),
+                is_capped: Some(false),
+                // TODO(NNS1-3198): Remove this field once it's deprecated
+                hotkey_principal: Some(nf_neurons_controller),
+            }],
+        }),
+        swap_participation_limits: Some(SwapParticipationLimits {
+            min_direct_participation_icp_e8s: Some(min_direct_participation_icp_e8s),
+            max_direct_participation_icp_e8s: Some(max_direct_participation_icp_e8s),
+            min_participant_icp_e8s: Some(E8),
+            max_participant_icp_e8s: Some(max_participant_icp_e8s),
+        }),
+        direct_participation_icp_e8s: Some(max_direct_participation_icp_e8s),
+        total_maturity_equivalent_icp_e8s: Some(total_nf_maturity_equivalent_icp_e8s),
+        max_neurons_fund_swap_participation_icp_e8s: Some(max_direct_participation_icp_e8s),
+        intended_neurons_fund_participation_icp_e8s: Some(max_direct_participation_icp_e8s),
+        allocated_neurons_fund_participation_icp_e8s: Some(max_direct_participation_icp_e8s),
+    };
+
+    assert_matches!(initial_neurons_fund_participation.validate(), Ok(_));
+
+    let mut nns = NNSBuilder::new()
+        // Add the proposal that will be used in `settle_neurons_fund_participation`.
         .add_proposal(ProposalData {
             id: Some(proposal_id),
             proposal: Some(Proposal {
-                action: Some(Action::OpenSnsTokenSwap(OpenSnsTokenSwap {
-                    target_swap_canister_id: Some(swap_canister_id),
-                    ..Default::default()
-                })),
+                action: Some(Action::CreateServiceNervousSystem(
+                    CreateServiceNervousSystem {
+                        ..Default::default()
+                    },
+                )),
                 ..Default::default()
             }),
-            cf_participants: vec![CfParticipant {
-                cf_neurons: vec![CfNeuron {
-                    amount_icp_e8s: E8,
-                    ..Default::default()
-                }],
-                ..Default::default()
-            }],
+            cf_participants: vec![],
+            neurons_fund_data: Some(NeuronsFundData {
+                initial_neurons_fund_participation: Some(initial_neurons_fund_participation),
+                final_neurons_fund_participation: None,
+                neurons_fund_refunds: None,
+            }),
             sns_token_swap_lifecycle: Some(Lifecycle::Open as i32),
             ..Default::default()
         })
+        .add_neuron(
+            NeuronBuilder::new(nf_neuron_id_u64, 100, nf_neurons_controller)
+                .set_dissolve_state(Some(DissolveState::WhenDissolvedTimestampSeconds(0)))
+                .set_maturity(nf_neuron_maturity)
+                .set_joined_community_fund(100),
+        )
         .add_account_for(sns_governance_canister_id, 0) // Setup the treasury account
         .add_ledger_transform(Box::new(move |l| {
             Box::new(InterleavingTestLedger::new(l, tx))
         }))
         .set_economics(NetworkEconomics::default())
         .create();
+    let sns_wasm_response = ic_sns_wasm::pb::v1::ListDeployedSnsesResponse {
+        instances: vec![DeployedSns {
+            swap_canister_id: Some(swap_canister_id),
+            ..Default::default()
+        }],
+    };
+    nns.push_mocked_canister_reply(sns_wasm_response.clone());
+    nns.push_mocked_canister_reply(sns_wasm_response.clone());
+    nns.push_mocked_canister_reply(sns_wasm_response);
 
     // The governance canister relies on a static variable that's reused by multiple
     // canister calls. To avoid using static variables in the test, and yet
@@ -196,28 +273,53 @@ fn test_cant_interleave_calls_to_settle_community_fund() {
     };
 
     // Create the request object used in interleaved calls
-    let settle_cf_request = SettleCommunityFundParticipation {
-        open_sns_token_swap_proposal_id: Some(proposal_id.id),
-        result: Some(settle_community_fund_participation::Result::Committed(
-            Committed {
-                sns_governance_canister_id: Some(sns_governance_canister_id),
-            },
-        )),
+    let settle_nf_request = SettleNeuronsFundParticipationRequest {
+        nns_proposal_id: Some(proposal_id.id),
+        result: Some(
+            settle_neurons_fund_participation_request::Result::Committed(
+                settle_neurons_fund_participation_request::Committed {
+                    sns_governance_canister_id: Some(sns_governance_canister_id),
+                    total_direct_participation_icp_e8s: Some(
+                        effective_direct_participation_icp_e8s,
+                    ),
+                    total_neurons_fund_participation_icp_e8s: Some(
+                        effective_nf_participation_icp_e8s,
+                    ),
+                },
+            ),
+        ),
     };
 
     // Clone the request so it can be moved into the closure
-    let settle_cf_request_clone = settle_cf_request.clone();
+    let settle_nf_request_clone = settle_nf_request.clone();
 
     let thread_handle = thread::spawn(move || {
-        let settle_cf_future = boxed
+        let settle_nf_future = boxed
             .governance
-            .settle_community_fund_participation(swap_canister_id, &settle_cf_request_clone);
-        let settle_cf_result = tokio_test::block_on(settle_cf_future);
+            .settle_neurons_fund_participation(swap_canister_id, settle_nf_request_clone.clone());
+        let settle_nf_result = tokio_test::block_on(settle_nf_future);
+
+        let expected_sns_treasury_balance_icp_e8s: u64 = if let Ok(ref snapshot) = settle_nf_result
+        {
+            snapshot.total_amount_icp_e8s().unwrap()
+        } else {
+            panic!("Expected Ok settle result, got {:?}", settle_nf_result);
+        };
+
         assert!(
-            settle_cf_result.is_ok(),
-            "Got an unexpected error while settling CF: {:?}",
-            settle_cf_result
+            settle_nf_result.is_ok(),
+            "Got an unexpected error while settling NF for the first time: {:?}",
+            settle_nf_result,
         );
+
+        // Repeat the call; the response should be the same
+        let second_settle_nf_future = boxed
+            .governance
+            .settle_neurons_fund_participation(swap_canister_id, settle_nf_request_clone);
+        let second_settle_nf_result = tokio_test::block_on(second_settle_nf_future);
+
+        assert_eq!(settle_nf_result, second_settle_nf_result);
+
         // As the main thread will try to drain the channel, it's important to close the
         // channel once disbursing is done, otherwise the main thread will hang.
         finish_tx.close_channel();
@@ -229,7 +331,7 @@ fn test_cant_interleave_calls_to_settle_community_fund() {
             .now_or_never()
             .unwrap()
             .expect("Expected the balance operation not to fail");
-        assert_eq!(balance.get_e8s(), E8);
+        assert_eq!(balance.get_e8s(), expected_sns_treasury_balance_icp_e8s);
     });
 
     // Block the current thread until the ledger transfer is initiated, then try to
@@ -249,14 +351,18 @@ fn test_cant_interleave_calls_to_settle_community_fund() {
     assert_eq!(balance.get_e8s(), 0);
 
     // Now that the first request to settle is awaiting a response from the ledger, attempt to
-    // call settle_community_fund_participation again. This should result in an Ok() response as
-    // this is seen as an idempotent call.
-    let settle_cf_result = unsafe { &mut *raw_ptr }
+    // call settle_neurons_fund_participation again. This should result in an Err() response as
+    // the ultimate NF participants are still being computed by the previous call.
+    let settle_nf_result = unsafe { &mut *raw_ptr }
         .governance
-        .settle_community_fund_participation(swap_canister_id, &settle_cf_request)
+        .settle_neurons_fund_participation(swap_canister_id, settle_nf_request.clone())
         .now_or_never()
         .unwrap();
-    assert!(settle_cf_result.is_ok());
+    assert!(
+        settle_nf_result.is_err(),
+        "Got an unexpected response while settling NF for the second time: {:?}",
+        settle_nf_result
+    );
 
     // Get the balance of the SNS Treasury account again. It should still be zero
     // as no work was done.
@@ -271,7 +377,7 @@ fn test_cant_interleave_calls_to_settle_community_fund() {
         .send(Ok(()))
         .expect("Error when continuing blocked settle");
 
-    // Drain the channel to finish the test.
+    // Drain the channel.
     tokio_test::block_on(async {
         while let Some((_msg, tx)) = rx.next().await {
             assert!(

@@ -37,7 +37,7 @@ EOF
                 SOURCE_BASENAME=$(basename $SOURCE_BINARY)
                 zip -j "${CLUSTERFUZZ_ZIP_PREFIX}_${SOURCE_BASENAME}-${CURRENT_TIME}.zip" $SOURCE_BINARY
                 # check if we have a corpus generator
-                CORPUS_TARGET=$(bazel query 'filter(".*'${SOURCE_BASENAME}'_seed_corpus_generation", kind("rust_binary", //rs/...))' | head -n 1)
+                CORPUS_TARGET=$(bazel query 'filter(".*'${SOURCE_BASENAME}'_seed_corpus_generation", kind("rust_binary", //rs/...) union kind("sh_binary", //rs/...) )' | head -n 1)
                 if [ ! -z $CORPUS_TARGET ]; then
                     # build new corpus and append to the zip
                     CORPUS_DIR="${SOURCE_BASENAME}_seed_corpus"

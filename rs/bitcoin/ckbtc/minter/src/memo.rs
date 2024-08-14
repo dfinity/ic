@@ -17,6 +17,8 @@ pub enum Status {
     /// The minter rejected a retrieve_btc due to a failed KYT check.
     #[n(1)]
     Rejected,
+    #[n(2)]
+    CallFailed,
 }
 
 #[derive(Decode, Encode, Debug, Eq, PartialEq)]
@@ -37,6 +39,19 @@ pub enum MintMemo<'a> {
     #[n(1)]
     /// The minter minted accumulated KYT fees to the KYT provider.
     Kyt,
+    #[n(2)]
+    /// The minter failed to check retrieve btc destination address
+    /// or the destination address is tainted.
+    KytFail {
+        #[n(0)]
+        /// The KYT check fee.
+        kyt_fee: Option<u64>,
+        #[n(1)]
+        /// The status of the KYT check.
+        status: Option<Status>,
+        #[n(2)]
+        associated_burn_index: Option<u64>,
+    },
 }
 
 #[derive(Decode, Encode, Debug, Eq, PartialEq)]

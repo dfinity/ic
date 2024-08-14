@@ -1,5 +1,5 @@
 {
-  "image": "dfinity/ic-build:c7ea5e461b78f94c435000eb0c2ed321526825b38906607233816fb116d7e385",
+  "image": "ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b",
   "remoteUser": "ubuntu",
   "privileged": true,
   "runArgs": [
@@ -45,23 +45,15 @@
       "source": "${localEnv:HOME}/.local/share/fish",
       "target": "/home/ubuntu/.local/share/fish",
       "type": "bind"
-    },
-    {
-      "source": "${localEnv:SSH_AUTH_SOCK}",
-      "target": "${localEnv:SSH_AUTH_SOCK}",
-      "type": "bind"
     }
   ],
-  "containerEnv": {
-    "SSH_AUTH_SOCK": "${localEnv:SSH_AUTH_SOCK}",
-    "TERM": "xterm-256color"
-  },
   "customizations": {
     "vscode": {
       "extensions": [
         "rust-lang.rust-analyzer",
         "vadimcn.vscode-lldb",
         "bazelbuild.vscode-bazel",
+        "stackbuild.bazel-stack-vscode",
         "bungcip.better-toml"
       ]
     }

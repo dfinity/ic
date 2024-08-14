@@ -1,9 +1,10 @@
 use crate::{InitArgs, Ledger};
 use ic_base_types::PrincipalId;
+use ic_canister_log::Sink;
 use ic_icrc1::{Operation, Transaction};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
-use ic_ledger_core::approvals::{Allowance, Approvals};
+use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::Tokens;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
@@ -16,6 +17,13 @@ use ic_icrc1_ledger_sm_tests::{
 };
 
 use std::time::Duration;
+
+#[derive(Clone)]
+struct DummyLogger;
+
+impl Sink for DummyLogger {
+    fn append(&self, _entry: ic_canister_log::LogEntry) {}
+}
 
 fn test_account_id(n: u64) -> Account {
     Account {
@@ -53,6 +61,7 @@ fn default_init_args() -> InitArgs {
             node_max_memory_size_bytes: None,
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_user_test_id(100),
+            more_controller_ids: None,
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
         },
@@ -67,7 +76,7 @@ fn default_init_args() -> InitArgs {
 fn test_approvals_are_not_cumulative() {
     let now = ts(12345678);
 
-    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
 
     let from = test_account_id(1);
     let spender = test_account_id(2);
@@ -98,7 +107,8 @@ fn test_approvals_are_not_cumulative() {
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
             amount: approved_amount,
-            expires_at: None
+            expires_at: None,
+            arrived_at: now,
         },
     );
 
@@ -111,7 +121,7 @@ fn test_approvals_are_not_cumulative() {
             spender,
             amount: new_allowance,
             expected_allowance: None,
-            expires_at: Some(expiration),
+            expires_at: Some(expiration.as_nanos_since_unix_epoch()),
             fee: Some(fee),
         },
         created_at_time: None,
@@ -125,7 +135,8 @@ fn test_approvals_are_not_cumulative() {
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
             amount: new_allowance,
-            expires_at: Some(expiration)
+            expires_at: Some(expiration),
+            arrived_at: now,
         }
     );
 }
@@ -134,7 +145,7 @@ fn test_approvals_are_not_cumulative() {
 fn test_approval_transfer_from() {
     let now = ts(1);
 
-    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
 
     let from = test_account_id(1);
     let spender = test_account_id(2);
@@ -198,7 +209,8 @@ fn test_approval_transfer_from() {
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
             amount: tokens(40_000),
-            expires_at: None
+            expires_at: None,
+            arrived_at: now,
         },
     );
 
@@ -224,7 +236,8 @@ fn test_approval_transfer_from() {
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
             amount: tokens(40_000),
-            expires_at: None
+            expires_at: None,
+            arrived_at: now,
         },
     );
     assert_eq!(ctx.balances().account_balance(&from), tokens(80_000),);
@@ -235,7 +248,7 @@ fn test_approval_transfer_from() {
 fn test_approval_expiration_override() {
     let now = ts(1000);
 
-    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
 
     let from = test_account_id(1);
     let spender = test_account_id(2);
@@ -247,7 +260,7 @@ fn test_approval_expiration_override() {
         spender,
         amount: tokens(amount),
         expected_allowance: None,
-        expires_at,
+        expires_at: expires_at.map(|e| e.as_nanos_since_unix_epoch()),
         fee: Some(tokens(10_000)),
     };
     let tr = Transaction {
@@ -261,7 +274,8 @@ fn test_approval_expiration_override() {
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
             amount: tokens(100_000),
-            expires_at: Some(ts(2000))
+            expires_at: Some(ts(2000)),
+            arrived_at: now,
         },
     );
 
@@ -276,7 +290,8 @@ fn test_approval_expiration_override() {
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
             amount: tokens(200_000),
-            expires_at: Some(ts(1500))
+            expires_at: Some(ts(1500)),
+            arrived_at: now,
         },
     );
 
@@ -291,7 +306,8 @@ fn test_approval_expiration_override() {
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
             amount: tokens(300_000),
-            expires_at: Some(ts(2500))
+            expires_at: Some(ts(2500)),
+            arrived_at: now,
         },
     );
 
@@ -310,7 +326,8 @@ fn test_approval_expiration_override() {
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
             amount: tokens(300_000),
-            expires_at: Some(ts(2500))
+            expires_at: Some(ts(2500)),
+            arrived_at: now,
         },
     );
 }
@@ -319,7 +336,7 @@ fn test_approval_expiration_override() {
 fn test_approval_no_fee_on_reject() {
     let now = ts(1000);
 
-    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
 
     let from = test_account_id(1);
     let spender = test_account_id(2);
@@ -332,7 +349,7 @@ fn test_approval_no_fee_on_reject() {
             spender,
             amount: tokens(1_000),
             expected_allowance: None,
-            expires_at: Some(ts(1)),
+            expires_at: Some(1),
             fee: Some(tokens(10_000)),
         },
         created_at_time: Some(1000),
@@ -356,7 +373,7 @@ fn test_approval_no_fee_on_reject() {
 fn test_self_transfer_from() {
     let now = ts(1000);
 
-    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
 
     let from = test_account_id(1);
     let to = test_account_id(2);
@@ -389,7 +406,7 @@ fn test_self_transfer_from() {
 fn test_approval_allowance_covers_fee() {
     let now = ts(1);
 
-    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
 
     let from = test_account_id(1);
     let spender = test_account_id(2);
@@ -464,7 +481,8 @@ fn test_approval_allowance_covers_fee() {
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
             amount: tokens(0),
-            expires_at: None
+            expires_at: None,
+            arrived_at: ts(0),
         },
     );
 }
@@ -473,7 +491,7 @@ fn test_approval_allowance_covers_fee() {
 fn test_burn_smoke() {
     let now = ts(1);
 
-    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
 
     let from = test_account_id(1);
 
@@ -500,7 +518,7 @@ fn test_burn_smoke() {
 fn test_approval_burn_from() {
     let now = ts(1);
 
-    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+    let mut ctx = Ledger::from_init_args(DummyLogger, default_init_args(), now);
 
     let from = test_account_id(1);
     let spender = test_account_id(2);
@@ -564,7 +582,8 @@ fn test_approval_burn_from() {
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
             amount: tokens(50_000),
-            expires_at: None
+            expires_at: None,
+            arrived_at: now,
         },
     );
 
@@ -588,7 +607,8 @@ fn test_approval_burn_from() {
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
             amount: tokens(50_000),
-            expires_at: None
+            expires_at: None,
+            arrived_at: now,
         },
     );
     assert_eq!(ctx.balances().account_balance(&from), tokens(90_000));

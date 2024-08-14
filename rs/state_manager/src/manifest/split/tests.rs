@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use ic_base_types::CanisterId;
 use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges};
 use ic_state_layout::{CANISTER_FILE, CANISTER_STATES_DIR};
-use ic_test_utilities::types::ids::{SUBNET_0, SUBNET_1};
+use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
 use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 
 use super::*;
@@ -375,19 +375,19 @@ fn expected_subnet_1_system_metadata() -> (FileInfo, ChunkInfo) {
     (
         FileInfo {
             relative_path: PathBuf::from(SYSTEM_METADATA_FILE),
-            size_bytes: 54,
+            size_bytes: 63,
             hash: [
-                190, 123, 51, 176, 145, 124, 0, 227, 155, 181, 174, 233, 106, 218, 63, 210, 36, 12,
-                43, 219, 67, 112, 210, 206, 129, 154, 102, 70, 228, 44, 38, 118,
+                122, 238, 38, 137, 170, 83, 240, 133, 62, 48, 18, 112, 233, 148, 191, 115, 239,
+                115, 135, 234, 25, 157, 24, 45, 161, 179, 219, 112, 242, 95, 10, 217,
             ],
         },
         ChunkInfo {
             file_index: 13,
-            size_bytes: 54,
+            size_bytes: 63,
             offset: 0,
             hash: [
-                189, 100, 243, 181, 196, 181, 61, 157, 171, 123, 163, 238, 161, 52, 153, 218, 140,
-                224, 145, 181, 41, 46, 63, 135, 226, 134, 233, 157, 43, 185, 198, 7,
+                167, 162, 133, 251, 148, 255, 80, 204, 229, 63, 140, 219, 43, 228, 234, 250, 69,
+                49, 7, 200, 173, 216, 136, 186, 183, 255, 101, 117, 229, 161, 238, 156,
             ],
         },
     )

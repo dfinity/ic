@@ -1,12 +1,13 @@
 mod client;
 mod metrics;
 
-pub use crate::client::BrokenCanisterHttpClient;
-use crate::client::CanisterHttpAdapterClientImpl;
-use ic_adapter_metrics::AdapterMetrics;
+pub use crate::client::{
+    grpc_status_code_to_reject, BrokenCanisterHttpClient, CanisterHttpAdapterClientImpl,
+};
+use ic_adapter_metrics_client::AdapterMetrics;
 use ic_async_utils::ExecuteOnTokioRuntime;
 use ic_config::adapters::AdaptersConfig;
-use ic_interfaces::execution_environment::AnonymousQueryService;
+use ic_interfaces::execution_environment::QueryExecutionService;
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -17,13 +18,15 @@ use tokio::net::UnixStream;
 use tonic::transport::{Endpoint, Uri};
 use tower::service_fn;
 
-const CANISTER_HTTP_CLIENT_CHANNEL_CAPACITY: usize = 100;
+/// To support 100 req/s with a worst case request latency of 30s the queue size needs buffer 100 req/s * 30s = 3000 req.
+/// The worst case request latency used here should be equivalent to the request timeout in the adapter.
+const CANISTER_HTTP_CLIENT_CHANNEL_CAPACITY: usize = 3000;
 
 pub fn setup_canister_http_client(
     rt_handle: tokio::runtime::Handle,
     metrics_registry: &MetricsRegistry,
     adapter_config: AdaptersConfig,
-    anononymous_query_handler: AnonymousQueryService,
+    query_handler: QueryExecutionService,
     log: ReplicaLogger,
     subnet_type: SubnetType,
 ) -> Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send> {
@@ -64,7 +67,7 @@ pub fn setup_canister_http_client(
                     Box::new(CanisterHttpAdapterClientImpl::new(
                         rt_handle,
                         channel,
-                        anononymous_query_handler,
+                        query_handler,
                         CANISTER_HTTP_CLIENT_CHANNEL_CAPACITY,
                         metrics_registry.clone(),
                         subnet_type,

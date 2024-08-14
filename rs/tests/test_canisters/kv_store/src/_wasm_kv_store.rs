@@ -1,14 +1,11 @@
-use ic_cdk::{
-    export::candid::CandidType,
-    storage::{stable_restore, stable_save},
-};
+use candid::CandidType;
+use ic_cdk::storage::{stable_restore, stable_save};
 use ic_cdk_macros::*;
 use serde::Deserialize;
 
 include! {"lib.rs"}
 
 #[derive(CandidType, Deserialize)]
-#[candid_path("ic_cdk::export::candid")]
 struct GetCert {
     val: Option<String>,
     cert: Vec<u8>,

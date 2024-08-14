@@ -8,6 +8,7 @@ package(
 )
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
     "//rs/crypto/internal/crypto_lib/types",
@@ -23,11 +24,12 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/sha2",
     "//rs/crypto/test_utils/reproducible_rng",
     "@crate_index//:assert_matches",
     "@crate_index//:hex",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
     "@crate_index//:wycheproof",
 ]
 
@@ -41,7 +43,7 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_crypto_internal_basic_sig_ecdsa_secp256k1",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.8.0",
+    version = "0.9.0",
     deps = DEPENDENCIES,
 )
 

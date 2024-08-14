@@ -42,7 +42,7 @@ service are started in the IC-OS boot sequence:
 
 - nftables reload on change
 
-- Start journalbeat
+- Start filebeat
 
 - Start node exporter
 
@@ -101,7 +101,7 @@ data might leak to it). This is facilitated in the following way:
   serves as a template defining initial structure of /var).
 
 * The unit file triggering this script is dynamically generated through
-  +/etc/systemd/system-generators/mount-generator+: The generater will
+  +/etc/systemd/system-generators/mount-generator+: The generator will
   check which partition is the correct one to use and synthesize a proper
   unit file.
 
@@ -190,7 +190,7 @@ the account user home directories.
 
 == Generate network configuration
 
-Service: +generate-network-config.service+, script +/opt/ic/bin/generate-network-config.sh+.
+Service: +generate-network-config.service+
 Dependes on +bootstrap-ic-node.service+, runs before +systemd-networkd.service+.
 
 This parses the network configuration given in the +config+ partition and
@@ -199,7 +199,7 @@ later.
 
 == Set up hostname
 
-Service: +generate-network-config.service+, script +/opt/ic/bin/generate-network-config.sh+.
+Service: +generate-network-config.service+
 Dependes on +bootstrap-ic-node.service+, runs before +systemd-networkd.service+.
 
 Sets hostname as defined in the +config+ partition.
@@ -231,12 +231,12 @@ interface and issues +networkctl reconfigure+ as needed. The reason is that
 so systems will fail to receive network configuration under certain conditions
 if the router in their network is down at boot.
 
-== Start journalbeat
+== Start filebeat
 
-Service: +journalbeat.service+. Pre-exec script +/opt/ic/bin/generate-journalbeat-config.sh+.
+Service: +filebeat.service+. Pre-exec script +/opt/ic/bin/generate-filebeat-config.sh+.
 Depends on +bootstrap-ic-node.service+.
 
-This launches journalbeat (if requested so by injected configuration). The configuration
+This launches filebeat (if requested so by injected configuration). The configuration
 for the binary itself is generated dynamically from the configuration pieces held
 in the +config+ partition.
 

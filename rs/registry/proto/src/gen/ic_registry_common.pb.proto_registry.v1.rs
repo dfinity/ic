@@ -1,8 +1,10 @@
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ProtoRegistry {
     #[prost(message, repeated, tag = "1")]
     pub records: ::prost::alloc::vec::Vec<ProtoRegistryRecord>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ProtoRegistryRecord {
     #[prost(string, tag = "1")]

@@ -1,3 +1,4 @@
+use crate::DirectAuthenticationScheme::{CanisterSignature, UserKeyPair};
 use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair};
 use ic_certification_test_utils::{generate_root_of_trust, serialize_to_cbor};
 use ic_crypto_internal_basic_sig_iccsa_test_utils::CanisterState;
@@ -7,9 +8,10 @@ use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::{CanisterSig, Signable};
 use ic_types::messages::{
     Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-    HttpReadStateContent, HttpRequest, HttpRequestEnvelope, HttpUserQuery, MessageId, ReadState,
-    SignedDelegation, SignedIngressContent, UserQuery,
+    HttpReadStateContent, HttpRequest, HttpRequestEnvelope, HttpUserQuery, MessageId, Query,
+    ReadState, SignedDelegation, SignedIngressContent,
 };
+use ic_types::time::GENESIS;
 use ic_types::{CanisterId, PrincipalId, Time};
 use rand::{CryptoRng, Rng};
 use simple_asn1::OID;
@@ -21,6 +23,9 @@ use strum_macros::EnumCount;
 mod tests;
 
 const ANONYMOUS_SENDER: u8 = 0x04;
+pub const CANISTER_ID_SIGNER: CanisterId = CanisterId::from_u64(1185);
+pub const CANISTER_SIGNATURE_SEED: [u8; 1] = [42];
+pub const CURRENT_TIME: Time = GENESIS;
 
 pub type HttpRequestBuilder<C> = HttpRequestBuilderGeneric<C, AuthenticationScheme>;
 pub struct HttpRequestBuilderGeneric<C, T> {
@@ -166,6 +171,11 @@ impl<C: HttpRequestEnvelopeContent, T> HttpRequestBuilderGeneric<C, T> {
         self.content.set_ingress_expiry(ingress_expiry_time);
         self
     }
+
+    pub fn with_nonce(mut self, nonce: Vec<u8>) -> Self {
+        self.content.set_nonce(nonce);
+        self
+    }
 }
 
 impl<T> HttpRequestBuilderGeneric<HttpReadState, T> {
@@ -211,6 +221,8 @@ pub trait HttpRequestEnvelopeContent {
 
     fn set_sender(&mut self, sender: Blob);
     fn set_ingress_expiry(&mut self, ingress_expiry: Time);
+
+    fn set_nonce(&mut self, nonce: Vec<u8>);
     fn id(&self) -> MessageId;
     fn into_request(
         self,
@@ -233,6 +245,10 @@ impl HttpRequestEnvelopeContent for HttpCanisterUpdate {
 
     fn set_ingress_expiry(&mut self, ingress_expiry: Time) {
         self.ingress_expiry = ingress_expiry.as_nanos_since_unix_epoch();
+    }
+
+    fn set_nonce(&mut self, nonce: Vec<u8>) {
+        self.nonce = Some(Blob(nonce));
     }
 
     fn id(&self) -> MessageId {
@@ -262,7 +278,7 @@ impl HttpRequestEnvelopeContentWithCanisterId for HttpCanisterUpdate {
 }
 
 impl HttpRequestEnvelopeContent for HttpUserQuery {
-    type HttpRequestContentType = UserQuery;
+    type HttpRequestContentType = Query;
 
     fn set_sender(&mut self, sender: Blob) {
         self.sender = sender;
@@ -270,6 +286,10 @@ impl HttpRequestEnvelopeContent for HttpUserQuery {
 
     fn set_ingress_expiry(&mut self, ingress_expiry: Time) {
         self.ingress_expiry = ingress_expiry.as_nanos_since_unix_epoch();
+    }
+
+    fn set_nonce(&mut self, nonce: Vec<u8>) {
+        self.nonce = Some(Blob(nonce));
     }
 
     fn id(&self) -> MessageId {
@@ -307,6 +327,10 @@ impl HttpRequestEnvelopeContent for HttpReadState {
 
     fn set_ingress_expiry(&mut self, ingress_expiry: Time) {
         self.ingress_expiry = ingress_expiry.as_nanos_since_unix_epoch();
+    }
+
+    fn set_nonce(&mut self, nonce: Vec<u8>) {
+        self.nonce = Some(Blob(nonce));
     }
 
     fn id(&self) -> MessageId {
@@ -687,6 +711,40 @@ impl RootOfTrust {
             secret_key,
         }
     }
+}
+
+pub fn all_authentication_schemes<R: Rng + CryptoRng>(rng: &mut R) -> Vec<AuthenticationScheme> {
+    use strum::EnumCount;
+
+    let schemes = vec![
+        AuthenticationScheme::Anonymous,
+        AuthenticationScheme::Direct(random_user_key_pair(rng)),
+        AuthenticationScheme::Direct(canister_signature_with_hard_coded_root_of_trust()),
+        AuthenticationScheme::Delegation(
+            DelegationChain::rooted_at(random_user_key_pair(rng))
+                .delegate_to(random_user_key_pair(rng), CURRENT_TIME)
+                .build(),
+        ),
+    ];
+    assert_eq!(schemes.len(), AuthenticationScheme::COUNT + 1);
+    schemes
+}
+
+pub fn random_user_key_pair<R: Rng + CryptoRng>(rng: &mut R) -> DirectAuthenticationScheme {
+    UserKeyPair(Ed25519KeyPair::generate(rng))
+}
+
+pub fn canister_signature_with_hard_coded_root_of_trust() -> DirectAuthenticationScheme {
+    canister_signature(hard_coded_root_of_trust())
+}
+
+pub fn canister_signature(root_of_trust: RootOfTrust) -> DirectAuthenticationScheme {
+    CanisterSignature(CanisterSigner {
+        seed: CANISTER_SIGNATURE_SEED.to_vec(),
+        canister_id: CANISTER_ID_SIGNER,
+        root_public_key: root_of_trust.public_key,
+        root_secret_key: root_of_trust.secret_key,
+    })
 }
 
 pub fn hard_coded_root_of_trust() -> RootOfTrust {

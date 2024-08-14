@@ -1,16 +1,21 @@
 [package]
 name = "ic-crypto-for-verification-only"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
 
 [dependencies]
-ic-interfaces = { path = "../../interfaces" }
-ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-crypto-temp-crypto = { path = "../temp_crypto" }
 ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
+ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
 
 [dev-dependencies]
+ic-crypto-interfaces-sig-verification = { path = "../interfaces/sig_verification" }
 ic-crypto-test-utils = { path = "../test_utils" }
+ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
 ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-types = { path = "../../types/types" }

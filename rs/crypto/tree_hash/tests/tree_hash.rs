@@ -4,6 +4,7 @@ use ic_crypto_sha2::Sha256;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_tree_hash::*;
 use ic_crypto_tree_hash_test_utils::*;
+use proptest::prelude::*;
 use rand::Rng;
 use rand::{CryptoRng, RngCore};
 use std::collections::BTreeMap;
@@ -503,119 +504,19 @@ fn should_panic_on_finish_subtree_at_a_completed_tree() {
 // ---------- tests for generation of witnesses
 
 #[test]
-fn witness_generator_from_hash_tree_with_a_few_leaves() {
-    let leaf_a_label = Label::from("label A");
-    let leaf_b_label = Label::from("label B");
-    let leaf_c_label = Label::from("label C");
-    let leaf_a_contents = ""; // intentionally empty
-    let leaf_b_contents = "contents of leaf B";
-    let leaf_c_contents = "contents of leaf C";
+fn witness_should_include_absence_proof_with_both_subtrees_at_root() {
+    // Generating a witness for +-- label_aa ... should result in the following
+    // absence proof
+    //
+    //    +-- label_a
+    //           \__ Pruned
+    //    +-- label_b
+    //           +-- Pruned
 
-    let mut builder = HashTreeBuilderImpl::new();
-    builder.start_subtree();
-
-    builder.new_edge(leaf_a_label);
-    builder.start_leaf();
-    builder.write_leaf(leaf_a_contents);
-    builder.finish_leaf();
-
-    builder.new_edge(leaf_b_label);
-    builder.start_leaf();
-    builder.write_leaf(leaf_b_contents);
-    builder.finish_leaf();
-
-    builder.new_edge(leaf_c_label);
-    builder.start_leaf();
-    builder.write_leaf(leaf_c_contents);
-    builder.finish_leaf();
-
-    builder.finish_subtree();
-
-    let expected_witness_generator = builder.witness_generator().unwrap();
-    let witness_generator =
-        WitnessGeneratorImpl::try_from(builder.as_hash_tree().unwrap()).unwrap();
-    assert_eq!(expected_witness_generator, witness_generator);
-}
-
-#[test]
-fn witness_generator_from_hash_tree_with_a_subtree() {
-    let builder = tree_with_a_subtree();
-    let expected_witness_generator = builder.witness_generator().unwrap();
-    let witness_generator =
-        WitnessGeneratorImpl::try_from(builder.as_hash_tree().unwrap()).unwrap();
-    assert_eq!(expected_witness_generator, witness_generator);
-}
-
-#[test]
-fn witness_generator_from_hash_tree_with_three_levels() {
-    let builder = tree_with_three_levels();
-    let expected_witness_generator = builder.witness_generator().unwrap();
-    let witness_generator =
-        WitnessGeneratorImpl::try_from(builder.as_hash_tree().unwrap()).unwrap();
-    assert_eq!(expected_witness_generator, witness_generator);
-}
-
-#[test]
-fn witness_generator_from_hash_tree_should_fail_on_fork_without_nodes() {
-    let hash_leaf_a = HashTree::Leaf {
-        digest: compute_leaf_digest(b"some leaf a data"),
-    };
-    let hash_leaf_b = HashTree::Leaf {
-        digest: compute_leaf_digest(b"some leaf b data"),
-    };
-    let hash_tree = fork(hash_leaf_a, hash_leaf_b);
-    let witness_generator = WitnessGeneratorImpl::try_from(hash_tree);
-    assert!(witness_generator.is_err());
-    assert_eq!(
-        TreeHashError::InvalidArgument {
-            info: "subtree leaf without a node at path ".to_owned() + "[]",
-        },
-        witness_generator.unwrap_err()
-    );
-}
-
-#[test]
-fn witness_generator_from_hash_tree_should_fail_on_duplicate_labels() {
-    let label = Label::from("some label");
-    let hash_tree_a = hash_node_with_leaf(&label, "some data");
-    let hash_tree_b = hash_node_with_leaf(&label, "some other data");
-    let hash_tree = fork(hash_tree_a, hash_tree_b);
-
-    let witness_generator = WitnessGeneratorImpl::try_from(hash_tree);
-    assert!(witness_generator.is_err());
-    assert_eq!(
-        TreeHashError::InvalidArgument {
-            info: "non-sorted labels in a subtree at path []".to_owned(),
-        },
-        witness_generator.unwrap_err()
-    );
-}
-
-#[test]
-fn witness_generator_from_hash_tree_should_fail_on_non_sorted_labels() {
-    let smaller_label = Label::from("aaaa");
-    let larger_label = Label::from("bbbb");
-    let left_hash_tree = hash_node_with_leaf(&larger_label, "some data");
-    let right_hash_tree = hash_node_with_leaf(&smaller_label, "some other data");
-    let hash_tree = fork(left_hash_tree, right_hash_tree);
-
-    let witness_generator = WitnessGeneratorImpl::try_from(hash_tree);
-    assert!(witness_generator.is_err());
-    assert_eq!(
-        TreeHashError::InvalidArgument {
-            info: "non-sorted labels in a subtree at path []".to_owned(),
-        },
-        witness_generator.unwrap_err()
-    );
-}
-
-#[test]
-fn witness_should_fail_for_non_existing_path_at_root() {
-    // Missing label at root: (root) -> wrong_label.
-    let wrong_label = Label::from("wrong label");
-    let contents = Vec::from("ignored");
+    let label_non_existing = Label::from("label_aa");
+    let contents = Vec::from("v");
     let root_map = flatmap!(
-        wrong_label.to_owned() => LabeledTree::Leaf(contents)
+        label_non_existing => LabeledTree::Leaf(contents)
     );
     let partial_tree = LabeledTree::SubTree(root_map);
 
@@ -623,23 +524,40 @@ fn witness_should_fail_for_non_existing_path_at_root() {
     let witness_generator = builder.witness_generator().unwrap();
 
     let res = witness_generator.witness(&partial_tree);
+    let root_nodes = builder
+        .as_hash_tree()
+        .expect("failed to generate hash tree");
 
-    assert_eq!(err_inconsistent_partial_tree(vec![wrong_label]), res);
+    let expected_result = Ok(Witness::Fork {
+        left_tree: Box::new(Witness::Node {
+            label: Label::from("label_a"),
+            sub_witness: Box::new(Witness::Pruned {
+                digest: root_nodes.left_tree().node_tree().digest().clone(),
+            }),
+        }),
+        right_tree: Box::new(Witness::Node {
+            label: Label::from("label_b"),
+            sub_witness: Box::new(Witness::Pruned {
+                digest: root_nodes.right_tree().node_tree().digest().clone(),
+            }),
+        }),
+    });
+    assert_eq!(res, expected_result);
 }
 
 #[test]
-fn witness_should_fail_for_non_existing_sub_path() {
-    // Simple path: label_b -> wrong_label
+fn witness_should_include_absence_proof_with_smaller_labeled_subtree_at_root() {
+    // Generating a witness for +-- a ... should result in the following
+    // absence proof
+    //
+    //    +-- label_a
+    //           \__ Pruned
+    //    +-- Pruned
 
-    let label_b = Label::from("label_b");
-    let wrong_label = Label::from("wrong label");
-    let contents = Vec::from("ignored");
-
-    let subtree_map = flatmap!(
-        wrong_label.to_owned() => LabeledTree::Leaf(contents)
-    );
+    let label_non_existing = Label::from("a");
+    let contents = Vec::from("v");
     let root_map = flatmap!(
-        label_b.to_owned() => LabeledTree::SubTree(subtree_map)
+        label_non_existing => LabeledTree::Leaf(contents)
     );
     let partial_tree = LabeledTree::SubTree(root_map);
 
@@ -647,11 +565,61 @@ fn witness_should_fail_for_non_existing_sub_path() {
     let witness_generator = builder.witness_generator().unwrap();
 
     let res = witness_generator.witness(&partial_tree);
+    let root_nodes = builder
+        .as_hash_tree()
+        .expect("failed to generate hash tree");
 
-    assert_eq!(
-        err_inconsistent_partial_tree(vec![label_b, wrong_label]),
-        res
+    let expected_result = Ok(Witness::Fork {
+        left_tree: Box::new(Witness::Node {
+            label: Label::from("label_a"),
+            sub_witness: Box::new(Witness::Pruned {
+                digest: root_nodes.left_tree().node_tree().digest().clone(),
+            }),
+        }),
+        right_tree: Box::new(Witness::Pruned {
+            digest: root_nodes.right_tree().digest().clone(),
+        }),
+    });
+    assert_eq!(res, expected_result);
+}
+
+#[test]
+fn witness_should_include_absence_proof_with_largest_labeled_subtree_at_root() {
+    // Generating a witness for +-- label_bb ... should result in the following
+    // absence proof
+    //
+    //    +-- Pruned
+    //    +-- label_b
+    //           \__ Pruned
+    //
+
+    let label_non_existing = Label::from("label_bb");
+    let contents = Vec::from("v");
+    let root_map = flatmap!(
+        label_non_existing => LabeledTree::Leaf(contents)
     );
+    let partial_tree = LabeledTree::SubTree(root_map);
+
+    let builder = tree_with_a_subtree();
+    let witness_generator = builder.witness_generator().unwrap();
+
+    let res = witness_generator.witness(&partial_tree);
+    let root_nodes = builder
+        .as_hash_tree()
+        .expect("failed to generate hash tree");
+
+    let expected_result = Ok(Witness::Fork {
+        left_tree: Box::new(Witness::Pruned {
+            digest: root_nodes.left_tree().digest().clone(),
+        }),
+        right_tree: Box::new(Witness::Node {
+            label: Label::from("label_b"),
+            sub_witness: Box::new(Witness::Pruned {
+                digest: root_nodes.right_tree().node_tree().digest().clone(),
+            }),
+        }),
+    });
+    assert_eq!(res, expected_result);
 }
 
 fn add_leaf<T>(label: T, contents: &str, builder: &mut HashTreeBuilderImpl)
@@ -674,19 +642,21 @@ where
     builder.start_subtree();
 }
 
-// Generates a builder with a tree, used for witness tests.
-// (root)
-//    +-- label_a
-//           \__ contents_a
-//    +-- label_b
-//           +-- label_c
-//                  \__ contents_c
-//           +-- label_d
-//                  \__ contents_d
-//           +-- label_e
-//                  \__ contents_e
-//           +-- label_f
-//                  \__ contents_f
+/// Generates a builder with a tree, used for witness tests.
+/// ```text
+/// (root)
+///    +-- label_a
+///           \__ contents_a
+///    +-- label_b
+///           +-- label_c
+///                  \__ contents_c
+///           +-- label_d
+///                  \__ contents_d
+///           +-- label_e
+///                  \__ contents_e
+///           +-- label_f
+///                  \__ contents_f
+/// ```
 fn tree_with_a_subtree() -> HashTreeBuilderImpl {
     let default_contents = &FlatMap::new();
     tree_with_a_subtree_and_custom_contents(default_contents)
@@ -1406,6 +1376,20 @@ fn tree_with_three_levels() -> HashTreeBuilderImpl {
     builder
 }
 
+proptest! {
+    #[test]
+    fn recompute_digest_for_mixed_hash_tree_iteratively_and_recursively_produces_same_digest(
+        tree in arbitrary::arbitrary_well_formed_mixed_hash_tree()
+    ){
+        let rec_or_error = mixed_hash_tree_digest_recursive(&tree);
+        // ignore the error case, since the iterative algorithm is infallible
+        if let Ok(rec) = rec_or_error {
+            let iter = tree.digest();
+            assert_eq!(rec, iter);
+        }
+    }
+}
+
 #[test]
 fn witness_for_simple_path_in_a_big_tree() {
     // Simple path : label_b -> label_b_5 -> label_b_5_1 -> leaf
@@ -1712,7 +1696,10 @@ fn sparse_labeled_tree_deep_path() {
 
 #[test]
 fn sparse_labeled_tree_one_path_max_depth() {
-    let path = Path::from_iter(vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH - 1]);
+    let path = Path::from_iter(vec![
+        Label::from("dummy_label");
+        MAX_HASH_TREE_DEPTH as usize - 1
+    ]);
 
     let result = sparse_labeled_tree_from_paths(&[path]);
 
@@ -1727,14 +1714,12 @@ fn sparse_labeled_tree_one_path_max_depth() {
 #[test]
 fn sparse_labeled_tree_many_paths_max_depth() {
     const TREE_WIDTH: usize = 100;
-    let subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH - 2];
+    let subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH as usize - 2];
 
     let mut paths = Vec::with_capacity(TREE_WIDTH);
     for i in 0..TREE_WIDTH {
         paths.push(Path::from_iter(
-            vec![Label::from("a".repeat(i))]
-                .iter()
-                .chain(subpath.iter()),
+            [Label::from("a".repeat(i))].iter().chain(subpath.iter()),
         ));
     }
     let result = sparse_labeled_tree_from_paths(&paths[..]);
@@ -1758,11 +1743,11 @@ fn sparse_labeled_tree_many_paths_max_depth() {
 #[test]
 fn sparse_labeled_tree_one_path_too_deep() {
     for depth in [
-        MAX_HASH_TREE_DEPTH,
-        MAX_HASH_TREE_DEPTH + 1,
-        10 * MAX_HASH_TREE_DEPTH,
+        MAX_HASH_TREE_DEPTH as u16,
+        MAX_HASH_TREE_DEPTH as u16 + 1,
+        10 * MAX_HASH_TREE_DEPTH as u16,
     ] {
-        let path = Path::from_iter(vec![Label::from("dummy_label"); depth]);
+        let path = Path::from_iter(vec![Label::from("dummy_label"); depth as usize]);
         assert_eq!(
             Err(TooLongPathError),
             sparse_labeled_tree_from_paths(&[path])
@@ -1773,8 +1758,8 @@ fn sparse_labeled_tree_one_path_too_deep() {
 #[test]
 fn sparse_labeled_tree_many_paths_max_depth_one_too_deep() {
     const TREE_WIDTH: usize = 100;
-    let ok_subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH - 2];
-    let too_long_subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH - 1];
+    let ok_subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH as usize - 2];
+    let too_long_subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH as usize - 1];
 
     let rng = &mut reproducible_rng();
     let target_index = rng.gen_range(0..TREE_WIDTH);
@@ -1787,7 +1772,7 @@ fn sparse_labeled_tree_many_paths_max_depth_one_too_deep() {
         } else {
             ok_subpath.clone()
         };
-        let path: Vec<_> = vec![Label::from("a".repeat(i))]
+        let path: Vec<_> = [Label::from("a".repeat(i))]
             .iter()
             .chain(path.iter())
             .cloned()
@@ -1807,7 +1792,10 @@ fn sparse_labeled_tree_many_paths_max_depth_one_too_deep() {
 
 #[test]
 fn sparse_labeled_tree_one_path_max_depth_does_not_panic_on_drop() {
-    let path = Path::from_iter(vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH - 1]);
+    let path = Path::from_iter(vec![
+        Label::from("dummy_label");
+        MAX_HASH_TREE_DEPTH as usize - 1
+    ]);
     let tree = sparse_labeled_tree_from_paths(&[path]);
     drop(tree);
 }
@@ -1815,14 +1803,12 @@ fn sparse_labeled_tree_one_path_max_depth_does_not_panic_on_drop() {
 #[test]
 fn sparse_labeled_tree_many_paths_max_depth_does_not_panic_on_drop() {
     const TREE_WIDTH: usize = 100;
-    let subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH - 2];
+    let subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH as usize - 2];
 
     let mut paths = Vec::with_capacity(TREE_WIDTH);
     for i in 0..TREE_WIDTH {
         paths.push(Path::from_iter(
-            vec![Label::from("a".repeat(i))]
-                .iter()
-                .chain(subpath.iter()),
+            [Label::from("a".repeat(i))].iter().chain(subpath.iter()),
         ));
     }
 
@@ -1919,7 +1905,7 @@ fn sparse_labeled_tree_multiple_paths_with_prefixes() {
 }
 
 /// Recursive implementation of `prune_labeled_tree()`.
-fn prune_labeled_tree_impl<T, U>(
+fn prune_labeled_tree_impl<T: Clone, U>(
     tree: LabeledTree<T>,
     selection: &LabeledTree<U>,
     path: &mut Vec<Label>,
@@ -1931,8 +1917,8 @@ fn prune_labeled_tree_impl<T, U>(
             LabeledTree::SubTree(_) => Ok(LabeledTree::SubTree(Default::default())),
         },
         LabeledTree::SubTree(selection_children) => {
-            if let LabeledTree::SubTree(children) = tree {
-                let mut children: BTreeMap<_, _> = children.into_iter().collect();
+            if let LabeledTree::SubTree(children) = &tree {
+                let mut children: BTreeMap<_, _> = children.iter().collect();
                 let mut res = BTreeMap::new();
                 for (k, sel_v) in selection_children.iter() {
                     path.push(k.to_owned());
@@ -1941,11 +1927,11 @@ fn prune_labeled_tree_impl<T, U>(
                             offending_path: path.to_owned(),
                         }
                     })?;
-                    res.insert(k, prune_labeled_tree_impl(v, sel_v, path)?);
+                    res.insert(k, prune_labeled_tree_impl(v.clone(), sel_v, path)?);
                     path.pop();
                 }
                 Ok(LabeledTree::SubTree(FlatMap::from_key_values(
-                    res.into_iter().collect(),
+                    res.into_iter().map(|(l, t)| (l.clone(), t)).collect(),
                 )))
             } else {
                 err_inconsistent_partial_tree(path.to_owned())
@@ -1963,7 +1949,7 @@ fn prune_labeled_tree_impl<T, U>(
 /// path covered by `selection` does not exist in `tree`, an error is returned.
 ///
 /// Never panics.
-fn prune_labeled_tree<T, U>(
+fn prune_labeled_tree<T: Clone, U>(
     tree: LabeledTree<T>,
     selection: &LabeledTree<U>,
 ) -> Result<LabeledTree<T>, TreeHashError> {
@@ -2266,7 +2252,7 @@ fn prune_witness_prune_inexistent_leaf_from_empty_subtree() {
 #[test]
 fn prune_witness_exceed_recursion_depth() {
     const DUMMY_LABEL: &str = "dummy label";
-    fn witness_of_depth(depth: usize) -> Witness {
+    fn witness_of_depth(depth: u8) -> Witness {
         assert!(depth > 0);
         let mut result = Box::new(Witness::Known());
         if depth > 1 {
@@ -2286,7 +2272,7 @@ fn prune_witness_exceed_recursion_depth() {
         *result
     }
 
-    fn labeled_tree(depth: usize) -> LabeledTree<Vec<u8>> {
+    fn labeled_tree(depth: u8) -> LabeledTree<Vec<u8>> {
         let mut result = LabeledTree::Leaf("dummy value".into());
         if depth > 1 {
             result = LabeledTree::SubTree(flatmap!(DUMMY_LABEL.into() => result));
@@ -2883,17 +2869,17 @@ fn witness_for_a_labeled_tree_does_not_contain_private_data() {
     /// continuously decreases with larger tree depth
     const RANDOM_TREE_DESIRED_SIZE: u32 = 1000;
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     // Minimum number of leaves in the generated random `LabeledTree`
     for min_leaves in [0, 5, 10, 15, 20] {
         let labeled_tree = new_random_labeled_tree(
-            &mut rng,
+            rng,
             RANDOM_TREE_MAX_DEPTH,
             RANDOM_TREE_DESIRED_SIZE,
             min_leaves,
         );
-        witness_for_a_labeled_tree_does_not_contain_private_data_impl(&labeled_tree, &mut rng);
+        witness_for_a_labeled_tree_does_not_contain_private_data_impl(&labeled_tree, rng);
     }
 }
 
@@ -3071,7 +3057,7 @@ fn pruning_depth_0_tree_works_correctly() {
         ]
     }
     use rand::Rng;
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     const RANDOM_TREE_MAX_DEPTH: u32 = 10;
 
     for (labeled_tree, expected_hash) in depth_0_inputs() {
@@ -3091,30 +3077,44 @@ fn pruning_depth_0_tree_works_correctly() {
             let random_tree_desired_size: u32 = rng.gen_range(1..100);
             let min_leaves = rng.gen_range(0..10);
             let other_labeled_tree = new_random_labeled_tree(
-                &mut rng,
+                rng,
                 RANDOM_TREE_MAX_DEPTH,
                 random_tree_desired_size,
                 min_leaves,
             );
-            if matches!(&other_labeled_tree, LabeledTree::SubTree(children) if !children.is_empty())
-            {
-                // any attempt to generate a witness with any other tree of
-                // depth > 0 should error
-                assert_matches!(
-                    builder
-                        .witness_generator()
-                        .unwrap()
-                        .witness(&other_labeled_tree),
-                    Err(TreeHashError::InconsistentPartialTree { offending_path: _ }),
+            if other_labeled_tree == labeled_tree {
+                continue;
+            }
+
+            let other_has_depth_gt_0 = matches!(&other_labeled_tree, LabeledTree::SubTree(children) if !children.is_empty());
+            if other_has_depth_gt_0 {
+                let computed_witness = builder
+                    .witness_generator()
+                    .unwrap()
+                    .witness(&other_labeled_tree);
+                let expected_witness = if matches!(&labeled_tree, LabeledTree::Leaf(_)) {
+                    Witness::Pruned {
+                        digest: builder.as_hash_tree().unwrap().digest().clone(),
+                    }
+                } else {
+                    Witness::Known()
+                };
+                // any attempt to generate a witness should result in the same witness
+                assert_eq!(
+                    computed_witness.as_ref(),
+                    Ok(&expected_witness),
                     "labeled_tree={labeled_tree:?}, other_labeled_tree={other_labeled_tree:?}"
                 );
-                // any attempt to `recompute_digest` or `prune_witness` with any
-                // other tree of depth > 0 should error
+                // A labeled tree with depth > 0 can't be plugged in to
+                // `witness`, which equals `Witness::Known`.
+                // Therefore, any attempt to `recompute_digest` or `prune_witness` with any
+                // other tree of depth > 0 should error.
                 assert_eq!(
                     recompute_digest(&other_labeled_tree, &witness),
                     Err(TreeHashError::InconsistentPartialTree {
                         offending_path: vec![]
-                    })
+                    }),
+                    "witness={witness:?}, other_labeled_tree={other_labeled_tree:?}"
                 );
                 assert_eq!(
                     prune_witness(&witness, &other_labeled_tree),
@@ -3130,7 +3130,7 @@ fn pruning_depth_0_tree_works_correctly() {
 #[test]
 fn pruning_witness_pruned_in_the_root_fails_for_any_labeled_tree() {
     use rand::Rng;
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     const RANDOM_TREE_MAX_DEPTH: u32 = 10;
     let random_tree_desired_size: u32 = rng.gen_range(1..100);
     let min_leaves = rng.gen_range(0..10);
@@ -3139,7 +3139,7 @@ fn pruning_witness_pruned_in_the_root_fails_for_any_labeled_tree() {
     };
     for _ in 0..10 {
         let labeled_tree = new_random_labeled_tree(
-            &mut rng,
+            rng,
             RANDOM_TREE_MAX_DEPTH,
             random_tree_desired_size,
             min_leaves,
@@ -3160,165 +3160,134 @@ fn pruning_witness_pruned_in_the_root_fails_for_any_labeled_tree() {
 }
 
 #[test]
-fn witness_merge_too_deep_recursion() {
-    let mut w = Witness::Known();
-    for depth in 0..127 {
-        assert_matches!(Witness::merge(w.clone(), w.clone()), Ok(_), "depth={depth}");
-        assert_eq!(
-            Witness::merge(w.clone(), w.clone()),
-            Witness::merge_trees(w.clone(), w.clone()),
-            "depth={depth}"
-        );
-        w = Witness::Node {
-            label: Label::from("dummy_label"),
-            sub_witness: Box::new(w),
-        };
-    }
+fn witness_for_a_leaf_returns_pruned_for_a_subtree() {
+    // For the trees
+    //
+    //    +-- label_b
+    //           \__ leaf
+    //
+    // should return the following Witness
+    //    +-- Pruned
+    //    +-- label_b
+    //           \__ Pruned
 
-    // the depth of `w` is 128, which is the max valid depth, and thus `merge`
-    // should work
-    assert_eq!(Witness::merge(w.clone(), w.clone()), Ok(w.clone()));
-    assert_eq!(
-        Witness::merge(w.clone(), w.clone()),
-        Witness::merge_trees(w.clone(), w.clone())
-    );
+    let partial_tree = LabeledTree::SubTree(flatmap!(
+        Label::from("label_b") => LabeledTree::Leaf(Vec::from("v"))
+    ));
 
-    w = Witness::Node {
-        label: Label::from("dummy_label"),
-        sub_witness: Box::new(w),
-    };
+    let builder = tree_with_a_subtree();
+    let witness_generator = builder.witness_generator().unwrap();
 
-    // the depth of `w` is 129, which is one deeper than the max valid depth, and thus `merge`
-    // should fail
-    assert_eq!(
-        Witness::merge(w.clone(), w.clone()),
-        Err(MergeError::TooDeepRecursion(128))
-    );
-    assert_eq!(
-        Witness::merge(w.clone(), w.clone()),
-        Witness::merge_trees(w.clone(), w)
-    );
+    let res = witness_generator.witness(&partial_tree);
+    let root_nodes = builder
+        .as_hash_tree()
+        .expect("failed to generate hash tree");
+
+    let expected_result = Ok(Witness::Fork {
+        left_tree: Box::new(Witness::Pruned {
+            digest: root_nodes.left_tree().digest().clone(),
+        }),
+        right_tree: Box::new(Witness::Node {
+            label: Label::from("label_b"),
+            sub_witness: Box::new(Witness::Pruned {
+                digest: root_nodes.right_tree().node_tree().digest().clone(),
+            }),
+        }),
+    });
+    assert_eq!(res, expected_result);
 }
 
 #[test]
-fn witness_merge_consistency() {
-    let witnesses = [
-        Witness::Known(),
-        Witness::Node {
-            label: Label::from("dummy_label"),
-            sub_witness: Box::new(Witness::Known()),
-        },
-        Witness::Fork {
-            left_tree: Box::new(Witness::Known()),
-            right_tree: Box::new(Witness::Known()),
-        },
-    ];
+fn witness_for_a_subtree_returns_pruned_for_a_leaf() {
+    // For the tree
+    //
+    //    +-- label_a
+    //           \__ label_b
+    //                  \__ leaf
+    //
+    // should return the following Witness
+    //    +-- label_a
+    //           \__ Pruned
+    //    +-- Pruned
 
-    // all witness variants except `Witness::Pruned` should be consistent
-    for w1 in witnesses.iter() {
-        for w2 in witnesses.iter() {
-            if w1 == w2 {
-                assert_eq!(Witness::merge(w1.clone(), w2.clone()), Ok(w1.clone()));
-            } else {
-                assert_eq!(
-                    Witness::merge(w1.clone(), w2.clone()),
-                    Err(MergeError::<Witness>::InconsistentWitnesses(
-                        w1.clone(),
-                        w2.clone()
-                    ))
-                );
-            }
-        }
-    }
+    let partial_tree = LabeledTree::SubTree(flatmap!(
+        Label::from("label_a") => LabeledTree::SubTree(flatmap!(
+        Label::from("label_b") => LabeledTree::Leaf(Vec::from("v"))
+    ))));
 
-    // `Witness::Pruned` returns the other non-`Witness::Pruned` witness
-    for w1 in witnesses.iter() {
-        let w2 = Witness::Pruned {
-            digest: Digest([2u8; Sha256::DIGEST_LEN]),
-        };
-        assert_eq!(Witness::merge(w1.clone(), w2.clone()), Ok(w1.clone()));
-        assert_eq!(Witness::merge(w2.clone(), w1.clone()), Ok(w1.clone()));
-    }
+    let builder = tree_with_a_subtree();
+    let witness_generator = builder.witness_generator().unwrap();
 
-    // Merging `Witness::Pruned` witnesses is `Ok`
-    {
-        let w1 = Witness::Pruned {
-            digest: Digest([1u8; Sha256::DIGEST_LEN]),
-        };
-        let w2 = Witness::Pruned {
-            digest: Digest([2u8; Sha256::DIGEST_LEN]),
-        };
-        assert_eq!(Witness::merge(w1, w2.clone()), Ok(w2));
-    }
+    let res = witness_generator.witness(&partial_tree);
+    let root_nodes = builder
+        .as_hash_tree()
+        .expect("failed to generate hash tree");
+
+    let expected_result = Ok(Witness::Fork {
+        left_tree: Box::new(Witness::Node {
+            label: Label::from("label_a"),
+            sub_witness: Box::new(Witness::Pruned {
+                digest: root_nodes.left_tree().node_tree().digest().clone(),
+            }),
+        }),
+        right_tree: Box::new(Witness::Pruned {
+            digest: root_nodes.right_tree().digest().clone(),
+        }),
+    });
+    assert_eq!(res, expected_result);
 }
 
 #[test]
-fn mixed_hash_tree_merge_too_deep_recursion() {
-    let mut w = MixedHashTree::Empty;
-    for depth in 0..127 {
-        assert_matches!(
-            MixedHashTree::merge(w.clone(), w.clone()),
-            Ok(_),
-            "depth={depth}"
-        );
-        assert_eq!(
-            MixedHashTree::merge(w.clone(), w.clone()),
-            MixedHashTree::merge_trees(w.clone(), w.clone()),
-            "depth={depth}"
-        );
-        w = MixedHashTree::Labeled(Label::from("dummy_label"), Box::new(w));
+fn labeled_tree_does_not_produce_stack_overflow_for_deep_trees() {
+    let mut tree = LabeledTree::Leaf(vec![0u8; 32]);
+    for _ in 0..100_000 {
+        tree = LabeledTree::SubTree(flatmap! {
+            Label::from("a") => tree
+        });
     }
-
-    // the depth of `w` is 128, which is the max valid depth, and thus `merge`
-    // should work
-    assert_eq!(MixedHashTree::merge(w.clone(), w.clone()), Ok(w.clone()));
-    assert_eq!(
-        MixedHashTree::merge(w.clone(), w.clone()),
-        MixedHashTree::merge_trees(w.clone(), w.clone()),
-    );
-
-    w = MixedHashTree::Labeled(Label::from("dummy_label"), Box::new(w));
-
-    // the depth of `w` is 129, which is one deeper than the max valid depth, and thus `merge`
-    // should fail
-    assert_eq!(
-        MixedHashTree::merge(w.clone(), w.clone()),
-        Err(MergeError::TooDeepRecursion(128))
-    );
-    assert_eq!(
-        MixedHashTree::merge(w.clone(), w.clone()),
-        MixedHashTree::merge_trees(w.clone(), w),
-    );
+    println!("dropping tree");
+    std::mem::drop(tree);
+    println!("tree dropped");
 }
 
 #[test]
-fn mixed_hash_tree_merge_consistency() {
-    let mixed_hash_trees = [
-        MixedHashTree::Empty,
-        MixedHashTree::Fork(Box::new((MixedHashTree::Empty, MixedHashTree::Empty))),
-        MixedHashTree::Labeled(Label::from("dummy_label"), Box::new(MixedHashTree::Empty)),
-        MixedHashTree::Leaf(b"dummy_leaf".to_vec()),
-    ];
-
-    for t1 in mixed_hash_trees.iter() {
-        for t2 in mixed_hash_trees.iter() {
-            if t1 == t2 {
-                assert_eq!(MixedHashTree::merge(t1.clone(), t2.clone()), Ok(t1.clone()));
-            } else {
-                assert_eq!(
-                    MixedHashTree::merge(t1.clone(), t2.clone()),
-                    Err(MergeError::<MixedHashTree>::InconsistentWitnesses(
-                        t1.clone(),
-                        t2.clone()
-                    ))
-                );
-            }
-        }
+fn witness_generator_exceeding_recursion_depth_should_error() {
+    let mut labeled_tree = LabeledTree::Leaf(vec![0u8; 32]);
+    for _ in 1..MAX_HASH_TREE_DEPTH {
+        labeled_tree = LabeledTree::SubTree(flatmap! {
+            Label::from("a") => labeled_tree
+        });
     }
 
-    for t1 in mixed_hash_trees.iter() {
-        let t2 = MixedHashTree::Pruned(Digest([1u8; Sha256::DIGEST_LEN]));
-        assert_eq!(MixedHashTree::merge(t1.clone(), t2.clone()), Ok(t1.clone()));
-        assert_eq!(MixedHashTree::merge(t2.clone(), t1.clone()), Ok(t1.clone()));
-    }
+    // valid tree depth succeeds
+    let builder: HashTreeBuilderImpl = hash_tree_builder_from_labeled_tree(&labeled_tree);
+    let witness_generator = builder.witness_generator().unwrap();
+
+    let res_w = witness_generator.witness(&labeled_tree);
+    assert_matches!(res_w, Ok(_));
+    let res_mht = witness_generator.mixed_hash_tree(&labeled_tree);
+    assert_matches!(res_mht, Ok(_));
+
+    labeled_tree = LabeledTree::SubTree(flatmap! {
+        Label::from("a") => labeled_tree
+    });
+
+    // too deep recursion errors
+    let builder: HashTreeBuilderImpl = hash_tree_builder_from_labeled_tree(&labeled_tree);
+    let witness_generator = builder.witness_generator().unwrap();
+
+    let res_w = witness_generator.witness(&labeled_tree);
+    assert_eq!(
+        res_w,
+        Err(WitnessGenerationError::TooDeepRecursion(
+            MAX_HASH_TREE_DEPTH + 1
+        ))
+    );
+    let res_mht = witness_generator.mixed_hash_tree(&labeled_tree);
+    assert_eq!(
+        res_mht,
+        Err(WitnessGenerationError::TooDeepRecursion(
+            MAX_HASH_TREE_DEPTH + 1
+        ))
+    );
 }

@@ -1,108 +1,139 @@
-load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary")
 load("//bazel:defs.bzl", "gzip_compress")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
+load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
 
-LINUX_ONLY = [
-    "sevctl",
-    "vsock_guest",
-    "vsock_host",
-]
+package(default_visibility = ["//rs:ic-os-pkg"])
 
-NO_STRIP = [
-    "canister_sandbox",
-    "ic-btc-adapter",
-    "ic-https-outcalls-adapter",
-    "ic-onchain-observability-adapter",
-    "replica",
-]
-
-BINARIES = {
+ALL_BINARIES = {
+    "canary-proxy": "//rs/boundary_node/canary_proxy:canary-proxy",
     "canister_sandbox": "//rs/canister_sandbox",
+    "compiler_sandbox": "//rs/canister_sandbox:compiler_sandbox",
     "ic-btc-adapter": "//rs/bitcoin/adapter:ic-btc-adapter",
-    "replica": "//rs/replica",
-    "boundary-node-control-plane": "//rs/boundary_node/control_plane:boundary-node-control-plane",
+    "replica": "//rs/replica:replica",
     "boundary-node-prober": "//rs/boundary_node/prober:boundary-node-prober",
     "certificate-issuer": "//rs/boundary_node/certificate_issuance/certificate_issuer:certificate-issuer",
     "certificate-syncer": "//rs/boundary_node/certificate_issuance/certificate_syncer:certificate-syncer",
     "denylist-updater": "//rs/boundary_node/denylist_updater:denylist-updater",
-    "e2e-test-driver": "//rs/scenario_tests:e2e-test-driver",
     "ic-admin": "//rs/registry/admin:ic-admin",
     "ic-backup": "//rs/backup:ic-backup",
     "ic-balance-exporter": "//rs/boundary_node/ic_balance_exporter:ic-balance-exporter",
     "ic-boundary": "//rs/boundary_node/ic_boundary:ic-boundary",
+    "ic-boundary-tls": "//rs/boundary_node/ic_boundary:ic-boundary-tls",
     "ic-starter": "//rs/starter:ic-starter",
-    "ic-https-outcalls-adapter": "//rs/https_outcalls/adapter:ic-https-outcalls-adapter",
+    "ic-https-outcalls-adapter": "//rs/https_outcalls/adapter:ic-outcalls-adapter-with-http",
+    "ic-https-outcalls-adapter-https-only": "//rs/https_outcalls/adapter:ic-https-outcalls-adapter",
     "ic-consensus-pool-util": "//rs/artifact_pool:ic-consensus-pool-util",
     "ic-crypto-csp": "//rs/crypto:ic-crypto-csp",
-    "ic-onchain-observability-adapter": "//rs/monitoring/onchain_observability/adapter:ic-onchain-observability-adapter",
     "ic-nns-init": "//rs/nns/init:ic-nns-init",
-    "ic-p8s-sd": "//rs/ic_p8s_service_discovery:ic-p8s-sd",
-    "ic-p8s-service-discovery": "//rs/ic_p8s_service_discovery:ic-p8s-service-discovery",
     "ic-prep": "//rs/prep:ic-prep",
     "ic-recovery": "//rs/recovery:ic-recovery",
     "ic-regedit": "//rs/registry/regedit:ic-regedit",
     "ic-registry-replicator": "//rs/orchestrator/registry_replicator:ic-registry-replicator",
     "ic-replay": "//rs/replay:ic-replay",
-    "ic-rosetta-api": "//rs/rosetta-api:ic-rosetta-api",
     "ic-test-state-machine": "//rs/state_machine_tests:ic-test-state-machine",
-    "ic-workload-generator": "//rs/workload_generator:ic-workload-generator",
     "icx-proxy": "//rs/boundary_node/icx_proxy:icx-proxy",
     "icx-proxy-dev": "//rs/boundary_node/icx_proxy:icx-proxy-dev",
-    "log-vector-config-generator": "//rs/observability/log_vector_config_generator:log_vector_config_generator",
+    "nfplot": "//rs/nervous_system/neurons_fund/nfplot",
     "orchestrator": "//rs/orchestrator",
-    "prometheus-config-updater": "//rs/observability/prometheus_config_updater:prometheus_config_updater",
-    "sandbox_launcher": "//rs/canister_sandbox/sandbox_launcher",
-    "sevctl": "//rs/ic_os/sevctl:sevctl",
+    "sandbox_launcher": "//rs/canister_sandbox:sandbox_launcher",
     "sns": "//rs/sns/cli:sns",
+    "sns-audit": "//rs/sns/audit:sns-audit",
+    "sns-test-feature": "//rs/sns/cli:sns--test_feature",
     "state-tool": "//rs/state_tool:state-tool",
-    "vector-config-generator": "//rs/observability/vector_config_generator:vector_config_generator",
-    "vsock_guest": "//rs/ic_os/vsock/guest:vsock_guest",
-    "vsock_host": "//rs/ic_os/vsock/host:vsock_host",
+    "systemd-journal-gatewayd-shim": "//rs/boundary_node/systemd_journal_gatewayd_shim:systemd-journal-gatewayd-shim",
+    "drun": "//rs/drun:drun",
+    "pocket-ic": "//rs/pocket_ic_server:pocket-ic-server",
+    "types-test": "//rs/types/types:types_test",
+    "replicated-state-test": "//rs/replicated_state:replicated_state_test_binary",
+    # needed by DRE for release qualification
+    "e2e-test-driver": "//rs/scenario_tests:e2e-test-driver",
+    # needed by DRE for release qualification
+    "ic-workload-generator": "//rs/workload_generator:ic-workload-generator",
 }
 
+# test binaries or binaries using test utils
+TESTONLY_BINARIES = [
+    "drun",
+    "e2e-test-driver",
+    "ic-admin",
+    "ic-backup",
+    "ic-boundary",
+    "ic-boundary-tls",
+    "ic-https-outcalls-adapter",
+    "ic-nns-init",
+    "ic-prep",
+    "ic-recovery",
+    "ic-replay",
+    "ic-starter",
+    "ic-test-state-machine",
+    "pocket-ic",
+    "sns-test-feature",
+    "types-test",
+    "replicated-state-test",
+]
+
+# We don't strip the more complex binaries
+# in order to have some debug information available.
+NO_STRIP_BINARIES = [
+    "canister_sandbox",
+    "replica",
+]
+
+TEST_BINARIES = [
+    "types-test",
+]
+
 [release_nostrip_binary(
-    name = name,
-    binary = BINARIES[name],
-    visibility = [
-        "//ic-os/guestos/envs:__subpackages__",
-        "//ic-os/hostos/envs:__subpackages__",
-    ],
-) for name in BINARIES if name in NO_STRIP]
+    name = name + "_bin",
+    binary = ALL_BINARIES[name],
+) for name in NO_STRIP_BINARIES]
 
 [release_strip_binary(
-    name = name,
-    binary = BINARIES[name],
-    visibility = [
-        "//ic-os/boundary-api-guestos/envs/dev:__pkg__",
-        "//ic-os/boundary-api-guestos/envs/prod:__pkg__",
-        "//ic-os/boundary-guestos/envs/dev:__pkg__",
-        "//ic-os/boundary-guestos/envs/dev-sev:__pkg__",
-        "//ic-os/boundary-guestos/envs/prod:__pkg__",
-        "//ic-os/boundary-guestos/envs/prod-sev:__pkg__",
-        "//ic-os/guestos/envs:__subpackages__",
-        "//ic-os/hostos/envs:__subpackages__",
-    ],
-) for name in BINARIES if name not in NO_STRIP]
+    name = name + "_bin",
+    testonly = name in TESTONLY_BINARIES,
+    binary = ALL_BINARIES[name],
+) for name in ALL_BINARIES if name not in NO_STRIP_BINARIES and name not in TEST_BINARIES]
+
+[release_strip_binary_test(
+    name = name + "_bin",
+    testonly = True,
+    binary = ALL_BINARIES[name],
+) for name in TEST_BINARIES]
+
+# all targets below are tesonly because the targets violating the testonly flag
+# would error at this point
+
+[
+    genrule(
+        name = name + "_cleaned",
+        testonly = name in TESTONLY_BINARIES,
+        srcs = [name + "_bin"],
+        outs = [name],
+        cmd = select({
+            "@platforms//os:linux": "objcopy -R .comment -R .note -R .note.gnu.build-id $< $@",
+            "@platforms//os:osx": "cp $< $@",
+        }),
+        executable = True,
+    )
+    for name in ALL_BINARIES
+]
 
 [
     gzip_compress(
         name = name + ".gz",
         srcs = [name],
     )
-    for name in BINARIES
+    for name in ALL_BINARIES
 ]
 
 filegroup(
     name = "binaries",
-    srcs = select({
-        "@platforms//os:linux": [name + ".gz" for name in BINARIES],
-        "@platforms//os:osx": [name + ".gz" for name in BINARIES if name not in LINUX_ONLY],
-    }),
+    srcs = [name + ".gz" for name in ALL_BINARIES],
 )
 
 upload_artifacts(
     name = "upload",
-    allow_openssl_static = True,
+    testonly = True,
     inputs = [":binaries"],
     remote_subdir = "binaries/" + select({
         "@platforms//cpu:x86_64": "x86_64",
@@ -120,8 +151,22 @@ upload_artifacts(
 # the legacy upload path. Unwinding it without a will involve an unpredictable amount of time.
 upload_artifacts(
     name = "legacy_upload",
+    testonly = True,
     inputs = [":binaries"],
     remote_subdir = "release",
     target_compatible_with = ["@platforms//os:linux"],
     visibility = ["//testnet/tools:__pkg__"],
+)
+
+BINS_TO_TEST = [":" + name for name in ALL_BINARIES]
+
+sh_test(
+    name = "binary-libraries-test",
+    size = "small",
+    srcs = ["binary-libraries-test.sh"],
+    args = ["$(rootpath " + b + ")" for b in BINS_TO_TEST],
+    data = BINS_TO_TEST,
+    tags = [
+        "test_macos",
+    ],
 )

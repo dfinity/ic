@@ -131,20 +131,18 @@ CONFIG="$(cat ${INPUT})"
 # Read all the top-level values out in one swoop
 VALUES=$(echo ${CONFIG} | jq -r -c '[
     .deployment,
-    (.name_servers | join(" ")),
-    (.journalbeat_hosts | join(" ")),
-    (.journalbeat_tags | join(" "))
+    (.elasticsearch_hosts | join(" ")),
+    (.elasticsearch_tags | join(" "))
 ] | join("\u0001")')
-IFS=$'\1' read -r DEPLOYMENT NAME_SERVERS JOURNALBEAT_HOSTS JOURNALBEAT_TAGS < <(echo $VALUES)
+IFS=$'\1' read -r DEPLOYMENT ELASTICSEARCH_HOSTS ELASTICSEARCH_TAGS < <(echo $VALUES)
 
 # Read all the node info out in one swoop
 NODES=0
 VALUES=$(echo ${CONFIG} \
     | jq -r -c '.datacenters[]
 | .aux_nodes[] += { "type": "aux" } | .boundary_nodes[] += {"type": "boundary"} | .nodes[] += { "type": "replica" }
-| [.aux_nodes[], .boundary_nodes[], .nodes[]][] + { "ipv6_prefix": .ipv6_prefix, "ipv6_subnet": .ipv6_subnet } | [
+| [.aux_nodes[], .boundary_nodes[], .nodes[]][] + { "ipv6_prefix": .ipv6_prefix } | [
     .ipv6_prefix,
-    .ipv6_subnet,
     .ipv6_address,
     .hostname,
     .subnet_type,
@@ -153,10 +151,9 @@ VALUES=$(echo ${CONFIG} \
     .use_hsm,
     .type
 ] | join("\u0001")')
-while IFS=$'\1' read -r ipv6_prefix ipv6_subnet ipv6_address hostname subnet_type subnet_idx node_idx use_hsm type; do
+while IFS=$'\1' read -r ipv6_prefix ipv6_address hostname subnet_type subnet_idx node_idx use_hsm type; do
     eval "declare -A __RAW_NODE_${NODES}=(
         ['ipv6_prefix']=${ipv6_prefix}
-        ['ipv6_subnet']=${ipv6_subnet}
         ['ipv6_address']=${ipv6_address}
         ['hostname']=${hostname}
         ['subnet_type']=${subnet_type}
@@ -215,14 +212,18 @@ function generate_prep_material() {
         local subnet_type=${NODE["subnet_type"]}
 
         if [[ "${subnet_type}" == "root_subnet" ]]; then
-            NODES_NNS+=("${node_idx}-${subnet_idx}-[${ipv6_address}]:4100-[${ipv6_address}]:2497-0-[${ipv6_address}]:8080")
+            NODES_NNS+=("--node")
+            NODES_NNS+=("idx:${node_idx},subnet_idx:${subnet_idx},xnet_api:\"[${ipv6_address}]:2497\",public_api:\"[${ipv6_address}]:8080\"")
+            OLD_NODES_NNS+=("${node_idx}-${subnet_idx}-[${ipv6_address}]:4100-[${ipv6_address}]:2497-0-[${ipv6_address}]:8080")
         elif [[ "${subnet_type}" == "app_subnet" ]]; then
             if [[ "${subnet_idx}" == "x" ]]; then
                 # Unassigned nodes (nodes not assigned to any subnet) have an empty subnet_idx
                 # in the line submitted to ic-prep.
                 subnet_idx=""
             fi
-            NODES_APP+=("${node_idx}-${subnet_idx}-[${ipv6_address}]:4100-[${ipv6_address}]:2497-0-[${ipv6_address}]:8080")
+            NODES_APP+=("--node")
+            NODES_APP+=("idx:${node_idx},subnet_idx:${subnet_idx},xnet_api:\"[${ipv6_address}]:2497\",public_api:\"[${ipv6_address}]:8080\"")
+            OLD_NODES_APP+=("${node_idx}-${subnet_idx}-[${ipv6_address}]:4100-[${ipv6_address}]:2497-0-[${ipv6_address}]:8080")
         fi
     done
 
@@ -239,6 +240,16 @@ function generate_prep_material() {
         P2P_FLOWS=""--p2p-flows" "1234-1""
     fi
 
+    # Fix backward compatibility of removed nodes argument
+    if ${IC_PREP_DIR}/bin/ic-prep --help | grep -q -- '--nodes'; then
+        NODE_FLAG=("--nodes")
+        NODE_FLAG+=(${OLD_NODES_NNS[*]})
+        NODE_FLAG+=(${OLD_NODES_APP[*]})
+    else
+        NODE_FLAG=(${NODES_NNS[*]})
+        NODE_FLAG+=(${NODES_APP[*]})
+    fi
+
     # Generate key material for assigned nodes
     # See subnet_crypto_install, line 5
     "${IC_PREP_DIR}/bin/ic-prep" \
@@ -248,7 +259,7 @@ function generate_prep_material() {
         "--dkg-interval-length" "${DKG_INTERVAL_LENGTH}" \
         "--max-ingress-bytes-per-message" "${MAX_INGRESS_BYTES_PER_MESSAGE}" \
         ${P2P_FLOWS:-} \
-        "--nodes" ${NODES_NNS[*]} ${NODES_APP[*]} \
+        ${NODE_FLAG[*]} \
         "--provisional-whitelist" "${WHITELIST}" \
         "--initial-node-operator" "${NODE_OPERATOR_ID}" \
         "--initial-node-provider" "${NODE_OPERATOR_ID}" \
@@ -305,17 +316,16 @@ function build_bootstrap_images() {
         fi
 
         set -x
-        "${REPO_ROOT}"/ic-os/scripts/build-bootstrap-config-image.sh \
+        "${REPO_ROOT}"/ic-os/components/hostos-scripts/build-bootstrap-config-image.sh \
             "${OUTPUT}/${NODE_PREFIX}.img" \
             ${root_subnet:+"--ic_registry_local_store"} ${root_subnet:+"${IC_PREP_DIR}/ic_registry_local_store"} \
             ${use_crypto:+"--ic_crypto"} ${use_crypto:+"${IC_PREP_DIR}/node-${node_idx}/crypto/"} \
             "--nns_url" "${NNS_URL}" \
             "--nns_public_key" "${IC_PREP_DIR}/nns_public_key.pem" \
             "--hostname" "${hostname}" \
-            "--name_servers" "${NAME_SERVERS}" \
             "--accounts_ssh_authorized_keys" "${SSH}" \
-            ${JOURNALBEAT_HOSTS:+"--journalbeat_hosts"} ${JOURNALBEAT_HOSTS:+"${JOURNALBEAT_HOSTS}"} \
-            ${JOURNALBEAT_TAGS:+"--journalbeat_tags"} ${JOURNALBEAT_TAGS:+"${JOURNALBEAT_TAGS}"} \
+            ${ELASTICSEARCH_HOSTS:+"--elasticsearch_hosts"} ${ELASTICSEARCH_HOSTS:+"${ELASTICSEARCH_HOSTS}"} \
+            ${ELASTICSEARCH_TAGS:+"--elasticsearch_tags"} ${ELASTICSEARCH_TAGS:+"${ELASTICSEARCH_TAGS}"} \
             ${NODE_OPERATOR_PRIVATE_KEY:+"--node_operator_private_key"} ${NODE_OPERATOR_PRIVATE_KEY:+"${NODE_OPERATOR_PRIVATE_KEY}"} \
             "--socks_proxy" "socks5://socks5.testnet.dfinity.network:1080"
         set +x

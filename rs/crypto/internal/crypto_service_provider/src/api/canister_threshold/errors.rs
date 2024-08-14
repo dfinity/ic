@@ -1,16 +1,13 @@
 //! Errors encountered during CSP canister threshold signature operations.
 use crate::KeyId;
-use ic_crypto_internal_threshold_sig_ecdsa::{
-    ThresholdEcdsaError, ThresholdEcdsaSerializationError,
-};
+use ic_crypto_internal_threshold_sig_ecdsa::CanisterThresholdSerializationError;
 use ic_interfaces::crypto::IDkgDealingEncryptionKeyRotationError;
 use serde::{Deserialize, Serialize};
 
 /// Errors encountered during generation of a MEGa encryption key pair.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum CspCreateMEGaKeyError {
-    FailedKeyGeneration(ThresholdEcdsaError),
-    SerializationError(ThresholdEcdsaSerializationError),
+    SerializationError(CanisterThresholdSerializationError),
     TransientInternalError { internal_error: String },
     DuplicateKeyId { key_id: KeyId },
     InternalError { internal_error: String },
@@ -19,11 +16,6 @@ pub enum CspCreateMEGaKeyError {
 impl std::fmt::Display for CspCreateMEGaKeyError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::FailedKeyGeneration(tecdsa_err) => write!(
-                f,
-                "Error creating MEGa keypair: Underlying operation failed: {:?}",
-                tecdsa_err
-            ),
             Self::SerializationError(tecdsa_err) => write!(
                 f,
                 "Error (de)serializing MEGa keypair: Underlying operation failed: {:?}",

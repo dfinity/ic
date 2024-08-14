@@ -20,7 +20,6 @@ use std::num::TryFromIntError;
 
 pub mod conversions;
 pub mod proto_conversions;
-pub use conversions::*;
 
 #[cfg(test)]
 mod tests;
@@ -117,7 +116,7 @@ impl IDkgReceivers {
     ///   multisignature shares (i.e. |self| >= verification_threshold(|self|) +
     ///   faults_tolerated(|self|)) (error: `UnsatisfiedVerificationThreshold`)
     ///
-    /// If an invariant is not satisifed, the `Err` as indicated above is
+    /// If an invariant is not satisfied, the `Err` as indicated above is
     /// returned.
     pub fn new(receivers: BTreeSet<NodeId>) -> Result<Self, IDkgParamsValidationError> {
         Self::ensure_receivers_not_empty(&receivers)?;
@@ -164,11 +163,19 @@ impl IDkgReceivers {
 
     /// Returns the position of the given `node_id` in the receivers. Returns
     /// `None` if the `node_id` is not a receiver.
-    pub fn position(&self, node_id: NodeId) -> Option<NodeIndex> {
+    ///
+    /// This method is intended to be PRIVATE. For public methods for obtaining
+    /// a receiver's index, the methods of the objects like [`IDkgTranscript`],
+    /// [`IDkgTranscriptParams`], or [`ThresholdEcdsaSigInputs`] should be used.
+    fn position(&self, node_id: NodeId) -> Option<NodeIndex> {
         self.receivers
             .iter()
             .position(|receiver| node_id == *receiver)
             .map(|index| NodeIndex::try_from(index).expect("node index overflow"))
+    }
+
+    pub fn contains(&self, node_id: NodeId) -> bool {
+        self.receivers.contains(&node_id)
     }
 
     pub fn get(&self) -> &BTreeSet<NodeId> {
@@ -240,7 +247,7 @@ impl IDkgDealers {
     /// * Dealers are not empty (error: `DealersEmpty`)
     /// * The number of dealers fits into `NodeIndex` (error: `TooManyDealers`)
     ///
-    /// If an invariant is not satisifed, the `Err` as indicated above is
+    /// If an invariant is not satisfied, the `Err` as indicated above is
     /// returned.
     pub fn new(dealers: BTreeSet<NodeId>) -> Result<Self, IDkgParamsValidationError> {
         Self::ensure_dealers_not_empty(&dealers)?;
@@ -262,16 +269,8 @@ impl IDkgDealers {
         Ok(())
     }
 
-    /// Returns the position of the given `node_id` in the dealers. Returns
-    /// `None` if the `node_id` is not a dealer.
-    pub fn position(&self, node_id: NodeId) -> Option<NodeIndex> {
-        self.iter().find_map(|(node_index, this_node_id)| {
-            if node_id == this_node_id {
-                Some(node_index)
-            } else {
-                None
-            }
-        })
+    pub fn contains(&self, node_id: NodeId) -> bool {
+        self.dealers.contains(&node_id)
     }
 
     pub fn get(&self) -> &BTreeSet<NodeId> {
@@ -302,8 +301,10 @@ pub struct IDkgTranscriptParams {
     dealers: IDkgDealers,
     receivers: IDkgReceivers,
     registry_version: RegistryVersion,
-    /// Identifies the cryptographic signature scheme used in the protocol.
-    /// Currently only [`AlgorithmId::ThresholdEcdsaSecp256k1`] is supported.
+    /// Identifies the cryptographic signature scheme used in the
+    /// protocol.  Currently only
+    /// [`AlgorithmId::ThresholdEcdsaSecp256k1`] and
+    /// [`AlgorithmId::ThresholdEcdsaSecp256r1`] are supported.
     algorithm_id: AlgorithmId,
     /// Mode of operation for this current execution of the protocol.
     operation_type: IDkgTranscriptOperation,
@@ -342,7 +343,7 @@ impl IDkgTranscriptParams {
     ///     - s.receivers == t.receivers
     ///     - self.dealers is contained in t.receivers (errors:
     ///       `DealersNotContainedInPreviousReceivers` or
-    /// `WrongTypeForOriginalTranscript`)
+    ///       `WrongTypeForOriginalTranscript`)
     pub fn new(
         transcript_id: IDkgTranscriptId,
         dealers: BTreeSet<NodeId>,
@@ -398,26 +399,32 @@ impl IDkgTranscriptParams {
 
     /// Returns the dealer index of a node, or `None` if the node is not included in the set of dealers.
     ///
-    /// For a Random transcript, the index of a dealer correspond to the position of `node_id` in the dealer set.
+    /// For a Random or RandomUnmasked transcript, the index of a dealer correspond to the position of `node_id` in the dealer set.
     /// For all other transcript operations, the dealer index corresponds to its position of `node_id` in the previous set of receivers.
     pub fn dealer_index(&self, node_id: NodeId) -> Option<NodeIndex> {
-        match self.dealers().position(node_id) {
-            None => None,
-            Some(index) => {
-                match &self.operation_type {
-                    IDkgTranscriptOperation::Random => Some(index),
-                    IDkgTranscriptOperation::ReshareOfMasked(transcript) => {
-                        transcript.receivers.position(node_id)
-                    }
-                    IDkgTranscriptOperation::ReshareOfUnmasked(transcript) => {
-                        transcript.receivers.position(node_id)
-                    }
-                    IDkgTranscriptOperation::UnmaskedTimesMasked(transcript_1, _transcript_2) => {
-                        // transcript_1.receivers == transcript_2.receivers already checked by
-                        // IDkgTranscriptParams::new
-                        transcript_1.receivers.position(node_id)
-                    }
+        let index = self
+            .dealers()
+            .iter()
+            .find_map(|(node_index, this_node_id)| {
+                if node_id == this_node_id {
+                    Some(node_index)
+                } else {
+                    None
                 }
+            })?;
+        match &self.operation_type {
+            IDkgTranscriptOperation::Random => Some(index),
+            IDkgTranscriptOperation::RandomUnmasked => Some(index),
+            IDkgTranscriptOperation::ReshareOfMasked(transcript) => {
+                transcript.index_for_signer_id(node_id)
+            }
+            IDkgTranscriptOperation::ReshareOfUnmasked(transcript) => {
+                transcript.index_for_signer_id(node_id)
+            }
+            IDkgTranscriptOperation::UnmaskedTimesMasked(transcript_1, _transcript_2) => {
+                // transcript_1.receivers == transcript_2.receivers already checked by
+                // IDkgTranscriptParams::new
+                transcript_1.index_for_signer_id(node_id)
             }
         }
     }
@@ -436,7 +443,7 @@ impl IDkgTranscriptParams {
     /// Number of verified dealings needed to create a transcript.
     pub fn collection_threshold(&self) -> NumberOfNodes {
         match &self.operation_type {
-            IDkgTranscriptOperation::Random => {
+            IDkgTranscriptOperation::Random | IDkgTranscriptOperation::RandomUnmasked => {
                 let faulty = get_faults_tolerated(self.dealers.count().get() as usize);
                 number_of_nodes_from_usize(faulty + 1).expect("by construction, this fits in a u32")
             }
@@ -456,6 +463,7 @@ impl IDkgTranscriptParams {
         match &self.operation_type {
             // Random operation not currently supported for distinct dealer and receiver subnets.
             IDkgTranscriptOperation::Random => None,
+            IDkgTranscriptOperation::RandomUnmasked => None,
             // Reshare of masked transcript not currently supported for distinct dealer and receiver subnets.
             IDkgTranscriptOperation::ReshareOfMasked(_) => None,
             IDkgTranscriptOperation::ReshareOfUnmasked(_) => {
@@ -496,17 +504,19 @@ impl IDkgTranscriptParams {
     }
 
     fn ensure_algorithm_id_supported(&self) -> Result<(), IDkgParamsValidationError> {
-        match self.algorithm_id {
-            AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(()),
-            _ => Err(IDkgParamsValidationError::UnsupportedAlgorithmId {
+        if self.algorithm_id.is_threshold_ecdsa() || self.algorithm_id.is_threshold_schnorr() {
+            Ok(())
+        } else {
+            Err(IDkgParamsValidationError::UnsupportedAlgorithmId {
                 algorithm_id: self.algorithm_id,
-            }),
+            })
         }
     }
 
     fn check_consistency_of_input_transcripts(&self) -> Result<(), IDkgParamsValidationError> {
         match &self.operation_type {
             IDkgTranscriptOperation::Random => Ok(()),
+            IDkgTranscriptOperation::RandomUnmasked => Ok(()),
             IDkgTranscriptOperation::ReshareOfMasked(IDkgTranscript {
                 receivers: original_receivers,
                 transcript_type: IDkgTranscriptType::Masked(_),
@@ -574,17 +584,22 @@ impl InitialIDkgDealings {
     /// * The `params.operation_type` is `IDkgTranscriptOperation::ReshareOfUnmasked`, otherwise
     ///   the error variant `InvalidTranscriptOperation` is returned.
     /// * The dealings are from nodes in `params.dealers`, otherwise the error variant
-    ///  `DealerNotAllowed` is returned.
+    ///   `DealerNotAllowed` is returned.
     /// * The dealings are for the transcript `params.transcript_id`, otherwise the error variant
     ///   `MismatchingDealing` is returned.
     /// * Only one dealing is provided from each dealer, otherwise the error variant
     ///   `MultipleDealingsFromSameDealer` is returned.
     /// * There are at least `params.unverified_dealings_collection_threshold()` dealings from
     ///   distinct dealers, otherwise the error variant `UnsatisfiedCollectionThreshold` is returned.
+    /// * The `params.dealers` and `params.receivers` are disjoint, otherwise the error variant
+    ///   `DealersAndReceiversNotDisjoint` is returned.
     pub fn new(
         params: IDkgTranscriptParams,
         dealings: Vec<SignedIDkgDealing>,
     ) -> Result<Self, InitialIDkgDealingsValidationError> {
+        if !params.dealers.get().is_disjoint(params.receivers.get()) {
+            return Err(InitialIDkgDealingsValidationError::DealersAndReceiversNotDisjoint);
+        }
         match params.unverified_dealings_collection_threshold() {
             Some(threshold) => {
                 let mut dealings_map = BTreeMap::new();
@@ -657,6 +672,7 @@ impl<'de> Deserialize<'de> for InitialIDkgDealings {
 /// When the transcript derives from earlier transcripts, these are included
 /// in this enum.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum IDkgMaskedTranscriptOrigin {
     Random,
     UnmaskedTimesMasked(IDkgTranscriptId, IDkgTranscriptId),
@@ -667,13 +683,16 @@ pub enum IDkgMaskedTranscriptOrigin {
 /// The earlier transcripts used to derive this transcript are included in this
 /// enum.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum IDkgUnmaskedTranscriptOrigin {
     ReshareMasked(IDkgTranscriptId),
     ReshareUnmasked(IDkgTranscriptId),
+    Random,
 }
 
 /// Type and origin of an IDkg transcript.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum IDkgTranscriptType {
     /// Masked transcripts contain dealings based on Pedersen verifiable secret sharing which
     /// perfectly hides the value shared in the dealing. This means that the commitment to the
@@ -695,8 +714,9 @@ pub enum IDkgTranscriptType {
 /// transcript is considered:
 /// * [`Masked`][`IDkgTranscriptType::Masked`] if the commitment perfectly hides the shared value.
 /// * [`Unmasked`][`IDkgTranscriptType::Unmasked`] if the commitment is not perfectly hiding and
-/// may reveal some informaiton about the shared value.
+///   may reveal some information about the shared value.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgTranscript {
     pub transcript_id: IDkgTranscriptId,
     pub receivers: IDkgReceivers,
@@ -728,34 +748,42 @@ pub enum IDkgTranscriptOperation {
 
     /// Starts from a `masked` transcript and returns an `unmasked` transcript.
     ///
-    /// Useful to reveal `g^a_0` (where `a_0` is the shared secret and g is a group's generator) to
+    /// Takes in a secret share `x` and outputs `g^x` (g is a group's generator) to
     /// all parties.
+    ///
+    /// Useful to compute the public key from a masked transcript.
     ReshareOfMasked(IDkgTranscript),
 
     /// Starts from an `unmasked` transcript and returns an `unmasked` transcript.
     ///
-    /// Useful to reshare the public key if there was for example a change in the subnet's
-    /// topology.
+    /// Reshares the public key. Needed, e.g., after subnet topology changes.
     ReshareOfUnmasked(IDkgTranscript),
 
     /// Starts from a pair of transcripts (the first being `unmasked` while the second is `masked`)
     /// to produce a `masked` transcript.
     ///
     /// Useful to compute the product transcripts in
-    /// [`PreSignatureQuadruple`][`crate::crypto::canister_threshold_sig::PreSignatureQuadruple`]:
+    /// [`EcdsaPreSignatureQuadruple`][`crate::crypto::canister_threshold_sig::EcdsaPreSignatureQuadruple`]:
     /// * Given a unmasked transcript for sharing a random value `kappa` and a masked transcript
-    /// for sharing a random value `lambda`, compute the masked transcript for sharing the value
-    /// `kappa * lambda`.
+    ///   for sharing a random value `lambda`, compute the masked transcript for sharing the value
+    ///   `kappa * lambda`.
     /// * Given a unmasked transcript for sharing a random value `alpha` and a masked transcript
-    /// for sharing the aforementioned random value `lambda`, compute the masked transcript for
-    /// sharing the value `alpha * lambda`.
+    ///   for sharing the aforementioned random value `lambda`, compute the masked transcript for
+    ///   sharing the value `alpha * lambda`.
     UnmaskedTimesMasked(IDkgTranscript, IDkgTranscript),
+
+    /// Generates a new public/private key pair shared among the replicas.
+    ///
+    /// The resulting transcript is `unmasked`; the public key is immediately
+    /// revealed to all parties
+    RandomUnmasked,
 }
 
 impl Debug for IDkgTranscriptOperation {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Random => write!(f, "IDkgTranscriptOperation::Random"),
+            Self::RandomUnmasked => write!(f, "IDkgTranscriptOperation::RandomUnmasked"),
             Self::ReshareOfMasked(transcript) => write!(
                 f,
                 "IDkgTranscriptOperation::ReshareOfMasked({:?})",
@@ -870,6 +898,7 @@ impl IDkgTranscript {
         type Iuto = IDkgUnmaskedTranscriptOrigin;
         let transcript_type_from_params_op = match params.operation_type() {
             Itop::Random => Itt::Masked(Imto::Random),
+            Itop::RandomUnmasked => Itt::Unmasked(Iuto::Random),
             Itop::ReshareOfMasked(r) => Itt::Unmasked(Iuto::ReshareMasked(r.transcript_id)),
             Itop::ReshareOfUnmasked(r) => Itt::Unmasked(Iuto::ReshareUnmasked(r.transcript_id)),
             Itop::UnmaskedTimesMasked(l, r) => {
@@ -932,7 +961,13 @@ impl IDkgTranscript {
 
     /// Checks if the specified `NodeId` is a receiver of the transcript.
     pub fn has_receiver(&self, receiver_id: NodeId) -> bool {
-        self.receivers.position(receiver_id).is_some()
+        self.receivers.contains(receiver_id)
+    }
+
+    /// Returns a copy of the raw internal transcript.
+    #[inline]
+    pub fn transcript_to_bytes(&self) -> Vec<u8> {
+        self.internal_transcript_raw.clone()
     }
 }
 
@@ -963,10 +998,19 @@ impl_display_using_debug!(IDkgTranscript);
 
 /// Dealing of an IDkg sharing.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgDealing {
     pub transcript_id: IDkgTranscriptId,
     #[serde(with = "serde_bytes")]
     pub internal_dealing_raw: Vec<u8>,
+}
+
+impl IDkgDealing {
+    /// Returns a copy of the internal dealing.
+    #[inline]
+    pub fn dealing_to_bytes(&self) -> Vec<u8> {
+        self.internal_dealing_raw.clone()
+    }
 }
 
 impl Debug for IDkgDealing {
@@ -1209,8 +1253,8 @@ fn number_of_nodes_from_usize(number: usize) -> Result<NumberOfNodes, TryFromInt
 ///   64-bit-big-endian-integer length)
 /// - IDkgTranscriptId::id, as a big-endian 64-bit integer
 /// - IDkgTranscriptId::source_subnet, as a big-endian 64-bit integer
-/// The registry version, as a big-endian 64-bit integer
-/// The Algorithm ID, as an 8-bit integer value
+/// - The registry version, as a big-endian 64-bit integer
+/// - The Algorithm ID, as an 8-bit integer value
 fn context_data(
     transcript_id: &IDkgTranscriptId,
     registry_version: RegistryVersion,
@@ -1230,4 +1274,76 @@ fn context_data(
     ret.push(algorithm_id as u8);
 
     ret
+}
+
+#[test]
+fn should_fail_deserializing_invalid_initial_idkg_dealings() {
+    use crate::crypto::canister_threshold_sig::IDkgUnmaskedTranscriptOrigin;
+    use crate::{PrincipalId, SubnetId};
+    use ic_crypto_test_utils_canister_threshold_sigs::set_of_nodes;
+    use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+    use ic_protobuf::proxy::ProxyDecodeError;
+    use ic_protobuf::registry::subnet::v1::InitialIDkgDealings as InitialIDkgDealingsProto;
+    use rand::Rng;
+
+    fn random_transcript_id(rng: &mut ReproducibleRng) -> IDkgTranscriptId {
+        let id = rng.gen();
+        let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
+        let height = Height::from(rng.gen::<u64>());
+
+        IDkgTranscriptId::new(subnet, id, height)
+    }
+
+    let rng = &mut reproducible_rng();
+
+    let receivers = IDkgReceivers::new(set_of_nodes(&[1])).expect("failed to create IDkgReceivers");
+    let dummy_transcript_unmasked = IDkgTranscript {
+        transcript_id: random_transcript_id(rng),
+        receivers,
+        registry_version: RegistryVersion::from(314),
+        verified_dealings: BTreeMap::new(),
+        transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random),
+        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+        internal_transcript_raw: vec![],
+    };
+
+    let dummy_transcript_masked = {
+        let mut tmp = dummy_transcript_unmasked.clone();
+        tmp.transcript_type = IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random);
+        tmp
+    };
+
+    let invalid_transcript_operations = vec![
+        IDkgTranscriptOperation::Random,
+        IDkgTranscriptOperation::RandomUnmasked,
+        IDkgTranscriptOperation::ReshareOfMasked(dummy_transcript_masked.clone()),
+        IDkgTranscriptOperation::UnmaskedTimesMasked(
+            dummy_transcript_unmasked,
+            dummy_transcript_masked,
+        ),
+    ];
+
+    for invalid_transcript_operation in invalid_transcript_operations {
+        let params = IDkgTranscriptParams {
+            transcript_id: random_transcript_id(rng),
+            dealers: IDkgDealers::new(set_of_nodes(&[1])).expect("failed to create IDkgDealers"),
+            receivers: IDkgReceivers::new(set_of_nodes(&[2]))
+                .expect("failed to create IDkgReceivers"),
+            registry_version: RegistryVersion::new(0),
+            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+            operation_type: invalid_transcript_operation.clone(),
+        };
+        let initial_dealings = InitialIDkgDealings {
+            params,
+            dealings: vec![],
+        };
+
+        let invalid_serialization = InitialIDkgDealingsProto::from(&initial_dealings);
+
+        assert_matches::assert_matches!(
+            InitialIDkgDealings::try_from(&invalid_serialization),
+            Err(ProxyDecodeError::Other(s))
+            if s == "InvalidTranscriptOperation" || s == "Unspecified transcript operation in IDkgTranscriptParams"
+        );
+    }
 }

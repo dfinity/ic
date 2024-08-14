@@ -1,4 +1,3 @@
-mod anonymous_query_handler;
 mod bitcoin;
 mod canister_manager;
 mod canister_settings;
@@ -15,7 +14,7 @@ mod scheduler;
 mod types;
 pub mod util;
 
-use crate::anonymous_query_handler::AnonymousQueryHandler;
+use crate::ingress_filter::IngressFilterServiceImpl;
 pub use execution_environment::{
     as_num_instructions, as_round_instructions, execute_canister, CompilationCostHandling,
     ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse, RoundInstructions, RoundLimits,
@@ -25,24 +24,28 @@ pub use hypervisor::{Hypervisor, HypervisorMetrics};
 use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces::execution_environment::{
     IngressFilterService, IngressHistoryReader, IngressHistoryWriter, QueryExecutionService,
-    QueryHandler, Scheduler,
+    Scheduler,
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
+use ic_query_stats::QueryStatsPayloadBuilderParams;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{CallOrigin, NetworkTopology, ReplicatedState};
-use ic_types::{messages::CallContextId, SubnetId};
-use ingress_filter::IngressFilter;
+use ic_types::{
+    messages::{CallContextId, MessageId},
+    Height, SubnetId,
+};
+pub use metrics::IngressFilterMetrics;
 pub use query_handler::InternalHttpQueryHandler;
 use query_handler::{HttpQueryHandler, QueryScheduler, QuerySchedulerFlag};
 pub use scheduler::RoundSchedule;
 use scheduler::SchedulerImpl;
 use std::sync::Arc;
+use tokio::sync::mpsc::Sender;
 
 /// When executing a wasm method of query type, this enum indicates if we are
 /// running in an replicated or non-replicated context. This information is
@@ -80,10 +83,9 @@ pub struct ExecutionServices {
     pub ingress_filter: IngressFilterService,
     pub ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     pub ingress_history_reader: Box<dyn IngressHistoryReader>,
-    pub sync_query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
-    pub async_query_handler: QueryExecutionService,
-    pub anonymous_query_handler: AnonymousQueryService,
+    pub query_execution_service: QueryExecutionService,
     pub scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
+    pub query_stats_payload_builder: QueryStatsPayloadBuilderParams,
 }
 
 impl ExecutionServices {
@@ -100,6 +102,7 @@ impl ExecutionServices {
         cycles_account_manager: Arc<CyclesAccountManager>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+        completed_execution_messages_tx: Sender<(MessageId, Height)>,
     ) -> ExecutionServices {
         let hypervisor = Arc::new(Hypervisor::new(
             config.clone(),
@@ -116,9 +119,14 @@ impl ExecutionServices {
             config.clone(),
             logger.clone(),
             metrics_registry,
+            completed_execution_messages_tx,
+            Arc::clone(&state_reader),
         ));
         let ingress_history_reader =
             Box::new(IngressHistoryReaderImpl::new(Arc::clone(&state_reader)));
+
+        let (query_stats_collector, query_stats_payload_builder) =
+            ic_query_stats::init_query_stats(logger.clone(), &config, metrics_registry);
 
         let exec_env = Arc::new(ExecutionEnvironment::new(
             logger.clone(),
@@ -130,6 +138,11 @@ impl ExecutionServices {
             SchedulerImpl::compute_capacity_percent(scheduler_config.scheduler_cores),
             config.clone(),
             Arc::clone(&cycles_account_manager),
+            scheduler_config.scheduler_cores,
+            Arc::clone(&fd_factory),
+            scheduler_config.heap_delta_rate_limit,
+            scheduler_config.upload_wasm_chunk_instructions,
+            scheduler_config.canister_snapshot_baseline_instructions,
         ));
         let sync_query_handler = Arc::new(InternalHttpQueryHandler::new(
             logger.clone(),
@@ -139,43 +152,32 @@ impl ExecutionServices {
             metrics_registry,
             scheduler_config.max_instructions_per_message_without_dts,
             Arc::clone(&cycles_account_manager),
+            query_stats_collector,
         ));
 
-        // If this is not a system or verified subnet we can double the
-        // number of query execution threads total because the file-backed
-        // allocator is enabled on these subnets and thus we can fit more
-        // concurrent queries in memory.
-        // TODO: remove this once the file-backed allocator is enabled on all subnets.
-        let query_execution_threads_total = if own_subnet_type == SubnetType::Application {
-            config.query_execution_threads_total * 2
-        } else {
-            config.query_execution_threads_total
-        };
         let query_scheduler = QueryScheduler::new(
-            query_execution_threads_total,
+            config.query_execution_threads_total,
             config.embedders_config.query_execution_threads_per_canister,
             config.query_scheduling_time_slice_per_canister,
             metrics_registry,
             QuerySchedulerFlag::UseNewSchedulingAlgorithm,
         );
 
+        let ingress_filter_metrics: Arc<_> = IngressFilterMetrics::new(metrics_registry).into();
+
         // Creating the async services require that a tokio runtime context is available.
 
-        let async_query_handler = HttpQueryHandler::new_service(
+        let query_execution_service = HttpQueryHandler::new_service(
             Arc::clone(&sync_query_handler) as Arc<_>,
             query_scheduler.clone(),
             Arc::clone(&state_reader),
+            metrics_registry,
         );
-        let ingress_filter = IngressFilter::new_service(
+        let ingress_filter = IngressFilterServiceImpl::new_service(
             query_scheduler.clone(),
             Arc::clone(&state_reader),
             Arc::clone(&exec_env),
-        );
-        let anonymous_query_handler = AnonymousQueryHandler::new_service(
-            query_scheduler,
-            Arc::clone(&state_reader),
-            Arc::clone(&exec_env),
-            scheduler_config.max_instructions_per_message_without_dts,
+            ingress_filter_metrics.clone(),
         );
 
         let scheduler = Box::new(SchedulerImpl::new(
@@ -189,16 +191,16 @@ impl ExecutionServices {
             config.rate_limiting_of_heap_delta,
             config.rate_limiting_of_instructions,
             config.deterministic_time_slicing,
+            Arc::clone(&fd_factory),
         ));
 
         Self {
             ingress_filter,
             ingress_history_writer,
             ingress_history_reader,
-            sync_query_handler,
-            async_query_handler,
-            anonymous_query_handler,
+            query_execution_service,
             scheduler,
+            query_stats_payload_builder,
         }
     }
 
@@ -209,18 +211,14 @@ impl ExecutionServices {
         IngressFilterService,
         Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
         Box<dyn IngressHistoryReader>,
-        Arc<dyn QueryHandler<State = ReplicatedState>>,
         QueryExecutionService,
-        AnonymousQueryService,
         Box<dyn Scheduler<State = ReplicatedState>>,
     ) {
         (
             self.ingress_filter,
             self.ingress_history_writer,
             self.ingress_history_reader,
-            self.sync_query_handler,
-            self.async_query_handler,
-            self.anonymous_query_handler,
+            self.query_execution_service,
             self.scheduler,
         )
     }

@@ -1,20 +1,28 @@
 //! Utilities for non-interactive Distributed Key Generation (NI-DKG), and
 //! for testing distributed key generation and threshold signing.
 
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
+    ni_dkg_groth20_bls12_381, CspNiDkgDealing, CspNiDkgTranscript,
+};
 use ic_crypto_internal_types::NodeIndex;
-use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
+use ic_crypto_temp_crypto::CryptoComponentRng;
+use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_interfaces::crypto::{KeyManager, NiDkgAlgorithm, ThresholdSigner};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::consensus::get_faults_tolerated;
-use ic_types::crypto::threshold_sig::ni_dkg::config::{NiDkgConfig, NiDkgConfigData};
+use ic_types::crypto::threshold_sig::ni_dkg::config::{
+    NiDkgConfig, NiDkgConfigData, NiDkgThreshold,
+};
 use ic_types::crypto::threshold_sig::ni_dkg::{
-    DkgId, NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
+    NiDkgDealing, NiDkgId, NiDkgReceivers, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
+    NiDkgTranscript,
 };
 use ic_types::crypto::{KeyPurpose, Signable, ThresholdSigShareOf};
 use ic_types::{Height, NodeId, NumberOfNodes, PrincipalId, RegistryVersion, SubnetId};
 use rand::prelude::*;
+use rand_chacha::ChaCha20Rng;
 use std::cmp;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::convert::TryFrom;
@@ -24,11 +32,15 @@ use std::sync::Arc;
 
 mod initial_config;
 
-pub use initial_config::{initial_dkg_transcript, InitialNiDkgConfig};
+pub use initial_config::{
+    dummy_initial_dkg_transcript, dummy_initial_dkg_transcript_with_master_key,
+    initial_dkg_transcript, initial_dkg_transcript_and_master_key, sign_message,
+    InitialNiDkgConfig, SecretKeyBytes,
+};
 
-pub fn create_transcript(
+pub fn create_transcript<R: CryptoComponentRng>(
     ni_dkg_config: &NiDkgConfig,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<R>>,
     dealings: &BTreeMap<NodeId, NiDkgDealing>,
     node_id: NodeId,
 ) -> NiDkgTranscript {
@@ -39,9 +51,9 @@ pub fn create_transcript(
         })
 }
 
-pub fn load_transcript(
+pub fn load_transcript<R: CryptoComponentRng>(
     transcript: &NiDkgTranscript,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<R>>,
     node_id: NodeId,
 ) {
     crypto_for(node_id, crypto_components)
@@ -51,9 +63,9 @@ pub fn load_transcript(
 
 /// Load transcript on each node (if resharing), create all dealings, and build
 /// transcript from those dealings.
-pub fn run_ni_dkg_and_create_single_transcript(
+pub fn run_ni_dkg_and_create_single_transcript<R: CryptoComponentRng>(
     ni_dkg_config: &NiDkgConfig,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<R>>,
 ) -> NiDkgTranscript {
     let dealings =
         load_resharing_transcript_if_needed_and_create_dealings(ni_dkg_config, crypto_components);
@@ -66,9 +78,9 @@ pub fn run_ni_dkg_and_create_single_transcript(
     )
 }
 
-pub fn load_resharing_transcript_if_needed_and_create_dealings(
+pub fn load_resharing_transcript_if_needed_and_create_dealings<R: CryptoComponentRng>(
     ni_dkg_config: &NiDkgConfig,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<R>>,
 ) -> BTreeMap<NodeId, NiDkgDealing> {
     ni_dkg_config
         .dealers()
@@ -85,9 +97,9 @@ pub fn load_resharing_transcript_if_needed_and_create_dealings(
         .collect()
 }
 
-pub fn create_dealings(
+pub fn create_dealings<R: CryptoComponentRng>(
     ni_dkg_config: &NiDkgConfig,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<R>>,
 ) -> BTreeMap<NodeId, NiDkgDealing> {
     ni_dkg_config
         .dealers()
@@ -100,9 +112,9 @@ pub fn create_dealings(
         .collect()
 }
 
-pub fn create_dealing(
+pub fn create_dealing<R: CryptoComponentRng>(
     ni_dkg_config: &NiDkgConfig,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<R>>,
     node_id: NodeId,
 ) -> NiDkgDealing {
     crypto_for(node_id, crypto_components)
@@ -115,9 +127,9 @@ pub fn create_dealing(
         })
 }
 
-pub fn load_resharing_transcript_and_create_dealing(
+pub fn load_resharing_transcript_and_create_dealing<R: CryptoComponentRng>(
     ni_dkg_config: &NiDkgConfig,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<R>>,
     node_id: NodeId,
 ) -> NiDkgDealing {
     if let Some(resharing_transcript) = ni_dkg_config.resharing_transcript() {
@@ -127,9 +139,9 @@ pub fn load_resharing_transcript_and_create_dealing(
     create_dealing(ni_dkg_config, crypto_components, node_id)
 }
 
-pub fn verify_dealing(
+pub fn verify_dealing<R: CryptoComponentRng>(
     ni_dkg_config: &NiDkgConfig,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<R>>,
     dealer_node_id: NodeId,
     verifier_node_id: NodeId,
     dealing: &NiDkgDealing,
@@ -144,8 +156,8 @@ pub fn verify_dealing(
         });
 }
 
-pub fn retain_only_active_keys(
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+pub fn retain_only_active_keys<R: CryptoComponentRng>(
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<R>>,
     node_id: NodeId,
     retained_transcripts: HashSet<NiDkgTranscript>,
 ) {
@@ -159,21 +171,149 @@ pub fn retain_only_active_keys(
         });
 }
 
-pub fn sign_threshold_for_each<H: Signable>(
+pub fn sign_threshold_for_each<H: Signable, R: CryptoComponentRng>(
     signers: &[NodeId],
     msg: &H,
     dkg_id: NiDkgId,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<R>>,
 ) -> BTreeMap<NodeId, ThresholdSigShareOf<H>> {
     signers
         .iter()
         .map(|signer| {
             let sig_share = crypto_for(*signer, crypto_components)
-                .sign_threshold(msg, DkgId::NiDkgId(dkg_id))
+                .sign_threshold(msg, dkg_id)
                 .unwrap_or_else(|_| panic!("signing by node {:?} failed", signer));
             (*signer, sig_share)
         })
         .collect()
+}
+
+pub fn dummy_transcript_for_tests_with_params(
+    committee: Vec<NodeId>,
+    dkg_tag: NiDkgTag,
+    threshold: u32,
+    registry_version: u64,
+) -> NiDkgTranscript {
+    // The functionality in this function, and the one in `dummy_transcript_for_tests` below, are
+    // copied from the `impl NiDkgTranscript` block in `ic_types::crypto::threshold_sig::ni_dkg`.
+    // The reasons for not being able to reuse the code are:
+    // - The functions/methods should not be available to production code, i.e., they should either
+    //   have a `#[cfg(test)]` annotation, or be in a `test-utils` crate.
+    // - We can annotate the method in the `ic-types` crate with `#[cfg(test)]`, since it is only
+    //   used for tests within that crate.
+    // - We cannot use the functions in this `ic-crypto-test-utils-ni-dkg` crate from the `ic-types`
+    //   crate even just for tests, due to the quasi-circular dependency that it would introduce.
+    // Since the code is not very complex and a dozen lines, duplicating it is not a big issue.
+    use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
+    NiDkgTranscript {
+        dkg_id: NiDkgId {
+            start_block_height: Height::from(0),
+            dealer_subnet: SubnetId::from(PrincipalId::new_subnet_test_id(0)),
+            dkg_tag,
+            target_subnet: NiDkgTargetSubnet::Local,
+        },
+        threshold: NiDkgThreshold::new(crate::NumberOfNodes::new(threshold))
+            .expect("Couldn't create a non-interactive DKG threshold."),
+        committee: NiDkgReceivers::new(committee.into_iter().collect())
+            .expect("Couldn't create non-interactive DKG committee"),
+        registry_version: RegistryVersion::from(registry_version),
+        internal_csp_transcript: CspNiDkgTranscript::Groth20_Bls12_381(
+            ni_dkg_groth20_bls12_381::Transcript {
+                public_coefficients: ni_dkg_groth20_bls12_381::PublicCoefficientsBytes {
+                    // the following public key matches the one used in StateMachine tests
+                    coefficients: vec![PublicKeyBytes(hex::decode("adf65638a53056b2222c91bb2457b0274bca95198a5acbdadfe7fd72178f069bdea8d99e9479d8087a2686fc81bf3c4b11fe275570d481f1698f79d468afe0e57acc1e298f8b69798da7a891bbec197093ec5f475909923d48bfed6843dbed1f").unwrap().try_into().unwrap())],
+                },
+                receiver_data: BTreeMap::new(),
+            },
+        ),
+    }
+}
+pub fn dummy_transcript_for_tests() -> NiDkgTranscript {
+    dummy_transcript_for_tests_with_params(
+        vec![NodeId::from(PrincipalId::new_node_test_id(0))],
+        NiDkgTag::LowThreshold,
+        1,
+        0,
+    )
+}
+
+pub fn ni_dkg_csp_dealing(seed: u8) -> CspNiDkgDealing {
+    use ni_dkg_groth20_bls12_381 as scheme;
+    fn fr(seed: u8) -> scheme::FrBytes {
+        scheme::FrBytes([seed; scheme::FrBytes::SIZE])
+    }
+    fn g1(seed: u8) -> scheme::G1Bytes {
+        scheme::G1Bytes([seed; scheme::G1Bytes::SIZE])
+    }
+    fn g2(seed: u8) -> scheme::G2Bytes {
+        scheme::G2Bytes([seed; scheme::G2Bytes::SIZE])
+    }
+    const NUM_RECEIVERS: usize = 1;
+    CspNiDkgDealing::Groth20_Bls12_381(scheme::Dealing {
+        public_coefficients: scheme::PublicCoefficientsBytes {
+            coefficients: Vec::new(),
+        },
+        ciphertexts: scheme::EncryptedShares {
+            rand_r: [g1(seed); scheme::NUM_CHUNKS],
+            rand_s: [g1(seed); scheme::NUM_CHUNKS],
+            rand_z: [g2(seed); scheme::NUM_CHUNKS],
+            ciphertext_chunks: (0..NUM_RECEIVERS)
+                .map(|i| [g1(seed ^ (i as u8)); scheme::NUM_CHUNKS])
+                .collect(),
+        },
+        zk_proof_decryptability: ni_dkg_groth20_bls12_381::ZKProofDec {
+            // TODO(CRP-530): Populate this when it has been defined in the spec.
+            first_move_y0: g1(seed),
+            first_move_b: [g1(seed); scheme::NUM_ZK_REPETITIONS],
+            first_move_c: [g1(seed); scheme::NUM_ZK_REPETITIONS],
+            second_move_d: (0..NUM_RECEIVERS + 1)
+                .map(|i| g1(seed ^ (i as u8)))
+                .collect(),
+            second_move_y: g1(seed),
+            response_z_r: (0..NUM_RECEIVERS).map(|i| fr(seed | (i as u8))).collect(),
+            response_z_s: [fr(seed); scheme::NUM_ZK_REPETITIONS],
+            response_z_b: fr(seed),
+        },
+        zk_proof_correct_sharing: ni_dkg_groth20_bls12_381::ZKProofShare {
+            first_move_f: g1(seed),
+            first_move_a: g2(seed),
+            first_move_y: g1(seed),
+            response_z_r: fr(seed),
+            response_z_a: fr(seed),
+        },
+    })
+}
+
+pub fn empty_ni_dkg_transcripts_with_committee(
+    committee: Vec<NodeId>,
+    registry_version: u64,
+) -> BTreeMap<NiDkgTag, NiDkgTranscript> {
+    vec![
+        (
+            NiDkgTag::LowThreshold,
+            dummy_transcript_for_tests_with_params(
+                committee.clone(),
+                NiDkgTag::LowThreshold,
+                NiDkgTag::LowThreshold.threshold_for_subnet_of_size(committee.len()) as u32,
+                registry_version,
+            ),
+        ),
+        (
+            NiDkgTag::HighThreshold,
+            dummy_transcript_for_tests_with_params(
+                committee.clone(),
+                NiDkgTag::HighThreshold,
+                NiDkgTag::HighThreshold.threshold_for_subnet_of_size(committee.len()) as u32,
+                registry_version,
+            ),
+        ),
+    ]
+    .into_iter()
+    .collect()
+}
+
+pub fn empty_ni_dkg_transcripts() -> BTreeMap<NiDkgTag, NiDkgTranscript> {
+    empty_ni_dkg_transcripts_with_committee(vec![NodeId::from(PrincipalId::new_node_test_id(0))], 0)
 }
 
 pub struct RandomNiDkgConfigBuilder {
@@ -210,27 +350,22 @@ impl RandomNiDkgConfigBuilder {
         self
     }
 
-    pub fn build(self) -> RandomNiDkgConfig {
+    pub fn build<R: Rng + CryptoRng>(self, rng: &mut R) -> RandomNiDkgConfig {
         let subnet_size = self.subnet_size.expect("must specify a subnet size");
 
-        let dkg_tag = self.dkg_tag.unwrap_or_else(|| {
-            let rng = &mut thread_rng();
-            match rng.gen::<bool>() {
-                true => NiDkgTag::LowThreshold,
-                false => NiDkgTag::HighThreshold,
-            }
+        let dkg_tag = self.dkg_tag.unwrap_or_else(|| match rng.gen::<bool>() {
+            true => NiDkgTag::LowThreshold,
+            false => NiDkgTag::HighThreshold,
         });
 
         // The registry version is used as DKG epoch and an epoch is u32. Because of
         // this, the maximum registry version we choose is u32::MAX, decreased by a
         // margin that allows for increasing it again sufficiently during tests.
-        let registry_version = self.registry_version.unwrap_or_else(|| {
-            let rng = &mut thread_rng();
-            RegistryVersion::new(rng.gen_range(1..u32::MAX - 10_000) as u64)
-        });
+        let registry_version = self
+            .registry_version
+            .unwrap_or_else(|| RegistryVersion::new(rng.gen_range(1..u32::MAX - 10_000) as u64));
 
         let dealer_count = self.dealer_count.unwrap_or_else(|| {
-            let rng = &mut thread_rng();
             let threshold = dkg_tag.threshold_for_subnet_of_size(subnet_size);
             let required_dealer_count = threshold;
             let dealer_surplus = rng.gen_range(0..3);
@@ -239,7 +374,7 @@ impl RandomNiDkgConfigBuilder {
 
         let max_corrupt_dealers = self
             .max_corrupt_dealers
-            .unwrap_or_else(|| thread_rng().gen_range(0..dealer_count));
+            .unwrap_or_else(|| rng.gen_range(0..dealer_count));
 
         RandomNiDkgConfig::new(
             subnet_size,
@@ -247,6 +382,7 @@ impl RandomNiDkgConfigBuilder {
             registry_version,
             dealer_count,
             max_corrupt_dealers,
+            rng,
         )
     }
 }
@@ -277,16 +413,17 @@ impl RandomNiDkgConfig {
 
     /// Creates a random NI-DKG config for `dkg_tag` satisfying all
     /// invariants.
-    pub fn new(
+    pub fn new<R: Rng + CryptoRng>(
         subnet_size: usize,
         dkg_tag: NiDkgTag,
         registry_version: RegistryVersion,
         num_of_dealers: usize,
         max_corrupt_dealers: usize,
+        rng: &mut R,
     ) -> Self {
         assert!(subnet_size > 0, "subnet must not be empty");
 
-        let receivers = Self::random_node_ids(subnet_size);
+        let receivers = Self::random_node_ids(subnet_size, rng);
         let threshold = dkg_tag.threshold_for_subnet_of_size(subnet_size);
         let dealers = {
             assert!(
@@ -295,16 +432,16 @@ impl RandomNiDkgConfig {
             );
             // Exclude receivers from being dealers because initial DKG is done by NNS for
             // another (remote) subnet, which means the dealers and receivers are disjoint.
-            Self::random_node_ids_excluding(&receivers, num_of_dealers)
+            Self::random_node_ids_excluding(&receivers, num_of_dealers, rng)
         };
 
         let config_data = NiDkgConfigData {
             dkg_id: NiDkgId {
-                start_block_height: Height::new(random()),
-                dealer_subnet: SubnetId::from(PrincipalId::new_subnet_test_id(random())),
+                start_block_height: Height::new(rng.gen()),
+                dealer_subnet: SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen())),
                 dkg_tag,
                 // The first DKG is always done by NNS for another (remote) subnet
-                target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new(random())),
+                target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new(rng.gen())),
             },
             max_corrupt_dealers: Self::number_of_nodes_from_usize(max_corrupt_dealers),
             dealers,
@@ -323,9 +460,7 @@ impl RandomNiDkgConfig {
     /// configuration with the opposite threshold requirements so it
     /// is possible to perform tests where a single subnet has both
     /// high and low threshold transcripts
-    pub fn new_with_inverted_threshold(&self) -> Self {
-        let rng = &mut thread_rng();
-
+    pub fn new_with_inverted_threshold<R: Rng + CryptoRng>(&self, rng: &mut R) -> Self {
         let dkg_tag = match self.0.dkg_id().dkg_tag {
             NiDkgTag::LowThreshold => NiDkgTag::HighThreshold,
             NiDkgTag::HighThreshold => NiDkgTag::LowThreshold,
@@ -339,7 +474,7 @@ impl RandomNiDkgConfig {
             let dealer_surplus = rng.gen_range(0..3);
             // Exclude receivers from being dealers because initial DKG is done by NNS for
             // another (remote) subnet, which means the dealers and receivers are disjoint.
-            Self::random_node_ids_excluding(&receivers, required_dealer_count + dealer_surplus)
+            Self::random_node_ids_excluding(&receivers, required_dealer_count + dealer_surplus, rng)
         };
 
         let config_data = NiDkgConfigData {
@@ -370,13 +505,12 @@ impl RandomNiDkgConfig {
     /// with minimum of 1 and maximum of `max_subnet_size`. If new nodes are
     /// added as part of the resizing, the registry version is increased by
     /// 1.
-    pub fn reshare(
+    pub fn reshare<R: Rng + CryptoRng>(
         transcript: NiDkgTranscript,
         subnet_size_change: std::ops::RangeInclusive<isize>,
         max_subnet_size: usize,
+        rng: &mut R,
     ) -> Self {
-        let rng = &mut thread_rng();
-
         // let max_corrupt_dealers = self.0.max_corrupt_receivers();
         let max_corrupt_dealers = Self::number_of_nodes_from_usize(get_faults_tolerated(
             transcript.committee.get().len(),
@@ -424,7 +558,7 @@ impl RandomNiDkgConfig {
                 let committee = transcript.committee.get();
                 let additional_receivers_count = new_subnet_size - committee.len();
                 let additional_receivers =
-                    Self::random_node_ids_excluding(committee, additional_receivers_count);
+                    Self::random_node_ids_excluding(committee, additional_receivers_count, rng);
                 let receivers = committee.union(&additional_receivers).copied().collect();
                 // Adding of nodes means that new nodes will be added to the registry
                 // which in turn means that the registry version needs to be bumped up
@@ -502,8 +636,7 @@ impl RandomNiDkgConfig {
         self.get().receivers().get().iter().cloned().collect()
     }
 
-    pub fn random_receiver_id(&self) -> NodeId {
-        let rng = &mut thread_rng();
+    pub fn random_receiver_id<R: Rng + CryptoRng>(&self, rng: &mut R) -> NodeId {
         let receiver_vec: Vec<_> = self.receiver_ids().into_iter().collect();
         *receiver_vec.choose(rng).expect("nodes empty")
     }
@@ -512,8 +645,7 @@ impl RandomNiDkgConfig {
         self.get().dealers().get().iter().cloned().collect()
     }
 
-    pub fn random_dealer_id(&self) -> NodeId {
-        let rng = &mut thread_rng();
+    pub fn random_dealer_id<R: Rng + CryptoRng>(&self, rng: &mut R) -> NodeId {
         let dealer_vec: Vec<_> = self.dealer_ids().into_iter().collect();
         *dealer_vec.choose(rng).expect("nodes empty")
     }
@@ -525,8 +657,7 @@ impl RandomNiDkgConfig {
             .collect()
     }
 
-    fn random_node_ids(n: usize) -> BTreeSet<NodeId> {
-        let rng = &mut thread_rng();
+    fn random_node_ids<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> BTreeSet<NodeId> {
         let mut node_ids = BTreeSet::new();
         while node_ids.len() < n {
             node_ids.insert(Self::node_id(rng.gen()));
@@ -534,8 +665,11 @@ impl RandomNiDkgConfig {
         node_ids
     }
 
-    fn random_node_ids_excluding(exclusions: &BTreeSet<NodeId>, n: usize) -> BTreeSet<NodeId> {
-        let rng = &mut thread_rng();
+    fn random_node_ids_excluding<R: Rng + CryptoRng>(
+        exclusions: &BTreeSet<NodeId>,
+        n: usize,
+        rng: &mut R,
+    ) -> BTreeSet<NodeId> {
         let mut node_ids = BTreeSet::new();
         while node_ids.len() < n {
             let candidate = Self::node_id(rng.gen());
@@ -558,27 +692,56 @@ impl RandomNiDkgConfig {
 }
 
 pub struct NiDkgTestEnvironment {
-    pub crypto_components: BTreeMap<NodeId, TempCryptoComponent>,
+    pub crypto_components: BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
     pub registry_data: Arc<ProtoRegistryDataProvider>,
     pub registry: Arc<FakeRegistryClient>,
+    use_remote_vault: bool,
 }
 
 impl NiDkgTestEnvironment {
     /// Creates a new empty test environment.
+    /// The crypto components are initialized with local vaults.
     pub fn new() -> Self {
+        Self::new_impl(false)
+    }
+
+    pub fn new_with_remote_vault() -> Self {
+        Self::new_impl(true)
+    }
+
+    fn new_impl(use_remote_vault: bool) -> Self {
         let registry_data = Arc::new(ProtoRegistryDataProvider::new());
         let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
         Self {
             crypto_components: BTreeMap::new(),
             registry_data,
             registry,
+            use_remote_vault,
         }
     }
 
     /// Creates a new test environment appropriate for the given config.
-    pub fn new_for_config(config: &NiDkgConfig) -> Self {
-        let mut env = Self::new();
-        env.update_for_config(config);
+    /// The crypto components are initialized with local vaults.
+    pub fn new_for_config<R: Rng + CryptoRng>(config: &NiDkgConfig, rng: &mut R) -> Self {
+        Self::new_for_config_impl(config, false, rng)
+    }
+
+    /// Creates a new test environment appropriate for the given config.
+    /// The crypto components are initialized with remote vaults.
+    pub fn new_for_config_with_remote_vault<R: Rng + CryptoRng>(
+        config: &NiDkgConfig,
+        rng: &mut R,
+    ) -> Self {
+        Self::new_for_config_impl(config, true, rng)
+    }
+
+    fn new_for_config_impl<R: Rng + CryptoRng>(
+        config: &NiDkgConfig,
+        use_remote_vault: bool,
+        rng: &mut R,
+    ) -> Self {
+        let mut env = Self::new_impl(use_remote_vault);
+        env.update_for_config(config, rng);
         env
     }
 
@@ -589,10 +752,19 @@ impl NiDkgTestEnvironment {
     ///
     /// Additionally, for all node IDs that no longer appear in the
     /// `ni_dkg_config`, the crypto components are removed.
-    pub fn update_for_config(&mut self, ni_dkg_config: &NiDkgConfig) {
+    pub fn update_for_config<R: Rng + CryptoRng>(
+        &mut self,
+        ni_dkg_config: &NiDkgConfig,
+        rng: &mut R,
+    ) {
         let new_node_ids = self.added_nodes(ni_dkg_config);
         for node_id in new_node_ids {
-            self.add_crypto_component_and_registry_entry(ni_dkg_config, node_id);
+            self.add_crypto_component_and_registry_entry(
+                ni_dkg_config,
+                node_id,
+                self.use_remote_vault,
+                rng,
+            );
         }
         self.registry.update_to_latest_version();
         self.cleanup_unused_nodes(ni_dkg_config);
@@ -612,10 +784,31 @@ impl NiDkgTestEnvironment {
     }
 
     /// Deserializes a new `NiDkgTestEnvironment` from disk.
+    /// The crypto components are initialized with local vaults.
     ///
     /// Note that this only works if the environment was originally serialized
     /// using `save_to_dir`.
-    pub fn new_from_dir(toplevel_path: &Path) -> Self {
+    pub fn new_from_dir<R: Rng + CryptoRng>(toplevel_path: &Path, rng: &mut R) -> Self {
+        Self::new_from_dir_impl(toplevel_path, false, rng)
+    }
+
+    /// Deserializes a new `NiDkgTestEnvironment` from disk.
+    /// The crypto components are initialized with remote vaults.
+    ///
+    /// Note that this only works if the environment was originally serialized
+    /// using `save_to_dir`.
+    pub fn new_from_dir_with_remote_vault<R: Rng + CryptoRng>(
+        toplevel_path: &Path,
+        rng: &mut R,
+    ) -> Self {
+        Self::new_from_dir_impl(toplevel_path, true, rng)
+    }
+
+    fn new_from_dir_impl<R: Rng + CryptoRng>(
+        toplevel_path: &Path,
+        use_remote_vault: bool,
+        rng: &mut R,
+    ) -> Self {
         fn node_ids_from_dir_names(toplevel_path: &Path) -> BTreeMap<NodeId, PathBuf> {
             std::fs::read_dir(toplevel_path)
                 .expect("crypto_root directory doesn't exist")
@@ -642,13 +835,20 @@ impl NiDkgTestEnvironment {
             crypto_components: BTreeMap::new(),
             registry_data,
             registry,
+            use_remote_vault,
         };
         for (node_id, crypto_root) in node_ids_from_dir_names(toplevel_path) {
-            let crypto_component = TempCryptoComponent::builder()
+            let crypto_component_builder = TempCryptoComponent::builder()
                 .with_temp_dir_source(crypto_root)
                 .with_registry(Arc::clone(&ret.registry) as Arc<_>)
                 .with_node_id(node_id)
-                .build();
+                .with_rng(ChaCha20Rng::from_seed(rng.gen()));
+            let crypto_component_builder = if use_remote_vault {
+                crypto_component_builder.with_remote_vault()
+            } else {
+                crypto_component_builder
+            };
+            let crypto_component = crypto_component_builder.build();
             ret.crypto_components.insert(node_id, crypto_component);
         }
 
@@ -666,17 +866,25 @@ impl NiDkgTestEnvironment {
     }
 
     /// Adds a crypto component and a registry entry for a node
-    fn add_crypto_component_and_registry_entry(
+    fn add_crypto_component_and_registry_entry<R: Rng + CryptoRng>(
         &mut self,
         ni_dkg_config: &NiDkgConfig,
         node_id: NodeId,
+        use_remote_vault: bool,
+        rng: &mut R,
     ) {
         // Insert TempCryptoComponent
-        let temp_crypto = TempCryptoComponent::builder()
+        let temp_crypto_builder = TempCryptoComponent::builder()
             .with_registry(Arc::clone(&self.registry) as Arc<_>)
             .with_node_id(node_id)
             .with_keys(NodeKeysToGenerate::only_dkg_dealing_encryption_key())
-            .build();
+            .with_rng(ChaCha20Rng::from_seed(rng.gen()));
+        let temp_crypto_builder = if use_remote_vault {
+            temp_crypto_builder.with_remote_vault()
+        } else {
+            temp_crypto_builder
+        };
+        let temp_crypto = temp_crypto_builder.build();
         let dkg_dealing_encryption_pubkey = temp_crypto
             .current_node_public_keys()
             .expect("Failed to retrieve node public keys")

@@ -14,30 +14,25 @@
 //!
 //! Use `ic-replay --help` to find out more.
 
-use crate::cmd::{ReplayToolArgs, SubCommand};
-use crate::ingress::*;
-use crate::player::{Player, ReplayResult};
-
+use crate::{
+    cmd::{ReplayToolArgs, SubCommand},
+    ingress::*,
+    player::{Player, ReplayResult},
+};
 use ic_canister_client::{Agent, Sender};
 use ic_config::{Config, ConfigSource};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
-use ic_types::consensus::CatchUpPackage;
+use ic_protobuf::{registry::subnet::v1::InitialNiDkgTranscriptRecord, types::v1 as pb};
 use ic_types::ReplicaVersion;
 use prost::Message;
-use std::cell::RefCell;
-use std::convert::{TryFrom, TryInto};
-use std::error::Error;
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
-use std::rc::Rc;
+use std::{cell::RefCell, convert::TryFrom, rc::Rc};
 
 mod backup;
 pub mod cmd;
 pub mod ingress;
 mod mocks;
 pub mod player;
+mod registry_helper;
 mod validator;
 
 /// Replays the past blocks and creates a checkpoint of the latest state.
@@ -77,15 +72,6 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
     let res_clone = Rc::clone(&result);
     Config::run_with_temp_config(|default_config| {
         let subcmd = &args.subcmd;
-        if let Some(SubCommand::VerifySubnetCUP(cmd)) = subcmd {
-            if let Err(err) = verify_cup_signature(&cmd.cup_file, &cmd.public_key_file) {
-                println!("CUP signature verification failed: {}", err);
-                std::process::exit(1);
-            } else {
-                println!("CUP signature verification succeeded!");
-                return;
-            }
-        }
 
         let source = ConfigSource::File(args.config.unwrap_or_else(|| {
             println!("Config file is required!");
@@ -243,8 +229,7 @@ fn cmd_get_recovery_cup(
     cmd: &crate::cmd::GetRecoveryCupCmd,
 ) -> Result<(), String> {
     use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, RegistryStoreUri};
-    use ic_types::consensus::HasHeight;
-    use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTag;
+    use ic_types::{consensus::HasHeight, crypto::threshold_sig::ni_dkg::NiDkgTag};
 
     let context_time = ic_types::time::current_time();
     let time = context_time + std::time::Duration::from_secs(60);
@@ -278,9 +263,10 @@ fn cmd_get_recovery_cup(
             registry_version: registry_version.get(),
         }),
         ecdsa_initializations: vec![],
+        chain_key_initializations: vec![],
     };
 
-    let cup_proto = ic_consensus::dkg::make_registry_cup_from_cup_contents(
+    let cup = ic_consensus::dkg::make_registry_cup_from_cup_contents(
         &*player.registry,
         player.subnet_id,
         cup_contents,
@@ -289,7 +275,6 @@ fn cmd_get_recovery_cup(
     )
     .ok_or_else(|| "couldn't create a registry CUP".to_string())?;
 
-    let cup = CatchUpPackage::try_from(&cup_proto).expect("deserializing CUP failed");
     println!(
         "height: {}, time: {}, state_hash: {:?}",
         cup.height(),
@@ -300,47 +285,12 @@ fn cmd_get_recovery_cup(
     let mut file =
         std::fs::File::create(&cmd.output_file).expect("Failed to open output file for write");
     let mut bytes = Vec::<u8>::new();
+    let cup_proto = pb::CatchUpPackage::from(cup);
     cup_proto
         .encode(&mut bytes)
         .expect("Failed to encode protobuf");
     use std::io::Write;
     file.write_all(&bytes)
         .expect("Failed to write to output file");
-    Ok(())
-}
-
-fn verify_cup_signature(cup_file: &Path, public_key_file: &Path) -> Result<(), Box<dyn Error>> {
-    let mut file = File::open(cup_file)?;
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer)?;
-
-    let cup: ic_types::consensus::CatchUpPackage =
-        (&ic_protobuf::types::v1::CatchUpPackage::decode(buffer.as_slice())?).try_into()?;
-    let pk = ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key(public_key_file)?;
-
-    use ic_types::consensus::HasHeight;
-    if let Some((_, transcript)) = &cup
-        .content
-        .block
-        .as_ref()
-        .payload
-        .as_ref()
-        .as_summary()
-        .dkg
-        .current_transcripts()
-        .iter()
-        .next()
-    {
-        println!("Dealer subnet: {}", transcript.dkg_id.dealer_subnet);
-    }
-    println!("CUP height: {}", &cup.content.height());
-    println!(
-        "State hash: {}",
-        hex::encode(cup.content.clone().state_hash.get().0)
-    );
-    println!();
-
-    ic_crypto_utils_threshold_sig::verify_combined(&cup.content, &cup.signature.signature, &pk)?;
-
     Ok(())
 }

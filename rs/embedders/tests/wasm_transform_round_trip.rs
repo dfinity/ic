@@ -1,4 +1,4 @@
-use ic_embedders::wasm_utils::wasm_transform::Module;
+use ic_wasm_transform::Module;
 
 fn round_trip(testname: &str, folder: &str) {
     let filename = format!(
@@ -25,21 +25,6 @@ macro_rules! make_round_trip_tests {
             }
         )*
     };
-}
-
-mod round_trip {
-    make_round_trip_tests!(
-        "round-trip-test-data",
-        import_func,
-        data_section,
-        func,
-        func_locals,
-        table,
-        table_init,
-        globals,
-        exports,
-        start
-    );
 }
 
 /// Might as well run the round trip test on the files we use to test

@@ -1,11 +1,12 @@
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces_state_manager::{
-    CertificationMask, CertificationScope, Labeled, StateHashError, StateManager,
-    StateManagerResult, StateReader,
+    CertificationMask, CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError,
+    StateManager, StateManagerResult, StateReader,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    consensus::certification::Certification, CryptoHashOfPartialState, CryptoHashOfState, Height,
+    batch::BatchSummary, consensus::certification::Certification, CryptoHashOfPartialState,
+    CryptoHashOfState, Height,
 };
 use mockall::*;
 use std::sync::Arc;
@@ -28,6 +29,8 @@ mock! {
             &self,
             _paths: &LabeledTree<()>
         ) -> Option<(Arc<ReplicatedState>, MixedHashTree, Certification)>;
+
+        fn get_certified_state_snapshot(&self) -> Option<Box<dyn CertifiedStateSnapshot<State = <MockStateManager as StateReader>::State> + 'static>>;
     }
 
     impl StateManager for StateManager {
@@ -57,6 +60,7 @@ mock! {
             state: ReplicatedState,
             height: Height,
             scope: CertificationScope,
+            batch_summary: Option<BatchSummary>,
         );
 
         fn report_diverged_checkpoint(&self, height: Height);

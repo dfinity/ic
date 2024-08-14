@@ -1,6 +1,8 @@
 use crate::{
     common::LOG_PREFIX,
     invariants::{
+        api_boundary_node::check_api_boundary_node_invariants,
+        assignment::check_node_assignment_invariants,
         common::RegistrySnapshot,
         crypto::check_node_crypto_keys_invariants,
         endpoint::check_endpoint_invariants,
@@ -15,7 +17,8 @@ use crate::{
     registry::Registry,
 };
 
-use crate::invariants::crypto::check_node_crypto_keys_soft_invariants;
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 use ic_registry_transport::pb::v1::{registry_mutation::Type, RegistryMutation};
 
 impl Registry {
@@ -72,16 +75,10 @@ impl Registry {
         let mut result = check_node_operator_invariants(&snapshot, false);
 
         // Crypto invariants
-        // "soft" checks log the results of the checks, but do not block the operation.
-        // The flag `soft_checks_do_block` is used for easy CI-testing,
-        // and should be removed once the invariants are fully enforced.
-        let soft_checks_do_block = false;
-        if soft_checks_do_block {
-            result = result.and(check_node_crypto_keys_soft_invariants(&snapshot));
-        } else {
-            let _result = check_node_crypto_keys_soft_invariants(&snapshot);
-        }
         result = result.and(check_node_crypto_keys_invariants(&snapshot));
+
+        // Node assignment invariants
+        result = result.and(check_node_assignment_invariants(&snapshot));
 
         // Routing Table invariants
         result = result.and(check_routing_table_invariants(&snapshot));
@@ -94,6 +91,9 @@ impl Registry {
 
         // Replica version invariants
         result = result.and(check_replica_version_invariants(&snapshot));
+
+        // API Boundary Node invariant
+        result = result.and(check_api_boundary_node_invariants(&snapshot));
 
         // HostOS version invariants
         result = result.and(check_hostos_version_invariants(&snapshot));
@@ -109,7 +109,7 @@ impl Registry {
 
         if let Err(e) = result {
             panic!(
-                "{} invariant check failed with message: {}",
+                "{}invariant check failed with message: {}",
                 LOG_PREFIX, e.msg
             );
         }
@@ -122,7 +122,7 @@ impl Registry {
         let mut snapshot = self.take_latest_snapshot();
         for mutation in mutations.iter() {
             let key = &mutation.key;
-            match Type::from_i32(mutation.mutation_type).unwrap() {
+            match Type::try_from(mutation.mutation_type).unwrap() {
                 Type::Insert | Type::Update | Type::Upsert => {
                     snapshot.insert(key.to_vec(), mutation.value.clone());
                 }
@@ -154,7 +154,6 @@ mod tests {
     use super::*;
     use ic_base_types::CanisterId;
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
-    use ic_nns_common::registry::encode_or_panic;
     use ic_protobuf::registry::{
         node_operator::v1::NodeOperatorRecord,
         routing_table::v1::{
@@ -170,20 +169,22 @@ mod tests {
         delete, insert,
         pb::v1::{RegistryAtomicMutateRequest, RegistryMutation},
     };
-    use ic_test_utilities::types::ids::subnet_test_id;
+    use ic_test_utilities_types::ids::subnet_test_id;
     use maplit::btreemap;
+    use prost::Message;
     use std::collections::BTreeMap;
     use std::convert::TryFrom;
 
     fn empty_mutation() -> Vec<u8> {
-        encode_or_panic(&RegistryAtomicMutateRequest {
+        RegistryAtomicMutateRequest {
             mutations: vec![RegistryMutation {
                 mutation_type: Type::Upsert as i32,
                 key: "_".into(),
                 value: "".into(),
             }],
             preconditions: vec![],
-        })
+        }
+        .encode_to_vec()
     }
 
     #[test]
@@ -246,14 +247,15 @@ mod tests {
     #[should_panic(expected = "No routing table in snapshot")]
     fn routing_table_invariants_do_not_hold() {
         let key = make_node_operator_record_key(*TEST_USER1_PRINCIPAL);
-        let value = encode_or_panic(&NodeOperatorRecord {
+        let value = NodeOperatorRecord {
             node_operator_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             node_allowance: 0,
             node_provider_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             dc_id: "".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
-        });
+        }
+        .encode_to_vec();
         let registry = Registry::new();
         let mutation = vec![insert(key.as_bytes(), value)];
         registry.check_global_state_invariants(&mutation);
@@ -263,23 +265,23 @@ mod tests {
     #[should_panic(expected = "not hosted by any subnet")]
     fn invalid_canister_migrations_invariants_check_panic() {
         let routing_table = RoutingTable::try_from(btreemap! {
-        CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => subnet_test_id(1),
-        CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => subnet_test_id(2),
-        CanisterIdRange{ start: CanisterId::from(0x200), end: CanisterId::from(0x2ff) } => subnet_test_id(3),
-    }).unwrap();
+            CanisterIdRange{ start: CanisterId::from(0x0), end: CanisterId::from(0xff) } => subnet_test_id(1),
+            CanisterIdRange{ start: CanisterId::from(0x100), end: CanisterId::from(0x1ff) } => subnet_test_id(2),
+            CanisterIdRange{ start: CanisterId::from(0x200), end: CanisterId::from(0x2ff) } => subnet_test_id(3),
+        }).unwrap();
 
         let routing_table = PbRoutingTable::from(routing_table);
         let key1 = make_routing_table_record_key();
-        let value1 = encode_or_panic(&routing_table);
+        let value1 = routing_table.encode_to_vec();
 
         // The canister ID range {0x200:0x2ff} in `canister_migrations` is not hosted by any subnet in trace according to the routing table.
         let canister_migrations = CanisterMigrations::try_from(btreemap! {
-        CanisterIdRange{ start: CanisterId::from(0x200), end: CanisterId::from(0x2ff) } => vec![subnet_test_id(1), subnet_test_id(2)],
-    }).unwrap();
+            CanisterIdRange{ start: CanisterId::from(0x200), end: CanisterId::from(0x2ff) } => vec![subnet_test_id(1), subnet_test_id(2)],
+        }).unwrap();
 
         let canister_migrations = PbCanisterMigrations::from(canister_migrations);
         let key2 = make_canister_migrations_record_key();
-        let value2 = encode_or_panic(&canister_migrations);
+        let value2 = canister_migrations.encode_to_vec();
 
         let mutations = vec![
             insert(key1.as_bytes(), value1),
@@ -293,17 +295,18 @@ mod tests {
     #[test]
     fn snapshot_reflects_latest_registry_state() {
         let key1 = make_routing_table_record_key();
-        let value1 = encode_or_panic(&PbRoutingTable { entries: vec![] });
+        let value1 = PbRoutingTable { entries: vec![] }.encode_to_vec();
 
         let key2 = make_node_operator_record_key(*TEST_USER1_PRINCIPAL);
-        let value2 = encode_or_panic(&NodeOperatorRecord {
+        let value2 = NodeOperatorRecord {
             node_operator_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             node_allowance: 0,
             node_provider_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             dc_id: "".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
-        });
+        }
+        .encode_to_vec();
 
         let mutations = vec![
             insert(key1.as_bytes(), &value1),
@@ -323,14 +326,15 @@ mod tests {
     #[test]
     fn snapshot_data_are_updated() {
         let key = make_node_operator_record_key(*TEST_USER1_PRINCIPAL);
-        let value = encode_or_panic(&NodeOperatorRecord {
+        let value = NodeOperatorRecord {
             node_operator_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             node_allowance: 0,
             node_provider_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             dc_id: "".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
-        });
+        }
+        .encode_to_vec();
         let mut mutations = vec![insert(key.as_bytes(), &value)];
 
         let registry = Registry::new();

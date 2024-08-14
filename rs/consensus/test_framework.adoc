@@ -27,7 +27,7 @@ A `ConsensusInstance` simulates the behavior of a single node in a sub-network.
 === Consensus Runner
 
 A `ConsensusRunner` manages the execution of a collection of `ConsensusInstance` in a broadcast network, relaying messages that are sent from one to the others.
-To ensure that any tests written with the consensus runner are reproducible, it has to use determinstic message delivery and execution strategies,
+To ensure that any tests written with the consensus runner are reproducible, it has to use deterministic message delivery and execution strategies,
 which may come from pseudo-randomness seeded by a fixed seed.
 An obvious implementation choice is to run everything a single thread, but multi-threaded execution is also possible.
 
@@ -114,7 +114,7 @@ The actual simulation may allow a certain percentage of messages to take longer 
 
 Once an instance receives new messages in its input queue, it can start executing.
 To satisfy the timing requirement, we also associate a local clock for each node instance `i`, called `clock~i~`.
-All nodes have to process messages in a monotonic order as decribed below:
+All nodes have to process messages in a monotonic order as described below:
 
 1. Pick an instance whose input queue is not empty.
 2. Pick a message `m~in(i)~` with smallest timestamp value, and insert into consensus pool of the `ConsensusDriver`.

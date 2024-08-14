@@ -12,12 +12,12 @@ use crate::{
     IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, IC_STATE_EXCLUDES, NEW_IC_STATE, READONLY,
 };
 use ic_artifact_pool::certification_pool::CertificationPoolImpl;
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, NodeId, PrincipalId};
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::certification::CertificationPool;
 use ic_metrics::MetricsRegistry;
 use ic_replay::cmd::{GetRecoveryCupCmd, SubCommand};
-use ic_types::{artifact::CertificationMessage, Height, SubnetId};
+use ic_types::{consensus::certification::CertificationMessage, Height, SubnetId};
 use slog::{debug, info, warn, Logger};
 use std::{collections::HashMap, net::IpAddr, path::PathBuf, process::Command, thread, time};
 
@@ -136,6 +136,7 @@ impl Step for MergeCertificationPoolsStep {
             .flat_map(|r| r.map_err(|e| warn!(self.logger, "Failed to read dir: {:?}", e)))
             .map(|dir| {
                 let pool = CertificationPoolImpl::new(
+                    NodeId::from(PrincipalId::new_anonymous()),
                     ArtifactPoolConfig::new(dir.path()),
                     self.logger.clone().into(),
                     MetricsRegistry::new(),
@@ -148,6 +149,7 @@ impl Step for MergeCertificationPoolsStep {
 
         // Analyze and move full certifications
         let new_pool = CertificationPoolImpl::new(
+            NodeId::from(PrincipalId::new_anonymous()),
             ArtifactPoolConfig::new(self.work_dir.join("data/ic_consensus_pool")),
             self.logger.clone().into(),
             MetricsRegistry::new(),
@@ -185,7 +187,7 @@ impl Step for MergeCertificationPoolsStep {
         if let Some(cert) = max_full_cert.as_ref() {
             info!(
                 self.logger,
-                "Maximum full certification height accross all nodes: {}, hash: {:?}",
+                "Maximum full certification height across all nodes: {}, hash: {:?}",
                 cert.height,
                 cert.signed.content.hash
             );
@@ -392,6 +394,7 @@ pub struct ReplayStep {
     pub config: PathBuf,
     pub subcmd: Option<ReplaySubCmd>,
     pub canister_caller_id: Option<CanisterId>,
+    pub replay_until_height: Option<u64>,
     pub result: PathBuf,
 }
 
@@ -399,10 +402,13 @@ impl Step for ReplayStep {
     fn descr(&self) -> String {
         let checkpoint_path = self.work_dir.join("data").join(IC_CHECKPOINTS_PATH);
         let mut base = format!(
-            "Delete old checkpoints found in {}, and execute:\nic-replay {} --subnet-id {:?}",
+            "Delete old checkpoints found in {}, and execute:\nic-replay {} --subnet-id {:?}{}",
             checkpoint_path.display(),
             self.config.display(),
             self.subnet_id,
+            self.replay_until_height
+                .map(|h| format!(" --replay-until-height {h}"))
+                .unwrap_or_default()
         );
         if let Some(subcmd) = &self.subcmd {
             base.push_str(&subcmd.descr);
@@ -422,6 +428,7 @@ impl Step for ReplayStep {
             self.canister_caller_id,
             self.work_dir.join("data"),
             self.subcmd.as_ref().map(|c| c.cmd.clone()),
+            self.replay_until_height,
             self.result.clone(),
         ))?;
 
@@ -540,7 +547,8 @@ impl Step for UploadAndRestartStep {
 
         let [max_checkpoint] = checkpoints.as_slice() else {
             return Err(RecoveryError::invalid_output_error(
-                "Found multiple checkpoints in upload directory"));
+                "Found multiple checkpoints in upload directory",
+            ));
         };
 
         if self.check_ic_replay_height {
@@ -711,6 +719,7 @@ impl Step for UpdateLocalStoreStep {
             None,
             self.work_dir.join("data"),
             Some(SubCommand::UpdateRegistryLocalStore),
+            None,
             self.work_dir.join("update_local_store.txt"),
         ))?;
         Ok(())
@@ -751,6 +760,7 @@ impl Step for GetRecoveryCUPStep {
                 registry_store_sha256: None,
                 output_file: self.work_dir.join("cup.proto"),
             })),
+            None,
             self.result.clone(),
         ))?;
         Ok(())
@@ -821,7 +831,7 @@ cd {};
 OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/ic_registry_local_store);
 GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/ic_registry_local_store);
 mkdir ic_registry_local_store;
-tar zxf ic_registry_local_store.tar.gz -C ic_registry_local_store;
+tar zxf ic_registry_local_store.tar.zst -C ic_registry_local_store;
 sudo chown -R "$OWNER_UID:$GROUP_UID" ic_registry_local_store;
 OWNER_UID=$(sudo stat -c '%u' /var/lib/ic/data/cups);
 GROUP_UID=$(sudo stat -c '%g' /var/lib/ic/data/cups);
@@ -889,7 +899,10 @@ impl Step for UploadCUPAndTar {
                 rsync(
                     &self.logger,
                     Vec::<String>::default(),
-                    &format!("{}/ic_registry_local_store.tar.gz", self.work_dir.display()),
+                    &format!(
+                        "{}/ic_registry_local_store.tar.zst",
+                        self.work_dir.display()
+                    ),
                     &target,
                     self.require_confirmation,
                     self.key_file.as_ref(),
@@ -1028,10 +1041,8 @@ impl Step for UploadAndHostTarStep {
 
 #[cfg(test)]
 mod tests {
-    use ic_test_utilities::{
-        consensus::fake::{Fake, FakeSigner},
-        types::ids::node_test_id,
-    };
+    use ic_test_utilities_consensus::fake::{Fake, FakeSigner};
+    use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
         consensus::certification::{Certification, CertificationContent, CertificationShare},
         crypto::{CryptoHash, Signed},
@@ -1041,7 +1052,7 @@ mod tests {
 
     use super::*;
 
-    fn make_certifcation(height: u64, hash: Vec<u8>) -> CertificationMessage {
+    fn make_certification(height: u64, hash: Vec<u8>) -> CertificationMessage {
         CertificationMessage::Certification(Certification {
             height: Height::from(height),
             signed: Signed {
@@ -1067,11 +1078,13 @@ mod tests {
         let tmp = tempfile::tempdir().expect("Could not create a temp dir");
         let work_dir = tmp.path().to_path_buf();
         let pool1 = CertificationPoolImpl::new(
+            node_test_id(0),
             ArtifactPoolConfig::new(work_dir.join("certifications/ip1")),
             logger.clone().into(),
             MetricsRegistry::new(),
         );
         let pool2 = CertificationPoolImpl::new(
+            node_test_id(0),
             ArtifactPoolConfig::new(work_dir.join("certifications/ip2")),
             logger.clone().into(),
             MetricsRegistry::new(),
@@ -1106,20 +1119,20 @@ mod tests {
 
         // Add two different certifications for height 1 to both pools,
         // only one of them should be kept after the merge.
-        let cert1 = make_certifcation(1, vec![1, 2, 3]);
-        let cert1_2 = make_certifcation(1, vec![4, 5, 6]);
+        let cert1 = make_certification(1, vec![1, 2, 3]);
+        let cert1_2 = make_certification(1, vec![4, 5, 6]);
         pool1.persistent_pool.insert(cert1);
         pool2.persistent_pool.insert(cert1_2);
 
         // Add the same certification for height 2 to both pools,
         // it should only exists in the merged pool once.
-        let cert2 = make_certifcation(2, vec![1, 2, 3]);
+        let cert2 = make_certification(2, vec![1, 2, 3]);
         pool1.persistent_pool.insert(cert2.clone());
         pool2.persistent_pool.insert(cert2);
 
         // Add two more certifications for heights 3 and 4, one to each pool.
-        let cert3 = make_certifcation(3, vec![1, 2, 3]);
-        let cert4 = make_certifcation(4, vec![1, 2, 3]);
+        let cert3 = make_certification(3, vec![1, 2, 3]);
+        let cert4 = make_certification(4, vec![1, 2, 3]);
         pool1.persistent_pool.insert(cert4);
         pool2.persistent_pool.insert(cert3);
 
@@ -1131,6 +1144,7 @@ mod tests {
         step.exec().expect("Failed to execute step.");
 
         let new_pool = CertificationPoolImpl::new(
+            node_test_id(0),
             ArtifactPoolConfig::new(work_dir.join("data/ic_consensus_pool")),
             logger.clone().into(),
             MetricsRegistry::new(),
@@ -1167,14 +1181,14 @@ mod tests {
             work_dir: work_dir.clone(),
         };
 
-        // Add a full certification at height 4
-        let cert4 = make_certifcation(4, vec![1, 2, 3]);
+        // Add a full certification at height 4.
+        let cert4 = make_certification(4, vec![1, 2, 3]);
 
-        // Shares below or equal to the heighest full share should be ignored.
+        // Shares below or equal to the highest full share should be ignored.
         let share3 = make_share(3, vec![3], 1);
         let share4 = make_share(4, vec![4], 2);
 
-        // These shares should be included in the new pool
+        // These shares should be included in the new pool.
         let share5 = make_share(5, vec![5], 1);
         let share6 = make_share(6, vec![6], 1);
         let share6_2 = make_share(6, vec![6, 2], 2);
@@ -1191,6 +1205,7 @@ mod tests {
         step.exec().expect("Failed to execute step.");
 
         let new_pool = CertificationPoolImpl::new(
+            node_test_id(0),
             ArtifactPoolConfig::new(work_dir.join("data/ic_consensus_pool")),
             logger.clone().into(),
             MetricsRegistry::new(),

@@ -1,0 +1,20 @@
+[package]
+name = "ic-neurons-fund"
+version = "0.0.1"
+edition = "2021"
+
+[lib]
+name = "ic_neurons_fund"
+
+[dependencies]
+ic-nervous-system-common = { path = "../../nervous_system/common" }
+lazy_static = { workspace = true }
+rust_decimal = "1.25"
+rust_decimal_macros = "1.25"
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+assert_matches = { workspace = true }
+proptest = "1.0"
+serde_bytes = { workspace = true }

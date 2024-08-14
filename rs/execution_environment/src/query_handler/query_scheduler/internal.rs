@@ -7,6 +7,7 @@ use std::{
 use ic_base_types::CanisterId;
 use ic_metrics::{buckets::decimal_buckets_with_zero, MetricsRegistry};
 use prometheus::Histogram;
+use tracing::instrument;
 
 /// An estimate of the average query execution duration. It is used at the
 /// start when there are no stats about the actual query execution duration.
@@ -34,6 +35,7 @@ impl QuerySchedulerMetrics {
 pub(crate) struct Query(pub Box<dyn FnOnce() -> Duration + Send + 'static>);
 
 impl Query {
+    #[instrument(skip_all)]
     pub fn execute(self) -> Duration {
         self.0()
     }
@@ -224,7 +226,7 @@ impl QuerySchedulerCore {
         canister.average_query_duration =
             (canister.average_query_duration + average_query_duration) / 2;
 
-        canister.leftover.extend(leftover.into_iter());
+        canister.leftover.extend(leftover);
         canister.active_threads -= 1;
 
         if !canister.has_been_scheduled

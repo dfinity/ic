@@ -1,6 +1,7 @@
 use super::*;
 use crate::models::amount::signed_amount;
-use crate::models::operation::{OperationIdentifier, OperationType};
+use crate::models::operation::OperationType;
+use crate::models::OperationIdentifier;
 use crate::request_types::Stake;
 use crate::DEFAULT_TOKEN_SYMBOL;
 use icp_ledger::AccountIdentifier;
@@ -8,10 +9,10 @@ use icp_ledger::Operation as LedgerOperation;
 
 struct OperationBuilder(Operation);
 impl OperationBuilder {
-    fn new(idx: i64, _type: OperationType) -> Self {
+    fn new(idx: u64, _type: OperationType) -> Self {
         Self(Operation {
             operation_identifier: OperationIdentifier::new(idx),
-            _type,
+            type_: _type.to_string(),
             status: None,
             account: None,
             amount: None,
@@ -65,6 +66,7 @@ fn test_transfer_requests_to_operations() {
             &[Request::Transfer(LedgerOperation::Transfer {
                 from: test_account(1),
                 to: test_account(2),
+                spender: None,
                 amount: Tokens::from_e8s(100),
                 fee: Tokens::from_e8s(10),
             })],
@@ -95,6 +97,7 @@ fn test_transfer_and_stake_requests_to_operations() {
                 Request::Transfer(LedgerOperation::Transfer {
                     from: test_account(1),
                     to: test_account(2),
+                    spender: None,
                     amount: Tokens::from_e8s(100),
                     fee: Tokens::from_e8s(10),
                 }),
@@ -134,12 +137,14 @@ fn test_can_handle_multiple_transfers() {
                 Request::Transfer(LedgerOperation::Transfer {
                     from: test_account(1),
                     to: test_account(2),
+                    spender: None,
                     amount: Tokens::from_e8s(100),
                     fee: Tokens::from_e8s(10),
                 }),
                 Request::Transfer(LedgerOperation::Transfer {
                     from: test_account(3),
                     to: test_account(4),
+                    spender: None,
                     amount: Tokens::from_e8s(200),
                     fee: Tokens::from_e8s(20),
                 }),

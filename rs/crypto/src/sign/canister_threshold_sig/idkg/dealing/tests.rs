@@ -26,94 +26,109 @@ mod verify_dealing_public {
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation;
     use ic_types::crypto::canister_threshold_sig::idkg::InitialIDkgDealings;
     use ic_types::crypto::KeyPurpose::NodeSigning;
-    use ic_types::crypto::{CryptoError, Signable};
+    use ic_types::crypto::{AlgorithmId, CryptoError, Signable};
     use ic_types::registry::RegistryClientError;
+    use rand::Rng;
 
     #[test]
     fn should_fail_on_reproducible_registry_error() {
-        let mut rng = reproducible_rng();
-        let registry_client_error = RegistryClientError::DecodeError {
-            error: "decode error".to_string(),
-        };
-        let setup = Setup::new_with_registry_client_get_value_error(
-            registry_client_error.clone(),
-            &mut rng,
-        );
+        let rng = &mut reproducible_rng();
 
-        assert_matches!(
-            verify_dealing_public(
-                &setup.csp,
-                &setup.registry_client,
-                setup.idkg_dealings.params(),
-                setup.idkg_dealings
-                    .dealings()
-                    .first()
-                    .expect("should contain a dealing"),
-            ),
-            Err(IDkgVerifyDealingPublicError::InvalidSignature {
-                error,
-                crypto_error
-            })
-            if error.contains("Invalid basic signature on signed iDKG dealing")
-                && crypto_error == CryptoError::RegistryClient(registry_client_error)
-                && crypto_error.is_reproducible()
-        );
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            let registry_client_error = RegistryClientError::DecodeError {
+                error: "decode error".to_string(),
+            };
+
+            let setup = Setup::new_with_registry_client_get_value_error(
+                alg,
+                registry_client_error.clone(),
+                rng,
+            );
+
+            assert_matches!(
+                verify_dealing_public(
+                    &setup.csp,
+                    &setup.registry_client,
+                    setup.idkg_dealings.params(),
+                    setup.idkg_dealings
+                        .dealings()
+                        .first()
+                        .expect("should contain a dealing"),
+                ),
+                Err(IDkgVerifyDealingPublicError::InvalidSignature {
+                    error,
+                    crypto_error
+                })
+                    if error.contains("Invalid basic signature on signed iDKG dealing")
+                    && crypto_error == CryptoError::RegistryClient(registry_client_error)
+                    && crypto_error.is_reproducible()
+            );
+        }
     }
 
     #[test]
     fn should_fail_on_not_necessarily_reproducible_registry_error() {
-        let mut rng = reproducible_rng();
-        let registry_client_error = RegistryClientError::VersionNotAvailable {
-            version: RegistryVersion::from(42),
-        };
-        let setup = Setup::new_with_registry_client_get_value_error(
-            registry_client_error.clone(),
-            &mut rng,
-        );
+        let rng = &mut reproducible_rng();
 
-        assert_matches!(
-            verify_dealing_public(
-                &setup.csp,
-                &setup.registry_client,
-                setup.idkg_dealings.params(),
-                setup.idkg_dealings
-                    .dealings()
-                    .first()
-                    .expect("should contain a dealing"),
-            ),
-            Err(IDkgVerifyDealingPublicError::InvalidSignature {
-                error,
-                crypto_error
-            })
-            if error.contains("Invalid basic signature on signed iDKG dealing")
-                && crypto_error == CryptoError::RegistryClient(registry_client_error)
-                && !crypto_error.is_reproducible()
-        );
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            let registry_client_error = RegistryClientError::VersionNotAvailable {
+                version: RegistryVersion::from(rng.gen::<u32>() as u64),
+            };
+
+            let setup = Setup::new_with_registry_client_get_value_error(
+                alg,
+                registry_client_error.clone(),
+                rng,
+            );
+
+            assert_matches!(
+                verify_dealing_public(
+                    &setup.csp,
+                    &setup.registry_client,
+                    setup.idkg_dealings.params(),
+                    setup.idkg_dealings
+                        .dealings()
+                        .first()
+                        .expect("should contain a dealing"),
+                ),
+                Err(IDkgVerifyDealingPublicError::InvalidSignature {
+                    error,
+                    crypto_error
+                })
+                    if error.contains("Invalid basic signature on signed iDKG dealing")
+                    && crypto_error == CryptoError::RegistryClient(registry_client_error)
+                    && !crypto_error.is_reproducible()
+            );
+        }
     }
 
     #[test]
     fn should_fail_if_deserializing_operation_fails() {
-        let mut rng = reproducible_rng();
-        let setup = Setup::new_with_dealer(node_id(37), valid_node_signing_public_key(), &mut rng);
+        let rng = &mut reproducible_rng();
 
-        // The deserialization of the operation fails if `internal_transcript_raw` is empty
-        assert_matches!(
-            setup.idkg_dealings.params().operation_type(),
-            IDkgTranscriptOperation::ReshareOfUnmasked(idkg_transcript)
-            if idkg_transcript.internal_transcript_raw.is_empty()
-        );
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            let setup =
+                Setup::new_with_dealer(alg, node_id(37), valid_node_signing_public_key(), rng);
 
-        // The error returned if the deserialization of the operation fails is `InvalidDealing`
-        assert_matches!(
-            verify_dealing_public(
-                &setup.csp,
-                &setup.registry_client,
-                setup.idkg_dealings.params(),
-                &setup.signed_dealing.expect("should have a signed dealing")
-            ),
-            Err(IDkgVerifyDealingPublicError::InvalidDealing { reason })
-            if reason.contains("EOF while parsing a value")
-        );
+            // The deserialization of the operation fails if `internal_transcript_raw` is empty
+            assert_matches!(
+                setup.idkg_dealings.params().operation_type(),
+                IDkgTranscriptOperation::ReshareOfUnmasked(idkg_transcript)
+                    if idkg_transcript.internal_transcript_raw.is_empty()
+            );
+
+            // The error returned if the deserialization of the operation fails is `InvalidDealing`
+            assert_matches!(
+                verify_dealing_public(
+                    &setup.csp,
+                    &setup.registry_client,
+                    setup.idkg_dealings.params(),
+                    &setup.signed_dealing.expect("should have a signed dealing")
+                ),
+                Err(IDkgVerifyDealingPublicError::InvalidDealing { reason })
+                    if reason.contains("EOF while parsing a value")
+            );
+        }
     }
 
     struct Setup {
@@ -125,6 +140,7 @@ mod verify_dealing_public {
 
     impl Setup {
         fn new_with_registry_client_get_value_error(
+            alg: AlgorithmId,
             registry_client_error: RegistryClientError,
             rng: &mut ReproducibleRng,
         ) -> Self {
@@ -136,18 +152,19 @@ mod verify_dealing_public {
             csp.expect_verify().never();
             Setup {
                 registry_client,
-                idkg_dealings: dummy_initial_idkg_dealing_for_tests(rng),
+                idkg_dealings: dummy_initial_idkg_dealing_for_tests(alg, rng),
                 csp,
                 signed_dealing: None,
             }
         }
 
         fn new_with_dealer(
+            alg: AlgorithmId,
             dealer_id: NodeId,
             dealer_node_signing_public_key_proto: PublicKey,
             rng: &mut ReproducibleRng,
         ) -> Self {
-            let idkg_dealings = dummy_initial_idkg_dealing_for_tests(rng);
+            let idkg_dealings = dummy_initial_idkg_dealing_for_tests(alg, rng);
             let mut node_signing_public_key_bytes = Vec::new();
             dealer_node_signing_public_key_proto
                 .encode(&mut node_signing_public_key_bytes)

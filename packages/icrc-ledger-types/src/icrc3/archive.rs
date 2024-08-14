@@ -5,21 +5,46 @@ use super::{
     transactions::{GetTransactionsRequest, TransactionRange},
 };
 use candid::{CandidType, Deserialize, Nat, Principal};
+use serde::Serialize;
 use std::marker::PhantomData;
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ArchivedRange<Callback> {
     pub start: Nat,
     pub length: Nat,
     pub callback: Callback,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(try_from = "candid::types::reference::Func")]
 pub struct QueryArchiveFn<Input: CandidType, Output: CandidType> {
     pub canister_id: Principal,
     pub method: String,
     pub _marker: PhantomData<(Input, Output)>,
+}
+
+impl<Input, Output> PartialOrd for QueryArchiveFn<Input, Output>
+where
+    Input: CandidType + Eq,
+    Output: CandidType + Eq,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<Input, Output> Ord for QueryArchiveFn<Input, Output>
+where
+    Input: CandidType + Eq,
+    Output: CandidType + Eq,
+{
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self.canister_id.cmp(&other.canister_id) {
+            std::cmp::Ordering::Equal => self.method.cmp(&other.method),
+            c => c,
+        }
+        // the _marker doesn't matter
+    }
 }
 
 impl<Input: CandidType, Output: CandidType> QueryArchiveFn<Input, Output> {
@@ -72,11 +97,7 @@ impl<Input: CandidType, Output: CandidType> TryFrom<candid::types::reference::Fu
 
 impl<Input: CandidType, Output: CandidType> CandidType for QueryArchiveFn<Input, Output> {
     fn _ty() -> candid::types::Type {
-        candid::types::Type::Func(candid::types::Function {
-            modes: vec![candid::parser::types::FuncMode::Query],
-            args: vec![Input::_ty()],
-            rets: vec![Output::_ty()],
-        })
+        candid::func!((Input) -> (Output) query)
     }
 
     fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
@@ -87,7 +108,7 @@ impl<Input: CandidType, Output: CandidType> CandidType for QueryArchiveFn<Input,
     }
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ArchiveInfo {
     pub canister_id: Principal,
     pub block_range_start: BlockIndex,
@@ -95,3 +116,26 @@ pub struct ArchiveInfo {
 }
 pub type QueryBlockArchiveFn = QueryArchiveFn<GetBlocksRequest, BlockRange>;
 pub type QueryTxArchiveFn = QueryArchiveFn<GetTransactionsRequest, TransactionRange>;
+
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct GetArchivesArgs {
+    // The last archive seen by the client.
+    // The Ledger will return archives coming
+    // after this one if set, otherwise it
+    // will return the first archives.
+    pub from: Option<Principal>,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct ICRC3ArchiveInfo {
+    // The id of the archive
+    pub canister_id: Principal,
+
+    // The first block in the archive
+    pub start: Nat,
+
+    // The last block in the archive
+    pub end: Nat,
+}
+
+pub type GetArchivesResult = Vec<ICRC3ArchiveInfo>;

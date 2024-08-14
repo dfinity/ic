@@ -12,7 +12,7 @@ use crate::wasm_utils::{
 };
 
 /// A `wasmtime::Module` that has been serialized.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct SerializedModuleBytes(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl TryFrom<&Module> for SerializedModuleBytes {
@@ -51,7 +51,7 @@ impl SerializedModuleBytes {
 /// Contains all data needed to construct a canister's execution state and
 /// execute messages against it. If the execution state already exists, then
 /// only the `bytes` field is needed to handle execution.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct SerializedModule {
     /// The serialized `wasmtime::Module`. This field is wrapped in an `Arc` so
     /// that it can be cheaply moved out of the `SerializedModule` in the cases
@@ -69,11 +69,6 @@ pub struct SerializedModule {
     pub compilation_cost: NumInstructions,
     /// Imported System API functions that are deprecated, should become deprecated, or should only be used by NNS canisters.
     pub imports_details: WasmImportsDetails,
-    /// The number of exported functions that are not in the list of
-    /// allowed exports and whose name starts with the reserved
-    /// "canister_" prefix.
-    /// TODO(EXC-350): Remove this once we confirm that no reserved functions are exported by existing canisters.
-    pub reserved_exports: usize,
 }
 
 impl CountBytes for SerializedModule {
@@ -96,7 +91,6 @@ impl SerializedModule {
             wasm_metadata: validation_details.wasm_metadata,
             compilation_cost: instrumentation_output.compilation_cost,
             imports_details: validation_details.imports_details,
-            reserved_exports: validation_details.reserved_exports,
         })
     }
 

@@ -14,9 +14,8 @@ use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
-#[cfg(test)]
-use ic_crypto_internal_threshold_sig_ecdsa::EccScalarBytes;
 use ic_crypto_internal_threshold_sig_ecdsa::{CommitmentOpeningBytes, MEGaKeySetK256Bytes};
+use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
 use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
 use ic_types::crypto::AlgorithmId;
 use serde::{Deserialize, Serialize};
@@ -27,26 +26,19 @@ pub mod conversions;
 mod external_conversion_utilities;
 
 #[cfg(test)]
+use ic_crypto_internal_threshold_sig_ecdsa::EccScalarBytes;
+#[cfg(test)]
+use proptest::prelude::*;
+#[cfg(test)]
 use proptest_derive::Arbitrary;
 
+#[cfg(test)]
 mod test_utils;
 #[cfg(test)]
 mod tests;
 
-use ic_crypto_internal_tls::keygen::TlsEd25519SecretKeyDerBytes;
-
 #[cfg(test)]
-use test_utils::{
-    arbitrary_ecdsa_secp256k1_public_key, arbitrary_ecdsa_secp256r1_public_key,
-    arbitrary_ecdsa_secp256r1_signature, arbitrary_ed25519_public_key,
-    arbitrary_ed25519_secret_key, arbitrary_ed25519_signature, arbitrary_fs_encryption_key_set,
-    arbitrary_mega_k256_encryption_key_set, arbitrary_multi_bls12381_combined_signature,
-    arbitrary_multi_bls12381_individual_signature, arbitrary_multi_bls12381_public_key,
-    arbitrary_multi_bls12381_secret_key, arbitrary_rsa_public_key, arbitrary_secp256k1_signature,
-    arbitrary_threshold_bls12381_combined_signature,
-    arbitrary_threshold_bls12381_individual_signature, arbitrary_threshold_bls12381_secret_key,
-    arbitrary_threshold_ecdsa_opening, arbitrary_tls_ed25519_secret_key,
-};
+use test_utils::*;
 
 pub use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
 
@@ -58,19 +50,19 @@ pub use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspP
 )]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum CspSecretKey {
-    #[cfg_attr(test, proptest(value(arbitrary_ed25519_secret_key)))]
+    #[cfg_attr(test, proptest(strategy(arbitrary_ed25519_secret_key)))]
     Ed25519(ed25519_types::SecretKeyBytes),
-    #[cfg_attr(test, proptest(value(arbitrary_multi_bls12381_secret_key)))]
+    #[cfg_attr(test, proptest(strategy(arbitrary_multi_bls12381_secret_key)))]
     MultiBls12_381(multi_types::SecretKeyBytes),
-    #[cfg_attr(test, proptest(value(arbitrary_threshold_bls12381_secret_key)))]
+    #[cfg_attr(test, proptest(strategy(arbitrary_threshold_bls12381_secret_key)))]
     ThresBls12_381(threshold_types::SecretKeyBytes),
-    #[cfg_attr(test, proptest(value(arbitrary_tls_ed25519_secret_key)))]
+    #[cfg_attr(test, proptest(strategy(arbitrary_tls_ed25519_secret_key)))]
     TlsEd25519(TlsEd25519SecretKeyDerBytes),
-    #[cfg_attr(test, proptest(value(arbitrary_fs_encryption_key_set)))]
+    #[cfg_attr(test, proptest(value(default_fs_encryption_key_set)))]
     FsEncryption(CspFsEncryptionKeySet),
-    #[cfg_attr(test, proptest(value(arbitrary_mega_k256_encryption_key_set)))]
+    #[cfg_attr(test, proptest(strategy(arbitrary_mega_k256_encryption_key_set)))]
     MEGaEncryptionK256(MEGaKeySetK256Bytes),
-    #[cfg_attr(test, proptest(value(arbitrary_threshold_ecdsa_opening)))]
+    #[cfg_attr(test, proptest(strategy(arbitrary_threshold_ecdsa_opening)))]
     IDkgCommitmentOpening(CommitmentOpeningBytes),
 }
 
@@ -94,21 +86,18 @@ impl std::fmt::Debug for CspSecretKey {
             CspSecretKey::MEGaEncryptionK256(_) => {
                 write!(f, "CspSecretKey::MEGaEncryptionK256 - REDACTED")
             }
-            Self::IDkgCommitmentOpening(CommitmentOpeningBytes::Simple(EccScalarBytes::K256(
-                _,
-            ))) => {
+            Self::IDkgCommitmentOpening(CommitmentOpeningBytes::Simple(s)) => {
                 write!(
                     f,
-                    "CspSecretKey::IDkgCommitmentOpening::Simple::K256 - REDACTED"
+                    "CspSecretKey::IDkgCommitmentOpening::Simple::{} - REDACTED",
+                    s.curve_type(),
                 )
             }
-            Self::IDkgCommitmentOpening(CommitmentOpeningBytes::Pedersen(
-                EccScalarBytes::K256(_),
-                EccScalarBytes::K256(_),
-            )) => {
+            Self::IDkgCommitmentOpening(CommitmentOpeningBytes::Pedersen(s, _)) => {
                 write!(
                     f,
-                    "CspSecretKey::IDkgCommitmentOpening::Pedersen::K256 - REDACTED"
+                    "CspSecretKey::IDkgCommitmentOpening::Pedersen::{} - REDACTED",
+                    s.curve_type()
                 )
             }
         }
@@ -119,15 +108,15 @@ impl std::fmt::Debug for CspSecretKey {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum CspPublicKey {
-    #[cfg_attr(test, proptest(value(arbitrary_ecdsa_secp256r1_public_key)))]
+    #[cfg_attr(test, proptest(strategy(arbitrary_ecdsa_secp256r1_public_key)))]
     EcdsaP256(ecdsa_secp256r1_types::PublicKeyBytes),
-    #[cfg_attr(test, proptest(value(arbitrary_ecdsa_secp256k1_public_key)))]
+    #[cfg_attr(test, proptest(strategy(arbitrary_ecdsa_secp256k1_public_key)))]
     EcdsaSecp256k1(ecdsa_secp256k1_types::PublicKeyBytes),
-    #[cfg_attr(test, proptest(value(arbitrary_ed25519_public_key)))]
+    #[cfg_attr(test, proptest(strategy(arbitrary_ed25519_public_key)))]
     Ed25519(ed25519_types::PublicKeyBytes),
-    #[cfg_attr(test, proptest(value(arbitrary_multi_bls12381_public_key)))]
+    #[cfg_attr(test, proptest(strategy(arbitrary_multi_bls12381_public_key)))]
     MultiBls12_381(multi_types::PublicKeyBytes),
-    #[cfg_attr(test, proptest(value(arbitrary_rsa_public_key)))]
+    #[cfg_attr(test, proptest(strategy(arbitrary_rsa_public_key)))]
     RsaSha256(rsa::RsaPublicKey),
 }
 
@@ -189,11 +178,11 @@ pub enum CspPop {
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub enum CspSignature {
-    #[cfg_attr(test, proptest(value(arbitrary_ecdsa_secp256r1_signature)))]
+    #[cfg_attr(test, proptest(strategy(arbitrary_ecdsa_secp256r1_signature)))]
     EcdsaP256(ecdsa_secp256r1_types::SignatureBytes),
-    #[cfg_attr(test, proptest(value(arbitrary_secp256k1_signature)))]
+    #[cfg_attr(test, proptest(strategy(arbitrary_secp256k1_signature)))]
     EcdsaSecp256k1(ecdsa_secp256k1_types::SignatureBytes),
-    #[cfg_attr(test, proptest(value(arbitrary_ed25519_signature)))]
+    #[cfg_attr(test, proptest(strategy(arbitrary_ed25519_signature)))]
     Ed25519(ed25519_types::SignatureBytes),
     MultiBls12_381(MultiBls12_381_Signature),
     ThresBls12_381(ThresBls12_381_Signature),
@@ -210,7 +199,7 @@ impl std::fmt::Debug for CspSignature {
             Ed25519(data) => write!(f, "CspSignature::Ed25519({:?})", data),
             MultiBls12_381(data) => write!(f, "CspSignature::MultiBls12_381({:?})", data),
             ThresBls12_381(data) => write!(f, "CspSignature::ThresBls12_381({:?})", data),
-            RsaSha256(data) => write!(f, "CspSignature::RsaSha256({:?})", base64::encode(&data)),
+            RsaSha256(data) => write!(f, "CspSignature::RsaSha256({:?})", base64::encode(data)),
         }
     }
 }
@@ -220,9 +209,12 @@ impl std::fmt::Debug for CspSignature {
 #[cfg_attr(test, derive(Arbitrary))]
 #[allow(non_camel_case_types)]
 pub enum MultiBls12_381_Signature {
-    #[cfg_attr(test, proptest(value(arbitrary_multi_bls12381_individual_signature)))]
+    #[cfg_attr(
+        test,
+        proptest(strategy(arbitrary_multi_bls12381_individual_signature))
+    )]
     Individual(multi_types::IndividualSignatureBytes),
-    #[cfg_attr(test, proptest(value(arbitrary_multi_bls12381_combined_signature)))]
+    #[cfg_attr(test, proptest(strategy(arbitrary_multi_bls12381_combined_signature)))]
     Combined(multi_types::CombinedSignatureBytes),
 }
 
@@ -233,10 +225,13 @@ pub enum MultiBls12_381_Signature {
 pub enum ThresBls12_381_Signature {
     #[cfg_attr(
         test,
-        proptest(value(arbitrary_threshold_bls12381_individual_signature))
+        proptest(strategy(arbitrary_threshold_bls12381_individual_signature))
     )]
     Individual(threshold_types::IndividualSignatureBytes),
-    #[cfg_attr(test, proptest(value(arbitrary_threshold_bls12381_combined_signature)))]
+    #[cfg_attr(
+        test,
+        proptest(strategy(arbitrary_threshold_bls12381_combined_signature))
+    )]
     Combined(threshold_types::CombinedSignatureBytes),
 }
 

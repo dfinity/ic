@@ -1,0 +1,63 @@
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
+load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/types/types",
+    "//rs/validator/ingress_message",
+    "@crate_index//:build-info",
+    "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:ic-cdk-macros",
+]
+
+BUILD_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:build-info-build",
+]
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    build_script_env = {
+        "CARGO_PKG_VERSION": "0.1.0",
+        "CARGO_PKG_NAME": "ic-validator-ingress-message-test-canister",
+    },
+    data = [],  # build script data (e.g. template files) goes here
+    deps = BUILD_DEPENDENCIES,
+)
+
+rust_canister(
+    name = "test_canister",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_validator_ingress_message_test_canister",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":interface.did",
+    version = "0.1.0",
+    deps = DEPENDENCIES + [":build_script"],
+)
+
+rust_ic_test(
+    name = "integration_tests",
+    srcs = ["tests/test.rs"],
+    data = [
+        ":test_canister",
+    ],
+    env = {
+        "IC_VALIDATOR_INGRESS_MESSAGE_TEST_CANISTER_WASM_PATH": "$(rootpath :test_canister)",
+    },
+    deps = [
+        # Keep sorted.
+        "//rs/rust_canisters/canister_test",
+        "//rs/state_machine_tests",
+        "//rs/types/types",
+        "@crate_index//:candid",
+    ],
+)

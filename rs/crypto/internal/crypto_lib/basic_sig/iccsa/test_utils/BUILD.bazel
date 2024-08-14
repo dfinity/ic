@@ -6,15 +6,17 @@ package(default_visibility = [
 ])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/certification/test-utils",
     "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/types/types",
-    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand",
 ]
 
 rust_library(
     name = "test_utils",
+    testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_internal_basic_sig_iccsa_test_utils",
     version = "0.1.0",

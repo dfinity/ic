@@ -20,6 +20,7 @@ use strum::IntoEnumIterator;
 /// This assumes that a set of keys has been provided and verifies that:
 /// * If the threshold signatures are used correctly, signatures verify.
 /// * If incorrect values are provided at any stage, relevant methods fail.
+///
 /// Note: We assume that all signers have been dealt keys but disqualify
 /// some as part of the test.
 ///
@@ -38,7 +39,7 @@ pub fn test_threshold_signatures(
     seed: Seed,
     message: &[u8],
 ) {
-    let mut rng = seed.into_rng();
+    let rng = &mut seed.into_rng();
     let threshold = try_number_of_nodes_from_csp_pub_coeffs(public_coefficients)
         .expect("Intolerable number of nodes");
     let incorrect_message = [&b"pound of flesh"[..], message].concat();
@@ -47,7 +48,7 @@ pub fn test_threshold_signatures(
     let signatures: Result<Vec<CspSignature>, CspThresholdSignError> = signers
         .iter()
         .map(|(csp_vault, key_id)| {
-            csp_vault.threshold_sign(AlgorithmId::ThresBls12_381, message, *key_id)
+            csp_vault.threshold_sign(AlgorithmId::ThresBls12_381, message.to_vec(), *key_id)
         })
         .collect();
     let signatures = signatures.expect("Signing failed");
@@ -56,10 +57,10 @@ pub fn test_threshold_signatures(
         // * Signatures cannot be generated with an incorrect AlgorithmId:
         for algorithm_id in AlgorithmId::iter() {
             if algorithm_id != AlgorithmId::ThresBls12_381 {
-                if let Some((csp_vault, key_id)) = signers.get(0) {
+                if let Some((csp_vault, key_id)) = signers.first() {
                     assert!(
                         csp_vault
-                            .threshold_sign(algorithm_id, message, *key_id)
+                            .threshold_sign(algorithm_id, message.to_vec(), *key_id)
                             .is_err(),
                         "Managed to threshold sign with algorithm ID {:?}",
                         algorithm_id
@@ -69,7 +70,7 @@ pub fn test_threshold_signatures(
         }
         //
         // * Signatures cannot be generated with an incorrect key_id:
-        if let Some((csp_vault, _key_id)) = signers.get(0) {
+        if let Some((csp_vault, _key_id)) = signers.first() {
             let wrong_key_id = KeyId::from(rng.gen::<[u8; 32]>());
             let mut key_ids = signers.iter().map(|(_, key_id)| *key_id);
 
@@ -79,7 +80,7 @@ pub fn test_threshold_signatures(
             );
             assert!(
                 csp_vault
-                    .threshold_sign(AlgorithmId::ThresBls12_381, message, wrong_key_id)
+                    .threshold_sign(AlgorithmId::ThresBls12_381, message.to_vec(), wrong_key_id)
                     .is_err(),
                 "A randomly generated key_id managed to sign"
             );
@@ -89,7 +90,7 @@ pub fn test_threshold_signatures(
     let verifier = Csp::builder_for_test()
         .with_vault(
             LocalCspVault::builder_for_test()
-                .with_rng(Seed::from_rng(&mut rng).into_rng())
+                .with_rng(Seed::from_rng(rng).into_rng())
                 .build(),
         )
         .build();
@@ -154,7 +155,7 @@ pub fn test_threshold_signatures(
     }
 
     // Combine a random subset of signatures:
-    let signature_selection = select_n(Seed::from_rng(&mut rng), threshold, &signatures);
+    let signature_selection = select_n(Seed::from_rng(rng), threshold, &signatures);
     let signature = verifier
         .threshold_combine_signatures(
             AlgorithmId::ThresBls12_381,
@@ -241,8 +242,8 @@ pub fn test_threshold_scheme_with_basic_keygen<R, S, C, P>(
     C: SecretKeyStore + 'static,
     P: PublicKeyStore + 'static,
 {
-    let mut rng = seed.into_rng();
-    let threshold = NumberOfNodes::from(rng.gen_range(0..10));
+    let rng = &mut seed.into_rng();
+    let threshold = NumberOfNodes::from(rng.gen_range(1..10));
     let number_of_signers = NumberOfNodes::from(rng.gen_range(0..10));
     println!(
         "--- threshold: {}, number_of_signers: {}",
@@ -264,12 +265,7 @@ pub fn test_threshold_scheme_with_basic_keygen<R, S, C, P>(
                 .map(|key_id| (csp_vault.clone() as Arc<_>, *key_id))
                 .collect();
 
-            test_threshold_signatures(
-                &public_coefficients,
-                &signers,
-                Seed::from_rng(&mut rng),
-                message,
-            );
+            test_threshold_signatures(&public_coefficients, &signers, Seed::from_rng(rng), message);
         }
         Err(_) => assert!(number_of_signers < threshold, "Failed to generate keys"),
     }

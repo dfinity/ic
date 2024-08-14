@@ -1,9 +1,9 @@
 use super::*;
 use assert_matches::assert_matches;
-use ic_crypto::ed25519_public_key_to_der;
+use ic_crypto_standalone_sig_verifier::ed25519_public_key_to_der;
 use ic_crypto_test_utils_root_of_trust::MockRootOfTrustProvider;
 use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
-use ic_test_utilities::types::ids::{canister_test_id, message_test_id, node_test_id};
+use ic_test_utilities_types::ids::{canister_test_id, message_test_id, node_test_id};
 use ic_types::{
     messages::{Delegation, SignedDelegation, UserSignature},
     time::UNIX_EPOCH,
@@ -588,14 +588,14 @@ mod canister_id_set {
 
     #[test]
     fn should_efficiently_intersect_large_canister_id_sets() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let number_of_ids = MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION;
         let (first_canister_ids, second_canister_ids) = {
             let mut first_set = BTreeSet::new();
             let mut second_set = BTreeSet::new();
             for _ in 1..=number_of_ids {
-                assert!(first_set.insert(random_canister_id(&mut rng)));
-                assert!(second_set.insert(random_canister_id(&mut rng)));
+                assert!(first_set.insert(random_canister_id(rng)));
+                assert!(second_set.insert(random_canister_id(rng)));
             }
             (
                 CanisterIdSet::try_from_iter(first_set).expect("too many elements"),

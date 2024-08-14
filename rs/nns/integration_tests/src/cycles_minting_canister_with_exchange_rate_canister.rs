@@ -1,21 +1,20 @@
 use candid::Encode;
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::{
     pb::v1::NeuronId,
     types::{UpdateIcpXdrConversionRatePayload, UpdateIcpXdrConversionRatePayloadReason},
 };
-use ic_nns_constants::EXCHANGE_RATE_CANISTER_ID;
-use ic_nns_governance::pb::v1::{
+use ic_nns_constants::{EXCHANGE_RATE_CANISTER_ID, EXCHANGE_RATE_CANISTER_INDEX};
+use ic_nns_governance_api::pb::v1::{
     manage_neuron_response, proposal::Action, ExecuteNnsFunction, NnsFunction, Proposal,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    ids::TEST_NEURON_1_ID,
     state_test_helpers::{
-        create_canister, get_icp_xdr_conversion_rate, nns_governance_make_proposal,
-        nns_wait_for_proposal_execution, setup_nns_canisters,
+        create_canister_at_specified_id, get_icp_xdr_conversion_rate, nns_governance_make_proposal,
+        nns_wait_for_proposal_execution, setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -28,17 +27,15 @@ const ONE_MINUTE_SECONDS: u64 = 60;
 const FIVE_MINUTES_SECONDS: u64 = 5 * ONE_MINUTE_SECONDS;
 
 /// Sets up the XRC mock canister.
-fn setup_mock_exchange_rate_canister(
-    machine: &StateMachine,
-    payload: XrcMockInitPayload,
-) -> CanisterId {
+fn setup_mock_exchange_rate_canister(machine: &StateMachine, payload: XrcMockInitPayload) {
     let wasm = Wasm::from_location_specified_by_env_var("xrc-mock", &[]);
-    create_canister(
+    create_canister_at_specified_id(
         machine,
+        EXCHANGE_RATE_CANISTER_INDEX,
         wasm.unwrap(),
         Some(Encode!(&payload).unwrap()),
         None,
-    )
+    );
 }
 
 fn reinstall_mock_exchange_rate_canister(
@@ -54,7 +51,7 @@ fn reinstall_mock_exchange_rate_canister(
 
 // Creates an ICP/XDR conversion rate proposal.
 fn propose_icp_xdr_rate(
-    machine: &mut StateMachine,
+    machine: &StateMachine,
     xdr_permyriad_per_icp: u64,
     timestamp_seconds: u64,
     reason: Option<UpdateIcpXdrConversionRatePayloadReason>,
@@ -130,7 +127,9 @@ fn new_icp_cxdr_mock_exchange_rate_canister_init_payload(
 #[test]
 fn test_enable_retrieving_rate_from_exchange_rate_canister() {
     // Step 1: Prepare the world.
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_nns_tests()
+        .with_time(GENESIS)
+        .build();
 
     // Set up NNS.
     let nns_init_payload = NnsInitPayloadsBuilder::new()
@@ -139,14 +138,9 @@ fn test_enable_retrieving_rate_from_exchange_rate_canister() {
     setup_nns_canisters(&state_machine, nns_init_payload);
 
     // Install exchange rate canister.
-    let installed_exchange_rate_canister_id = setup_mock_exchange_rate_canister(
+    setup_mock_exchange_rate_canister(
         &state_machine,
         new_icp_cxdr_mock_exchange_rate_canister_init_payload(25_000_000_000, None, None),
-    );
-    // Make sure the exchange rate canister ID and the installed canister ID match.
-    assert_eq!(
-        EXCHANGE_RATE_CANISTER_ID,
-        installed_exchange_rate_canister_id
     );
 
     // Check that the canister is initialized with the default rate.
@@ -335,7 +329,9 @@ fn test_enable_retrieving_rate_from_exchange_rate_canister() {
 #[test]
 fn test_disabling_and_reenabling_exchange_rate_canister_calling_via_exchange_rate_proposal() {
     // Step 1: Prepare the world.
-    let mut state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_nns_tests()
+        .with_time(GENESIS)
+        .build();
 
     // Set up NNS.
     let nns_init_payload = NnsInitPayloadsBuilder::new()
@@ -345,14 +341,9 @@ fn test_disabling_and_reenabling_exchange_rate_canister_calling_via_exchange_rat
     setup_nns_canisters(&state_machine, nns_init_payload);
 
     // Install exchange rate canister.
-    let installed_exchange_rate_canister_id = setup_mock_exchange_rate_canister(
+    setup_mock_exchange_rate_canister(
         &state_machine,
         new_icp_cxdr_mock_exchange_rate_canister_init_payload(25_000_000_000, None, None),
-    );
-    // Make sure the exchange rate canister ID and the installed canister ID match.
-    assert_eq!(
-        EXCHANGE_RATE_CANISTER_ID,
-        installed_exchange_rate_canister_id
     );
 
     // Check that the canister is initialized with the default rate.
@@ -399,12 +390,12 @@ fn test_disabling_and_reenabling_exchange_rate_canister_calling_via_exchange_rat
     // Step 3: Send in a proposal with a diverged rate reason. Ensure that the CMC
     // stops calling the mock exchange rate canister.
     let proposal_id = propose_icp_xdr_rate(
-        &mut state_machine,
+        &state_machine,
         210_000,
         cmc_first_rate_timestamp_seconds + FIVE_MINUTES_SECONDS + ONE_MINUTE_SECONDS,
         Some(UpdateIcpXdrConversionRatePayloadReason::DivergedRate),
     );
-    nns_wait_for_proposal_execution(&mut state_machine, proposal_id);
+    nns_wait_for_proposal_execution(&state_machine, proposal_id);
 
     // Check if proposal has set the rate.
     let response = get_icp_xdr_conversion_rate(&state_machine);
@@ -431,12 +422,12 @@ fn test_disabling_and_reenabling_exchange_rate_canister_calling_via_exchange_rat
     // Ensure that a proposal with a OldRate reason does not reactivate the
     // update cycle.
     let proposal_id = propose_icp_xdr_rate(
-        &mut state_machine,
+        &state_machine,
         200_000,
         cmc_first_rate_timestamp_seconds + FIVE_MINUTES_SECONDS * 2,
         Some(UpdateIcpXdrConversionRatePayloadReason::OldRate),
     );
-    nns_wait_for_proposal_execution(&mut state_machine, proposal_id);
+    nns_wait_for_proposal_execution(&state_machine, proposal_id);
 
     let response = get_icp_xdr_conversion_rate(&state_machine);
     assert_eq!(
@@ -458,12 +449,12 @@ fn test_disabling_and_reenabling_exchange_rate_canister_calling_via_exchange_rat
 
     // Re-enable calls to the exchange rate canister.
     let proposal_id = propose_icp_xdr_rate(
-        &mut state_machine,
+        &state_machine,
         220_000,
         cmc_first_rate_timestamp_seconds + FIVE_MINUTES_SECONDS * 3,
         Some(UpdateIcpXdrConversionRatePayloadReason::EnableAutomaticExchangeRateUpdates),
     );
-    nns_wait_for_proposal_execution(&mut state_machine, proposal_id);
+    nns_wait_for_proposal_execution(&state_machine, proposal_id);
 
     let response = get_icp_xdr_conversion_rate(&state_machine);
     assert_eq!(

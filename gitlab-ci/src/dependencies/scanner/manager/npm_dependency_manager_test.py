@@ -242,6 +242,35 @@ def test_get_first_level_dependencies_from_npm_list_version_mismatch(npm_test):
     assert first_level_dependency[0].version == "0.10.2"
 
 
+def test_get_first_level_dependencies_from_npm_list_default_version_if_missing(npm_test):
+    first_level_dependency_tree = {
+        "version": "0.1.0",
+        "name": "wallet-ui",
+        "dependencies": {
+            "@dfinity/agent": {
+                "resolved": "../../../",
+                "overridden": False,
+                "dependencies": {
+                    "@dfinity/candid": {"version": "0.10.2"},
+                    "bignumber.js": {
+                        "version": "9.0.1",
+                        "resolved": "https://registry.npmjs.org/bignumber.js/-/bignumber.js-9.0.1.tgz",
+                        "overridden": False,
+                    },
+                },
+            },
+        },
+    }
+    first_level_dependency = npm_test._NPMDependencyManager__get_first_level_dependencies_from_npm_list(
+        first_level_dependency_tree, "bignumber.js", ["<10.0.0"]
+    )
+    assert len(first_level_dependency) == 1
+    assert isinstance(first_level_dependency[0], Dependency)
+    assert first_level_dependency[0].id == "https://www.npmjs.com/package/@dfinity/agent/v/0.0.0"
+    assert first_level_dependency[0].name == "@dfinity/agent"
+    assert first_level_dependency[0].version == "0.0.0"
+
+
 def test_get_vulnerable_dependency_from_npm_list(npm_test):
     first_level_dependency_tree = {
         "version": "0.1.0",
@@ -523,12 +552,12 @@ class FakeNPM:
         }
 
 
-def test_findings_helper_no_vulnerabilites(npm_test):
+def test_findings_helper_no_vulnerabilities(npm_test):
     repository = "ic"
     project = Project("ic", "ic")
     fake_npm = FakeNPM(1)
-    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output.__get__(npm_test, NPMDependencyManager)
-    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output.__get__(npm_test, NPMDependencyManager)
+    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output
+    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output
 
     findings = npm_test.get_findings(repository, project, DEFAULT_NODE_VERSION)
     assert not findings
@@ -538,8 +567,8 @@ def test_findings_helper_one_finding(npm_test):
     repository = "ic"
     project = Project("ic", "ic")
     fake_npm = FakeNPM(2)
-    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output.__get__(npm_test, NPMDependencyManager)
-    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output.__get__(npm_test, NPMDependencyManager)
+    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output
+    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output
 
     findings = npm_test.get_findings(repository, project, DEFAULT_NODE_VERSION)
     assert len(findings) == 1
@@ -588,8 +617,8 @@ def test_findings_helper_vulnerable_dependency_not_in_range(npm_test):
     repository = "ic"
     project = Project("ic", "ic")
     fake_npm = FakeNPM(3)
-    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output.__get__(npm_test, NPMDependencyManager)
-    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output.__get__(npm_test, NPMDependencyManager)
+    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output
+    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output
 
     findings = npm_test.get_findings(repository, project, DEFAULT_NODE_VERSION)
     assert not findings
@@ -599,8 +628,8 @@ def test_findings_helper_transitive_vulnerability(npm_test):
     repository = "ic"
     project = Project("ic", "ic")
     fake_npm = FakeNPM(4)
-    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output.__get__(npm_test, NPMDependencyManager)
-    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output.__get__(npm_test, NPMDependencyManager)
+    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output
+    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output
 
     findings = npm_test.get_findings(repository, project, DEFAULT_NODE_VERSION)
     assert not findings

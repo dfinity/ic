@@ -1,18 +1,17 @@
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_interfaces::messages::CanisterMessage;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::DEFAULT_QUEUE_CAPACITY,
     testing::{CanisterQueuesTesting, SystemStateTesting},
     InputQueueType, StateError, SystemState,
 };
-use ic_test_utilities::mock_time;
-use ic_test_utilities::types::{
+use ic_test_utilities_types::{
     ids::{canister_test_id, user_test_id},
     messages::{RequestBuilder, ResponseBuilder},
 };
 use ic_types::{
-    messages::{Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES},
+    messages::{CanisterMessage, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES},
+    time::UNIX_EPOCH,
     CanisterId, Cycles,
 };
 use std::sync::Arc;
@@ -76,7 +75,7 @@ struct SystemStateFixture {
 impl SystemStateFixture {
     fn running() -> SystemStateFixture {
         SystemStateFixture {
-            system_state: SystemState::new_running(
+            system_state: SystemState::new_running_for_testing(
                 CANISTER_ID,
                 user_test_id(1).get(),
                 Cycles::new(5_000_000_000_000),
@@ -87,7 +86,7 @@ impl SystemStateFixture {
 
     fn stopping() -> SystemStateFixture {
         SystemStateFixture {
-            system_state: SystemState::new_stopping(
+            system_state: SystemState::new_stopping_for_testing(
                 CANISTER_ID,
                 user_test_id(1).get(),
                 Cycles::new(5_000_000_000_000),
@@ -98,7 +97,7 @@ impl SystemStateFixture {
 
     fn stopped() -> SystemStateFixture {
         SystemStateFixture {
-            system_state: SystemState::new_stopped(
+            system_state: SystemState::new_stopped_for_testing(
                 CANISTER_ID,
                 user_test_id(1).get(),
                 Cycles::new(5_000_000_000_000),
@@ -129,14 +128,11 @@ impl SystemStateFixture {
         &mut self,
         request: Arc<Request>,
     ) -> Result<(), (StateError, Arc<Request>)> {
-        self.system_state.push_output_request(request, mock_time())
+        self.system_state.push_output_request(request, UNIX_EPOCH)
     }
 
     fn pop_output(&mut self) -> Option<RequestOrResponse> {
-        self.system_state
-            .output_into_iter(CANISTER_ID)
-            .pop()
-            .map(|(_, msg)| msg)
+        self.system_state.output_into_iter().pop()
     }
 
     fn induct_messages_to_self(&mut self) {
@@ -156,7 +152,7 @@ fn correct_charging_target_canister_for_a_response() {
         NumBytes::from(4 << 30),
     ) + Cycles::new(5_000_000_000_000);
     let mut fixture = SystemStateFixture {
-        system_state: SystemState::new_running(
+        system_state: SystemState::new_running_for_testing(
             canister_test_id(0),
             user_test_id(1).get(),
             initial_cycles,
@@ -255,9 +251,9 @@ fn induct_messages_to_self_memory_limit_test_impl(
     let request = default_request_to_self();
     let response = default_response_to_self();
 
-    // A system state with a reservation for an outgoing response.
+    // A system state with a slot reservation for an outgoing response.
     let mut fixture = SystemStateFixture {
-        system_state: SystemState::new_running(
+        system_state: SystemState::new_running_for_testing(
             CANISTER_ID,
             user_test_id(1).get(),
             Cycles::new(5_000_000_000_000),

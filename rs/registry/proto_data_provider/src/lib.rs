@@ -4,8 +4,8 @@ use ic_registry_common_proto::pb::proto_registry::v1::{ProtoRegistry, ProtoRegis
 use ic_registry_transport::insert;
 use ic_registry_transport::pb::v1::registry_mutation::Type;
 use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
+use ic_sys::fs::write_atomically;
 use ic_types::{registry::RegistryDataProviderError, RegistryVersion};
-use ic_utils::fs::write_atomically;
 use std::collections::HashMap;
 use std::{
     io::Write,
@@ -14,7 +14,7 @@ use std::{
 };
 use thiserror::Error;
 
-const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
+pub const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
 
 #[derive(Clone)]
 pub struct ProtoRegistryDataProvider {
@@ -35,6 +35,10 @@ pub enum ProtoRegistryDataProviderError {
 impl ProtoRegistryDataProvider {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.records.read().unwrap().is_empty()
     }
 
     pub fn add<T>(
@@ -161,7 +165,7 @@ impl ProtoRegistryDataProvider {
 
         mutations.sort_by(|l, r| l.key.cmp(&r.key));
         for m in mutations.iter_mut() {
-            m.mutation_type = match Type::from_i32(m.mutation_type).unwrap() {
+            m.mutation_type = match Type::try_from(m.mutation_type).unwrap() {
                 Type::Insert | Type::Update | Type::Upsert => Type::Upsert,
                 Type::Delete => {
                     unimplemented!("Need to implement Delete below to execute these mutations")

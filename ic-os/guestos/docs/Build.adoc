@@ -20,13 +20,13 @@ bazel build //ic-os/guestos/envs/prod/...
 ----
 
 "prod" can be replaced with "dev" for the dev variant. The built image can be
-found at `/ic/bazel-bin/ic-os/guestos/envs/prod/disk-img.tar{.gz,.zst}`
+found at `/ic/bazel-bin/ic-os/guestos/envs/prod/disk-img.tar.zst`
 
 See notes below on the individual build steps.
 
 == Constructing the system using docker
 
-All build instructions are contained in +rootfs/Dockerfile+.
+All build instructions are contained in +context/Dockerfile+.
 
 The following template directories are copied verbatim onto the target
 system:

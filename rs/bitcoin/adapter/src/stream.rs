@@ -27,7 +27,7 @@ const CONNECTION_TIMEOUT_SECS: u64 = 5;
 /// from the Bitcoin node.
 const STREAM_BUFFER_SIZE: usize = 64 * 1024;
 
-/// This constant represents the maxiumum raw network message size we accept.
+/// This constant represents the maximum raw network message size we accept.
 const MAX_RAW_MESSAGE_SIZE: usize = 40 * 1024 * 1024;
 
 /// This enum is used to represent the possible errors that could occur while a stream
@@ -368,6 +368,7 @@ pub fn handle_stream(config: StreamConfig) -> tokio::task::JoinHandle<()> {
 
 #[cfg(test)]
 pub mod test {
+
     use std::net::{IpAddr, Ipv4Addr};
 
     use crate::common::DEFAULT_CHANNEL_BUFFER_SIZE;
@@ -377,6 +378,7 @@ pub mod test {
     use ic_logger::replica_logger::no_op_logger;
 
     /// Test that large messages get rejected and we disconnect as a consequence.
+    #[allow(clippy::disallowed_methods)]
     #[tokio::test]
     async fn read_huge_message_from_network() {
         let network = Network::Bitcoin;
@@ -433,11 +435,15 @@ pub mod test {
     async fn initialization_times_out_after_five_seconds() {
         let network = Network::Bitcoin;
         let (net_tx, _) = tokio::sync::mpsc::channel(DEFAULT_CHANNEL_BUFFER_SIZE);
+        #[allow(clippy::disallowed_methods)]
         let (_adapter_tx, adapter_rx) = tokio::sync::mpsc::unbounded_channel();
         let (stream_tx, _) = tokio::sync::mpsc::channel(DEFAULT_CHANNEL_BUFFER_SIZE);
 
-        // Try to connect to a non routable IP address to force a timeout to happen.
-        let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 0, 2, 0)), 80);
+        // Try to connect to a non routable IP address to force a timeout to happen. If a routable IP is used,
+        // then the connection either succeeds or other errors are generated.
+        // https://stackoverflow.com/questions/100841/artificially-create-a-connection-timeout-error
+        // The chosen ephemeral port is random and should not affect the test.
+        let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 2, 0)), 55535);
 
         let stream_config = StreamConfig {
             address,
@@ -459,6 +465,7 @@ pub mod test {
     async fn read_two_messages_at_size_boundary() {
         let network = Network::Bitcoin;
         let (net_tx, mut net_rx) = tokio::sync::mpsc::channel(DEFAULT_CHANNEL_BUFFER_SIZE);
+        #[allow(clippy::disallowed_methods)]
         let (_adapter_tx, adapter_rx) = tokio::sync::mpsc::unbounded_channel();
         let (stream_tx, mut stream_rx) = tokio::sync::mpsc::channel(DEFAULT_CHANNEL_BUFFER_SIZE);
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
