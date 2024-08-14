@@ -46,7 +46,7 @@ VARIABLES
     locks,
     \* @type: Seq({caller : $proc, method_and_args: $methodCall });
     governance_to_ledger,
-    \* @type: Set({caller: $proc, response_value: $methodResponse });
+    \* @type: Set({caller: $proc, response: $methodResponse });
     ledger_to_governance,
     \* @type: $proc -> Str;
     pc,
