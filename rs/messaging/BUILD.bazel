@@ -94,9 +94,7 @@ rust_ic_test_suite(
     deps = [
         # Keep sorted.
         ":messaging",
-    	"//rs/config",
         "//rs/interfaces/certified_stream_store",
-	"//rs/interfaces/state_manager",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
