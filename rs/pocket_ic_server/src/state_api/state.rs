@@ -5,6 +5,7 @@ use crate::pocket_ic::{
     AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, GetCanisterHttp, MockCanisterHttp,
     PocketIc,
 };
+use crate::state_api::canister_id::{self, DomainResolver, ResolvesDomain};
 use crate::{InstanceId, OpId, Operation};
 use axum::{
     extract::{Request as AxumRequest, State},
@@ -16,7 +17,7 @@ use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
 use base64;
 use candid::Principal;
-use fqdn::{fqdn, Fqdn, FQDN};
+use fqdn::{fqdn, FQDN};
 use futures::future::Shared;
 use http::{
     header::{
@@ -51,10 +52,7 @@ use pocket_ic::common::rest::{
 };
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::BTreeMap, collections::HashMap, fmt, path::PathBuf, str::FromStr, sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, fmt, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::{
     sync::mpsc::error::TryRecvError,
     sync::mpsc::Receiver,
@@ -406,24 +404,6 @@ const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister
 const MAX_REQUEST_BODY_SIZE: usize = 10 * 1_048_576;
 const MINUTE: Duration = Duration::from_secs(60);
 
-// Attempts to extract host from HTTP2 "authority" pseudo-header or from HTTP/1.1 "Host" header
-fn extract_authority(request: &AxumRequest) -> Option<FQDN> {
-    // Try HTTP2 first, then Host header
-    request
-        .uri()
-        .authority()
-        .map(|x| x.host())
-        .or_else(|| {
-            request
-                .headers()
-                .get(http::header::HOST)
-                .and_then(|x| x.to_str().ok())
-                // Split if it has a port
-                .and_then(|x| x.split(':').next())
-        })
-        .and_then(|x| FQDN::from_str(x).ok())
-}
-
 #[derive(Clone)]
 struct RequestCtx {
     pub verify: bool,
@@ -451,107 +431,6 @@ fn layer(methods: &[Method]) -> CorsLayer {
             HEADER_IC_CANISTER_ID,
         ])
         .max_age(10 * MINUTE)
-}
-
-/// Result of a domain lookup
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct DomainLookup {
-    pub domain: FQDN,
-    pub canister_id: Option<Principal>,
-    pub verify: bool,
-}
-
-// Resolves hostname to a canister id
-trait ResolvesDomain: Send + Sync {
-    fn resolve(&self, host: &Fqdn) -> Option<DomainLookup>;
-}
-
-struct DomainResolver {
-    domains_base: Vec<FQDN>,
-    domains_all: BTreeMap<FQDN, DomainLookup>,
-}
-
-impl DomainResolver {
-    fn new(domains_base: Vec<FQDN>) -> Self {
-        fn domain(f: &Fqdn) -> FQDN {
-            f.into()
-        }
-
-        let domains_base = domains_base
-            .into_iter()
-            .map(|x| domain(&x))
-            .collect::<Vec<_>>();
-
-        // Combine all domains
-        let domains_all = domains_base.clone().into_iter().map(|x| {
-            (
-                x.clone(),
-                DomainLookup {
-                    domain: x,
-                    canister_id: None,
-                    verify: true,
-                },
-            )
-        });
-
-        Self {
-            domains_all: domains_all.collect::<BTreeMap<_, _>>(),
-            domains_base,
-        }
-    }
-
-    // Tries to find the base domain that corresponds to the given host and resolve a canister id
-    fn resolve_domain(&self, host: &Fqdn) -> Option<DomainLookup> {
-        // First try to find an exact match
-        // This covers base domains
-        if let Some(v) = self.domains_all.get(host) {
-            return Some(v.clone());
-        }
-
-        // Next we try to lookup dynamic subdomains like <canister>.ic0.app or <canister>.raw.ic0.app
-        // Check if the host is a subdomain of any of our base domains.
-        let domain = self
-            .domains_base
-            .iter()
-            .find(|&x| host.is_subdomain_of(x))?;
-
-        // Host can be 1 or 2 levels below base domain only: <id>.<domain> or <id>.raw.<domain>
-        // Fail the lookup if it's deeper.
-        let depth = host.labels().count() - domain.labels().count();
-        if depth > 2 {
-            return None;
-        }
-
-        // Check if it's a raw domain
-        let raw = depth == 2;
-        if raw && host.labels().nth(1) != Some("raw") {
-            return None;
-        }
-
-        // Strip the optional prefix if any
-        let label = host.labels().next()?.split("--").last()?;
-
-        // Do not allow cases like <id>.foo.ic0.app where
-        // the base subdomain is not raw or <id>.
-        // TODO discuss
-        let canister_id = if depth == 1 || raw {
-            Principal::from_text(label).ok()
-        } else {
-            None
-        };
-
-        Some(DomainLookup {
-            domain: domain.clone(),
-            canister_id,
-            verify: !raw,
-        })
-    }
-}
-
-impl ResolvesDomain for DomainResolver {
-    fn resolve(&self, host: &Fqdn) -> Option<DomainLookup> {
-        self.resolve_domain(host)
-    }
 }
 
 // Categorized possible causes for request processing failures
@@ -610,13 +489,18 @@ impl IntoResponse for ErrorCause {
     }
 }
 
-struct HandlerState {
+pub(crate) struct HandlerState {
     client: HttpGatewayClient,
+    resolver: DomainResolver,
 }
 
 impl HandlerState {
-    fn new(client: HttpGatewayClient) -> Self {
-        Self { client }
+    fn new(client: HttpGatewayClient, resolver: DomainResolver) -> Self {
+        Self { client, resolver }
+    }
+
+    pub(crate) fn resolver(&self) -> &DomainResolver {
+        &self.resolver
     }
 }
 
@@ -624,10 +508,24 @@ impl HandlerState {
 async fn handler(
     State(state): State<Arc<HandlerState>>,
     canister_id: Option<Extension<Principal>>,
+    host_canister_id: Option<canister_id::HostHeader>,
+    query_param_canister_id: Option<canister_id::QueryParam>,
+    referer_host_canister_id: Option<canister_id::RefererHeaderHost>,
+    referer_query_param_canister_id: Option<canister_id::RefererHeaderQueryParam>,
     Extension(ctx): Extension<Arc<RequestCtx>>,
     request: AxumRequest,
 ) -> Result<Response, ErrorCause> {
-    let canister_id = canister_id.ok_or(ErrorCause::CanisterIdNotFound)?;
+    let canister_id = canister_id.map(|v| v.0);
+    let host_canister_id = host_canister_id.map(|v| v.0);
+    let query_param_canister_id = query_param_canister_id.map(|v| v.0);
+    let referer_host_canister_id = referer_host_canister_id.map(|v| v.0);
+    let referer_query_param_canister_id = referer_query_param_canister_id.map(|v| v.0);
+    let canister_id = canister_id
+        .or(host_canister_id)
+        .or(query_param_canister_id)
+        .or(referer_host_canister_id)
+        .or(referer_query_param_canister_id)
+        .ok_or(ErrorCause::CanisterIdNotFound)?;
 
     let (parts, body) = request.into_parts();
 
@@ -647,7 +545,7 @@ async fn handler(
 
     let args = HttpGatewayRequestArgs {
         canister_request: CanisterRequest::from_parts(parts, body),
-        canister_id: *canister_id,
+        canister_id,
     };
 
     let resp = {
@@ -662,6 +560,24 @@ async fn handler(
     let response = resp.canister_response.into_response();
 
     Ok(response)
+}
+
+// Attempts to extract host from HTTP2 "authority" pseudo-header or from HTTP/1.1 "Host" header
+fn extract_authority(request: &AxumRequest) -> Option<FQDN> {
+    // Try HTTP2 first, then Host header
+    request
+        .uri()
+        .authority()
+        .map(|x| x.host())
+        .or_else(|| {
+            request
+                .headers()
+                .get(http::header::HOST)
+                .and_then(|x| x.to_str().ok())
+                // Split if it has a port
+                .and_then(|x| x.split(':').next())
+        })
+        .and_then(|x| FQDN::from_str(x).ok())
 }
 
 async fn validate_middleware(
@@ -953,16 +869,17 @@ impl ApiState {
                 .with_agent(agent)
                 .build()
                 .unwrap();
-            let state_handler = Arc::new(HandlerState::new(client));
-
-            let domain_resolver = Arc::new(DomainResolver::new(
+            let domain_resolver = DomainResolver::new(
                 http_gateway_config
                     .domains
                     .unwrap_or(vec!["localhost".to_string()])
                     .iter()
                     .map(|d| fqdn!(d))
                     .collect(),
-            )) as Arc<dyn ResolvesDomain>;
+            );
+            let state_handler = Arc::new(HandlerState::new(client, domain_resolver.clone()));
+
+            let domain_resolver = Arc::new(domain_resolver) as Arc<dyn ResolvesDomain>;
 
             let router = Router::new()
                 .route("/api/v2/status", get(handler_status))

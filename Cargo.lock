@@ -16310,6 +16310,7 @@ version = "5.0.0"
 dependencies = [
  "aide",
  "askama",
+ "async-trait",
  "axum 0.7.5",
  "axum-extra",
  "axum-server 0.6.0",
@@ -16319,6 +16320,7 @@ dependencies = [
  "candid",
  "clap 3.2.25",
  "flate2",
+ "form_urlencoded",
  "fqdn",
  "futures",
  "hex",

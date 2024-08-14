@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 aide = { version = "^0.13.0", features = ["axum"] }
 askama = { workspace = true }
+async-trait = { workspace = true }
 axum = { workspace = true }
 axum-extra = { version = "^0.9", features = ["typed-header"] }
 axum-server = { version = "0.6.0", features = ["tls-rustls"] }
@@ -15,6 +16,7 @@ bytes = { workspace = true }
 candid = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 flate2 = { workspace = true }
+form_urlencoded = "1"
 fqdn = "0.3.11"
 futures = { workspace = true }
 hex = { workspace = true }

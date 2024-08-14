@@ -48,6 +48,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:clap_3_2_25",
     "@crate_index//:flate2",
+    "@crate_index//:form_urlencoded",
     "@crate_index//:fqdn",
     "@crate_index//:futures",
     "@crate_index//:hex",
@@ -103,7 +104,9 @@ SPEC_TEST_DEPENDENCIES = TEST_DEPENDENCIES + [
     "//rs/registry/subnet_type",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
 
 ALIASES = {}
 
