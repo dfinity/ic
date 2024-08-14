@@ -24,7 +24,6 @@ proptest! {
         let signature = derived_secret_key.sign_message_with_ecdsa(&message_hash);
 
         let derived_public_key = derived_secret_key.public_key();
-        //let derived_public_key = ecdsa_secret_key.public_key().derive_subkey(&derivation_path).0;
         prop_assert!(derived_public_key.verify_ecdsa_signature(&message_hash, &signature));
     }
 }
