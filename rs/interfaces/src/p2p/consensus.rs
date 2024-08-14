@@ -31,6 +31,7 @@ pub trait ChangeSetProducer<Pool>: Send {
 /// The enum specifies if a given artifact should be replicated.
 /// In other words, this specifies an addition or removal
 /// to the outbound set of messages that is replicated.
+#[derive(Debug, PartialEq)]
 pub enum ArtifactMutation<T: IdentifiableArtifact> {
     Insert(ArtifactWithOpt<T>),
     Remove(T::Id),
@@ -47,6 +48,8 @@ pub struct ChangeResult<T: IdentifiableArtifact> {
     /// true results in lower consensus latencies.
     pub poll_immediately: bool,
 }
+
+#[derive(Debug, PartialEq)]
 pub struct ArtifactWithOpt<T> {
     pub artifact: T,
     pub is_latency_sensitive: bool,

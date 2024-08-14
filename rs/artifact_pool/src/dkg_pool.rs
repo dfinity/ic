@@ -278,7 +278,13 @@ mod test {
         });
         // ensure we have 2 validated and 2 unvalidated artifacts
         assert_eq!(result.artifacts_with_opt.len(), 2);
-        assert!(result.purged.is_empty());
+        assert!(result
+            .mutations
+            .iter()
+            .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
+            .next()
+            .is_none());
+
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 2);
         assert_eq!(pool.get_unvalidated().count(), 2);
@@ -286,7 +292,7 @@ mod test {
         // purge below the height of the current dkg and make sure the older artifacts
         // are purged from the validated and unvalidated sections
         let result = pool.apply_changes(vec![ChangeAction::Purge(current_dkg_id_start_height)]);
-        assert_eq!(result.purged.len(), 1);
+        assert_eq!(result.mutations.len(), 1);
         assert!(result
             .mutations
             .iter()
@@ -301,7 +307,7 @@ mod test {
         let result = pool.apply_changes(vec![ChangeAction::Purge(
             current_dkg_id_start_height.increment(),
         )]);
-        assert_eq!(result.purged.len(), 1);
+        assert_eq!(result.mutations.len(), 1);
         assert!(result
             .mutations
             .iter()

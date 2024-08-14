@@ -295,7 +295,7 @@ mod tests {
             .next()
             .is_none());
         assert!(result.poll_immediately);
-        assert_eq!(result.purged[0], id);
+        assert_eq!(result.mutations[0], ArtifactMutation::Remove(id));
         assert!(pool.lookup_validated(&id).is_none());
         assert!(pool.get_response_content_by_hash(&content_hash).is_none());
         assert_eq!(pool.get_validated_shares().count(), 1);
@@ -319,7 +319,13 @@ mod tests {
 
         assert!(pool.lookup_validated(&id2).is_none());
         assert!(result.poll_immediately);
-        assert!(result.purged.is_empty());
+        assert!(result
+            .mutations
+            .iter()
+            .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
+            .next()
+            .is_none());
+
         assert_eq!(share1, pool.lookup_validated(&id1).unwrap());
     }
 
@@ -338,7 +344,13 @@ mod tests {
 
         assert!(pool.lookup_unvalidated(&id).is_none());
         assert!(result.poll_immediately);
-        assert!(result.purged.is_empty());
+        assert!(result
+            .mutations
+            .iter()
+            .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
+            .next()
+            .is_none());
+
         assert!(result
             .mutations
             .iter()
@@ -363,7 +375,13 @@ mod tests {
 
         assert!(pool.lookup_unvalidated(&id).is_none());
         assert!(result.poll_immediately);
-        assert!(result.purged.is_empty());
+        assert!(result
+            .mutations
+            .iter()
+            .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
+            .next()
+            .is_none());
+
         assert!(result
             .mutations
             .iter()

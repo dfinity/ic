@@ -662,7 +662,13 @@ mod tests {
                 let result = ingress_pool.apply_changes(changeset);
 
                 // Check moved message is returned as an advert
-                assert!(result.purged.is_empty());
+                assert!(result
+                    .mutations
+                    .iter()
+                    .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
+                    .next()
+                    .is_none());
+
                 assert_eq!(result.artifacts_with_opt.len(), 1);
                 assert_eq!(
                     IdentifiableArtifact::id(&result.artifacts_with_opt[0].artifact),
@@ -726,7 +732,13 @@ mod tests {
                 }
                 assert_eq!(ingress_pool.unvalidated().size(), initial_count);
                 let result = ingress_pool.apply_changes(changeset);
-                assert!(result.purged.is_empty());
+                assert!(result
+                    .mutations
+                    .iter()
+                    .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
+                    .next()
+                    .is_none());
+
                 // artifacts_with_opt are only created for own node id
                 assert_eq!(result.artifacts_with_opt.len(), initial_count / nodes);
                 assert!(!result.poll_immediately);

@@ -1196,7 +1196,13 @@ mod tests {
                 }),
             ];
             let result = pool.apply_changes(changeset);
-            assert!(result.purged.is_empty());
+            assert!(result
+                .mutations
+                .iter()
+                .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
+                .next()
+                .is_none());
+
             assert_eq!(result.artifacts_with_opt.len(), 2);
             assert!(result.poll_immediately);
             assert_eq!(
@@ -1229,7 +1235,13 @@ mod tests {
                 .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
                 .next()
                 .is_none());
-            assert!(result.purged.is_empty());
+            assert!(result
+                .mutations
+                .iter()
+                .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
+                .next()
+                .is_none());
+
             assert!(result.poll_immediately);
 
             let result = pool.apply_changes(vec![]);
@@ -1288,7 +1300,13 @@ mod tests {
             // share 3 should be added to the validated pool and create an advert
             // share 2 should be moved to the validated pool and not create an advert
             // share 1 should remain in the unvalidated pool
-            assert!(result.purged.is_empty());
+            assert!(result
+                .mutations
+                .iter()
+                .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
+                .next()
+                .is_none());
+
             assert_eq!(result.artifacts_with_opt.len(), 1);
             assert!(result.poll_immediately);
             assert_eq!(

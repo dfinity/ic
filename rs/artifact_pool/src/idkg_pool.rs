@@ -653,7 +653,13 @@ mod tests {
                     IDkgMessage::DealingSupport(support.clone()),
                 )];
                 let result = idkg_pool.apply_changes(change_set);
-                assert!(result.purged.is_empty());
+                assert!(result
+                    .mutations
+                    .iter()
+                    .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
+                    .next()
+                    .is_none());
+
                 assert_eq!(
                     result.artifacts_with_opt[0].artifact.id(),
                     support.message_id()
@@ -927,7 +933,13 @@ mod tests {
                     IDkgChangeAction::MoveToValidated(msg_2),
                     IDkgChangeAction::MoveToValidated(msg_3),
                 ]);
-                assert!(result.purged.is_empty());
+                assert!(result
+                    .mutations
+                    .iter()
+                    .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
+                    .next()
+                    .is_none());
+
                 // No artifacts_with_opt are created for moved dealings and dealing support
                 assert!(result
                     .mutations
@@ -1000,7 +1012,9 @@ mod tests {
                     .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
                     .next()
                     .is_none());
-                assert_eq!(result.purged, vec![msg_id_2]);
+                assert!(
+                    matches!(result.mutations[0], ArtifactMutation::Remove(id) if id == msg_id_2)
+                );
                 assert!(result.poll_immediately);
                 check_state(&idkg_pool, &[msg_id_3], &[]);
 
@@ -1029,7 +1043,13 @@ mod tests {
 
                 let result =
                     idkg_pool.apply_changes(vec![IDkgChangeAction::RemoveUnvalidated(msg_id)]);
-                assert!(result.purged.is_empty());
+                assert!(result
+                    .mutations
+                    .iter()
+                    .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
+                    .next()
+                    .is_none());
+
                 assert!(result
                     .mutations
                     .iter()

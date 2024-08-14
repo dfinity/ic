@@ -586,8 +586,13 @@ mod tests {
                 ChangeAction::AddToValidated(share_msg.clone()),
                 ChangeAction::AddToValidated(cert_msg.clone()),
             ]);
-            assert_eq!(result.artifacts_with_opt.len(), 2);
-            assert!(result.purged.is_empty());
+            assert_eq!(result.mutations.len(), 2);
+            assert!(result
+                .mutations
+                .iter()
+                .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
+                .next()
+                .is_none());
             assert!(result.poll_immediately);
             assert_eq!(
                 pool.certification_at_height(Height::from(8)),
@@ -618,9 +623,17 @@ mod tests {
                 ChangeAction::MoveToValidated(cert_msg.clone()),
             ]);
             let expected = cert_msg.id();
-            assert_eq!(result.artifacts_with_opt[0].artifact.id(), expected);
-            assert_eq!(result.artifacts_with_opt.len(), 1);
-            assert!(result.purged.is_empty());
+            assert!(
+                matches!(&result.mutations[0], ArtifactMutation::Insert(artifact) if artifact.artifact.id() == expected)
+            );
+            assert_eq!(result.mutations.len(), 1);
+            assert!(result
+                .mutations
+                .iter()
+                .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
+                .next()
+                .is_none());
+
             assert!(result.poll_immediately);
             assert_eq!(
                 pool.shares_at_height(Height::from(10))
@@ -751,7 +764,13 @@ mod tests {
                 .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
                 .next()
                 .is_none());
-            assert!(result.purged.is_empty());
+            assert!(result
+                .mutations
+                .iter()
+                .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
+                .next()
+                .is_none());
+
             assert!(result.poll_immediately);
             assert_eq!(
                 pool.unvalidated_shares_at_height(Height::from(10)).count(),
@@ -824,7 +843,13 @@ mod tests {
                 ChangeAction::AddToValidated(cert_msg.clone()),
             ]);
             assert_eq!(result.artifacts_with_opt.len(), 2);
-            assert!(result.purged.is_empty());
+            assert!(result
+                .mutations
+                .iter()
+                .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
+                .next()
+                .is_none());
+
             assert!(result.poll_immediately);
             assert_eq!(
                 pool.certification_at_height(Height::from(8)),
