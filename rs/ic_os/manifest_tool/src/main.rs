@@ -1,6 +1,9 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
+mod components_parser;
+use components_parser::get_all_components;
+
 #[derive(Subcommand)]
 pub enum Commands {
     /// Check for unused component files
@@ -24,7 +27,15 @@ pub fn main() -> Result<()> {
 
     match opts.command {
         Some(Commands::CheckUnusedComponents) => {
-            println!("CheckUnusedComponents command was invoked");
+            println!("Current working directory: {:?}", std::env::current_dir()?);
+
+            let components = get_all_components()?;
+            println!("Found {} components:", components.len());
+
+            
+            for component in &components {
+                dbg!(component);
+            }
             Ok(())
         }
         None => Ok(()),
