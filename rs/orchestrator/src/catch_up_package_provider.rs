@@ -35,11 +35,7 @@ use crate::{
     registry_helper::RegistryHelper,
     utils::http_endpoint_to_url,
 };
-use http_body_util::Full;
-use hyper::body::Bytes;
-use hyper_rustls::HttpsConnectorBuilder;
-use hyper_util::{client::legacy::Client, rt::TokioExecutor};
-use ic_canister_client::{Agent, HttpClient, Sender};
+use ic_canister_client::{Agent, Sender};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_logger::{info, warn, ReplicaLogger};
