@@ -52,9 +52,9 @@ def icos_build(
         srcs = [k for k, v in image_deps["component_files"].items()],
         outs = [name + "_pre_check_result.txt"],
         cmd = """
-        echo "Running pre_check for {name}" > $@
-        echo "All paths exist" >> $@
-      """,
+            echo "Running pre_check for {name}" > $@
+            echo "All paths exist" >> $@
+        """,
     )
 
     # -------------------- Version management --------------------
