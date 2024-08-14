@@ -148,7 +148,7 @@ rust_library(
 
 rust_ic_test(
     name = "pic_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = {
         "@crate_index//:hyper_0_14_27": "hyper_legacy",
     },

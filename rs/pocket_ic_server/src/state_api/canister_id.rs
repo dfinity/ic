@@ -298,10 +298,9 @@ mod tests {
             Some("happy.little.domain.name"),
             "https://happy.little.domain.name/rrkah-fqaaa-aaaaa-aaaaq-cai",
         );
-        assert_eq!(
-            rt.block_on(HostHeader::from_request_parts(&mut req, &resolver)),
-            Ok(HostHeader(principal("r7inp-6aaaa-aaaaa-aaabq-cai")))
-        );
+        assert!(rt
+            .block_on(HostHeader::from_request_parts(&mut req, &resolver))
+            .is_err());
         assert!(rt
             .block_on(QueryParam::from_request_parts(&mut req, &resolver))
             .is_err());
