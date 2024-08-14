@@ -380,14 +380,9 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
             artifacts_with_opt
                 .drain(..)
                 .into_iter()
-                .map(|v| ArtifactMutation::Insert(v)),
+                .map(ArtifactMutation::Insert),
         );
-        mutations.extend(
-            purged
-                .drain(..)
-                .into_iter()
-                .map(|v| ArtifactMutation::Remove(v)),
-        );
+        mutations.extend(purged.drain(..).into_iter().map(ArtifactMutation::Remove));
         ChangeResult {
             mutations,
             poll_immediately: false,
