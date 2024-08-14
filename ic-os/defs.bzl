@@ -618,6 +618,7 @@ EOF
         name = name,
         testonly = malicious,
         srcs = [
+            name + "_pre_check_result.txt",
             ":disk-img.tar.zst",
         ] + ([
             ":update-img.tar.zst",
