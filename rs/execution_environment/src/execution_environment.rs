@@ -58,9 +58,11 @@ use ic_replicated_state::{
 };
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_types::{
-    canister_http::CanisterHttpRequestContext,
-    crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey, PublicKey},
-    crypto::threshold_sig::ni_dkg::NiDkgTargetId,
+    canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT},
+    crypto::{
+        canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey, PublicKey},
+        threshold_sig::ni_dkg::NiDkgTargetId,
+    },
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         extract_effective_canister_id, CanisterCall, CanisterCallOrTask, CanisterMessage,
@@ -920,7 +922,22 @@ impl ExecutionEnvironment {
                                             canister_http_request_context.max_response_bytes,
                                             registry_settings.subnet_size,
                                         );
-                                    if request.payment < http_request_fee {
+                                    if state
+                                        .metadata
+                                        .subnet_call_context_manager
+                                        .canister_http_request_contexts
+                                        .len()
+                                        >= MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT
+                                    {
+                                        let err = Err(UserError::new(
+                                            ErrorCode::CanisterRejectedMessage,
+                                            format!("max number ({}) of http requests in-flight reached.", MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT),
+                                        ));
+                                        ExecuteSubnetMessageResult::Finished {
+                                            response: err,
+                                            refund: msg.take_cycles(),
+                                        }
+                                    } else if request.payment < http_request_fee {
                                         let err = Err(UserError::new(
                                                         ErrorCode::CanisterRejectedMessage,
                                                         format!(
