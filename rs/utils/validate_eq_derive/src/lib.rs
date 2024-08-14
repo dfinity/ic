@@ -24,7 +24,7 @@ enum ValidateEqFieldAttr {
     Ignore,
 }
 
-// Find #[validate_eq(...)] attribute if any.
+/// Find #[validate_eq(...)] attribute if any.
 fn find_validate_eq_attr(field: &syn::Field) -> syn::Result<Option<&syn::Attribute>> {
     let matching_attrs = field
         .attrs
@@ -43,7 +43,7 @@ fn find_validate_eq_attr(field: &syn::Field) -> syn::Result<Option<&syn::Attribu
     }
 }
 
-// Given the field of a named struct to derive ValidateEq for, return the attribute
+/// Given the field of a named struct to derive ValidateEq for, return the attribute.
 fn parse_validate_eq_attr(field: &syn::Field) -> syn::Result<ValidateEqFieldAttr> {
     let attr = find_validate_eq_attr(field)?;
 
