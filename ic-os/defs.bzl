@@ -53,9 +53,9 @@ def icos_build(
         cmd = """
         echo "Running pre_check for {name}" > $@
         for file in $(SRCS); do
-            if [ ! -f "$file" ]; then
-                echo "Error: $file does not exist" >&2
-                echo "Error: $file does not exist" >> $@
+            if [ ! -f "$$file" ]; then
+                echo "Error: $$file does not exist" >&2
+                echo "Error: $$file does not exist" >> $@
                 exit 1
             fi
         done
