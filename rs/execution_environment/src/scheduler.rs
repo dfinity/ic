@@ -1585,6 +1585,9 @@ impl Scheduler for SchedulerImpl {
                     &idkg_subnet_public_keys,
                 );
                 state = new_state;
+                if subnet_round_limits.reached() {
+                    break;
+                }
             }
             scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
 
