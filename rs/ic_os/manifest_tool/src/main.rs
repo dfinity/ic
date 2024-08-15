@@ -30,11 +30,7 @@ pub fn main() -> Result<()> {
             println!("Current working directory: {:?}", std::env::current_dir()?);
 
             let components = get_all_components()?;
-            println!("Found {} components:", components.len());
-
-            for component in &components {
-                dbg!(component);
-            }
+            dbg!(components);
             Ok(())
         }
         None => Ok(()),
