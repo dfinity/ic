@@ -2,13 +2,14 @@ use crate::{
     pb::v1::{
         add_wasm_response, get_deployed_sns_by_proposal_id_response, AddWasmResponse, DeployedSns,
         GetDeployedSnsByProposalIdResponse, GetNextSnsVersionResponse,
-        InsertUpgradePathEntriesResponse, ListUpgradeStep, PrettySnsVersion, SnsCanisterIds,
-        SnsCanisterType, SnsSpecificSnsUpgrade, SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError,
-        SnsWasmStableIndex, StableCanisterState, UpdateSnsSubnetListResponse,
-        UpgradePath as StableUpgradePath,
+        InsertUpgradePathEntriesResponse, ListUpgradeStep, MetadataSection as MetadataSectionPb,
+        PrettySnsVersion, SnsCanisterIds, SnsCanisterType, SnsSpecificSnsUpgrade, SnsUpgrade,
+        SnsVersion, SnsWasm, SnsWasmError, StableCanisterState, UpdateSnsSubnetListResponse,
+        UpgradePath as StableUpgradePath, UpgradePath as UpgradePathPb,
     },
     sns_wasm::{vec_to_hash, SnsWasmCanister, UpgradePath},
     stable_memory::SnsWasmStableMemory,
+    wasm_metadata::MetadataSection,
 };
 use ic_base_types::CanisterId;
 use ic_cdk::api::stable::StableMemory;
@@ -182,11 +183,20 @@ impl TryFrom<SnsCanisterIds> for ic_sns_init::SnsCanisterIds {
 
 impl<M: StableMemory + Clone + Default> From<StableCanisterState> for SnsWasmCanister<M> {
     fn from(stable_canister_state: StableCanisterState) -> Self {
-        let wasm_indexes: BTreeMap<[u8; 32], SnsWasmStableIndex> = stable_canister_state
+        let mut wasm_indexes = BTreeMap::new();
+        let mut wasm_metadata = BTreeMap::new();
+        for (index, metadata_section) in stable_canister_state
             .wasm_indexes
             .into_iter()
-            .map(|index| (vec_to_hash(index.hash.clone()).unwrap(), index))
-            .collect();
+            .zip(stable_canister_state.wasm_metadata.into_iter())
+        {
+            let key = vec_to_hash(index.hash.clone()).unwrap();
+            wasm_indexes.insert(key.clone(), index);
+
+            let metadata_section = MetadataSection::try_from(metadata_section)
+                .expect("All metadata sections of WASMs stored in SNS-W should be valid.");
+            wasm_metadata.insert(key, metadata_section);
+        }
 
         let stable_upgrade_path = stable_canister_state.upgrade_path.unwrap_or_default();
 
@@ -207,23 +217,32 @@ impl<M: StableMemory + Clone + Default> From<StableCanisterState> for SnsWasmCan
             access_controls_enabled: stable_canister_state.access_controls_enabled,
             allowed_principals: stable_canister_state.allowed_principals,
             nns_proposal_to_deployed_sns: stable_canister_state.nns_proposal_to_deployed_sns,
+            wasm_metadata,
         }
     }
 }
 
 impl<M: StableMemory + Clone + Default> From<SnsWasmCanister<M>> for StableCanisterState {
     fn from(state: SnsWasmCanister<M>) -> StableCanisterState {
-        let wasm_indexes = state.wasm_indexes.values().cloned().collect();
-        let sns_subnet_ids = state
-            .sns_subnet_ids
-            .into_iter()
-            .map(|id| id.get())
+        let SnsWasmCanister::<M> {
+            wasm_indexes,
+            sns_subnet_ids,
+            deployed_sns_list,
+            upgrade_path,
+            access_controls_enabled,
+            allowed_principals,
+            nns_proposal_to_deployed_sns,
+            wasm_metadata,
+            stable_memory: _,
+        } = state;
+
+        let wasm_indexes = wasm_indexes.into_values().collect();
+        let wasm_metadata = wasm_metadata
+            .into_values()
+            .map(MetadataSectionPb::from)
             .collect();
-        let deployed_sns_list = state.deployed_sns_list;
-        let upgrade_path = Some(state.upgrade_path.into());
-        let access_controls_enabled = state.access_controls_enabled;
-        let allowed_principals = state.allowed_principals;
-        let nns_proposal_to_deployed_sns = state.nns_proposal_to_deployed_sns;
+        let sns_subnet_ids = sns_subnet_ids.into_iter().map(|id| id.get()).collect();
+        let upgrade_path = Some(UpgradePathPb::from(upgrade_path));
 
         StableCanisterState {
             wasm_indexes,
@@ -233,6 +252,7 @@ impl<M: StableMemory + Clone + Default> From<SnsWasmCanister<M>> for StableCanis
             access_controls_enabled,
             allowed_principals,
             nns_proposal_to_deployed_sns,
+            wasm_metadata,
         }
     }
 }

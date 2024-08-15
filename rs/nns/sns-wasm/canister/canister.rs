@@ -317,7 +317,11 @@ fn canister_init_(init_payload: SnsWasmCanisterInitPayload) {
 fn canister_pre_upgrade() {
     println!("{}Executing pre upgrade", LOG_PREFIX);
 
-    SNS_WASM.with(|c| c.borrow().write_state_to_stable_memory());
+    SNS_WASM.with(|c| {
+        println!("c.wasm_metadata = {:#?}", c.borrow().wasm_metadata);
+        println!("c.wasm_metadata = {:?}", c.borrow().wasm_indexes);
+        c.borrow().write_state_to_stable_memory();
+    });
 
     println!("{}Completed pre upgrade", LOG_PREFIX);
 }
@@ -329,7 +333,13 @@ fn canister_post_upgrade() {
     dfn_core::printer::hook();
     println!("{}Executing post upgrade", LOG_PREFIX);
 
-    SNS_WASM.with(|c| c.replace(SnsWasmCanister::<CanisterStableMemory>::from_stable_memory()));
+    SNS_WASM.with(|c| {
+        println!("c.wasm_metadata = {:#?}", c.borrow().wasm_metadata);
+        println!("c.wasm_metadata = {:?}", c.borrow().wasm_indexes);
+        c.replace(SnsWasmCanister::<CanisterStableMemory>::from_stable_memory());
+        println!("c.wasm_metadata = {:#?}", c.borrow().wasm_metadata);
+        println!("c.wasm_metadata = {:?}", c.borrow().wasm_indexes);
+    });
 
     println!("{}Completed post upgrade", LOG_PREFIX);
 }

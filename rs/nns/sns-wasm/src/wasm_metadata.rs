@@ -23,6 +23,7 @@ impl TryFrom<GetWasmMetadataRequestPb> for [u8; 32] {
 }
 
 /// The internal representation of `MetadataSectionPb`.
+#[derive(Clone, Debug)]
 pub struct MetadataSection {
     pub visibility: String,
     pub name: String,
@@ -36,6 +37,31 @@ impl From<MetadataSection> for MetadataSectionPb {
             name: Some(src.name),
             contents: Some(src.contents),
         }
+    }
+}
+
+impl TryFrom<MetadataSectionPb> for MetadataSection {
+    type Error = String;
+
+    fn try_from(src: MetadataSectionPb) -> Result<Self, Self::Error> {
+        let MetadataSectionPb {
+            visibility: Some(visibility),
+            name: Some(name),
+            contents: Some(contents),
+        } = src
+        else {
+            return Err(
+                "Cannot interpret as MetadataSection: fields visibility, name, contents must be \
+                specified."
+                    .to_string(),
+            );
+        };
+
+        Ok(Self {
+            visibility,
+            name,
+            contents,
+        })
     }
 }
 

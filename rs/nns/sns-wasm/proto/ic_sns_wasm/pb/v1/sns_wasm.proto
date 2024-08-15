@@ -33,6 +33,7 @@ message StableCanisterState {
   bool access_controls_enabled = 5;
   repeated ic_base_types.pb.v1.PrincipalId allowed_principals = 6;
   map<uint64, uint64> nns_proposal_to_deployed_sns = 7;
+  repeated MetadataSection wasm_metadata = 8;
 }
 
 // Details the offset and size of a WASM binary in stable memory and the hash of this binary.

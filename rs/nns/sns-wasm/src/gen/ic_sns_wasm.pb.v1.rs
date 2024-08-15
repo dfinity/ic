@@ -18,6 +18,8 @@ pub struct StableCanisterState {
     pub allowed_principals: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
     #[prost(btree_map = "uint64, uint64", tag = "7")]
     pub nns_proposal_to_deployed_sns: ::prost::alloc::collections::BTreeMap<u64, u64>,
+    #[prost(message, repeated, tag = "8")]
+    pub wasm_metadata: ::prost::alloc::vec::Vec<MetadataSection>,
 }
 /// Details the offset and size of a WASM binary in stable memory and the hash of this binary.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]

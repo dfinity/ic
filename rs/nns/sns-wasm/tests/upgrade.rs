@@ -89,6 +89,7 @@ fn test_sns_wasm_upgrade() {
     // Ensure the basic wasm response is the same after upgrade
     let get_wasm_response =
         sns_wasm::get_wasm(&machine, SNS_WASM_CANISTER_ID, &first_gov_wasm_hash);
+    println!("get_wasm_response = {:#?}", get_wasm_response);
     assert_eq!(
         types_to_wasms_one
             .get(&SnsCanisterType::Governance)

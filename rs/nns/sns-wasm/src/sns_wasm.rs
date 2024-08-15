@@ -107,6 +107,8 @@ where
     pub allowed_principals: Vec<PrincipalId>,
     /// Map of nns proposal id to index in the `deployed_sns_list`.
     pub nns_proposal_to_deployed_sns: BTreeMap<u64, u64>,
+    /// Map from WASM hash to the metadata of this WASM.
+    pub wasm_metadata: BTreeMap<[u8; 32], MetadataSection>,
 }
 
 /// Internal implementation to give the wasms we explicitly handle a name (instead of Vec<u8>) for
