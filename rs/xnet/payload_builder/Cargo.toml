@@ -10,7 +10,6 @@ documentation.workspace = true
 async-trait = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
-hyper-rustls = { workspace = true }
 http-body-util = { workspace = true }
 ic-async-utils = { path = "../../async_utils" }
 ic-base-types = { path = "../../types/base_types" }

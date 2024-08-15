@@ -27,7 +27,6 @@ DEPENDENCIES = [
     "//rs/xnet/uri",
     "@crate_index//:http-body-util",
     "@crate_index//:hyper",
-    "@crate_index//:hyper-rustls",
     "@crate_index//:hyper-util",
     "@crate_index//:prometheus",
     "@crate_index//:rand",

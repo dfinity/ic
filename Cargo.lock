@@ -12776,7 +12776,6 @@ dependencies = [
  "axum 0.7.5",
  "http-body-util",
  "hyper 1.4.1",
- "hyper-rustls 0.27.1",
  "hyper-util",
  "ic-async-utils",
  "ic-base-types",
