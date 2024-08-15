@@ -2994,6 +2994,7 @@ dependencies = [
  "ff 0.12.1",
  "flate2",
  "form_urlencoded",
+ "fqdn",
  "fs_extra",
  "futures",
  "futures-util",
@@ -3027,15 +3028,16 @@ dependencies = [
  "ic-btc-validation",
  "ic-canister-log",
  "ic-canister-sig-creation",
- "ic-cbor",
+ "ic-cbor 2.6.0",
  "ic-cdk 0.13.2",
  "ic-cdk-macros 0.9.0",
  "ic-cdk-timers",
- "ic-certification",
+ "ic-certification 2.6.0",
  "ic-certified-map",
- "ic-http-certification",
+ "ic-http-certification 2.6.0",
+ "ic-http-gateway",
  "ic-metrics-encoder",
- "ic-response-verification",
+ "ic-response-verification 2.6.0",
  "ic-stable-structures",
  "ic-test-state-machine-client",
  "ic-utils",
@@ -3070,6 +3072,8 @@ dependencies = [
  "libfuzzer-sys",
  "libnss",
  "little-loadshedder",
+ "lmdb-rkv",
+ "lmdb-rkv-sys",
  "local-ip-address",
  "lru",
  "mach2",
@@ -3921,6 +3925,12 @@ dependencies = [
  "nonempty",
  "thiserror",
 ]
+
+[[package]]
+name = "fqdn"
+version = "0.3.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08b1eaa7dfddeab6036292995620bf0435712e619db6d7690605897e76975eb0"
 
 [[package]]
 name = "fragile"
@@ -4819,7 +4829,7 @@ dependencies = [
  "hyper 1.4.1",
  "hyper-rustls 0.27.2",
  "hyper-util",
- "ic-certification",
+ "ic-certification 2.6.0",
  "ic-transport-types",
  "ic-verify-bls-signature 0.5.0",
  "k256",
@@ -4893,8 +4903,8 @@ dependencies = [
  "candid",
  "hex",
  "ic-cdk 0.14.0",
- "ic-certification",
- "ic-representation-independent-hash",
+ "ic-certification 2.6.0",
+ "ic-representation-independent-hash 2.6.0",
  "lazy_static",
  "serde",
  "serde_bytes",
@@ -4910,7 +4920,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "02b0e48b4166c891e79d624f3a184b4a7c145d307576872d9a46dedb8c73ea8f"
 dependencies = [
  "candid",
- "ic-certification",
+ "ic-certification 2.6.0",
+ "leb128",
+ "nom",
+ "thiserror",
+]
+
+[[package]]
+name = "ic-cbor"
+version = "2.6.0"
+source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
+dependencies = [
+ "candid",
+ "ic-certification 2.6.0",
  "leb128",
  "nom",
  "thiserror",
@@ -5033,8 +5055,26 @@ checksum = "586e09b06a93d930f6a33f5f909bb11d2e4a06be3635dd5da1eb0e6554b7dae4"
 dependencies = [
  "cached 0.47.0",
  "candid",
- "ic-cbor",
- "ic-certification",
+ "ic-cbor 2.6.0",
+ "ic-certification 2.6.0",
+ "lazy_static",
+ "leb128",
+ "miracl_core_bls12381",
+ "nom",
+ "parking_lot 0.12.1",
+ "sha2 0.10.8",
+ "thiserror",
+]
+
+[[package]]
+name = "ic-certificate-verification"
+version = "2.6.0"
+source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
+dependencies = [
+ "cached 0.47.0",
+ "candid",
+ "ic-cbor 2.6.0",
+ "ic-certification 2.6.0",
  "lazy_static",
  "leb128",
  "miracl_core_bls12381",
@@ -5057,6 +5097,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-certification"
+version = "2.6.0"
+source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
+dependencies = [
+ "hex",
+ "sha2 0.10.8",
+]
+
+[[package]]
 name = "ic-certified-map"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5075,11 +5124,43 @@ checksum = "ff0b97e949845039149dc5e7ea6a7c12ee4333bb402e37bc507904643c7b3e41"
 dependencies = [
  "candid",
  "http 0.2.12",
- "ic-certification",
- "ic-representation-independent-hash",
+ "ic-certification 2.6.0",
+ "ic-representation-independent-hash 2.6.0",
  "serde",
  "thiserror",
  "urlencoding",
+]
+
+[[package]]
+name = "ic-http-certification"
+version = "2.6.0"
+source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
+dependencies = [
+ "candid",
+ "http 0.2.12",
+ "ic-certification 2.6.0",
+ "ic-representation-independent-hash 2.6.0",
+ "serde",
+ "thiserror",
+ "urlencoding",
+]
+
+[[package]]
+name = "ic-http-gateway"
+version = "0.0.0"
+source = "git+https://github.com/dfinity/http-gateway?rev=a1f63eb17b0a89f7fadcab67b3a0afe1720ef9b3#a1f63eb17b0a89f7fadcab67b3a0afe1720ef9b3"
+dependencies = [
+ "bytes",
+ "candid",
+ "futures",
+ "http 1.1.0",
+ "http-body 1.0.0",
+ "http-body-util",
+ "ic-agent",
+ "ic-http-certification 2.6.0",
+ "ic-response-verification 2.6.0",
+ "ic-utils",
+ "thiserror",
 ]
 
 [[package]]
@@ -5099,6 +5180,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-representation-independent-hash"
+version = "2.6.0"
+source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
+dependencies = [
+ "leb128",
+ "sha2 0.10.8",
+]
+
+[[package]]
 name = "ic-response-verification"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5109,11 +5199,34 @@ dependencies = [
  "flate2",
  "hex",
  "http 0.2.12",
- "ic-cbor",
- "ic-certificate-verification",
- "ic-certification",
- "ic-http-certification",
- "ic-representation-independent-hash",
+ "ic-cbor 2.6.0",
+ "ic-certificate-verification 2.6.0",
+ "ic-certification 2.6.0",
+ "ic-http-certification 2.6.0",
+ "ic-representation-independent-hash 2.6.0",
+ "leb128",
+ "log",
+ "nom",
+ "sha2 0.10.8",
+ "thiserror",
+ "urlencoding",
+]
+
+[[package]]
+name = "ic-response-verification"
+version = "2.6.0"
+source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
+dependencies = [
+ "base64 0.21.4",
+ "candid",
+ "flate2",
+ "hex",
+ "http 0.2.12",
+ "ic-cbor 2.6.0",
+ "ic-certificate-verification 2.6.0",
+ "ic-certification 2.6.0",
+ "ic-http-certification 2.6.0",
+ "ic-representation-independent-hash 2.6.0",
  "leb128",
  "log",
  "nom",
@@ -5151,7 +5264,7 @@ checksum = "875dc4704780383112e8e8b5063a1b98de114321d0c7d3e7f635dcf360a57fba"
 dependencies = [
  "candid",
  "hex",
- "ic-certification",
+ "ic-certification 2.6.0",
  "leb128",
  "serde",
  "serde_bytes",
@@ -6251,6 +6364,27 @@ dependencies = [
  "thiserror",
  "tokio",
  "tower",
+]
+
+[[package]]
+name = "lmdb-rkv"
+version = "0.14.99"
+source = "git+https://github.com/dfinity-lab/lmdb-rs?rev=4d952c8f1dca79de855af892b444d7112567b58d#4d952c8f1dca79de855af892b444d7112567b58d"
+dependencies = [
+ "bitflags 1.3.2",
+ "byteorder",
+ "libc",
+ "lmdb-rkv-sys",
+]
+
+[[package]]
+name = "lmdb-rkv-sys"
+version = "0.11.99"
+source = "git+https://github.com/dfinity-lab/lmdb-rs?rev=4d952c8f1dca79de855af892b444d7112567b58d#4d952c8f1dca79de855af892b444d7112567b58d"
+dependencies = [
+ "cc",
+ "libc",
+ "pkg-config",
 ]
 
 [[package]]
