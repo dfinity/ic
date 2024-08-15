@@ -917,6 +917,7 @@ fn test_peek_input_with_stale_references() {
         canister_test_id(1),
         canister_test_id(3),
     ];
+    // 4 requests, with deadlines 1000, 1001, 1002, 1003.
     let requests = senders
         .iter()
         .enumerate()
@@ -932,7 +933,9 @@ fn test_peek_input_with_stale_references() {
 
     let own_canister_id = canister_test_id(13);
     let local_canisters = BTreeMap::new();
-    // Time out the first two requests, including the only request from canister 2.
+
+    // Time out the first two requests (deadlines 1000, 1001), including the only
+    // request from canister 2.
     queues.time_out_messages(coarse_time(1002).into(), &own_canister_id, &local_canisters);
 
     assert!(queues.has_input());

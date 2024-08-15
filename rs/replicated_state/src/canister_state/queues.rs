@@ -76,7 +76,7 @@ pub struct CanisterQueues {
 
     /// Per remote canister input and output queues. Queues hold references into the
     /// message pool, some of which may be stale due to expiration or load shedding.
-    /// The item at the head of each queue, if any, is guaranteed tp be non-stale.
+    /// The item at the head of each queue, if any, is guaranteed to be non-stale.
     canister_queues: BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
 
     /// Pool holding the messages referenced by `canister_queues`, with support for
@@ -920,7 +920,7 @@ impl CanisterQueues {
     ) -> usize {
         let expired_messages = self.pool.expire_messages(current_time);
         for (id, msg) in expired_messages.iter() {
-            self.on_message_dropped(id, msg, own_canister_id, local_canisters);
+            self.on_message_dropped(*id, msg, own_canister_id, local_canisters);
         }
 
         debug_assert!(self.stats_ok());
@@ -941,7 +941,7 @@ impl CanisterQueues {
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
     ) -> bool {
         if let Some((id, msg)) = self.pool.shed_largest_message() {
-            self.on_message_dropped(&id, &msg, own_canister_id, local_canisters);
+            self.on_message_dropped(id, &msg, own_canister_id, local_canisters);
 
             debug_assert!(self.stats_ok());
             debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters));
@@ -960,7 +960,7 @@ impl CanisterQueues {
     /// to determine the correct input queue schedule to update (if applicable).
     fn on_message_dropped(
         &mut self,
-        id: &message_pool::Id,
+        id: message_pool::Id,
         msg: &RequestOrResponse,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
@@ -983,7 +983,7 @@ impl CanisterQueues {
         //
         // Defensive check, reference may have already been popped by an earlier
         // `on_message_dropped()` call if multiple messages got dropped at once.
-        if queue.peek() == Some(&CanisterQueueItem::Reference(*id)) {
+        if queue.peek() == Some(&CanisterQueueItem::Reference(id)) {
             queue.pop();
             queue.pop_while(|item| self.pool.get(item.id()).is_none());
         }
@@ -1264,31 +1264,29 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
                 .map(|qp| {
                     let canister_id: CanisterId =
                         try_from_option_field(qp.canister_id, "CanisterQueuePair::canister_id")?;
-                    let mut iq: CanisterQueue = try_from_option_field(
+                    let iq: CanisterQueue = try_from_option_field(
                         qp.input_queue.map(|q| (q, Context::Inbound)),
                         "CanisterQueuePair::input_queue",
                     )?;
                     if let Some(item) = iq.peek() {
                         if pool.get(item.id()).is_none() {
-                            metrics.observe_broken_soft_invariant(
-                                "CanisterQueues: Stale message at the head of input queue"
-                                    .to_string(),
-                            );
+                            return Err(ProxyDecodeError::Other(format!(
+                                "CanisterQueues: Stale message at the head of input queue from {}",
+                                canister_id
+                            )));
                         }
-                        iq.pop_while(|item| pool.get(item.id()).is_none());
                     }
-                    let mut oq: CanisterQueue = try_from_option_field(
+                    let oq: CanisterQueue = try_from_option_field(
                         qp.output_queue.map(|q| (q, Context::Outbound)),
                         "CanisterQueuePair::output_queue",
                     )?;
                     if let Some(item) = oq.peek() {
                         if pool.get(item.id()).is_none() {
-                            metrics.observe_broken_soft_invariant(
-                                "CanisterQueues: Stale message at the head of output queue"
-                                    .to_string(),
-                            );
+                            return Err(ProxyDecodeError::Other(format!(
+                                "CanisterQueues: Stale message at the head of output queue to {}",
+                                canister_id
+                            )));
                         }
-                        oq.pop_while(|item| pool.get(item.id()).is_none());
                     }
 
                     iq.iter().chain(oq.iter()).for_each(|queue_item| {
@@ -1444,22 +1442,22 @@ impl QueueStats {
         if context == Context::Inbound {
             // If pushing a response into an input queue, consume an input queue slot.
             debug_assert!(self.input_queues_reserved_slots > 0);
-            self.input_queues_reserved_slots -= 1;
+            self.input_queues_reserved_slots = self.input_queues_reserved_slots.saturating_sub(1);
         } else {
             // And the other way around.
             debug_assert!(self.output_queues_reserved_slots > 0);
-            self.output_queues_reserved_slots -= 1;
+            self.output_queues_reserved_slots = self.output_queues_reserved_slots.saturating_sub(1);
         }
     }
 
     /// Updates the stats to reflect the dropping of the given request from an input
     /// queue.
     fn on_drop_input_request(&mut self, request: &Request) {
-        // We should never be expiring or shedding a guaranteed response request.
+        // We should never be expiring or shedding a guaranteed response input request.
         debug_assert_ne!(NO_DEADLINE, request.deadline);
 
         debug_assert!(self.output_queues_reserved_slots > 0);
-        self.output_queues_reserved_slots -= 1;
+        self.output_queues_reserved_slots = self.output_queues_reserved_slots.saturating_sub(1);
     }
 }
 

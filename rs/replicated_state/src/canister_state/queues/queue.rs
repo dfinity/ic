@@ -109,10 +109,18 @@ pub(crate) struct CanisterQueue {
     capacity: usize,
 
     /// Number of enqueued request references.
+    ///
+    /// Invariants:
+    ///  * `request_slots == queue.iter().filter(|msg| !msg.is_response()).count()`
+    ///  * `request_slots <= capacity`
     request_slots: usize,
 
     /// Number of slots used by response references or reserved for expected
     /// responses.
+    ///
+    /// Invariants:
+    ///  * `response_slots >= queue.iter().filter(|msg| msg.is_response()).count()`
+    ///  * `response_slots <= capacity`
     response_slots: usize,
 }
 
@@ -184,7 +192,8 @@ impl CanisterQueue {
     /// had a chance to be popped.
     pub(super) fn release_reserved_response_slot(&mut self) {
         debug_assert!(self.response_slots > 0);
-        self.response_slots -= 1;
+
+        self.response_slots = self.response_slots.saturating_sub(1);
     }
 
     /// Returns the number of reserved response slots.
@@ -221,7 +230,7 @@ impl CanisterQueue {
 
         if item.is_response() {
             debug_assert!(self.response_slots > 0);
-            self.response_slots -= 1;
+            self.response_slots = self.response_slots.saturating_sub(1);
         } else {
             debug_assert!(self.request_slots > 0);
             self.request_slots -= 1;
