@@ -1201,13 +1201,9 @@ mod tests {
                 .any(|x| matches!(x, ArtifactMutation::Insert(_))));
             // purging genesis CUP & beacon + validated beacon at height 2
             assert_eq!(result.mutations.len(), 3);
-            assert!(result
-                .mutations
-                .iter()
-                .find(
-                    |x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_2.get_id())
-                )
-                .is_some());
+            assert!(result.mutations.iter().any(
+                |x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_2.get_id())
+            ));
             assert!(result.poll_immediately);
 
             let result =
