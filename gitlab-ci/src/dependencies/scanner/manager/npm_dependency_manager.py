@@ -66,7 +66,7 @@ class NPMDependencyManager(DependencyManager):
         return False
 
     @staticmethod
-    def __npm_audit_output(engine_version: int, path: pathlib.Path) -> typing.Dict:
+    def __npm_audit_output(engine_version: str, path: pathlib.Path) -> typing.Dict:
         nvm_dir = os.environ.get("NVM_DIR", "/opt/nvm")
         environment = {}
         cwd = path
@@ -79,7 +79,7 @@ class NPMDependencyManager(DependencyManager):
         return audit_out
 
     @staticmethod
-    def __npm_list_output(engine_version: int, path: pathlib.Path) -> typing.Dict:
+    def __npm_list_output(engine_version: str, path: pathlib.Path) -> typing.Dict:
         nvm_dir = os.environ.get("NVM_DIR", "/opt/nvm")
         environment = {}
         cwd = path
