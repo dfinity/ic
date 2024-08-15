@@ -7,7 +7,7 @@ use ic_nns_governance_api::pb::v1::{
     update_canister_settings::{
         CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
     },
-    ProposalActionRequest, MakeProposalRequest, UpdateCanisterSettings,
+    MakeProposalRequest, ProposalActionRequest, UpdateCanisterSettings,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,

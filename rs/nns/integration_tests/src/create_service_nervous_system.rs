@@ -12,11 +12,11 @@ use ic_nns_governance_api::pb::v1::{
     manage_neuron::{self, RegisterVote},
     manage_neuron_response,
     proposal::Action,
+    MakeProposalRequest,
     // Perhaps surprisingly, CreateServiceNervousSystem is not needed by
     // this file, because we simply use a constant of that type
     ManageNeuron,
     ManageNeuronResponse,
-    MakeProposalRequest,
     ProposalActionRequest,
     ProposalStatus,
     Vote,

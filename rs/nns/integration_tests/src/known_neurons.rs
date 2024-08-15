@@ -6,9 +6,9 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_governance_api::pb::v1::{
     manage_neuron::NeuronIdOrSubaccount, manage_neuron_response::Command as CommandResponse,
-    GovernanceError, KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse, ManageNeuronResponse,
-    NeuronInfo, ManageNeuronRequest, ManageNeuronCommandRequest, MakeProposalRequest, ProposalActionRequest,
-    ProposalStatus,
+    GovernanceError, KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse, MakeProposalRequest,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NeuronInfo,
+    ProposalActionRequest, ProposalStatus,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,

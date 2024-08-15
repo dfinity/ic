@@ -7,7 +7,7 @@ use ic_nervous_system_root::change_canister::{
 use ic_nns_constants::{REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::pb::v1::{
     manage_neuron_response::Command, stop_or_start_canister::CanisterAction, ExecuteNnsFunction,
-    MakeProposalRequest, ProposalActionRequest, NnsFunction, StopOrStartCanister,
+    MakeProposalRequest, NnsFunction, ProposalActionRequest, StopOrStartCanister,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,

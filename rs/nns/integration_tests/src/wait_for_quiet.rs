@@ -12,8 +12,8 @@ use ic_nns_governance_api::pb::v1::{
     manage_neuron::{self, NeuronIdOrSubaccount},
     manage_neuron_response::Command as CommandResponse,
     neuron::DissolveState,
-    AddOrRemoveNodeProvider, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
-    Neuron, NodeProvider, ProposalActionRequest, ProposalInfo, MakeProposalRequest, Vote,
+    AddOrRemoveNodeProvider, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, Neuron, NodeProvider, ProposalActionRequest, ProposalInfo, Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,

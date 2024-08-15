@@ -57,8 +57,8 @@ use ic_nns_governance_api::{
             CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
         },
         AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, InstallCodeRequest,
-        ManageNeuronCommandRequest, ManageNeuronRequest, NnsFunction, NodeProvider,
-        ProposalActionRequest, MakeProposalRequest, RewardNodeProviders, StopOrStartCanister,
+        MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, NnsFunction,
+        NodeProvider, ProposalActionRequest, RewardNodeProviders, StopOrStartCanister,
         UpdateCanisterSettings,
     },
     proposal_helpers::{

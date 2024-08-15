@@ -5,8 +5,8 @@ use ic_agent::Agent;
 use ic_nns_common::{pb::v1::ProposalId, types::NeuronId};
 use ic_nns_governance_api::{
     pb::v1::{
-        manage_neuron_response, manage_neuron_response::MakeProposalResponse, ManageNeuronResponse,
-        ProposalInfo, MakeProposalRequest,
+        manage_neuron_response, manage_neuron_response::MakeProposalResponse, MakeProposalRequest,
+        ManageNeuronResponse, ProposalInfo,
     },
     proposal_helpers::create_make_proposal_payload,
 };

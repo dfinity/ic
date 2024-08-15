@@ -10,8 +10,8 @@ use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_governance_api::pb::v1::{
     add_or_remove_node_provider::Change, manage_neuron::NeuronIdOrSubaccount,
     manage_neuron_response::Command as CommandResponse, AddOrRemoveNodeProvider,
-    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NnsFunction, NodeProvider,
-    ProposalActionRequest, MakeProposalRequest, ProposalStatus,
+    MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
+    NnsFunction, NodeProvider, ProposalActionRequest, ProposalStatus,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,

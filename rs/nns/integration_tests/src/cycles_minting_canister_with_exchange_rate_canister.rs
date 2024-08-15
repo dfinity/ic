@@ -8,7 +8,8 @@ use ic_nns_common::{
 };
 use ic_nns_constants::{EXCHANGE_RATE_CANISTER_ID, EXCHANGE_RATE_CANISTER_INDEX};
 use ic_nns_governance_api::pb::v1::{
-    manage_neuron_response, ExecuteNnsFunction, MakeProposalRequest, ProposalActionRequest, NnsFunction,
+    manage_neuron_response, ExecuteNnsFunction, MakeProposalRequest, NnsFunction,
+    ProposalActionRequest,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -72,10 +73,12 @@ fn propose_icp_xdr_rate(
         title: Some(format!("Update ICP/XDR rate to {}", xdr_permyriad_per_icp)),
         summary: "".to_string(),
         url: "".to_string(),
-        action: Some(ProposalActionRequest::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: NnsFunction::IcpXdrConversionRate as i32,
-            payload: Encode!(&payload).unwrap(),
-        })),
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::IcpXdrConversionRate as i32,
+                payload: Encode!(&payload).unwrap(),
+            },
+        )),
     };
 
     let response = nns_governance_make_proposal(

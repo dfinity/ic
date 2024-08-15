@@ -14,8 +14,9 @@ use ic_nns_governance_api::pb::v1::{
     add_or_remove_node_provider::Change,
     manage_neuron_response::Command as CommandResponse,
     reward_node_provider::{RewardMode, RewardToAccount},
-    AddOrRemoveNodeProvider, ExecuteNnsFunction, GovernanceError, NetworkEconomics, MakeProposalRequest,
-    ProposalActionRequest, NnsFunction, NodeProvider, RewardNodeProvider, RewardNodeProviders,
+    AddOrRemoveNodeProvider, ExecuteNnsFunction, GovernanceError, MakeProposalRequest,
+    NetworkEconomics, NnsFunction, NodeProvider, ProposalActionRequest, RewardNodeProvider,
+    RewardNodeProviders,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,

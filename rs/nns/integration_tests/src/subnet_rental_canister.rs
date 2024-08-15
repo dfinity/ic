@@ -8,7 +8,7 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::pb::v1::{
     manage_neuron_response::{Command as CommandResponse, RegisterVoteResponse},
-    ExecuteNnsFunction, MakeProposalRequest, ProposalActionRequest, NnsFunction, Vote,
+    ExecuteNnsFunction, MakeProposalRequest, NnsFunction, ProposalActionRequest, Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -249,10 +249,12 @@ fn subnet_rental_request_lifecycle() {
         title: Some("Create subnet rental request".to_string()),
         summary: "".to_string(),
         url: "".to_string(),
-        action: Some(ProposalActionRequest::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: NnsFunction::SubnetRentalRequest as i32,
-            payload: Encode!(&subnet_rental_request).expect("Error encoding proposal payload"),
-        })),
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::SubnetRentalRequest as i32,
+                payload: Encode!(&subnet_rental_request).expect("Error encoding proposal payload"),
+            },
+        )),
     };
     // Make proposal with small neuron. It does not have enough voting power such that the proposal would be adopted immediately.
     let cmd = nns_governance_make_proposal(
@@ -399,10 +401,12 @@ fn test_renting_a_subnet_without_paying_fails() {
         title: Some("Create subnet rental request".to_string()),
         summary: "".to_string(),
         url: "".to_string(),
-        action: Some(ProposalActionRequest::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: NnsFunction::SubnetRentalRequest as i32,
-            payload: Encode!(&subnet_rental_request).expect("Error encoding proposal payload"),
-        })),
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::SubnetRentalRequest as i32,
+                payload: Encode!(&subnet_rental_request).expect("Error encoding proposal payload"),
+            },
+        )),
     };
     // Make proposal with large neuron. It has enough voting power such that the proposal will be adopted immediately.
     let cmd = nns_governance_make_proposal(
