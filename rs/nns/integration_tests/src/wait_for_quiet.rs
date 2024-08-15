@@ -12,8 +12,8 @@ use ic_nns_governance_api::pb::v1::{
     manage_neuron::{self, NeuronIdOrSubaccount},
     manage_neuron_response::Command as CommandResponse,
     neuron::DissolveState,
-    AddOrRemoveNodeProvider, ManageNeuronResponse, Neuron, ManageNeuronInput, ManageNeuronCommandInput,
-    ProposalInput, ProposalActionInput, NodeProvider, ProposalInfo, Vote,
+    AddOrRemoveNodeProvider, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
+    Neuron, NodeProvider, ProposalActionRequest, ProposalInfo, MakeProposalRequest, Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -59,17 +59,17 @@ fn test_deadline_is_extended_with_wait_for_quiet() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuronInput {
+                ManageNeuronRequest {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
                         id: TEST_NEURON_2_ID,
                     })),
                     id: None,
-                    command: Some(ManageNeuronCommandInput::MakeProposal(Box::new(
-                        ProposalInput {
+                    command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
+                        MakeProposalRequest {
                             title: Some("Just want to add this NP.".to_string()),
                             summary: "".to_string(),
                             url: "".to_string(),
-                            action: Some(ProposalActionInput::AddOrRemoveNodeProvider(
+                            action: Some(ProposalActionRequest::AddOrRemoveNodeProvider(
                                 AddOrRemoveNodeProvider {
                                     change: Some(Change::ToAdd(NodeProvider {
                                         id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
@@ -119,10 +119,10 @@ fn test_deadline_is_extended_with_wait_for_quiet() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuronInput {
+                ManageNeuronRequest {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id_4)),
                     id: None,
-                    command: Some(ManageNeuronCommandInput::RegisterVote(
+                    command: Some(ManageNeuronCommandRequest::RegisterVote(
                         manage_neuron::RegisterVote {
                             proposal: Some(pid),
                             vote: Vote::No as i32,

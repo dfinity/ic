@@ -6,7 +6,7 @@ use ic_nns_common::{pb::v1::ProposalId, types::NeuronId};
 use ic_nns_governance_api::{
     pb::v1::{
         manage_neuron_response, manage_neuron_response::MakeProposalResponse, ManageNeuronResponse,
-        ProposalInfo, ProposalInput,
+        ProposalInfo, MakeProposalRequest,
     },
     proposal_helpers::create_make_proposal_payload,
 };
@@ -54,7 +54,7 @@ impl GovernanceClient {
     pub async fn make_proposal(
         &self,
         neuron_details: &NeuronDetails,
-        proposal: &ProposalInput,
+        proposal: &MakeProposalRequest,
     ) -> ProposalId {
         debug!(&self.logger, "[governance_client] Making Proposal");
         let neuron_id: NeuronId = neuron_details.neuron.id.unwrap().into();

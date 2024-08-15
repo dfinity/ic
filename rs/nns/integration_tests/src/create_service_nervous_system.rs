@@ -16,8 +16,8 @@ use ic_nns_governance_api::pb::v1::{
     // this file, because we simply use a constant of that type
     ManageNeuron,
     ManageNeuronResponse,
-    ProposalInput,
-    ProposalActionInput,
+    MakeProposalRequest,
+    ProposalActionRequest,
     ProposalStatus,
     Vote,
 };
@@ -190,11 +190,11 @@ fn make_proposal(state_machine: &StateMachine, sns_number: u64) -> ManageNeuronR
         state_machine,
         *TEST_NEURON_2_OWNER_PRINCIPAL,
         neuron_id,
-        &ProposalInput {
+        &MakeProposalRequest {
             title: Some(format!("Create SNS #{}", sns_number)),
             summary: "".to_string(),
             url: "".to_string(),
-            action: Some(ProposalActionInput::CreateServiceNervousSystem(
+            action: Some(ProposalActionRequest::CreateServiceNervousSystem(
                 CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
                     .clone()
                     .into(),

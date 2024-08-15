@@ -7,7 +7,7 @@ use ic_nns_governance_api::pb::v1::{
     update_canister_settings::{
         CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
     },
-    ProposalInput, ProposalActionInput, UpdateCanisterSettings,
+    ProposalActionRequest, MakeProposalRequest, UpdateCanisterSettings,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -74,9 +74,9 @@ fn test_update_canister_settings_proposal(
         &state_machine,
         n1.principal_id,
         n1.neuron_id,
-        &ProposalInput {
+        &MakeProposalRequest {
             title: Some("Update canister settings".to_string()),
-            action: Some(ProposalActionInput::UpdateCanisterSettings(
+            action: Some(ProposalActionRequest::UpdateCanisterSettings(
                 UpdateCanisterSettings {
                     canister_id: Some(target_canister_id.get()),
                     settings: Some(CanisterSettings {

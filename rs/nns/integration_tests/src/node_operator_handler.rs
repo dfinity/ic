@@ -10,8 +10,8 @@ use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_governance_api::pb::v1::{
     add_or_remove_node_provider::Change, manage_neuron::NeuronIdOrSubaccount,
     manage_neuron_response::Command as CommandResponse, AddOrRemoveNodeProvider,
-    ManageNeuronResponse, ManageNeuronInput, ManageNeuronCommandInput, ProposalInput, ProposalActionInput,
-    NnsFunction, NodeProvider, ProposalStatus,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NnsFunction, NodeProvider,
+    ProposalActionRequest, MakeProposalRequest, ProposalStatus,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -50,19 +50,19 @@ fn test_node_operator_records_can_be_added_and_removed() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuronInput {
+                ManageNeuronRequest {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
                         ic_nns_common::pb::v1::NeuronId {
                             id: TEST_NEURON_1_ID,
                         },
                     )),
                     id: None,
-                    command: Some(ManageNeuronCommandInput::MakeProposal(Box::new(
-                        ProposalInput {
+                    command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
+                        MakeProposalRequest {
                             title: Some("Just want to add this NP.".to_string()),
                             summary: "".to_string(),
                             url: "".to_string(),
-                            action: Some(ProposalActionInput::AddOrRemoveNodeProvider(
+                            action: Some(ProposalActionRequest::AddOrRemoveNodeProvider(
                                 AddOrRemoveNodeProvider {
                                     change: Some(Change::ToAdd(NodeProvider {
                                         id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),

@@ -4,7 +4,7 @@ use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nns_constants::LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET;
 use ic_nns_governance_api::pb::v1::{
     manage_neuron_response::{Command, MakeProposalResponse},
-    ExecuteNnsFunction, ProposalInput, ProposalActionInput, NnsFunction,
+    ExecuteNnsFunction, MakeProposalRequest, ProposalActionRequest, NnsFunction,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -49,11 +49,11 @@ fn uninstall_canister_by_proposal() {
     let status = get_canister_status_from_root(&state_machine, canister_id);
     assert!(status.module_hash.is_some());
     // Prepare a proposal to uninstall canister code
-    let proposal = ProposalInput {
+    let proposal = MakeProposalRequest {
         title: Some("<proposal to uninstall an NNS canister>".to_string()),
         summary: "".to_string(),
         url: "".to_string(),
-        action: Some(ProposalActionInput::ExecuteNnsFunction(ExecuteNnsFunction {
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(ExecuteNnsFunction {
             nns_function: NnsFunction::UninstallCode as i32,
             payload: Encode!(&CanisterIdRecord { canister_id })
                 .expect("Error encoding proposal payload"),

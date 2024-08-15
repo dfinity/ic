@@ -7,7 +7,7 @@ use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_governance_api::pb::v1::{
     manage_neuron::NeuronIdOrSubaccount, manage_neuron_response::Command as CommandResponse,
     GovernanceError, KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse, ManageNeuronResponse,
-    NeuronInfo, ManageNeuronInput, ManageNeuronCommandInput, ProposalInput, ProposalActionInput,
+    NeuronInfo, ManageNeuronRequest, ManageNeuronCommandRequest, MakeProposalRequest, ProposalActionRequest,
     ProposalStatus,
 };
 use ic_nns_test_utils::{
@@ -43,19 +43,19 @@ fn test_known_neurons() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuronInput {
+                ManageNeuronRequest {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
                         ic_nns_common::pb::v1::NeuronId {
                             id: TEST_NEURON_1_ID,
                         },
                     )),
                     id: None,
-                    command: Some(ManageNeuronCommandInput::MakeProposal(Box::new(
-                        ProposalInput {
+                    command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
+                        MakeProposalRequest {
                             title: Some("Naming neuron 2.".to_string()),
                             summary: "".to_string(),
                             url: "".to_string(),
-                            action: Some(ProposalActionInput::RegisterKnownNeuron(KnownNeuron {
+                            action: Some(ProposalActionRequest::RegisterKnownNeuron(KnownNeuron {
                                 id: Some(NeuronId {
                                     id: TEST_NEURON_2_ID,
                                 }),
@@ -76,19 +76,19 @@ fn test_known_neurons() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuronInput {
+                ManageNeuronRequest {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
                         ic_nns_common::pb::v1::NeuronId {
                             id: TEST_NEURON_1_ID,
                         },
                     )),
                     id: None,
-                    command: Some(ManageNeuronCommandInput::MakeProposal(Box::new(
-                        ProposalInput {
+                    command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
+                        MakeProposalRequest {
                             title: Some("Naming neuron 3.".to_string()),
                             summary: "".to_string(),
                             url: "".to_string(),
-                            action: Some(ProposalActionInput::RegisterKnownNeuron(KnownNeuron {
+                            action: Some(ProposalActionRequest::RegisterKnownNeuron(KnownNeuron {
                                 id: Some(NeuronId {
                                     id: TEST_NEURON_3_ID,
                                 }),

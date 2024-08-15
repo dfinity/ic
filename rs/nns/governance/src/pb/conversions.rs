@@ -555,8 +555,8 @@ impl From<pb_api::Proposal> for pb::Proposal {
         }
     }
 }
-impl From<pb_api::ProposalInput> for pb::Proposal {
-    fn from(item: pb_api::ProposalInput) -> Self {
+impl From<pb_api::MakeProposalRequest> for pb::Proposal {
+    fn from(item: pb_api::MakeProposalRequest) -> Self {
         Self {
             title: item.title,
             summary: item.summary,
@@ -666,53 +666,53 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
         }
     }
 }
-impl From<pb_api::ProposalActionInput> for pb::proposal::Action {
-    fn from(item: pb_api::ProposalActionInput) -> Self {
+impl From<pb_api::ProposalActionRequest> for pb::proposal::Action {
+    fn from(item: pb_api::ProposalActionRequest) -> Self {
         match item {
-            pb_api::ProposalActionInput::ManageNeuron(v) => {
+            pb_api::ProposalActionRequest::ManageNeuron(v) => {
                 pb::proposal::Action::ManageNeuron(Box::new((*v).into()))
             }
-            pb_api::ProposalActionInput::ManageNetworkEconomics(v) => {
+            pb_api::ProposalActionRequest::ManageNetworkEconomics(v) => {
                 pb::proposal::Action::ManageNetworkEconomics(v.into())
             }
-            pb_api::ProposalActionInput::Motion(v) => pb::proposal::Action::Motion(v.into()),
-            pb_api::ProposalActionInput::ExecuteNnsFunction(v) => {
+            pb_api::ProposalActionRequest::Motion(v) => pb::proposal::Action::Motion(v.into()),
+            pb_api::ProposalActionRequest::ExecuteNnsFunction(v) => {
                 pb::proposal::Action::ExecuteNnsFunction(v.into())
             }
-            pb_api::ProposalActionInput::ApproveGenesisKyc(v) => {
+            pb_api::ProposalActionRequest::ApproveGenesisKyc(v) => {
                 pb::proposal::Action::ApproveGenesisKyc(v.into())
             }
-            pb_api::ProposalActionInput::AddOrRemoveNodeProvider(v) => {
+            pb_api::ProposalActionRequest::AddOrRemoveNodeProvider(v) => {
                 pb::proposal::Action::AddOrRemoveNodeProvider(v.into())
             }
-            pb_api::ProposalActionInput::RewardNodeProvider(v) => {
+            pb_api::ProposalActionRequest::RewardNodeProvider(v) => {
                 pb::proposal::Action::RewardNodeProvider(v.into())
             }
-            pb_api::ProposalActionInput::SetDefaultFollowees(v) => {
+            pb_api::ProposalActionRequest::SetDefaultFollowees(v) => {
                 pb::proposal::Action::SetDefaultFollowees(v.into())
             }
-            pb_api::ProposalActionInput::RewardNodeProviders(v) => {
+            pb_api::ProposalActionRequest::RewardNodeProviders(v) => {
                 pb::proposal::Action::RewardNodeProviders(v.into())
             }
-            pb_api::ProposalActionInput::RegisterKnownNeuron(v) => {
+            pb_api::ProposalActionRequest::RegisterKnownNeuron(v) => {
                 pb::proposal::Action::RegisterKnownNeuron(v.into())
             }
-            pb_api::ProposalActionInput::SetSnsTokenSwapOpenTimeWindow(v) => {
+            pb_api::ProposalActionRequest::SetSnsTokenSwapOpenTimeWindow(v) => {
                 pb::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v.into())
             }
-            pb_api::ProposalActionInput::OpenSnsTokenSwap(v) => {
+            pb_api::ProposalActionRequest::OpenSnsTokenSwap(v) => {
                 pb::proposal::Action::OpenSnsTokenSwap(v.into())
             }
-            pb_api::ProposalActionInput::CreateServiceNervousSystem(v) => {
+            pb_api::ProposalActionRequest::CreateServiceNervousSystem(v) => {
                 pb::proposal::Action::CreateServiceNervousSystem(v.into())
             }
-            pb_api::ProposalActionInput::InstallCode(v) => {
+            pb_api::ProposalActionRequest::InstallCode(v) => {
                 pb::proposal::Action::InstallCode(v.into())
             }
-            pb_api::ProposalActionInput::StopOrStartCanister(v) => {
+            pb_api::ProposalActionRequest::StopOrStartCanister(v) => {
                 pb::proposal::Action::StopOrStartCanister(v.into())
             }
-            pb_api::ProposalActionInput::UpdateCanisterSettings(v) => {
+            pb_api::ProposalActionRequest::UpdateCanisterSettings(v) => {
                 pb::proposal::Action::UpdateCanisterSettings(v.into())
             }
         }
@@ -748,8 +748,8 @@ impl From<pb_api::ManageNeuron> for pb::ManageNeuron {
         }
     }
 }
-impl From<pb_api::ManageNeuronInput> for pb::ManageNeuron {
-    fn from(item: pb_api::ManageNeuronInput) -> Self {
+impl From<pb_api::ManageNeuronRequest> for pb::ManageNeuron {
+    fn from(item: pb_api::ManageNeuronRequest) -> Self {
         Self {
             id: item.id,
             neuron_id_or_subaccount: item.neuron_id_or_subaccount.map(|x| x.into()),
@@ -1318,43 +1318,43 @@ impl From<pb_api::manage_neuron::Command> for pb::manage_neuron::Command {
         }
     }
 }
-impl From<pb_api::ManageNeuronCommandInput> for pb::manage_neuron::Command {
-    fn from(item: pb_api::ManageNeuronCommandInput) -> Self {
+impl From<pb_api::ManageNeuronCommandRequest> for pb::manage_neuron::Command {
+    fn from(item: pb_api::ManageNeuronCommandRequest) -> Self {
         match item {
-            pb_api::ManageNeuronCommandInput::Configure(v) => {
+            pb_api::ManageNeuronCommandRequest::Configure(v) => {
                 pb::manage_neuron::Command::Configure(v.into())
             }
-            pb_api::ManageNeuronCommandInput::Disburse(v) => {
+            pb_api::ManageNeuronCommandRequest::Disburse(v) => {
                 pb::manage_neuron::Command::Disburse(v.into())
             }
-            pb_api::ManageNeuronCommandInput::Spawn(v) => {
+            pb_api::ManageNeuronCommandRequest::Spawn(v) => {
                 pb::manage_neuron::Command::Spawn(v.into())
             }
-            pb_api::ManageNeuronCommandInput::Follow(v) => {
+            pb_api::ManageNeuronCommandRequest::Follow(v) => {
                 pb::manage_neuron::Command::Follow(v.into())
             }
-            pb_api::ManageNeuronCommandInput::MakeProposal(v) => {
+            pb_api::ManageNeuronCommandRequest::MakeProposal(v) => {
                 pb::manage_neuron::Command::MakeProposal(Box::new((*v).into()))
             }
-            pb_api::ManageNeuronCommandInput::RegisterVote(v) => {
+            pb_api::ManageNeuronCommandRequest::RegisterVote(v) => {
                 pb::manage_neuron::Command::RegisterVote(v.into())
             }
-            pb_api::ManageNeuronCommandInput::Split(v) => {
+            pb_api::ManageNeuronCommandRequest::Split(v) => {
                 pb::manage_neuron::Command::Split(v.into())
             }
-            pb_api::ManageNeuronCommandInput::DisburseToNeuron(v) => {
+            pb_api::ManageNeuronCommandRequest::DisburseToNeuron(v) => {
                 pb::manage_neuron::Command::DisburseToNeuron(v.into())
             }
-            pb_api::ManageNeuronCommandInput::ClaimOrRefresh(v) => {
+            pb_api::ManageNeuronCommandRequest::ClaimOrRefresh(v) => {
                 pb::manage_neuron::Command::ClaimOrRefresh(v.into())
             }
-            pb_api::ManageNeuronCommandInput::MergeMaturity(v) => {
+            pb_api::ManageNeuronCommandRequest::MergeMaturity(v) => {
                 pb::manage_neuron::Command::MergeMaturity(v.into())
             }
-            pb_api::ManageNeuronCommandInput::Merge(v) => {
+            pb_api::ManageNeuronCommandRequest::Merge(v) => {
                 pb::manage_neuron::Command::Merge(v.into())
             }
-            pb_api::ManageNeuronCommandInput::StakeMaturity(v) => {
+            pb_api::ManageNeuronCommandRequest::StakeMaturity(v) => {
                 pb::manage_neuron::Command::StakeMaturity(v.into())
             }
         }
@@ -2924,8 +2924,8 @@ impl From<pb_api::InstallCode> for pb::InstallCode {
         }
     }
 }
-impl From<pb_api::InstallCodeInput> for pb::InstallCode {
-    fn from(item: pb_api::InstallCodeInput) -> Self {
+impl From<pb_api::InstallCodeRequest> for pb::InstallCode {
+    fn from(item: pb_api::InstallCodeRequest) -> Self {
         Self {
             canister_id: item.canister_id,
             install_mode: item.install_mode,

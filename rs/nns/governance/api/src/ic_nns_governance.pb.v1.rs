@@ -1191,7 +1191,7 @@ pub mod manage_neuron_response {
 #[compare_default]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ProposalInput {
+pub struct MakeProposalRequest {
     #[prost(string, optional, tag = "20")]
     pub title: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(string, tag = "1")]
@@ -1199,18 +1199,18 @@ pub struct ProposalInput {
     #[prost(string, tag = "2")]
     pub url: ::prost::alloc::string::String,
     #[prost(
-        oneof = "ProposalActionInput",
+        oneof = "ProposalActionRequest",
         tags = "10, 12, 13, 14, 15, 16, 21, 24, 25, 26, 27"
     )]
-    pub action: ::core::option::Option<ProposalActionInput>,
+    pub action: ::core::option::Option<ProposalActionRequest>,
 }
 
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Oneof)]
-pub enum ProposalActionInput {
+pub enum ProposalActionRequest {
     #[prost(message, tag = "10")]
-    ManageNeuron(::prost::alloc::boxed::Box<ManageNeuronInput>),
+    ManageNeuron(::prost::alloc::boxed::Box<ManageNeuronRequest>),
     #[prost(message, tag = "12")]
     ManageNetworkEconomics(NetworkEconomics),
     #[prost(message, tag = "13")]
@@ -1236,7 +1236,7 @@ pub enum ProposalActionInput {
     #[prost(message, tag = "24")]
     CreateServiceNervousSystem(CreateServiceNervousSystem),
     #[prost(message, tag = "25")]
-    InstallCode(InstallCodeInput),
+    InstallCode(InstallCodeRequest),
     #[prost(message, tag = "26")]
     StopOrStartCanister(StopOrStartCanister),
     #[prost(message, tag = "27")]
@@ -1246,22 +1246,22 @@ pub enum ProposalActionInput {
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ManageNeuronInput {
+pub struct ManageNeuronRequest {
     #[prost(message, optional, tag = "1")]
     pub id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
     #[prost(oneof = "manage_neuron::NeuronIdOrSubaccount", tags = "11, 12")]
     pub neuron_id_or_subaccount: ::core::option::Option<manage_neuron::NeuronIdOrSubaccount>,
     #[prost(
-        oneof = "ManageNeuronCommandInput",
+        oneof = "ManageNeuronCommandRequest",
         tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15"
     )]
-    pub command: ::core::option::Option<ManageNeuronCommandInput>,
+    pub command: ::core::option::Option<ManageNeuronCommandRequest>,
 }
 
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Oneof)]
-pub enum ManageNeuronCommandInput {
+pub enum ManageNeuronCommandRequest {
     #[prost(message, tag = "2")]
     Configure(manage_neuron::Configure),
     #[prost(message, tag = "3")]
@@ -1271,7 +1271,7 @@ pub enum ManageNeuronCommandInput {
     #[prost(message, tag = "5")]
     Follow(manage_neuron::Follow),
     #[prost(message, tag = "6")]
-    MakeProposal(::prost::alloc::boxed::Box<ProposalInput>),
+    MakeProposal(::prost::alloc::boxed::Box<MakeProposalRequest>),
     #[prost(message, tag = "7")]
     RegisterVote(manage_neuron::RegisterVote),
     #[prost(message, tag = "8")]
@@ -2487,7 +2487,7 @@ pub mod install_code {
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct InstallCodeInput {
+pub struct InstallCodeRequest {
     #[prost(message, optional, tag = "1")]
     pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
     #[prost(enumeration = "install_code::CanisterInstallMode", optional, tag = "2")]

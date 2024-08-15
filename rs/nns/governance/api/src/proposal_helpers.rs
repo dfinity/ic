@@ -1,7 +1,7 @@
 use crate::pb::v1::{
-    manage_neuron_response::Command as CommandResponse, ExecuteNnsFunction,
-    ManageNeuronCommandInput, ManageNeuronInput, ManageNeuronResponse, NnsFunction,
-    ProposalActionInput, ProposalInput,
+    manage_neuron_response::Command as CommandResponse, ExecuteNnsFunction, MakeProposalRequest,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NnsFunction,
+    ProposalActionRequest,
 };
 use candid::{CandidType, Decode, Encode};
 use ic_nns_common::types::{NeuronId, ProposalId};
@@ -13,7 +13,7 @@ pub fn create_external_update_proposal_candid<T: CandidType>(
     url: &str,
     nns_function: NnsFunction,
     payload: T,
-) -> ProposalInput {
+) -> MakeProposalRequest {
     create_external_update_proposal_binary(
         title,
         summary,
@@ -29,12 +29,12 @@ pub fn create_external_update_proposal_binary(
     url: &str,
     nns_function: NnsFunction,
     payload: Vec<u8>,
-) -> ProposalInput {
-    ProposalInput {
+) -> MakeProposalRequest {
+    MakeProposalRequest {
         title: Some(title.to_string()),
         summary: summary.to_string(),
         url: url.to_string(),
-        action: Some(ProposalActionInput::ExecuteNnsFunction(
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
             ExecuteNnsFunction {
                 nns_function: nns_function as i32,
                 payload,
@@ -46,13 +46,13 @@ pub fn create_external_update_proposal_binary(
 /// Wraps the given proposal into a MakeProposal command, and wraps the command
 /// into a payload to call `manage_neuron`.
 pub fn create_make_proposal_payload(
-    proposal: ProposalInput,
+    proposal: MakeProposalRequest,
     proposer_neuron_id: &NeuronId,
-) -> ManageNeuronInput {
-    ManageNeuronInput {
+) -> ManageNeuronRequest {
+    ManageNeuronRequest {
         id: Some((*proposer_neuron_id).into()),
         neuron_id_or_subaccount: None,
-        command: Some(ManageNeuronCommandInput::MakeProposal(Box::new(proposal))),
+        command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(proposal))),
     }
 }
 

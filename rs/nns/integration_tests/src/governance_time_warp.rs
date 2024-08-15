@@ -12,7 +12,7 @@ use ic_nns_governance_api::pb::v1::{
     manage_neuron::{Disburse, NeuronIdOrSubaccount},
     manage_neuron_response,
     neuron::DissolveState,
-    ManageNeuronCommandInput, ManageNeuronInput, ManageNeuronResponse, Neuron,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Neuron,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -69,10 +69,10 @@ fn test_time_warp() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuronInput {
+                ManageNeuronRequest {
                     id: None,
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id_4)),
-                    command: Some(ManageNeuronCommandInput::Disburse(Disburse {
+                    command: Some(ManageNeuronCommandRequest::Disburse(Disburse {
                         amount: None,
                         to_account: Some(
                             AccountIdentifier::new(*TEST_NEURON_1_OWNER_PRINCIPAL, None).into(),
@@ -108,10 +108,10 @@ fn test_time_warp() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuronInput {
+                ManageNeuronRequest {
                     id: None,
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id_4)),
-                    command: Some(ManageNeuronCommandInput::Disburse(Disburse {
+                    command: Some(ManageNeuronCommandRequest::Disburse(Disburse {
                         amount: None,
                         to_account: Some(
                             AccountIdentifier::new(*TEST_NEURON_1_OWNER_PRINCIPAL, None).into(),
@@ -146,10 +146,10 @@ fn test_time_warp() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuronInput {
+                ManageNeuronRequest {
                     id: None,
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id_4)),
-                    command: Some(ManageNeuronCommandInput::Disburse(Disburse {
+                    command: Some(ManageNeuronCommandRequest::Disburse(Disburse {
                         amount: None,
                         to_account: Some(
                             AccountIdentifier::new(*TEST_NEURON_1_OWNER_PRINCIPAL, None).into(),

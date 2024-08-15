@@ -11,8 +11,8 @@ use ic_nns_governance_api::pb::v1::{
     manage_neuron::NeuronIdOrSubaccount,
     manage_neuron_response::Command as CommandResponse,
     reward_node_provider::{RewardMode, RewardToAccount},
-    AddOrRemoveNodeProvider, ManageNeuronResponse, ManageNeuronInput, ManageNeuronCommandInput,
-    ProposalInput, ProposalActionInput, NodeProvider, ProposalStatus, RewardNodeProvider,
+    AddOrRemoveNodeProvider, ManageNeuronResponse, ManageNeuronRequest, ManageNeuronCommandRequest,
+    MakeProposalRequest, ProposalActionRequest, NodeProvider, ProposalStatus, RewardNodeProvider,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -54,17 +54,17 @@ fn test_node_provider_rewards() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuronInput {
+                ManageNeuronRequest {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
                         id: TEST_NEURON_1_ID,
                     })),
                     id: None,
-                    command: Some(ManageNeuronCommandInput::MakeProposal(Box::new(
-                        ProposalInput {
+                    command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
+                        MakeProposalRequest {
                             title: Some("Just want to add this NP.".to_string()),
                             summary: "".to_string(),
                             url: "".to_string(),
-                            action: Some(ProposalActionInput::AddOrRemoveNodeProvider(
+                            action: Some(ProposalActionRequest::AddOrRemoveNodeProvider(
                                 AddOrRemoveNodeProvider {
                                     change: Some(Change::ToAdd(NodeProvider {
                                         id: Some(np_pid),
@@ -112,17 +112,17 @@ fn test_node_provider_rewards() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuronInput {
+                ManageNeuronRequest {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
                         id: TEST_NEURON_1_ID,
                     })),
                     id: None,
-                    command: Some(ManageNeuronCommandInput::MakeProposal(Box::new(
-                        ProposalInput {
+                    command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
+                        MakeProposalRequest {
                             title: Some("Just want to add this NP.".to_string()),
                             summary: "".to_string(),
                             url: "".to_string(),
-                            action: Some(ProposalActionInput::RewardNodeProvider(
+                            action: Some(ProposalActionRequest::RewardNodeProvider(
                                 RewardNodeProvider {
                                     node_provider: Some(NodeProvider {
                                         id: Some(np_pid),

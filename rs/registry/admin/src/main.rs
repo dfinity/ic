@@ -56,9 +56,9 @@ use ic_nns_governance_api::{
         update_canister_settings::{
             CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
         },
-        AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, InstallCodeInput,
-        ManageNeuronCommandInput, ManageNeuronInput, NnsFunction, NodeProvider,
-        ProposalActionInput, ProposalInput, RewardNodeProviders, StopOrStartCanister,
+        AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, InstallCodeRequest,
+        ManageNeuronCommandRequest, ManageNeuronRequest, NnsFunction, NodeProvider,
+        ProposalActionRequest, MakeProposalRequest, RewardNodeProviders, StopOrStartCanister,
         UpdateCanisterSettings,
     },
     proposal_helpers::{
@@ -848,14 +848,14 @@ impl ProposalPayload<StopOrStartCanisterRequest> for StartCanisterCmd {
 
 #[async_trait]
 impl ProposalAction for StartCanisterCmd {
-    async fn action(&self) -> ProposalActionInput {
+    async fn action(&self) -> ProposalActionRequest {
         let canister_id = Some(self.canister_id.get());
         let action = Some(GovernanceCanisterAction::Start as i32);
         let start_canister = StopOrStartCanister {
             canister_id,
             action,
         };
-        ProposalActionInput::StopOrStartCanister(start_canister)
+        ProposalActionRequest::StopOrStartCanister(start_canister)
     }
 }
 
@@ -893,14 +893,14 @@ impl ProposalPayload<StopOrStartCanisterRequest> for StopCanisterCmd {
 
 #[async_trait]
 impl ProposalAction for StopCanisterCmd {
-    async fn action(&self) -> ProposalActionInput {
+    async fn action(&self) -> ProposalActionRequest {
         let canister_id = Some(self.canister_id.get());
         let action = Some(GovernanceCanisterAction::Stop as i32);
         let stop_canister = StopOrStartCanister {
             canister_id,
             action,
         };
-        ProposalActionInput::StopOrStartCanister(stop_canister)
+        ProposalActionRequest::StopOrStartCanister(stop_canister)
     }
 }
 
@@ -1116,7 +1116,7 @@ impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
 
 #[async_trait]
 impl ProposalAction for ProposeToChangeNnsCanisterCmd {
-    async fn action(&self) -> ProposalActionInput {
+    async fn action(&self) -> ProposalActionRequest {
         let canister_id = Some(self.canister_id.get());
         let wasm_module = Some(
             read_wasm_module(
@@ -1134,7 +1134,7 @@ impl ProposalAction for ProposeToChangeNnsCanisterCmd {
             CanisterInstallMode::Upgrade => Some(GovernanceInstallMode::Upgrade as i32),
         };
 
-        let install_code = InstallCodeInput {
+        let install_code = InstallCodeRequest {
             skip_stopping_before_installing,
             install_mode,
             canister_id,
@@ -1142,7 +1142,7 @@ impl ProposalAction for ProposeToChangeNnsCanisterCmd {
             arg,
         };
 
-        ProposalActionInput::InstallCode(install_code)
+        ProposalActionRequest::InstallCode(install_code)
     }
 }
 
@@ -1304,7 +1304,7 @@ impl ProposalTitle for ProposeToUpdateCanisterSettingsCmd {
 
 #[async_trait]
 impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
-    async fn action(&self) -> ProposalActionInput {
+    async fn action(&self) -> ProposalActionRequest {
         let canister_id = Some(self.canister_id.get());
 
         let controllers = if self.remove_all_controllers {
@@ -1338,7 +1338,7 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
             }),
         };
 
-        ProposalActionInput::UpdateCanisterSettings(update_settings)
+        ProposalActionRequest::UpdateCanisterSettings(update_settings)
     }
 }
 
@@ -3177,13 +3177,13 @@ async fn propose_to_create_service_nervous_system(
 ) {
     let is_dry_run = cmd.is_dry_run();
 
-    let action = Some(ProposalActionInput::CreateServiceNervousSystem(
+    let action = Some(ProposalActionRequest::CreateServiceNervousSystem(
         CreateServiceNervousSystem::try_from(cmd.clone()).unwrap(),
     ));
     let title = cmd.title();
     let summary = cmd.summary.clone().unwrap();
     let url = parse_proposal_url(cmd.proposal_url.clone());
-    let proposal = ProposalInput {
+    let proposal = MakeProposalRequest {
         title: Some(title.clone()),
         summary,
         url,
@@ -6039,13 +6039,13 @@ impl GovernanceCanisterClient {
         title: String,
         summary: String,
     ) -> Result<ProposalId, String> {
-        let serialized = Encode!(&ManageNeuronInput {
+        let serialized = Encode!(&ManageNeuronRequest {
             neuron_id_or_subaccount: None,
-            command: Some(ManageNeuronCommandInput::MakeProposal(Box::new(ProposalInput {
+            command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(MakeProposalRequest {
                 title: Some(title),
                 summary,
                 url,
-                action: Some(ProposalActionInput::AddOrRemoveNodeProvider(payload)),
+                action: Some(ProposalActionRequest::AddOrRemoveNodeProvider(payload)),
             }))),
             id: Some((*self.0.proposal_author()).into()),
         })
@@ -6090,15 +6090,15 @@ impl GovernanceCanisterClient {
 
     async fn submit_proposal_action(
         &self,
-        action: ProposalActionInput,
+        action: ProposalActionRequest,
         url: String,
         title: String,
         summary: String,
     ) -> Result<ProposalId, String> {
-        let serialized = Encode!(&ManageNeuronInput {
+        let serialized = Encode!(&ManageNeuronRequest {
             neuron_id_or_subaccount: None,
-            command: Some(ManageNeuronCommandInput::MakeProposal(Box::new(
-                ProposalInput {
+            command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
+                MakeProposalRequest {
                     title: Some(title),
                     summary,
                     url,
@@ -6124,7 +6124,7 @@ impl GovernanceCanisterClient {
 
     async fn submit_external_proposal(
         &self,
-        submit_proposal_command: &ManageNeuronInput,
+        submit_proposal_command: &ManageNeuronRequest,
         title: &str,
     ) -> Result<ProposalId, String> {
         let serialized = Encode!(submit_proposal_command).map_err(|e| {

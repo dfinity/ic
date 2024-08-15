@@ -46,10 +46,11 @@ use ic_nns_governance_api::pb::v1::{
         JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey, Split, StakeMaturity,
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
-    Empty, ExecuteNnsFunction, Governance, GovernanceError, InstallCodeInput, ListNeurons,
-    ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuronCommandInput,
-    ManageNeuronInput, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
-    NnsFunction, ProposalActionInput, ProposalInfo, ProposalInput, RewardNodeProviders, Vote,
+    Empty, ExecuteNnsFunction, Governance, GovernanceError, InstallCodeRequest, ListNeurons,
+    ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, MakeProposalRequest,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
+    MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, ProposalActionRequest, ProposalInfo,
+    RewardNodeProviders, Vote,
 };
 use ic_nns_handler_lifeline_interface::UpgradeRootProposal;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
@@ -810,14 +811,14 @@ fn manage_neuron(
     state_machine: &StateMachine,
     sender: PrincipalId,
     neuron_id: NeuronId,
-    command: nns_governance_pb::ManageNeuronCommandInput,
+    command: nns_governance_pb::ManageNeuronCommandRequest,
 ) -> ManageNeuronResponse {
     let result = state_machine
         .execute_ingress_as(
             sender,
             GOVERNANCE_CANISTER_ID,
             "manage_neuron",
-            Encode!(&ManageNeuronInput {
+            Encode!(&ManageNeuronRequest {
                 id: Some(neuron_id),
                 command: Some(command),
                 neuron_id_or_subaccount: None
@@ -845,12 +846,12 @@ impl NnsManageNeuronConfigureOperation for IncreaseDissolveDelay {
 }
 
 trait NnsManageNeuronCommand {
-    fn into_command(self) -> nns_governance_pb::ManageNeuronCommandInput;
+    fn into_command(self) -> nns_governance_pb::ManageNeuronCommandRequest;
 }
 
 impl NnsManageNeuronCommand for nns_governance_pb::manage_neuron::Configure {
-    fn into_command(self) -> nns_governance_pb::ManageNeuronCommandInput {
-        nns_governance_pb::ManageNeuronCommandInput::Configure(self)
+    fn into_command(self) -> nns_governance_pb::ManageNeuronCommandRequest {
+        nns_governance_pb::ManageNeuronCommandRequest::Configure(self)
     }
 }
 
@@ -926,13 +927,13 @@ pub fn nns_claim_or_refresh_neuron(
     memo: u64,
 ) -> NeuronId {
     // Construct request.
-    let command = Some(ManageNeuronCommandInput::ClaimOrRefresh(ClaimOrRefresh {
+    let command = Some(ManageNeuronCommandRequest::ClaimOrRefresh(ClaimOrRefresh {
         by: Some(claim_or_refresh::By::MemoAndController(MemoAndController {
             memo,
             controller: Some(controller),
         })),
     }));
-    let manage_neuron = ManageNeuronInput {
+    let manage_neuron = ManageNeuronRequest {
         id: None,
         command,
         neuron_id_or_subaccount: None,
@@ -974,7 +975,7 @@ pub fn nns_disburse_neuron(
         state_machine,
         sender,
         neuron_id,
-        ManageNeuronCommandInput::Disburse(Disburse {
+        ManageNeuronCommandRequest::Disburse(Disburse {
             amount: Some(manage_neuron::disburse::Amount { e8s: amount_e8s }),
             to_account: to_account.map(|account| account.into()),
         }),
@@ -1015,7 +1016,7 @@ pub fn nns_propose_upgrade_nns_canister(
     use_proposal_action: bool,
 ) -> ProposalId {
     let action = if use_proposal_action {
-        Some(ProposalActionInput::InstallCode(InstallCodeInput {
+        Some(ProposalActionRequest::InstallCode(InstallCodeRequest {
             canister_id: Some(target_canister_id.get()),
             install_mode: Some(3),
             wasm_module: Some(wasm_module),
@@ -1033,7 +1034,7 @@ pub fn nns_propose_upgrade_nns_canister(
 
         let payload = Encode!(&payload).unwrap();
 
-        Some(ProposalActionInput::ExecuteNnsFunction(
+        Some(ProposalActionRequest::ExecuteNnsFunction(
             ExecuteNnsFunction {
                 nns_function: NnsFunction::NnsCanisterUpgrade as i32,
                 payload,
@@ -1047,7 +1048,7 @@ pub fn nns_propose_upgrade_nns_canister(
         };
         let payload = Encode!(&payload).unwrap();
 
-        Some(ProposalActionInput::ExecuteNnsFunction(
+        Some(ProposalActionRequest::ExecuteNnsFunction(
             ExecuteNnsFunction {
                 nns_function: NnsFunction::NnsRootUpgrade as i32,
                 payload,
@@ -1057,7 +1058,7 @@ pub fn nns_propose_upgrade_nns_canister(
 
     let target_canister_name = canister_id_to_nns_canister_name(target_canister_id);
 
-    let proposal = ProposalInput {
+    let proposal = MakeProposalRequest {
         title: Some(format!("Upgrade {}", target_canister_name)),
         action,
         ..Default::default()
@@ -1167,7 +1168,7 @@ pub fn nns_cast_vote(
     proposal_id: u64,
     vote: Vote,
 ) -> ManageNeuronResponse {
-    let command = ManageNeuronCommandInput::RegisterVote(RegisterVote {
+    let command = ManageNeuronCommandRequest::RegisterVote(RegisterVote {
         proposal: Some(ic_nns_common::pb::v1::ProposalId { id: proposal_id }),
         vote: vote as i32,
     });
@@ -1181,7 +1182,7 @@ pub fn nns_split_neuron(
     neuron_id: NeuronId,
     amount: u64,
 ) -> ManageNeuronResponse {
-    let command = ManageNeuronCommandInput::Split(Split { amount_e8s: amount });
+    let command = ManageNeuronCommandRequest::Split(Split { amount_e8s: amount });
 
     manage_neuron(state_machine, sender, neuron_id, command)
 }
@@ -1224,7 +1225,7 @@ pub fn nns_join_community_fund(
     sender: PrincipalId,
     neuron_id: NeuronId,
 ) -> ManageNeuronResponse {
-    let command = ManageNeuronCommandInput::Configure(Configure {
+    let command = ManageNeuronCommandRequest::Configure(Configure {
         operation: Some(Operation::JoinCommunityFund(JoinCommunityFund {})),
     });
 
@@ -1236,7 +1237,7 @@ pub fn nns_leave_community_fund(
     sender: PrincipalId,
     neuron_id: NeuronId,
 ) -> ManageNeuronResponse {
-    let command = ManageNeuronCommandInput::Configure(Configure {
+    let command = ManageNeuronCommandRequest::Configure(Configure {
         operation: Some(Operation::LeaveCommunityFund(LeaveCommunityFund {})),
     });
 
@@ -1247,9 +1248,9 @@ pub fn nns_governance_make_proposal(
     state_machine: &StateMachine,
     sender: PrincipalId,
     neuron_id: NeuronId,
-    proposal: &ProposalInput,
+    proposal: &MakeProposalRequest,
 ) -> ManageNeuronResponse {
-    let command = ManageNeuronCommandInput::MakeProposal(Box::new(proposal.clone()));
+    let command = ManageNeuronCommandRequest::MakeProposal(Box::new(proposal.clone()));
 
     manage_neuron(state_machine, sender, neuron_id, command)
 }
@@ -1260,7 +1261,7 @@ pub fn nns_add_hot_key(
     neuron_id: NeuronId,
     new_hot_key: PrincipalId,
 ) -> ManageNeuronResponse {
-    let command = ManageNeuronCommandInput::Configure(Configure {
+    let command = ManageNeuronCommandRequest::Configure(Configure {
         operation: Some(Operation::AddHotKey(AddHotKey {
             new_hot_key: Some(new_hot_key),
         })),
@@ -1276,7 +1277,7 @@ pub fn nns_set_followees_for_neuron(
     followees: &[NeuronId],
     topic: i32,
 ) -> ManageNeuronResponse {
-    let command = ManageNeuronCommandInput::Follow(Follow {
+    let command = ManageNeuronCommandRequest::Follow(Follow {
         topic,
         followees: followees
             .iter()
@@ -1293,7 +1294,7 @@ pub fn nns_remove_hot_key(
     neuron_id: NeuronId,
     hot_key_to_remove: PrincipalId,
 ) -> ManageNeuronResponse {
-    let command = ManageNeuronCommandInput::Configure(Configure {
+    let command = ManageNeuronCommandRequest::Configure(Configure {
         operation: Some(Operation::RemoveHotKey(RemoveHotKey {
             hot_key_to_remove: Some(hot_key_to_remove),
         })),
@@ -1308,7 +1309,7 @@ pub fn nns_stake_maturity(
     neuron_id: NeuronId,
     percentage_to_stake: Option<u32>,
 ) -> ManageNeuronResponse {
-    let command = ManageNeuronCommandInput::StakeMaturity(StakeMaturity {
+    let command = ManageNeuronCommandRequest::StakeMaturity(StakeMaturity {
         percentage_to_stake,
     });
 
@@ -1944,11 +1945,11 @@ pub fn cmc_set_default_authorized_subnetworks(
     neuron_id: NeuronId,
 ) {
     let args = SetAuthorizedSubnetworkListArgs { who: None, subnets };
-    let proposal = ProposalInput {
+    let proposal = MakeProposalRequest {
         title: Some("set subnetworks".to_string()),
         summary: "setting subnetworks".to_string(),
         url: "".to_string(),
-        action: Some(ProposalActionInput::ExecuteNnsFunction(
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
             ExecuteNnsFunction {
                 nns_function: NnsFunction::SetAuthorizedSubnetworks as i32,
                 payload: Encode!(&args).unwrap(),
