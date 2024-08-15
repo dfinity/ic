@@ -1,9 +1,5 @@
 {
-<<<<<<< HEAD
-  "checksum": "033d78e6b9d9ff8285b278bdd0d4165e7db81b5bda854ca844539b7fd3eeb916",
-=======
-  "checksum": "b8f5c546714a2fd2ce702051dd8da9f2c7e988036a0357c3c75d6deaefba88a6",
->>>>>>> origin/master
+  "checksum": "370448d815061bc7c787110fed4d7c57190bbb66251366195630761973a2854f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -35958,38 +35954,30 @@
         ],
         "crate_features": {
           "common": [
+            "elf",
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
           "selects": {
             "aarch64-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "aarch64-unknown-nixos-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "arm-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "armv7-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "i686-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
@@ -36002,14 +35990,10 @@
               "system"
             ],
             "x86_64-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "x86_64-unknown-nixos-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ]
