@@ -180,7 +180,7 @@ pub fn setup_consensus_and_p2p(
         transport_config.listening_port,
     )
         .into();
-    
+
     let quic_transport = Arc::new(ic_quic_transport::QuicTransport::start(
         log,
         metrics_registry,
