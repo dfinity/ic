@@ -1,4 +1,3 @@
-load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -9,16 +8,6 @@ DEPENDENCIES = [
     "@crate_index//:regex",
     "@crate_index//:rstack-self",
 ]
-
-cargo_build_script(
-    name = "build_script",
-    srcs = ["build.rs"],
-    data = [],
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
-    deps = [],
-)
 
 rust_library(
     name = "backtrace",
