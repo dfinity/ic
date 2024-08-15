@@ -5,15 +5,14 @@ use std::path::{Path, PathBuf};
 use crate::components_parser::{get_icos_manifest, IcosManifest, COMPONENTS_PATH};
 
 pub fn check_unused_components(repo_root: &PathBuf) -> Result<()> {
-    let icos_components = get_icos_manifest(repo_root)?;
+    let icos_manifest = get_icos_manifest(repo_root)?;
 
-    let components_path = repo_root.join(COMPONENTS_PATH);
+    let components_path: PathBuf = repo_root.join(COMPONENTS_PATH);
 
-    let mut component_repo_files = HashSet::new();
-    collect_component_repo_files(&components_path, &mut component_repo_files)?;
+    let component_repo_files = collect_component_repo_files(&components_path)?;
 
     let mut manifest_sources = HashSet::new();
-    collect_manifest_sources(&icos_components, &mut manifest_sources);
+    collect_manifest_sources(&icos_manifest, &mut manifest_sources);
 
     let unused_components: Vec<&PathBuf> =
         component_repo_files.difference(&manifest_sources).collect();
@@ -30,18 +29,19 @@ pub fn check_unused_components(repo_root: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn collect_component_repo_files(dir: &Path, files: &mut HashSet<PathBuf>) -> Result<()> {
+fn collect_component_repo_files(dir: &Path) -> Result<HashSet<PathBuf>> {
+    let mut files = HashSet::new();
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
 
         if path.is_dir() {
-            collect_component_repo_files(&path, files)?;
+            files.extend(collect_component_repo_files(&path)?);
         } else {
             files.insert(path);
         }
     }
-    Ok(())
+    Ok(files)
 }
 
 fn collect_manifest_sources(icos_manifest: &IcosManifest, manifest_sources: &mut HashSet<PathBuf>) {
