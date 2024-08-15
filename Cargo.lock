@@ -9314,6 +9314,7 @@ dependencies = [
  "lazy_static",
  "maplit",
  "mockall",
+ "pretty_assertions",
  "prometheus",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -10130,6 +10131,7 @@ dependencies = [
  "ic-nns-handler-lifeline-interface",
  "ic-nns-handler-root",
  "ic-protobuf",
+ "ic-registry-canister-api",
  "ic-registry-keys",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
@@ -10466,6 +10468,16 @@ dependencies = [
  "thiserror",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "ic-registry-canister-api"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-base-types",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]
@@ -12110,6 +12122,7 @@ dependencies = [
  "ic-prep",
  "ic-protobuf",
  "ic-regedit",
+ "ic-registry-canister-api",
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-keys",
@@ -15070,7 +15083,6 @@ dependencies = [
  "ic-canister-client",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
- "ic-nns-governance",
  "ic-nns-test-utils",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
@@ -15740,6 +15752,7 @@ dependencies = [
  "ic-metrics",
  "ic-nns-constants",
  "ic-protobuf",
+ "ic-registry-canister-api",
  "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",
@@ -15762,7 +15775,6 @@ dependencies = [
  "prometheus",
  "prost",
  "rand 0.8.5",
- "registry-canister",
  "serde",
  "serde_cbor",
  "slog",
@@ -17388,6 +17400,7 @@ dependencies = [
  "ic-nns-test-utils",
  "ic-nns-test-utils-macros",
  "ic-protobuf",
+ "ic-registry-canister-api",
  "ic-registry-client-fake",
  "ic-registry-keys",
  "ic-registry-nns-data-provider",
@@ -18966,7 +18979,6 @@ dependencies = [
  "anyhow",
  "ic-nervous-system-common",
  "ic-nervous-system-proto",
- "ic-nns-governance",
  "ic-sns-swap",
  "ic-system-test-driver",
  "rust_decimal",
@@ -19669,7 +19681,6 @@ dependencies = [
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
  "ic-nns-governance-api",
  "ic-nns-gtc",
  "ic-nns-handler-root",
@@ -19679,6 +19690,7 @@ dependencies = [
  "ic-protobuf",
  "ic-recovery",
  "ic-regedit",
+ "ic-registry-canister-api",
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-keys",

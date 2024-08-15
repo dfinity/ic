@@ -1,0 +1,22 @@
+#!/bin/sh
+
+set -e
+
+PREREQ=""
+
+prereqs() {
+    echo "$PREREQ"
+}
+
+case "$1" in
+    prereqs)
+        prereqs
+        exit 0
+        ;;
+esac
+
+. /usr/share/initramfs-tools/hook-functions
+
+# The veritysetup tool is required in order to set up the root filesystem
+# with integrity protection from initramfs.
+copy_exec /sbin/veritysetup
