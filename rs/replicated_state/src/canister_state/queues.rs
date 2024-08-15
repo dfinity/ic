@@ -133,6 +133,9 @@ pub struct CanisterOutputQueuesIterator<'a> {
 }
 
 impl<'a> CanisterOutputQueuesIterator<'a> {
+    /// Creates a new output queue iterator from the given
+    /// `CanisterQueues::canister_queues` (a map of `CanisterId` to an input queue,
+    /// output queue pair) and `MessagePool`.
     fn new(
         queues: &'a mut BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
         pool: &'a mut MessagePool,
@@ -162,10 +165,12 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
     /// the queue is moved to the back of the iteration order, else it is dropped.
     pub fn pop(&mut self) -> Option<RequestOrResponse> {
         let (receiver, queue) = self.queues.pop_front()?;
+        debug_assert!(self.size >= queue.len());
         self.size -= queue.len();
 
         // Queue must be non-empty and message at the head of queue non-stale.
         let msg = pop_and_advance(queue, self.pool).unwrap();
+        debug_assert_eq!(Ok(()), canister_queue_ok(queue, &self.pool, receiver));
 
         if queue.len() > 0 {
             self.size += queue.len();
@@ -189,6 +194,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
             .map(|(_, q)| q.len())
             .unwrap_or_default();
 
+        debug_assert!(self.size >= ignored);
         self.size -= ignored;
         debug_assert_eq!(Self::compute_size(&self.queues), self.size);
 
@@ -281,6 +287,7 @@ impl CanisterQueues {
             }
         }
         debug_assert!(self.stats_ok());
+        debug_assert_eq!(Ok(()), self.canister_queues_ok());
     }
 
     /// Returns an iterator that loops over output queues, popping one message
@@ -415,6 +422,10 @@ impl CanisterQueues {
                 input_schedule.push_back(sender);
             }
 
+            debug_assert_eq!(
+                Ok(()),
+                canister_queues_ok(&self.canister_queues, &self.pool)
+            );
             if let Some(msg) = msg {
                 return Some(msg.into());
             }
@@ -724,6 +735,8 @@ impl CanisterQueues {
         pop_and_advance(queue, &mut self.pool)
             .expect("Message peeked above so pop should not fail.");
 
+        debug_assert_eq!(Ok(()), self.canister_queues_ok());
+
         Ok(())
     }
 
@@ -928,6 +941,7 @@ impl CanisterQueues {
         }
 
         debug_assert!(self.stats_ok());
+        debug_assert_eq!(Ok(()), self.canister_queues_ok());
         debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters));
 
         expired_messages.len()
@@ -948,6 +962,7 @@ impl CanisterQueues {
             self.on_message_dropped(id, &msg, own_canister_id, local_canisters);
 
             debug_assert!(self.stats_ok());
+            debug_assert_eq!(Ok(()), self.canister_queues_ok());
             debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters));
 
             return true;
@@ -998,7 +1013,7 @@ impl CanisterQueues {
             // Outbound request: produce a `SYS_TRANSIENT` timeout response.
             (Outbound, RequestOrResponse::Request(request)) => request,
 
-            // Outbound request: release the response slot and return.
+            // Inbound request: release the outbound response slot and return.
             (Inbound, RequestOrResponse::Request(request)) => {
                 reverse_queue.release_reserved_response_slot();
                 self.queue_stats.on_drop_input_request(request);
@@ -1115,6 +1130,15 @@ impl CanisterQueues {
         Ok(())
     }
 
+    /// Helper function for concisely validating the hard invariant that all
+    /// canister queues (input or output) are either empty of start with a non-stale
+    /// reference, by writing `debug_assert_eq!(Ok(()), self.canister_queues_ok()`.
+    ///
+    /// Time complexity: `O(n * log(n))`.
+    fn canister_queues_ok(&self) -> Result<(), String> {
+        canister_queues_ok(&self.canister_queues, &self.pool)
+    }
+
     /// Computes stats for the given canister queues. Used when deserializing and in
     /// `debug_assert!()` checks. Takes the number of memory reservations from the
     /// caller, as the queues have no need to track memory reservations, so it
@@ -1149,6 +1173,48 @@ fn pop_and_advance(queue: &mut CanisterQueue, pool: &mut MessagePool) -> Option<
     let msg = pool.take(item.id());
     assert!(msg.is_some(), "stale reference at the head of queue");
     msg
+}
+
+/// Helper function for concisely validating the hard invariant that all
+/// canister queues (input or output) are either empty of start with a non-stale
+/// reference, by writing
+/// `debug_assert_eq!(Ok(()), canister_queues_ok(&queues, &pool)`.
+///
+/// Time complexity: `O(n * log(n))`.
+fn canister_queues_ok(
+    queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
+    pool: &MessagePool,
+) -> Result<(), String> {
+    for (canister_id, (input_queue, output_queue)) in queues.iter() {
+        canister_queue_ok(input_queue, pool, canister_id)?;
+        canister_queue_ok(output_queue, pool, canister_id)?;
+    }
+
+    Ok(())
+}
+
+/// Helper function for concisely validating the hard invariant that a canister
+/// queuee is either empty of starts with a non-stale reference, by writing
+/// `debug_assert_eq!(Ok(()), canister_queue_ok(...)`.
+///
+/// Time complexity: `O(log(n))`.
+fn canister_queue_ok(
+    queue: &CanisterQueue,
+    pool: &MessagePool,
+    canister_id: &CanisterId,
+) -> Result<(), String> {
+    if let Some(item) = queue.peek() {
+        let id = item.id();
+        if pool.get(id).is_none() {
+            return Err(format!(
+                "Stale reference at the head of {:?} queue to/from {}",
+                id.context(),
+                canister_id
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 /// Generates a timeout reject response from a request, refunding its payment.
@@ -1272,26 +1338,10 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
                         qp.input_queue.map(|q| (q, Context::Inbound)),
                         "CanisterQueuePair::input_queue",
                     )?;
-                    if let Some(item) = iq.peek() {
-                        if pool.get(item.id()).is_none() {
-                            return Err(ProxyDecodeError::Other(format!(
-                                "CanisterQueues: Stale message at the head of input queue from {}",
-                                canister_id
-                            )));
-                        }
-                    }
                     let oq: CanisterQueue = try_from_option_field(
                         qp.output_queue.map(|q| (q, Context::Outbound)),
                         "CanisterQueuePair::output_queue",
                     )?;
-                    if let Some(item) = oq.peek() {
-                        if pool.get(item.id()).is_none() {
-                            return Err(ProxyDecodeError::Other(format!(
-                                "CanisterQueues: Stale message at the head of output queue to {}",
-                                canister_id
-                            )));
-                        }
-                    }
 
                     iq.iter().chain(oq.iter()).for_each(|queue_item| {
                         if pool.get(queue_item.id()).is_some()
@@ -1316,6 +1366,8 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
                 ));
             }
         }
+
+        canister_queues_ok(&canister_queues, &pool).map_err(ProxyDecodeError::Other)?;
 
         let queue_stats = Self::calculate_queue_stats(
             &canister_queues,
