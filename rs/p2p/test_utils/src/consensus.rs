@@ -159,7 +159,7 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
             change_set
                 .1
                 .drain(..)
-                .map(|ArtifactMutation::Remove),
+                .map(ArtifactMutation::Remove),
         );
         ChangeResult {
             mutations,
