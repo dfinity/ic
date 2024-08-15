@@ -1559,12 +1559,12 @@ impl StateMachine {
                     (public_key, private_key)
                 }
                 MasterPublicKeyId::Ecdsa(id) => {
-                    use ic_crypto_ecdsa_secp256k1::{PrivateKey, DerivationPath, DerivationIndex};
+                    use ic_crypto_ecdsa_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
 
-                    let path = DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
+                    let path =
+                        DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
 
-                    let private_key =
-                        PrivateKey::generate_from_seed(&seed).derive_subkey(&path).0;
+                    let private_key = PrivateKey::generate_from_seed(&seed).derive_subkey(&path).0;
 
                     let public_key = MasterPublicKey {
                         algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
@@ -1577,9 +1577,12 @@ impl StateMachine {
                 }
                 MasterPublicKeyId::Schnorr(id) => match id.algorithm {
                     SchnorrAlgorithm::Bip340Secp256k1 => {
-                        use ic_crypto_ecdsa_secp256k1::{PrivateKey, DerivationPath, DerivationIndex};
+                        use ic_crypto_ecdsa_secp256k1::{
+                            DerivationIndex, DerivationPath, PrivateKey,
+                        };
 
-                        let path = DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
+                        let path =
+                            DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
 
                         let private_key =
                             PrivateKey::generate_from_seed(&seed).derive_subkey(&path).0;
@@ -1594,9 +1597,10 @@ impl StateMachine {
                         (public_key, private_key)
                     }
                     SchnorrAlgorithm::Ed25519 => {
-                        use ic_crypto_ed25519::{PrivateKey, DerivationPath, DerivationIndex};
+                        use ic_crypto_ed25519::{DerivationIndex, DerivationPath, PrivateKey};
 
-                        let path = DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
+                        let path =
+                            DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
 
                         let private_key =
                             PrivateKey::generate_from_seed(&seed).derive_subkey(&path).0;
