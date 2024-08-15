@@ -2,8 +2,8 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
+mod check_unused_components;
 mod components_parser;
-use components_parser::get_icos_manifest;
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -32,9 +32,7 @@ pub fn main() -> Result<()> {
 
     match opts.command {
         Some(Commands::CheckUnusedComponents) => {
-            let icos_components = get_icos_manifest(&opts.repo_root)?;
-            dbg!(icos_components);
-            dbg!(opts.repo_root);
+            check_unused_components::check_unused_components(&opts.repo_root)?;
             Ok(())
         }
         None => Ok(()),

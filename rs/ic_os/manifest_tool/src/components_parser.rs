@@ -86,7 +86,8 @@ pub fn get_icos_manifest(repo_root: &PathBuf) -> Result<IcosManifest> {
     let guestos_manifest = get_manifest(&guestos_manifest_path, &components_path)?;
     let hostos_manifest = get_manifest(&hostos_manifest_path, &components_path)?;
     let setupos_manifest = get_manifest(&setupos_manifest_path, &components_path)?;
-    let boundary_guestos_manifest = get_manifest(&boundary_guestos_manifest_path, &components_path)?;
+    let boundary_guestos_manifest =
+        get_manifest(&boundary_guestos_manifest_path, &components_path)?;
 
     Ok(IcosManifest::new(
         guestos_manifest,
