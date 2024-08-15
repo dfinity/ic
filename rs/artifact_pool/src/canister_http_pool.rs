@@ -265,12 +265,7 @@ mod tests {
             matches!(&result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == id)
         );
         assert!(result.poll_immediately);
-        assert!(result
-            .mutations
-            .iter()
-            .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
-            .next()
-            .is_none());
+        assert_eq!(result.mutations.len(), 2);
         assert_eq!(share, pool.lookup_validated(&id).unwrap());
         assert_eq!(share, pool.get(&id).unwrap());
         assert_eq!(
@@ -283,12 +278,7 @@ mod tests {
             CanisterHttpChangeAction::RemoveContent(content_hash.clone()),
         ]);
 
-        assert!(result
-            .mutations
-            .iter()
-            .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
-            .next()
-            .is_none());
+        assert_eq!(result.mutations.len(), 1);
         assert!(result.poll_immediately);
         assert!(matches!(&result.mutations[0], ArtifactMutation::Remove(x) if *x == id));
         assert!(pool.lookup_validated(&id).is_none());
@@ -314,12 +304,14 @@ mod tests {
 
         assert!(pool.lookup_validated(&id2).is_none());
         assert!(result.poll_immediately);
-        assert!(result
-            .mutations
-            .iter()
-            .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
-            .next()
-            .is_none());
+        assert_eq!(
+            result
+                .mutations
+                .iter()
+                .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
+                .count(),
+            0
+        );
 
         assert_eq!(share1, pool.lookup_validated(&id1).unwrap());
     }
@@ -339,19 +331,7 @@ mod tests {
 
         assert!(pool.lookup_unvalidated(&id).is_none());
         assert!(result.poll_immediately);
-        assert!(result
-            .mutations
-            .iter()
-            .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
-            .next()
-            .is_none());
-
-        assert!(result
-            .mutations
-            .iter()
-            .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
-            .next()
-            .is_none());
+        assert!(result.mutations.is_empty());
     }
 
     #[test]
@@ -370,18 +350,6 @@ mod tests {
 
         assert!(pool.lookup_unvalidated(&id).is_none());
         assert!(result.poll_immediately);
-        assert!(result
-            .mutations
-            .iter()
-            .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
-            .next()
-            .is_none());
-
-        assert!(result
-            .mutations
-            .iter()
-            .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
-            .next()
-            .is_none());
+        assert!(result.mutations.is_empty());
     }
 }
