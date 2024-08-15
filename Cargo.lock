@@ -14676,6 +14676,7 @@ dependencies = [
  "anyhow",
  "clap 4.4.6",
  "regex",
+ "walkdir",
 ]
 
 [[package]]

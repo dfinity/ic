@@ -7,6 +7,7 @@ DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:clap",
     "@crate_index//:regex",
+    "@crate_index//:walkdir"
 ]
 
 MACRO_DEPENDENCIES = [

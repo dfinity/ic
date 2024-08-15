@@ -11,3 +11,4 @@ path = "src/main.rs"
 anyhow = { workspace = true }
 clap = { workspace = true }
 regex = { workspace = true }
+walkdir = { workspace = true }
