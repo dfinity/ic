@@ -1272,12 +1272,6 @@ mod tests {
             // share 3 should be added to the validated pool and create an advert
             // share 2 should be moved to the validated pool and not create an advert
             // share 1 should remain in the unvalidated pool
-            assert!(result
-                .mutations
-                .iter()
-                .find(|x| matches!(x, ArtifactMutation::Remove(_)))
-                .is_none());
-
             assert_eq!(result.mutations.len(), 1);
             assert!(result.poll_immediately);
             assert!(matches!(
