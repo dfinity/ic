@@ -753,19 +753,7 @@ mod tests {
                 share_msg,
                 "Testing the removal of invalid artifacts".to_string(),
             )]);
-            assert!(result
-                .mutations
-                .iter()
-                .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
-                .next()
-                .is_none());
-            assert!(result
-                .mutations
-                .iter()
-                .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
-                .next()
-                .is_none());
-
+            assert!(result.mutations.is_empty());
             assert!(result.poll_immediately);
             assert_eq!(
                 pool.unvalidated_shares_at_height(Height::from(10)).count(),
