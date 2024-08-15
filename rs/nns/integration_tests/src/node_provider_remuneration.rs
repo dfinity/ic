@@ -15,8 +15,8 @@ use ic_nns_governance_api::pb::v1::{
     manage_neuron_response::Command as CommandResponse,
     reward_node_provider::{RewardMode, RewardToAccount},
     AddOrRemoveNodeProvider, ExecuteNnsFunction, GovernanceError, ListNodeProviderRewardsRequest,
-    MakeProposalRequest, NetworkEconomics, NnsFunction, NodeProvider, ProposalActionRequest,
-    RewardNodeProvider, RewardNodeProviders,
+    MakeProposalRequest, NetworkEconomics, NnsFunction, NodeProvider, Proposal,
+    ProposalActionRequest, RewardNodeProvider, RewardNodeProviders,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -120,7 +120,6 @@ fn test_list_node_provider_rewards() {
         nns_get_monthly_node_provider_rewards(&state_machine);
 
     let monthly_node_provider_rewards = monthly_node_provider_rewards_result.unwrap();
-
     assert!(monthly_node_provider_rewards
         .rewards
         .contains(&expected_node_provider_reward_1));
@@ -195,8 +194,13 @@ fn test_list_node_provider_rewards() {
         minted_rewards.push(rewards.clone());
     }
 
-    let response =
-        nns_list_node_provider_rewards(&state_machine, ListNodeProviderRewardsRequest {});
+    let response = nns_list_node_provider_rewards(
+        &state_machine,
+        ListNodeProviderRewardsRequest {
+            page: None,
+            date_filter: None,
+        },
+    );
 
     assert_eq!(response.rewards.len(), 5);
 
