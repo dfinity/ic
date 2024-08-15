@@ -240,13 +240,13 @@ pub mod tests {
         let mut output_entries = archive.entries()?;
 
         // Verify that each entry was correctly preserved.
-        for entry_index in 0..entries.len() {
+        for (expected_path, expected_content) in &entries {
             let mut output_entry = output_entries.next().expect("Too few entries in output")?;
-            assert_eq!(output_entry.path()?, Path::new(entries[entry_index].0));
+            assert_eq!(output_entry.path()?, Path::new(expected_path));
 
-            let mut output_content = vec![];
-            output_entry.read_to_end(&mut output_content)?;
-            assert_eq!(output_content, entries[entry_index].1);
+            let mut actual_content = vec![];
+            output_entry.read_to_end(&mut actual_content)?;
+            assert_eq!(&actual_content, expected_content);
         }
 
         Ok(())
