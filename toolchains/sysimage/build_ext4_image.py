@@ -83,6 +83,7 @@ def read_fakeroot_state(statefile):
 
 
 def strip_files(fs_basedir, fakeroot_statefile, strip_paths):
+    flattened_paths = []
     for path in strip_paths:
         if path[0] == "/":
             path = path[1:]
@@ -91,10 +92,16 @@ def strip_files(fs_basedir, fakeroot_statefile, strip_paths):
         if os.path.isdir(target_path):
             for entry in os.listdir(target_path):
                 del_path = os.path.join(target_path, entry)
-                subprocess.run(["fakeroot", "-s", fakeroot_statefile, "-i", fakeroot_statefile, "rm", "-rf", del_path])
+                flattened_paths.append(del_path)
         else:
-            subprocess.run(["fakeroot", "-s", fakeroot_statefile, "-i", fakeroot_statefile, "rm", "-rf", target_path])
+            flattened_paths.append(target_path)
 
+    if not flattened_paths:
+        return
+
+    subprocess.run(
+        ["fakeroot", "-s", fakeroot_statefile, "-i", fakeroot_statefile, "rm", "-rf"] + flattened_paths,
+        check=True)
 
 def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extract):
     if in_file:
