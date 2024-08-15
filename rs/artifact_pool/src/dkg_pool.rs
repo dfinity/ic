@@ -268,12 +268,10 @@ mod test {
         });
         // ensure we have 2 validated and 2 unvalidated artifacts
         assert_eq!(result.mutations.len(), 2);
-        assert!(result
+        assert!(!result
             .mutations
             .iter()
-            .find(|x| matches!(x, ArtifactMutation::Remove(_)))
-            .is_none());
-
+            .any(|x| matches!(x, ArtifactMutation::Remove(_))));
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 2);
         assert_eq!(pool.get_unvalidated().count(), 2);
@@ -282,11 +280,10 @@ mod test {
         // are purged from the validated and unvalidated sections
         let result = pool.apply_changes(vec![ChangeAction::Purge(current_dkg_id_start_height)]);
         assert_eq!(result.mutations.len(), 1);
-        assert!(result
+        assert!(!result
             .mutations
             .iter()
-            .find(|x| matches!(x, ArtifactMutation::Insert(_)))
-            .is_none());
+            .any(|x| matches!(x, ArtifactMutation::Insert(_))));
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 1);
         assert_eq!(pool.get_unvalidated().count(), 1);
@@ -296,12 +293,10 @@ mod test {
             current_dkg_id_start_height.increment(),
         )]);
         assert_eq!(result.mutations.len(), 1);
-        assert!(result
+        assert!(!result
             .mutations
             .iter()
-            .find(|x| matches!(x, ArtifactMutation::Insert(_)))
-            .is_none());
-
+            .any(|x| matches!(x, ArtifactMutation::Insert(_))));
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 0);
         assert_eq!(pool.get_unvalidated().count(), 0);

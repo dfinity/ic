@@ -716,11 +716,10 @@ mod tests {
                 }
                 assert_eq!(ingress_pool.unvalidated().size(), initial_count);
                 let result = ingress_pool.apply_changes(changeset);
-                assert!(result
+                assert!(!result
                     .mutations
                     .iter()
-                    .find(|x| matches!(x, ArtifactMutation::Remove(_)))
-                    .is_none());
+                    .any(|x| matches!(x, ArtifactMutation::Remove(_))));
 
                 // artifacts_with_opt are only created for own node id
                 assert_eq!(result.mutations.len(), initial_count / nodes);
@@ -730,11 +729,10 @@ mod tests {
 
                 let changeset = vec![ChangeAction::PurgeBelowExpiry(cutoff_time)];
                 let result = ingress_pool.apply_changes(changeset);
-                assert!(result
+                assert!(!result
                     .mutations
                     .iter()
-                    .find(|x| matches!(x, ArtifactMutation::Insert(_)))
-                    .is_none());
+                    .any(|x| matches!(x, ArtifactMutation::Insert(_))));
                 assert_eq!(result.mutations.len(), initial_count - non_expired_count);
                 assert!(!result.poll_immediately);
                 assert_eq!(ingress_pool.validated().size(), non_expired_count);

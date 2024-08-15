@@ -643,12 +643,10 @@ mod tests {
                     IDkgMessage::DealingSupport(support.clone()),
                 )];
                 let result = idkg_pool.apply_changes(change_set);
-                assert!(result
+                assert!(!result
                     .mutations
                     .iter()
-                    .find(|x| matches!(x, ArtifactMutation::Remove(_)))
-                    .is_none());
-
+                    .any(|x| matches!(x, ArtifactMutation::Remove(_))));
                 assert!(matches!(
                     &result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == support.message_id()
                 ));

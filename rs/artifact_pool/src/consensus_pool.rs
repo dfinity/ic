@@ -1195,11 +1195,10 @@ mod tests {
 
             let result =
                 pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
-            assert!(result
+            assert!(!result
                 .mutations
                 .iter()
-                .find(|x| matches!(x, ArtifactMutation::Insert(_)))
-                .is_none());
+                .any(|x| matches!(x, ArtifactMutation::Insert(_))));
             // purging genesis CUP & beacon + validated beacon at height 2
             assert_eq!(result.mutations.len(), 3);
             assert!(result
@@ -1280,22 +1279,14 @@ mod tests {
 
             let result =
                 pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
-            assert!(result
+            assert!(!result
                 .mutations
                 .iter()
-                .find(|x| matches!(x, ArtifactMutation::Insert(_)))
-                .is_none());
+                .any(|x| matches!(x, ArtifactMutation::Insert(_))));
             // purging genesis CUP & beacon + 2 validated beacon shares
             assert_eq!(result.mutations.len(), 4);
-            assert!(
-                result.mutations.iter().find(|x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_share_2.get_id()))
-                .is_some()
-            );
-            assert!(
-                result.mutations.iter().find(|x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_share_3.get_id()))
-                .is_some()
-            );
-
+            assert!(result.mutations.iter().any(|x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_share_2.get_id())));
+            assert!(result.mutations.iter().any(|x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_share_3.get_id())));
             assert!(result.poll_immediately);
         })
     }

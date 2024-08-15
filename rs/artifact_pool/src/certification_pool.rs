@@ -577,11 +577,10 @@ mod tests {
                 ChangeAction::AddToValidated(cert_msg.clone()),
             ]);
             assert_eq!(result.mutations.len(), 2);
-            assert!(result
+            assert!(!result
                 .mutations
                 .iter()
-                .find(|x| matches!(x, ArtifactMutation::Remove(_)))
-                .is_none());
+                .any(|x| matches!(x, ArtifactMutation::Remove(_))));
             assert!(result.poll_immediately);
             assert_eq!(
                 pool.certification_at_height(Height::from(8)),
@@ -692,11 +691,10 @@ mod tests {
                     panic!("Purging couldn't finish in more than 6 seconds.")
                 }
             }
-            assert!(result
+            assert!(!result
                 .mutations
                 .iter()
-                .find(|x| matches!(x, ArtifactMutation::Insert(_)))
-                .is_none());
+                .any(|x| matches!(x, ArtifactMutation::Insert(_))));
             assert_eq!(result.mutations.len(), 2);
             assert!(result.poll_immediately);
             assert_eq!(pool.all_heights_with_artifacts().len(), 0);
@@ -812,12 +810,10 @@ mod tests {
                 ChangeAction::AddToValidated(cert_msg.clone()),
             ]);
             assert_eq!(result.mutations.len(), 2);
-            assert!(result
+            assert!(!result
                 .mutations
                 .iter()
-                .find(|x| matches!(x, ArtifactMutation::Remove(_)))
-                .is_none());
-
+                .any(|x| matches!(x, ArtifactMutation::Remove(_))));
             assert!(result.poll_immediately);
             assert_eq!(
                 pool.certification_at_height(Height::from(8)),

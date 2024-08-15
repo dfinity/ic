@@ -299,11 +299,10 @@ mod tests {
 
         assert!(pool.lookup_validated(&id2).is_none());
         assert!(result.poll_immediately);
-        assert!(result
+        assert!(!result
             .mutations
             .iter()
-            .find(|x| matches!(x, ArtifactMutation::Remove(_)))
-            .is_none());
+            .any(|x| matches!(x, ArtifactMutation::Remove(_))));
         assert_eq!(share1, pool.lookup_validated(&id1).unwrap());
     }
 
