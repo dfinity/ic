@@ -32,6 +32,6 @@ rust_library(
 )
 
 rust_test(
-    name="dflate_lib_test",
-    crate = ":dflate_lib"
+    name = "dflate_lib_test",
+    crate = ":dflate_lib",
 )
