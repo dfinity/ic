@@ -38,10 +38,8 @@ use ic_nervous_system_root::change_canister::{
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance::{
-    governance::{
-        BitcoinNetwork, BitcoinSetConfigProposal, RentalConditionId, SubnetRentalRequest,
-    },
+use ic_nns_governance_api::{
+    bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
     pb::v1::{
         add_or_remove_node_provider::Change,
         create_service_nervous_system::{
@@ -64,10 +62,11 @@ use ic_nns_governance::{
         ManageNeuron, NnsFunction, NodeProvider, Proposal, RewardNodeProviders,
         StopOrStartCanister, UpdateCanisterSettings,
     },
-    proposals::proposal_submission::{
+    proposal_helpers::{
         create_external_update_proposal_candid, create_make_proposal_payload,
         decode_make_proposal_response,
     },
+    subnet_rental::{RentalConditionId, SubnetRentalRequest},
 };
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
@@ -3157,9 +3156,12 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             governance_parameters,
         };
 
+        let result = ic_nns_governance::pb::v1::CreateServiceNervousSystem::from(result);
+
+        // TODO migrate validation out of SnsInitPayload so we no longer have to support ic_nns_gov types
         SnsInitPayload::try_from(result.clone())?;
 
-        Ok(result)
+        Ok(result.into())
     }
 }
 
@@ -3200,10 +3202,7 @@ async fn propose_to_create_service_nervous_system(
         Some(proposer),
     ));
     let response = canister_client
-        .submit_external_proposal(
-            &create_make_proposal_payload(proposal.into(), &proposer).into(),
-            &title,
-        )
+        .submit_external_proposal(&create_make_proposal_payload(proposal, &proposer), &title)
         .await;
 
     match response {
@@ -6080,12 +6079,11 @@ impl GovernanceCanisterClient {
                     title,
                     summary,
                     &url,
-                    external_update_type.into(),
+                    external_update_type,
                     payload,
                 ),
                 self.0.proposal_author(),
-            )
-            .into(),
+            ),
             title,
         )
         .await
