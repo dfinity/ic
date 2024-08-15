@@ -52,7 +52,10 @@ pub struct Component {
 
 impl Component {
     pub fn new(source: PathBuf, destination: PathBuf) -> Self {
-        Component { source, destination }
+        Component {
+            source,
+            destination,
+        }
     }
 }
 
@@ -73,17 +76,16 @@ pub fn get_components(file_path: &Path) -> Result<IcosVariant> {
     Ok(components)
 }
 
-pub fn get_icos_components(repo_root: &str) -> Result<IcosComponents> {
-    //TODO: help: fix file paths
-    let guestos_path = Path::new("../../../ic-os/components/guestos.bzl");
-    let hostos_path = Path::new("../../../ic-os/components/hostos.bzl");
-    let setupos_path = Path::new("../../../ic-os/components/setupos.bzl");
-    let boundary_guestos_path = Path::new("../../../ic-os/components/boundary-guestos.bzl");
+pub fn get_icos_components(repo_root: &PathBuf) -> Result<IcosComponents> {
+    let guestos_path = repo_root.join("ic-os/components/guestos.bzl");
+    let hostos_path = repo_root.join("ic-os/components/hostos.bzl");
+    let setupos_path = repo_root.join("ic-os/components/setupos.bzl");
+    let boundary_guestos_path = repo_root.join("ic-os/components/boundary-guestos.bzl");
 
-    let guestos_components = get_components(guestos_path)?;
-    let hostos_components = get_components(hostos_path)?;
-    let setupos_components = get_components(setupos_path)?;
-    let boundary_guestos_components = get_components(boundary_guestos_path)?;
+    let guestos_components = get_components(&guestos_path)?;
+    let hostos_components = get_components(&hostos_path)?;
+    let setupos_components = get_components(&setupos_path)?;
+    let boundary_guestos_components = get_components(&boundary_guestos_path)?;
 
     Ok(IcosComponents::new(
         guestos_components,

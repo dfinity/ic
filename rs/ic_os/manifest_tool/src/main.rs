@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 
 mod components_parser;
 use components_parser::get_icos_components;
+use std::path::PathBuf;
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -15,7 +16,7 @@ pub enum Commands {
 struct ManifestArgs {
     /// The root of the repository
     #[arg(short, long)]
-    repo_root: String,
+    repo_root: PathBuf,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -35,7 +36,8 @@ pub fn main() -> Result<()> {
 
             let icos_components = get_icos_components(&opts.repo_root)?;
             dbg!(icos_components);
-            println!("{}", &opts.repo_root);
+            dbg!(opts.repo_root);
+            // println!("{}", &opts.repo_root.display());
             Ok(())
         }
         None => Ok(()),
