@@ -59,16 +59,16 @@ impl Component {
     }
 }
 
-pub fn get_components(file_path: &Path) -> Result<IcosVariant> {
-    let content = fs::read_to_string(file_path)
-        .with_context(|| format!("Failed to read file: {:?}", file_path))?;
+pub fn get_components(manifest_path: &Path, components_path: &Path) -> Result<IcosVariant> {
+    let content = fs::read_to_string(manifest_path)
+        .with_context(|| format!("Failed to read file: {:?}", manifest_path))?;
 
     let re = Regex::new(r#"Label\("(.+?)"\): "(.+?)""#)?;
 
     let mut components = IcosVariant::new();
 
     for cap in re.captures_iter(&content) {
-        let source = PathBuf::from(&cap[1]);
+        let source = components_path.join(&cap[1]);
         let destination = PathBuf::from(&cap[2]);
         components.add_component(Component::new(source, destination));
     }
@@ -77,15 +77,16 @@ pub fn get_components(file_path: &Path) -> Result<IcosVariant> {
 }
 
 pub fn get_icos_components(repo_root: &PathBuf) -> Result<IcosComponents> {
-    let guestos_path = repo_root.join("ic-os/components/guestos.bzl");
-    let hostos_path = repo_root.join("ic-os/components/hostos.bzl");
-    let setupos_path = repo_root.join("ic-os/components/setupos.bzl");
-    let boundary_guestos_path = repo_root.join("ic-os/components/boundary-guestos.bzl");
+    let components_path = repo_root.join("ic-os/components/");
+    let guestos_path = components_path.join("guestos.bzl");
+    let hostos_path = components_path.join("hostos.bzl");
+    let setupos_path = components_path.join("setupos.bzl");
+    let boundary_guestos_path = components_path.join("boundary-guestos.bzl");
 
-    let guestos_components = get_components(&guestos_path)?;
-    let hostos_components = get_components(&hostos_path)?;
-    let setupos_components = get_components(&setupos_path)?;
-    let boundary_guestos_components = get_components(&boundary_guestos_path)?;
+    let guestos_components = get_components(&guestos_path, &components_path)?;
+    let hostos_components = get_components(&hostos_path, &components_path)?;
+    let setupos_components = get_components(&setupos_path, &components_path)?;
+    let boundary_guestos_components = get_components(&boundary_guestos_path, &components_path)?;
 
     Ok(IcosComponents::new(
         guestos_components,
