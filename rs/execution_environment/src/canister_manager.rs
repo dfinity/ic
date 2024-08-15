@@ -1789,7 +1789,7 @@ impl CanisterManager {
             return (Err(err), NumInstructions::new(0));
         };
 
-        match replace_snapshot {
+        let replace_snapshot_size = match replace_snapshot {
             // Check that replace snapshot ID exists if provided.
             Some(replace_snapshot) => {
                 match state.canister_snapshots.get(replace_snapshot) {
@@ -1814,6 +1814,7 @@ impl CanisterManager {
                                 NumInstructions::new(0),
                             );
                         }
+                        snapshot.size()
                     }
                 }
             }
@@ -1833,8 +1834,9 @@ impl CanisterManager {
                         NumInstructions::new(0),
                     );
                 }
+                0.into()
             }
-        }
+        };
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
             && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
@@ -1850,6 +1852,18 @@ impl CanisterManager {
         }
 
         let new_snapshot_size = canister.snapshot_size_bytes();
+        let new_snapshot_increase = NumBytes::from(
+            new_snapshot_size
+                .get()
+                .saturating_sub(replace_snapshot_size.get()),
+        );
+        let new_memory_usage = NumBytes::from(
+            canister
+                .memory_usage()
+                .get()
+                .saturating_add(new_snapshot_size.get())
+                .saturating_sub(replace_snapshot_size.get()),
+        );
 
         {
             // Run the following checks on memory usage and return an error
@@ -1861,7 +1875,7 @@ impl CanisterManager {
 
             // Calculate if any cycles will need to be reserved.
             let reservation_cycles = self.cycles_account_manager.storage_reservation_cycles(
-                new_snapshot_size,
+                new_snapshot_increase,
                 resource_saturation,
                 subnet_size,
             );
@@ -1871,7 +1885,7 @@ impl CanisterManager {
             let threshold = self.cycles_account_manager.freeze_threshold_cycles(
                 canister.system_state.freeze_threshold,
                 canister.memory_allocation(),
-                canister.memory_usage() + new_snapshot_size,
+                new_memory_usage,
                 canister.message_memory_usage(),
                 canister.compute_allocation(),
                 subnet_size,
@@ -1881,14 +1895,14 @@ impl CanisterManager {
             if canister.system_state.balance() < threshold + reservation_cycles {
                 return (
                     Err(CanisterManagerError::InsufficientCyclesInMemoryGrow {
-                        bytes: new_snapshot_size,
+                        bytes: new_snapshot_increase,
                         available: canister.system_state.balance(),
                         threshold,
                     }),
                     NumInstructions::new(0),
                 );
             }
-            // Verify that the subnet has enough memory.
+            // Verify that the subnet has enough memory for a new snapshot.
             if let Err(err) = round_limits
                 .subnet_available_memory
                 .check_available_memory(new_snapshot_size, NumBytes::from(0), NumBytes::from(0))
@@ -1915,13 +1929,13 @@ impl CanisterManager {
                         requested,
                         available,
                     } => CanisterManagerError::InsufficientCyclesInMemoryGrow {
-                        bytes: new_snapshot_size,
+                        bytes: new_snapshot_increase,
                         available,
                         threshold: requested,
                     },
                     ReservationError::ReservedLimitExceed { requested, limit } => {
                         CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow {
-                            bytes: new_snapshot_size,
+                            bytes: new_snapshot_increase,
                             requested,
                             limit,
                         }
@@ -1937,7 +1951,6 @@ impl CanisterManager {
                         .expect("Error: Cannot fail to decrement SubnetAvailableMemory after checking for availability");
         }
 
-        let current_memory_usage = canister.memory_usage() + new_snapshot_size;
         let message_memory = canister.message_memory_usage();
         let compute_allocation = canister.compute_allocation();
         let reveal_top_up = canister.controllers().contains(&sender);
@@ -1949,7 +1962,7 @@ impl CanisterManager {
             .cycles_account_manager
             .prepay_execution_cycles(
                 &mut canister.system_state,
-                current_memory_usage,
+                new_memory_usage,
                 message_memory,
                 compute_allocation,
                 instructions,
@@ -1987,14 +2000,12 @@ impl CanisterManager {
 
         // Delete old snapshot identified by `replace_snapshot` ID.
         if let Some(replace_snapshot) = replace_snapshot {
-            let old_snapshot = state.canister_snapshots.remove(replace_snapshot);
-            // Already confirmed that `replace_snapshot` exists.
-            let old_snapshot_size = old_snapshot.unwrap().size();
+            state.canister_snapshots.remove(replace_snapshot);
             canister.system_state.snapshots_memory_usage = canister
                 .system_state
                 .snapshots_memory_usage
                 .get()
-                .saturating_sub(old_snapshot_size.get())
+                .saturating_sub(replace_snapshot_size.get())
                 .into();
             // Confirm that `snapshots_memory_usage` is updated correctly.
             debug_assert_eq!(

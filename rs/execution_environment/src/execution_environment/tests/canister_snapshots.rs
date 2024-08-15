@@ -600,6 +600,101 @@ fn canister_request_take_canister_reserves_cycles() {
 }
 
 #[test]
+fn canister_snapshot_reserves_cycles_difference() {
+    const CYCLES: Cycles = Cycles::new(200_000_000_000_000);
+    const CAPACITY: u64 = 2_000_000_000;
+    const THRESHOLD: u64 = CAPACITY / 4;
+    const WASM_PAGE_SIZE: u64 = 65_536;
+    // 7500 of stable memory pages is close to 500MB, but still leaves some room
+    // for Wasm memory of the universal canister.
+    const NUM_PAGES: u64 = 7_500;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_snapshots(FlagStatus::Enabled)
+        .with_heap_delta_rate_limit(NumBytes::new(1_000_000_000))
+        .with_subnet_execution_memory(CAPACITY as i64)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(THRESHOLD as i64)
+        .build();
+
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+    test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
+        .unwrap();
+    grow_stable_memory(&mut test, canister_id, WASM_PAGE_SIZE, NUM_PAGES);
+
+    // Get the reserve balance before taking a canister snapshot.
+    let initial_reserved_cycles = test
+        .canister_state(canister_id)
+        .system_state
+        .reserved_balance();
+    // Make sure there are no reserved cycles.
+    assert_eq!(initial_reserved_cycles, Cycles::zero());
+
+    // Take a snapshot 1 for the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test
+        .subnet_message("take_canister_snapshot", args.encode())
+        .unwrap();
+    let snapshot_id_1 = CanisterSnapshotResponse::decode(&result.bytes())
+        .unwrap()
+        .snapshot_id();
+    let reserved_cycles_after_snapshot_1 = test
+        .canister_state(canister_id)
+        .system_state
+        .reserved_balance();
+
+    // Take a snapshot 2 for the canister by replacing previous snapshot.
+    let args: TakeCanisterSnapshotArgs =
+        TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id_1));
+    let result = test
+        .subnet_message("take_canister_snapshot", args.encode())
+        .unwrap();
+    let snapshot_id_2 = CanisterSnapshotResponse::decode(&result.bytes())
+        .unwrap()
+        .snapshot_id();
+    let reserved_cycles_after_snapshot_2 = test
+        .canister_state(canister_id)
+        .system_state
+        .reserved_balance();
+    // Make sure the reserved cycles are the same.
+    assert_eq!(
+        reserved_cycles_after_snapshot_1,
+        reserved_cycles_after_snapshot_2
+    );
+
+    // Delete the Snapshot.
+    let args: DeleteCanisterSnapshotArgs =
+        DeleteCanisterSnapshotArgs::new(canister_id, snapshot_id_2);
+    test.subnet_message("delete_canister_snapshot", args.encode())
+        .unwrap();
+    let reserved_cycles_after_delete = test
+        .canister_state(canister_id)
+        .system_state
+        .reserved_balance();
+    // Make sure the reserved cycles are the same.
+    assert_eq!(
+        reserved_cycles_after_snapshot_2,
+        reserved_cycles_after_delete
+    );
+
+    // Take a new snapshot 3 for the canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    test.subnet_message("take_canister_snapshot", args.encode())
+        .unwrap();
+    let reserved_cycles_after_a_new_snapshot = test
+        .canister_state(canister_id)
+        .system_state
+        .reserved_balance();
+    // Make sure the reserved cycles are increased even more than before.
+    assert!(
+        reserved_cycles_after_a_new_snapshot
+            > reserved_cycles_after_snapshot_1 + reserved_cycles_after_snapshot_1
+    );
+}
+
+#[test]
 fn take_canister_snapshot_fails_subnet_memory_exceeded() {
     const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
     const CAPACITY: u64 = 500_000_000;
