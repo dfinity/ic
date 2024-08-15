@@ -10,6 +10,7 @@ use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
 use ic_types::messages::{CallbackId, CanisterMessage};
 use ic_types::time::{expiry_time_from_now, CoarseTime, UNIX_EPOCH};
+use ic_types::UserId;
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::cell::RefCell;
@@ -388,6 +389,18 @@ impl CanisterQueuesMultiFixture {
                 .into(),
             input_queue_type,
         )
+    }
+
+    fn reserve_and_push_input_response(
+        &mut self,
+        other: CanisterId,
+        input_queue_type: InputQueueType,
+    ) -> Result<(), (StateError, RequestOrResponse)> {
+        self.push_output_request(other)
+            .map_err(|(se, req)| (se, (*req).clone().into()))?;
+        self.pop_output()
+            .expect("Just pushed an output request, but nothing popped");
+        self.push_input_response(other, input_queue_type)
     }
 
     fn push_ingress(&mut self, msg: Ingress) {
@@ -2346,6 +2359,90 @@ mod mainnet_compatibility_tests {
             assert_matches!(queues.pop_output().unwrap(), RequestOrResponse::Request(_));
             assert_matches!(queues.pop_output().unwrap(), RequestOrResponse::Response(_));
             assert!(!queues.queues.has_output());
+        }
+    }
+
+    /// Test that, with multiple input queues of different types, the order in which they
+    /// are consumed stays the same
+    mod input_order_test {
+        use super::super::*;
+        use super::*;
+
+        const OUTPUT_NAME: &str = "queues.pbuf";
+        const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
+        const LOCAL_CANISTER_ID: CanisterId = CanisterId::from_u64(13);
+        const REMOTE_CANISTER_ID: CanisterId = CanisterId::from_u64(666);
+        const USER_ID: UserId = user_test_id(7);
+
+        #[test]
+        #[ignore]
+        fn serialize() {
+            let mut queues = CanisterQueuesMultiFixture::new();
+            queues.this = CANISTER_ID;
+
+            // Put a request and a response from a local canister in the input queues
+            queues
+                .push_input_request(LOCAL_CANISTER_ID, InputQueueType::LocalSubnet)
+                .unwrap();
+            queues
+                .reserve_and_push_input_response(LOCAL_CANISTER_ID, InputQueueType::LocalSubnet)
+                .unwrap();
+
+            // Put a request and a response from a remote canister in the input queues
+            queues
+                .push_input_request(REMOTE_CANISTER_ID, InputQueueType::RemoteSubnet)
+                .unwrap();
+            queues
+                .reserve_and_push_input_response(REMOTE_CANISTER_ID, InputQueueType::RemoteSubnet)
+                .unwrap();
+
+            // Put a request from the canister itself in the input queues
+            queues
+                .push_input_request(CANISTER_ID, InputQueueType::LocalSubnet)
+                .unwrap();
+
+            // Put an ingress message in the input queues
+            queues.push_ingress(
+                IngressBuilder::default()
+                    .source(USER_ID)
+                    .receiver(CANISTER_ID)
+                    .build(),
+            );
+
+            let pb_queues: pb_queues::CanisterQueues = (&queues.queues).into();
+            let serialized = pb_queues.encode_to_vec();
+
+            let output_path = std::path::Path::new(OUTPUT_NAME);
+            File::create(output_path)
+                .unwrap()
+                .write_all(&serialized)
+                .unwrap();
+        }
+
+        #[test]
+        #[ignore]
+        fn deserialize() {
+            let serialized = std::fs::read(OUTPUT_NAME).expect("Could not read file");
+            let pb_queues = pb_queues::CanisterQueues::decode(&serialized as &[u8])
+                .expect("Failed to deserialize the protobuf");
+            let c_queues = CanisterQueues::try_from((
+                pb_queues,
+                &StrictMetrics as &dyn CheckpointLoadingMetrics,
+            ))
+            .expect("Failed to convert the protobuf to CanisterQueues");
+
+            let mut queues = CanisterQueuesMultiFixture::new();
+            queues.queues = c_queues;
+            queues.this = CANISTER_ID;
+
+            assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Request(ref req) if req.sender == LOCAL_CANISTER_ID);
+            assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Ingress(ref ing) if ing.source == USER_ID);
+            assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Request(ref req) if req.sender == REMOTE_CANISTER_ID);
+            assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Request(ref req) if req.sender == CANISTER_ID);
+            assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Response(ref req) if req.respondent == REMOTE_CANISTER_ID);
+            assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Response(ref req) if req.respondent == LOCAL_CANISTER_ID);
+
+            assert!(!queues.has_input());
         }
     }
 }

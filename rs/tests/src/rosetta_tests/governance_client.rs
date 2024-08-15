@@ -2,16 +2,21 @@ use crate::ckbtc::lib::subnet_sys;
 use candid::{Decode, Encode, Principal};
 use canister_test::PrincipalId;
 use ic_agent::Agent;
-use ic_nns_common::pb::v1::ProposalId;
-use ic_nns_common::types::NeuronId;
-use ic_nns_governance::pb::v1::manage_neuron_response::MakeProposalResponse;
-use ic_nns_governance::pb::v1::{
-    manage_neuron_response, ManageNeuronResponse, Proposal, ProposalInfo,
+use ic_nns_common::{pb::v1::ProposalId, types::NeuronId};
+use ic_nns_governance_api::{
+    pb::v1::{
+        manage_neuron_response, manage_neuron_response::MakeProposalResponse, ManageNeuronResponse,
+        Proposal, ProposalInfo,
+    },
+    proposal_helpers::create_make_proposal_payload,
 };
-use ic_nns_governance::proposals::proposal_submission::create_make_proposal_payload;
-use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, IcNodeContainer};
-use ic_system_test_driver::util::{assert_create_agent, block_on};
+use ic_system_test_driver::{
+    driver::{
+        test_env::TestEnv,
+        test_env_api::{HasPublicApiUrl, IcNodeContainer},
+    },
+    util::{assert_create_agent, block_on},
+};
 use slog::{debug, Logger};
 
 use super::lib::NeuronDetails;
