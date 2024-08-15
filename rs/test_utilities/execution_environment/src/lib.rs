@@ -52,6 +52,7 @@ use ic_replicated_state::{
 use ic_system_api::InstructionLimits;
 use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
+use ic_types::batch::IDkgData;
 use ic_types::{
     batch::QueryStats,
     crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
@@ -201,7 +202,7 @@ pub struct ExecutionTest {
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
     caller_canister_id: Option<CanisterId>,
-    idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    idkg_data: BTreeMap<MasterPublicKeyId, IDkgData>,
 
     // The actual implementation.
     exec_env: ExecutionEnvironment,
@@ -1201,7 +1202,7 @@ impl ExecutionTest {
             state,
             self.install_code_instruction_limits.clone(),
             &mut mock_random_number_generator(),
-            &self.idkg_subnet_public_keys,
+            &self.idkg_data,
             &self.registry_settings,
             &mut round_limits,
         );
@@ -2115,24 +2116,26 @@ impl ExecutionTestBuilder {
         state.metadata.network_topology.bitcoin_testnet_canister_id =
             self.execution_config.bitcoin.testnet_canister_id;
 
-        let idkg_subnet_public_keys = self
+        let idkg_data = self
             .idkg_keys_with_signing_enabled
             .into_keys()
-            .map(|key_id| match key_id {
-                MasterPublicKeyId::Ecdsa(_) => (
+            .enumerater()
+            .map(|(id, key_id)| {
+                (
                     key_id,
-                    MasterPublicKey {
-                        algorithm_id: AlgorithmId::EcdsaSecp256k1,
-                        public_key: b"abababab".to_vec(),
+                    IDkgData {
+                        public_key: MasterPublicKey {
+                            algorithm_id: AlgorithmId::Secp256k1,
+                            public_key: b"abababab".to_vec(),
+                        },
+                        key_transcript_id: IDkgTranscriptId::new(
+                            self.own_subnet_id,
+                            id,
+                            Height::from(0),
+                        ),
+                        pre_signatures: vec![],
                     },
-                ),
-                MasterPublicKeyId::Schnorr(_) => (
-                    key_id,
-                    MasterPublicKey {
-                        algorithm_id: AlgorithmId::SchnorrSecp256k1,
-                        public_key: b"cdcdcdcd".to_vec(),
-                    },
-                ),
+                )
             })
             .collect();
 
@@ -2249,7 +2252,7 @@ impl ExecutionTestBuilder {
             metrics_registry,
             ingress_history_writer,
             manual_execution: self.manual_execution,
-            idkg_subnet_public_keys,
+            idkg_data,
             log: self.log,
             checkpoint_files: vec![],
         }

@@ -836,6 +836,7 @@ pub struct DerivedIDkgPayload {
     pub ongoing_xnet_reshares: BTreeMap<IDkgReshareRequest, ReshareOfUnmaskedParams>,
     pub xnet_reshare_agreements: BTreeMap<IDkgReshareRequest, CompletedReshareRequest>,
     pub key_transcripts: BTreeMap<MasterPublicKeyId, MasterKeyTranscript>,
+    pub prev_key_transcript_refs: BTreeSet<TranscriptRef>,
 }
 
 impl ExhaustiveSet for IDkgPayload {
@@ -851,6 +852,7 @@ impl ExhaustiveSet for IDkgPayload {
                 ongoing_xnet_reshares: payload.ongoing_xnet_reshares,
                 xnet_reshare_agreements: payload.xnet_reshare_agreements,
                 key_transcripts: replace_by_singleton_if_empty(payload.key_transcripts, rng),
+                prev_key_transcript_refs: payload.prev_key_transcript_refs,
             })
             .collect()
     }

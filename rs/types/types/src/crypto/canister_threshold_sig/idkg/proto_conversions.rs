@@ -4,7 +4,9 @@ use crate::crypto::canister_threshold_sig::idkg::{
     IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType, InitialIDkgDealings,
     SignedIDkgDealing,
 };
-use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
+use crate::crypto::canister_threshold_sig::{
+    EcdsaPreSignatureQuadruple, ExtendedDerivationPath, SchnorrPreSignatureTranscript,
+};
 use crate::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHashOf};
 use crate::signature::{BasicSignature, BasicSignatureBatch};
 use crate::{node_id_into_protobuf, node_id_try_from_option, Height, NodeIndex};
@@ -26,6 +28,8 @@ use ic_protobuf::registry::subnet::v1::VerifiedIDkgDealing as VerifiedIDkgDealin
 use ic_protobuf::registry::subnet::v1::{DealerTuple as DealerTupleProto, SignatureTuple};
 use ic_protobuf::types::v1::BasicSignature as BasicSignatureProto;
 use ic_protobuf::types::v1::IDkgDealingSupport as IDkgDealingSupportProto;
+use ic_protobuf::types::v1::PreSignatureQuadruple as EcdsaPreSignatureQuadrupleProto;
+use ic_protobuf::types::v1::PreSignatureTranscript as SchnorrPreSignatureTranscriptProto;
 use ic_protobuf::types::v1::PrincipalId as PrincipalIdProto;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
@@ -233,6 +237,63 @@ impl TryFrom<&IDkgSignedDealingTupleProto> for SignedIDkgDealing {
         Ok(SignedIDkgDealing {
             content: idkg_dealing,
             signature: basic_signature,
+        })
+    }
+}
+
+impl From<&EcdsaPreSignatureQuadruple> for EcdsaPreSignatureQuadrupleProto {
+    fn from(value: &EcdsaPreSignatureQuadruple) -> Self {
+        Self {
+            kappa_unmasked: Some(idkg_transcript_proto(&value.kappa_unmasked)),
+            lambda_masked: Some(idkg_transcript_proto(&value.lambda_masked)),
+            kappa_times_lambda: Some(idkg_transcript_proto(&value.kappa_times_lambda)),
+            key_times_lambda: Some(idkg_transcript_proto(&value.key_times_lambda)),
+        }
+    }
+}
+
+impl TryFrom<&EcdsaPreSignatureQuadrupleProto> for EcdsaPreSignatureQuadruple {
+    type Error = ProxyDecodeError;
+
+    fn try_from(proto: &EcdsaPreSignatureQuadrupleProto) -> Result<Self, Self::Error> {
+        Ok(Self {
+            kappa_unmasked: try_from_option_field(
+                proto.kappa_unmasked.as_ref(),
+                "EcdsaPreSignatureQuadruple::kappa_unmasked",
+            )?,
+            lambda_masked: try_from_option_field(
+                proto.lambda_masked.as_ref(),
+                "EcdsaPreSignatureQuadruple::lambda_masked",
+            )?,
+            kappa_times_lambda: try_from_option_field(
+                proto.kappa_times_lambda.as_ref(),
+                "EcdsaPreSignatureQuadruple::kappa_times_lambda",
+            )?,
+            key_times_lambda: try_from_option_field(
+                proto.key_times_lambda.as_ref(),
+                "EcdsaPreSignatureQuadruple::key_times_lambda",
+            )?,
+        })
+    }
+}
+
+impl From<&SchnorrPreSignatureTranscript> for SchnorrPreSignatureTranscriptProto {
+    fn from(value: &SchnorrPreSignatureTranscript) -> Self {
+        Self {
+            blinder_unmasked: Some(idkg_transcript_proto(&value.blinder_unmasked)),
+        }
+    }
+}
+
+impl TryFrom<&SchnorrPreSignatureTranscriptProto> for SchnorrPreSignatureTranscript {
+    type Error = ProxyDecodeError;
+
+    fn try_from(proto: &SchnorrPreSignatureTranscriptProto) -> Result<Self, Self::Error> {
+        Ok(Self {
+            blinder_unmasked: try_from_option_field(
+                proto.blinder_unmasked.as_ref(),
+                "SchnorrPreSignatureTranscript::blinder_unmasked",
+            )?,
         })
     }
 }

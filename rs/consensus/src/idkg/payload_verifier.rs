@@ -40,7 +40,9 @@ use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_management_canister_types::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
 use ic_replicated_state::ReplicatedState;
-use ic_types::consensus::idkg::common::{CombinedSignature, ThresholdSigInputsRef};
+use ic_types::consensus::idkg::common::{
+    CombinedSignature, ThresholdSigInputs, ThresholdSigInputsRef,
+};
 use ic_types::crypto::canister_threshold_sig::error::ThresholdSchnorrVerifyCombinedSigError;
 use ic_types::crypto::canister_threshold_sig::ThresholdSchnorrCombinedSignature;
 use ic_types::{
@@ -365,15 +367,7 @@ fn validate_data_payload(
         .map_err(IDkgPayloadValidationFailure::StateManagerError)?;
     let signatures = timed_call(
         "validate_new_signature_agreements",
-        || {
-            validate_new_signature_agreements(
-                crypto,
-                &block_reader,
-                state.get_ref(),
-                &prev_payload,
-                curr_payload,
-            )
-        },
+        || validate_new_signature_agreements(crypto, state.get_ref(), &prev_payload, curr_payload),
         metrics,
     )?;
 
@@ -539,7 +533,6 @@ fn validate_reshare_dealings(
 // New signatures are those that are Unreported in the curr_payload and not in prev_payload.
 fn validate_new_signature_agreements(
     crypto: &dyn ConsensusCrypto,
-    block_reader: &dyn IDkgBlockReader,
     state: &ReplicatedState,
     prev_payload: &idkg::IDkgPayload,
     curr_payload: &idkg::IDkgPayload,
@@ -560,13 +553,10 @@ fn validate_new_signature_agreements(
                 let context = context_map.get(random_id).ok_or(
                     InvalidIDkgPayloadReason::NewSignatureMissingContext(*random_id),
                 )?;
-                let (_, input_ref) = build_signature_inputs(context, block_reader)
+                let (_, inputs) = build_signature_inputs(context)
                     .map_err(InvalidIDkgPayloadReason::NewSignatureBuildInputsError)?;
-                match input_ref {
-                    ThresholdSigInputsRef::Ecdsa(input_ref) => {
-                        let input = input_ref
-                            .translate(block_reader)
-                            .map_err(InvalidIDkgPayloadReason::from)?;
+                match inputs {
+                    ThresholdSigInputs::Ecdsa(input) => {
                         let reply = SignWithECDSAReply::decode(data).map_err(|err| {
                             InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
                         })?;
@@ -577,10 +567,7 @@ fn validate_new_signature_agreements(
                             .map_err(ThresholdEcdsaVerifyCombinedSignatureError)?;
                         new_signatures.insert(*random_id, CombinedSignature::Ecdsa(signature));
                     }
-                    ThresholdSigInputsRef::Schnorr(input_ref) => {
-                        let input = input_ref
-                            .translate(block_reader)
-                            .map_err(InvalidIDkgPayloadReason::from)?;
+                    ThresholdSigInputs::Schnorr(input) => {
                         let reply = SignWithSchnorrReply::decode(data).map_err(|err| {
                             InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
                         })?;

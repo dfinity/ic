@@ -1543,13 +1543,13 @@ impl Validator {
         }
 
         let summary = block.payload.as_ref().as_summary();
-        let registry_version = if let Some(idkg) = summary.idkg.as_ref() {
+        let registry_version = if summary.idkg.is_some() {
             // Should succeed as we already got the hash above
             let state = self
                 .state_manager
                 .get_state_at(height)
                 .map_err(ValidationFailure::StateManagerError)?;
-            get_oldest_idkg_state_registry_version(idkg, state.get_ref())
+            get_oldest_idkg_state_registry_version(state.get_ref())
         } else {
             None
         };

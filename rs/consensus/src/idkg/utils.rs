@@ -15,7 +15,10 @@ use ic_registry_subnet_features::ChainKeyConfig;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     SignWithThresholdContext, ThresholdArguments,
 };
-use ic_types::consensus::idkg::common::{PreSignatureRef, SignatureScheme, ThresholdSigInputsRef};
+use ic_types::batch::IDkgData;
+use ic_types::consensus::idkg::common::{
+    PreSignatureRef, SignatureScheme, ThresholdSigInputs, ThresholdSigInputsRef,
+};
 use ic_types::consensus::idkg::ecdsa::ThresholdEcdsaSigInputsRef;
 use ic_types::consensus::idkg::schnorr::ThresholdSchnorrSigInputsRef;
 use ic_types::consensus::idkg::HasMasterPublicKeyId;
@@ -27,10 +30,15 @@ use ic_types::consensus::{
     },
     HasHeight,
 };
+use ic_types::crypto::canister_threshold_sig::error::{
+    ThresholdEcdsaSigInputsCreationError, ThresholdSchnorrSigInputsCreationError,
+};
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings,
 };
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey};
+use ic_types::crypto::canister_threshold_sig::{
+    ExtendedDerivationPath, MasterPublicKey, ThresholdEcdsaSigInputs, ThresholdSchnorrSigInputs,
+};
 use ic_types::crypto::AlgorithmId;
 use ic_types::registry::RegistryClientError;
 use ic_types::{Height, RegistryVersion, SubnetId};
@@ -226,7 +234,8 @@ pub(super) fn block_chain_cache(
 /// Helper to build the [`RequestId`] if the context is already completed
 pub(super) fn get_context_request_id(context: &SignWithThresholdContext) -> Option<RequestId> {
     context
-        .matched_pre_signature
+        // Todo get ID from correct field
+        .matched_pre_sig_height()
         .map(|(pre_signature_id, height)| RequestId {
             pre_signature_id,
             pseudo_random_id: context.pseudo_random_id,
@@ -243,6 +252,8 @@ pub(crate) enum BuildSignatureInputsError {
     MissingPreSignature(RequestId),
     /// The context was matched to a pre-signature of the wrong signature scheme
     SignatureSchemeMismatch(RequestId, SignatureScheme),
+    ThresholdEcdsaSigInputsCreationError(ThresholdEcdsaSigInputsCreationError),
+    ThresholdSchnorrSigInputsCreationError(ThresholdSchnorrSigInputsCreationError),
 }
 
 impl BuildSignatureInputsError {
@@ -260,51 +271,50 @@ impl BuildSignatureInputsError {
 /// the pre-signature
 pub(super) fn build_signature_inputs(
     context: &SignWithThresholdContext,
-    block_reader: &dyn IDkgBlockReader,
-) -> Result<(RequestId, ThresholdSigInputsRef), BuildSignatureInputsError> {
+) -> Result<(RequestId, ThresholdSigInputs), BuildSignatureInputsError> {
     let request_id =
         get_context_request_id(context).ok_or(BuildSignatureInputsError::ContextIncomplete)?;
     let extended_derivation_path = ExtendedDerivationPath {
         caller: context.request.sender.into(),
         derivation_path: context.derivation_path.clone(),
     };
-    let pre_signature = block_reader
-        .available_pre_signature(&request_id.pre_signature_id)
-        .ok_or_else(|| BuildSignatureInputsError::MissingPreSignature(request_id.clone()))?
-        .clone();
     let nonce = Id::from(
         context
             .nonce
             .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
     );
-    let inputs = match (pre_signature, &context.args) {
-        (PreSignatureRef::Ecdsa(pre_sig), ThresholdArguments::Ecdsa(args)) => {
-            ThresholdSigInputsRef::Ecdsa(ThresholdEcdsaSigInputsRef::new(
-                extended_derivation_path,
-                args.message_hash,
-                nonce,
-                pre_sig,
-            ))
+    let inputs = match &context.args {
+        ThresholdArguments::Ecdsa(args) => {
+            let matched_data = args
+                .pre_signature
+                .as_ref()
+                .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
+            ThresholdSigInputs::Ecdsa(
+                ThresholdEcdsaSigInputs::new(
+                    &extended_derivation_path,
+                    &args.message_hash,
+                    nonce,
+                    matched_data.pre_signature.clone(),
+                    matched_data.key_transcript.clone(),
+                )
+                .map_err(BuildSignatureInputsError::ThresholdEcdsaSigInputsCreationError)?,
+            )
         }
-        (PreSignatureRef::Schnorr(pre_sig), ThresholdArguments::Schnorr(args)) => {
-            ThresholdSigInputsRef::Schnorr(ThresholdSchnorrSigInputsRef::new(
-                extended_derivation_path,
-                args.message.clone(),
-                nonce,
-                pre_sig,
-            ))
-        }
-        (PreSignatureRef::Ecdsa(_), _) => {
-            return Err(BuildSignatureInputsError::SignatureSchemeMismatch(
-                request_id,
-                SignatureScheme::Ecdsa,
-            ))
-        }
-        (PreSignatureRef::Schnorr(_), _) => {
-            return Err(BuildSignatureInputsError::SignatureSchemeMismatch(
-                request_id,
-                SignatureScheme::Schnorr,
-            ))
+        ThresholdArguments::Schnorr(args) => {
+            let matched_data = args
+                .pre_signature
+                .as_ref()
+                .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
+            ThresholdSigInputs::Schnorr(
+                ThresholdSchnorrSigInputs::new(
+                    &extended_derivation_path,
+                    &args.message,
+                    nonce,
+                    matched_data.pre_signature.clone(),
+                    matched_data.key_transcript.clone(),
+                )
+                .map_err(BuildSignatureInputsError::ThresholdSchnorrSigInputsCreationError)?,
+            )
         }
     };
 
@@ -511,11 +521,11 @@ pub(crate) fn get_pre_signature_ids_to_deliver(
 /// Additionally, we return `Err(string)` if we were unable to find a dkg summary block for the height
 /// of the given block (as the lower bound for past blocks to lookup the transcript in). In that case
 /// a newer CUP is already present in the pool and we should continue from there.
-pub(crate) fn get_idkg_subnet_public_keys(
+pub(crate) fn get_idkg_data(
     block: &Block,
     pool: &PoolReader<'_>,
     log: &ReplicaLogger,
-) -> Result<BTreeMap<MasterPublicKeyId, MasterPublicKey>, String> {
+) -> Result<BTreeMap<MasterPublicKeyId, IDkgData>, String> {
     let Some(idkg_payload) = block.payload.as_ref().as_idkg() else {
         return Ok(BTreeMap::new());
     };
@@ -529,7 +539,7 @@ pub(crate) fn get_idkg_subnet_public_keys(
     let chain = pool.pool().build_block_chain(&summary, block);
     let block_reader = IDkgBlockReaderImpl::new(chain);
 
-    let mut public_keys = BTreeMap::new();
+    let mut idkg_data = BTreeMap::new();
 
     for (key_id, key_transcript) in &idkg_payload.key_transcripts {
         let Some(transcript_ref) = key_transcript
@@ -540,24 +550,50 @@ pub(crate) fn get_idkg_subnet_public_keys(
             continue;
         };
 
-        let ecdsa_subnet_public_key = match block_reader.transcript(&transcript_ref) {
-            Ok(transcript) => get_subnet_master_public_key(&transcript, log),
+        let maybe_public_key = match block_reader.transcript(&transcript_ref) {
+            Ok(transcript) => get_subnet_master_public_key(&transcript, log)
+                .map(|public_key| (public_key, transcript)),
             Err(err) => {
                 warn!(
                     log,
-                    "Failed to translate transcript ref {:?}: {:?}", transcript_ref, err
+                    "Failed to translate transcript ref {:?} for key id {}: {:?}",
+                    transcript_ref,
+                    key_id,
+                    err
                 );
-
                 None
             }
         };
 
-        if let Some(public_key) = ecdsa_subnet_public_key {
-            public_keys.insert(key_id.clone(), public_key);
+        if let Some((public_key, key_transcript)) = maybe_public_key {
+            let pre_signatures = idkg_payload
+                .available_pre_signatures
+                .iter()
+                .filter(|(_, pre_sig)| pre_sig.key_id() == *key_id)
+                .flat_map(|(&id, pre_sig)| match pre_sig.translate(&block_reader) {
+                    Ok(pre_signature) => Some((id, pre_signature)),
+                    Err(err) => {
+                        warn!(
+                            log,
+                            "Failed to translate pre-signature ref {:?}: {:?}", id, err
+                        );
+                        None
+                    }
+                })
+                .collect();
+
+            idkg_data.insert(
+                key_id.clone(),
+                IDkgData {
+                    public_key,
+                    key_transcript,
+                    pre_signatures,
+                },
+            );
         }
     }
 
-    Ok(public_keys)
+    Ok(idkg_data)
 }
 
 fn get_subnet_master_public_key(

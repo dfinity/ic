@@ -227,6 +227,10 @@ impl IDkgPayloadMetrics {
             "key_transcripts",
             payload.key_transcripts.len(),
         );
+        self.payload_metrics_set_without_key_id_label(
+            "prev_key_transcript_refs",
+            payload.prev_key_transcript_refs.len(),
+        );
     }
 
     fn payload_metrics_set_without_key_id_label(&self, label: &str, value: usize) {

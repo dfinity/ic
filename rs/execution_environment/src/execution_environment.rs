@@ -58,9 +58,12 @@ use ic_replicated_state::{
 };
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_types::{
+    batch::IDkgData,
     canister_http::CanisterHttpRequestContext,
-    crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey, PublicKey},
-    crypto::threshold_sig::ni_dkg::NiDkgTargetId,
+    crypto::{
+        canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey, PublicKey},
+        threshold_sig::ni_dkg::NiDkgTargetId,
+    },
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         extract_effective_canister_id, CanisterCall, CanisterCallOrTask, CanisterMessage,
@@ -466,7 +469,7 @@ impl ExecutionEnvironment {
         mut state: ReplicatedState,
         instruction_limits: InstructionLimits,
         rng: &mut dyn RngCore,
-        idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+        idkg_data: &BTreeMap<MasterPublicKeyId, IDkgData>,
         registry_settings: &RegistryExecutionSettings,
         round_limits: &mut RoundLimits,
     ) -> (ReplicatedState, Option<NumInstructions>) {
@@ -609,11 +612,7 @@ impl ExecutionEnvironment {
                         },
                         Ok(args) => {
                             let key_id = MasterPublicKeyId::Ecdsa(args.key_id.clone());
-                            match get_master_public_key(
-                                idkg_subnet_public_keys,
-                                self.own_subnet_id,
-                                &key_id,
-                            ) {
+                            match get_master_public_key(idkg_data, self.own_subnet_id, &key_id) {
                                 Err(err) => ExecuteSubnetMessageResult::Finished {
                                     response: Err(err),
                                     refund: msg.take_cycles(),
@@ -623,6 +622,7 @@ impl ExecutionEnvironment {
                                     ThresholdArguments::Ecdsa(EcdsaArguments {
                                         key_id: args.key_id,
                                         message_hash: args.message_hash,
+                                        pre_signature: None,
                                     }),
                                     args.derivation_path.into_inner(),
                                     registry_settings
@@ -1003,7 +1003,7 @@ impl ExecutionEnvironment {
                         let res = match ECDSAPublicKeyArgs::decode(request.method_payload()) {
                             Err(err) => Err(err),
                             Ok(args) => match get_master_public_key(
-                                idkg_subnet_public_keys,
+                                idkg_data,
                                 self.own_subnet_id,
                                 &MasterPublicKeyId::Ecdsa(args.key_id.clone()),
                             ) {
@@ -1050,7 +1050,7 @@ impl ExecutionEnvironment {
                                     request.method_payload(),
                                 ) {
                                     Ok(args) => match get_master_public_key(
-                                        idkg_subnet_public_keys,
+                                        idkg_data,
                                         self.own_subnet_id,
                                         &args.key_id,
                                     ) {
@@ -1092,7 +1092,7 @@ impl ExecutionEnvironment {
                             let res = match SchnorrPublicKeyArgs::decode(request.method_payload()) {
                                 Err(err) => Err(err),
                                 Ok(args) => match get_master_public_key(
-                                    idkg_subnet_public_keys,
+                                    idkg_data,
                                     self.own_subnet_id,
                                     &MasterPublicKeyId::Schnorr(args.key_id.clone()),
                                 ) {
@@ -1161,11 +1161,8 @@ impl ExecutionEnvironment {
                             },
                             Ok(args) => {
                                 let key_id = MasterPublicKeyId::Schnorr(args.key_id.clone());
-                                match get_master_public_key(
-                                    idkg_subnet_public_keys,
-                                    self.own_subnet_id,
-                                    &key_id,
-                                ) {
+                                match get_master_public_key(idkg_data, self.own_subnet_id, &key_id)
+                                {
                                     Err(err) => ExecuteSubnetMessageResult::Finished {
                                         response: Err(err),
                                         refund: msg.take_cycles(),
@@ -1175,6 +1172,7 @@ impl ExecutionEnvironment {
                                         ThresholdArguments::Schnorr(SchnorrArguments {
                                             key_id: args.key_id,
                                             message: Arc::new(args.message),
+                                            pre_signature: None,
                                         }),
                                         args.derivation_path.into_inner(),
                                         registry_settings
@@ -2704,7 +2702,6 @@ impl ExecutionEnvironment {
                 derivation_path,
                 pseudo_random_id,
                 batch_time: state.metadata.batch_time,
-                matched_pre_signature: None,
                 nonce: None,
             }),
         );
@@ -3767,11 +3764,11 @@ pub fn execute_canister(
 }
 
 fn get_master_public_key<'a>(
-    idkg_subnet_public_keys: &'a BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    idkg_data: &'a BTreeMap<MasterPublicKeyId, IDkgData>,
     subnet_id: SubnetId,
     key_id: &MasterPublicKeyId,
 ) -> Result<&'a MasterPublicKey, UserError> {
-    match idkg_subnet_public_keys.get(key_id) {
+    match idkg_data.get(key_id) {
         None => Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
             format!(
@@ -3779,6 +3776,6 @@ fn get_master_public_key<'a>(
                 subnet_id, key_id
             ),
         )),
-        Some(master_key) => Ok(master_key),
+        Some(data) => Ok(&data.public_key),
     }
 }

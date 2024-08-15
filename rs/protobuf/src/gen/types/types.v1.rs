@@ -402,6 +402,8 @@ pub struct IDkgPayload {
     pub available_pre_signatures: ::prost::alloc::vec::Vec<AvailablePreSignature>,
     #[prost(message, repeated, tag = "15")]
     pub pre_signatures_in_creation: ::prost::alloc::vec::Vec<PreSignatureInProgress>,
+    #[prost(message, repeated, tag = "17")]
+    pub prev_key_transcript_refs: ::prost::alloc::vec::Vec<TranscriptRef>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -603,6 +605,68 @@ pub mod pre_signature_ref {
         Ecdsa(super::PreSignatureQuadrupleRef),
         #[prost(message, tag = "2")]
         Schnorr(super::PreSignatureTranscriptRef),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EcdsaDeliveredPreSignature {
+    #[prost(uint64, tag = "1")]
+    pub pre_signature_id: u64,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+    #[prost(message, optional, tag = "3")]
+    pub pre_signature: ::core::option::Option<PreSignatureQuadruple>,
+    #[prost(message, optional, tag = "4")]
+    pub key_transcript: ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SchnorrDeliveredPreSignature {
+    #[prost(uint64, tag = "1")]
+    pub pre_signature_id: u64,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+    #[prost(message, optional, tag = "3")]
+    pub pre_signature: ::core::option::Option<PreSignatureTranscript>,
+    #[prost(message, optional, tag = "4")]
+    pub key_transcript: ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignatureQuadruple {
+    #[prost(message, optional, tag = "1")]
+    pub kappa_unmasked: ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+    #[prost(message, optional, tag = "2")]
+    pub lambda_masked: ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+    #[prost(message, optional, tag = "3")]
+    pub kappa_times_lambda:
+        ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+    #[prost(message, optional, tag = "4")]
+    pub key_times_lambda:
+        ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignatureTranscript {
+    #[prost(message, optional, tag = "1")]
+    pub blinder_unmasked:
+        ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignature {
+    #[prost(oneof = "pre_signature::Msg", tags = "1, 2")]
+    pub msg: ::core::option::Option<pre_signature::Msg>,
+}
+/// Nested message and enum types in `PreSignature`.
+pub mod pre_signature {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Msg {
+        #[prost(message, tag = "1")]
+        Ecdsa(super::PreSignatureQuadruple),
+        #[prost(message, tag = "2")]
+        Schnorr(super::PreSignatureTranscript),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]

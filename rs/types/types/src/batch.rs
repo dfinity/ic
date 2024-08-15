@@ -18,8 +18,8 @@ pub use self::{
     xnet::XNetPayload,
 };
 use crate::{
-    consensus::idkg::PreSigId,
-    crypto::canister_threshold_sig::MasterPublicKey,
+    consensus::idkg::{common::PreSignature, PreSigId},
+    crypto::canister_threshold_sig::{idkg::IDkgTranscript, MasterPublicKey},
     messages::{CallbackId, Payload, SignedIngress},
     xnet::CertifiedStreamSlice,
     Height, Randomness, RegistryVersion, SubnetId, Time,
@@ -31,11 +31,14 @@ use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    convert::TryInto,
-    hash::Hash,
-};
+use std::{collections::BTreeMap, convert::TryInto, hash::Hash};
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IDkgData {
+    pub public_key: MasterPublicKey,
+    pub key_transcript: IDkgTranscript,
+    pub pre_signatures: Vec<(PreSigId, PreSignature)>,
+}
 
 /// The `Batch` provided to Message Routing for deterministic processing.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -52,10 +55,8 @@ pub struct Batch {
     pub messages: BatchMessages,
     /// A source of randomness for processing the Batch.
     pub randomness: Randomness,
-    /// The Master public keys of the subnet.
-    pub idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-    /// The pre-signature Ids available to be matched with signature requests.
-    pub idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+    // IDkgData delivered to execution.
+    pub idkg_data: BTreeMap<MasterPublicKeyId, IDkgData>,
     /// The version of the registry to be referenced when processing the batch.
     pub registry_version: RegistryVersion,
     /// A clock time to be used for processing messages.

@@ -276,6 +276,17 @@ fn create_summary_payload_helper(
     }
 
     let mut idkg_summary = idkg_payload.clone();
+
+    for (key_id, key_transcript) in &idkg_summary.key_transcripts {
+        if new_key_transcripts.contains(key_id) {
+            if let Some(current) = &key_transcript.current {
+                idkg_summary
+                    .prev_key_transcript_refs
+                    .insert(*current.as_ref());
+            }
+        }
+    }
+
     idkg_summary.key_transcripts = key_transcripts;
     // Start creating key transcripts for all new key ids.
     for key_id in key_ids {
@@ -289,11 +300,9 @@ fn create_summary_payload_helper(
     }
 
     idkg_summary.idkg_transcripts.clear();
+    idkg_summary.available_pre_signatures.clear();
 
-    // We keep available pre-signatures for now, even if the key transcript changed, as we don't know if
-    // they are part of ongoing signature requests. Instead we will purge them once the certified
-    // state height catches up with the height of this summary block.
-    // We do purge the pre-signatures in creation, though.
+    // We purge the pre-signatures in creation for changed key transcripts.
     idkg_summary
         .pre_signatures_in_creation
         .retain(|_, pre_sig| !new_key_transcripts.contains(&pre_sig.key_id()));
@@ -537,6 +546,14 @@ pub(crate) fn create_data_payload_helper(
     let state = state_manager.get_state_at(context.certified_height)?;
     let all_signing_requests = state.get_ref().signature_request_contexts();
     let idkg_dealings_contexts = state.get_ref().idkg_dealings_contexts();
+    let stashed_pre_signatures_count = state
+        .get_ref()
+        .metadata
+        .subnet_call_context_manager
+        .pre_signature_stash
+        .iter()
+        .map(|(key_id, (_, stash))| (key_id.clone(), stash.len()))
+        .collect::<BTreeMap<_, _>>();
 
     let certified_height = if context.certified_height >= summary_block.height() {
         CertifiedHeight::ReachedSummaryHeight
@@ -555,6 +572,7 @@ pub(crate) fn create_data_payload_helper(
         &receivers,
         all_signing_requests,
         idkg_dealings_contexts,
+        stashed_pre_signatures_count,
         block_reader,
         transcript_builder,
         signature_builder,
@@ -576,6 +594,7 @@ pub(crate) fn create_data_payload_helper_2(
     receivers: &[NodeId],
     all_signing_requests: &BTreeMap<CallbackId, SignWithThresholdContext>,
     idkg_dealings_contexts: &BTreeMap<CallbackId, IDkgDealingsContext>,
+    stashed_pre_signatures_count: BTreeMap<MasterPublicKeyId, usize>,
     block_reader: &dyn IDkgBlockReader,
     transcript_builder: &dyn IDkgTranscriptBuilder,
     signature_builder: &dyn ThresholdSignatureBuilder,
@@ -590,6 +609,7 @@ pub(crate) fn create_data_payload_helper_2(
         }
     }
 
+    idkg_payload.available_pre_signatures.clear();
     idkg_payload.uid_generator.update_height(height)?;
 
     let request_expiry_time = chain_key_config
@@ -606,30 +626,8 @@ pub(crate) fn create_data_payload_helper_2(
     );
 
     if matches!(certified_height, CertifiedHeight::ReachedSummaryHeight) {
-        pre_signatures::purge_old_key_pre_signatures(idkg_payload, all_signing_requests);
+        idkg_payload.prev_key_transcript_refs.clear();
     }
-
-    // We count the number of pre-signatures in the payload that were already matched,
-    // such that they can be replenished.
-    let mut matched_pre_signatures_per_key_id = BTreeMap::new();
-
-    for context in all_signing_requests.values() {
-        if context
-            .matched_pre_signature
-            .as_ref()
-            .is_some_and(|(pid, _)| idkg_payload.available_pre_signatures.contains_key(pid))
-        {
-            *matched_pre_signatures_per_key_id
-                .entry(context.key_id())
-                .or_insert(0) += 1;
-        }
-    }
-
-    pre_signatures::make_new_pre_signatures_if_needed(
-        chain_key_config,
-        idkg_payload,
-        &matched_pre_signatures_per_key_id,
-    );
 
     let new_transcripts = [
         pre_signatures::update_pre_signatures_in_creation(
@@ -649,6 +647,12 @@ pub(crate) fn create_data_payload_helper_2(
     ]
     .into_iter()
     .flatten();
+
+    pre_signatures::make_new_pre_signatures_if_needed(
+        chain_key_config,
+        idkg_payload,
+        &stashed_pre_signatures_count,
+    );
 
     // Drop transcripts from last round and keep only the
     // ones created in this round.

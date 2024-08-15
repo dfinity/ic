@@ -18,6 +18,7 @@ use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_test_utilities_types::{
     batch::BatchBuilder, ids::subnet_test_id, messages::SignedIngressBuilder,
 };
+use ic_types::batch::IDkgData;
 use ic_types::consensus::idkg::PreSigId;
 use ic_types::messages::SignedIngress;
 use ic_types::{batch::BatchMessages, crypto::canister_threshold_sig::MasterPublicKey};
@@ -34,8 +35,7 @@ mock! {
             &self,
             state: ic_replicated_state::ReplicatedState,
             randomness: ic_types::Randomness,
-            idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-            idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+            idkg_data: BTreeMap<MasterPublicKeyId, IDkgData>,
             current_round: ExecutionRound,
             round_summary: Option<ExecutionRoundSummary>,
             current_round_type: ExecutionRoundType,
@@ -90,8 +90,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         .with(
             always(),
             eq(provided_batch.randomness),
-            eq(provided_batch.idkg_subnet_public_keys.clone()),
-            eq(provided_batch.idkg_pre_signature_ids.clone()),
+            eq(provided_batch.idkg_data.clone()),
             eq(round),
             eq(None),
             eq(round_type),

@@ -102,6 +102,8 @@ use ic_test_utilities_registry::{
     add_single_subnet_record, add_subnet_key_record, add_subnet_list_record, SubnetRecordBuilder,
 };
 use ic_test_utilities_time::FastForwardTimeSource;
+use ic_types::batch::IDkgData;
+use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
 use ic_types::{
     artifact::IngressMessageId,
     batch::{
@@ -2097,6 +2099,7 @@ impl StateMachine {
         }));
         let requires_full_state_hash =
             batch_number.get() % checkpoint_interval_length_plus_one == 0;
+        let idkg_data = BTreeMap::new();
 
         let batch = Batch {
             batch_number,
@@ -2109,8 +2112,7 @@ impl StateMachine {
                 query_stats: payload.query_stats,
             },
             randomness: Randomness::from(seed),
-            idkg_subnet_public_keys: self.idkg_subnet_public_keys.clone(),
-            idkg_pre_signature_ids: BTreeMap::new(),
+            idkg_data,
             registry_version: self.registry_client.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(self.time.load(Ordering::Relaxed)),
             consensus_responses: payload.consensus_responses,

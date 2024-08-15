@@ -92,6 +92,9 @@ pub struct IDkgPayload {
 
     /// State of the key transcripts.
     pub key_transcripts: BTreeMap<MasterPublicKeyId, MasterKeyTranscript>,
+
+    /// References to past key transcripts that might still be needed
+    pub prev_key_transcript_refs: BTreeSet<TranscriptRef>,
 }
 
 impl IDkgPayload {
@@ -113,6 +116,7 @@ impl IDkgPayload {
             idkg_transcripts: BTreeMap::new(),
             ongoing_xnet_reshares: BTreeMap::new(),
             xnet_reshare_agreements: BTreeMap::new(),
+            prev_key_transcript_refs: BTreeSet::new(),
         }
     }
 
@@ -188,6 +192,22 @@ impl IDkgPayload {
             .cloned()
     }
 
+    /// Return an iterator of all ids of pre-signatures for the given key in the payload.
+    pub fn pre_sigs_in_creation_count(&self, key_id: &MasterPublicKeyId) -> usize {
+        self.pre_signatures_in_creation
+            .iter()
+            .filter(|(_, pre_sig)| pre_sig.key_id() == *key_id)
+            .count()
+    }
+
+    /// Return an iterator of all ids of pre-signatures for the given key in the payload.
+    pub fn available_pre_sigs_count(&self, key_id: &MasterPublicKeyId) -> usize {
+        self.available_pre_signatures
+            .iter()
+            .filter(|(_, pre_sig)| pre_sig.key_id() == *key_id)
+            .count()
+    }
+
     /// Return active transcript references in the  payload.
     pub fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
         let mut active_refs = BTreeSet::new();
@@ -203,6 +223,7 @@ impl IDkgPayload {
         for obj in self.key_transcripts.values() {
             active_refs.extend(obj.get_refs());
         }
+        active_refs.extend(&self.prev_key_transcript_refs);
 
         active_refs
     }
@@ -1777,6 +1798,12 @@ impl From<&IDkgPayload> for pb::IDkgPayload {
             .map(pb::MasterKeyTranscript::from)
             .collect();
 
+        let prev_key_transcript_refs: Vec<_> = payload
+            .prev_key_transcript_refs
+            .iter()
+            .map(pb::TranscriptRef::from)
+            .collect();
+
         Self {
             signature_agreements,
             available_pre_signatures,
@@ -1787,6 +1814,7 @@ impl From<&IDkgPayload> for pb::IDkgPayload {
             ongoing_xnet_reshares,
             xnet_reshare_agreements,
             key_transcripts,
+            prev_key_transcript_refs,
         }
     }
 }
@@ -1809,6 +1837,11 @@ impl TryFrom<&pb::IDkgPayload> for IDkgPayload {
             let key_transcript = MasterKeyTranscript::try_from(key_transcript_proto)?;
 
             key_transcripts.insert(key_transcript.key_id(), key_transcript);
+        }
+
+        let mut prev_key_transcript_refs = BTreeSet::new();
+        for prev_ref in &payload.prev_key_transcript_refs {
+            prev_key_transcript_refs.insert(TranscriptRef::try_from(prev_ref)?);
         }
 
         let mut signature_agreements = BTreeMap::new();
@@ -1925,6 +1958,7 @@ impl TryFrom<&pb::IDkgPayload> for IDkgPayload {
             xnet_reshare_agreements,
             uid_generator,
             key_transcripts,
+            prev_key_transcript_refs,
         })
     }
 }

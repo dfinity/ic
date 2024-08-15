@@ -19,6 +19,7 @@ message IDkgPayload {
   repeated MasterKeyTranscript key_transcripts = 13;
   repeated AvailablePreSignature available_pre_signatures = 14;
   repeated PreSignatureInProgress pre_signatures_in_creation = 15;
+  repeated TranscriptRef prev_key_transcript_refs = 17;
 }
 
 message ConsensusResponse {
@@ -137,6 +138,38 @@ message PreSignatureRef {
   oneof msg {
     PreSignatureQuadrupleRef ecdsa = 1;
     PreSignatureTranscriptRef schnorr = 2;
+  }
+}
+
+message EcdsaDeliveredPreSignature {
+  uint64 pre_signature_id = 1;
+  uint64 height = 2;
+  PreSignatureQuadruple pre_signature = 3;
+  registry.subnet.v1.IDkgTranscript key_transcript = 4;
+}
+
+message SchnorrDeliveredPreSignature {
+  uint64 pre_signature_id = 1;
+  uint64 height = 2;
+  PreSignatureTranscript pre_signature = 3;
+  registry.subnet.v1.IDkgTranscript key_transcript = 4;
+}
+
+message PreSignatureQuadruple {
+  registry.subnet.v1.IDkgTranscript kappa_unmasked = 1;
+  registry.subnet.v1.IDkgTranscript lambda_masked = 2;
+  registry.subnet.v1.IDkgTranscript kappa_times_lambda = 3;
+  registry.subnet.v1.IDkgTranscript key_times_lambda = 4;
+}
+
+message PreSignatureTranscript {
+  registry.subnet.v1.IDkgTranscript blinder_unmasked = 1;
+}
+
+message PreSignature {
+  oneof msg {
+    PreSignatureQuadruple ecdsa = 1;
+    PreSignatureTranscript schnorr = 2;
   }
 }
 

@@ -575,17 +575,11 @@ pub fn get_subnet_record(
 
 /// Return the oldest registry version of transcripts in the given IDKG summary payload that are
 /// referenced by the given replicated state.
-pub fn get_oldest_idkg_state_registry_version(
-    idkg: &IDkgPayload,
-    state: &ReplicatedState,
-) -> Option<RegistryVersion> {
+pub fn get_oldest_idkg_state_registry_version(state: &ReplicatedState) -> Option<RegistryVersion> {
     state
         .signature_request_contexts()
         .values()
-        .flat_map(|context| context.matched_pre_signature.as_ref())
-        .flat_map(|(pre_sig_id, _)| idkg.available_pre_signatures.get(pre_sig_id))
-        .flat_map(|pre_signature| pre_signature.get_refs())
-        .flat_map(|transcript_ref| idkg.idkg_transcripts.get(&transcript_ref.transcript_id))
+        .flat_map(|context| context.iter_idkg_transcripts())
         .map(|transcript| transcript.registry_version)
         .min()
 }

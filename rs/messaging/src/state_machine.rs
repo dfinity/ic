@@ -142,8 +142,7 @@ impl StateMachine for StateMachineImpl {
         let state_after_execution = self.scheduler.execute_round(
             state_with_messages,
             batch.randomness,
-            batch.idkg_subnet_public_keys,
-            batch.idkg_pre_signature_ids,
+            batch.idkg_data,
             ExecutionRound::from(batch.batch_number.get()),
             round_summary,
             execution_round_type,

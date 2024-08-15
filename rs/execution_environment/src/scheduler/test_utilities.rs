@@ -113,10 +113,8 @@ pub(crate) struct SchedulerTest {
     registry_settings: RegistryExecutionSettings,
     // Metrics Registry.
     metrics_registry: MetricsRegistry,
-    // iDKG subnet public keys.
-    idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-    // Pre-signature IDs.
-    idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+    // iDKG data.
+    idkg_data: BTreeMap<MasterPublicKeyId, IDkgData>,
 }
 
 impl std::fmt::Debug for SchedulerTest {
@@ -509,8 +507,7 @@ impl SchedulerTest {
         let state = self.scheduler.execute_round(
             state,
             Randomness::from([0; 32]),
-            self.idkg_subnet_public_keys.clone(),
-            self.idkg_pre_signature_ids.clone(),
+            self.idkg_data.clone(),
             self.round,
             self.round_summary.clone(),
             round_type,
@@ -635,13 +632,6 @@ impl SchedulerTest {
         self.scheduler
             .cycles_account_manager
             .memory_cost(bytes, duration, self.subnet_size())
-    }
-
-    pub(crate) fn deliver_pre_signature_ids(
-        &mut self,
-        idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
-    ) {
-        self.idkg_pre_signature_ids = idkg_pre_signature_ids;
     }
 }
 
@@ -811,15 +801,24 @@ impl SchedulerTestBuilder {
                 },
             );
         }
-        let idkg_subnet_public_keys: BTreeMap<_, _> = self
+        let idkg_data: BTreeMap<_, _> = self
             .idkg_keys
             .into_iter()
-            .map(|key_id| {
+            .enumerate()
+            .map(|(id, key_id)| {
                 (
                     key_id,
-                    MasterPublicKey {
-                        algorithm_id: AlgorithmId::Secp256k1,
-                        public_key: b"abababab".to_vec(),
+                    IDkgData {
+                        public_key: MasterPublicKey {
+                            algorithm_id: AlgorithmId::Secp256k1,
+                            public_key: b"abababab".to_vec(),
+                        },
+                        key_transcript_id: IDkgTranscriptId::new(
+                            self.own_subnet_id,
+                            id,
+                            Height::from(0),
+                        ),
+                        pre_signatures: vec![],
                     },
                 )
             })
@@ -931,8 +930,7 @@ impl SchedulerTestBuilder {
             wasm_executor,
             registry_settings,
             metrics_registry: self.metrics_registry,
-            idkg_subnet_public_keys,
-            idkg_pre_signature_ids: BTreeMap::new(),
+            idkg_data,
         }
     }
 }
