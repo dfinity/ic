@@ -9,6 +9,3 @@ fn init() {
 }
 
 fn main() {}
-
-#[cfg(test)]
-candid::export_service!();
