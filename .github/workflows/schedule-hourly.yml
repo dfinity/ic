@@ -83,10 +83,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
-          retention-days: 14
+          retention-days: 30
           if-no-files-found: ignore
           compression-level: 9
-          path: bazel-bep.pb
+          path: |
+            bazel-bep.pb
+            profile.json
   bazel-test-coverage:
     name: Bazel Test Coverage
     runs-on:

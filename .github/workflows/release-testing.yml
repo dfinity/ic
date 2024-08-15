@@ -65,10 +65,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
-          retention-days: 14
+          retention-days: 30
           if-no-files-found: ignore
           compression-level: 9
-          path: bazel-bep.pb
+          path: |
+            bazel-bep.pb
+            profile.json
   bazel-system-test-staging:
     name: Bazel System Test Staging
     continue-on-error: True
@@ -102,11 +104,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
-          retention-days: 90
+          retention-days: 30
           if-no-files-found: ignore
           compression-level: 9
           path: |
             bazel-bep.pb
+            profile.json
   bazel-system-test-hotfix:
     name: Bazel System Test Hotfix
     runs-on:
@@ -139,11 +142,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
-          retention-days: 90
+          retention-days: 30
           if-no-files-found: ignore
           compression-level: 9
           path: |
             bazel-bep.pb
+            profile.json
   dependency-scan-release-cut:
     name: Dependency Scan for Release
     runs-on:

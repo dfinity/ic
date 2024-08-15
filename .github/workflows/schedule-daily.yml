@@ -144,10 +144,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
-          retention-days: 14
+          retention-days: 30
           if-no-files-found: ignore
           compression-level: 9
-          path: bazel-bep.pb
+          path: |
+            bazel-bep.pb
+            profile.json
   system-tests-benchmarks-nightly:
     name: Bazel System Test Benchmarks
     runs-on:
@@ -184,10 +186,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
-          retention-days: 90
+          retention-days: 30
           if-no-files-found: ignore
           compression-level: 9
-          path: bazel-bep.pb
+          path: |
+            bazel-bep.pb
+            profile.json
   dependency-scan-nightly:
     name: Dependency Scan Nightly
     runs-on:
