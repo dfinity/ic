@@ -975,14 +975,6 @@ mod tests {
 
                 let result = idkg_pool
                     .apply_changes(vec![IDkgChangeAction::RemoveValidated(msg_id_1.clone())]);
-                assert_eq!(
-                    result
-                        .mutations
-                        .iter()
-                        .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
-                        .count(),
-                    0
-                );
                 assert_eq!(result.mutations.len(), 1);
                 assert!(
                     matches!(&result.mutations[0], ArtifactMutation::Remove(x) if *x == msg_id_1)
@@ -992,12 +984,7 @@ mod tests {
 
                 let result = idkg_pool
                     .apply_changes(vec![IDkgChangeAction::RemoveValidated(msg_id_2.clone())]);
-                assert!(result
-                    .mutations
-                    .iter()
-                    .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
-                    .next()
-                    .is_none());
+                assert_eq!(result.mutations.len(), 1);
                 assert!(
                     matches!(&result.mutations[0], ArtifactMutation::Remove(x) if *x == msg_id_2)
                 );
