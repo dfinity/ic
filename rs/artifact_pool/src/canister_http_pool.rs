@@ -155,12 +155,7 @@ impl MutablePool<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
             }
         }
         let mut mutations = Vec::with_capacity(artifacts_with_opt.len() + purged.len());
-        mutations.extend(
-            artifacts_with_opt
-                .drain(..)
-                .into_iter()
-                .map(ArtifactMutation::Insert),
-        );
+        mutations.extend(artifacts_with_opt.drain(..).map(ArtifactMutation::Insert));
         mutations.extend(purged.drain(..).map(ArtifactMutation::Remove));
         ChangeResult {
             mutations,
