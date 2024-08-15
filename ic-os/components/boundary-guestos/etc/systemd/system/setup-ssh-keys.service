@@ -1,0 +1,14 @@
+[Unit]
+Description=Generate ssh keys on first boot
+# We must wait for var to be mounted over before interacting with it
+After=var.mount
+Wants=var.mount
+Before=ssh.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-ssh-keys.sh
+
+[Install]
+WantedBy=multi-user.target

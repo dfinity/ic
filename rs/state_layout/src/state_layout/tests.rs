@@ -1,8 +1,7 @@
 use super::*;
 
 use ic_management_canister_types::{
-    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
-    LogVisibility, IC_00,
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
 };
 use ic_replicated_state::{
     canister_state::system_state::CanisterHistory,
@@ -54,10 +53,11 @@ fn default_canister_state_bits() -> CanisterStateBits {
         canister_history: CanisterHistory::default(),
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
         total_query_stats: TotalQueryStats::default(),
-        log_visibility: LogVisibility::default(),
+        log_visibility: Default::default(),
         canister_log: Default::default(),
         wasm_memory_limit: None,
         next_snapshot_id: 0,
+        snapshots_memory_usage: NumBytes::from(0),
     }
 }
 
@@ -352,6 +352,55 @@ fn test_last_removal_panics_in_debug() {
             .unwrap();
         state_layout.remove_checkpoint_when_unused(Height::new(1));
         std::mem::drop(cp1);
+    });
+}
+
+#[test]
+fn test_can_remove_unverified_marker_file_twice() {
+    // Double removal of the marker file could happen when the state sync and `commit_and_certify` try to promote a scratchpad
+    // to the checkpoint folder at the same height.
+    // It should be fine that both threads are verifying the checkpoint and try to remove the marker file.
+    with_test_replica_logger(|log| {
+        let tempdir = tmpdir("state_layout");
+        let root_path = tempdir.path().to_path_buf();
+        let metrics_registry = ic_metrics::MetricsRegistry::new();
+        let state_layout = StateLayout::try_new(log, root_path, &metrics_registry).unwrap();
+
+        let height = Height::new(1);
+        let state_sync_scratchpad = state_layout.state_sync_scratchpad(height).unwrap();
+        let scratchpad_layout =
+            CheckpointLayout::<RwPolicy<()>>::new_untracked(state_sync_scratchpad, height)
+                .expect("failed to create checkpoint layout");
+        // Create at least a file in the scratchpad layout. Otherwise, empty folders can be overridden without errors
+        // and calling "scratchpad_to_checkpoint" twice will not fail as expected.
+        File::create(scratchpad_layout.raw_path().join(SYSTEM_METADATA_FILE)).unwrap();
+
+        let tip_path = state_layout.tip_path();
+        let tip = CheckpointLayout::<RwPolicy<()>>::new_untracked(tip_path, height)
+            .expect("failed to create tip layout");
+        File::create(tip.raw_path().join(SYSTEM_METADATA_FILE)).unwrap();
+
+        // Create marker files in both the scratchpad and tip and try to promote them to a checkpoint.
+        scratchpad_layout
+            .create_unverified_checkpoint_marker()
+            .unwrap();
+        tip.create_unverified_checkpoint_marker().unwrap();
+
+        let checkpoint = state_layout
+            .scratchpad_to_checkpoint(scratchpad_layout, height, None)
+            .unwrap();
+        checkpoint.remove_unverified_checkpoint_marker().unwrap();
+
+        // The checkpoint already exists, therefore promoting the tip to checkpoint should fail.
+        // However, it can still access the checkpoint and try to remove the marker file again from its side.
+        let checkpoint_result = state_layout.scratchpad_to_checkpoint(tip, height, None);
+        assert!(checkpoint_result.is_err());
+
+        let res = state_layout
+            .checkpoint_in_verification(height)
+            .unwrap()
+            .remove_unverified_checkpoint_marker();
+        assert!(res.is_ok());
     });
 }
 

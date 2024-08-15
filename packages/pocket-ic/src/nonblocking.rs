@@ -35,7 +35,7 @@ const POLLING_PERIOD_MS: u64 = 10;
 const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
-const LOCALHOST: &str = "127.0.0.1";
+const LOCALHOST: &str = "localhost";
 
 // The minimum joint size of a canister's WASM
 // and its initial argument blob for which

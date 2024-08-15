@@ -63,6 +63,20 @@ use crate::{
 };
 use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor};
 
+/// The value of 25MB is chosen from experiments and the BDP product shown below to support
+/// around 2Gb/s.
+/// Bandwidth-Delay Product
+/// 2Gb/s * 100ms ≈ 200M bits = 25MB
+/// To this only on to avoid unnecessary error in dfx on MacOS
+#[cfg(target_os = "linux")]
+const UDP_BUFFER_SIZE: usize = 25_000_000; // 25MB
+
+const RECEIVE_WINDOW: VarInt = VarInt::from_u32(200_000_000);
+const SEND_WINDOW: u64 = 100_000_000;
+const STREAM_RECEIVE_WINDOW: VarInt = VarInt::from_u32(4_000_000);
+const MAX_CONCURRENT_BIDI_STREAMS: VarInt = VarInt::from_u32(1_000);
+const MAX_CONCURRENT_UNI_STREAMS: VarInt = VarInt::from_u32(1_000);
+
 /// Interval of quic heartbeats. They are only sent if the connection is idle for more than 200ms.
 const KEEP_ALIVE_INTERVAL: Duration = Duration::from_millis(200);
 /// Timeout after which quic marks connections as broken. This timeout is used to detect connections
@@ -212,18 +226,15 @@ pub(crate) fn start_connection_manager(
 
     let mut transport_config = quinn::TransportConfig::default();
 
-    transport_config.keep_alive_interval(Some(KEEP_ALIVE_INTERVAL));
-    transport_config.max_idle_timeout(Some(IDLE_TIMEOUT.try_into().unwrap()));
-    // defaults:
-    // STREAM_RWN 1_250_000
-    // stream_receive_window: STREAM_RWND.into(),
-    // send_window: (8 * STREAM_RWND).into()
-    transport_config.send_window(100_000_000);
-    // Upper bound on receive memory consumption.
-    transport_config.receive_window(VarInt::from_u32(200_000_000));
-    transport_config.stream_receive_window(VarInt::from_u32(4_000_000));
-    transport_config.max_concurrent_bidi_streams(VarInt::from_u32(1_000));
-    transport_config.max_concurrent_uni_streams(VarInt::from_u32(1_000));
+    transport_config
+        .max_idle_timeout(Some(IDLE_TIMEOUT.try_into().unwrap()))
+        .keep_alive_interval(Some(KEEP_ALIVE_INTERVAL))
+        .send_window(SEND_WINDOW)
+        .receive_window(RECEIVE_WINDOW)
+        .stream_receive_window(STREAM_RECEIVE_WINDOW)
+        .max_concurrent_bidi_streams(MAX_CONCURRENT_BIDI_STREAMS)
+        .max_concurrent_uni_streams(MAX_CONCURRENT_UNI_STREAMS);
+
     let transport_config = Arc::new(transport_config);
     let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(
         QuicServerConfig::try_from(rustls_server_config).unwrap(),
@@ -237,18 +248,13 @@ pub(crate) fn start_connection_manager(
                 .expect("Failed to create udp socket");
 
             // Set socket send/recv buffer size. Setting these explicitly makes sure that a
-            // sufficiently large value is used. Increasing these buffers can help with high packetloss.
-            // The value of 25MB isch chosen from experiments and the BDP product shown below to support
-            // around 2Gb/s.
-            // Bandwidth-Delay Product
-            // 2Gb/s * 100ms ~ 200M bits = 25MB
-            // To this only on to avoid unecessary error in dfx on MacOS
+            // sufficiently large value is used. Increasing these buffers can help with high packet loss.
             #[cfg(target_os = "linux")]
-            if let Err(e) = socket2.set_recv_buffer_size(25_000_000) {
+            if let Err(e) = socket2.set_recv_buffer_size(UDP_BUFFER_SIZE) {
                 info!(log, "Failed to set receive udp buffer. {}", e)
             }
             #[cfg(target_os = "linux")]
-            if let Err(e) = socket2.set_send_buffer_size(25_000_000) {
+            if let Err(e) = socket2.set_send_buffer_size(UDP_BUFFER_SIZE) {
                 info!(log, "Failed to set send udp buffer. {}", e)
             }
             info!(

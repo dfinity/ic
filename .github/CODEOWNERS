@@ -99,6 +99,7 @@ go_deps.bzl               @dfinity/idx
 /rs/bitcoin/mock/                                       @dfinity/finint
 /rs/bitcoin/client/                                     @dfinity/networking
 /rs/bitcoin/consensus/                                  @dfinity/execution @dfinity/consensus
+/rs/bitcoin/kyt/                                        @dfinity/cross-chain-team
 /rs/bitcoin/service/                                    @dfinity/networking
 /rs/bitcoin/replica_types/                              @dfinity/execution
 /rs/boundary_node/                                      @dfinity/boundary-node
@@ -228,6 +229,7 @@ go_deps.bzl               @dfinity/idx
 /rs/test_utilities/src/cycles_account_manager.rs        @dfinity/execution
 /rs/test_utilities/types/src/batch/                     @dfinity/consensus
 /rs/tests/                                              @dfinity/idx
+/rs/tests/driver/src/driver/simulate_network.rs         @dfinity/networking
 /rs/tests/boundary_nodes/                               @dfinity/boundary-node @dfinity/idx
 /rs/tests/consensus/                                    @dfinity/consensus @dfinity/idx
 /rs/tests/crypto/                                       @dfinity/crypto-team @dfinity/idx
