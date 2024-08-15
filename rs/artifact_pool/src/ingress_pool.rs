@@ -657,14 +657,6 @@ mod tests {
                 let result = ingress_pool.apply_changes(changeset);
 
                 // Check moved message is returned as an advert
-                assert_eq!(
-                    result
-                        .mutations
-                        .iter()
-                        .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
-                        .count(),
-                    0
-                );
                 assert_eq!(result.mutations.len(), 1);
                 assert!(
                     matches!(&result.mutations[0], ArtifactMutation::Insert(artifact) if
