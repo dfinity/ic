@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use regex::Regex;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub struct IcosComponents {
@@ -46,16 +46,13 @@ impl IcosVariant {
 
 #[derive(Debug)]
 pub struct Component {
-    pub source: String,
-    pub destination: String,
+    pub source: PathBuf,
+    pub destination: PathBuf,
 }
 
 impl Component {
-    pub fn new(source: &str, destination: &str) -> Self {
-        Component {
-            source: source.to_string(),
-            destination: destination.to_string(),
-        }
+    pub fn new(source: PathBuf, destination: PathBuf) -> Self {
+        Component { source, destination }
     }
 }
 
@@ -63,14 +60,13 @@ pub fn get_components(file_path: &Path) -> Result<IcosVariant> {
     let content = fs::read_to_string(file_path)
         .with_context(|| format!("Failed to read file: {:?}", file_path))?;
 
-    // Regular expression to capture the key and value in the component_files dictionary
     let re = Regex::new(r#"Label\("(.+?)"\): "(.+?)""#)?;
 
     let mut components = IcosVariant::new();
 
     for cap in re.captures_iter(&content) {
-        let source = &cap[1];
-        let destination = &cap[2];
+        let source = PathBuf::from(&cap[1]);
+        let destination = PathBuf::from(&cap[2]);
         components.add_component(Component::new(source, destination));
     }
 
