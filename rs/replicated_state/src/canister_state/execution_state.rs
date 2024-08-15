@@ -466,12 +466,15 @@ pub struct ExecutionState {
     pub stable_memory: Memory,
 
     /// The state of exported globals. Internal globals are not accessible.
+    #[validate_eq(Ignore)]
     pub exported_globals: Vec<Global>,
 
     /// A set of the functions that a Wasm module exports.
+    #[validate_eq(Ignore)]
     pub exports: ExportedFunctions,
 
     /// Metadata extracted from the Wasm module.
+    #[validate_eq(Ignore)]
     pub metadata: WasmMetadata,
 
     /// Round number at which canister executed
