@@ -3,6 +3,8 @@ use regex::Regex;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+pub const COMPONENTS_PATH: &str = "ic-os/components";
+
 #[derive(Debug)]
 pub struct IcosManifest {
     pub setupos: Manifest,
@@ -77,7 +79,7 @@ fn get_manifest(manifest_path: &Path, components_path: &Path) -> Result<Manifest
 }
 
 pub fn get_icos_manifest(repo_root: &PathBuf) -> Result<IcosManifest> {
-    let components_path = repo_root.join("ic-os/components/");
+    let components_path = repo_root.join(COMPONENTS_PATH);
     let guestos_manifest_path = components_path.join("guestos.bzl");
     let hostos_manifest_path = components_path.join("hostos.bzl");
     let setupos_manifest_path = components_path.join("setupos.bzl");
