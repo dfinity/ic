@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use regex::Regex;
 use std::fs;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub struct IcosComponents {
@@ -45,22 +46,22 @@ impl Components {
 
 #[derive(Debug)]
 pub struct Component {
-    pub _source: String,
-    pub _destination: String,
+    pub source: String,
+    pub destination: String,
 }
 
 impl Component {
-    pub fn new(name: String, path: String) -> Self {
+    pub fn new(source: &str, destination: &str) -> Self {
         Component {
-            _source: name,
-            _destination: path,
+            source: source.to_string(),
+            destination: destination.to_string(),
         }
     }
 }
 
-pub fn get_components_from_bzl(file_path: &str) -> Result<Components> {
+pub fn get_components_from_bzl(file_path: &Path) -> Result<Components> {
     let content = fs::read_to_string(file_path)
-        .with_context(|| format!("Failed to read file: {}", file_path))?;
+        .with_context(|| format!("Failed to read file: {:?}", file_path))?;
 
     // Regular expression to capture the key and value in the component_files dictionary
     let re = Regex::new(r#"Label\("(.+?)"\): "(.+?)""#)?;
@@ -68,9 +69,9 @@ pub fn get_components_from_bzl(file_path: &str) -> Result<Components> {
     let mut components = Components::new();
 
     for cap in re.captures_iter(&content) {
-        let name = cap[1].to_string();
-        let path = cap[2].to_string();
-        components.add_component(Component::new(name, path));
+        let source = &cap[1];
+        let destination = &cap[2];
+        components.add_component(Component::new(source, destination));
     }
 
     Ok(components)
@@ -78,11 +79,15 @@ pub fn get_components_from_bzl(file_path: &str) -> Result<Components> {
 
 pub fn get_all_components() -> Result<IcosComponents> {
     //TODO: help: fix file paths
-    let guestos_components = get_components_from_bzl("../../../ic-os/components/guestos.bzl")?;
-    let hostos_components = get_components_from_bzl("../../../ic-os/components/hostos.bzl")?;
-    let setupos_components = get_components_from_bzl("../../../ic-os/components/setupos.bzl")?;
-    let boundary_guestos_components =
-        get_components_from_bzl("../../../ic-os/components/boundary-guestos.bzl")?;
+    let guestos_path = Path::new("../../../ic-os/components/guestos.bzl");
+    let hostos_path = Path::new("../../../ic-os/components/hostos.bzl");
+    let setupos_path = Path::new("../../../ic-os/components/setupos.bzl");
+    let boundary_guestos_path = Path::new("../../../ic-os/components/boundary-guestos.bzl");
+
+    let guestos_components = get_components_from_bzl(guestos_path)?;
+    let hostos_components = get_components_from_bzl(hostos_path)?;
+    let setupos_components = get_components_from_bzl(setupos_path)?;
+    let boundary_guestos_components = get_components_from_bzl(boundary_guestos_path)?;
 
     Ok(IcosComponents::new(
         guestos_components,
