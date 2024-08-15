@@ -20,7 +20,7 @@ pub struct Config {
 
 /// Stats of the messages and bytes sent by the canister. This is returned by the `stats` query of
 /// the canister.
-#[derive(Serialize, Deserialize, Clone, Debug, Default, CandidType)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug, Default, CandidType)]
 pub struct Metrics {
     /// Counter for failures on sending requests.
     pub send_request_error_count: u32,

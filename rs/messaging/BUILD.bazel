@@ -84,10 +84,12 @@ rust_ic_test_suite(
     srcs = glob(["tests/**/*.rs"]),
     data = [
         "//rs/rust_canisters/downstream_calls_test:downstream-calls-test-canister",
+	"//rs/rust_canisters/saturating_subnet_memory_test:saturating-subnet-memory-test-canister",
         "//rs/rust_canisters/xnet_test:xnet-test-canister",
     ],
     env = {
         "DOWNSTREAM_CALLS_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/downstream_calls_test:downstream-calls-test-canister)",
+	"SATURATING_SUBNET_MEMORY_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/saturating_subnet_memory_test:saturating-subnet-memory-test-canister)",
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
     deps = [
@@ -99,6 +101,7 @@ rust_ic_test_suite(
         "//rs/replicated_state",
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/downstream_calls_test",
+        "//rs/rust_canisters/saturating_subnet_memory_test",
         "//rs/rust_canisters/xnet_test",
         "//rs/state_machine_tests",
         "//rs/test_utilities",
