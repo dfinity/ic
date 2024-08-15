@@ -395,7 +395,7 @@ impl DerivedPrivateKey {
         derivation_path: &DerivationPath,
         chain_code: &[u8; 32],
     ) -> (DerivedPrivateKey, [u8; 32]) {
-        let sk_scalar = self.esk.scalar.clone();
+        let sk_scalar = self.esk.scalar;
         let pt = EdwardsPoint::mul_base(&sk_scalar);
 
         let (pt, sum, chain_code) = derivation_path.derive_offset(pt, chain_code);
