@@ -66,6 +66,7 @@ impl CanisterHttpAdapterClientImpl {
         metrics_registry: MetricsRegistry,
         subnet_type: SubnetType,
     ) -> Self {
+        #[allow(clippy::disallowed_methods)]
         let (tx, rx) = unbounded_channel();
         let metrics = Metrics::new(&metrics_registry);
         Self {
