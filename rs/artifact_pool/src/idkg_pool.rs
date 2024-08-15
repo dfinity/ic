@@ -655,10 +655,9 @@ mod tests {
                     .next()
                     .is_none());
 
-                assert_eq!(
-                    result.artifacts_with_opt[0].artifact.id(),
-                    support.message_id()
-                );
+                assert!(matches!(
+                    &result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == support.message_id()
+                ));
                 assert!(result.poll_immediately);
             }
         }
@@ -989,13 +988,18 @@ mod tests {
 
                 let result = idkg_pool
                     .apply_changes(vec![IDkgChangeAction::RemoveValidated(msg_id_1.clone())]);
-                assert!(result
-                    .mutations
-                    .iter()
-                    .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
-                    .next()
-                    .is_none());
-                assert_eq!(result.purged, vec![msg_id_1]);
+                assert_eq!(
+                    result
+                        .mutations
+                        .iter()
+                        .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
+                        .count(),
+                    0
+                );
+                assert_eq!(result.mutations.len(), 1);
+                assert!(
+                    matches!(&result.mutations[0], ArtifactMutation::Remove(x) if *x == msg_id_1)
+                );
                 assert!(result.poll_immediately);
                 check_state(&idkg_pool, &[msg_id_3.clone()], &[msg_id_2.clone()]);
 
@@ -1008,7 +1012,7 @@ mod tests {
                     .next()
                     .is_none());
                 assert!(
-                    matches!(result.mutations[0], ArtifactMutation::Remove(id) if id == msg_id_2)
+                    matches!(&result.mutations[0], ArtifactMutation::Remove(x) if *x == msg_id_2)
                 );
                 assert!(result.poll_immediately);
                 check_state(&idkg_pool, &[msg_id_3], &[]);

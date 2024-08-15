@@ -272,7 +272,7 @@ mod test {
             timestamp: UNIX_EPOCH,
         });
         // ensure we have 2 validated and 2 unvalidated artifacts
-        assert_eq!(result.artifacts_with_opt.len(), 2);
+        assert_eq!(result.mutations.len(), 2);
         assert!(result
             .mutations
             .iter()

@@ -262,7 +262,7 @@ mod tests {
         ]);
 
         assert!(
-            matches!(result.mutations[0], ArtifactMutation::Insert(artifact) if artifact.artifact.id() == id)
+            matches!(&result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == id)
         );
         assert!(result.poll_immediately);
         assert!(result
@@ -290,7 +290,7 @@ mod tests {
             .next()
             .is_none());
         assert!(result.poll_immediately);
-        assert_eq!(result.mutations[0], ArtifactMutation::Remove(id));
+        assert!(matches!(&result.mutations[0], ArtifactMutation::Remove(x) if *x == id));
         assert!(pool.lookup_validated(&id).is_none());
         assert!(pool.get_response_content_by_hash(&content_hash).is_none());
         assert_eq!(pool.get_validated_shares().count(), 1);

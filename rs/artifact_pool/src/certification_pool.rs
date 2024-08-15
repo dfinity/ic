@@ -619,7 +619,7 @@ mod tests {
             ]);
             let expected = cert_msg.id();
             assert!(
-                matches!(&result.mutations[0], ArtifactMutation::Insert(artifact) if artifact.artifact.id() == expected)
+                matches!(&result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == expected)
             );
             assert_eq!(result.mutations.len(), 1);
             assert!(result
@@ -711,7 +711,7 @@ mod tests {
                 .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
                 .next()
                 .is_none());
-            assert_eq!(result.purged.len(), 2);
+            assert_eq!(result.mutations.len(), 2);
             assert!(result.poll_immediately);
             assert_eq!(pool.all_heights_with_artifacts().len(), 0);
             assert_eq!(pool.shares_at_height(Height::from(10)).count(), 0);
@@ -837,7 +837,7 @@ mod tests {
                 ChangeAction::AddToValidated(share_msg.clone()),
                 ChangeAction::AddToValidated(cert_msg.clone()),
             ]);
-            assert_eq!(result.artifacts_with_opt.len(), 2);
+            assert_eq!(result.mutations.len(), 2);
             assert!(result
                 .mutations
                 .iter()
