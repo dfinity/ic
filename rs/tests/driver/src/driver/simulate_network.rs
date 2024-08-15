@@ -37,19 +37,20 @@ pub fn simulate_network(subnet: SubnetSnapshot, topology: &NetworkSimulation) {
                         continue;
                     }
                     let destination_ip = nodes[destination_node].get_ip_addr();
-
+                    // tc class id start at 1 and we already defined one above so we need to start from 2..
+                    let tc_class_id = destination_node + 2;
                     tc_command.push_str(&format!(
                         "sudo tc class add dev enp1s0 parent 1:1 classid 1:{} htb rate 2000Mbps \n",
-                        destination_node + 2,
+                        tc_class_id,
                     ));
                     tc_command.push_str(&format!(
                         "sudo tc qdisc add dev enp1s0 handle {}: parent 1:{} netem limit 10000000 loss {:.3}% delay {}ms \n",
-                        destination_node+2,
-                        destination_node+2,
+                        tc_class_id,
+                        tc_class_id,
                         packet_loss[(12) * source_node + destination_node].2 * 100.0,
                         (rtt[(12) * source_node + destination_node].2 * 1000.0 / 2.0) as u64
                     ));
-                    tc_command.push_str(&format!("sudo tc filter add dev enp1s0 protocol ipv6 parent 1: pref {} u32 match ip6 dst {destination_ip} flowid 1:{} \n",destination_node+2, destination_node+2));
+                    tc_command.push_str(&format!("sudo tc filter add dev enp1s0 protocol ipv6 parent 1: pref {} u32 match ip6 dst {destination_ip} flowid 1:{} \n", tc_class_id, tc_class_id ));
                 }
                 tc_command.push_str(
                     "sudo tc class add dev enp1s0 parent 1:1 classid 1:999 htb rate 2000Mbps \n",
