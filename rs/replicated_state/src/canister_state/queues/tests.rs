@@ -1042,6 +1042,43 @@ fn test_gced_queue_in_input_schedule() {
 }
 
 #[test]
+fn test_peek_input_with_empty_queue_in_input_schedule() {
+    let mut queues = fixture_with_empty_queues_in_input_schedules();
+
+    assert_matches!(queues.peek_input().unwrap(), CanisterMessage::Request(request) if request.sender == canister_test_id(2));
+    assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Request(request) if request.sender == canister_test_id(2));
+
+    assert_matches!(queues.peek_input().unwrap(), CanisterMessage::Request(request) if request.sender == canister_test_id(5));
+    assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Request(request) if request.sender == canister_test_id(5));
+
+    assert_eq!(None, queues.peek_input());
+    assert_eq!(None, queues.pop_input());
+
+    assert!(queues.pool.len() == 0);
+}
+
+#[test]
+fn test_peek_input_with_gced_queue_in_input_schedule() {
+    let mut queues = fixture_with_empty_queues_in_input_schedules();
+
+    // Garbage collect the empty queue paurs.
+    queues.garbage_collect();
+    // Only 2 queue pairs should be left.
+    assert_eq!(2, queues.canister_queues.len());
+
+    assert_matches!(queues.peek_input().unwrap(), CanisterMessage::Request(request) if request.sender == canister_test_id(2));
+    assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Request(request) if request.sender == canister_test_id(2));
+
+    assert_matches!(queues.peek_input().unwrap(), CanisterMessage::Request(request) if request.sender == canister_test_id(5));
+    assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Request(request) if request.sender == canister_test_id(5));
+
+    assert_eq!(None, queues.peek_input());
+    assert_eq!(None, queues.pop_input());
+
+    assert!(queues.pool.len() == 0);
+}
+
+#[test]
 fn roundtrip_encode_empty_queue_in_input_schedule() {
     let queues = fixture_with_empty_queues_in_input_schedules();
 

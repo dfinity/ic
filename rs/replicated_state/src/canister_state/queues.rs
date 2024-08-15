@@ -437,7 +437,11 @@ impl CanisterQueues {
 
         while let Some(sender) = input_schedule.front() {
             // The sender's input queue.
-            let input_queue = &mut self.canister_queues.get_mut(sender).unwrap().0;
+            let Some((input_queue, _)) = self.canister_queues.get_mut(&sender) else {
+                // Queue pair was garbage collected.
+                input_schedule.pop_front();
+                continue;
+            };
 
             if let Some(item) = input_queue.peek() {
                 let msg = self
@@ -469,13 +473,13 @@ impl CanisterQueues {
     }
 
     /// Returns `true` if `ingress_queue` or at least one of the canister input
-    /// queues is not empty; `false` otherwise.
+    /// queues contains non-stale messages; `false` otherwise.
     pub fn has_input(&self) -> bool {
         !self.ingress_queue.is_empty() || self.pool.message_stats().inbound_message_count > 0
     }
 
-    /// Returns `true` if at least one output queue is not empty; false
-    /// otherwise.
+    /// Returns `true` if at least one output queue contains non-stale messages;
+    /// false otherwise.
     pub fn has_output(&self) -> bool {
         self.pool.message_stats().outbound_message_count > 0
     }
