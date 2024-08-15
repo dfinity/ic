@@ -4,15 +4,15 @@ use std::fs;
 
 #[derive(Debug)]
 pub struct Component {
-    pub source: String,
-    pub destination: String,
+    pub _source: String,
+    pub _destination: String,
 }
 
 impl Component {
     pub fn new(name: String, path: String) -> Self {
         Component {
-            source: name,
-            destination: path,
+            _source: name,
+            _destination: path,
         }
     }
 }
