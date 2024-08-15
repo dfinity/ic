@@ -44,6 +44,19 @@ def icos_build(
 
     image_deps = image_deps_func(mode, malicious)
 
+    # -------------------- Pre-check --------------------
+
+    # Verify that all the referenced components exist
+    native.genrule(
+        name = name + "_pre_check",
+        srcs = [k for k, v in image_deps["component_files"].items()],
+        outs = [name + "_pre_check_result.txt"],
+        cmd = """
+            echo "Running pre_check for {name}"
+            echo "All paths exist" > $@
+        """,
+    )
+
     # -------------------- Version management --------------------
 
     copy_file(
@@ -605,6 +618,7 @@ EOF
         name = name,
         testonly = malicious,
         srcs = [
+            name + "_pre_check_result.txt",
             ":disk-img.tar.zst",
         ] + ([
             ":update-img.tar.zst",

@@ -45,6 +45,17 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 "opt-level=3",
             ],
         )],
+        "lmdb-rkv-sys": [crate.annotation(
+            build_script_data = [
+                "@lmdb//:lmdb.h",
+            ],
+            build_script_env = {
+                "LMDB_NO_BUILD": "1",
+                "LMDB_H_PATH": "$(location @lmdb//:lmdb.h)",
+            },
+            # ensure LMDB lib is available at runtime
+            deps = ["@lmdb"],
+        )],
         "p256": [crate.annotation(
             rustc_flags = [
                 "-C",
@@ -735,6 +746,15 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "little-loadshedder": crate.spec(
                 version = "^0.1.0",
+            ),
+            "lmdb-rkv": crate.spec(
+                git = "https://github.com/dfinity-lab/lmdb-rs",
+                rev = "4d952c8f1dca79de855af892b444d7112567b58d",
+            ),
+            "lmdb-rkv-sys": crate.spec(
+                git = "https://github.com/dfinity-lab/lmdb-rs",
+                rev = "4d952c8f1dca79de855af892b444d7112567b58d",
+                default_features = False,
             ),
             "local-ip-address": crate.spec(
                 version = "^0.5.6",
