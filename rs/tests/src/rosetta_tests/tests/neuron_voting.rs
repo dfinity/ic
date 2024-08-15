@@ -9,7 +9,9 @@ use crate::rosetta_tests::{
 };
 use ic_agent::Identity;
 use ic_nns_common::pb::v1::ProposalId;
-use ic_nns_governance_api::pb::v1::{neuron::DissolveState, proposal, Motion, Neuron, Proposal};
+use ic_nns_governance_api::pb::v1::{
+    neuron::DissolveState, MakeProposalRequest, Motion, Neuron, ProposalActionRequest,
+};
 use ic_rosetta_api::{
     convert::neuron_subaccount_bytes_from_public_key,
     ledger_client::proposal_info_response::ProposalInfoResponse,
@@ -67,10 +69,10 @@ pub fn test(env: TestEnv) {
     let neuron3 = neurons.create(neuron_setup);
     let neurons = neurons.get_neurons();
 
-    let proposal = Proposal {
+    let proposal = MakeProposalRequest {
         title: Some("dummy title".to_string()),
         summary: "test".to_string(),
-        action: Some(proposal::Action::Motion(Motion {
+        action: Some(ProposalActionRequest::Motion(Motion {
             motion_text: "dummy text".to_string(),
         })),
         ..Default::default()
