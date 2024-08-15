@@ -201,11 +201,11 @@ fn seek_data(file: &File, from: u64) -> Option<u64> {
 }
 
 pub mod tests {
+    use super::*;
     use anyhow::{Context, Result};
     use std::env;
     use std::path::{Path, PathBuf};
     use tar::Archive;
-    use super::*;
 
     fn test_dir() -> Result<PathBuf> {
         let mut path = PathBuf::new();
