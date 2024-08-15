@@ -221,9 +221,7 @@ pub mod tests {
             ("third.txt", vec![0u8; 2000 * 1000]),
         ];
 
-        let mut output = vec![];
-        let mut output_builder = Builder::new(&mut output);
-
+        let mut output_builder = Builder::new(vec![]);
         for (name, content) in &entries {
             let mut file = File::create_new(test_dir()?.join(name))?;
             file.write_all(content)?;
@@ -231,7 +229,8 @@ pub mod tests {
             let state = scan_file_for_holes(&mut file, name.to_string())?;
             add_file_to_archive(&mut file, &mut output_builder, state)?;
         }
-        drop(output_builder);
+
+        let output = output_builder.into_inner()?;
 
         // Verify archive size in bytes.
         assert_eq!(output.len(), 526848);
@@ -241,7 +240,7 @@ pub mod tests {
 
         // Verify that each entry was correctly preserved.
         for entry_index in 0..entries.len() {
-            let mut output_entry = output_entries.next().expect("Tew few entries in output")?;
+            let mut output_entry = output_entries.next().expect("Too few entries in output")?;
             assert_eq!(output_entry.path()?, Path::new(entries[entry_index].0));
 
             let mut output_content = vec![];
