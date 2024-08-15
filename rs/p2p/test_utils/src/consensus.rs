@@ -6,8 +6,8 @@ use std::{
 };
 
 use ic_interfaces::p2p::consensus::{
-    ArtifactWithOpt, ChangeResult, ChangeSetProducer, MutablePool, Priority, PriorityFnFactory,
-    UnvalidatedArtifact, ValidatedPoolReader, ArtifactMutation,
+    ArtifactMutation, ArtifactWithOpt, ChangeResult, ChangeSetProducer, MutablePool, Priority,
+    PriorityFnFactory, UnvalidatedArtifact, ValidatedPoolReader,
 };
 use ic_logger::ReplicaLogger;
 use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
@@ -147,17 +147,21 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
         if !change_set.1.is_empty() {
             poll_immediately = true;
         }
-        let mut mutations: Vec<_> = change_set
-        .0
-        .into_iter()
-        .map(|m| ArtifactMutation::Insert(ArtifactWithOpt {
-            artifact: self.id_to_msg(m).into(),
-            is_latency_sensitive: self.latency_sensitive,
-        }))
-        .collect();
+        let mut mutations = vec![];
+        mutations.extend(change_set.0.drain(..).into_iter().map(|m| {
+            ArtifactMutation::Insert(ArtifactWithOpt {
+                artifact: self.id_to_msg(m).into(),
+                is_latency_sensitive: self.latency_sensitive,
+            })
+        }));
 
-        mutations.extend(change_set.1.drain(..).into_iter().map(|id| 
-            ArtifactMutation::Remove(id)));
+        mutations.extend(
+            change_set
+                .1
+                .drain(..)
+                .into_iter()
+                .map(|id| ArtifactMutation::Remove(id)),
+        );
         ChangeResult {
             mutations,
             poll_immediately,

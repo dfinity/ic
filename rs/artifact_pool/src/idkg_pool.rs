@@ -927,20 +927,7 @@ mod tests {
                     IDkgChangeAction::MoveToValidated(msg_2),
                     IDkgChangeAction::MoveToValidated(msg_3),
                 ]);
-                assert!(result
-                    .mutations
-                    .iter()
-                    .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
-                    .next()
-                    .is_none());
-
-                // No artifacts_with_opt are created for moved dealings and dealing support
-                assert!(result
-                    .mutations
-                    .iter()
-                    .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
-                    .next()
-                    .is_none());
+                assert!(result.mutations.is_empty());
                 assert!(result.poll_immediately);
                 check_state(&idkg_pool, &[], &[msg_id_1, msg_id_2]);
             })
@@ -1042,19 +1029,7 @@ mod tests {
 
                 let result =
                     idkg_pool.apply_changes(vec![IDkgChangeAction::RemoveUnvalidated(msg_id)]);
-                assert!(result
-                    .mutations
-                    .iter()
-                    .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
-                    .next()
-                    .is_none());
-
-                assert!(result
-                    .mutations
-                    .iter()
-                    .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
-                    .next()
-                    .is_none());
+                assert!(result.mutations.is_empty());
                 assert!(result.poll_immediately);
                 check_state(&idkg_pool, &[], &[]);
             })

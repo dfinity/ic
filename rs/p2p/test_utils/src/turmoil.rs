@@ -22,10 +22,8 @@ use ic_artifact_downloader::FetchArtifact;
 use ic_artifact_manager::run_artifact_processor;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
-    p2p::artifact_manager::JoinGuard,
-    p2p::consensus::ArtifactMutation,
-    p2p::state_sync::StateSyncClient,
-    time_source::SysTimeSource,
+    p2p::artifact_manager::JoinGuard, p2p::consensus::ArtifactMutation,
+    p2p::state_sync::StateSyncClient, time_source::SysTimeSource,
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
