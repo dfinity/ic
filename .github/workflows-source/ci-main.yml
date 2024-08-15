@@ -113,7 +113,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bazel-targets
-          retention-days: 1
+          retention-days: 30
           if-no-files-found: error
           path: |
             bazel-targets
@@ -122,7 +122,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
-          retention-days: 14
+          retention-days: 30
           # we don't always run bazel test (e.g. README changes only)
           if-no-files-found: ignore
           compression-level: 9
@@ -153,7 +153,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
-          retention-days: 14
+          retention-days: 30
           if-no-files-found: ignore
           compression-level: 9
           path: |
@@ -204,7 +204,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
-          retention-days: 14
+          retention-days: 30
           if-no-files-found: ignore
           compression-level: 9
           path: |
@@ -233,7 +233,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
-          retention-days: 90
+          retention-days: 30
           if-no-files-found: ignore
           compression-level: 9
           path: |
@@ -257,7 +257,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
-          retention-days: 90
+          retention-days: 30
           if-no-files-found: ignore
           compression-level: 9
           path: |
