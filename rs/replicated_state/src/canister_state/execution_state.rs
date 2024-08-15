@@ -256,9 +256,10 @@ impl WasmBinary {
 }
 
 /// Represents a canister's wasm or stable memory.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, ValidateEq)]
 pub struct Memory {
     /// The contents of this memory.
+    #[validate_eq(CompareWithValidateEq)]
     pub page_map: PageMap,
     /// The size of the memory in wasm pages. This does not indicate how much
     /// data is stored in the `page_map`, only the number of pages the memory
@@ -269,6 +270,7 @@ pub struct Memory {
 
     /// Contains either a handle to the execution state in the sandbox process
     /// or information that is necessary to constructs the state remotely.
+    #[validate_eq(Ignore)]
     pub sandbox_memory: Arc<Mutex<SandboxMemory>>,
 }
 
@@ -456,9 +458,11 @@ pub struct ExecutionState {
 
     /// The persistent heap of the module. The size of this memory is expected
     /// to fit in a `u32`.
+    #[validate_eq(CompareWithValidateEq)]
     pub wasm_memory: Memory,
 
     /// The canister stable memory which is persisted across canister upgrades.
+    #[validate_eq(CompareWithValidateEq)]
     pub stable_memory: Memory,
 
     /// The state of exported globals. Internal globals are not accessible.

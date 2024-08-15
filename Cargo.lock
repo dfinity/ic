@@ -12731,6 +12731,8 @@ dependencies = [
  "ic-sys",
  "ic-types",
  "ic-utils 0.9.0",
+ "ic-validate-eq",
+ "ic-validate-eq-derive",
  "serde",
 ]
 
