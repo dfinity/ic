@@ -176,7 +176,7 @@ fn is_empty(block: &[u8]) -> bool {
     block == &[0; MAX_BLOCK_SIZE][..block.len()]
 }
 
-fn seek_hole(file: &File, from: u64) -> u64 {
+fn seek_hole(file: &mut File, from: u64) -> u64 {
     // NOTE: u64 does not fully fit in i64, but i64::MAX is 9_223_372_036_854_775_807
     // (8 exbibytes) and we won't be seeing files this large any time soon.
     let unsized_from = from.try_into().unwrap();
@@ -186,7 +186,7 @@ fn seek_hole(file: &File, from: u64) -> u64 {
     out.try_into().unwrap()
 }
 
-fn seek_data(file: &File, from: u64) -> Option<u64> {
+fn seek_data(file: &mut File, from: u64) -> Option<u64> {
     // NOTE: u64 does not fully fit in i64, but i64::MAX is 9_223_372_036_854_775_807
     // (8 exbibytes) and we won't be seeing files this large any time soon.
     let unsized_from = from.try_into().unwrap();
