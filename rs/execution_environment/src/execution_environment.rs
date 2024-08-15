@@ -58,7 +58,7 @@ use ic_replicated_state::{
 };
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_types::{
-    canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT},
+    canister_http::CanisterHttpRequestContext,
     crypto::{
         canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey, PublicKey},
         threshold_sig::ni_dkg::NiDkgTargetId,
@@ -927,11 +927,11 @@ impl ExecutionEnvironment {
                                         .subnet_call_context_manager
                                         .canister_http_request_contexts
                                         .len()
-                                        >= MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT
+                                        >= self.config.max_canister_http_requests_in_flight
                                     {
                                         let err = Err(UserError::new(
                                             ErrorCode::CanisterRejectedMessage,
-                                            format!("max number ({}) of http requests in-flight reached.", MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT),
+                                            format!("max number ({}) of http requests in-flight reached.", self.config.max_canister_http_requests_in_flight),
                                         ));
                                         ExecuteSubnetMessageResult::Finished {
                                             response: err,
