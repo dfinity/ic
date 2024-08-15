@@ -99,6 +99,29 @@ fn should_reject_long_x_when_deserializing_private_key() {
 }
 
 #[test]
+fn generate_from_seed_is_stable() {
+    let tests = [
+        (
+            "",
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        ),
+        (
+            "abcdef",
+            "995da3cf545787d65f9ced52674e92ee8171c87c7a4008aa4349ec47d21609a7",
+        ),
+        (
+            "03fc46909ddfe5ed2f37af7923d846ecab53f962a83e4fc30be550671ceab3e6",
+            "37d0dc8b55b04f4b44824272d4449ebbd6363ab031c91a5cd717cbd60f3fc034",
+        ),
+    ];
+
+    for (seed, expected_key) in tests {
+        let sk = PrivateKey::generate_from_seed(&hex::decode(seed).unwrap());
+        assert_eq!(hex::encode(sk.serialize_sec1()), expected_key);
+    }
+}
+
+#[test]
 fn should_accept_ecdsa_signatures_that_we_generate() {
     use rand::RngCore;
 
@@ -137,7 +160,7 @@ fn should_accept_bip340_signatures_that_we_generate() {
 
         let mut msg = rng.gen::<[u8; 32]>();
         rng.fill_bytes(&mut msg);
-        let sig = sk.sign_bip340(&msg, &mut rng);
+        let sig = sk.sign_message_with_bip340(&msg, &mut rng);
 
         assert!(pk.verify_bip340_signature(&msg, &sig));
     }

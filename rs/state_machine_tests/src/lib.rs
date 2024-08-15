@@ -707,7 +707,7 @@ impl From<u64> for StateMachineNode {
 enum SignatureSecretKey {
     EcdsaSecp256k1(ic_crypto_ecdsa_secp256k1::PrivateKey),
     SchnorrBip340(ic_crypto_ecdsa_secp256k1::PrivateKey),
-    Ed25519(ic_crypto_ed25519::PrivateKey),
+    Ed25519(ic_crypto_ed25519::DerivedPrivateKey),
 }
 
 /// Represents a replicated state machine detached from the network layer that
@@ -1559,8 +1559,12 @@ impl StateMachine {
                     (public_key, private_key)
                 }
                 MasterPublicKeyId::Ecdsa(id) => {
+                    use ic_crypto_ecdsa_secp256k1::{PrivateKey, DerivationPath, DerivationIndex};
+
+                    let path = DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
+
                     let private_key =
-                        ic_crypto_ecdsa_secp256k1::PrivateKey::generate_test_key(&seed, &id.name);
+                        PrivateKey::generate_from_seed(&seed).derive_subkey(&path).0;
 
                     let public_key = MasterPublicKey {
                         algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
@@ -1573,9 +1577,12 @@ impl StateMachine {
                 }
                 MasterPublicKeyId::Schnorr(id) => match id.algorithm {
                     SchnorrAlgorithm::Bip340Secp256k1 => {
-                        let private_key = ic_crypto_ecdsa_secp256k1::PrivateKey::generate_test_key(
-                            &seed, &id.name,
-                        );
+                        use ic_crypto_ecdsa_secp256k1::{PrivateKey, DerivationPath, DerivationIndex};
+
+                        let path = DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
+
+                        let private_key =
+                            PrivateKey::generate_from_seed(&seed).derive_subkey(&path).0;
 
                         let public_key = MasterPublicKey {
                             algorithm_id: AlgorithmId::ThresholdSchnorrBip340,
@@ -1587,8 +1594,12 @@ impl StateMachine {
                         (public_key, private_key)
                     }
                     SchnorrAlgorithm::Ed25519 => {
+                        use ic_crypto_ed25519::{PrivateKey, DerivationPath, DerivationIndex};
+
+                        let path = DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
+
                         let private_key =
-                            ic_crypto_ed25519::PrivateKey::generate_test_key(&seed, &id.name);
+                            PrivateKey::generate_from_seed(&seed).derive_subkey(&path).0;
 
                         let public_key = MasterPublicKey {
                             algorithm_id: AlgorithmId::ThresholdEd25519,
@@ -2037,21 +2048,7 @@ impl StateMachine {
                     }
                 };
 
-                let signature = {
-                    let mut aux_rand = [0u8; 32];
-                    let mut aux = 0u64;
-
-                    loop {
-                        if let Some(sig) = dk.sign_bip340_with_aux_rand(&message, &aux_rand) {
-                            break sig;
-                        }
-
-                        aux += 1;
-                        aux_rand[0..8].copy_from_slice(&aux.to_le_bytes());
-                    }
-                };
-
-                signature.to_vec()
+                dk.sign_message_with_bip340_no_rng(&message).to_vec()
             }
             Some(SignatureSecretKey::Ed25519(k)) => {
                 let path = ic_crypto_ed25519::DerivationPath::from_canister_id_and_path(

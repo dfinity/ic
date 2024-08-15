@@ -12,7 +12,7 @@ use k256::{
     },
     AffinePoint, Scalar, Secp256k1,
 };
-use rand::{CryptoRng, Rng, RngCore};
+use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use zeroize::ZeroizeOnDrop;
 
 /// An error indicating that decoding a key failed
@@ -349,30 +349,30 @@ impl PrivateKey {
         Self { key }
     }
 
-    /// Generate a key for testing purposes
+    /// Generate a key using an input seed
     ///
-    /// Specifically this hashes the input seed and string together
-    /// using SHA-256, then reduces it modulo the group order.
-    pub fn generate_test_key(seed: &[u8], key_id: &str) -> Self {
+    /// # Warning
+    ///
+    /// For security the seed should be at least 256 bits and
+    /// randomly generated
+    pub fn generate_from_seed(seed: &[u8]) -> Self {
         use k256::{elliptic_curve::ops::Reduce, sha2::Digest, sha2::Sha256};
 
         let digest: [u8; 32] = {
-            let mut h = Sha256::new();
-            h.update(seed);
-            h.update("test_key");
-            h.update(key_id);
-            h.finalize().into()
+            let mut sha256 = Sha256::new();
+            sha256.update(seed);
+            sha256.finalize().into()
         };
 
         let scalar = {
             let fb = k256::FieldBytes::from_slice(&digest);
             let scalar = <k256::Scalar as Reduce<k256::U256>>::reduce_bytes(fb);
 
-            // This could with ~ 1/2**256 probability fail. If it ever did, it implies
-            // we've found an input such that the SHA-256 hash of the input reduced
-            // modulo the group order is zero. Such an input would be exceptionally
-            // useful for constructing test cases which currently cannot be created,
-            // since such an input is not known to any party.
+            // This could with ~ 1/2**256 probability fail. If it ever did, it
+            // implies we've found a seed such that the SHA-256 hash of it,
+            // reduced modulo the group order, is zero. Such an input would be
+            // exceptionally useful for constructing test cases which currently
+            // cannot be created, since such an input is not known to any party.
 
             k256::NonZeroScalar::new(scalar).expect("Not zero")
         };
@@ -505,7 +505,7 @@ impl PrivateKey {
     ///
     /// This can theoretically fail, in the case that k/s generated is zero.
     /// This will never occur in practice
-    pub fn sign_bip340_with_aux_rand(
+    fn sign_bip340_with_aux_rand(
         &self,
         message: &[u8; 32],
         aux_rand: &[u8; 32],
@@ -528,7 +528,7 @@ impl PrivateKey {
     }
 
     /// Sign a message with BIP340 Schnorr
-    pub fn sign_bip340<R: Rng + CryptoRng>(&self, message: &[u8; 32], rng: &mut R) -> [u8; 64] {
+    pub fn sign_message_with_bip340<R: Rng + CryptoRng>(&self, message: &[u8; 32], rng: &mut R) -> [u8; 64] {
         loop {
             /*
              * The only way this function can fail is the (cryptographically unlikely)
@@ -540,6 +540,16 @@ impl PrivateKey {
                 return sig;
             }
         }
+    }
+
+    /// Sign a message with BIP340 Schnorr without using an external RNG
+    ///
+    /// The aux_rand parameter for BIP340 is just to re-randomize the signature,
+    /// and may prevent certain forms of fault attack. It it is otherwise not necessary
+    /// for security.
+    pub fn sign_message_with_bip340_no_rng(&self, message: &[u8; 32]) -> [u8; 64] {
+        let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(0);
+        self.sign_message_with_bip340(message, &mut rng)
     }
 
     /// Return the public key corresponding to this private key
