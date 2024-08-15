@@ -33,7 +33,9 @@ use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
-use ic_nervous_system_common::{i2d, ledger::compute_neuron_staking_subaccount_bytes};
+use ic_nervous_system_common::{
+    i2d, ledger::compute_neuron_staking_subaccount_bytes, MAX_NEURONS_FOR_DIRECT_PARTICIPANTS,
+};
 use ic_nervous_system_proto::pb::v1::Principals;
 use ic_neurons_fund::{MatchedParticipationFunction, PolynomialNeuronsFundParticipation};
 use ic_sns_governance::pb::v1::claim_swap_neurons_request::{
@@ -66,9 +68,6 @@ use std::{
     str::FromStr,
     time::Duration,
 };
-
-/// TODO: This should be shared with rs/sns/init/src/lib.rs
-pub const MAX_NEURONS_FOR_DIRECT_PARTICIPANTS: u64 = 100_000;
 
 /// The maximum count of participants that can be returned by ListDirectParticipants
 pub const MAX_LIST_DIRECT_PARTICIPANTS_LIMIT: u32 = 20_000;
