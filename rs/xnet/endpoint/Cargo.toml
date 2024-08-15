@@ -10,7 +10,6 @@ documentation.workspace = true
 axum = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
-tower = { workspace = true }
 crossbeam-channel = { workspace = true }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-interfaces-certified-stream-store = { path = "../../interfaces/certified_stream_store" }
@@ -25,9 +24,10 @@ prometheus = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
+threadpool = { workspace = true }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
-threadpool = { workspace = true }
+tower = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
