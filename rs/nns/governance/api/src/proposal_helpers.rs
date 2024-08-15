@@ -1,11 +1,9 @@
-// NOTE: We do not use internal types here, but rather API types
-// TODO: Move this to nns/test_utils/src/governance.rs
-use candid::{CandidType, Decode, Encode};
-use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_governance_api::pb::v1::{
+use crate::pb::v1::{
     manage_neuron::Command, manage_neuron_response::Command as CommandResponse, proposal,
     ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal,
 };
+use candid::{CandidType, Decode, Encode};
+use ic_nns_common::types::{NeuronId, ProposalId};
 
 /// Simplified the process of creating an ExternalUpdate proposal.
 pub fn create_external_update_proposal_candid<T: CandidType>(

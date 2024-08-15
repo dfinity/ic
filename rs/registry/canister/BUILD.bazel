@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/protobuf",
+    "//rs/registry/canister/api",
     "//rs/registry/keys",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_features",
