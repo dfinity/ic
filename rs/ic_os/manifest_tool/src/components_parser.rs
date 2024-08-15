@@ -4,21 +4,21 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
-pub struct IcosComponents {
-    pub setupos: IcosVariant,
-    pub hostos: IcosVariant,
-    pub guestos: IcosVariant,
-    pub boundary_guestos: IcosVariant,
+pub struct IcosManifest {
+    pub setupos: Manifest,
+    pub hostos: Manifest,
+    pub guestos: Manifest,
+    pub boundary_guestos: Manifest,
 }
 
-impl IcosComponents {
+impl IcosManifest {
     pub fn new(
-        guestos_components: IcosVariant,
-        hostos_components: IcosVariant,
-        setupos_components: IcosVariant,
-        boundary_guestos_components: IcosVariant,
+        guestos_components: Manifest,
+        hostos_components: Manifest,
+        setupos_components: Manifest,
+        boundary_guestos_components: Manifest,
     ) -> Self {
-        IcosComponents {
+        IcosManifest {
             guestos: guestos_components,
             hostos: hostos_components,
             setupos: setupos_components,
@@ -28,70 +28,70 @@ impl IcosComponents {
 }
 
 #[derive(Debug)]
-pub struct IcosVariant {
-    pub components: Vec<Component>,
+pub struct Manifest {
+    pub manifest: Vec<Entry>,
 }
 
-impl IcosVariant {
+impl Manifest {
     pub fn new() -> Self {
-        IcosVariant {
-            components: Vec::new(),
+        Manifest {
+            manifest: Vec::new(),
         }
     }
 
-    pub fn add_component(&mut self, component: Component) {
-        self.components.push(component);
+    pub fn add_entry(&mut self, component: Entry) {
+        self.manifest.push(component);
     }
 }
 
 #[derive(Debug)]
-pub struct Component {
+pub struct Entry {
     pub source: PathBuf,
     pub destination: PathBuf,
 }
 
-impl Component {
+impl Entry {
     pub fn new(source: PathBuf, destination: PathBuf) -> Self {
-        Component {
+        Entry {
             source,
             destination,
         }
     }
 }
 
-pub fn get_components(manifest_path: &Path, components_path: &Path) -> Result<IcosVariant> {
-    let content = fs::read_to_string(manifest_path)
+fn get_manifest(manifest_path: &Path, components_path: &Path) -> Result<Manifest> {
+    let manifest_contents = fs::read_to_string(manifest_path)
         .with_context(|| format!("Failed to read file: {:?}", manifest_path))?;
 
     let re = Regex::new(r#"Label\("(.+?)"\): "(.+?)""#)?;
 
-    let mut components = IcosVariant::new();
+    let mut manifest = Manifest::new();
 
-    for cap in re.captures_iter(&content) {
+    for cap in re.captures_iter(&manifest_contents) {
         let source = components_path.join(&cap[1]);
         let destination = PathBuf::from(&cap[2]);
-        components.add_component(Component::new(source, destination));
+        manifest.add_entry(Entry::new(source, destination));
     }
 
-    Ok(components)
+    Ok(manifest)
 }
 
-pub fn get_icos_components(repo_root: &PathBuf) -> Result<IcosComponents> {
+pub fn get_icos_manifest(repo_root: &PathBuf) -> Result<IcosManifest> {
     let components_path = repo_root.join("ic-os/components/");
-    let guestos_path = components_path.join("guestos.bzl");
-    let hostos_path = components_path.join("hostos.bzl");
-    let setupos_path = components_path.join("setupos.bzl");
-    let boundary_guestos_path = components_path.join("boundary-guestos.bzl");
+    let guestos_manifest_path = components_path.join("guestos.bzl");
+    let hostos_manifest_path = components_path.join("hostos.bzl");
+    let setupos_manifest_path = components_path.join("setupos.bzl");
+    let boundary_guestos_manifest_path = components_path.join("boundary-guestos.bzl");
 
-    let guestos_components = get_components(&guestos_path, &components_path)?;
-    let hostos_components = get_components(&hostos_path, &components_path)?;
-    let setupos_components = get_components(&setupos_path, &components_path)?;
-    let boundary_guestos_components = get_components(&boundary_guestos_path, &components_path)?;
+    let guestos_manifest = get_manifest(&guestos_manifest_path, &components_path)?;
+    let hostos_manifest = get_manifest(&hostos_manifest_path, &components_path)?;
+    let setupos_manifest = get_manifest(&setupos_manifest_path, &components_path)?;
+    let boundary_guestos_manifest = get_manifest(&boundary_guestos_manifest_path, &components_path)?;
 
-    Ok(IcosComponents::new(
-        guestos_components,
-        hostos_components,
-        setupos_components,
-        boundary_guestos_components,
+    Ok(IcosManifest::new(
+        guestos_manifest,
+        hostos_manifest,
+        setupos_manifest,
+        boundary_guestos_manifest,
     ))
 }
