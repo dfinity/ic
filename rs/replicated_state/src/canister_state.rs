@@ -123,7 +123,7 @@ pub struct CanisterState {
     /// an actual wasm module. A valid canister is not required to contain a
     /// Wasm module. Canisters without Wasm modules can exist as a store of
     /// ICP; temporarily when they are being upgraded, etc.
-    #[validate_eq(Ignore)]
+    #[validate_eq(CompareWithValidateEq)]
     pub execution_state: Option<ExecutionState>,
 
     /// See `SchedulerState` for documentation.

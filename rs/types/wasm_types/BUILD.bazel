@@ -13,6 +13,11 @@ rust_library(
         "//rs/sys",
         "//rs/types/types",
         "//rs/utils",
+        "//rs/utils/validate_eq",
         "@crate_index//:serde",
+    ],
+    proc_macro_deps = [
+        # Keep sorted.
+	"//rs/utils/validate_eq_derive",
     ],
 )

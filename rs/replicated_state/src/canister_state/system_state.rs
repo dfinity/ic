@@ -352,6 +352,7 @@ pub struct SystemState {
     pub log_visibility: LogVisibilityV2,
 
     /// Log records of the canister.
+    #[validate_eq(CompareWithValidateEq)]
     pub canister_log: CanisterLog,
 
     /// The Wasm memory limit. This is a field in developer-visible canister
