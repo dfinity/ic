@@ -155,12 +155,7 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
             })
         }));
 
-        mutations.extend(
-            change_set
-                .1
-                .drain(..)
-                .map(ArtifactMutation::Remove),
-        );
+        mutations.extend(change_set.1.drain(..).map(ArtifactMutation::Remove));
         ChangeResult {
             mutations,
             poll_immediately,
