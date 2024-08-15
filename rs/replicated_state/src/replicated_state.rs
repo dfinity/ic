@@ -620,10 +620,13 @@ impl ReplicatedState {
         guaranteed_response_message_memory_taken +=
             (self.subnet_queues.guaranteed_response_memory_usage() as u64).into();
 
+        let canister_snapshots_memory_taken = self.canister_snapshots.memory_taken();
+
         MemoryTaken {
             execution: raw_memory_taken
                 + canister_history_memory_taken
-                + wasm_chunk_store_memory_usage,
+                + wasm_chunk_store_memory_usage
+                + canister_snapshots_memory_taken,
             guaranteed_response_messages: guaranteed_response_message_memory_taken,
             wasm_custom_sections: wasm_custom_sections_memory_taken,
             canister_history: canister_history_memory_taken,

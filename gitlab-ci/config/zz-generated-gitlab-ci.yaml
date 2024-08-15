@@ -1237,7 +1237,7 @@ bazel-test-macos:
       - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
       variables:
-        BAZEL_EXTRA_ARGS: "--test_tag_filters=test_macos,test_macos_master"
+        BAZEL_EXTRA_ARGS: "--test_tag_filters=test_macos"
   script:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
