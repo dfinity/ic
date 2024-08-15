@@ -152,6 +152,7 @@ jobs:
       - name: Upload bazel-bep
         if: always()
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: ${{ github.job }}-bep
           retention-days: 30
@@ -185,6 +186,7 @@ jobs:
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - name: Upload bazel-bep
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: ${{ github.job }}-bep
           retention-days: 30
