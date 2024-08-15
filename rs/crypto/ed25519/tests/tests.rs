@@ -429,10 +429,13 @@ fn private_derivation_also_works_for_derived_keys() {
 
         let chain_code = rng.gen::<[u8; 32]>();
         let path_len = 2 + rng.gen::<usize>() % 32;
-        let path = (0..path_len).map(|_| rng.gen::<u32>()).collect::<Vec<u32>>();
+        let path = (0..path_len)
+            .map(|_| rng.gen::<u32>())
+            .collect::<Vec<u32>>();
 
         // First derive directly from a normal key
-        let (derived_sk, cc_sk) = master_sk.derive_subkey_with_chain_code(&DerivationPath::new_bip32(&path), &chain_code);
+        let (derived_sk, cc_sk) =
+            master_sk.derive_subkey_with_chain_code(&DerivationPath::new_bip32(&path), &chain_code);
 
         // Now derive with the path split in half
 
@@ -450,7 +453,10 @@ fn private_derivation_also_works_for_derived_keys() {
         assert_eq!(hex::encode(fcc), hex::encode(cc_sk));
 
         // We can't serialize the keys so instead compare their respective public keys
-        assert_eq!(hex::encode(fsk.public_key().serialize_raw()), hex::encode(derived_sk.public_key().serialize_raw()));
+        assert_eq!(
+            hex::encode(fsk.public_key().serialize_raw()),
+            hex::encode(derived_sk.public_key().serialize_raw())
+        );
     }
 }
 

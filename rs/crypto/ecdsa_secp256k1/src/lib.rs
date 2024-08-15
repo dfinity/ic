@@ -528,7 +528,11 @@ impl PrivateKey {
     }
 
     /// Sign a message with BIP340 Schnorr
-    pub fn sign_message_with_bip340<R: Rng + CryptoRng>(&self, message: &[u8; 32], rng: &mut R) -> [u8; 64] {
+    pub fn sign_message_with_bip340<R: Rng + CryptoRng>(
+        &self,
+        message: &[u8; 32],
+        rng: &mut R,
+    ) -> [u8; 64] {
         loop {
             /*
              * The only way this function can fail is the (cryptographically unlikely)
