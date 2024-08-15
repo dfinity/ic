@@ -382,7 +382,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                 .into_iter()
                 .map(ArtifactMutation::Insert),
         );
-        mutations.extend(purged.drain(..).into_iter().map(ArtifactMutation::Remove));
+        mutations.extend(purged.drain(..).map(ArtifactMutation::Remove));
         ChangeResult {
             mutations,
             poll_immediately: false,
@@ -721,14 +721,11 @@ mod tests {
                 }
                 assert_eq!(ingress_pool.unvalidated().size(), initial_count);
                 let result = ingress_pool.apply_changes(changeset);
-                assert_eq!(
-                    result
-                        .mutations
-                        .iter()
-                        .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
-                        .count(),
-                    0
-                );
+                assert!(result
+                    .mutations
+                    .iter()
+                    .find(|x| matches!(x, ArtifactMutation::Remove(_)))
+                    .is_none());
 
                 // artifacts_with_opt are only created for own node id
                 assert_eq!(result.mutations.len(), initial_count / nodes);
@@ -738,14 +735,11 @@ mod tests {
 
                 let changeset = vec![ChangeAction::PurgeBelowExpiry(cutoff_time)];
                 let result = ingress_pool.apply_changes(changeset);
-                assert_eq!(
-                    result
-                        .mutations
-                        .iter()
-                        .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
-                        .count(),
-                    0
-                );
+                assert!(result
+                    .mutations
+                    .iter()
+                    .find(|x| matches!(x, ArtifactMutation::Insert(_)))
+                    .is_none());
                 assert_eq!(result.mutations.len(), initial_count - non_expired_count);
                 assert!(!result.poll_immediately);
                 assert_eq!(ingress_pool.validated().size(), non_expired_count);

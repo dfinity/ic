@@ -807,7 +807,7 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
                 .into_iter()
                 .map(ArtifactMutation::Insert),
         );
-        mutations.extend(purged.drain(..).into_iter().map(ArtifactMutation::Remove));
+        mutations.extend(purged.drain(..).map(ArtifactMutation::Remove));
         ChangeResult {
             mutations,
             poll_immediately: changed,
@@ -1191,14 +1191,11 @@ mod tests {
                 }),
             ];
             let result = pool.apply_changes(changeset);
-            assert_eq!(
-                result
-                    .mutations
-                    .iter()
-                    .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
-                    .count(),
-                0
-            );
+            assert!(result
+                .mutations
+                .iter()
+                .find(|x| matches!(x, ArtifactMutation::Remove(_)))
+                .is_none(),);
 
             assert_eq!(result.mutations.len(), 2);
             assert!(result.poll_immediately);
@@ -1209,14 +1206,11 @@ mod tests {
 
             let result =
                 pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
-            assert_eq!(
-                result
-                    .mutations
-                    .iter()
-                    .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
-                    .count(),
-                0
-            );
+            assert!(result
+                .mutations
+                .iter()
+                .find(|x| matches!(x, ArtifactMutation::Insert(_)))
+                .is_none());
             // purging genesis CUP & beacon + validated beacon at height 2
             assert_eq!(result.mutations.len(), 3);
             assert_eq!(result
@@ -1292,8 +1286,7 @@ mod tests {
             assert!(result
                 .mutations
                 .iter()
-                .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
-                .next()
+                .find(|x| matches!(x, ArtifactMutation::Remove(_)))
                 .is_none());
 
             assert_eq!(result.mutations.len(), 1);
@@ -1307,19 +1300,16 @@ mod tests {
             assert!(result
                 .mutations
                 .iter()
-                .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
-                .next()
+                .find(|x| matches!(x, ArtifactMutation::Insert(_)))
                 .is_none());
             // purging genesis CUP & beacon + 2 validated beacon shares
             assert_eq!(result.mutations.len(), 4);
             assert!(
-                result.mutations.iter().filter(|x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_share_2.get_id()))
-                .next()
+                result.mutations.iter().find(|x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_share_2.get_id()))
                 .is_some()
             );
             assert!(
-                result.mutations.iter().filter(|x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_share_3.get_id()))
-                .next()
+                result.mutations.iter().find(|x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_share_3.get_id()))
                 .is_some()
             );
 

@@ -148,7 +148,7 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
             poll_immediately = true;
         }
         let mut mutations = vec![];
-        mutations.extend(change_set.0.drain(..).into_iter().map(|m| {
+        mutations.extend(change_set.0.drain(..).map(|m| {
             ArtifactMutation::Insert(ArtifactWithOpt {
                 artifact: self.id_to_msg(m).into(),
                 is_latency_sensitive: self.latency_sensitive,

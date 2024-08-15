@@ -161,7 +161,7 @@ impl MutablePool<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
                 .into_iter()
                 .map(ArtifactMutation::Insert),
         );
-        mutations.extend(purged.drain(..).into_iter().map(ArtifactMutation::Remove));
+        mutations.extend(purged.drain(..).map(ArtifactMutation::Remove));
         ChangeResult {
             mutations,
             poll_immediately: changed,
@@ -304,15 +304,11 @@ mod tests {
 
         assert!(pool.lookup_validated(&id2).is_none());
         assert!(result.poll_immediately);
-        assert_eq!(
-            result
-                .mutations
-                .iter()
-                .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
-                .count(),
-            0
-        );
-
+        assert!(result
+            .mutations
+            .iter()
+            .find(|x| matches!(x, ArtifactMutation::Remove(_)))
+            .is_none());
         assert_eq!(share1, pool.lookup_validated(&id1).unwrap());
     }
 

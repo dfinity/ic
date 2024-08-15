@@ -493,7 +493,7 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
                 .into_iter()
                 .map(ArtifactMutation::Insert),
         );
-        mutations.extend(purged.drain(..).into_iter().map(ArtifactMutation::Remove));
+        mutations.extend(purged.drain(..).map(ArtifactMutation::Remove));
         ChangeResult {
             mutations,
             poll_immediately: changed,
@@ -651,8 +651,7 @@ mod tests {
                 assert!(result
                     .mutations
                     .iter()
-                    .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
-                    .next()
+                    .find(|x| matches!(x, ArtifactMutation::Remove(_)))
                     .is_none());
 
                 assert!(matches!(

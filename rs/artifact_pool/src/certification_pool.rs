@@ -277,7 +277,7 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
                 .into_iter()
                 .map(ArtifactMutation::Insert),
         );
-        mutations.extend(purged.drain(..).into_iter().map(ArtifactMutation::Remove));
+        mutations.extend(purged.drain(..).map(ArtifactMutation::Remove));
         ChangeResult {
             mutations,
             poll_immediately: changed,
@@ -585,8 +585,7 @@ mod tests {
             assert!(result
                 .mutations
                 .iter()
-                .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
-                .next()
+                .find(|x| matches!(x, ArtifactMutation::Remove(_)))
                 .is_none());
             assert!(result.poll_immediately);
             assert_eq!(
@@ -625,8 +624,7 @@ mod tests {
             assert!(result
                 .mutations
                 .iter()
-                .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
-                .next()
+                .find(|x| matches!(x, ArtifactMutation::Remove(_)))
                 .is_none());
 
             assert!(result.poll_immediately);
@@ -708,8 +706,7 @@ mod tests {
             assert!(result
                 .mutations
                 .iter()
-                .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
-                .next()
+                .find(|x| matches!(x, ArtifactMutation::Insert(_)))
                 .is_none());
             assert_eq!(result.mutations.len(), 2);
             assert!(result.poll_immediately);
@@ -829,8 +826,7 @@ mod tests {
             assert!(result
                 .mutations
                 .iter()
-                .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
-                .next()
+                .find(|x| matches!(x, ArtifactMutation::Remove(_)))
                 .is_none());
 
             assert!(result.poll_immediately);
