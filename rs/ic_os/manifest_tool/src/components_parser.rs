@@ -49,14 +49,14 @@ impl Manifest {
 #[derive(Debug)]
 pub struct Entry {
     pub source: PathBuf,
-    pub destination: PathBuf,
+    pub _destination: PathBuf,
 }
 
 impl Entry {
     pub fn new(source: PathBuf, destination: PathBuf) -> Self {
         Entry {
             source,
-            destination,
+            _destination: destination,
         }
     }
 }
@@ -78,7 +78,7 @@ fn get_manifest(manifest_path: &Path, components_path: &Path) -> Result<Manifest
     Ok(manifest)
 }
 
-pub fn get_icos_manifest(repo_root: &PathBuf) -> Result<IcosManifest> {
+pub fn get_icos_manifest(repo_root: &Path) -> Result<IcosManifest> {
     let components_path = repo_root.join(COMPONENTS_PATH);
     let guestos_manifest_path = components_path.join("guestos.bzl");
     let hostos_manifest_path = components_path.join("hostos.bzl");

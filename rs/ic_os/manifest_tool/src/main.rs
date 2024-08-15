@@ -32,8 +32,7 @@ pub fn main() -> Result<()> {
 
     match opts.command {
         Some(Commands::CheckUnusedComponents) => {
-            check_unused_components::check_unused_components(&opts.repo_root)?;
-            Ok(())
+            check_unused_components::check_unused_components(&opts.repo_root)
         }
         None => Ok(()),
     }

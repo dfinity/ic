@@ -5,7 +5,7 @@ use walkdir::WalkDir;
 
 use crate::components_parser::{get_icos_manifest, IcosManifest, COMPONENTS_PATH};
 
-pub fn check_unused_components(repo_root: &PathBuf) -> Result<()> {
+pub fn check_unused_components(repo_root: &Path) -> Result<()> {
     let icos_manifest = get_icos_manifest(repo_root)?;
 
     let components_path: PathBuf = repo_root.join(COMPONENTS_PATH);
