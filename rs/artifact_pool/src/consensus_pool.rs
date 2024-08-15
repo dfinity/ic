@@ -1186,12 +1186,6 @@ mod tests {
                 }),
             ];
             let result = pool.apply_changes(changeset);
-            assert!(result
-                .mutations
-                .iter()
-                .find(|x| matches!(x, ArtifactMutation::Remove(_)))
-                .is_none(),);
-
             assert_eq!(result.mutations.len(), 2);
             assert!(result.poll_immediately);
             assert!(matches!(
@@ -1208,13 +1202,13 @@ mod tests {
                 .is_none());
             // purging genesis CUP & beacon + validated beacon at height 2
             assert_eq!(result.mutations.len(), 3);
-            assert_eq!(result
+            assert!(result
                 .mutations
                 .iter()
-                .filter(
-                    |x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_3.get_id())
+                .find(
+                    |x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_2.get_id())
                 )
-                .count(), 0);
+                .is_some());
             assert!(result.poll_immediately);
 
             let result =

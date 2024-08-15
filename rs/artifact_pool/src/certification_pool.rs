@@ -616,12 +616,6 @@ mod tests {
                 matches!(&result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == expected)
             );
             assert_eq!(result.mutations.len(), 1);
-            assert!(result
-                .mutations
-                .iter()
-                .find(|x| matches!(x, ArtifactMutation::Remove(_)))
-                .is_none());
-
             assert!(result.poll_immediately);
             assert_eq!(
                 pool.shares_at_height(Height::from(10))
