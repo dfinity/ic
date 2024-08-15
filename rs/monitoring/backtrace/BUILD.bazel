@@ -17,5 +17,5 @@ rust_library(
         "@platforms//os:linux",
     ],
     version = "0.9.0",
-    deps = DEPENDENCIES + [":build_script"],
+    deps = DEPENDENCIES,
 )
