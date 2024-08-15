@@ -273,12 +273,14 @@ mod test {
         });
         // ensure we have 2 validated and 2 unvalidated artifacts
         assert_eq!(result.mutations.len(), 2);
-        assert!(result
-            .mutations
-            .iter()
-            .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
-            .next()
-            .is_none());
+        assert_eq!(
+            result
+                .mutations
+                .iter()
+                .filter(|x| matches!(x, ArtifactMutation::Remove(_)))
+                .count(),
+            0
+        );
 
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 2);
@@ -288,12 +290,14 @@ mod test {
         // are purged from the validated and unvalidated sections
         let result = pool.apply_changes(vec![ChangeAction::Purge(current_dkg_id_start_height)]);
         assert_eq!(result.mutations.len(), 1);
-        assert!(result
-            .mutations
-            .iter()
-            .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
-            .next()
-            .is_none());
+        assert_eq!(
+            result
+                .mutations
+                .iter()
+                .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
+                .count(),
+            0
+        );
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 1);
         assert_eq!(pool.get_unvalidated().count(), 1);
@@ -303,12 +307,15 @@ mod test {
             current_dkg_id_start_height.increment(),
         )]);
         assert_eq!(result.mutations.len(), 1);
-        assert!(result
-            .mutations
-            .iter()
-            .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
-            .next()
-            .is_none());
+        assert_eq!(
+            result
+                .mutations
+                .iter()
+                .filter(|x| matches!(x, ArtifactMutation::Insert(_)))
+                .count(),
+            0
+        );
+
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 0);
         assert_eq!(pool.get_unvalidated().count(), 0);
