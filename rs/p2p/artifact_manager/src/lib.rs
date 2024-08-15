@@ -229,7 +229,7 @@ fn process_messages<Artifact: IdentifiableArtifact + 'static>(
         } = metrics
             .with_metrics(|| client.process_changes(time_source.as_ref(), batched_artifact_events));
 
-        // TODO: verify we can merge the two for loops into 1 where we just forward the mutation.
+        // We must first send the addition to the replication manager because in theory in one batch we can have both an addition and removal of the same artifact.
         let mut purged = vec![];
         for mutation in mutations {
             match mutation {
