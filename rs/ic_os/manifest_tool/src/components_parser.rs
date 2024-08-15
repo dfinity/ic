@@ -73,7 +73,7 @@ pub fn get_components(file_path: &Path) -> Result<IcosVariant> {
     Ok(components)
 }
 
-pub fn get_icos_components() -> Result<IcosComponents> {
+pub fn get_icos_components(repo_root: &str) -> Result<IcosComponents> {
     //TODO: help: fix file paths
     let guestos_path = Path::new("../../../ic-os/components/guestos.bzl");
     let hostos_path = Path::new("../../../ic-os/components/hostos.bzl");
