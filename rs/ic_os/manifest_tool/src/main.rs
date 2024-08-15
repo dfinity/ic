@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 mod components_parser;
-use components_parser::get_all_components;
+use components_parser::get_icos_components;
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -29,8 +29,8 @@ pub fn main() -> Result<()> {
         Some(Commands::CheckUnusedComponents) => {
             println!("Current working directory: {:?}", std::env::current_dir()?);
 
-            let components = get_all_components()?;
-            dbg!(components);
+            let icos_components = get_icos_components()?;
+            dbg!(icos_components);
             Ok(())
         }
         None => Ok(()),
