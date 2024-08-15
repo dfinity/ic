@@ -200,6 +200,7 @@ fn seek_data(file: &File, from: u64) -> Option<u64> {
     Some(out.try_into().unwrap())
 }
 
+#[cfg(test)]
 pub mod tests {
     use super::*;
     use anyhow::{Context, Result};
