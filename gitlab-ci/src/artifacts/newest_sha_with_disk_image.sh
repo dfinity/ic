@@ -11,7 +11,6 @@ fi
 function disk_image_exists() {
     local -r GIT_SHA=$1
     local -r URLS=(
-        "https://download.dfinity.systems/ic/${GIT_SHA}/guest-os/disk-img/disk-img.tar.gz"
         "https://download.dfinity.systems/ic/${GIT_SHA}/guest-os/disk-img/disk-img.tar.zst"
     )
 
