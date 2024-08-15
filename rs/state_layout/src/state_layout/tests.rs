@@ -1,8 +1,7 @@
 use super::*;
 
 use ic_management_canister_types::{
-    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
-    LogVisibility, IC_00,
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
 };
 use ic_replicated_state::{
     canister_state::system_state::CanisterHistory,
@@ -54,10 +53,11 @@ fn default_canister_state_bits() -> CanisterStateBits {
         canister_history: CanisterHistory::default(),
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
         total_query_stats: TotalQueryStats::default(),
-        log_visibility: LogVisibility::default(),
+        log_visibility: Default::default(),
         canister_log: Default::default(),
         wasm_memory_limit: None,
         next_snapshot_id: 0,
+        snapshots_memory_usage: NumBytes::from(0),
     }
 }
 

@@ -1,5 +1,6 @@
 use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
+    enable_new_canister_management_topics,
     pb::v1::{install_code::CanisterInstallMode, GovernanceError, InstallCode, Topic},
     proposals::call_canister::CallCanister,
 };
@@ -22,7 +23,7 @@ struct UpgradeRootProposalPayload {
 
 impl InstallCode {
     pub fn validate(&self) -> Result<(), GovernanceError> {
-        if !cfg!(feature = "test") {
+        if !enable_new_canister_management_topics() {
             return Err(invalid_proposal_error(
                 "InstallCode proposal is not yet supported",
             ));
@@ -76,7 +77,7 @@ impl InstallCode {
 
     pub fn valid_topic(&self) -> Result<Topic, GovernanceError> {
         let canister_id = self.valid_canister_id()?;
-        topic_to_manage_canister(&canister_id)
+        Ok(topic_to_manage_canister(&canister_id))
     }
 
     fn payload_to_upgrade_root(&self) -> Result<Vec<u8>, GovernanceError> {
@@ -201,7 +202,9 @@ mod tests {
         };
 
         let is_invalid_proposal_with_keywords = |install_code: InstallCode, keywords: Vec<&str>| {
-            let error = install_code.validate().unwrap_err();
+            let error = install_code.validate().expect_err(&format!(
+                "Expecting validation error for {install_code:?} but got Ok(())"
+            ));
             assert_eq!(error.error_type, ErrorType::InvalidProposal as i32);
             for keyword in keywords {
                 let error_message = error.error_message.to_lowercase();
@@ -278,14 +281,6 @@ mod tests {
                 "not supported for root canister",
                 "hardresetnnsroottoversion",
             ],
-        );
-
-        is_invalid_proposal_with_keywords(
-            InstallCode {
-                canister_id: Some(ic_nns_constants::SNS_WASM_CANISTER_ID.get()),
-                ..valid_install_code.clone()
-            },
-            vec!["canister id", "not a protocol canister"],
         );
     }
 
@@ -391,5 +386,34 @@ mod tests {
                 memory_allocation: None,
             }
         );
+    }
+
+    #[cfg(feature = "test")]
+    #[test]
+    fn test_upgrade_canisters_topic_mapping() {
+        use ic_base_types::CanisterId;
+        use ic_nns_constants::SNS_WASM_CANISTER_ID;
+
+        let test_cases = vec![
+            (REGISTRY_CANISTER_ID, Topic::ProtocolCanisterManagement),
+            (SNS_WASM_CANISTER_ID, Topic::ServiceNervousSystemManagement),
+            (
+                CanisterId::from_u64(123_456_789),
+                Topic::NetworkCanisterManagement,
+            ),
+        ];
+
+        for (canister_id, expected_topic) in test_cases {
+            let install_code = InstallCode {
+                canister_id: Some(canister_id.get()),
+                wasm_module: Some(vec![1, 2, 3]),
+                install_mode: Some(CanisterInstallMode::Upgrade as i32),
+                arg: Some(vec![4, 5, 6]),
+                skip_stopping_before_installing: None,
+            };
+
+            assert_eq!(install_code.validate(), Ok(()));
+            assert_eq!(install_code.valid_topic(), Ok(expected_topic));
+        }
     }
 }

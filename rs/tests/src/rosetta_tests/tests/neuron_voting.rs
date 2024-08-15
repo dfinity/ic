@@ -1,26 +1,29 @@
-use crate::rosetta_tests::lib::{
-    create_governance_client, do_multiple_txn, one_day_from_now_nanos, to_public_key, NeuronDetails,
+use crate::rosetta_tests::{
+    lib::{
+        create_governance_client, do_multiple_txn, one_day_from_now_nanos, to_public_key,
+        NeuronDetails,
+    },
+    rosetta_client::RosettaApiClient,
+    setup::setup,
+    test_neurons::TestNeurons,
 };
-use crate::rosetta_tests::rosetta_client::RosettaApiClient;
-use crate::rosetta_tests::setup::setup;
-use crate::rosetta_tests::test_neurons::TestNeurons;
 use ic_agent::Identity;
 use ic_nns_common::pb::v1::ProposalId;
-use ic_nns_governance::pb::v1::neuron::DissolveState;
-use ic_nns_governance::pb::v1::{proposal, Motion, Neuron, Proposal};
-use ic_rosetta_api::convert::neuron_subaccount_bytes_from_public_key;
-use ic_rosetta_api::ledger_client::proposal_info_response::ProposalInfoResponse;
-use ic_rosetta_api::models::{CallResponse, EdKeypair};
-use ic_rosetta_api::request::request_result::RequestResult;
-use ic_rosetta_api::request::Request;
-use ic_rosetta_api::request_types::{RegisterVote, Status};
+use ic_nns_governance_api::pb::v1::{neuron::DissolveState, proposal, Motion, Neuron, Proposal};
+use ic_rosetta_api::{
+    convert::neuron_subaccount_bytes_from_public_key,
+    ledger_client::proposal_info_response::ProposalInfoResponse,
+    models::{CallResponse, EdKeypair},
+    request::{request_result::RequestResult, Request},
+    request_types::{RegisterVote, Status},
+};
 use ic_rosetta_test_utils::RequestInfo;
-use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::util::{block_on, get_identity, IDENTITY_PEM};
+use ic_system_test_driver::{
+    driver::test_env::TestEnv,
+    util::{block_on, get_identity, IDENTITY_PEM},
+};
 use slog::info;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::UNIX_EPOCH;
+use std::{collections::HashMap, sync::Arc, time::UNIX_EPOCH};
 
 const PORT: u32 = 8111;
 const VM_NAME: &str = "rosetta-neuron-voting";

@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_nns_common::types::ProposalId;
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     governance_error::ErrorType,
     manage_neuron_response::{Command, RegisterVoteResponse},
     Vote,

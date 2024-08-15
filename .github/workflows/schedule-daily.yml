@@ -13,7 +13,7 @@ env:
   CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
-  CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
+  CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.ref_name }} # this workflow will always run on the default branch
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
   DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
@@ -24,13 +24,12 @@ jobs:
     name: Cut RC
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.repository }}
+          ref: ${{ github.ref }}
           token: ${{ secrets.IDX_PUSH_TO_PR }}
       - name: Cut Release Candidate
         shell: bash
@@ -140,6 +139,14 @@ jobs:
           BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=nns_tests_nightly --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Upload bazel-bep
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 90
+          if-no-files-found: ignore
+          compression-level: 9
+          path: bazel-bep.pb
   system-tests-benchmarks-nightly:
     name: Bazel System Test Benchmarks
     runs-on:
@@ -172,6 +179,14 @@ jobs:
           # note: there's just one performance cluster, so the job can't be parallelized
           BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_benchmark --//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
+      - name: Upload bazel-bep
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 90
+          if-no-files-found: ignore
+          compression-level: 9
+          path: bazel-bep.pb
   dependency-scan-nightly:
     name: Dependency Scan Nightly
     runs-on:

@@ -11,5 +11,5 @@ serde = { workspace = true }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
-serde_cbor = { workspace = true }
 serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
