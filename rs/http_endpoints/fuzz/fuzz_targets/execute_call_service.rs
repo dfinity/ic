@@ -197,6 +197,7 @@ fn new_call_service(
 
     let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(1)));
     let call_handler = IngressValidatorBuilder::builder(
+        log.clone(),
         node_test_id(1),
         subnet_test_id(1),
         Arc::clone(&mock_registry_client),
@@ -205,7 +206,6 @@ fn new_call_service(
         ingress_throttler,
         ingress_tx,
     )
-    .with_logger(log.clone())
     .build();
     let call_service = BoxCloneService::new(
         ServiceBuilder::new()
