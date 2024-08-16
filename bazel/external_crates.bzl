@@ -45,6 +45,17 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 "opt-level=3",
             ],
         )],
+        "lmdb-rkv-sys": [crate.annotation(
+            build_script_data = [
+                "@lmdb//:lmdb.h",
+            ],
+            build_script_env = {
+                "LMDB_NO_BUILD": "1",
+                "LMDB_H_PATH": "$(location @lmdb//:lmdb.h)",
+            },
+            # ensure LMDB lib is available at runtime
+            deps = ["@lmdb"],
+        )],
         "p256": [crate.annotation(
             rustc_flags = [
                 "-C",
@@ -104,10 +115,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         annotations = CRATE_ANNOTATIONS,
         packages = {
             "actix-rt": crate.spec(
-                version = "^2.2.0",
+                version = "^2.10.0",
             ),
             "actix-web": crate.spec(
-                version = "^4.3.0",
+                version = "^4.9.0",
             ),
             "addr": crate.spec(
                 version = "^0.15.6",
@@ -431,6 +442,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "form_urlencoded": crate.spec(
                 version = "^1.0.0",
             ),
+            "fqdn": crate.spec(
+                version = "0.3.11",
+            ),
             "fs_extra": crate.spec(
                 version = "^1.2.0",
             ),
@@ -607,6 +621,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-http-certification": crate.spec(
                 version = "2.6.0",
             ),
+            "ic-http-gateway": crate.spec(
+                git = "https://github.com/dfinity/http-gateway",
+                rev = "a1f63eb17b0a89f7fadcab67b3a0afe1720ef9b3",
+            ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
             ),
@@ -659,7 +677,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.31.0",
             ),
             "instant-acme": crate.spec(
-                version = "^0.3.2",
+                version = "^0.7.1",
             ),
             "intmap": crate.spec(
                 version = "^1.1.0",
@@ -728,6 +746,15 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "little-loadshedder": crate.spec(
                 version = "^0.1.0",
+            ),
+            "lmdb-rkv": crate.spec(
+                git = "https://github.com/dfinity-lab/lmdb-rs",
+                rev = "4d952c8f1dca79de855af892b444d7112567b58d",
+            ),
+            "lmdb-rkv-sys": crate.spec(
+                git = "https://github.com/dfinity-lab/lmdb-rs",
+                rev = "4d952c8f1dca79de855af892b444d7112567b58d",
+                default_features = False,
             ),
             "local-ip-address": crate.spec(
                 version = "^0.5.6",
@@ -1282,10 +1309,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.36",
             ),
             "tokio": crate.spec(
-                version = "^1.38.0",
-                features = [
-                    "full",
-                ],
+                version = "^1.39.2",
+                features = ["full"],
             ),
             "tokio-io-timeout": crate.spec(
                 version = "^1.2.0",

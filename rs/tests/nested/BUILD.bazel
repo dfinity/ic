@@ -9,7 +9,6 @@ DEPENDENCIES = [
     "//rs/canister_client",
     "//rs/nervous_system/common/test_keys",
     "//rs/nns/common",
-    "//rs/nns/governance",
     "//rs/nns/test_utils",
     "//rs/registry/subnet_type",
     "//rs/rust_canisters/canister_test",

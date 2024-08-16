@@ -38,10 +38,8 @@ use ic_nervous_system_root::change_canister::{
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance::{
-    governance::{
-        BitcoinNetwork, BitcoinSetConfigProposal, RentalConditionId, SubnetRentalRequest,
-    },
+use ic_nns_governance_api::{
+    bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
     pb::v1::{
         add_or_remove_node_provider::Change,
         create_service_nervous_system::{
@@ -54,20 +52,20 @@ use ic_nns_governance::{
             SwapParameters,
         },
         install_code::CanisterInstallMode as GovernanceInstallMode,
-        manage_neuron::Command,
-        proposal::Action,
         stop_or_start_canister::CanisterAction as GovernanceCanisterAction,
         update_canister_settings::{
             CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
         },
-        AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, InstallCode,
-        ManageNeuron, NnsFunction, NodeProvider, Proposal, RewardNodeProviders,
-        StopOrStartCanister, UpdateCanisterSettings,
+        AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, InstallCodeRequest,
+        MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, NnsFunction,
+        NodeProvider, ProposalActionRequest, RewardNodeProviders, StopOrStartCanister,
+        UpdateCanisterSettings,
     },
-    proposals::proposal_submission::{
+    proposal_helpers::{
         create_external_update_proposal_candid, create_make_proposal_payload,
         decode_make_proposal_response,
     },
+    subnet_rental::{RentalConditionId, SubnetRentalRequest},
 };
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
@@ -850,14 +848,14 @@ impl ProposalPayload<StopOrStartCanisterRequest> for StartCanisterCmd {
 
 #[async_trait]
 impl ProposalAction for StartCanisterCmd {
-    async fn action(&self) -> Action {
+    async fn action(&self) -> ProposalActionRequest {
         let canister_id = Some(self.canister_id.get());
         let action = Some(GovernanceCanisterAction::Start as i32);
         let start_canister = StopOrStartCanister {
             canister_id,
             action,
         };
-        Action::StopOrStartCanister(start_canister)
+        ProposalActionRequest::StopOrStartCanister(start_canister)
     }
 }
 
@@ -895,14 +893,14 @@ impl ProposalPayload<StopOrStartCanisterRequest> for StopCanisterCmd {
 
 #[async_trait]
 impl ProposalAction for StopCanisterCmd {
-    async fn action(&self) -> Action {
+    async fn action(&self) -> ProposalActionRequest {
         let canister_id = Some(self.canister_id.get());
         let action = Some(GovernanceCanisterAction::Stop as i32);
         let stop_canister = StopOrStartCanister {
             canister_id,
             action,
         };
-        Action::StopOrStartCanister(stop_canister)
+        ProposalActionRequest::StopOrStartCanister(stop_canister)
     }
 }
 
@@ -1118,7 +1116,7 @@ impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
 
 #[async_trait]
 impl ProposalAction for ProposeToChangeNnsCanisterCmd {
-    async fn action(&self) -> Action {
+    async fn action(&self) -> ProposalActionRequest {
         let canister_id = Some(self.canister_id.get());
         let wasm_module = Some(
             read_wasm_module(
@@ -1136,7 +1134,7 @@ impl ProposalAction for ProposeToChangeNnsCanisterCmd {
             CanisterInstallMode::Upgrade => Some(GovernanceInstallMode::Upgrade as i32),
         };
 
-        let install_code = InstallCode {
+        let install_code = InstallCodeRequest {
             skip_stopping_before_installing,
             install_mode,
             canister_id,
@@ -1144,7 +1142,7 @@ impl ProposalAction for ProposeToChangeNnsCanisterCmd {
             arg,
         };
 
-        Action::InstallCode(install_code)
+        ProposalActionRequest::InstallCode(install_code)
     }
 }
 
@@ -1306,7 +1304,7 @@ impl ProposalTitle for ProposeToUpdateCanisterSettingsCmd {
 
 #[async_trait]
 impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
-    async fn action(&self) -> Action {
+    async fn action(&self) -> ProposalActionRequest {
         let canister_id = Some(self.canister_id.get());
 
         let controllers = if self.remove_all_controllers {
@@ -1340,7 +1338,7 @@ impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
             }),
         };
 
-        Action::UpdateCanisterSettings(update_settings)
+        ProposalActionRequest::UpdateCanisterSettings(update_settings)
     }
 }
 
@@ -3157,9 +3155,12 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             governance_parameters,
         };
 
+        let result = ic_nns_governance::pb::v1::CreateServiceNervousSystem::from(result);
+
+        // TODO migrate validation out of SnsInitPayload so we no longer have to support ic_nns_gov types
         SnsInitPayload::try_from(result.clone())?;
 
-        Ok(result)
+        Ok(result.into())
     }
 }
 
@@ -3176,13 +3177,13 @@ async fn propose_to_create_service_nervous_system(
 ) {
     let is_dry_run = cmd.is_dry_run();
 
-    let action = Some(Action::CreateServiceNervousSystem(
+    let action = Some(ProposalActionRequest::CreateServiceNervousSystem(
         CreateServiceNervousSystem::try_from(cmd.clone()).unwrap(),
     ));
     let title = cmd.title();
     let summary = cmd.summary.clone().unwrap();
     let url = parse_proposal_url(cmd.proposal_url.clone());
-    let proposal = Proposal {
+    let proposal = MakeProposalRequest {
         title: Some(title.clone()),
         summary,
         url,
@@ -3200,10 +3201,7 @@ async fn propose_to_create_service_nervous_system(
         Some(proposer),
     ));
     let response = canister_client
-        .submit_external_proposal(
-            &create_make_proposal_payload(proposal.into(), &proposer).into(),
-            &title,
-        )
+        .submit_external_proposal(&create_make_proposal_payload(proposal, &proposer), &title)
         .await;
 
     match response {
@@ -6041,13 +6039,13 @@ impl GovernanceCanisterClient {
         title: String,
         summary: String,
     ) -> Result<ProposalId, String> {
-        let serialized = Encode!(&ManageNeuron {
+        let serialized = Encode!(&ManageNeuronRequest {
             neuron_id_or_subaccount: None,
-            command: Some(Command::MakeProposal(Box::new(Proposal {
+            command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(MakeProposalRequest {
                 title: Some(title),
                 summary,
                 url,
-                action: Some(Action::AddOrRemoveNodeProvider(payload)),
+                action: Some(ProposalActionRequest::AddOrRemoveNodeProvider(payload)),
             }))),
             id: Some((*self.0.proposal_author()).into()),
         })
@@ -6080,12 +6078,11 @@ impl GovernanceCanisterClient {
                     title,
                     summary,
                     &url,
-                    external_update_type.into(),
+                    external_update_type,
                     payload,
                 ),
                 self.0.proposal_author(),
-            )
-            .into(),
+            ),
             title,
         )
         .await
@@ -6093,19 +6090,21 @@ impl GovernanceCanisterClient {
 
     async fn submit_proposal_action(
         &self,
-        action: Action,
+        action: ProposalActionRequest,
         url: String,
         title: String,
         summary: String,
     ) -> Result<ProposalId, String> {
-        let serialized = Encode!(&ManageNeuron {
+        let serialized = Encode!(&ManageNeuronRequest {
             neuron_id_or_subaccount: None,
-            command: Some(Command::MakeProposal(Box::new(Proposal {
-                title: Some(title),
-                summary,
-                url,
-                action: Some(action),
-            }))),
+            command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
+                MakeProposalRequest {
+                    title: Some(title),
+                    summary,
+                    url,
+                    action: Some(action),
+                }
+            ))),
             id: Some((*self.0.proposal_author()).into()),
         })
         .map_err(|e| {
@@ -6125,7 +6124,7 @@ impl GovernanceCanisterClient {
 
     async fn submit_external_proposal(
         &self,
-        submit_proposal_command: &ManageNeuron,
+        submit_proposal_command: &ManageNeuronRequest,
         title: &str,
     ) -> Result<ProposalId, String> {
         let serialized = Encode!(submit_proposal_command).map_err(|e| {
