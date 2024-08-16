@@ -2269,7 +2269,7 @@ fn route(
                     for subnet in pic.subnets.read().unwrap().values() {
                         subnet.execute_round();
                     }
-                    // We update the replica loggers.
+                    // We update the canister http adapters.
                     pic.canister_http_adapters.blocking_lock().insert(
                         sm.get_subnet_id(),
                         new_canister_http_adapter(sm.replica_logger.clone(), &sm.metrics_registry),
