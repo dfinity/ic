@@ -22,6 +22,7 @@ class SlackApi:
         self.oauth_token = oauth_token
 
     def __api_request(self, url: str, data: Optional[any] = None, retry: int = 0) -> Optional[any]:
+        logging.debug(f"Slack API request {url} made with data {data} and retries {retry}")
         req = urllib.request.Request(
             url=url,
             data=json.dumps(data).encode(),
@@ -50,63 +51,66 @@ class SlackApi:
     def send_message(self, message: str, is_block_kit_message: bool = False, thread_id: Optional[str] = None) -> Optional[str]:
         if self.log_to_console:
             logging.info("Mock Slack send_message to channel '%s' and thread '%s': '%s'", self.channel_config, thread_id, message)
-        else:
-            logging.info("Slack send_message to channel '%s' and thread '%s': '%s'", self.channel_config, thread_id, message)
-
-            data = {
-                "channel": self.channel_config.channel_id,
-            }
-            if is_block_kit_message:
-                data["blocks"] = message
-            else:
-                data["text"] = message
-            if thread_id:
-                data["thread_ts"] = thread_id
-
-            api_response = self.__api_request("https://slack.com/api/chat.postMessage", data, retry=3)
-            if api_response["ok"]:
-                return api_response["ts"]
             return None
+
+        logging.info("Slack send_message to channel '%s' and thread '%s': '%s'", self.channel_config, thread_id, message)
+
+        data = {
+            "channel": self.channel_config.channel_id,
+        }
+        if is_block_kit_message:
+            data["blocks"] = message
+        else:
+            data["text"] = message
+        if thread_id:
+            data["thread_ts"] = thread_id
+
+        api_response = self.__api_request("https://slack.com/api/chat.postMessage", data, retry=3)
+        if api_response["ok"]:
+            return api_response["ts"]
+        return None
 
     def update_message(self, message: str, message_id: str, is_block_kit_message: bool = False):
         if self.log_to_console:
             logging.info("Mock Slack update_message to channel '%s' and message '%s': '%s'", self.channel_config, message_id, message)
+            return
+
+        logging.info("Slack update_message to channel '%s' and message '%s': '%s'", self.channel_config, message_id, message)
+        data = {
+            "channel": self.channel_config.channel_id,
+            "ts": message_id,
+        }
+        if is_block_kit_message:
+            data["blocks"] = message
         else:
-            logging.info("Slack update_message to channel '%s' and message '%s': '%s'", self.channel_config, message_id, message)
-            data = {
-                "channel": self.channel_config.channel_id,
-                "ts": message_id,
-            }
-            if is_block_kit_message:
-                data["blocks"] = message
-            else:
-                data["text"] = message
-            self.__api_request("https://slack.com/api/chat.update", data, retry=3)
+            data["text"] = message
+        self.__api_request("https://slack.com/api/chat.update", data, retry=3)
 
     def delete_message(self, message_id: str):
         if self.log_to_console:
             logging.info("Mock Slack delete_message from channel '%s' with message id: '%s'", self.channel_config, message_id)
-        else:
-            logging.info("Slack delete_message from channel '%s' with message id: '%s'", self.channel_config, message_id)
-            data = {
-                "channel": self.channel_config.channel_id,
-                "ts": message_id,
-            }
+            return
 
-            self.__api_request("https://slack.com/api/chat.delete", data, retry=3)
+        logging.info("Slack delete_message from channel '%s' with message id: '%s'", self.channel_config, message_id)
+        data = {
+            "channel": self.channel_config.channel_id,
+            "ts": message_id,
+        }
+
+        self.__api_request("https://slack.com/api/chat.delete", data, retry=3)
 
     def add_reaction(self, reaction: str, message_id: str):
         if self.log_to_console:
             logging.info("Mock Slack add_reaction to channel '%s' and message '%s': '%s'", self.channel_config, message_id, reaction)
-        else:
-            logging.info("Slack add_reaction to channel '%s' and message '%s': '%s'", self.channel_config, message_id, reaction)
-            data = {
-                "name": reaction,
-                "channel": self.channel_config.channel_id,
-                "timestamp": message_id,
-            }
 
-            self.__api_request("https://slack.com/api/reactions.add", data, retry=3)
+        logging.info("Slack add_reaction to channel '%s' and message '%s': '%s'", self.channel_config, message_id, reaction)
+        data = {
+            "name": reaction,
+            "channel": self.channel_config.channel_id,
+            "timestamp": message_id,
+        }
+
+        self.__api_request("https://slack.com/api/reactions.add", data, retry=3)
 
     def try_get_slack_id(self, user: User) -> Optional[str]:
         if user.email is None:
@@ -114,6 +118,7 @@ class SlackApi:
         if user.email in self.slack_id_cache:
             return self.slack_id_cache[user.email]
 
+        logging.info("Slack try_get_slack_id for user: '%s'", user)
         # https://api.slack.com/methods/users.lookupByEmail#examples
         api_response = self.__api_request(f"https://slack.com/api/users.lookupByEmail?email={user.email}")
         if api_response["ok"]:
@@ -145,6 +150,7 @@ class SlackApi:
                             return False
             return True
 
+        logging.info("Slack get_channel_history from channel '%s' with filters: (%s, %s, %s, %s)", self.channel_config, oldest, author, prefix, ignore_reaction)
         cursor = None
         slack_messages = []
         while True:

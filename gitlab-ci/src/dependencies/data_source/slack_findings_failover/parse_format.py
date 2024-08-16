@@ -39,6 +39,6 @@ def parse_slack_optional_hyperlink(string: str) -> Optional[Tuple[str, Optional[
 
 
 def parse_finding_project(string: str) -> Optional[Tuple[Optional[str], str, Optional[str]]]:
-    if match := re.match(r"^(?P<prefix>\w+:\s*)?(?P<path>[^ ]+)(\s+\((?P<suffix>.*)\))?$", string):
-        return match.group("prefix"), match.group("path"), match.group("suffix")
+    if match := re.match(r"^(?P<prefix>\w+:\s*)?(?P<path>((?! \(http).)+)(\s+\((?P<suffix>.*)\))?$", string):
+        return match.group("prefix"), match.group("path").strip(), match.group("suffix")
     return None
