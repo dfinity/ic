@@ -15,7 +15,7 @@ use ic_base_types::CanisterId;
 use ic_cdk::api::stable::StableMemory;
 use ic_crypto_sha2::Sha256;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     convert::TryFrom,
     fmt::{Display, Write},
     str::FromStr,
@@ -183,13 +183,30 @@ impl TryFrom<SnsCanisterIds> for ic_sns_init::SnsCanisterIds {
 
 impl<M: StableMemory + Clone + Default> From<StableCanisterState> for SnsWasmCanister<M> {
     fn from(stable_canister_state: StableCanisterState) -> Self {
+        let StableCanisterState {
+            wasm_indexes,
+            wasm_metadata,
+            upgrade_path,
+            sns_subnet_ids,
+            deployed_sns_list,
+            access_controls_enabled,
+            allowed_principals,
+            nns_proposal_to_deployed_sns,
+        } = stable_canister_state;
+
+        assert_eq!(
+            wasm_indexes.len(),
+            wasm_metadata.len(),
+            "Inconsistent StableCanisterState: WASM indices and metadata have diverged.",
+        );
+
+        let wasm_indexes_and_metadata = wasm_indexes
+            .into_iter()
+            .zip(wasm_metadata.into_iter());
+
         let mut wasm_indexes = BTreeMap::new();
         let mut wasm_metadata = BTreeMap::new();
-        for (index, metadata_section) in stable_canister_state
-            .wasm_indexes
-            .into_iter()
-            .zip(stable_canister_state.wasm_metadata.into_iter())
-        {
+        for (index, metadata_section) in wasm_indexes_and_metadata {
             let key = vec_to_hash(index.hash.clone()).unwrap();
             wasm_indexes.insert(key.clone(), index);
 
@@ -198,12 +215,10 @@ impl<M: StableMemory + Clone + Default> From<StableCanisterState> for SnsWasmCan
             wasm_metadata.insert(key, metadata_section);
         }
 
-        let stable_upgrade_path = stable_canister_state.upgrade_path.unwrap_or_default();
+        let stable_upgrade_path = upgrade_path.unwrap_or_default();
+        let upgrade_path = UpgradePath::from(stable_upgrade_path);
 
-        let upgrade_path = stable_upgrade_path.into();
-
-        let sns_subnet_ids = stable_canister_state
-            .sns_subnet_ids
+        let sns_subnet_ids = sns_subnet_ids
             .into_iter()
             .map(|id| id.into())
             .collect();
@@ -211,13 +226,13 @@ impl<M: StableMemory + Clone + Default> From<StableCanisterState> for SnsWasmCan
         SnsWasmCanister {
             wasm_indexes,
             sns_subnet_ids,
-            deployed_sns_list: stable_canister_state.deployed_sns_list,
+            deployed_sns_list,
             upgrade_path,
-            stable_memory: SnsWasmStableMemory::<M>::default(),
-            access_controls_enabled: stable_canister_state.access_controls_enabled,
-            allowed_principals: stable_canister_state.allowed_principals,
-            nns_proposal_to_deployed_sns: stable_canister_state.nns_proposal_to_deployed_sns,
+            access_controls_enabled,
+            allowed_principals,
+            nns_proposal_to_deployed_sns,
             wasm_metadata,
+            stable_memory: SnsWasmStableMemory::<M>::default(),
         }
     }
 }
@@ -235,6 +250,12 @@ impl<M: StableMemory + Clone + Default> From<SnsWasmCanister<M>> for StableCanis
             wasm_metadata,
             stable_memory: _,
         } = state;
+
+        assert_eq!(
+            wasm_indexes.keys().cloned().collect::<HashSet<_>>(),
+            wasm_metadata.keys().cloned().collect::<HashSet<_>>(),
+            "Inconsistent SnsWasmCanister: WASM indices and metadata have diverged.",
+        );
 
         let wasm_indexes = wasm_indexes.into_values().collect();
         let wasm_metadata = wasm_metadata

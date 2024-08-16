@@ -119,6 +119,8 @@ impl<M: StableMemory + Clone> SnsWasmStableMemory<M> {
         state: StableCanisterState,
     ) -> Result<(), StableMemoryError> {
         let wasms_end_offset = self.read_wasms_end_offset()?;
+        dfn_core::println!("wasms_end_offset = {}", wasms_end_offset);
+
         let mut state_writer = self.get_stable_writer(wasms_end_offset as usize);
         let bytes_written = state_writer.write(&state.encode_to_vec())?;
 
@@ -130,7 +132,10 @@ impl<M: StableMemory + Clone> SnsWasmStableMemory<M> {
     /// Read the `StableCanisterState` that was most recently written to stable memory
     pub fn read_canister_state(&self) -> Result<StableCanisterState, StableMemoryError> {
         let wasms_end_offset = self.read_wasms_end_offset()?;
+        dfn_core::println!("wasms_end_offset = {}", wasms_end_offset);
+
         let canister_state_size = self.read_canister_state_size()?;
+        dfn_core::println!("canister_state_size = {}", canister_state_size);
 
         let mut reader = self.get_stable_reader(wasms_end_offset as usize);
         let mut bytes = vec![0; canister_state_size as usize];
@@ -166,8 +171,8 @@ mod test {
     use crate::{
         canister_stable_memory::TestCanisterStableMemory,
         pb::v1::{
-            DeployedSns, MetadataSection as MetadataSectionPb, SnsSpecificSnsUpgrade, SnsUpgrade,
-            SnsVersion, SnsWasmStableIndex, UpgradePath,
+            DeployedSns, SnsSpecificSnsUpgrade, SnsUpgrade, SnsVersion, SnsWasmStableIndex,
+            UpgradePath, MetadataSection as MetadataSectionPb,
         },
     };
     use ic_base_types::PrincipalId;
@@ -200,11 +205,13 @@ mod test {
             offset: 34811,
             size: 1200,
         }];
-        let wasm_metadata = vec![MetadataSectionPb {
-            visibility: Some("icp:public".to_string()),
-            name: Some("foo".to_string()),
-            contents: Some(vec![1, 2, 3]),
-        }];
+        let wasm_metadata = vec![
+            MetadataSectionPb {
+                visibility: Some("icp:public".to_string()),
+                name: Some("foo".to_string()),
+                contents: Some(vec![1, 2, 3]),
+            }
+        ];
 
         let sns_subnet_ids = vec![PrincipalId::new_subnet_test_id(34)];
         let deployed_sns_list = vec![DeployedSns {
@@ -260,13 +267,27 @@ mod test {
     }
 
     #[test]
-    fn test_stable_write_and_read_canister_state() {
+    fn test_stable_write_and_read_consistent_canister_state() {
         let stable_memory = SnsWasmStableMemory::<TestCanisterStableMemory>::default();
         stable_memory.write_wasms_end_offset(80000).unwrap();
 
         let state = get_test_canister_state();
         stable_memory.write_canister_state(state.clone()).unwrap();
         assert_eq!(stable_memory.read_canister_state().unwrap(), state);
+    }
+
+    #[test]
+    fn test_stable_write_and_read_inconsistent_canister_state() {
+        let stable_memory = SnsWasmStableMemory::<TestCanisterStableMemory>::default();
+        stable_memory.write_wasms_end_offset(80000).unwrap();
+
+        let mut state = get_test_canister_state();
+        state.wasm_metadata = vec![];
+        assert_ne!(state.wasm_indexes.len(), state.wasm_metadata.len(), "Precondition");
+
+        stable_memory.write_canister_state(state.clone()).unwrap();
+
+        panic!("hello")
     }
 
     #[test]
