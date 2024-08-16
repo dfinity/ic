@@ -314,8 +314,6 @@ pub struct UpgradeArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feature_flags: Option<FeatureFlags>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub maximum_number_of_accounts: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accounts_overflow_trim_quantity: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub change_archive_options: Option<ChangeArchiveOptions>,
@@ -648,9 +646,6 @@ impl<Tokens: TokensType> Ledger<Tokens> {
                 );
             }
             self.feature_flags = feature_flags;
-        }
-        if let Some(maximum_number_of_accounts) = args.maximum_number_of_accounts {
-            self.maximum_number_of_accounts = maximum_number_of_accounts.try_into().unwrap();
         }
         if let Some(accounts_overflow_trim_quantity) = args.accounts_overflow_trim_quantity {
             self.accounts_overflow_trim_quantity =

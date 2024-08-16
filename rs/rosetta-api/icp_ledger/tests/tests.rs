@@ -315,7 +315,6 @@ fn upgrade_test() {
             .upgrade_to_self_binary(
                 CandidOne(Some(
                     LedgerCanisterUpgradePayload::builder()
-                        .maximum_number_of_accounts(28_000_000)
                         .build()
                         .unwrap(),
                 ))
@@ -336,7 +335,6 @@ fn upgrade_test() {
             .upgrade_to_self_binary(
                 CandidOne(Some(
                     LedgerCanisterUpgradePayload::builder()
-                        .maximum_number_of_accounts(28_000_000)
                         .icrc1_minting_account(minting_account_principal.into())
                         .build()
                         .unwrap(),
