@@ -1151,32 +1151,6 @@ impl PageMapType {
                 .map(|snap| snap.chunk_store().page_map()),
         }
     }
-
-    /// Maps a PageMapType to the the `&mut PageMap` in `state`
-    fn get_mut<'a>(&self, state: &'a mut ReplicatedState) -> Option<&'a mut PageMap> {
-        match &self {
-            PageMapType::WasmMemory(id) => state.canister_state_mut(id).and_then(|can| {
-                can.execution_state
-                    .as_mut()
-                    .map(|ex| &mut ex.wasm_memory.page_map)
-            }),
-            PageMapType::StableMemory(id) => state.canister_state_mut(id).and_then(|can| {
-                can.execution_state
-                    .as_mut()
-                    .map(|ex| &mut ex.stable_memory.page_map)
-            }),
-            PageMapType::WasmChunkStore(id) => state
-                .canister_state_mut(id)
-                .map(|can| can.system_state.wasm_chunk_store.page_map_mut()),
-            // Snapshots are kept behind an `Arc` inside `state`, which makes the pattern of `list_all` and `get_mut` for pagemaps difficult
-            // without excessive copies.
-            // In the few places where we need to iterate over all pagemaps and modify them we instead handle snapshots separately.
-            // Note that this is not a problem in the many more places where we need to iterate over all pagemaps and only need read access.
-            PageMapType::SnapshotWasmMemory(_) => unimplemented!(),
-            PageMapType::SnapshotStableMemory(_) => unimplemented!(),
-            PageMapType::SnapshotWasmChunkStore(_) => unimplemented!(),
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -1213,14 +1187,24 @@ fn strip_page_map_deltas(
     state: &mut ReplicatedState,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) {
-    PageMapType::list_all_without_snapshots(state)
-        .into_iter()
-        .for_each(|entry| {
-            if let Some(page_map) = entry.get_mut(state) {
-                assert!(page_map.unflushed_delta_is_empty());
-                page_map.strip_all_deltas(Arc::clone(&fd_factory));
-            }
-        });
+    for (_id, canister) in state.canister_states.iter_mut() {
+        canister
+            .system_state
+            .wasm_chunk_store
+            .page_map_mut()
+            .strip_all_deltas(Arc::clone(&fd_factory));
+        if let Some(execution_state) = canister.execution_state.as_mut() {
+            execution_state
+                .wasm_memory
+                .page_map
+                .strip_all_deltas(Arc::clone(&fd_factory));
+            execution_state
+                .stable_memory
+                .page_map
+                .strip_all_deltas(Arc::clone(&fd_factory));
+        }
+    }
+
     for (_id, canister_snapshot) in state.canister_snapshots.iter_mut() {
         let new_snapshot = Arc::make_mut(canister_snapshot);
         new_snapshot
@@ -1256,17 +1240,36 @@ fn strip_page_map_deltas(
 /// 2) The page deltas must be empty in both states.
 /// 3) The memory sizes must match.
 fn switch_to_checkpoint(tip: &mut ReplicatedState, src: &ReplicatedState) {
-    let maps = PageMapType::list_all_without_snapshots(src);
-    assert_eq!(maps, PageMapType::list_all_without_snapshots(tip));
+    for ((tip_id, tip_canister), (src_id, src_canister)) in tip
+        .canister_states
+        .iter_mut()
+        .zip(src.canister_states.iter())
+    {
+        assert_eq!(tip_id, src_id);
 
-    for map_type in maps {
-        let src_page_map_opt = map_type.get(src);
-        let tip_page_map_opt = map_type.get_mut(tip);
+        tip_canister
+            .system_state
+            .wasm_chunk_store
+            .page_map_mut()
+            .switch_to_checkpoint(src_canister.system_state.wasm_chunk_store.page_map());
 
-        assert_eq!(src_page_map_opt.is_some(), tip_page_map_opt.is_some(),);
+        assert_eq!(
+            src_canister.execution_state.is_some(),
+            tip_canister.execution_state.is_some()
+        );
 
-        if let (Some(src_page_map), Some(tip_page_map)) = (src_page_map_opt, tip_page_map_opt) {
-            tip_page_map.switch_to_checkpoint(src_page_map);
+        if let (Some(src_execution), Some(tip_execution)) = (
+            src_canister.execution_state.as_ref(),
+            tip_canister.execution_state.as_mut(),
+        ) {
+            tip_execution
+                .wasm_memory
+                .page_map
+                .switch_to_checkpoint(&src_execution.wasm_memory.page_map);
+            tip_execution
+                .stable_memory
+                .page_map
+                .switch_to_checkpoint(&src_execution.stable_memory.page_map);
         }
     }
 
@@ -2664,9 +2667,20 @@ fn flush_canister_snapshots_and_page_maps(
         page_map.strip_unflushed_delta();
     };
 
-    for entry in PageMapType::list_all_without_snapshots(tip_state) {
-        if let Some(page_map) = entry.get_mut(tip_state) {
-            add_to_pagemaps_and_strip(entry, page_map);
+    for (id, canister) in tip_state.canister_states.iter_mut() {
+        add_to_pagemaps_and_strip(
+            PageMapType::WasmChunkStore(id.to_owned()),
+            canister.system_state.wasm_chunk_store.page_map_mut(),
+        );
+        if let Some(execution_state) = canister.execution_state.as_mut() {
+            add_to_pagemaps_and_strip(
+                PageMapType::WasmMemory(id.to_owned()),
+                &mut execution_state.wasm_memory.page_map,
+            );
+            add_to_pagemaps_and_strip(
+                PageMapType::StableMemory(id.to_owned()),
+                &mut execution_state.stable_memory.page_map,
+            );
         }
     }
 
