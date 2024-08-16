@@ -6196,7 +6196,7 @@ dependencies = [
  "ic-cdk-macros 0.9.0",
  "ic-ckbtc-kyt",
  "ic-config",
- "ic-crypto-extended-bip32",
+ "ic-crypto-ecdsa-secp256k1",
  "ic-crypto-getrandom-for-wasm",
  "ic-crypto-sha2",
  "ic-icrc1",

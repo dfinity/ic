@@ -3,7 +3,6 @@
 use crate::ECDSAPublicKey;
 use bech32::Variant;
 use ic_btc_interface::Network;
-use ic_crypto_extended_bip32::{DerivationIndex, DerivationPath, ExtendedBip32DerivationOutput};
 use ic_crypto_sha2::Sha256;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
@@ -100,20 +99,30 @@ pub fn derivation_path(account: &Account) -> Vec<ByteBuf> {
 
 /// Returns a valid extended BIP-32 derivation path from an Account (Principal + subaccount)
 pub fn derive_public_key(ecdsa_public_key: &ECDSAPublicKey, account: &Account) -> ECDSAPublicKey {
-    let ExtendedBip32DerivationOutput {
-        derived_public_key,
-        derived_chain_code,
-    } = DerivationPath::new(
+    use ic_crypto_ecdsa_secp256k1::{DerivationIndex, DerivationPath, PublicKey};
+
+    let path = DerivationPath::new(
         derivation_path(account)
             .into_iter()
             .map(|x| DerivationIndex(x.into_vec()))
             .collect(),
-    )
-    .public_key_derivation(&ecdsa_public_key.public_key, &ecdsa_public_key.chain_code)
-    .expect("bug: failed to derive an ECDSA public key from valid inputs");
+    );
+
+    let pk = PublicKey::deserialize_sec1(&ecdsa_public_key.public_key)
+        .expect("Failed to parse ECDSA public key");
+
+    let chain_code: [u8; 32] = ecdsa_public_key
+        .chain_code
+        .clone()
+        .try_into()
+        .expect("Incorrect chain code size");
+
+    let (derived_public_key, derived_chain_code) =
+        pk.derive_subkey_with_chain_code(&path, &chain_code);
+
     ECDSAPublicKey {
-        public_key: derived_public_key,
-        chain_code: derived_chain_code,
+        public_key: derived_public_key.serialize_sec1(true),
+        chain_code: derived_chain_code.to_vec(),
     }
 }
 
