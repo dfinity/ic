@@ -21,7 +21,7 @@ use std::{collections::BTreeSet, sync::Arc};
 // to another by about 100 http outcalls + 15 other management canister calls per second.
 const MAX_NUMBER_OF_REQUESTS_AHEAD: usize = 3 * (100 + 15);
 
-/// The canonical implementation of [`PriorityFnAndFilterProducer`]
+/// The canonical implementation of [`PriorityFnFactory`]
 pub struct CanisterHttpGossipImpl {
     consensus_cache: Arc<dyn ConsensusPoolCache>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
