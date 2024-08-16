@@ -19,7 +19,7 @@ use std::{collections::BTreeSet, sync::Arc};
 // We are aiming for about 100 req/s for http outcalls. Assuming that the priority function gets
 // called about once every 3 seconds, we do not expect the number of requests to grow from one call
 // to another by about 100 http outcalls + 15 other management canister calls per second.
-const MAX_NUMBER_OF_REQUESTS_AHEAD: usize = 3 * (100 + 15);
+const MAX_NUMBER_OF_REQUESTS_AHEAD: u64 = 3 * (100 + 15);
 
 /// The canonical implementation of [`PriorityFnFactory`]
 pub struct CanisterHttpGossipImpl {
