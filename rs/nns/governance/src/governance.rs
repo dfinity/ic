@@ -4316,9 +4316,10 @@ impl Governance {
         &self,
         limit: u64,
         page: Option<u32>,
-    ) -> Vec<MonthlyNodeProviderRewards> {
+    ) -> (Option<u32>, Vec<MonthlyNodeProviderRewards>) {
         let limit = limit.min(MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS);
-        list_node_provider_rewards(limit, page)
+        let (next_page, rewards) = list_node_provider_rewards(limit, page);
+        let rewards = rewards
             .into_iter()
             .map(|archived| match archived.version {
                 Some(archived_monthly_node_provider_rewards::Version::Version1(v1)) => {
@@ -4326,7 +4327,8 @@ impl Governance {
                 }
                 _ => panic!("Should not be possible!"),
             })
-            .collect()
+            .collect();
+        (next_page, rewards)
     }
 
     pub fn get_most_recent_monthly_node_provider_rewards(

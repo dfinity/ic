@@ -34,7 +34,7 @@ pub(crate) fn latest_node_provider_rewards() -> Option<ArchivedMonthlyNodeProvid
 pub(crate) fn list_node_provider_rewards(
     limit: u64,
     page: Option<u32>,
-) -> Vec<ArchivedMonthlyNodeProviderRewards> {
+) -> (Option<u32>, Vec<ArchivedMonthlyNodeProviderRewards>) {
     let page = page.unwrap_or(0);
 
     // If we have 10 entries, they're 0..9
@@ -44,11 +44,16 @@ pub(crate) fn list_node_provider_rewards(
         let len = log.len();
         let end_range = len.saturating_sub(page as u64 * limit);
         let start_range = end_range.saturating_sub(limit);
-
-        (start_range..end_range)
+        let rewards = (start_range..end_range)
             .rev()
             .flat_map(|index| log.get(index))
-            .collect()
+            .collect();
+
+        if start_range == 0 {
+            (None, rewards)
+        } else {
+            (Some(page + 1), rewards)
+        }
     })
 }
 

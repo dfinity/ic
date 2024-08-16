@@ -747,13 +747,14 @@ fn list_node_provider_rewards() {
 fn list_node_provider_rewards_(
     req: ListNodeProviderRewardsRequest,
 ) -> ListNodeProviderRewardsResponse {
-    let rewards = governance().list_node_provider_rewards(5, req.page);
+    let (next_page, rewards) = governance().list_node_provider_rewards(5, req.page);
 
     ListNodeProviderRewardsResponse {
         rewards: rewards
             .into_iter()
             .map(MonthlyNodeProviderRewards::from)
             .collect(),
+        next_page,
     }
 }
 
