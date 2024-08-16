@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- The function `PocketIcBuilder::with_log_level` to specify the replica log level of the PocketIC instance.
+
 
 
 ## 4.0.0 - 2024-07-22

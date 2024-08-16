@@ -1088,6 +1088,7 @@ pub async fn create_instance(
             subnet_configs,
             instance_config.state_dir,
             instance_config.nonmainnet_features,
+            instance_config.log_level,
         )
     })
     .await

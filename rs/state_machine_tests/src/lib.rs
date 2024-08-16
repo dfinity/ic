@@ -387,10 +387,10 @@ fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
     ser.into_inner()
 }
 
-fn replica_logger() -> ReplicaLogger {
+fn replica_logger(log_level: Option<String>) -> ReplicaLogger {
     use slog::Drain;
-    let log_level = std::env::var("RUST_LOG")
-        .ok()
+    let log_level = log_level
+        .or(std::env::var("RUST_LOG").ok())
         .and_then(|level| Level::from_str(&level).ok())
         .unwrap_or(Level::Warning);
 
@@ -822,6 +822,7 @@ pub struct StateMachineBuilder {
     seed: [u8; 32],
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
     dts: bool,
+    log_level: Option<String>,
 }
 
 impl StateMachineBuilder {
@@ -854,6 +855,7 @@ impl StateMachineBuilder {
             seed: [42; 32],
             with_extra_canister_range: None,
             dts: true,
+            log_level: None,
         }
     }
 
@@ -1035,6 +1037,10 @@ impl StateMachineBuilder {
         Self { dts: false, ..self }
     }
 
+    pub fn with_log_level(self, log_level: Option<String>) -> Self {
+        Self { log_level, ..self }
+    }
+
     pub fn build_internal(self) -> StateMachine {
         StateMachine::setup_from_dir(
             self.state_dir,
@@ -1063,6 +1069,7 @@ impl StateMachineBuilder {
             self.is_root_subnet,
             self.seed,
             self.dts,
+            self.log_level,
         )
     }
 
@@ -1359,12 +1366,13 @@ impl StateMachine {
         is_root_subnet: bool,
         seed: [u8; 32],
         dts: bool,
+        log_level: Option<String>,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
             SubnetType::Application | SubnetType::VerifiedApplication => 499,
             SubnetType::System => 199,
         });
-        let replica_logger = replica_logger();
+        let replica_logger = replica_logger(log_level);
 
         let metrics_registry = MetricsRegistry::new();
 

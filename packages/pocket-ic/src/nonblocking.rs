@@ -86,6 +86,7 @@ impl PocketIc {
             Some(DEFAULT_MAX_REQUEST_TIME_MS),
             None,
             false,
+            None,
         )
         .await
     }
@@ -98,7 +99,7 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
     ) -> Self {
         let server_url = crate::start_or_reuse_server();
-        Self::from_components(config, server_url, max_request_time_ms, None, false).await
+        Self::from_components(config, server_url, max_request_time_ms, None, false, None).await
     }
 
     /// Creates a new PocketIC instance with the specified subnet config and server url.
@@ -113,6 +114,7 @@ impl PocketIc {
             Some(DEFAULT_MAX_REQUEST_TIME_MS),
             None,
             false,
+            None,
         )
         .await
     }
@@ -123,6 +125,7 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
+        log_level: Option<String>,
     ) -> Self {
         let subnet_config_set = subnet_config_set.into();
         if state_dir.is_none()
@@ -134,6 +137,7 @@ impl PocketIc {
             subnet_config_set,
             state_dir,
             nonmainnet_features,
+            log_level,
         };
 
         let parent_pid = std::os::unix::process::parent_id();

@@ -27,6 +27,7 @@ pub const LOCALHOST: &str = "127.0.0.1";
 fn start_server_helper(
     parent_pid: Option<u32>,
     ttl: Option<u64>,
+    capture_stdout: bool,
     capture_stderr: bool,
 ) -> (Url, Child) {
     let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
@@ -49,6 +50,9 @@ fn start_server_helper(
     }
     if let Some(ttl) = ttl {
         cmd.arg("--ttl").arg(ttl.to_string());
+    }
+    if capture_stdout {
+        cmd.stdout(std::process::Stdio::piped());
     }
     if capture_stderr {
         cmd.stderr(std::process::Stdio::piped());
@@ -74,7 +78,7 @@ fn start_server_helper(
 
 pub fn start_server() -> Url {
     let parent_pid = std::os::unix::process::parent_id();
-    start_server_helper(Some(parent_pid), None, false).0
+    start_server_helper(Some(parent_pid), None, false, false).0
 }
 
 #[test]
@@ -98,6 +102,7 @@ fn test_creation_of_instance_extended() {
         .into(),
         state_dir: None,
         nonmainnet_features: false,
+        log_level: None,
     };
     let response = client
         .post(url.join("instances").unwrap())
@@ -450,7 +455,7 @@ fn test_specified_id() {
 
 #[test]
 fn test_dashboard() {
-    let (server_url, _) = start_server_helper(None, Some(5), true);
+    let (server_url, _) = start_server_helper(None, Some(5), false, false);
     let subnet_config_set = SubnetConfigSet {
         nns: true,
         application: 1,
@@ -510,14 +515,14 @@ const CANISTER_LOGS_WAT: &str = r#"
 "#;
 
 #[test]
-fn canister_logs() {
+fn canister_and_replica_logs() {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
-    let (server_url, mut out) = start_server_helper(None, Some(5), true);
-    let subnet_config_set = SubnetConfigSet {
-        application: 1,
-        ..Default::default()
-    };
-    let pic = PocketIc::from_config_and_server_url(subnet_config_set, server_url);
+    let (server_url, mut out) = start_server_helper(None, Some(5), true, true);
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_server_url(server_url)
+        .with_log_level("info".to_string())
+        .build();
 
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
@@ -525,6 +530,49 @@ fn canister_logs() {
     pic.install_canister(canister_id, canister_logs_wasm, vec![], None);
 
     drop(pic);
+
+    let mut stdout = String::new();
+    out.stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut stdout)
+        .unwrap();
+    assert!(stdout.contains("Finished executing install_code message on canister CanisterId(lxzze-o7777-77777-aaaaa-cai)"));
+
+    let mut stderr = String::new();
+    out.stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr)
+        .unwrap();
+    assert!(stderr.contains("Logging works!"));
+}
+
+#[test]
+fn canister_and_no_replica_logs() {
+    const INIT_CYCLES: u128 = 2_000_000_000_000;
+    let (server_url, mut out) = start_server_helper(None, Some(5), true, true);
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_server_url(server_url)
+        .with_log_level("error".to_string())
+        .build();
+
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    let canister_logs_wasm = wat::parse_str(CANISTER_LOGS_WAT).unwrap();
+    pic.install_canister(canister_id, canister_logs_wasm, vec![], None);
+
+    drop(pic);
+
+    let mut stdout = String::new();
+    out.stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut stdout)
+        .unwrap();
+    assert!(!stdout.contains("Finished executing install_code message on canister CanisterId(lxzze-o7777-77777-aaaaa-cai)"));
+
     let mut stderr = String::new();
     out.stderr
         .take()
@@ -665,7 +713,7 @@ fn canister_state_dir() {
     drop(pic);
 
     // Start a new PocketIC server.
-    let (new_server_url, _) = start_server_helper(None, Some(5), false);
+    let (new_server_url, _) = start_server_helper(None, Some(5), false, false);
 
     // Create a PocketIC instance mounting the state created so far.
     let pic = PocketIcBuilder::new()
@@ -694,7 +742,7 @@ fn canister_state_dir() {
     drop(pic);
 
     // Start a new PocketIC server.
-    let (newest_server_url, _) = start_server_helper(None, Some(5), false);
+    let (newest_server_url, _) = start_server_helper(None, Some(5), false, false);
 
     // Create a PocketIC instance mounting the NNS state created so far.
     let nns_subnet_seed = topology.0.get(&nns_subnet).unwrap().subnet_seed;
