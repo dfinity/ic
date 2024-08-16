@@ -31,7 +31,6 @@ pub fn simulate_network(subnet: SubnetSnapshot, topology: &NetworkSimulation) {
                     "sudo tc class add dev enp1s0 parent 1: classid 1:1 htb rate 2000Mbps \n",
                 );
 
-                let source_ip = nodes[source_node].get_ip_addr();
                 for destination_node in 0..13 {
                     if source_node == destination_node {
                         continue;
