@@ -1,7 +1,8 @@
-use crate::errors::ApiError;
-use crate::ledger_client::OperationOutput;
-use ic_nns_governance::pb::v1::manage_neuron_response::{Command, FollowResponse};
-use ic_nns_governance::pb::v1::ManageNeuronResponse;
+use crate::{errors::ApiError, ledger_client::OperationOutput};
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron_response::{Command, FollowResponse},
+    ManageNeuronResponse,
+};
 
 pub fn handle_follow(bytes: Vec<u8>) -> Result<Result<Option<OperationOutput>, ApiError>, String> {
     let response: ManageNeuronResponse = candid::decode_one(bytes.as_ref())

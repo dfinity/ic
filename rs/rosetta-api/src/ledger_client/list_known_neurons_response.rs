@@ -1,5 +1,5 @@
 use crate::errors::ApiError;
-use ic_nns_governance::pb::v1::{KnownNeuron, ListKnownNeuronsResponse as Response};
+use ic_nns_governance_api::pb::v1::{KnownNeuron, ListKnownNeuronsResponse as Response};
 use rosetta_core::objects::ObjectMap;
 use serde_json::Value;
 

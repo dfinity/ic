@@ -34,10 +34,11 @@ use hyper::header;
 use ic_http_endpoints_public::cors_layer;
 use ic_types::CanisterId;
 use pocket_ic::common::rest::{
-    self, ApiResponse, ExtendedSubnetConfigSet, HttpGatewayConfig, HttpGatewayInfo, InstanceConfig,
-    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
-    RawCanisterResult, RawCycles, RawMessageId, RawMockCanisterHttpResponse, RawSetStableMemory,
-    RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime, RawWasmResult, Topology,
+    self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
+    HttpGatewayDetails, InstanceConfig, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
+    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawMessageId,
+    RawMockCanisterHttpResponse, RawSetStableMemory, RawStableMemory, RawSubmitIngressResult,
+    RawSubnetId, RawTime, RawWasmResult, Topology,
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
@@ -198,6 +199,8 @@ where
     AppState: extract::FromRef<S>,
 {
     ApiRouter::new()
+        // List all HTTP gateways.
+        .api_route("/", get(list_http_gateways))
         // Create a new HTTP gateway instance. Takes a HttpGatewayConfig.
         // Returns an InstanceId and the HTTP gateway's port.
         .api_route("/", post(create_http_gateway))
@@ -1116,19 +1119,23 @@ pub async fn delete_instance(
     StatusCode::OK
 }
 
+pub async fn list_http_gateways(
+    State(AppState { api_state, .. }): State<AppState>,
+) -> Json<Vec<HttpGatewayDetails>> {
+    let http_gateways = api_state.list_http_gateways().await;
+    Json(http_gateways)
+}
+
 /// Create a new HTTP gateway instance from a given HTTP gateway configuration.
 /// The new InstanceId and HTTP gateway's port will be returned.
 pub async fn create_http_gateway(
     State(AppState { api_state, .. }): State<AppState>,
     extract::Json(http_gateway_config): extract::Json<HttpGatewayConfig>,
 ) -> (StatusCode, Json<rest::CreateHttpGatewayResponse>) {
-    let (instance_id, port) = api_state.create_http_gateway(http_gateway_config).await;
+    let http_gateway_info = api_state.create_http_gateway(http_gateway_config).await;
     (
         StatusCode::CREATED,
-        Json(rest::CreateHttpGatewayResponse::Created(HttpGatewayInfo {
-            instance_id,
-            port,
-        })),
+        Json(rest::CreateHttpGatewayResponse::Created(http_gateway_info)),
     )
 }
 
@@ -1144,9 +1151,19 @@ pub async fn stop_http_gateway(
 pub async fn auto_progress(
     State(AppState { api_state, .. }): State<AppState>,
     Path(id): Path<InstanceId>,
+    extract::Json(auto_progress_config): extract::Json<AutoProgressConfig>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
-    api_state.auto_progress(id).await;
-    (StatusCode::OK, Json(ApiResponse::Success(())))
+    if let Err(e) = api_state
+        .auto_progress(id, auto_progress_config.artificial_delay_ms)
+        .await
+    {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::Error { message: e }),
+        )
+    } else {
+        (StatusCode::OK, Json(ApiResponse::Success(())))
+    }
 }
 
 pub async fn stop_progress(

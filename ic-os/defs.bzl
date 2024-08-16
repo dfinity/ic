@@ -44,6 +44,19 @@ def icos_build(
 
     image_deps = image_deps_func(mode, malicious)
 
+    # -------------------- Pre-check --------------------
+
+    # Verify that all the referenced components exist
+    native.genrule(
+        name = name + "_pre_check",
+        srcs = [k for k, v in image_deps["component_files"].items()],
+        outs = [name + "_pre_check_result.txt"],
+        cmd = """
+            echo "Running pre_check for {name}"
+            echo "All paths exist" > $@
+        """,
+    )
+
     # -------------------- Version management --------------------
 
     copy_file(
@@ -322,20 +335,6 @@ def icos_build(
         tags = ["manual"],
     )
 
-    gzip_compress(
-        name = "disk-img.tar.gz",
-        srcs = [":disk-img.tar"],
-        visibility = visibility,
-        tags = ["manual"],
-    )
-
-    sha256sum(
-        name = "disk-img.tar.gz.sha256",
-        srcs = [":disk-img.tar.gz"],
-        visibility = visibility,
-        tags = ["manual"],
-    )
-
     # -------------------- Assemble upgrade image --------------------
 
     if upgrades:
@@ -444,7 +443,6 @@ def icos_build(
             name = "upload_disk-img",
             inputs = [
                 ":disk-img.tar.zst",
-                ":disk-img.tar.gz",
             ],
             remote_subdir = upload_prefix + "/disk-img" + upload_suffix,
             visibility = visibility,
@@ -454,14 +452,6 @@ def icos_build(
             name = "disk-img-url",
             target = ":upload_disk-img",
             basenames = ["upload_disk-img_disk-img.tar.zst.url"],
-            visibility = visibility,
-            tags = ["manual"],
-        )
-
-        output_files(
-            name = "disk-img-url-gz",
-            target = ":upload_disk-img",
-            basenames = ["upload_disk-img_disk-img.tar.gz.url"],
             visibility = visibility,
             tags = ["manual"],
         )
@@ -628,8 +618,8 @@ EOF
         name = name,
         testonly = malicious,
         srcs = [
+            name + "_pre_check_result.txt",
             ":disk-img.tar.zst",
-            ":disk-img.tar.gz",
         ] + ([
             ":update-img.tar.zst",
             ":update-img.tar.gz",

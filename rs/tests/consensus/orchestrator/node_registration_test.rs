@@ -18,15 +18,14 @@ use anyhow::Result;
 use ic_base_types::PrincipalId;
 use ic_consensus_system_test_utils::ssh_access::execute_bash_command;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance::pb::v1::NnsFunction;
+use ic_nns_governance_api::pb::v1::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::{ic::InternetComputer, test_env::TestEnv, test_env_api::*};
-use ic_system_test_driver::nns::{
-    submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed,
+use ic_system_test_driver::{
+    driver::{group::SystemTestGroup, ic::InternetComputer, test_env::TestEnv, test_env_api::*},
+    nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
+    systest,
+    util::{block_on, runtime_from_url},
 };
-use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{block_on, runtime_from_url};
 use registry_canister::mutations::node_management::do_remove_nodes::RemoveNodesPayload;
 use slog::info;
 use std::str::FromStr;

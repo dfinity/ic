@@ -45,23 +45,22 @@
 //
 // Happy testing!
 
-use ic_consensus_system_test_utils::{
-    limit_tc_ssh_command, rw_message::install_nns_with_customizations_and_check_progress,
-};
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
+use ic_system_test_driver::canister_agent::CanisterAgent;
 use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
 use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
-use ic_system_test_driver::driver::test_env_api::SshSession;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
+    simulate_network::{FixedNetworkSimulation, SimulateNetwork},
     test_env::TestEnv,
     test_env_api::{
-        HasTopologySnapshot, IcNodeContainer, NnsCanisterWasmStrategy, NnsCustomizations,
+        read_dependency_from_env_to_string, HasTopologySnapshot, IcNodeContainer, NnsCustomizations,
     },
 };
 use ic_system_test_driver::generic_workload_engine;
@@ -70,13 +69,14 @@ use ic_system_test_driver::generic_workload_engine::metrics::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    assert_canister_counter_with_retries, get_app_subnet_and_node, MetricsFetcher,
+    assert_canister_counter_with_retries, assert_create_agent_using_call_v2,
+    get_app_subnet_and_node, MetricsFetcher,
 };
 use ic_types::Height;
 
 use anyhow::Result;
 use futures::future::join_all;
-use slog::info;
+use slog::{error, info, Logger};
 use std::time::{Duration, Instant};
 use tokio::runtime::{Builder, Runtime};
 
@@ -98,6 +98,9 @@ const INGRESS_MESSAGES_SUM_METRIC: &str = "consensus_ingress_messages_delivered_
 // Network parameters
 const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(200); // artificial added latency
+const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
+    .with_latency(LATENCY)
+    .with_bandwidth(BANDWIDTH_MBITS);
 
 fn setup(env: TestEnv) {
     PrometheusVm::default()
@@ -129,23 +132,14 @@ fn setup(env: TestEnv) {
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
     env.sync_with_prometheus();
 
     let topology_snapshot = env.topology_snapshot();
     let (app_subnet, _) = get_app_subnet_and_node(&topology_snapshot);
-    for node in app_subnet.nodes() {
-        let session = node
-            .block_on_ssh_session()
-            .expect("Failed to ssh into node");
-        node.block_on_bash_script_from_session(
-            &session,
-            &limit_tc_ssh_command(BANDWIDTH_MBITS, LATENCY),
-        )
-        .expect("Failed to execute bash script from session");
-    }
+
+    app_subnet.apply_network_settings(NETWORK_SIMULATION);
 }
 
 fn test(env: TestEnv, message_size: usize, rps: f64) {
@@ -181,7 +175,10 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
         "Step 1: Install {} canisters on the subnet..", canister_count
     );
     let mut canisters = Vec::new();
-    let agent = rt.block_on(app_node.build_canister_agent());
+    let agent = rt.block_on(async {
+        let agent = assert_create_agent_using_call_v2(app_node.get_public_url().as_str()).await;
+        CanisterAgent { agent }
+    });
 
     let nodes = env
         .topology_snapshot()
@@ -191,12 +188,10 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
         .nodes()
         .collect::<Vec<_>>();
     let agents = rt.block_on(async {
-        join_all(
-            nodes
-                .iter()
-                .cloned()
-                .map(|n| async move { n.build_canister_agent().await }),
-        )
+        join_all(nodes.iter().cloned().map(|n| async move {
+            let agent = assert_create_agent_using_call_v2(n.get_public_url().as_str()).await;
+            CanisterAgent { agent }
+        }))
         .await
     });
 
@@ -281,6 +276,19 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
             min_expected_canister_counter,
             MAX_RETRIES,
             RETRY_WAIT,
+        ));
+    }
+
+    if cfg!(feature = "upload_perf_systest_results") {
+        let branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
+            .expect("tip-of-branch IC version");
+
+        rt.block_on(persist_metrics(
+            branch_version,
+            test_metrics,
+            message_size,
+            rps,
+            &log,
         ));
     }
 }
@@ -377,6 +385,76 @@ async fn get_consensus_metrics(nodes: &[IcNodeSnapshot]) -> ConsensusMetrics {
     }
 }
 
+async fn persist_metrics(
+    ic_version: String,
+    metrics: TestMetrics,
+    message_size: usize,
+    rps: f64,
+    log: &Logger,
+) {
+    // elastic search url
+    const ES_URL: &str =
+        "https://elasticsearch.testnet.dfinity.network/ci-consensus-performance-test/_doc";
+
+    let timestamp =
+        chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now()).to_rfc3339();
+
+    let json_report = serde_json::json!(
+        {
+            "benchmark_name": "consensus_performance_test",
+            "timestamp": timestamp,
+            "ic_version": ic_version,
+            "benchmark_settings": {
+                "message_size": message_size,
+                "rps": rps,
+            },
+            "benchmark_results": {
+                "success_rate": metrics.success_rate,
+                "blocks_per_second": metrics.blocks_per_second,
+                "throughput_bytes_per_second": metrics.throughput_bytes_per_second,
+                "throughput_messages_per_second": metrics.throughput_messages_per_second,
+            }
+        }
+    );
+
+    info!(
+        log,
+        "Starting to upload performance test results to {ES_URL}: {}", json_report,
+    );
+
+    let client = reqwest::Client::new();
+    let result = ic_system_test_driver::retry_with_msg_async!(
+        "Uploading performance test results attempt",
+        log,
+        Duration::from_secs(5 * 60),
+        Duration::from_secs(10),
+        || async {
+            client
+                .post(ES_URL)
+                .json(&json_report)
+                .send()
+                .await
+                .map_err(Into::into)
+        }
+    )
+    .await;
+
+    match result {
+        Ok(response) => {
+            info!(
+                log,
+                "Successfully uploaded performance test results: {response:?}"
+            );
+        }
+        Err(err) => {
+            error!(
+                log,
+                "Failed to upload performance test results. Last error: {err}"
+            )
+        }
+    }
+}
+
 fn average(nums: &[u64]) -> u64 {
     assert!(!nums.is_empty());
 
@@ -388,7 +466,7 @@ fn test_small_messages(env: TestEnv) {
 }
 
 fn test_large_messages(env: TestEnv) {
-    test(env, 1_950_000, 2.0)
+    test(env, 950_000, 4.0)
 }
 
 fn main() -> Result<()> {

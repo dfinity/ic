@@ -202,6 +202,7 @@ mod tests {
             CanisterStatusView::Running,
             NumSeconds::from(3600),
             MemoryAllocation::BestEffort,
+            NumBytes::new(0),
             ComputeAllocation::default(),
             Cycles::new(1_000_000),
             Cycles::zero(),

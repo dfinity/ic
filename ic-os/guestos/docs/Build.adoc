@@ -20,7 +20,7 @@ bazel build //ic-os/guestos/envs/prod/...
 ----
 
 "prod" can be replaced with "dev" for the dev variant. The built image can be
-found at `/ic/bazel-bin/ic-os/guestos/envs/prod/disk-img.tar{.gz,.zst}`
+found at `/ic/bazel-bin/ic-os/guestos/envs/prod/disk-img.tar.zst`
 
 See notes below on the individual build steps.
 

@@ -12,7 +12,7 @@ pub use call_context_manager::{CallContext, CallContextAction, CallContextManage
 use ic_base_types::NumSeconds;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
-    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, LogVisibility,
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, LogVisibilityV2,
 };
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
@@ -274,6 +274,8 @@ pub struct SystemState {
     queues: CanisterQueues,
     /// The canister's memory allocation.
     pub memory_allocation: MemoryAllocation,
+    /// Threshold used for activation of canister_on_low_wasm_memory hook.
+    pub wasm_memory_threshold: NumBytes,
     pub freeze_threshold: NumSeconds,
     /// The status of the canister: Running, Stopping, or Stopped.
     /// Different statuses allow for different behaviors on the SystemState.
@@ -341,7 +343,7 @@ pub struct SystemState {
     pub wasm_chunk_store: WasmChunkStore,
 
     /// Log visibility of the canister.
-    pub log_visibility: LogVisibility,
+    pub log_visibility: LogVisibilityV2,
 
     /// Log records of the canister.
     pub canister_log: CanisterLog,
@@ -354,6 +356,12 @@ pub struct SystemState {
 
     /// Next local snapshot id.
     pub next_snapshot_id: u64,
+
+    /// Cumulative memory usage of all snapshots that belong to this canister.
+    ///
+    /// This amount contributes to the total `memory_usage` of the canister as
+    /// reported by `CanisterState::memory_usage`.
+    pub snapshots_memory_usage: NumBytes,
 }
 
 /// A wrapper around the different canister statuses.
@@ -710,6 +718,7 @@ impl SystemState {
             reserved_balance: Cycles::zero(),
             reserved_balance_limit: None,
             memory_allocation: MemoryAllocation::BestEffort,
+            wasm_memory_threshold: NumBytes::new(0),
             freeze_threshold,
             status,
             certified_data: Default::default(),
@@ -719,10 +728,11 @@ impl SystemState {
             canister_version: 0,
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
-            log_visibility: LogVisibility::default(),
+            log_visibility: Default::default(),
             canister_log: Default::default(),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
+            snapshots_memory_usage: NumBytes::from(0),
         }
     }
 
@@ -732,6 +742,7 @@ impl SystemState {
         canister_id: CanisterId,
         queues: CanisterQueues,
         memory_allocation: MemoryAllocation,
+        wasm_memory_threshold: NumBytes,
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
         certified_data: Vec<u8>,
@@ -746,16 +757,18 @@ impl SystemState {
         canister_history: CanisterHistory,
         wasm_chunk_store_data: PageMap,
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
-        log_visibility: LogVisibility,
+        log_visibility: LogVisibilityV2,
         canister_log: CanisterLog,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
+        snapshots_memory_usage: NumBytes,
     ) -> Self {
         Self {
             controllers,
             canister_id,
             queues,
             memory_allocation,
+            wasm_memory_threshold,
             freeze_threshold,
             status,
             certified_data,
@@ -776,6 +789,7 @@ impl SystemState {
             canister_log,
             wasm_memory_limit,
             next_snapshot_id,
+            snapshots_memory_usage,
         }
     }
 

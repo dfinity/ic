@@ -1,6 +1,4 @@
-use crate::eth_rpc::JsonRpcResult;
-use crate::eth_rpc::{BlockSpec, BlockTag, SendRawTransactionResult};
-use crate::eth_rpc_client::requests::GetTransactionCountParams;
+use crate::eth_rpc::SendRawTransactionResult;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_client::EthRpcClient;
 use crate::eth_rpc_client::MultiCallError;
@@ -179,12 +177,8 @@ pub async fn process_retrieve_eth_requests() {
 
 async fn latest_transaction_count() -> Option<TransactionCount> {
     match read_state(EthRpcClient::from_state)
-        .eth_get_transaction_count(GetTransactionCountParams {
-            address: crate::state::minter_address().await,
-            block: BlockSpec::Tag(BlockTag::Latest),
-        })
+        .eth_get_latest_transaction_count(crate::state::minter_address().await)
         .await
-        .reduce_with_min_by_key(|transaction_count| *transaction_count)
     {
         Ok(transaction_count) => Some(transaction_count),
         Err(e) => {
@@ -348,19 +342,21 @@ async fn send_transactions_batch(latest_transaction_count: Option<TransactionCou
     for (signed_tx, result) in zip(transactions_to_send, results) {
         log!(DEBUG, "Sent transaction {signed_tx:?}: {result:?}");
         match result {
-            Ok(JsonRpcResult::Result(tx_result)) if tx_result == SendRawTransactionResult::Ok || tx_result == SendRawTransactionResult::NonceTooLow => {
+            Ok(SendRawTransactionResult::Ok) | Ok(SendRawTransactionResult::NonceTooLow) => {
                 // In case of resubmission we may hit the case of SendRawTransactionResult::NonceTooLow
                 // if the stuck transaction was mined in the meantime.
                 // It will be cleaned-up once the transaction is finalized.
             }
-            Ok(JsonRpcResult::Result(tx_result)) => log!(INFO,
-                "Failed to send transaction {signed_tx:?}: {tx_result:?}. Will retry later.",
-            ),
-            Ok(JsonRpcResult::Error { code, message }) => log!(INFO,
-                "Failed to send transaction {signed_tx:?}: {message} (error code = {code}). Will retry later.",
+            Ok(SendRawTransactionResult::InsufficientFunds)
+            | Ok(SendRawTransactionResult::NonceTooHigh) => log!(
+                INFO,
+                "Failed to send transaction {signed_tx:?}: {result:?}. Will retry later.",
             ),
             Err(e) => {
-                log!(INFO, "Failed to send transaction {signed_tx:?}: {e:?}. Will retry later.")
+                log!(
+                    INFO,
+                    "Failed to send transaction {signed_tx:?}: {e:?}. Will retry later."
+                )
             }
         };
     }
@@ -444,10 +440,6 @@ async fn finalize_transactions_batch() {
 async fn finalized_transaction_count() -> Result<TransactionCount, MultiCallError<TransactionCount>>
 {
     read_state(EthRpcClient::from_state)
-        .eth_get_transaction_count(GetTransactionCountParams {
-            address: crate::state::minter_address().await,
-            block: BlockSpec::Tag(BlockTag::Finalized),
-        })
+        .eth_get_finalized_transaction_count(crate::state::minter_address().await)
         .await
-        .reduce_with_equality()
 }

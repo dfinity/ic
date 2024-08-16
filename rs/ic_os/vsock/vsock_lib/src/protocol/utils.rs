@@ -65,23 +65,6 @@ pub mod tests {
             serde_json::json!({
                 "sender_cid": 1u32,
                 "message": {
-                    "set-node-id": {
-                        "node-id": "node-id-1"
-                    }
-                }
-            }),
-            serde_json::to_value(Request {
-                guest_cid: 1,
-                command: Command::SetNodeId(NodeIdData {
-                    node_id: "node-id-1".to_string()
-                })
-            })
-            .unwrap()
-        );
-        assert_eq!(
-            serde_json::json!({
-                "sender_cid": 1u32,
-                "message": {
                     "upgrade": {
                         "url": "https://example.com",
                         "target-hash": "0x1111222233334444"
@@ -151,17 +134,6 @@ pub mod tests {
         assert!(request.is_ok());
         let request = request.unwrap();
         assert_eq!(request.command, Command::DetachHSM);
-
-        // Test SetNodeId command
-        let json_str = r#"{"sender_cid": 123, "message": {"set-node-id": {"node-id": "node123"}}}"#;
-        let request = parse_request(json_str);
-        assert!(request.is_ok());
-        let request = request.unwrap();
-        assert_eq!(request.guest_cid, 123);
-        match request.command {
-            Command::SetNodeId(data) => assert_eq!(data.node_id, "node123"),
-            _ => panic!("Expected SetNodeId command"),
-        }
 
         // Test Upgrade command
         let json_str = r#"{"sender_cid": 123, "message": {"upgrade": {"url": "http://example.com/upgrade", "target-hash": "abcd1234hash"}}}"#;

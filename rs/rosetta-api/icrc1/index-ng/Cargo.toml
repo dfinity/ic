@@ -52,3 +52,5 @@ serde_json = { workspace = true }
 [features]
 default = []
 u256-tokens = ["dep:ic-icrc1-tokens-u256"]
+icrc3_disabled = []
+get_blocks_disabled = []
