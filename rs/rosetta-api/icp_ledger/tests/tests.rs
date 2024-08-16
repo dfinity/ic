@@ -314,9 +314,7 @@ fn upgrade_test() {
         ledger
             .upgrade_to_self_binary(
                 CandidOne(Some(
-                    LedgerCanisterUpgradePayload::builder()
-                        .build()
-                        .unwrap(),
+                    LedgerCanisterUpgradePayload::builder().build().unwrap(),
                 ))
                 .into_bytes()
                 .unwrap(),
