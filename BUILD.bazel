@@ -40,11 +40,6 @@ alias(
 )
 
 alias(
-    name = "bazelifier",
-    actual = "//rs/bazelifier",
-)
-
-alias(
     name = "shfmt-format",
     actual = "//pre-commit:shfmt-format",
 )
@@ -102,9 +97,4 @@ test_suite(
     name = "single_large_node",  # the "_test" postfix is dropped on purpose since this target is meant for interactive use.
     tags = ["manual"],
     tests = ["//rs/tests/testing_verification/testnets:single_large_node"],
-)
-
-alias(
-    name = "deterministic-ips",
-    actual = "//rs/ic_os/deterministic_ips:deterministic-ips",
 )

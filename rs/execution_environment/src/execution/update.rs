@@ -18,7 +18,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types::IC_00;
-use ic_replicated_state::{CallOrigin, CanisterState};
+use ic_replicated_state::{num_bytes_try_from, CallOrigin, CanisterState};
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::messages::{
     CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
@@ -146,6 +146,12 @@ pub fn execute_update(
         CanisterCallOrTask::Task(CanisterTask::GlobalTimer) => ApiType::system_task(
             IC_00.get(),
             SystemMethod::CanisterGlobalTimer,
+            time,
+            helper.call_context_id(),
+        ),
+        CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) => ApiType::system_task(
+            IC_00.get(),
+            SystemMethod::CanisterOnLowWasmMemory,
             time,
             helper.call_context_id(),
         ),
@@ -296,6 +302,29 @@ impl UpdateHelper {
 
         validate_message(&canister, &original.method)?;
 
+        if let CanisterCallOrTask::Call(_) = original.call_or_task {
+            // TODO(RUN-957): Enforce the limit in heartbeat and timer after
+            // canister logging ships by removing the `if` above.
+
+            let wasm_memory_usage = canister
+                .execution_state
+                .as_ref()
+                .map_or(NumBytes::new(0), |es| {
+                    num_bytes_try_from(es.wasm_memory.size).unwrap()
+                });
+
+            if let Some(wasm_memory_limit) = clean_canister.system_state.wasm_memory_limit {
+                // A Wasm memory limit of 0 means unlimited.
+                if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
+                    let err = HypervisorError::WasmMemoryLimitExceeded {
+                        bytes: wasm_memory_usage,
+                        limit: wasm_memory_limit,
+                    };
+                    return Err(err.into_user_error(&canister.canister_id()));
+                }
+            }
+        }
+
         let call_context_id = canister
             .system_state
             .call_context_manager_mut()
@@ -310,7 +339,9 @@ impl UpdateHelper {
         let initial_cycles_balance = canister.system_state.balance();
 
         match original.call_or_task {
-            CanisterCallOrTask::Call(_) | CanisterCallOrTask::Task(CanisterTask::Heartbeat) => {}
+            CanisterCallOrTask::Call(_)
+            | CanisterCallOrTask::Task(CanisterTask::Heartbeat)
+            | CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) => {}
             CanisterCallOrTask::Task(CanisterTask::GlobalTimer) => {
                 // The global timer is one-off.
                 canister.system_state.global_timer = CanisterTimer::Inactive;
@@ -428,7 +459,7 @@ impl UpdateHelper {
         );
 
         let heap_delta = if output.wasm_result.is_ok() {
-            NumBytes::from((output.instance_stats.dirty_pages * ic_sys::PAGE_SIZE) as u64)
+            NumBytes::from((output.instance_stats.dirty_pages() * ic_sys::PAGE_SIZE) as u64)
         } else {
             NumBytes::from(0)
         };
@@ -476,7 +507,7 @@ impl UpdateHelper {
                 round.log,
                 &original.canister_id,
                 &original.method.name(),
-                output.instance_stats.dirty_pages,
+                output.instance_stats.dirty_pages(),
                 instructions_used,
             );
         }
@@ -573,17 +604,19 @@ impl PausedExecution for PausedCallExecution {
                 }
             }
             WasmExecutionResult::Finished(slice, output, state_changes) => {
+                let instructions_consumed = self
+                    .original
+                    .execution_parameters
+                    .instruction_limits
+                    .message()
+                    - output.num_instructions_left;
                 info!(
                     round.log,
                     "[DTS] Finished {:?} execution of canister {} after {} / {} instructions.",
                     self.original.method,
                     clean_canister.canister_id(),
-                    slice.executed_instructions,
-                    self.original
-                        .execution_parameters
-                        .instruction_limits
-                        .message()
-                        - output.num_instructions_left,
+                    slice.executed_instructions.display(),
+                    instructions_consumed.display(),
                 );
                 update_round_limits(round_limits, &slice);
                 helper.finish(

@@ -376,8 +376,8 @@ impl Payload {
         message_limit: Option<usize>,
         byte_limit: Option<usize>,
     ) -> CertifiedSliceResult<(Option<Self>, Option<Self>)> {
-        let message_limit = message_limit.unwrap_or(std::usize::MAX);
-        let byte_limit = byte_limit.unwrap_or(std::usize::MAX);
+        let message_limit = message_limit.unwrap_or(usize::MAX);
+        let byte_limit = byte_limit.unwrap_or(usize::MAX);
         let reject_signals_bytes = self.reject_signals_count_bytes();
 
         debug_assert!(EMPTY_PAYLOAD_BYTES <= NON_EMPTY_PAYLOAD_FIXED_BYTES);

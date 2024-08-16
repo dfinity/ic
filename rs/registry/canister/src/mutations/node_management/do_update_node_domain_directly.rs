@@ -1,10 +1,11 @@
-use crate::mutations::common::is_valid_domain;
 use crate::mutations::node_management::common::get_node_operator_id_for_node;
-use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
+use crate::{common::LOG_PREFIX, registry::Registry};
 
 use candid::{CandidType, Deserialize};
 use ic_registry_keys::make_node_record_key;
 use ic_registry_transport::update;
+use idna::domain_to_ascii_strict;
+use prost::Message;
 use serde::Serialize;
 
 #[cfg(target_arch = "wasm32")]
@@ -53,7 +54,7 @@ impl Registry {
 
         // Ensure domain name is valid
         if let Some(ref domain) = domain {
-            if !is_valid_domain(domain) {
+            if !domain_to_ascii_strict(domain).is_ok_and(|s| s == *domain) {
                 panic!("invalid domain");
             }
         }
@@ -62,7 +63,7 @@ impl Registry {
         // Create the mutation
         let update_node_record = update(
             make_node_record_key(node_id).as_bytes(),
-            encode_or_panic(&node_record),
+            node_record.encode_to_vec(),
         );
         let mutations = vec![update_node_record];
 
@@ -76,8 +77,7 @@ mod tests {
     use crate::{
         common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
         mutations::{
-            common::{decode_registry_value, encode_or_panic, test::TEST_NODE_ID},
-            do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
+            common::test::TEST_NODE_ID, do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
         },
     };
     use ic_base_types::{NodeId, PrincipalId};
@@ -86,6 +86,7 @@ mod tests {
     };
     use ic_registry_keys::{make_blessed_replica_versions_key, make_replica_version_key};
     use ic_registry_transport::{insert, upsert};
+    use prost::Message;
     use std::str::FromStr;
 
     use super::UpdateNodeDomainDirectlyPayload;
@@ -152,7 +153,7 @@ mod tests {
                 .expect("failed to get the node operator id");
 
         // Assert setting domain name to Some() works
-        let new_domain = Some("invalid".to_string());
+        let new_domain = Some("_invalid".to_string());
         registry.do_update_node_domain(
             UpdateNodeDomainDirectlyPayload {
                 node_id,
@@ -235,12 +236,12 @@ mod tests {
         );
 
         // create and bless version for the API boundary node
-        let blessed_versions: BlessedReplicaVersions = registry
+        let blessed_versions = registry
             .get(
                 make_blessed_replica_versions_key().as_bytes(), // key
                 registry.latest_version(),                      // version
             )
-            .map(|v| decode_registry_value(v.value.clone()))
+            .map(|v| BlessedReplicaVersions::decode(v.value.as_slice()).unwrap())
             .expect("failed to decode blessed versions");
         let blessed_versions = blessed_versions.blessed_version_ids;
 
@@ -248,18 +249,20 @@ mod tests {
             // Mutation to insert ApiBoundaryNodeRecord
             insert(
                 make_replica_version_key("version"), // key
-                encode_or_panic(&ReplicaVersionRecord {
+                ReplicaVersionRecord {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
                     guest_launch_measurement_sha256_hex: None,
-                }),
+                }
+                .encode_to_vec(),
             ),
             // Mutation to insert BlessedReplicaVersions
             upsert(
                 make_blessed_replica_versions_key(), // key
-                encode_or_panic(&BlessedReplicaVersions {
+                BlessedReplicaVersions {
                     blessed_version_ids: [blessed_versions, vec!["version".into()]].concat(),
-                }),
+                }
+                .encode_to_vec(),
             ),
         ]);
 

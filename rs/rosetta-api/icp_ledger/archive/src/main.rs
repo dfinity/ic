@@ -1,14 +1,15 @@
 use candid::candid_method;
 use dfn_candid::candid_one;
-use dfn_core::api::{print, stable_memory_size_in_pages};
+use dfn_core::api::{caller, print, stable_memory_size_in_pages};
 use dfn_core::{over_init, stable, BytesS};
 use dfn_protobuf::protobuf;
 use ic_ledger_canister_core::range_utils;
+use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_metrics_encoder::MetricsEncoder;
 use icp_ledger::{
     Block, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError, GetBlocksResult,
-    GetEncodedBlocksResult, IterBlocksArgs, MAX_BLOCKS_PER_REQUEST,
+    GetEncodedBlocksResult, IterBlocksArgs,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::RwLock;
@@ -163,7 +164,7 @@ fn iter_blocks_() {
     dfn_core::over(protobuf, |IterBlocksArgs { start, length }| {
         let archive_state = ARCHIVE_STATE.read().unwrap();
         let blocks = &archive_state.blocks;
-        let length = length.min(MAX_BLOCKS_PER_REQUEST);
+        let length = length.min(icp_ledger::max_blocks_per_request(&caller()));
         icp_ledger::iter_blocks(blocks, start, length)
     });
 }
@@ -176,7 +177,7 @@ fn get_blocks_() {
         let archive_state = ARCHIVE_STATE.read().unwrap();
         let blocks = &archive_state.blocks;
         let from_offset = archive_state.block_height_offset;
-        let length = length.min(MAX_BLOCKS_PER_REQUEST);
+        let length = length.min(icp_ledger::max_blocks_per_request(&caller()));
         icp_ledger::get_blocks(blocks, from_offset, start, length)
     });
 }
@@ -255,6 +256,11 @@ fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
+        "archive_node_total_memory_bytes",
+        total_memory_size_bytes() as f64,
+        "Total amount of memory (heap, stable memory, etc) that has been allocated by this canister.",
+    )?;
+    w.encode_gauge(
         "archive_node_last_upgrade_time_seconds",
         state.last_upgrade_timestamp as f64 / 1_000_000_000.0,
         "IC timestamp of the last upgrade performed on this canister.",
@@ -288,7 +294,10 @@ fn read_encoded_blocks(start: u64, length: usize) -> Result<Vec<EncodedBlock>, G
     let requested_range = range_utils::make_range(start, length);
     let effective_range = match range_utils::intersect(
         &block_range,
-        &range_utils::take(&requested_range, MAX_BLOCKS_PER_REQUEST),
+        &range_utils::take(
+            &requested_range,
+            icp_ledger::max_blocks_per_request(&caller()),
+        ),
     ) {
         Ok(range) => range,
         Err(range_utils::NoIntersection) => return Ok(vec![]),

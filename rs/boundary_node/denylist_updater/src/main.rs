@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
     fs::{self, File},
     hash::{Hash, Hasher},
-    io::{ErrorKind, Write},
+    io::Write,
     net::SocketAddr,
     path::{Path, PathBuf},
     sync::Arc,
@@ -25,17 +25,14 @@ use nix::{
     sys::signal::{kill as send_signal, Signal},
     unistd::Pid,
 };
-use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider};
+use opentelemetry::metrics::MeterProvider;
 use opentelemetry_prometheus::exporter;
+use opentelemetry_sdk::metrics::MeterProviderBuilder;
 use prometheus::{labels, Encoder, Registry, TextEncoder};
 use rsa::{pkcs8::DecodePrivateKey, RsaPrivateKey};
 use serde::Deserialize;
 use serde_json as json;
-use tokio::{
-    io::{self},
-    net::TcpListener,
-    task,
-};
+use tokio::{net::TcpListener, task};
 use tracing::info;
 
 mod metrics;
@@ -96,7 +93,9 @@ async fn main() -> Result<(), Error> {
     )
     .unwrap();
     let exporter = exporter().with_registry(registry.clone()).build()?;
-    let provider = MeterProvider::builder().with_reader(exporter).build();
+    let provider = MeterProviderBuilder::default()
+        .with_reader(exporter)
+        .build();
     let meter = provider.meter(SERVICE_NAME);
     let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { registry }));
     let metrics_router = Router::new().route("/metrics", get(metrics_handler));
@@ -469,30 +468,6 @@ impl<T: List> List for WithNormalize<T> {
                 entries
             })
     }
-}
-
-struct WithRecover<T: List>(T);
-
-#[async_trait]
-impl<T: List> List for WithRecover<T> {
-    async fn list(&self) -> Result<Entries, Error> {
-        match self.0.list().await {
-            Err(err) => match io_error_kind(&err) {
-                Some(ErrorKind::NotFound) => Ok(Entries(vec![])),
-                _ => Err(err),
-            },
-            Ok(entries) => Ok(entries),
-        }
-    }
-}
-
-fn io_error_kind(err: &Error) -> Option<ErrorKind> {
-    for cause in err.chain() {
-        if let Some(err) = cause.downcast_ref::<io::Error>() {
-            return Some(err.kind());
-        }
-    }
-    None
 }
 
 #[cfg(test)]

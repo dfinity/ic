@@ -15,17 +15,6 @@ import sys
 import tempfile
 
 
-def parse_size(s):
-    if s[-1] == "k" or s[-1] == "K":
-        return 1024 * int(s[:-1])
-    elif s[-1] == "m" or s[-1] == "M":
-        return 1024 * 1024 * int(s[:-1])
-    elif s[-1] == "g" or s[-1] == "G":
-        return 1024 * 1024 * 1024 * int(s[:-1])
-    else:
-        return int(s)
-
-
 def limit_file_contexts(file_contexts, base_path):
     r"""
     Projects file contexts to given base path.
@@ -56,8 +45,11 @@ def limit_file_contexts(file_contexts, base_path):
         # Drop all statements assigning no label at all
         if line.find("<<none>>") != -1:
             continue
-        if line.startswith(base_path):
-            lines.append(line[len(base_path) :])
+        if base_path:
+            if line.startswith(base_path):
+                lines.append(line[len(base_path) :])
+        else:
+            lines.append(line)
     return "\n".join(lines) + "\n"
 
 
@@ -95,10 +87,13 @@ def strip_files(fs_basedir, fakeroot_statefile, strip_paths):
         if path[0] == "/":
             path = path[1:]
 
-        target_dir = os.path.join(fs_basedir, path)
-        for entry in os.listdir(target_dir):
-            del_path = os.path.join(target_dir, entry)
-            subprocess.run(["fakeroot", "-s", fakeroot_statefile, "-i", fakeroot_statefile, "rm", "-rf", del_path])
+        target_path = os.path.join(fs_basedir, path)
+        if os.path.isdir(target_path):
+            for entry in os.listdir(target_path):
+                del_path = os.path.join(target_path, entry)
+                subprocess.run(["fakeroot", "-s", fakeroot_statefile, "-i", fakeroot_statefile, "rm", "-rf", del_path])
+        else:
+            subprocess.run(["fakeroot", "-s", fakeroot_statefile, "-i", fakeroot_statefile, "rm", "-rf", target_path])
 
 
 def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extract):
@@ -125,47 +120,11 @@ def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extrac
                 "-s",
                 fakeroot_statefile,
                 "chown",
-                "root.root",
+                "root:root",
                 fs_basedir,
             ],
             check=True,
         )
-
-
-def fixup_selinux_root_context(file_contexts, limit_prefix, image_file):
-    root_context = get_root_context(file_contexts, "/" + limit_prefix[:-1])
-    with subprocess.Popen(
-        ["/usr/sbin/debugfs", "-w", image_file], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL
-    ) as proc:
-        proc.stdin.write(('ea_set / security.selinux "%s\\000"\n' % root_context).encode("utf-8"))
-        proc.stdin.close()
-        proc.wait()
-        if proc.returncode != 0:
-            raise RuntimeError("SELinux root context fixup failed")
-
-
-def fixup_permissions(fs_rootdir, fakeroot_statefile, image_file):
-    fakeroot_state = read_fakeroot_state(fakeroot_statefile)
-    for path, subdirs, files in os.walk(fs_rootdir, followlinks=False):
-        for entry in subdirs + files:
-            realpath = os.path.join(path, entry)
-            imgpath = os.path.join(path[len(fs_rootdir) :], entry)
-            ino = os.lstat(realpath).st_ino
-            entry = fakeroot_state[ino]
-            uid = entry["uid"]
-            gid = entry["gid"]
-            if uid != "0" or gid != "0":
-                print("Fix ownership of %s to %s:%s" % (imgpath, uid, gid))
-                with subprocess.Popen(
-                    ["/usr/sbin/debugfs", "-w", image_file, "-R", "modify_inode " + imgpath],
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.DEVNULL,
-                ) as proc:
-                    proc.stdin.write(("\n%s\n%s\n" % (uid, gid)).encode("utf-8"))
-                    proc.stdin.close()
-                    proc.wait()
-                    if proc.returncode != 0:
-                        raise RuntimeError("Permission fixup failed")
 
 
 def make_argparser():
@@ -199,7 +158,8 @@ def make_argparser():
         default=[],
         help="Directories to be cleared from the tree; expects a list of full paths",
     )
-    parser.add_argument("-d", "--dflate", help="Path to dflate", type=str)
+    parser.add_argument("--dflate", help="Path to our dflate tool", type=str, required=True)
+    parser.add_argument("--diroid", help="Path to our diroid tool", type=str, required=True)
     return parser
 
 
@@ -208,7 +168,7 @@ def main():
 
     in_file = args.input
     out_file = args.output
-    image_size = parse_size(args.size)
+    image_size = args.size
     limit_prefix = args.path
     file_contexts_file = args.file_contexts
     strip_paths = args.strip_paths
@@ -220,7 +180,11 @@ def main():
 
     if file_contexts_file:
         original_file_contexts = open(file_contexts_file, "r").read()
-        file_contexts = limit_file_contexts(original_file_contexts, "/" + limit_prefix)
+        if limit_prefix:
+            prefix = "/" + limit_prefix
+        else:
+            prefix = ""
+        file_contexts = limit_file_contexts(original_file_contexts, prefix)
         file_contexts_file = os.path.join(tmpdir, "file_contexts")
         open(file_contexts_file, "w").write(file_contexts)
 
@@ -238,26 +202,25 @@ def main():
 
     # Now build the basic filesystem image. Wrap again in fakeroot
     # so correct permissions are read for all files etc.
-    make_ext4fs_args = ["fakeroot", "-i", fakeroot_statefile, "make_ext4fs", "-T", "0", "-l", str(image_size)]
-    make_ext4fs_args += [image_file, os.path.join(fs_basedir, limit_prefix)]
+    mke2fs_args = ["faketime", "-f", "1970-1-1 0:0:0", "/usr/sbin/mkfs.ext4", "-E", "hash_seed=c61251eb-100b-48fe-b089-57dea7368612", "-U", "clear", "-F", image_file, str(image_size)]
+    subprocess.run(mke2fs_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
+
+    # Use our tool, diroid, to create an fs_config file to be used by e2fsdroid.
+    # This file is a simple list of files with their desired uid, gid, and mode.
+    fs_config_path = os.path.join(tmpdir, "fs_config")
+    diroid_args=[args.diroid, "--fakeroot", fakeroot_statefile, "--input-dir", os.path.join(fs_basedir, limit_prefix), "--output", fs_config_path]
+    subprocess.run(diroid_args, check=True)
+
+    e2fsdroid_args= ["faketime", "-f", "1970-1-1 0:0:0", "fakeroot", "-i", fakeroot_statefile, "e2fsdroid", "-e", "-a", "/", "-T", "0"]
+    e2fsdroid_args += ["-C", fs_config_path]
     if file_contexts_file:
-        make_ext4fs_args += ["-S", file_contexts_file]
-    subprocess.run(make_ext4fs_args, check=True)
-
-    # make_ext4fs has two quirks/bugs that will be fixed up now.
-
-    # 1. SELinux context of the root inode does not get set correctly.
-    if file_contexts_file:
-        subprocess.run(['sync'], check=True)
-        fixup_selinux_root_context(original_file_contexts, limit_prefix, image_file)
-
-    subprocess.run(['sync'], check=True)
-    # 2. Ownership of all inodes is root.root, but that is not what it is
-    # supposed to be in the final image
-    fixup_permissions(os.path.join(fs_basedir, limit_prefix), fakeroot_statefile, image_file)
+        e2fsdroid_args += ["-S", file_contexts_file]
+    e2fsdroid_args += ["-f", os.path.join(fs_basedir, limit_prefix), image_file]
+    subprocess.run(e2fsdroid_args, check=True, env={"E2FSPROGS_FAKE_TIME": "0"})
 
     subprocess.run(['sync'], check=True)
 
+    # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
     # If dflate is ever misbehaving, it can be replaced with:
     # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
     temp_tar = os.path.join(tmpdir, "partition.tar")

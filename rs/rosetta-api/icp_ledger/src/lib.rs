@@ -5,7 +5,7 @@ use ic_crypto_sha2::Sha256;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
 use ic_ledger_core::{
-    approvals::Approvals,
+    approvals::{AllowanceTable, HeapAllowancesData},
     balances::Balances,
     block::{BlockType, EncodedBlock, FeeCollector},
     tokens::CheckedAdd,
@@ -43,10 +43,12 @@ pub use validate_endpoints::{tokens_from_proto, tokens_into_proto};
 pub const DEFAULT_TRANSFER_FEE: Tokens = Tokens::from_e8s(10_000);
 
 pub const MAX_BLOCKS_PER_REQUEST: usize = 2000;
+pub const MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST: usize = 50;
 
 pub const MEMO_SIZE_BYTES: usize = 32;
 
 pub type LedgerBalances = Balances<BTreeMap<AccountIdentifier, Tokens>>;
+pub type LedgerAllowances = AllowanceTable<HeapAllowancesData<AccountIdentifier, Tokens>>;
 
 #[derive(
     Serialize,
@@ -325,21 +327,6 @@ impl Transaction {
             icrc1_memo: None,
             created_at_time: Some(created_at_time),
         }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct ApprovalKey(AccountIdentifier, AccountIdentifier);
-
-impl From<(&AccountIdentifier, &AccountIdentifier)> for ApprovalKey {
-    fn from((account, spender): (&AccountIdentifier, &AccountIdentifier)) -> Self {
-        Self(*account, *spender)
-    }
-}
-
-impl From<ApprovalKey> for (AccountIdentifier, AccountIdentifier) {
-    fn from(key: ApprovalKey) -> Self {
-        (key.0, key.1)
     }
 }
 
@@ -629,7 +616,7 @@ impl LedgerCanisterInitPayloadBuilder {
         }
 
         // Don't allow self-transfers of the minting canister
-        if self.initial_values.get(&minting_account).is_some() {
+        if self.initial_values.contains_key(&minting_account) {
             return Err(
                 "initial_values cannot contain transfers to the minting_account".to_string(),
             );
@@ -1250,6 +1237,13 @@ impl Default for FeatureFlags {
     fn default() -> Self {
         Self::const_default()
     }
+}
+
+pub fn max_blocks_per_request(principal_id: &PrincipalId) -> usize {
+    if ic_cdk::api::data_certificate().is_none() && principal_id.is_self_authenticating() {
+        return MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST;
+    }
+    MAX_BLOCKS_PER_REQUEST
 }
 
 #[cfg(test)]

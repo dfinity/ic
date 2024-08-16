@@ -1,8 +1,8 @@
 /// A subnet: A logical group of nodes that run consensus
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetRecord {
+    /// The IDs of the nodes that are part of this subnet.
     #[prost(bytes = "vec", repeated, tag = "3")]
     pub membership: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     /// Maximum amount of bytes per message. This is a hard cap, which means
@@ -22,9 +22,6 @@ pub struct SubnetRecord {
     /// The length of all DKG intervals. The DKG interval length is the number of rounds following the DKG summary.
     #[prost(uint64, tag = "10")]
     pub dkg_interval_length: u64,
-    /// Gossip Config
-    #[prost(message, optional, tag = "13")]
-    pub gossip_config: ::core::option::Option<GossipConfig>,
     /// If set to yes, the subnet starts as a (new) NNS
     #[prost(bool, tag = "14")]
     pub start_as_nns: bool,
@@ -43,18 +40,6 @@ pub struct SubnetRecord {
     /// The maximum combined size of the ingress and xnet messages that fit into a block.
     #[prost(uint64, tag = "19")]
     pub max_block_payload_size: u64,
-    /// The maximum number of instructions a message can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[prost(uint64, tag = "20")]
-    pub max_instructions_per_message: u64,
-    /// The maximum number of instructions a round can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[prost(uint64, tag = "21")]
-    pub max_instructions_per_round: u64,
-    /// The maximum number of instructions an `install_code` message can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[prost(uint64, tag = "22")]
-    pub max_instructions_per_install_code: u64,
     /// Information on whether a feature is supported by this subnet.
     #[prost(message, optional, tag = "23")]
     pub features: ::core::option::Option<SubnetFeatures>,
@@ -93,7 +78,6 @@ pub struct SubnetRecord {
     #[prost(message, optional, tag = "29")]
     pub chain_key_config: ::core::option::Option<ChainKeyConfig>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaInitialization {
@@ -102,10 +86,17 @@ pub struct EcdsaInitialization {
     #[prost(message, optional, tag = "2")]
     pub dealings: ::core::option::Option<InitialIDkgDealings>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ChainKeyInitialization {
+    #[prost(message, optional, tag = "1")]
+    pub key_id: ::core::option::Option<super::super::crypto::v1::MasterPublicKeyId>,
+    #[prost(message, optional, tag = "2")]
+    pub dealings: ::core::option::Option<InitialIDkgDealings>,
+}
 /// Contains the initial DKG transcripts for the subnet and materials to construct a base CUP (i.e.
 /// a CUP with no dependencies on previous CUPs or blocks). Such CUP materials can be used to
 /// construct the genesis CUP or a recovery CUP in the event of a subnet stall.
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CatchUpPackageContents {
@@ -132,8 +123,10 @@ pub struct CatchUpPackageContents {
     /// / The initial ECDSA dealings for boot strapping target subnets.
     #[prost(message, repeated, tag = "7")]
     pub ecdsa_initializations: ::prost::alloc::vec::Vec<EcdsaInitialization>,
+    /// / The initial IDkg dealings for boot strapping target chain key subnets.
+    #[prost(message, repeated, tag = "8")]
+    pub chain_key_initializations: ::prost::alloc::vec::Vec<ChainKeyInitialization>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryStoreUri {
@@ -150,7 +143,6 @@ pub struct RegistryStoreUri {
     pub registry_version: u64,
 }
 /// Contains information pertaining to all subnets in the IC and their params.
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetListRecord {
@@ -159,7 +151,6 @@ pub struct SubnetListRecord {
     pub subnets: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
 /// Initial non-interactive DKG transcript record
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InitialNiDkgTranscriptRecord {
@@ -174,7 +165,6 @@ pub struct InitialNiDkgTranscriptRecord {
     #[prost(bytes = "vec", tag = "5")]
     pub internal_csp_transcript: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgTranscriptId {
@@ -185,7 +175,6 @@ pub struct IDkgTranscriptId {
     #[prost(uint64, tag = "3")]
     pub source_height: u64,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VerifiedIDkgDealing {
@@ -196,7 +185,6 @@ pub struct VerifiedIDkgDealing {
     #[prost(message, repeated, tag = "7")]
     pub support_tuples: ::prost::alloc::vec::Vec<SignatureTuple>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgTranscript {
@@ -219,7 +207,6 @@ pub struct IDkgTranscript {
     #[prost(bytes = "vec", tag = "8")]
     pub raw_transcript: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DealerTuple {
@@ -228,7 +215,6 @@ pub struct DealerTuple {
     #[prost(uint32, tag = "2")]
     pub dealer_index: u32,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignatureTuple {
@@ -237,7 +223,6 @@ pub struct SignatureTuple {
     #[prost(bytes = "vec", tag = "2")]
     pub signature: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgTranscriptParams {
@@ -257,7 +242,6 @@ pub struct IDkgTranscriptParams {
     #[prost(message, repeated, tag = "7")]
     pub idkg_transcript_operation_args: ::prost::alloc::vec::Vec<IDkgTranscript>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgDealing {
@@ -267,7 +251,6 @@ pub struct IDkgDealing {
     #[prost(bytes = "vec", tag = "2")]
     pub raw_dealing: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgSignedDealingTuple {
@@ -278,7 +261,6 @@ pub struct IDkgSignedDealingTuple {
     #[prost(bytes = "vec", tag = "3")]
     pub signature: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InitialIDkgDealings {
@@ -289,7 +271,6 @@ pub struct InitialIDkgDealings {
     #[prost(message, repeated, tag = "4")]
     pub signed_dealings: ::prost::alloc::vec::Vec<IDkgSignedDealingTuple>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgComplaint {
@@ -300,7 +281,6 @@ pub struct IDkgComplaint {
     #[prost(bytes = "vec", tag = "3")]
     pub raw_complaint: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgOpening {
@@ -311,7 +291,6 @@ pub struct IDkgOpening {
     #[prost(bytes = "vec", tag = "3")]
     pub raw_opening: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExtendedDerivationPath {
@@ -320,40 +299,6 @@ pub struct ExtendedDerivationPath {
     #[prost(bytes = "vec", repeated, tag = "2")]
     pub derivation_path: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
-/// Per subnet P2P configuration
-/// Note: protoc is mangling the name P2PConfig to P2pConfig
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GossipConfig {
-    /// max outstanding request per peer MIN/DEFAULT/MAX 1/20/200
-    #[prost(uint32, tag = "1")]
-    pub max_artifact_streams_per_peer: u32,
-    /// timeout for a outstanding request 3_000/15_000/180_000
-    #[prost(uint32, tag = "2")]
-    pub max_chunk_wait_ms: u32,
-    /// max duplicate requests in underutilized networks 1/28/6000
-    #[prost(uint32, tag = "3")]
-    pub max_duplicity: u32,
-    /// maximum chunk size supported on this subnet 1024/4096/131_072
-    #[prost(uint32, tag = "4")]
-    pub max_chunk_size: u32,
-    /// history size for receive check 1_000/5_000/30_000
-    #[prost(uint32, tag = "5")]
-    pub receive_check_cache_size: u32,
-    /// period for re evaluating the priority function. 1_000/3_000/30_000
-    #[prost(uint32, tag = "6")]
-    pub pfn_evaluation_period_ms: u32,
-    /// period for polling the registry for updates 1_000/3_000/30_000
-    #[prost(uint32, tag = "7")]
-    pub registry_poll_period_ms: u32,
-    /// period for sending a retransmission request
-    ///
-    /// config for advert distribution.
-    #[prost(uint32, tag = "8")]
-    pub retransmission_request_ms: u32,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetFeatures {
@@ -372,7 +317,6 @@ pub struct SubnetFeatures {
 /// Per subnet ECDSA configuration
 ///
 /// Deprecated; please use ChainKeyConfig instead.
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaConfig {
@@ -393,7 +337,6 @@ pub struct EcdsaConfig {
     #[prost(uint64, optional, tag = "6")]
     pub idkg_key_rotation_period_ms: ::core::option::Option<u64>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct KeyConfig {
@@ -408,7 +351,6 @@ pub struct KeyConfig {
     pub max_queue_size: ::core::option::Option<u32>,
 }
 /// Per-subnet chain key configuration
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ChainKeyConfig {
@@ -423,19 +365,7 @@ pub struct ChainKeyConfig {
     #[prost(uint64, optional, tag = "3")]
     pub idkg_key_rotation_period_ms: ::core::option::Option<u64>,
 }
-#[derive(
-    serde::Serialize,
-    serde::Deserialize,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
-)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum IDkgTranscriptOperation {
     Unspecified = 0,
@@ -482,19 +412,7 @@ impl IDkgTranscriptOperation {
 /// Represents the type of subnet. Subnets of different type might exhibit different
 /// behavior, e.g. being more restrictive in what operations are allowed or privileged
 /// compared to other subnet types.
-#[derive(
-    serde::Serialize,
-    serde::Deserialize,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    ::prost::Enumeration,
-)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum SubnetType {
     Unspecified = 0,

@@ -164,7 +164,7 @@ fn test_upgrade_existing_sns() {
 
         // Install the (mainnet) NNS canisters.
         let with_mainnet_nns_canisters = true;
-        install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None);
+        install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]);
 
         // Publish (mainnet) SNS Wasms to SNS-W.
         let with_mainnet_sns_wasms = true;
@@ -398,22 +398,22 @@ fn test_upgrade_existing_sns() {
 
     // Publish modified versions of all the wasms and ensure we can upgrade a second time (pre-upgrade smoke test)
     {
-        let wasm = create_modified_sns_wasm(&build_swap_sns_wasm(), Some("foo"));
+        let wasm = create_modified_sns_wasm(&build_swap_sns_wasm(), Some(42));
         let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
         assert_eq!(proposal_info.failure_reason, None);
     }
     {
-        let wasm = create_modified_sns_wasm(&build_index_ng_sns_wasm(), Some("foo"));
+        let wasm = create_modified_sns_wasm(&build_index_ng_sns_wasm(), Some(42));
         let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
         assert_eq!(proposal_info.failure_reason, None);
     }
     {
-        let wasm = create_modified_sns_wasm(&build_ledger_sns_wasm(), Some("foo"));
+        let wasm = create_modified_sns_wasm(&build_ledger_sns_wasm(), Some(42));
         let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
         assert_eq!(proposal_info.failure_reason, None);
     }
     {
-        let wasm = create_modified_sns_wasm(&build_archive_sns_wasm(), Some("foo"));
+        let wasm = create_modified_sns_wasm(&build_archive_sns_wasm(), Some(42));
         let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
         assert_eq!(proposal_info.failure_reason, None);
     }

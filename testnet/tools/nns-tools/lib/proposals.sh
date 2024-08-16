@@ -102,8 +102,8 @@ $([ ! -z "$CANDID_ARGS" ] && echo "## Candid Post Upgrade Args
 $CANDID_ARGS
 \`\`\`
 ### Validating Candid Args
-Verify that the hash of the args matches proposal contents.
-\`didc encode '$CANDID_ARGS' | xxd -r -p | sha256sum\`
+Verify that the encoded version of the plaintext args matches the \`arg_hex\` field in the proposal.
+\`didc encode '$CANDID_ARGS'\`
 ")
 ## Wasm Verification
 Verify that the hash of the gzipped WASM matches the proposed hash.

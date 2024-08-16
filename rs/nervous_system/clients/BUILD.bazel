@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-client:icrc_ledger_client",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/nervous_system/common",
@@ -14,6 +15,7 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/error_types",
     "//rs/types/management_canister_types",
+    "//rs/utils",
     "@crate_index//:candid",
     "@crate_index//:num-traits",
     "@crate_index//:serde",
@@ -26,6 +28,7 @@ DEV_DEPENDENCIES = DEPENDENCIES + [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 

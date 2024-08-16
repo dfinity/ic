@@ -11,6 +11,10 @@ Usage: $0 (<COMMIT_ID>)
 
     Prints unreleased canister git logs. This indicates which canisters should be
     released.
+
+    If your system is missing some of the CLI tools that I need, you can install those via, e.g.,
+    $ cargo install ic-wasm idl2json_cli ...
+
 "
     exit 1
 }
@@ -23,6 +27,9 @@ LATEST_ARTIFACTS_COMMIT=$(latest_commit_with_prebuilt_artifacts 2>/dev/null)
 
 RELEASE_CANDIDATE_COMMIT_ID=${1:-$LATEST_ARTIFACTS_COMMIT}
 echo "Listing commits from:" "$RELEASE_CANDIDATE_COMMIT_ID"
+
+echo NNS
+echo =====
 
 for canister_name in "${NNS_CANISTERS[@]}"; do
     echo

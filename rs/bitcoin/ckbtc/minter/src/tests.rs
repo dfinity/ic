@@ -1175,3 +1175,68 @@ fn can_form_a_batch_conditions() {
     // Two request, long enough since last_transaction_submission_time, pass.
     assert!(state.can_form_a_batch(10, 10600));
 }
+
+#[test]
+fn test_build_account_to_utxos_table_pagination() {
+    use crate::dashboard;
+
+    let mut state = CkBtcMinterState::from(InitArgs {
+        btc_network: Network::Regtest.into(),
+        ecdsa_key_name: "".to_string(),
+        retrieve_btc_min_amount: 5_000u64,
+        ledger_id: CanisterId::from_u64(42),
+        max_time_in_queue_nanos: 0,
+        min_confirmations: None,
+        mode: Mode::GeneralAvailability,
+        kyt_fee: None,
+        kyt_principal: None,
+    });
+    let account1 = Account::from(
+        Principal::from_str("gjfkw-yiolw-ncij7-yzhg2-gq6ec-xi6jy-feyni-g26f4-x7afk-thx6z-6ae")
+            .unwrap(),
+    );
+    let account2 = Account::from(
+        Principal::from_str("k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae")
+            .unwrap(),
+    );
+    let mut utxos = (1..=30).map(dummy_utxo_from_value).collect::<Vec<_>>();
+    utxos.sort_unstable();
+
+    state.add_utxos(account1, utxos[..10].to_vec());
+    state.add_utxos(account2, utxos[10..].to_vec());
+
+    // Check if all pages combined together would give the full utxos set.
+    let pages = [
+        dashboard::build_account_to_utxos_table(&state, 0, 7),
+        dashboard::build_account_to_utxos_table(&state, 7, 7),
+        dashboard::build_account_to_utxos_table(&state, 14, 7),
+        dashboard::build_account_to_utxos_table(&state, 21, 7),
+        dashboard::build_account_to_utxos_table(&state, 28, 7),
+    ];
+    for (i, utxo) in utxos.iter().enumerate() {
+        assert!(pages[i / 7].contains(&format!("{}", utxo.outpoint.txid)));
+    }
+    // Check if everything is on the same page when page_size = number of utxos.
+    let single_page = dashboard::build_account_to_utxos_table(&state, 0, utxos.len() as u64);
+    for utxo in utxos.iter() {
+        assert!(single_page.contains(&format!("{}", utxo.outpoint.txid)));
+    }
+    // Content should be equal when page size is greater than total number of utxos.
+    assert_eq!(
+        single_page,
+        dashboard::build_account_to_utxos_table(&state, 0, 1 + utxos.len() as u64)
+    );
+    // After removing the last line (which are links to other pages), the size of
+    // the paginated content should be less than 1/4 of size of a full page.
+    let remove_last_line = |s: &str| {
+        let mut v = s.lines().collect::<Vec<_>>();
+        v.pop();
+        v.join("\n")
+    };
+    assert!(remove_last_line(&pages[0]).len() * 4 < remove_last_line(&single_page).len());
+    // No utxos should be displayed when start is out of range.
+    let no_utxo_page = dashboard::build_account_to_utxos_table(&state, utxos.len() as u64, 7);
+    for utxo in utxos.iter() {
+        assert!(!no_utxo_page.contains(&format!("{}", utxo.outpoint.txid)));
+    }
+}

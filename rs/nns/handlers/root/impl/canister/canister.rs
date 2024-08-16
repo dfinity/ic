@@ -38,6 +38,7 @@ use ic_nns_handler_root::{
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
+    UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
 };
 use std::cell::RefCell;
 
@@ -114,10 +115,13 @@ async fn canister_status_(canister_id_record: CanisterIdRecord) -> CanisterStatu
 fn submit_root_proposal_to_upgrade_governance_canister() {
     over_async(
         candid,
-        |(expected_governance_wasm_sha, proposal): (Vec<u8>, ChangeCanisterRequest)| {
+        |(expected_governance_wasm_sha, proposal): (
+            serde_bytes::ByteBuf,
+            ChangeCanisterRequest,
+        )| {
             ic_nns_handler_root::root_proposals::submit_root_proposal_to_upgrade_governance_canister(
                 caller(),
-                expected_governance_wasm_sha,
+                expected_governance_wasm_sha.to_vec(),
                 proposal,
             )
         },
@@ -128,11 +132,15 @@ fn submit_root_proposal_to_upgrade_governance_canister() {
 fn vote_on_root_proposal_to_upgrade_governance_canister() {
     over_async(
         candid,
-        |(proposer, wasm_sha256, ballot): (PrincipalId, Vec<u8>, RootProposalBallot)| {
+        |(proposer, wasm_sha256, ballot): (
+            PrincipalId,
+            serde_bytes::ByteBuf,
+            RootProposalBallot,
+        )| {
             ic_nns_handler_root::root_proposals::vote_on_root_proposal_to_upgrade_governance_canister(
                 caller(),
                 proposer,
-                wasm_sha256,
+                wasm_sha256.to_vec(),
                 ballot,
             )
         },
@@ -167,7 +175,17 @@ fn change_nns_canister_(request: ChangeCanisterRequest) {
 
     // Because change_canister is async, and because we can't directly use
     // `await`, we need to use the `spawn` trick.
-    let future = change_canister::<DfnRuntime>(request);
+    let future = async move {
+        let change_canister_result = change_canister::<DfnRuntime>(request).await;
+        match change_canister_result {
+            Ok(()) => {
+                println!("{LOG_PREFIX}change_canister: Canister change completed successfully.");
+            }
+            Err(err) => {
+                println!("{LOG_PREFIX}change_canister: Canister change failed: {err}");
+            }
+        };
+    };
 
     // Starts the proposal execution, which will continue after this function has
     // returned.
@@ -239,6 +257,25 @@ async fn change_canister_controllers_(
 ) -> ChangeCanisterControllersResponse {
     canister_management::change_canister_controllers(
         change_canister_controllers_request,
+        &mut new_management_canister_client(),
+    )
+    .await
+}
+
+/// Updates the canister settings of a canister controlled by NNS Root. Only callable by NNS
+/// Governance.
+#[export_name = "canister_update update_canister_settings"]
+fn update_canister_settings() {
+    check_caller_is_governance();
+    over_async(candid_one, update_canister_settings_);
+}
+
+#[candid_method(update, rename = "update_canister_settings")]
+async fn update_canister_settings_(
+    update_settings: UpdateCanisterSettingsRequest,
+) -> UpdateCanisterSettingsResponse {
+    canister_management::update_canister_settings(
+        update_settings,
         &mut new_management_canister_client(),
     )
     .await

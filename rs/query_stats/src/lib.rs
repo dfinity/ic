@@ -134,6 +134,7 @@ impl QueryStatsCollector {
             .or_default()
             .saturating_accumulate(stats);
 
+        self.metrics.query_stats_collector.add(stats);
         self.metrics
             .query_stats_collector_num_canister_ids
             .set(state.len() as i64);

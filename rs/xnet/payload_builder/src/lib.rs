@@ -17,11 +17,11 @@ use async_trait::async_trait;
 use hyper::{client::Client, Body, Request, StatusCode, Uri};
 use ic_async_utils::{receive_body_without_timeout, BodyReceiveError};
 use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
-use ic_crypto_tls_interfaces::TlsHandshake;
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
     messaging::{
         InvalidXNetPayload, XNetPayloadBuilder, XNetPayloadValidationError,
-        XNetTransientValidationError,
+        XNetPayloadValidationFailure,
     },
     validation::ValidationError,
 };
@@ -41,7 +41,7 @@ use ic_replicated_state::{replicated_state::ReplicatedStateMessageRouting, Repli
 use ic_types::{
     batch::{ValidationContext, XNetPayload},
     registry::RegistryClientError,
-    xnet::{CertifiedStreamSlice, StreamIndex},
+    xnet::{CertifiedStreamSlice, RejectSignal, StreamIndex},
     Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
 use ic_xnet_hyper::{ExecuteOnRuntime, TlsConnector};
@@ -308,7 +308,7 @@ impl XNetPayloadBuilderImpl {
     pub fn new(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
+        tls_handshake: Arc<dyn TlsConfig + Send + Sync>,
         registry: Arc<dyn RegistryClient>,
         runtime_handle: runtime::Handle,
         node_id: NodeId,
@@ -485,20 +485,20 @@ impl XNetPayloadBuilderImpl {
     /// In particular:
     ///
     ///  1. `signals_end` must be monotonically increasing, i.e. `expected <=
-    /// signals_end`;
+    ///     signals_end`;
     ///
     ///  2. signals must only refer to past and current messages, i.e.
-    /// `signals_end <= stream.messages_end()`;
+    ///     `signals_end <= stream.messages_end()`;
     ///
     ///  3. `signals_end - reject_signals[0] <= MAX_STREAM_MESSAGES`; and
     ///
     ///  4. `concat(reject_signals, [signals_end])` must be strictly increasing.
-    /// and
+    ///     and
     fn validate_signals(
         &self,
         subnet_id: SubnetId,
         signals_end: StreamIndex,
-        reject_signals: &VecDeque<StreamIndex>,
+        reject_signals: &VecDeque<RejectSignal>,
         expected: StreamIndex,
         state: &ReplicatedState,
     ) -> SignalsValidationResult {
@@ -546,20 +546,20 @@ impl XNetPayloadBuilderImpl {
             // messages have been GC-ed). Meaning we can never have signals going back
             // farther than the maximum number of messages in a stream.
             let signals_begin = reject_signals.front().unwrap();
-            if signals_end.get() - signals_begin.get() > MAX_STREAM_MESSAGES {
+            if signals_end.get() - signals_begin.index.get() > MAX_STREAM_MESSAGES {
                 warn!(
                     self.log,
                     "Too old reject signal in stream from {}: signals_begin {}, signals_end {}",
                     subnet_id,
-                    signals_begin,
+                    signals_begin.index,
                     signals_end
                 );
                 return SignalsValidationResult::Invalid;
             }
 
             let mut next = signals_end;
-            for index in reject_signals.iter().rev() {
-                if index >= &next {
+            for signal in reject_signals.iter().rev() {
+                if signal.index >= next {
                     warn!(
                         self.log,
                         "Invalid signals in stream from {}: reject_signals {:?}, signals_end {}",
@@ -569,7 +569,7 @@ impl XNetPayloadBuilderImpl {
                     );
                     return SignalsValidationResult::Invalid;
                 }
-                next = *index;
+                next = signal.index;
             }
         }
 
@@ -1080,14 +1080,14 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                 SliceValidationResult::Invalid(reason) => {
                     self.metrics
                         .observe_validate_duration(VALIDATION_STATUS_INVALID, since);
-                    return Err(ValidationError::Permanent(
+                    return Err(ValidationError::InvalidArtifact(
                         InvalidXNetPayload::InvalidSlice(reason),
                     ));
                 }
                 SliceValidationResult::Empty => {
                     self.metrics
                         .observe_validate_duration(VALIDATION_STATUS_EMPTY_SLICE, since);
-                    return Err(ValidationError::Permanent(
+                    return Err(ValidationError::InvalidArtifact(
                         InvalidXNetPayload::InvalidSlice("Empty slice".to_string()),
                     ));
                 }
@@ -1152,11 +1152,11 @@ fn get_node_operator_id(
 fn from_state_manager_error(e: StateManagerError) -> XNetPayloadValidationError {
     match e {
         StateManagerError::StateRemoved(height) => {
-            ValidationError::Permanent(InvalidXNetPayload::StateRemoved(height))
+            ValidationError::ValidationFailed(XNetPayloadValidationFailure::StateRemoved(height))
         }
-        StateManagerError::StateNotCommittedYet(height) => {
-            ValidationError::Transient(XNetTransientValidationError::StateNotCommittedYet(height))
-        }
+        StateManagerError::StateNotCommittedYet(height) => ValidationError::ValidationFailed(
+            XNetPayloadValidationFailure::StateNotCommittedYet(height),
+        ),
     }
 }
 
@@ -1560,7 +1560,7 @@ impl XNetClientImpl {
     fn new(
         metrics_registry: &MetricsRegistry,
         runtime_handle: runtime::Handle,
-        tls: Arc<dyn TlsHandshake + Send + Sync>,
+        tls: Arc<dyn TlsConfig + Send + Sync>,
         proximity_map: Arc<ProximityMap>,
     ) -> XNetClientImpl {
         // TODO(MR-28) Make timeout configurable.

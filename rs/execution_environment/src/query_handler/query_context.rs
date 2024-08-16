@@ -20,7 +20,7 @@ use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, SubnetAvailableMemory, SystemApiCallCounters,
 };
 use ic_interfaces_state_manager::Labeled;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{error, info, ReplicaLogger};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -31,11 +31,11 @@ use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
     messages::{
-        CallContextId, CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
-        UserQuery, NO_DEADLINE,
+        CallContextId, CallbackId, Payload, Query, QuerySource, RejectContext, Request,
+        RequestOrResponse, Response, NO_DEADLINE,
     },
     methods::{FuncRef, WasmClosure, WasmMethod},
-    CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, Time,
+    CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, PrincipalId, Time,
 };
 use prometheus::IntCounter;
 use std::{
@@ -175,29 +175,32 @@ impl<'a> QueryContext<'a> {
     /// - If it produces a response return the response.
     ///
     /// - If it does not produce a response and does not send further queries,
-    /// then return a response indicating that the canister did not reply.
+    ///   then return a response indicating that the canister did not reply.
     ///
     /// - If it does not produce a response and produces additional
-    /// inter-canister queries, process them till there is a response or the
-    /// call graph finishes with no reply.
+    ///   inter-canister queries, process them till there is a response or the
+    ///   call graph finishes with no reply.
     pub(super) fn run<'b>(
         &mut self,
-        query: UserQuery,
+        query: Query,
         metrics: &'b QueryHandlerMetrics,
         measurement_scope: &MeasurementScope<'b>,
     ) -> Result<WasmResult, UserError> {
         let canister_id = query.receiver;
         let old_canister = self.state.get_ref().get_active_canister(&canister_id)?;
-        let call_origin = CallOrigin::Query(query.source);
+        let call_origin = match query.source {
+            QuerySource::User { user_id, .. } => CallOrigin::Query(user_id),
+            QuerySource::Anonymous => CallOrigin::Query(PrincipalId::new_anonymous().into()),
+        };
 
-        let method = match wasm_query_method(old_canister, query.method_name.clone()) {
+        let method = match wasm_query_method(old_canister, query.method_name.to_string()) {
             Ok(method) => method,
             Err(err) => return Err(err.into_user_error(&canister_id)),
         };
 
         let query_kind = match &method {
             WasmMethod::Query(_) => NonReplicatedQueryKind::Pure {
-                caller: query.source.get(),
+                caller: query.source(),
             },
             WasmMethod::CompositeQuery(_) => NonReplicatedQueryKind::Stateful {
                 call_origin: call_origin.clone(),
@@ -213,7 +216,7 @@ impl<'a> QueryContext<'a> {
             self.execute_query(
                 old_canister.clone(),
                 method.clone(),
-                query.method_payload.as_slice(),
+                &query.method_payload,
                 query_kind,
                 &measurement_scope,
             )
@@ -229,13 +232,21 @@ impl<'a> QueryContext<'a> {
         if let WasmMethod::Query(_) = &method {
             if let Err(err) = &result {
                 if err.code() == ErrorCode::CanisterContractViolation && legacy_icqc_enabled {
+                    if self.own_subnet_type == SubnetType::System {
+                        info!(
+                            self.log,
+                            "Canister's {} query method {} is using the legacy ICQC feature.",
+                            canister_id,
+                            method,
+                        );
+                    }
                     let measurement_scope =
                         MeasurementScope::nested(&metrics.query_retry_call, measurement_scope);
                     let old_canister = self.state.get_ref().get_active_canister(&canister_id)?;
                     let (new_canister, new_result) = self.execute_query(
                         old_canister.clone(),
                         method,
-                        query.method_payload.as_slice(),
+                        &query.method_payload,
                         NonReplicatedQueryKind::Stateful {
                             call_origin: call_origin.clone(),
                         },
@@ -291,7 +302,7 @@ impl<'a> QueryContext<'a> {
     ) -> Result<(), UserError> {
         let canister_id = canister.canister_id();
 
-        let outgoing_messages: Vec<_> = canister.output_into_iter().map(|(_, msg)| msg).collect();
+        let outgoing_messages: Vec<_> = canister.output_into_iter().collect();
         let call_context_manager = canister
             .system_state
             .call_context_manager_mut()
@@ -730,6 +741,7 @@ impl<'a> QueryContext<'a> {
                 ApiType::Cleanup {
                     caller: call_origin.get_principal(),
                     time,
+                    execution_mode: execution_parameters.execution_mode.clone(),
                     call_context_instructions_executed,
                 },
                 time,

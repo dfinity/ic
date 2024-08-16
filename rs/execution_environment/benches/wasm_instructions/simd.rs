@@ -1,4 +1,4 @@
-//! Benchmarks for the SIMD WASM instructions.
+//! Benchmarks for the Wasm SIMD instructions.
 //!
 //! References:
 //! * https://www.w3.org/TR/wasm-core-2/

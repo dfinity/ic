@@ -13,17 +13,17 @@ anyhow = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 ic-config = { path = "../config" }
 ic-logger = { path = "../monitoring/logger" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-prep = { path = "../prep" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
-ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-types = { path = "../types/types" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 
 [[bin]]
 name = "ic-starter"

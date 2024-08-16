@@ -28,26 +28,30 @@ use ic_backup::{
     config::{ColdStorage, Config, SubnetConfig},
 };
 use ic_base_types::SubnetId;
+use ic_consensus_system_test_utils::{
+    rw_message::install_nns_and_check_progress,
+    ssh_access::{
+        generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
+        wait_until_authentication_is_granted, AuthMean,
+    },
+    subnet::enable_chain_key_on_subnet,
+    upgrade::{
+        assert_assigned_replica_version, bless_public_replica_version,
+        deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
+    },
+};
+use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
+use ic_management_canister_types::{
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+};
 use ic_recovery::file_sync_helper::{download_binary, write_file};
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::{
+use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::*,
-    },
-    orchestrator::utils::{
-        rw_message::install_nns_and_check_progress,
-        ssh_access::{
-            generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
-            wait_until_authentication_is_granted, AuthMean,
-        },
-        subnet_recovery::{enable_ecdsa_on_subnet, run_ecdsa_signature_test},
-        upgrade::{
-            assert_assigned_replica_version, bless_public_replica_version,
-            deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
-        },
     },
     systest,
     util::{block_on, get_nns_node, MessageCanister, UniversalCanister},
@@ -125,7 +129,7 @@ pub fn test(env: TestEnv) {
     fs::create_dir_all(&backup_binaries_dir).expect("failure creating backup binaries directory");
 
     // Copy all the binaries needed for the replay of the current version in order to avoid downloading them
-    let testing_dir = env.get_dependency_path("rs/tests");
+    let testing_dir = get_dependency_path("rs/tests");
     let binaries_path = testing_dir.join("backup/binaries");
     copy_file(&binaries_path, &backup_binaries_dir, "ic-replay");
     copy_file(&binaries_path, &backup_binaries_dir, "sandbox_launcher");
@@ -136,8 +140,7 @@ pub fn test(env: TestEnv) {
         log,
         "Download the binaries needed for replay of the mainnet version"
     );
-    let mainnet_version = env
-        .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
+    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt")
         .expect("could not read mainnet version!");
 
     // Download all the binaries needed for the replay of the mainnet version
@@ -164,14 +167,18 @@ pub fn test(env: TestEnv) {
         &agent,
         nns_node.effective_canister_id(),
     ));
-    let key = enable_ecdsa_on_subnet(
+    let public_keys = enable_chain_key_on_subnet(
         &nns_node,
         &nns_canister,
         env.topology_snapshot().root_subnet_id(),
         None,
+        make_key_ids_for_all_schemes(),
         &log,
     );
-    run_ecdsa_signature_test(&nns_canister, &log, key);
+
+    for (key_id, public_key) in public_keys {
+        run_chain_key_signature_test(&nns_canister, &log, &key_id, public_key);
+    }
 
     info!(log, "Install universal canister");
     let log2 = log.clone();
@@ -326,10 +333,15 @@ pub fn test(env: TestEnv) {
 
     let checkpoint =
         some_checkpoint_dir(&backup_dir, &subnet_id).expect("Checkpoint doesn't exist");
-    let memory_artifact_path = checkpoint
-        .join("canister_states")
-        .join(canister_id_hex)
-        .join("vmemory_0.bin");
+
+    let canister_dir = checkpoint.join("canister_states").join(canister_id_hex);
+    let memory_artifact_path = fs::read_dir(canister_dir)
+        .expect("Should read canister dir")
+        .flatten()
+        .map(|entry| entry.path())
+        .find(|path| path.display().to_string().contains("vmemory_0"))
+        .expect("Should find file");
+
     assert!(memory_artifact_path.exists());
     info!(log, "Modify memory file: {:?}", memory_artifact_path);
     modify_byte_in_file(memory_artifact_path).expect("Modifying a byte failed");
@@ -508,4 +520,21 @@ fn download_binary_file(
         binaries_dir,
     ))
     .expect("error downloading binaty");
+}
+
+fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
+    vec![
+        MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "some_ecdsa_key".to_string(),
+        }),
+        MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Ed25519,
+            name: "some_eddsa_key".to_string(),
+        }),
+        MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+            name: "some_bip340_key".to_string(),
+        }),
+    ]
 }

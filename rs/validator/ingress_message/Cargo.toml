@@ -8,8 +8,8 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
 hex = { workspace = true }
+ic-cdk = { workspace = true }
 ic-crypto-interfaces-sig-verification = { path = "../../crypto/interfaces/sig_verification" }
 ic-crypto-standalone-sig-verifier = { path = "../../crypto/standalone-sig-verifier" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
@@ -27,5 +27,5 @@ ic-crypto-test-utils-root-of-trust = { path = "../../crypto/test_utils/root_of_t
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-validator-http-request-test-utils = { path = "../http_request_test_utils" }
-rand = "0.8"
+rand = { workspace = true }
 strum = { workspace = true }

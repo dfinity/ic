@@ -1,26 +1,29 @@
 use slog::info;
 
 use crate::ckbtc::lib::install_bitcoin_canister_with_network;
-use crate::driver::ic::InternetComputer;
-use crate::driver::test_env::{SshKeyGen, TestEnv};
-use crate::driver::test_env_api::{
-    retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-    READY_WAIT_TIMEOUT, RETRY_BACKOFF,
-};
-use crate::nns::{get_governance_canister, vote_execute_proposal_assert_failed};
-use crate::retry_with_msg_async;
-use crate::util::{block_on, runtime_from_url};
 use candid::{Decode, Encode};
 use canister_test::Canister;
 use ic_agent::Agent;
 use ic_btc_interface::{Config as BitcoinConfig, Flag, Network, SetConfigRequest};
 use ic_config::execution_environment::{BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance::governance::BitcoinNetwork;
+use ic_nns_governance_api::bitcoin::BitcoinNetwork;
 use ic_nns_test_utils::governance::{
     bitcoin_set_config_by_proposal, invalid_bitcoin_set_config_by_proposal,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
+    driver::{
+        ic::InternetComputer,
+        test_env::{SshKeyGen, TestEnv},
+        test_env_api::{
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+        },
+    },
+    nns::{get_governance_canister, vote_execute_proposal_assert_failed},
+    util::{block_on, runtime_from_url},
+};
 use std::str::FromStr;
 
 pub fn config(env: TestEnv) {
@@ -52,8 +55,8 @@ pub fn test(env: TestEnv) {
 
     info!(&logger, "Installing the Bitcoin canisters...");
     block_on(async {
-        install_bitcoin_canister_with_network(&nns, &logger, &env, Network::Testnet).await;
-        install_bitcoin_canister_with_network(&nns, &logger, &env, Network::Mainnet).await;
+        install_bitcoin_canister_with_network(&nns, &logger, Network::Testnet).await;
+        install_bitcoin_canister_with_network(&nns, &logger, Network::Mainnet).await;
     });
     info!(&logger, "Bitcoin canisters installed successfully.");
 
@@ -104,7 +107,7 @@ pub fn test(env: TestEnv) {
         // Check that the config has been updated per the proposal.
         block_on(async {
             // We retry several times in case the proposal took some time to be executed.
-            retry_with_msg_async!(
+            ic_system_test_driver::retry_with_msg_async!(
                 "check if the bitcoin config has been updated per proposal",
                 &logger,
                 READY_WAIT_TIMEOUT,

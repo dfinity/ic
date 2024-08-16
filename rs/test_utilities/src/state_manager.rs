@@ -14,11 +14,15 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
+    batch::BatchSummary,
     consensus::certification::Certification,
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
     crypto::{CryptoHash, CryptoHashOf},
     messages::{Request, RequestOrResponse, Response},
-    xnet::{CertifiedStreamSlice, StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
+    xnet::{
+        CertifiedStreamSlice, RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex,
+        StreamIndexedQueue, StreamSlice,
+    },
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
 use serde::{Deserialize, Serialize};
@@ -223,6 +227,7 @@ impl StateManager for FakeStateManager {
         state: ReplicatedState,
         height: Height,
         _scope: CertificationScope,
+        _batch_summary: Option<BatchSummary>,
     ) {
         let fake_hash = CryptoHash(Sha256::hash(&height.get().to_le_bytes()).to_vec());
         self.states.write().unwrap().push(Snapshot {
@@ -352,6 +357,131 @@ impl From<SerializableRequestOrResponse> for RequestOrResponse {
 }
 
 /// Local helper to enable serialization and deserialization of
+/// ['StreamHeader'] for testing.
+#[derive(Serialize, Deserialize)]
+struct SerializableStreamHeader {
+    begin: StreamIndex,
+    end: StreamIndex,
+    signals_end: StreamIndex,
+    reject_signals: VecDeque<SerializableRejectSignal>,
+    flags: SerializableStreamFlags,
+}
+
+impl From<&StreamHeader> for SerializableStreamHeader {
+    fn from(header: &StreamHeader) -> Self {
+        Self {
+            begin: header.begin(),
+            end: header.end(),
+            signals_end: header.signals_end(),
+            reject_signals: header.reject_signals().iter().map(From::from).collect(),
+            flags: header.flags().into(),
+        }
+    }
+}
+
+impl From<SerializableStreamHeader> for StreamHeader {
+    fn from(header: SerializableStreamHeader) -> StreamHeader {
+        StreamHeader::new(
+            header.begin,
+            header.end,
+            header.signals_end,
+            header.reject_signals.into_iter().map(From::from).collect(),
+            header.flags.into(),
+        )
+    }
+}
+
+/// Local helper to enable serialization and deserialization of
+/// ['RejectReason'] for testing.
+#[derive(Serialize, Deserialize)]
+pub enum SerializableRejectReason {
+    CanisterMigrating = 1,
+    CanisterNotFound = 2,
+    CanisterStopped = 3,
+    CanisterStopping = 4,
+    QueueFull = 5,
+    OutOfMemory = 6,
+    Unknown = 7,
+}
+
+impl From<&RejectReason> for SerializableRejectReason {
+    fn from(reason: &RejectReason) -> Self {
+        match reason {
+            RejectReason::CanisterMigrating => Self::CanisterMigrating,
+            RejectReason::CanisterNotFound => Self::CanisterNotFound,
+            RejectReason::CanisterStopped => Self::CanisterStopped,
+            RejectReason::CanisterStopping => Self::CanisterStopping,
+            RejectReason::QueueFull => Self::QueueFull,
+            RejectReason::OutOfMemory => Self::OutOfMemory,
+            RejectReason::Unknown => Self::Unknown,
+        }
+    }
+}
+
+impl From<SerializableRejectReason> for RejectReason {
+    fn from(reason: SerializableRejectReason) -> RejectReason {
+        match reason {
+            SerializableRejectReason::CanisterMigrating => RejectReason::CanisterMigrating,
+            SerializableRejectReason::CanisterNotFound => RejectReason::CanisterNotFound,
+            SerializableRejectReason::CanisterStopped => RejectReason::CanisterStopped,
+            SerializableRejectReason::CanisterStopping => RejectReason::CanisterStopping,
+            SerializableRejectReason::QueueFull => RejectReason::QueueFull,
+            SerializableRejectReason::OutOfMemory => RejectReason::OutOfMemory,
+            SerializableRejectReason::Unknown => RejectReason::Unknown,
+        }
+    }
+}
+
+/// Local helper to enable serialization and deserialization of
+/// ['RejectSignal'] for testing.
+#[derive(Serialize, Deserialize)]
+pub struct SerializableRejectSignal {
+    pub reason: SerializableRejectReason,
+    pub index: StreamIndex,
+}
+
+impl From<&RejectSignal> for SerializableRejectSignal {
+    fn from(signal: &RejectSignal) -> Self {
+        Self {
+            reason: (&signal.reason).into(),
+            index: signal.index,
+        }
+    }
+}
+
+impl From<SerializableRejectSignal> for RejectSignal {
+    fn from(signal: SerializableRejectSignal) -> RejectSignal {
+        RejectSignal {
+            reason: signal.reason.into(),
+            index: signal.index,
+        }
+    }
+}
+
+/// Local helper to enable serialization and deserialization of
+/// ['StreamFlags'] for testing.
+#[derive(Serialize, Deserialize)]
+pub struct SerializableStreamFlags {
+    pub deprecated_responses_only: bool,
+}
+
+impl From<&StreamFlags> for SerializableStreamFlags {
+    fn from(flags: &StreamFlags) -> Self {
+        Self {
+            deprecated_responses_only: flags.deprecated_responses_only,
+        }
+    }
+}
+
+impl From<SerializableStreamFlags> for StreamFlags {
+    fn from(flags: SerializableStreamFlags) -> StreamFlags {
+        StreamFlags {
+            deprecated_responses_only: flags.deprecated_responses_only,
+        }
+    }
+}
+
+/// Local helper to enable serialization and deserialization of
 /// [`StreamIndexedQueue`] for testing.
 #[derive(Serialize, Deserialize)]
 struct SerializableStreamIndexedQueue {
@@ -382,14 +512,14 @@ impl From<SerializableStreamIndexedQueue> for StreamIndexedQueue<RequestOrRespon
 /// [`StreamSlice`] for testing.
 #[derive(Serialize, Deserialize)]
 struct SerializableStreamSlice {
-    header: StreamHeader,
+    header: SerializableStreamHeader,
     messages: Option<SerializableStreamIndexedQueue>,
 }
 
 impl From<StreamSlice> for SerializableStreamSlice {
     fn from(slice: StreamSlice) -> Self {
         SerializableStreamSlice {
-            header: slice.header().clone(),
+            header: slice.header().into(),
             messages: slice.messages().map(|messages| messages.into()),
         }
     }
@@ -398,7 +528,7 @@ impl From<StreamSlice> for SerializableStreamSlice {
 impl From<SerializableStreamSlice> for StreamSlice {
     fn from(slice: SerializableStreamSlice) -> StreamSlice {
         StreamSlice::new(
-            slice.header,
+            slice.header.into(),
             slice
                 .messages
                 .map(|messages| messages.into())
@@ -573,11 +703,12 @@ impl StateManager for RefMockStateManager {
         state: ReplicatedState,
         height: Height,
         scope: CertificationScope,
+        batch_summary: Option<BatchSummary>,
     ) {
         self.mock
             .read()
             .unwrap()
-            .commit_and_certify(state, height, scope)
+            .commit_and_certify(state, height, scope, batch_summary)
     }
 
     fn report_diverged_checkpoint(&self, height: Height) {

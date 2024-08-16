@@ -1,4 +1,4 @@
-use crate::checked_amount::CheckedAmountOf;
+use crate::tx::{GasFeeEstimate, TransactionPrice};
 use proptest::strategy::Strategy;
 
 mod estimate_transaction_price {
@@ -81,43 +81,79 @@ mod estimate_transaction_price {
     }
 }
 
-mod transaction_price {
-    mod increase_by_10_percent {
-        use crate::numeric::WeiPerGas;
-        use crate::tx::tests::arb_checked_amount_of;
-        use crate::tx::TransactionPrice;
-        use proptest::{prelude::any, prop_assert_eq, proptest};
+mod resubmit_transaction_price {
+    use crate::numeric::WeiPerGas;
+    use crate::tx::tests::{arb_gas_fee_estimate, arb_transaction_price};
+    use crate::tx::GasFeeEstimate;
+    use proptest::{prop_assert, prop_assert_eq, proptest};
 
-        proptest! {
-            #[test]
-            fn should_saturate(gas_limit in arb_checked_amount_of()) {
-                let unreasonable_price = TransactionPrice {
-                    gas_limit,
-                    max_fee_per_gas: WeiPerGas::MAX,
-                    max_priority_fee_per_gas: WeiPerGas::MAX,
+    proptest! {
+        #[test]
+        fn should_be_the_same_when_base_fee_per_gas_covered(initial_price in arb_transaction_price()) {
+            let max_base_fee_per_gas = initial_price
+                .max_fee_per_gas
+                .checked_sub(initial_price.max_priority_fee_per_gas)
+                .expect("BUG: max fee per gas should be greater or equal than max priority fee per gas");
+            let mut base_fee_per_gas = max_base_fee_per_gas;
+            while base_fee_per_gas > WeiPerGas::ZERO {
+                let new_gas_fee = GasFeeEstimate {
+                    base_fee_per_gas,
+                    max_priority_fee_per_gas: initial_price.max_priority_fee_per_gas,
                 };
-                let increased_price = unreasonable_price.clone().increase_by_10_percent();
 
-                prop_assert_eq!(increased_price, unreasonable_price);
+                let updated_price = initial_price
+                    .clone()
+                    .resubmit_transaction_price(new_gas_fee);
+
+                prop_assert_eq!(&updated_price, &initial_price);
+
+                base_fee_per_gas = base_fee_per_gas.div_by_two();
             }
         }
+    }
 
-        proptest! {
-            #[test]
-            fn should_have_at_least_10_percent_difference(gas_limit in arb_checked_amount_of(), max_fee_per_gas in any::<u128>(), max_priority_fee_per_gas in any::<u128>()) {
-                let price = TransactionPrice {
-                    gas_limit,
-                    max_fee_per_gas: WeiPerGas::from(max_fee_per_gas),
-                    max_priority_fee_per_gas: WeiPerGas::from(max_priority_fee_per_gas),
+    proptest! {
+        #[test]
+        fn should_increase_by_at_least_10_percent_when_base_fee_not_covered(initial_price in arb_transaction_price()) {
+            let max_base_fee_per_gas = initial_price
+                .max_fee_per_gas
+                .checked_sub(initial_price.max_priority_fee_per_gas)
+                .expect(
+                    "BUG: max fee per gas should be greater or equal than max priority fee per gas",
+                );
+            let mut base_fee_per_gas = max_base_fee_per_gas
+                .checked_add(WeiPerGas::ONE)
+                .unwrap_or(WeiPerGas::MAX);
+            while base_fee_per_gas < WeiPerGas::MAX {
+                let new_gas_fee = GasFeeEstimate {
+                    base_fee_per_gas,
+                    max_priority_fee_per_gas: initial_price.max_priority_fee_per_gas,
                 };
-                let bumped_price = price.clone().increase_by_10_percent();
-                let max_fee_per_gas_diff = bumped_price.max_fee_per_gas.checked_sub(price.max_fee_per_gas).expect("bumped max fee per gas should be greater than original");
-                let max_priority_fee_per_gas_diff = bumped_price.max_priority_fee_per_gas.checked_sub(price.max_priority_fee_per_gas).expect("bumped max priority fee per gas should be greater than original");
 
-                prop_assert_eq!(price.gas_limit, bumped_price.gas_limit);
-                prop_assert_eq!(max_fee_per_gas_diff, price.max_fee_per_gas.checked_div_ceil(10_u8).unwrap());
-                prop_assert_eq!(max_priority_fee_per_gas_diff, price.max_priority_fee_per_gas.checked_div_ceil(10_u8).unwrap());
+                let updated_price = initial_price
+                    .clone()
+                    .resubmit_transaction_price(new_gas_fee);
+                let max_priority_fee_per_gas_diff = updated_price.max_priority_fee_per_gas.checked_sub(initial_price.max_priority_fee_per_gas).expect("updated max priority fee per gas should be greater than original");
+
+                prop_assert_eq!(updated_price.gas_limit, initial_price.gas_limit);
+                prop_assert!(updated_price.max_fee_per_gas >= initial_price.max_fee_per_gas);
+                prop_assert_eq!(max_priority_fee_per_gas_diff, initial_price.max_priority_fee_per_gas.checked_div_ceil(10_u8).unwrap());
+
+                base_fee_per_gas = base_fee_per_gas.checked_mul(2_u8).unwrap_or(WeiPerGas::MAX);
             }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn should_always_increase_or_be_the_same(initial_price in arb_transaction_price(), new_gas_fee in arb_gas_fee_estimate()) {
+            let updated_price = initial_price
+                .clone()
+                .resubmit_transaction_price(new_gas_fee);
+
+            prop_assert_eq!(updated_price.gas_limit, initial_price.gas_limit);
+            prop_assert!(updated_price.max_fee_per_gas >= initial_price.max_fee_per_gas);
+            prop_assert!(updated_price.max_priority_fee_per_gas >= initial_price.max_priority_fee_per_gas);
         }
     }
 }
@@ -180,8 +216,29 @@ fn should_cbor_encoding_be_stable() {
     assert_eq!(decoded_signed_tx, signed_tx);
 }
 
-fn arb_checked_amount_of<Unit>() -> impl Strategy<Value = CheckedAmountOf<Unit>> {
-    use proptest::arbitrary::any;
-    use proptest::array::uniform32;
-    uniform32(any::<u8>()).prop_map(CheckedAmountOf::from_be_bytes)
+fn arb_transaction_price() -> impl Strategy<Value = TransactionPrice> {
+    use crate::numeric::WeiPerGas;
+    use crate::test_fixtures::arb::arb_checked_amount_of;
+    use proptest::prelude::any;
+    (arb_checked_amount_of(), any::<u128>(), any::<u128>()).prop_map(
+        |(gas_limit, delta_to_max_fee_per_gas, max_priority_fee_per_gas)| TransactionPrice {
+            gas_limit,
+            // max_fee_per_gas is always greater or equal to max_priority_fee_per_gas
+            max_fee_per_gas: WeiPerGas::from(max_priority_fee_per_gas)
+                .checked_add(WeiPerGas::from(delta_to_max_fee_per_gas))
+                .expect("BUG: addition of 2 u128 should not overflow a u256"),
+            max_priority_fee_per_gas: WeiPerGas::from(max_priority_fee_per_gas),
+        },
+    )
+}
+
+fn arb_gas_fee_estimate() -> impl Strategy<Value = GasFeeEstimate> {
+    use crate::numeric::WeiPerGas;
+    use proptest::prelude::any;
+    (any::<u64>(), any::<u64>()).prop_map(|(base_fee_per_gas, max_priority_fee_per_gas)| {
+        GasFeeEstimate {
+            base_fee_per_gas: WeiPerGas::from(base_fee_per_gas),
+            max_priority_fee_per_gas: WeiPerGas::from(max_priority_fee_per_gas),
+        }
+    })
 }

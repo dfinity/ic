@@ -8,16 +8,16 @@
 use dfn_core::println;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::memory_manager_upgrade_storage::store_protobuf;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::pb::v1::{NeuronId as NeuronIdProto, ProposalId as ProposalIdProto};
-use ic_nns_governance::{
-    governance::{
-        HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES, MAX_FOLLOWEES_PER_TOPIC, MAX_NEURON_RECENT_BALLOTS,
-        MAX_NUMBER_OF_NEURONS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
-    },
-    pb::v1::{
-        governance::NeuronInFlightCommand, proposal::Action, Governance as GovernanceProto,
-        NetworkEconomics as NetworkEconomicsProto, Neuron, Proposal, ProposalData, Topic, *,
-    },
+use ic_nns_governance::governance::{
+    HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES, MAX_FOLLOWEES_PER_TOPIC, MAX_NEURON_RECENT_BALLOTS,
+    MAX_NUMBER_OF_NEURONS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
+};
+use ic_nns_governance_api::pb::v1::{
+    governance::NeuronInFlightCommand, neuron::DissolveState, proposal::Action,
+    Governance as GovernanceProto, NetworkEconomics as NetworkEconomicsProto, Neuron, Proposal,
+    ProposalData, Topic, *,
 };
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
@@ -40,7 +40,8 @@ const TEST_TARGET_HEAP_SIZE_IN_NUM_PAGES: usize = (MAX_POSSIBLE_HEAP_SIZE_IN_PAG
     / 3;
 
 /// Total number of neurons the governance will have.
-const TEST_NUM_NEURONS: u64 = MAX_NUMBER_OF_NEURONS as u64;
+const ASSUMED_INACTIVE: u64 = 120_000;
+const TEST_NUM_NEURONS: u64 = MAX_NUMBER_OF_NEURONS as u64 - ASSUMED_INACTIVE;
 
 lazy_static! {
     /// Number of settled proposals to keep, per topic. Settled proposals have empty
@@ -153,6 +154,22 @@ fn create_in_flight_commands() -> HashMap<u64, NeuronInFlightCommand> {
 }
 
 fn populate_canister_state() {
+    const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
+    let neuron1 = {
+        let neuron_id = NeuronIdProto {
+            id: TEST_NEURON_1_ID,
+        };
+        let subaccount_bytes = vec![1; 32];
+        Neuron {
+            id: Some(neuron_id),
+            controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+            account: subaccount_bytes,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(TWELVE_MONTHS_SECONDS)),
+            cached_neuron_stake_e8s: 1_000_000_000_000,
+            ..Default::default()
+        }
+    };
+
     let mut proto = GovernanceProto {
         economics: Some(NetworkEconomicsProto::with_default_values()),
         in_flight_commands: create_in_flight_commands(),
@@ -170,7 +187,9 @@ fn populate_canister_state() {
 
     let wasm_pages_before_neurons = heap_size_num_pages();
 
-    for i in 0..TEST_NUM_NEURONS {
+    proto.neurons.insert(TEST_NEURON_1_ID, neuron1);
+
+    for i in 0..TEST_NUM_NEURONS - 1 {
         proto.neurons.insert(i, allocate_neuron(i));
     }
 
@@ -249,7 +268,9 @@ lazy_static! {
         for topic in topic_iterator() {
             let mut followees = Vec::<NeuronIdProto>::new();
             followees.reserve_exact(MAX_FOLLOWEES_PER_TOPIC);
-            for i in 0..MAX_FOLLOWEES_PER_TOPIC {
+            // Test following for votes in the upgrade test
+            followees.push(NeuronIdProto {id: TEST_NEURON_1_ID});
+            for i in 1..MAX_FOLLOWEES_PER_TOPIC {
                 followees.push(NeuronIdProto { id: i as u64 })
             }
             map.insert(topic as i32, neuron::Followees { followees });
@@ -275,7 +296,7 @@ fn allocate_neuron(id: u64) -> Neuron {
         followees: FOLLOWEES_MAP.clone(),
         recent_ballots: vec![
             BallotInfo {
-                proposal_id: None,
+                proposal_id: Some(ProposalIdProto { id: 1 }),
                 vote: 0,
             };
             MAX_NEURON_RECENT_BALLOTS
@@ -285,12 +306,13 @@ fn allocate_neuron(id: u64) -> Neuron {
         maturity_e8s_equivalent: 0,
         staked_maturity_e8s_equivalent: None,
         auto_stake_maturity: None,
-        dissolve_state: Some(neuron::DissolveState::WhenDissolvedTimestampSeconds(0)),
+        dissolve_state: Some(neuron::DissolveState::DissolveDelaySeconds(1)),
         not_for_profit: true,
         joined_community_fund_timestamp_seconds: None,
         known_neuron_data: None,
         spawn_at_timestamp_seconds: None,
         neuron_type: None,
+        visibility: None,
     }
 }
 

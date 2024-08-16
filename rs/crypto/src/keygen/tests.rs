@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
 use super::*;
-use crate::common::test_utils::crypto_component::crypto_component_with_csp;
+use crate::common::test_utils::crypto_component::crypto_component_with_csp_and_vault;
 use assert_matches::assert_matches;
 use ic_base_types::SubnetId;
 use ic_base_types::{NodeId, PrincipalId};
@@ -1277,9 +1277,10 @@ mod rotate_idkg_dealing_encryption_keys {
         use ic_protobuf::registry::subnet::v1::SubnetListRecord;
         use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 
-        let mut csp = MockAllCryptoServiceProvider::new();
+        let mut vault = MockLocalCspVault::new();
         let mut counter = 0_u8;
-        csp.expect_current_node_public_keys()
+        vault
+            .expect_current_node_public_keys()
             .times(2)
             .returning(move || match counter {
                 0 => {
@@ -1297,7 +1298,8 @@ mod rotate_idkg_dealing_encryption_keys {
                 }
                 _ => panic!("current_node_public_keys called too many times!"),
             });
-        csp.expect_current_node_public_keys_with_timestamps()
+        vault
+            .expect_current_node_public_keys_with_timestamps()
             .times(2)
             .return_const(Ok(valid_current_node_public_keys_with_timestamps()));
 
@@ -1341,8 +1343,8 @@ mod rotate_idkg_dealing_encryption_keys {
 
         let time_source = FastForwardTimeSource::new();
         let crypto_component = CryptoComponentImpl::new_for_test(
-            csp,
-            Arc::new(MockLocalCspVault::new()),
+            MockAllCryptoServiceProvider::new(),
+            Arc::new(vault),
             no_op_logger(),
             registry_client.clone(),
             node_id(),
@@ -1373,9 +1375,10 @@ mod rotate_idkg_dealing_encryption_keys {
         use ic_protobuf::registry::subnet::v1::SubnetListRecord;
         use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 
-        let mut csp = MockAllCryptoServiceProvider::new();
+        let mut vault = MockLocalCspVault::new();
         let mut counter = 0_u8;
-        csp.expect_current_node_public_keys()
+        vault
+            .expect_current_node_public_keys()
             .times(2)
             .returning(move || match counter {
                 0 => {
@@ -1393,10 +1396,12 @@ mod rotate_idkg_dealing_encryption_keys {
                 }
                 _ => panic!("current_node_public_keys called too many times!"),
             });
-        csp.expect_current_node_public_keys_with_timestamps()
+        vault
+            .expect_current_node_public_keys_with_timestamps()
             .times(2)
             .return_const(Ok(valid_current_node_public_keys_with_timestamps()));
-        csp.expect_idkg_gen_dealing_encryption_key_pair()
+        vault
+            .expect_idkg_gen_dealing_encryption_key_pair()
             .times(1)
             .return_const(Ok(MEGaPublicKey::deserialize(
                 EccCurveType::K256,
@@ -1439,7 +1444,12 @@ mod rotate_idkg_dealing_encryption_keys {
             )
             .expect("Failed to add subnet list record key");
 
-        let crypto_component = crypto_component_with_csp(csp, registry_client.clone());
+        let crypto_component = crypto_component_with_csp_and_vault(
+            MockAllCryptoServiceProvider::new(),
+            vault,
+            registry_client.clone(),
+        );
+
         registry_client.reload();
 
         let result = crypto_component.rotate_idkg_dealing_encryption_keys(REGISTRY_VERSION_1);
@@ -1851,17 +1861,17 @@ impl SetupBuilder {
     }
 
     fn build(self) -> Setup {
-        let mut mock_csp = MockAllCryptoServiceProvider::new();
+        let mut mock_vault = MockLocalCspVault::new();
 
         if let Some(csp_pks_and_sks_contains_result) = self.csp_pks_and_sks_contains_result {
-            mock_csp
+            mock_vault
                 .expect_pks_and_sks_contains()
                 .times(1)
                 .return_const(csp_pks_and_sks_contains_result);
         }
         if let Some(csp_current_node_public_keys_result) = self.csp_current_node_public_keys_result
         {
-            mock_csp
+            mock_vault
                 .expect_current_node_public_keys()
                 .times(1)
                 .return_const(csp_current_node_public_keys_result);
@@ -1869,7 +1879,7 @@ impl SetupBuilder {
         if let Some(csp_current_node_public_keys_with_timestamps_result) =
             self.csp_current_node_public_keys_with_timestamps_result
         {
-            mock_csp
+            mock_vault
                 .expect_current_node_public_keys_with_timestamps()
                 .times(1)
                 .return_const(csp_current_node_public_keys_with_timestamps_result);
@@ -1877,7 +1887,7 @@ impl SetupBuilder {
         if let Some(csp_idkg_dealing_encryption_public_keys_count_result) =
             self.csp_idkg_dealing_encryption_public_keys_count_result
         {
-            mock_csp
+            mock_vault
                 .expect_idkg_dealing_encryption_pubkeys_count()
                 .times(1)
                 .return_const(csp_idkg_dealing_encryption_public_keys_count_result);
@@ -1885,7 +1895,7 @@ impl SetupBuilder {
         if let Some(csp_idkg_gen_dealing_encryption_key_pair_result) =
             self.csp_idkg_gen_dealing_encryption_key_pair_result
         {
-            mock_csp
+            mock_vault
                 .expect_idkg_gen_dealing_encryption_key_pair()
                 .times(1)
                 .return_const(csp_idkg_gen_dealing_encryption_key_pair_result);
@@ -1953,8 +1963,8 @@ impl SetupBuilder {
 
         let time_source = FastForwardTimeSource::new();
         let crypto = CryptoComponentImpl::new_for_test(
-            mock_csp,
-            Arc::new(MockLocalCspVault::new()),
+            MockAllCryptoServiceProvider::new(),
+            Arc::new(mock_vault),
             self.logger.unwrap_or_else(no_op_logger),
             Arc::clone(&registry_client),
             node_id(),

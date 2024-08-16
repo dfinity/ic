@@ -31,7 +31,7 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
 use std::{
-    collections::{hash_map::Entry, BTreeMap, HashMap, VecDeque},
+    collections::{hash_map::Entry, BTreeMap, HashMap},
     convert::{TryFrom, TryInto},
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
@@ -65,15 +65,12 @@ pub struct FakeAccount {
 
 type LedgerMap = HashMap<AccountIdentifier, u64>;
 
-type CallCanisterResult = Result<Vec<u8>, (Option<i32>, String)>;
-
 /// The state required for fake implementations of `Environment` and
 /// `Ledger`.
 pub struct FakeState {
     pub now: u64,
     pub rng: ChaCha20Rng,
     pub accounts: LedgerMap,
-    pub call_canister_method_results: VecDeque<CallCanisterResult>,
 }
 
 impl Default for FakeState {
@@ -94,7 +91,6 @@ impl Default for FakeState {
             // different places doesn't conflict.
             rng: ChaCha20Rng::seed_from_u64(9539),
             accounts: HashMap::new(),
-            call_canister_method_results: vec![Ok(vec![])].into(),
         }
     }
 }
@@ -396,7 +392,6 @@ impl Environment for FakeDriver {
                         sns_token_e8s: None,    // TODO[NNS1-2339]
                         neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
                         nns_proposal_id: None,  // TODO[NNS1-2339]
-                        neurons_fund_participants: None, // TODO[NNS1-2339]
                         should_auto_finalize: Some(true),
                         neurons_fund_participation_constraints: None,
                         neurons_fund_participation: None,
@@ -459,7 +454,8 @@ impl Environment for FakeDriver {
                 NodeProvidersMonthlyXdrRewards {
                     rewards: hashmap! {
                         PrincipalId::new_user_test_id(1).to_string() => NODE_PROVIDER_REWARD,
-                    }
+                    },
+                    registry_version: Some(5)
                 }
             ))
             .unwrap());

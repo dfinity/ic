@@ -1,14 +1,12 @@
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1::{Canister, Duration as DurationPb, Tokens as TokensPb};
-use ic_nns_governance::{
-    governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
-    pb::v1::{
-        create_service_nervous_system::{
-            initial_token_distribution::developer_distribution::NeuronDistribution, SwapParameters,
-        },
-        CreateServiceNervousSystem,
+use ic_nns_governance::governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
+use ic_nns_governance_api::pb::v1::{
+    create_service_nervous_system::{
+        initial_token_distribution::developer_distribution::NeuronDistribution, SwapParameters,
     },
+    CreateServiceNervousSystem,
 };
 
 #[derive(Clone, Debug)]
@@ -20,6 +18,7 @@ impl Default for CreateServiceNervousSystemBuilder {
         let swap_parameters = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
             .swap_parameters
             .clone()
+            .map(|x| x.into())
             .unwrap();
         let swap_parameters = SwapParameters {
             // Ensure just one huge direct participant can finalize the swap.
@@ -37,7 +36,9 @@ impl Default for CreateServiceNervousSystemBuilder {
         CreateServiceNervousSystemBuilder(CreateServiceNervousSystem {
             dapp_canisters: vec![],
             swap_parameters: Some(swap_parameters),
-            ..CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone()
+            ..CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+                .clone()
+                .into()
         })
     }
 }
@@ -119,6 +120,12 @@ impl CreateServiceNervousSystemBuilder {
             .into_iter()
             .map(|id| Canister { id: Some(id.get()) })
             .collect();
+        self
+    }
+
+    pub fn with_minimum_participants(mut self, minimum_participants: u64) -> Self {
+        let swap_parameters = self.0.swap_parameters.as_mut().unwrap();
+        swap_parameters.minimum_participants = Some(minimum_participants);
         self
     }
 

@@ -21,6 +21,7 @@ use crate::{
     registration::Config as RegistrationConfig,
     registry_client::Config as RegistryClientConfig,
     state_manager::Config as StateManagerConfig,
+    tracing::Config as TracingConfig,
     transport::TransportConfig,
 };
 use ic_types::malicious_behaviour::MaliciousBehaviour;
@@ -40,6 +41,7 @@ pub struct Config {
     pub artifact_pool: ArtifactPoolTomlConfig,
     pub crypto: CryptoConfig,
     pub logger: LoggerConfig,
+    pub tracing: TracingConfig,
     // If `orchestrator_logger` is not specified in the configuration file, it
     // defaults to the value specified for `logger`.
     pub orchestrator_logger: LoggerConfig,
@@ -71,6 +73,7 @@ pub struct ConfigOptional {
     pub artifact_pool: Option<ArtifactPoolTomlConfig>,
     pub crypto: Option<CryptoConfig>,
     pub logger: Option<LoggerConfig>,
+    pub tracing: Option<TracingConfig>,
     pub orchestrator_logger: Option<LoggerConfig>,
     pub csp_vault_logger: Option<LoggerConfig>,
     pub message_routing: Option<MessageRoutingConfig>,
@@ -103,6 +106,7 @@ impl Config {
             artifact_pool: ArtifactPoolTomlConfig::new(parent_dir.join("consensus_pool"), None),
             crypto: CryptoConfig::new(parent_dir.join("crypto")),
             logger: logger.clone(),
+            tracing: TracingConfig::default(),
             orchestrator_logger: logger.clone(),
             csp_vault_logger: logger,
             message_routing: MessageRoutingConfig::default(),
@@ -155,6 +159,7 @@ impl Config {
             artifact_pool: cfg.artifact_pool.unwrap_or(default.artifact_pool),
             crypto: cfg.crypto.unwrap_or(default.crypto),
             logger,
+            tracing: cfg.tracing.unwrap_or(default.tracing),
             orchestrator_logger,
             csp_vault_logger,
             message_routing: cfg.message_routing.unwrap_or(default.message_routing),

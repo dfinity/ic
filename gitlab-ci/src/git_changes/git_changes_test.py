@@ -15,6 +15,7 @@ Typical example usage:
 import os
 import shutil
 
+import pytest
 from git import Repo
 
 import git_changes
@@ -67,7 +68,7 @@ def setup_repo(tmpdir, testcase, branch="feature_branch"):
     if "CI_COMMIT_REF_NAME" in os.environ:
         del os.environ["CI_COMMIT_REF_NAME"]
 
-
+@pytest.mark.fails_on_merge_train
 def test_change_one_file(tmpdir):
     """Tests that a commit has changed one crate."""
     setup_repo(tmpdir, "change_one_file")
@@ -80,6 +81,7 @@ def test_change_one_file(tmpdir):
     assert not changed_files
 
 
+@pytest.mark.fails_on_merge_train
 def test_change_file_ignore(tmpdir):
     """Tests that a commit has changed one crate."""
     setup_repo(tmpdir, "change_file_ignore")
@@ -99,17 +101,3 @@ def test_is_master_branch_false(tmpdir):
     """Tests that a commit has changed one crate."""
     setup_repo(tmpdir, "change_one_file")
     assert not git_changes.is_master(tmpdir)
-
-
-def test_changed_gitlab_ci(tmpdir):
-    """Tests that ci config change in /gitlab-ci was detected."""
-    setup_repo(tmpdir, "ci_cfg_gitlab_ci")
-
-    assert git_changes.ci_config_changes(tmpdir)
-
-
-def test_changed_ci_cfg_gitlab_ci_config_yml(tmpdir):
-    """Tests that ci config change in rs/gitlab-ci-config.yml was detected."""
-    setup_repo(tmpdir, "ci_cfg_gitlab-ci-config-yml")
-
-    assert git_changes.ci_config_changes(tmpdir)

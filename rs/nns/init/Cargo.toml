@@ -13,19 +13,19 @@ clap = { version = "3.2.25", features = ["derive"] }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-client = { path = "../../canister_client" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-nns-common = { path = "../common" }
+ic-nns-constants = { path = "../constants" }
+ic-nns-governance-api = { path = "../governance/api" }
+ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-registry-local-store = { path = "../../registry/local_store" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-registry-transport = { path = "../../registry/transport" }
-ic-nns-test-utils = { path = "../../nns/test_utils" }
-ic-nns-common = { path = "../common" }
-ic-nns-constants = { path = "../constants" }
-ic-nns-governance = { path = "../governance" }
-ic-test-identity = { path = "../../test_utilities/identity" }
 ic-sys = { path = "../../sys" }
+ic-test-identity = { path = "../../test_utilities/identity" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 prost = { workspace = true }
 tokio = { workspace = true }
-url = "2.2.0"
+url = { workspace = true }
 
 [[bin]]
 name = "ic-nns-init"
@@ -36,4 +36,4 @@ name = "ic-get-neuron-ids"
 path = "src/get_neuron_ids.rs"
 
 [dev-dependencies]
-tempfile = "3.0"
+tempfile = { workspace = true }

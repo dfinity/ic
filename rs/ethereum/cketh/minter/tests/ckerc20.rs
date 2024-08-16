@@ -9,18 +9,19 @@ use ic_cketh_minter::endpoints::{
 };
 use ic_cketh_minter::memo::MintMemo;
 use ic_cketh_minter::numeric::BlockNumber;
-use ic_cketh_minter::{MINT_RETRY_DELAY, SCRAPPING_ETH_LOGS_INTERVAL};
+use ic_cketh_minter::{MINT_RETRY_DELAY, SCRAPING_ETH_LOGS_INTERVAL};
 use ic_cketh_test_utils::ckerc20::{CkErc20DepositParams, CkErc20Setup, Erc20Token, ONE_USDC};
 use ic_cketh_test_utils::flow::DepositParams;
 use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders};
-use ic_cketh_test_utils::response::{block_response, empty_logs, Erc20LogEntry};
+use ic_cketh_test_utils::response::{
+    block_response, empty_logs, multi_logs_for_single_transaction, Erc20LogEntry,
+};
 use ic_cketh_test_utils::{
     format_ethereum_address_to_eip_55, CkEthSetup, CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
     DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
     DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
     DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, EFFECTIVE_GAS_PRICE, ERC20_HELPER_CONTRACT_ADDRESS,
-    ETH_HELPER_CONTRACT_ADDRESS, GAS_USED, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL,
-    MAX_ETH_LOGS_BLOCK_RANGE, MINTER_ADDRESS, RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
+    ETH_HELPER_CONTRACT_ADDRESS, GAS_USED, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
 };
 use ic_ethereum_types::Address;
 use ic_ledger_suite_orchestrator_test_utils::flow::call_ledger_icrc1_total_supply;
@@ -58,14 +59,8 @@ fn should_refuse_to_add_ckerc20_token_from_unauthorized_principal() {
 #[test]
 fn should_add_ckusdc_and_ckusdt_to_minter_via_orchestrator() {
     let mut ckerc20 = CkErc20Setup::default();
-    let embedded_ledger_wasm_hash = ckerc20.orchestrator.embedded_ledger_wasm_hash.clone();
-    let embedded_index_wasm_hash = ckerc20.orchestrator.embedded_index_wasm_hash.clone();
 
-    for token in supported_erc20_tokens(
-        ckerc20.cketh.minter_id.into(),
-        embedded_ledger_wasm_hash,
-        embedded_index_wasm_hash,
-    ) {
+    for token in supported_erc20_tokens() {
         ckerc20.orchestrator = ckerc20
             .orchestrator
             .add_erc20_token(token.clone())
@@ -94,13 +89,7 @@ fn should_retry_to_add_usdc_when_minter_stopped() {
     const RETRY_FREQUENCY: Duration = Duration::from_secs(5);
 
     let mut ckerc20 = CkErc20Setup::default();
-    let embedded_ledger_wasm_hash = ckerc20.orchestrator.embedded_ledger_wasm_hash.clone();
-    let embedded_index_wasm_hash = ckerc20.orchestrator.embedded_index_wasm_hash.clone();
-    let usdc = usdc(
-        Principal::anonymous(),
-        embedded_ledger_wasm_hash,
-        embedded_index_wasm_hash,
-    );
+    let usdc = usdc();
     let stop_msg_id = ckerc20
         .env
         .stop_canister_non_blocking(ckerc20.cketh.minter_id);
@@ -167,7 +156,9 @@ mod withdraw_erc20 {
         DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS, ONE_USDC, TWO_USDC,
     };
     use ic_cketh_test_utils::flow::{
-        increment_max_priority_fee_per_gas, DepositParams, ProcessWithdrawalParams,
+        double_and_increment_base_fee_per_gas, increment_base_fee_per_gas,
+        increment_max_priority_fee_per_gas, DepositParams, FeeHistoryProcessWithdrawal,
+        ProcessWithdrawalParams,
     };
     use ic_cketh_test_utils::mock::JsonRpcProvider;
     use ic_cketh_test_utils::response::{
@@ -953,6 +944,55 @@ mod withdraw_erc20 {
     }
 
     #[test]
+    fn should_process_withdrawal_when_price_increases_moderately() {
+        fn test_when_tx_fee<F: FnMut(&mut ethers_core::types::FeeHistory)>(
+            tx_fee_increase: &mut F,
+        ) -> FeeHistoryProcessWithdrawal<CkErc20Setup, RetrieveErc20Request> {
+            let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+            let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+            let caller = ckerc20.caller();
+            let ckerc20_tx_fee = CKETH_MINIMUM_WITHDRAWAL_AMOUNT;
+
+            ckerc20
+                .deposit_cketh_and_ckerc20(
+                    EXPECTED_BALANCE,
+                    TWO_USDC + CKERC20_TRANSFER_FEE,
+                    ckusdc.clone(),
+                    caller,
+                )
+                .expect_mint()
+                .call_cketh_ledger_approve_minter(caller, ckerc20_tx_fee, None)
+                .call_ckerc20_ledger_approve_minter(
+                    ckusdc.ledger_canister_id,
+                    caller,
+                    TWO_USDC,
+                    None,
+                )
+                .call_minter_withdraw_erc20(
+                    caller,
+                    TWO_USDC,
+                    ckusdc.ledger_canister_id,
+                    DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+                )
+                .expect_refresh_gas_fee_estimate(identity)
+                .expect_withdrawal_request_accepted()
+                .start_processing_withdrawals()
+                .retrieve_fee_history(|mock| mock.modify_response_for_all(tx_fee_increase))
+        }
+
+        test_when_tx_fee(&mut increment_base_fee_per_gas)
+            .expect_status(RetrieveEthStatus::Pending, WithdrawalStatus::Pending)
+            .retrieve_latest_transaction_count(identity)
+            .expect_status(RetrieveEthStatus::TxCreated);
+
+        test_when_tx_fee(&mut double_and_increment_base_fee_per_gas)
+            .expect_status(RetrieveEthStatus::Pending, WithdrawalStatus::Pending)
+            .retrieve_latest_transaction_count(identity)
+            .expect_status(RetrieveEthStatus::Pending)
+            .expect_transaction_not_created();
+    }
+
+    #[test]
     fn should_resubmit_transaction_as_is_when_price_still_actual() {
         let (expected_tx, expected_sig) = default_erc20_signed_eip_1559_transaction();
         let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
@@ -1152,6 +1192,64 @@ mod withdraw_erc20 {
                 )
             })
             .expect_status(RetrieveEthStatus::Pending, WithdrawalStatus::Pending);
+    }
+
+    #[test]
+    fn should_retrieve_cached_transaction_price() {
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+        let caller = ckerc20.caller();
+        let ckerc20_tx_fee = DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE;
+
+        let ckerc20 = ckerc20
+            .deposit_cketh_and_ckerc20(
+                EXPECTED_BALANCE,
+                TWO_USDC + CKERC20_TRANSFER_FEE,
+                ckusdc.clone(),
+                caller,
+            )
+            .expect_mint()
+            .call_cketh_ledger_approve_minter(caller, ckerc20_tx_fee, None)
+            .call_ckerc20_ledger_approve_minter(ckusdc.ledger_canister_id, caller, TWO_USDC, None)
+            .call_minter_withdraw_erc20(
+                caller,
+                TWO_USDC,
+                ckusdc.ledger_canister_id,
+                DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+            )
+            .expect_refresh_gas_fee_estimate(identity)
+            .expect_withdrawal_request_accepted()
+            .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
+            .setup;
+
+        let tx = ckerc20
+            .cketh
+            .get_all_events()
+            .into_iter()
+            .find_map(|event| match event.payload {
+                EventPayload::CreatedTransaction { transaction, .. } => Some(transaction),
+                _ => None,
+            })
+            .expect("missing CreatedTransaction event");
+
+        let price = ckerc20
+            .cketh
+            .eip_1559_transaction_price_expecting_ok(Some(ckusdc.ledger_canister_id));
+        assert_eq!(price.max_priority_fee_per_gas, tx.max_priority_fee_per_gas);
+        assert_eq!(price.max_fee_per_gas, tx.max_fee_per_gas);
+        assert_eq!(price.gas_limit, tx.gas_limit);
+
+        ckerc20.env.tick();
+        let second_price = ckerc20
+            .cketh
+            .eip_1559_transaction_price_expecting_ok(Some(ckusdc.ledger_canister_id));
+        assert_eq!(price, second_price);
+
+        // test an error case
+        let not_ledger_id = ckerc20.cketh.minter_id.into();
+        ckerc20
+            .cketh
+            .eip_1559_transaction_price_expecting_err(not_ledger_id);
     }
 }
 
@@ -1448,6 +1546,7 @@ fn should_retrieve_minter_info() {
             erc20_balances: Some(erc20_balances),
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
+            cketh_ledger_id: Some(ckerc20.cketh_ledger_id()),
         }
     );
 }
@@ -1455,11 +1554,12 @@ fn should_retrieve_minter_info() {
 #[test]
 fn should_scrape_from_last_scraped_after_upgrade() {
     let mut ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+    let max_eth_logs_block_range = ckerc20.as_ref().max_logs_block_range();
 
-    // Set latest_finalized_block so that we scrapped twice each time.
+    // Set latest_finalized_block so that we scraped twice each time.
     let latest_finalized_block =
-        LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + MAX_ETH_LOGS_BLOCK_RANGE * 2;
-    ckerc20.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+        LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + max_eth_logs_block_range * 2;
+    ckerc20.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(latest_finalized_block))
         .build()
@@ -1469,14 +1569,14 @@ fn should_scrape_from_last_scraped_after_upgrade() {
     // ckETH event logs
     let first_from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
     let first_to_block = first_from_block
-        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
+        .checked_add(BlockNumber::from(max_eth_logs_block_range))
         .unwrap();
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [ckerc20.as_ref().received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -1491,7 +1591,7 @@ fn should_scrape_from_last_scraped_after_upgrade() {
             "fromBlock": second_from_block,
             "toBlock": second_to_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [ckerc20.as_ref().received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -1503,7 +1603,7 @@ fn should_scrape_from_last_scraped_after_upgrade() {
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
             "address": [ERC20_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ERC20_EVENT_TOPIC, erc20_topics.clone()]
+            "topics": [ckerc20.received_erc20_event_topic(), erc20_topics.clone()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -1514,7 +1614,7 @@ fn should_scrape_from_last_scraped_after_upgrade() {
             "fromBlock": second_from_block,
             "toBlock": second_to_block,
             "address": [ERC20_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ERC20_EVENT_TOPIC, erc20_topics]
+            "topics": [ckerc20.received_erc20_event_topic(), erc20_topics.clone()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -1537,8 +1637,8 @@ fn should_scrape_from_last_scraped_after_upgrade() {
 
     // Advance block height and scrape again
     let latest_finalized_block =
-        u64::try_from(second_to_block.into_inner()).unwrap() + MAX_ETH_LOGS_BLOCK_RANGE;
-    ckerc20.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+        u64::try_from(second_to_block.into_inner()).unwrap() + max_eth_logs_block_range;
+    ckerc20.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(latest_finalized_block))
         .build()
@@ -1554,7 +1654,7 @@ fn should_scrape_from_last_scraped_after_upgrade() {
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [ckerc20.as_ref().received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -1566,7 +1666,7 @@ fn should_scrape_from_last_scraped_after_upgrade() {
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
             "address": [ERC20_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ERC20_EVENT_TOPIC, erc20_topics]
+            "topics": [ckerc20.received_erc20_event_topic(), erc20_topics.clone()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -1576,10 +1676,11 @@ fn should_scrape_from_last_scraped_after_upgrade() {
 #[test]
 fn should_not_scrape_when_no_erc20_token() {
     let ckerc20 = CkErc20Setup::default();
+    let max_eth_logs_block_range = ckerc20.as_ref().max_logs_block_range();
 
     // Set latest_finalized_block so that we scrapped twice each time.
-    let latest_finalized_block = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + MAX_ETH_LOGS_BLOCK_RANGE;
-    ckerc20.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    let latest_finalized_block = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + max_eth_logs_block_range;
+    ckerc20.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
         .respond_for_all_with(block_response(latest_finalized_block))
         .build()
@@ -1604,14 +1705,14 @@ fn should_not_scrape_when_no_erc20_token() {
     // ckETH event logs
     let first_from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
     let first_to_block = first_from_block
-        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE - 1))
+        .checked_add(BlockNumber::from(max_eth_logs_block_range - 1))
         .unwrap();
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
         .with_request_params(json!([{
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
             "address": [ETH_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+            "topics": [ckerc20.as_ref().received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -1623,7 +1724,7 @@ fn should_not_scrape_when_no_erc20_token() {
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
             "address": [ERC20_HELPER_CONTRACT_ADDRESS],
-            "topics": [RECEIVED_ERC20_EVENT_TOPIC]
+            "topics": [ckerc20.received_erc20_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
         .build()
@@ -1651,4 +1752,120 @@ fn should_not_scrape_when_no_erc20_token() {
             .last_erc20_scraped_block_number,
         Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into())
     );
+}
+
+#[test]
+fn should_skip_single_block_containing_too_many_events() {
+    let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+    let erc20_topics = ckerc20.supported_erc20_contract_address_topics();
+    let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+    let deposit = CkErc20DepositParams {
+        from_address: "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1"
+            .parse()
+            .unwrap(),
+        ..CkErc20DepositParams::for_token(ONE_USDC, ckusdc)
+    }
+    .erc20_log_entry();
+    // around 680 bytes per log
+    // we need at least 3085 logs to reach the 2MB limit
+    let large_amount_of_logs = multi_logs_for_single_transaction(deposit.clone(), 3_100);
+    assert!(serde_json::to_vec(&large_amount_of_logs).unwrap().len() > 2_000_000);
+
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .respond_for_all_with(block_response(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3))
+        .build()
+        .expect_rpc_calls(&ckerc20);
+
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
+            "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3),
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
+            "topics": [ckerc20.as_ref().received_eth_event_topic()]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(&ckerc20);
+
+    for max_response_bytes in ckerc20.as_ref().all_eth_get_logs_response_size_estimates() {
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+            .with_request_params(json!([{
+                "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
+                "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3),
+                "address": [ERC20_HELPER_CONTRACT_ADDRESS],
+                "topics": [ckerc20.received_erc20_event_topic(), erc20_topics.clone()]
+            }]))
+            .with_max_response_bytes(max_response_bytes)
+            .respond_for_all_with(large_amount_of_logs.clone())
+            .build()
+            .expect_rpc_calls(&ckerc20);
+    }
+
+    for max_response_bytes in ckerc20.as_ref().all_eth_get_logs_response_size_estimates() {
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+            .with_request_params(json!([{
+                "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
+                "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 2),
+                "address": [ERC20_HELPER_CONTRACT_ADDRESS],
+                "topics": [ckerc20.received_erc20_event_topic(), erc20_topics.clone()]
+            }]))
+            .with_max_response_bytes(max_response_bytes)
+            .respond_for_all_with(large_amount_of_logs.clone())
+            .build()
+            .expect_rpc_calls(&ckerc20);
+    }
+
+    for max_response_bytes in ckerc20.as_ref().all_eth_get_logs_response_size_estimates() {
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+            .with_request_params(json!([{
+                "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
+                "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
+                "address": [ERC20_HELPER_CONTRACT_ADDRESS],
+                "topics": [ckerc20.received_erc20_event_topic(), erc20_topics.clone()]
+            }]))
+            .with_max_response_bytes(max_response_bytes)
+            .respond_for_all_with(large_amount_of_logs.clone())
+            .build()
+            .expect_rpc_calls(&ckerc20);
+    }
+
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 2),
+            "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3),
+            "address": [ERC20_HELPER_CONTRACT_ADDRESS],
+            "topics": [ckerc20.received_erc20_event_topic(), erc20_topics.clone()]
+        }]))
+        .with_max_response_bytes(ckerc20.as_ref().all_eth_get_logs_response_size_estimates()[0])
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(&ckerc20.cketh);
+
+    ckerc20
+        .cketh
+        .check_audit_logs_and_upgrade(Default::default())
+        .assert_has_no_event_satisfying(|event| match event {
+            EventPayload::SkippedBlock {
+                contract_address: Some(address),
+                ..
+            } => address.to_lowercase() == ETH_HELPER_CONTRACT_ADDRESS,
+            _ => false,
+        })
+        .assert_has_unique_events_in_order(&vec![
+            EventPayload::SkippedBlock {
+                contract_address: Some(
+                    ERC20_HELPER_CONTRACT_ADDRESS
+                        .parse::<Address>()
+                        .unwrap()
+                        .to_string(),
+                ),
+                block_number: (LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1).into(),
+            },
+            EventPayload::SyncedToBlock {
+                block_number: (LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3).into(),
+            },
+            EventPayload::SyncedErc20ToBlock {
+                block_number: (LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3).into(),
+            },
+        ]);
 }

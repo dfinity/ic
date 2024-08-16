@@ -1,23 +1,26 @@
-use crate::convert::{self, from_arg, to_model_account_identifier};
-use crate::errors::ApiError;
-use crate::models::{ConstructionParseRequest, ConstructionParseResponse, ParsedTransaction};
-use crate::request_handler::{verify_network_id, RosettaRequestHandler};
-use crate::request_types::{
-    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity, NeuronInfo,
-    PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType, SetDissolveTimestamp, Spawn,
-    Stake, StakeMaturity, StartDissolve, StopDissolve,
+use crate::{
+    convert::{self, from_arg, to_model_account_identifier},
+    errors::ApiError,
+    models::{ConstructionParseRequest, ConstructionParseResponse, ParsedTransaction},
+    request_handler::{verify_network_id, RosettaRequestHandler},
+    request_types::{
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity,
+        NeuronInfo, PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType,
+        SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
+    },
 };
 use rosetta_core::objects::ObjectMap;
 
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     manage_neuron::{self, Command, NeuronIdOrSubaccount},
     ClaimOrRefreshNeuronFromAccount, ManageNeuron,
 };
 
-use crate::models::seconds::Seconds;
-use crate::request::Request;
-use ic_types::messages::{Blob, HttpCallContent, HttpCanisterUpdate};
-use ic_types::PrincipalId;
+use crate::{models::seconds::Seconds, request::Request};
+use ic_types::{
+    messages::{Blob, HttpCallContent, HttpCanisterUpdate},
+    PrincipalId,
+};
 use icp_ledger::{AccountIdentifier, Operation, SendArgs};
 use std::convert::TryFrom;
 
@@ -594,30 +597,29 @@ fn follow(
 
 #[cfg(test)]
 mod tests {
-    use ed25519_consensus::SigningKey;
     use ic_base_types::CanisterId;
-    use proptest::prop_assert;
-    use proptest::test_runner::TestCaseError;
-    use proptest::{prop_assert_eq, proptest, strategy::Strategy};
+    use proptest::{
+        prop_assert, prop_assert_eq, proptest, strategy::Strategy, test_runner::TestCaseError,
+    };
     use rand_chacha::rand_core::OsRng;
-    use std::str::FromStr;
-    use std::time::SystemTime;
+    use std::{str::FromStr, time::SystemTime};
     use url::Url;
 
-    use crate::ledger_client::LedgerClient;
-    use crate::models::operation::OperationType;
-    use crate::models::Amount;
-    use crate::models::{
-        ConstructionCombineRequest, ConstructionDeriveRequest, ConstructionParseRequest,
-        ConstructionPayloadsRequest, ConstructionPayloadsRequestMetadata, Currency, CurveType,
-        Operation, OperationIdentifier, PublicKey, Signature, SignatureType,
+    use crate::{
+        ledger_client::LedgerClient,
+        models::{
+            operation::OperationType, Amount, ConstructionCombineRequest,
+            ConstructionDeriveRequest, ConstructionParseRequest, ConstructionPayloadsRequest,
+            ConstructionPayloadsRequestMetadata, Currency, CurveType, Operation,
+            OperationIdentifier, PublicKey, Signature, SignatureType,
+        },
+        request_handler::RosettaRequestHandler,
     };
-    use crate::request_handler::RosettaRequestHandler;
     use rosetta_core::objects::ObjectMap;
 
     #[test]
     fn test_payloads_parse_identity() {
-        let key = SigningKey::new(OsRng);
+        let key = ic_crypto_ed25519::PrivateKey::generate_using_rng(&mut OsRng);
         let ledger_client = futures::executor::block_on(LedgerClient::new(
             Url::from_str("http://localhost:1234").unwrap(),
             CanisterId::from_u64(1),
@@ -627,6 +629,7 @@ mod tests {
             None,
             true,
             None,
+            false,
         ))
         .unwrap();
         let handler = RosettaRequestHandler::new("Internet Computer".into(), ledger_client.into());
@@ -641,7 +644,7 @@ mod tests {
 
         // get the account from the public key
         let pub_key = crate::models::PublicKey {
-            hex_bytes: hex::encode(key.as_bytes()),
+            hex_bytes: hex::encode(key.public_key().serialize_raw()),
             curve_type: CurveType::Edwards25519,
         };
         let account = handler
@@ -819,12 +822,12 @@ mod tests {
             let mut signatures = vec![];
             for payload in construction_payloads_result.payloads {
                 let bytes = hex::decode(payload.clone().hex_bytes).unwrap();
-                let signature = key.sign(&bytes);
+                let signature = key.sign_message(&bytes);
                 let signature = Signature {
                     signing_payload: payload,
-                    public_key: PublicKey::new(hex::encode(key.as_bytes()), CurveType::Edwards25519),
+                    public_key: PublicKey::new(hex::encode(key.public_key().serialize_raw()), CurveType::Edwards25519),
                     signature_type: SignatureType::Ed25519,
-                    hex_bytes: hex::encode(signature.to_bytes()),
+                    hex_bytes: hex::encode(signature),
                 };
                 signatures.push(signature);
             }

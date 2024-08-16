@@ -27,6 +27,7 @@ use opentelemetry::{
     sdk::metrics::{new_view, Aggregation, Instrument, MeterProvider, Stream},
     KeyValue,
 };
+
 use opentelemetry_prometheus::exporter;
 
 use prometheus::{Encoder as PrometheusEncoder, Registry, TextEncoder};
@@ -78,14 +79,23 @@ impl<T: Validate> Validate for WithMetrics<T> {
         request: &HttpRequest,
         response: &HttpResponse,
     ) -> Result<Option<VerificationInfo>, Cow<'static, str>> {
-        let out = self.0.validate(agent, canister_id, request, response);
+        let out: Result<Option<VerificationInfo>, Cow<'_, str>> =
+            self.0.validate(agent, canister_id, request, response);
 
         let mut status = if out.is_ok() { "ok" } else { "fail" };
         if cfg!(feature = "skip_body_verification") {
             status = "skip";
         }
 
-        let labels = &[KeyValue::new("status", status)];
+        let verification_version = match out {
+            Ok(Some(ref verification_info)) => verification_info.verification_version.to_string(),
+            _ => "none".to_string(),
+        };
+
+        let labels = &[
+            KeyValue::new("status", status),
+            KeyValue::new("response_verification_version", verification_version),
+        ];
 
         let MetricParams { counter } = &self.1;
         counter.add(1, labels);
@@ -196,10 +206,13 @@ impl Runner {
             }))),
         );
 
-        axum_server::bind(self.metrics_addr.unwrap())
-            .serve(add_trace_layer(metrics_router).into_make_service())
-            .await
-            .context("failed to start metrics server")?;
+        let listener = tokio::net::TcpListener::bind(self.metrics_addr.unwrap()).await?;
+        axum::serve(
+            listener,
+            add_trace_layer(metrics_router).into_make_service(),
+        )
+        .await
+        .context("failed to start metrics server")?;
 
         Ok(())
     }

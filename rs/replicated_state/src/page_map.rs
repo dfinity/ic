@@ -23,7 +23,7 @@ pub use storage::{
 };
 use storage::{OverlayFile, OverlayVersion, Storage};
 
-use ic_types::{Height, NumPages, MAX_STABLE_MEMORY_IN_BYTES};
+use ic_types::{Height, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES};
 use int_map::{Bounds, IntMap};
 use libc::off_t;
 use page_allocator::Page;
@@ -211,6 +211,11 @@ impl PageDelta {
     fn max_page_index(&self) -> Option<PageIndex> {
         self.0.max_key().map(PageIndex::from)
     }
+
+    /// Returns the number of pages in the page delta.
+    fn len(&self) -> usize {
+        self.0.len()
+    }
 }
 
 impl<I> From<I> for PageDelta
@@ -349,6 +354,67 @@ pub type MemoryInstruction<'a> = (Range<PageIndex>, MemoryMapOrData<'a>);
 pub enum MemoryMapOrData<'a> {
     MemoryMap(FileDescriptor, usize),
     Data(&'a [u8]),
+}
+
+impl<'a> MemoryInstructions<'a> {
+    // Filters and cuts any instructions that do not fall into `new_range`.
+    pub fn restrict_to_range(&mut self, new_range: &Range<PageIndex>) {
+        self.range = PageIndex::new(std::cmp::max(self.range.start.get(), new_range.start.get()))
+            ..PageIndex::new(std::cmp::min(self.range.end.get(), new_range.end.get()));
+        let instructions = std::mem::take(&mut self.instructions);
+        self.instructions = instructions
+            .into_iter()
+            .filter_map(|(range, instruction)| {
+                if range.end.get() <= self.range.start.get()
+                    || range.start.get() >= self.range.end.get()
+                {
+                    // The entire instruction is outside of `new_range` and can be dropped.
+                    None
+                } else {
+                    // Cut off from the left.
+                    let (range, instruction) = if range.start.get() < self.range.start.get() {
+                        let shift = (self.range.start.get() - range.start.get()) as usize;
+                        let range = self.range.start..range.end;
+                        match instruction {
+                            MemoryMapOrData::MemoryMap(fd, offset) => (
+                                range,
+                                MemoryMapOrData::MemoryMap(fd, offset + shift * PAGE_SIZE),
+                            ),
+                            MemoryMapOrData::Data(data) => {
+                                (range, MemoryMapOrData::Data(&data[(shift * PAGE_SIZE)..]))
+                            }
+                        }
+                    } else {
+                        (range, instruction)
+                    };
+
+                    // Cut off from the right.
+                    let (range, instruction) = if range.end.get() > self.range.end.get() {
+                        let shift = (range.end.get() - self.range.end.get()) as usize;
+                        let range = range.start..self.range.end;
+                        match instruction {
+                            MemoryMapOrData::MemoryMap(fd, offset) => {
+                                (range, MemoryMapOrData::MemoryMap(fd, offset))
+                            }
+                            MemoryMapOrData::Data(data) => {
+                                debug_assert!(data.len() > shift * PAGE_SIZE);
+                                (
+                                    range,
+                                    MemoryMapOrData::Data(
+                                        &data[..(data.len() - shift * PAGE_SIZE)],
+                                    ),
+                                )
+                            }
+                        }
+                    } else {
+                        (range, instruction)
+                    };
+
+                    Some((range, instruction))
+                }
+            })
+            .collect();
+    }
 }
 
 /// `PageMap` is a data structure that represents an image of a canister virtual
@@ -589,9 +655,8 @@ impl PageMap {
     }
 
     /// Returns a sequence of instructions on how to prepare a memory region. It always returns instructions for at least `min_range`,
-    /// but the range can be as large as `max_range`, as long as there are no more than `target_complexity` instructions.
-    /// Note that `target_complexity` is only a guide. The result can have more instructions if they are contained in `min_range`, or fewer
-    /// if there are not enough instructions to fill `max_range`.
+    /// but the range can be as large as `max_range`. The result only extends past `min_range`, if it does not require any extra instructions
+    /// to do so.
     /// Assumptions:
     ///       * `min_range` ⊆ `max_range`
     ///       * The entire memory has already been initialized according to `get_base_memory_instructions`
@@ -604,7 +669,6 @@ impl PageMap {
         &self,
         min_range: Range<PageIndex>,
         max_range: Range<PageIndex>,
-        target_complexity: usize,
     ) -> MemoryInstructions {
         debug_assert!(min_range.start >= max_range.start && min_range.end <= max_range.end);
 
@@ -680,28 +744,6 @@ impl PageMap {
             );
         }
 
-        // Extend range up to `max_range` by growing right first.
-        while delta_instructions.len() < target_complexity && result_range.end < max_range.end {
-            grow_right(
-                &self.page_delta,
-                &mut delta_instructions,
-                &mut result_range,
-                &max_range,
-                true,
-            );
-        }
-
-        // Extend by growing left.
-        while delta_instructions.len() < target_complexity && result_range.start > max_range.start {
-            grow_left(
-                &self.page_delta,
-                &mut delta_instructions,
-                &mut result_range,
-                &max_range,
-                true,
-            );
-        }
-
         // Grow `result_range` to the edge of the next deltas, but do not include them.
         grow_left(
             &self.page_delta,
@@ -735,10 +777,35 @@ impl PageMap {
             .instructions;
         storage_instructions.extend(delta_instructions);
 
-        MemoryInstructions {
-            range: result_range,
-            instructions: storage_instructions,
+        // Find left and right cutoff point to have no instructions fully outside of `min_range`.
+        let mut cut_left = result_range.start;
+        for instruction in &storage_instructions {
+            // We explicitly do not consider instructions that start within `min_range`,
+            // and end outside, as they do not add additional instructions.
+            if instruction.0.end.get() > cut_left.get()
+                && instruction.0.end.get() <= min_range.start.get()
+            {
+                cut_left = instruction.0.end;
+            }
         }
+        let mut cut_right = result_range.end;
+        for instruction in &storage_instructions {
+            if instruction.0.start.get() < cut_right.get()
+                && instruction.0.start.get() >= min_range.end.get()
+            {
+                cut_right = instruction.0.start;
+            }
+        }
+
+        let result_range = cut_left..cut_right;
+
+        let mut result = MemoryInstructions {
+            range: result_range.clone(),
+            instructions: storage_instructions,
+        };
+
+        result.restrict_to_range(&result_range);
+        result
     }
 
     /// Returns how to memory map the base layer of this PageMap
@@ -888,6 +955,11 @@ impl PageMap {
 
         Ok(())
     }
+
+    /// Returns the number of delta pages included in this PageMap.
+    pub fn num_delta_pages(&self) -> usize {
+        self.page_delta.len()
+    }
 }
 
 impl From<&[u8]> for PageMap {
@@ -977,9 +1049,9 @@ impl Buffer {
     ///
     /// This function assumes the write doesn't extend beyond the maximum stable
     /// memory size (in which case the memory would fail anyway).
-    pub fn dirty_pages_from_write(&self, offset: u64, size: u64) -> NumPages {
+    pub fn dirty_pages_from_write(&self, offset: u64, size: u64) -> NumOsPages {
         if size == 0 {
-            return NumPages::from(0);
+            return NumOsPages::from(0);
         }
         let first_page = offset / (PAGE_SIZE as u64);
         let last_page = offset
@@ -989,7 +1061,7 @@ impl Buffer {
         let dirty_page_count = (first_page..=last_page)
             .filter(|p| !self.dirty_pages.contains_key(&PageIndex::new(*p)))
             .count();
-        NumPages::new(dirty_page_count as u64)
+        NumOsPages::new(dirty_page_count as u64)
     }
 
     pub fn dirty_pages(&self) -> impl Iterator<Item = (PageIndex, &PageBytes)> {
@@ -1041,7 +1113,7 @@ impl std::fmt::Debug for PageMap {
 /// It contains sufficient information to reconstruct `PageMap`
 /// in another process. Note that canister sandboxing does not
 /// need `unflushed_delta`, but the field is kept for consistency here.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct PageMapSerialization {
     pub storage: StorageSerialization,
     pub base_height: Option<Height>,

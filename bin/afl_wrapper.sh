@@ -83,6 +83,7 @@ function afl_env() {
     ASAN_OPTIONS=$ASAN_OPTIONS \
         LSAN_OPTIONS=$LSAN_OPTIONS \
         AFL_CMPLOG_ONLY_NEW=1 \
+        AFL_DEBUG_CHILD=1 \
         AFL_DISABLE_TRIM=1 \
         AFL_DRIVER_DONT_DEFER=1 \
         AFL_EXPAND_HAVOC_NOW=1 \
@@ -157,6 +158,6 @@ if [[ ! -z "$AFL_PARALLEL" ]]; then
 else
     # if AFL_PARALLEL is not set
     # run a single instance
-    # single instance will have strategy and power_schedule as exploit
-    afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P exploit -p exploit ${@:2} -- $1
+    # single instance will mimic the master fuzzer
+    afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P exploit -p explore ${@:2} -- $1
 fi

@@ -9,7 +9,6 @@ DEPENDENCIES = [
     "//rs/consensus/utils",
     "//rs/crypto",
     "//rs/crypto/prng",
-    "//rs/crypto/test_utils/canister_threshold_sigs",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/https_outcalls/consensus",
     "//rs/interfaces",
@@ -32,12 +31,13 @@ DEPENDENCIES = [
     "@crate_index//:rand_chacha",
     "@crate_index//:rayon",
     "@crate_index//:slog",
+    "@crate_index//:tokio",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/artifact_pool",
-    "//rs/bitcoin/types/internal",
+    "//rs/bitcoin/replica_types",
     "//rs/consensus/mocks",
     "//rs/crypto/temp_crypto",
     "//rs/crypto/test_utils/ni-dkg",
@@ -69,10 +69,17 @@ DEV_DEPENDENCIES = [
     "@crate_index//:slog-async",
     "@crate_index//:slog-envlogger",
     "@crate_index//:slog-term",
+    "@crate_index//:strum",
     "@crate_index//:tempfile",
 ]
 
+MALICIOUS_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/test_utils/canister_threshold_sigs",
+]
+
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:strum_macros",
 ]
 
@@ -87,14 +94,21 @@ ENV = {
 rust_library(
     name = "consensus",
     srcs = glob(["src/**/*.rs"]),
-    crate_features = select({
-        "//bazel:malicious_code_enabled": ["malicious_code"],
-        "//conditions:default": [],
-    }),
     crate_name = "ic_consensus",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
+)
+
+rust_library(
+    name = "malicious_consensus",
+    testonly = True,
+    srcs = glob(["src/**/*.rs"]),
+    crate_features = ["malicious_code"],
+    crate_name = "ic_consensus",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES + MALICIOUS_DEPENDENCIES,
 )
 
 rust_doc(
@@ -104,23 +118,26 @@ rust_doc(
 
 rust_test(
     name = "consensus_test",
-    crate = ":consensus",
-    crate_features = ["proptest"],
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    crate = ":malicious_consensus",
+    crate_features = [
+        "malicious_code",
+        "proptest",
+    ],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + MALICIOUS_DEPENDENCIES,
 )
 
 rust_test(
     name = "integration_test",
     srcs = glob(["tests/**"]),
     crate_root = "tests/integration.rs",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":consensus"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + MALICIOUS_DEPENDENCIES + [":malicious_consensus"],
 )
 
 rust_test(
     name = "payload_test",
     srcs = glob(["tests/**"]),
     crate_root = "tests/payload.rs",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":consensus"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":malicious_consensus"],
 )
 
 rust_test(
@@ -137,6 +154,7 @@ rust_ic_bench(
     data = DATA,
     env = ENV,
     deps = [
+        # Keep sorted.
         ":consensus",
         "//rs/artifact_pool",
         "//rs/config",

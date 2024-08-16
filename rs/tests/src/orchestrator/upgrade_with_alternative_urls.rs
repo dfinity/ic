@@ -22,20 +22,20 @@ replica version package.
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_check_progress;
-use crate::{
+use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
+use ic_consensus_system_test_utils::upgrade::{
+    assert_assigned_replica_version, bless_replica_version_with_urls,
+    deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
+};
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::*,
     },
-    orchestrator::utils::upgrade::{
-        bless_replica_version_with_urls, deploy_guestos_to_all_subnet_nodes,
-        get_assigned_replica_version, UpdateImageType,
-    },
     util::{block_on, get_nns_node},
 };
-use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
 use slog::info;
 use std::convert::TryFrom;
@@ -62,7 +62,7 @@ pub fn test(env: TestEnv) {
     let original_version = get_assigned_replica_version(&nns_node).unwrap();
     info!(logger, "Original replica version: {}", original_version);
 
-    let upgrade_url = env.get_ic_os_update_img_test_url().expect("no image URL");
+    let upgrade_url = get_ic_os_update_img_test_url().expect("no image URL");
     info!(logger, "Upgrade URL: {}", upgrade_url);
 
     // A list of URLs, among which only one is valid:
@@ -83,8 +83,7 @@ pub fn test(env: TestEnv) {
         &original_version,
         UpdateImageType::ImageTest,
         release_package_urls,
-        env.get_ic_os_update_img_test_sha256()
-            .expect("no SHA256 hash"),
+        get_ic_os_update_img_test_sha256().expect("no SHA256 hash"),
         &logger,
     ));
 
@@ -92,12 +91,12 @@ pub fn test(env: TestEnv) {
     let test_version = format!("{}-test", original_version);
     block_on(deploy_guestos_to_all_subnet_nodes(
         &nns_node,
-        &ReplicaVersion::try_from(test_version).unwrap(),
+        &ReplicaVersion::try_from(test_version.clone()).unwrap(),
         subnet_id,
     ));
 
-    info!(logger, "Waiting until the replica process is killed");
+    info!(logger, "Waiting until the subnet is upgraded");
 
-    // Wait until the replica process is killed.
-    nns_node.await_status_is_unavailable().unwrap();
+    // Wait until the subnet is upgraded.
+    assert_assigned_replica_version(&nns_node, &test_version, logger);
 }

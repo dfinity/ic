@@ -85,10 +85,12 @@ pub struct GovernanceUpgradeRootProposal {
     /// The expected sha256 hash of the governance canister
     /// wasm. This must match the sha of the currently running
     /// governance canister.
+    #[serde(with = "serde_bytes")]
     pub current_wasm_sha: Vec<u8>,
     /// The proposal payload to upgrade the governance canister.
     pub payload: ChangeCanisterRequest,
     /// The sha of the binary the proposer wants to upgrade to.
+    #[serde(with = "serde_bytes")]
     pub proposed_wasm_sha: Vec<u8>,
     /// The principal id of the proposer (must be one of the node
     /// operators of the NNS subnet according to the registry at
@@ -440,7 +442,7 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
             println!("{}", message);
             return Err(message);
         }
-        change_canister::<DfnRuntime>(payload).await;
+        let _ = change_canister::<DfnRuntime>(payload).await;
         Ok(())
     } else if proposal.is_byzantine_majority_no() {
         PROPOSALS.with(|proposals| proposals.borrow_mut().remove(&proposer));

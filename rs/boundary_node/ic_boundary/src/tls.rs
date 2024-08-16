@@ -20,7 +20,7 @@ use futures_util::future::BoxFuture;
 use instant_acme::{Account, AccountCredentials, LetsEncrypt, NewAccount};
 use mockall::automock;
 use prometheus::Registry;
-use rcgen::{Certificate, CertificateParams, DistinguishedName};
+use rcgen::{CertificateParams, DistinguishedName, KeyPair};
 use regex::Regex;
 use rustls::{
     cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384},
@@ -34,6 +34,7 @@ use tokio::{
 use tokio_rustls::server::TlsStream;
 use tracing::{debug, warn};
 use x509_parser::prelude::{Pem, Validity};
+use zeroize::Zeroize;
 
 use crate::{
     acme::{Acme, Finalize, Obtain, Order, Ready},
@@ -216,24 +217,21 @@ impl Provision for Provisioner {
             .context("failed to mark ACME order as ready")?;
         debug!("TLS: Order marked as ready");
 
-        // Create a certificate for the ACME provider to sign
-        let cert = Certificate::from_params({
-            let mut params = CertificateParams::new(vec![name.to_string()]);
-            params.distinguished_name = DistinguishedName::new();
-            params
-        })
-        .context("failed to generate certificate")?;
-        debug!("TLS: Certificate generated");
+        let mut key_pair = KeyPair::generate().context("failed to create key pair")?;
 
         // Create a Certificate Signing Request for the ACME provider
-        let csr = cert
-            .serialize_request_der()
-            .context("failed to create certificate signing request")?;
+        let csr = {
+            let mut params = CertificateParams::new(vec![name.to_string()])
+                .context("failed to create certificate params")?;
+            params.distinguished_name = DistinguishedName::new();
+            params.serialize_request(&key_pair)
+        }
+        .context("failed to generate certificate signing request")?;
         debug!("TLS: CSR created");
 
         // Attempt to finalize the order by having the ACME provider sign our certificate
         self.acme_finalize
-            .finalize(&mut order, &csr)
+            .finalize(&mut order, csr.der().as_ref())
             .await
             .context("failed to finalize ACME order")?;
         debug!("TLS: Order finalized");
@@ -249,9 +247,12 @@ impl Provision for Provisioner {
         self.token_owner.set(None).await;
 
         warn!("TLS: Certificate for {name} successfully provisioned");
+
+        let key_pair_pem = key_pair.serialize_pem();
+        key_pair.zeroize();
         Ok(ProvisionResult::Issued(TLSCert(
-            cert_chain_pem,                   // Certificate Chain
-            cert.serialize_private_key_pem(), // Private Key
+            cert_chain_pem, // Certificate Chain
+            key_pair_pem,   // Key pair
         )))
     }
 }
@@ -386,7 +387,6 @@ fn extract_cert_validity(name: &str, data: &[u8]) -> Result<Option<Validity>, Er
 pub async fn load_or_create_acme_account(
     path: &PathBuf,
     acme_provider_url: &str,
-    http_client: Box<dyn instant_acme::HttpClient>,
 ) -> Result<Account, Error> {
     let f = File::open(path).context("failed to open credentials file for reading");
 
@@ -395,14 +395,16 @@ pub async fn load_or_create_acme_account(
         let creds: AccountCredentials =
             serde_json::from_reader(f).context("failed to json parse existing acme credentials")?;
 
-        let account =
-            Account::from_credentials(creds).context("failed to load account from credentials")?;
+        let account = Account::from_credentials(creds)
+            .await
+            .context("failed to load account from credentials")?;
 
         return Ok(account);
     }
 
     // Create new account
-    let account = Account::create_with_http(
+    warn!("TLS: Creating new ACME account");
+    let (account, credentials) = Account::create(
         &NewAccount {
             contact: &[],
             terms_of_service_agreed: true,
@@ -410,7 +412,6 @@ pub async fn load_or_create_acme_account(
         },
         acme_provider_url,
         None,
-        http_client,
     )
     .await
     .context("failed to create acme account")?;
@@ -418,7 +419,7 @@ pub async fn load_or_create_acme_account(
     // Store credentials
     let f = File::create(path).context("failed to open credentials file for writing")?;
 
-    serde_json::to_writer_pretty(f, &account.credentials())
+    serde_json::to_writer_pretty(f, &credentials)
         .context("failed to serialize acme credentials")?;
 
     Ok(account)
@@ -452,23 +453,13 @@ async fn prepare_acme_provisioner(
     tls_loader: Loader,
     token_owner: Arc<TokenOwner>,
 ) -> Result<Box<dyn Provision>, Error> {
-    // ACME client
-    let acme_http_client = hyper::Client::builder().build(
-        hyper_rustls::HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .https_only()
-            .enable_all_versions()
-            .build(),
-    );
+    warn!("TLS: Using ACME provisioner");
 
-    let acme_account = load_or_create_acme_account(
-        acme_credentials,
-        LetsEncrypt::Production.url(),
-        Box::new(acme_http_client),
-    )
-    .await
-    .context("failed to load acme credentials")?;
+    let acme_account = load_or_create_acme_account(acme_credentials, LetsEncrypt::Production.url())
+        .await
+        .context("failed to load acme credentials")?;
 
+    warn!("TLS: Trying to provision certificate");
     let acme_client = Acme::new(acme_account);
 
     let acme_order = acme_client.clone();
@@ -500,7 +491,7 @@ async fn prepare_acme_provisioner(
     let tls_provisioner = WithLoad(tls_provisioner, tls_loader, renew_before);
     let tls_provisioner = Box::new(tls_provisioner);
 
-    warn!("TLS: Using ACME provisioner");
+    warn!("TLS: Successfully set up ACME provisioner");
     Ok(tls_provisioner)
 }
 
@@ -591,14 +582,20 @@ pub fn load_pem(
     use rustls_pemfile::Item;
 
     // Convert certificate & key from PEM format
-    let certs = rustls_pemfile::certs(&mut certs.as_ref())?;
+    let mut temp = certs.as_ref();
+    let certs = rustls_pemfile::certs(&mut temp);
     let key = match rustls_pemfile::read_one(&mut key.as_ref())? {
-        Some(Item::RSAKey(v)) | Some(Item::PKCS8Key(v)) | Some(Item::ECKey(v)) => v,
+        Some(Item::Pkcs1Key(v)) => v.secret_pkcs1_der().to_vec(),
+        Some(Item::Pkcs8Key(v)) => v.secret_pkcs8_der().to_vec(),
+        Some(Item::Sec1Key(v)) => v.secret_sec1_der().to_vec(),
         _ => return Err(anyhow!("private key format not supported")),
     };
 
     // Cast into Rustls types
-    let certs = certs.into_iter().map(rustls::Certificate).collect();
+    let certs = certs
+        .filter_map(Result::ok)
+        .map(|cert| rustls::Certificate(cert.to_vec()))
+        .collect();
     let key = rustls::PrivateKey(key);
 
     Ok((certs, key))

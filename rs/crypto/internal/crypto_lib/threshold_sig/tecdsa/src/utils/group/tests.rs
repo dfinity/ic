@@ -29,7 +29,7 @@ fn to_i8_at_pos(naf: &Naf, i: usize) -> i8 {
 }
 
 #[test]
-fn test_range_to_i8_is_correct() -> ThresholdEcdsaResult<()> {
+fn test_range_to_i8_is_correct() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
     for curve_type in EccCurveType::all() {
         let scalars: Vec<EccScalar> = (0..10)
@@ -80,7 +80,7 @@ macro_rules! non_adjacent_form_transformation_is_correct_full_domain_test_factor
     ($t:ty, $r:ty) => {
         ::paste::paste! {
             #[test]
-                pub fn [<non_adjacent_form_transformation_is_correct_ $t _full_domain>]() -> ThresholdEcdsaResult<()> {
+                pub fn [<non_adjacent_form_transformation_is_correct_ $t _full_domain>]() -> CanisterThresholdResult<()> {
                 let scalars: Vec<$t> = ($t::MIN..=$t::MAX).collect();
                 let naf: Vec<Naf> = scalars
                     .iter()
@@ -101,7 +101,7 @@ non_adjacent_form_transformation_is_correct_full_domain_test_factory!(u8, i16);
 non_adjacent_form_transformation_is_correct_full_domain_test_factory!(u16, i32);
 
 #[test]
-fn non_adjacent_form_transformation_is_correct_u64_random_samples() -> ThresholdEcdsaResult<()> {
+fn non_adjacent_form_transformation_is_correct_u64_random_samples() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
     let scalars: Vec<u64> = (0..10000).map(|_| rng.next_u64()).collect();
     let naf: Vec<Naf> = scalars
@@ -117,7 +117,7 @@ fn non_adjacent_form_transformation_is_correct_u64_random_samples() -> Threshold
 
 #[test]
 fn non_adjacent_form_transformation_is_correct_ecc_scalar_random_samples(
-) -> ThresholdEcdsaResult<()> {
+) -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
     for curve_type in EccCurveType::all() {
         let scalars: Vec<EccScalar> = (0..1000)

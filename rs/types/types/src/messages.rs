@@ -21,6 +21,8 @@ use crate::time::CoarseTime;
 use crate::{user_id_into_protobuf, user_id_try_from_protobuf, Cycles, Funds, NumBytes, UserId};
 pub use blob::Blob;
 use ic_base_types::{CanisterId, PrincipalId};
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::CanisterChangeOrigin;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
@@ -35,7 +37,7 @@ pub use inter_canister::{
 };
 pub use message_id::{MessageId, MessageIdError, EXPECTED_MESSAGE_ID_LENGTH};
 use phantom_newtype::Id;
-pub use query::{AnonymousQuery, AnonymousQueryResponse, AnonymousQueryResponseReply, UserQuery};
+pub use query::{Query, QuerySource};
 pub use read_state::ReadState;
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug, Display, Formatter};
@@ -100,6 +102,7 @@ pub type StopCanisterCallId = Id<StopCanisterCallIdTag, u64>;
 /// Stores info needed for processing and tracking requests to
 /// stop canisters.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum StopCanisterContext {
     Ingress {
         sender: UserId,
@@ -355,6 +358,15 @@ impl Display for CanisterMessage {
     }
 }
 
+impl From<RequestOrResponse> for CanisterMessage {
+    fn from(msg: RequestOrResponse) -> Self {
+        match msg {
+            RequestOrResponse::Request(request) => CanisterMessage::Request(request),
+            RequestOrResponse::Response(response) => CanisterMessage::Response(response),
+        }
+    }
+}
+
 /// A wrapper around a canister request and an ingress message.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum CanisterCall {
@@ -437,6 +449,7 @@ impl TryFrom<CanisterMessage> for CanisterCall {
 pub enum CanisterTask {
     Heartbeat = 1,
     GlobalTimer = 2,
+    OnLowWasmMemory = 3,
 }
 
 impl From<CanisterTask> for SystemMethod {
@@ -444,6 +457,7 @@ impl From<CanisterTask> for SystemMethod {
         match task {
             CanisterTask::Heartbeat => SystemMethod::CanisterHeartbeat,
             CanisterTask::GlobalTimer => SystemMethod::CanisterGlobalTimer,
+            CanisterTask::OnLowWasmMemory => SystemMethod::CanisterOnLowWasmMemory,
         }
     }
 }
@@ -453,6 +467,7 @@ impl Display for CanisterTask {
         match self {
             Self::Heartbeat => write!(f, "Heartbeat task"),
             Self::GlobalTimer => write!(f, "Global timer task"),
+            Self::OnLowWasmMemory => write!(f, "On low Wasm memory task"),
         }
     }
 }
@@ -462,6 +477,7 @@ impl From<&CanisterTask> for pb::execution_task::CanisterTask {
         match task {
             CanisterTask::Heartbeat => pb::execution_task::CanisterTask::Heartbeat,
             CanisterTask::GlobalTimer => pb::execution_task::CanisterTask::Timer,
+            CanisterTask::OnLowWasmMemory => pb::execution_task::CanisterTask::OnLowWasmMemory,
         }
     }
 }
@@ -479,6 +495,7 @@ impl TryFrom<pb::execution_task::CanisterTask> for CanisterTask {
             }
             pb::execution_task::CanisterTask::Heartbeat => Ok(CanisterTask::Heartbeat),
             pb::execution_task::CanisterTask::Timer => Ok(CanisterTask::GlobalTimer),
+            pb::execution_task::CanisterTask::OnLowWasmMemory => Ok(CanisterTask::OnLowWasmMemory),
         }
     }
 }
@@ -534,8 +551,10 @@ impl CanisterCallOrTask {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::exhaustive::ExhaustiveSet;
     use crate::{time::expiry_time_from_now, Time};
     use assert_matches::assert_matches;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use maplit::btreemap;
     use serde_cbor::Value;
     use std::{convert::TryFrom, io::Cursor};
@@ -827,7 +846,17 @@ mod tests {
         // See note [Handling changes to Enums in Replicated State] for how to proceed.
         assert_eq!(
             CanisterTask::iter().map(|x| x as i32).collect::<Vec<i32>>(),
-            [1, 2]
+            [1, 2, 3]
         );
+    }
+
+    #[test]
+    fn stop_canister_context_proto_round_trip() {
+        for initial in StopCanisterContext::exhaustive_set(&mut reproducible_rng()) {
+            let encoded = pb::StopCanisterContext::from(&initial);
+            let round_trip = StopCanisterContext::try_from(encoded).unwrap();
+
+            assert_eq!(initial, round_trip);
+        }
     }
 }

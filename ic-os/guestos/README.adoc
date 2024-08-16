@@ -44,8 +44,8 @@ For more details about the program, refer to the `rs/ic_os/launch-single-vm` dir
 
 == Developing the Ubuntu system
 
-The Ubuntu configuration and system logic is contained in the rootfs/ subdirectory.
-See instructions link:rootfs/README.adoc#[here] on how to make changes to the OS.
+The Ubuntu configuration and system logic is contained in the components/ subdirectory.
+See instructions link:components/README.adoc#[here] on how to make changes to the OS.
 
 For further reading, see the docs in the
 link:docs/README.adoc#[docs/ subdirectory]

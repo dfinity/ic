@@ -1,15 +1,16 @@
 use std::sync::Arc;
 
 use ic_btc_interface::Network;
-use ic_btc_types_internal::{
+use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
     GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, SendTransactionResponse,
 };
-use ic_interfaces::batch_payload::BatchPayloadBuilder;
+use ic_config::bitcoin_payload_builder_config::Config;
+use ic_interfaces::batch_payload::{BatchPayloadBuilder, ProposalContext};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_test_utilities_types::ids::subnet_test_id;
-use ic_types::{batch::ValidationContext, Height, NumBytes};
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+use ic_types::{batch::ValidationContext, time::UNIX_EPOCH, Height, NumBytes};
 use proptest::{prelude::*, proptest};
 
 use crate::{
@@ -32,8 +33,9 @@ proptest! {
     #[test]
     fn proptest_bitcoin_payload_builder(
         max_size in (0..MAX_BTC_BLOCK_SIZE),
-        response in prop_adapter_response_wrapper()) {
-            proptest_round(Height::new(10), NumBytes::new(max_size as u64), response);
+        response in prop_adapter_response_wrapper()
+    ) {
+        proptest_round(Height::new(10), NumBytes::new(max_size as u64), response);
     }
 }
 
@@ -67,6 +69,7 @@ fn proptest_round(
         Arc::new(mock_registry_client(NumBytes::new(
             MAX_BTC_BLOCK_SIZE as u64,
         ))),
+        Config::default(),
         no_op_logger(),
     );
 
@@ -78,8 +81,13 @@ fn proptest_round(
 
     let payload = bitcoin_payload_builder.build_payload(height, max_size, &[], &validation_context);
 
+    let proposal_context = ProposalContext {
+        proposer: node_test_id(1),
+        validation_context: &validation_context,
+    };
+
     assert!(bitcoin_payload_builder
-        .validate_payload(height, &payload, &[], &validation_context)
+        .validate_payload(height, &proposal_context, &payload, &[])
         .is_ok());
 }
 

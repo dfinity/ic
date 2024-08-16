@@ -6,15 +6,14 @@ use crate::{CustomRandomState, IngressManager};
 use ic_constants::{MAX_INGRESS_TTL, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_cycles_account_manager::IngressInductionCost;
 use ic_interfaces::{
-    execution_environment::IngressHistoryReader,
+    execution_environment::{IngressHistoryError, IngressHistoryReader},
     ingress_manager::{
-        IngressPayloadValidationError, IngressPermanentError, IngressSelector, IngressSetQuery,
-        IngressTransientError,
+        IngressPayloadValidationError, IngressPayloadValidationFailure, IngressSelector,
+        IngressSetQuery, InvalidIngressPayloadReason,
     },
     ingress_pool::ValidatedIngressArtifact,
     validation::{ValidationError, ValidationResult},
 };
-use ic_interfaces_state_manager::StateManagerError;
 use ic_logger::warn;
 use ic_management_canister_types::CanisterStatusType;
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
@@ -178,8 +177,8 @@ impl IngressSelector for IngressManager {
                     // the canister's queue.
                     match result {
                         Ok(()) => (),
-                        Err(ValidationError::Permanent(
-                            IngressPermanentError::IngressPayloadTooManyMessages(_, _),
+                        Err(ValidationError::InvalidArtifact(
+                            InvalidIngressPayloadReason::IngressPayloadTooManyMessages(_, _),
                         )) => break 'outer,
                         _ => {
                             queue.msgs.pop();
@@ -296,12 +295,16 @@ impl IngressSelector for IngressManager {
             Ok(ingress_set) => ingress_set,
             Err(err) => {
                 warn!(
+                    every_n_seconds => 30,
                     self.log,
                     "IngressHistoryReader doesn't have state for height {} yet: {:?}",
                     certified_height,
                     err
                 );
-                return Err(err);
+
+                return Err(ValidationError::ValidationFailed(
+                    IngressPayloadValidationFailure::IngressHistoryError(certified_height, err),
+                ));
             }
         };
 
@@ -309,23 +312,20 @@ impl IngressSelector for IngressManager {
             Ok(state) => state.take(),
             Err(err) => {
                 warn!(
+                    every_n_seconds => 30,
                     self.log,
-                    "StateManager doesn't have state for height {}: {:?}", certified_height, err,
+                    "StateManager doesn't have state for height {}: {:?}", certified_height, err
                 );
-                return Err(match err {
-                    StateManagerError::StateRemoved(h) => {
-                        ValidationError::Permanent(IngressPermanentError::StateRemoved(h))
-                    }
-                    StateManagerError::StateNotCommittedYet(h) => {
-                        ValidationError::Transient(IngressTransientError::StateNotCommittedYet(h))
-                    }
-                });
+
+                return Err(ValidationError::ValidationFailed(
+                    IngressPayloadValidationFailure::StateManagerError(certified_height, err),
+                ));
             }
         };
 
         if payload.message_count() > settings.max_ingress_messages_per_block {
-            return Err(ValidationError::Permanent(
-                IngressPermanentError::IngressPayloadTooManyMessages(
+            return Err(ValidationError::InvalidArtifact(
+                InvalidIngressPayloadReason::IngressPayloadTooManyMessages(
                     payload.message_count(),
                     settings.max_ingress_messages_per_block,
                 ),
@@ -337,7 +337,7 @@ impl IngressSelector for IngressManager {
         for i in 0..payload.message_count() {
             let (ingress_id, ingress) = payload
                 .get(i)
-                .map_err(IngressPermanentError::IngressPayloadError)?;
+                .map_err(InvalidIngressPayloadReason::IngressPayloadError)?;
 
             self.validate_ingress(
                 ingress_id.clone(),
@@ -413,6 +413,16 @@ impl IngressSelector for IngressManager {
     fn request_purge_finalized_messages(&self, message_ids: Vec<IngressMessageId>) {
         self.messages_to_purge.write().unwrap().push(message_ids)
     }
+
+    fn has_message(&self, message_id: &IngressMessageId) -> bool {
+        self.ingress_pool
+            .as_ref()
+            .read()
+            .unwrap()
+            .validated()
+            .get(message_id)
+            .is_some()
+    }
 }
 
 impl IngressManager {
@@ -431,8 +441,8 @@ impl IngressManager {
         let ingress_message_size = signed_ingress.count_bytes();
         // The message is invalid if its size is larger than the configured maximum.
         if ingress_message_size > settings.max_ingress_bytes_per_message {
-            return Err(ValidationError::Permanent(
-                IngressPermanentError::IngressMessageTooBig(
+            return Err(ValidationError::InvalidArtifact(
+                InvalidIngressPayloadReason::IngressMessageTooBig(
                     ingress_message_size,
                     settings.max_ingress_bytes_per_message,
                 ),
@@ -440,8 +450,8 @@ impl IngressManager {
         }
 
         if num_messages >= settings.max_ingress_messages_per_block {
-            return Err(ValidationError::Permanent(
-                IngressPermanentError::IngressPayloadTooManyMessages(
+            return Err(ValidationError::InvalidArtifact(
+                InvalidIngressPayloadReason::IngressPayloadTooManyMessages(
                     num_messages,
                     settings.max_ingress_messages_per_block,
                 ),
@@ -451,8 +461,8 @@ impl IngressManager {
         // Do not include the message if it's a duplicate.
         if past_ingress_set.contains(&ingress_id) {
             let message_id = MessageId::from(&ingress_id);
-            return Err(ValidationError::Permanent(
-                IngressPermanentError::DuplicatedIngressMessage(message_id),
+            return Err(ValidationError::InvalidArtifact(
+                InvalidIngressPayloadReason::DuplicatedIngressMessage(message_id),
             ));
         }
 
@@ -461,18 +471,20 @@ impl IngressManager {
         if !msg.is_addressed_to_subnet(self.subnet_id) {
             let canister_id = msg.canister_id();
             let canister_state = state.canister_state(&canister_id).ok_or({
-                ValidationError::Permanent(IngressPermanentError::CanisterNotFound(canister_id))
+                ValidationError::InvalidArtifact(InvalidIngressPayloadReason::CanisterNotFound(
+                    canister_id,
+                ))
             })?;
             match canister_state.status() {
                 CanisterStatusType::Running => {}
                 CanisterStatusType::Stopping => {
-                    return Err(ValidationError::Permanent(
-                        IngressPermanentError::CanisterStopping(canister_id),
+                    return Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::CanisterStopping(canister_id),
                     ));
                 }
                 CanisterStatusType::Stopped => {
-                    return Err(ValidationError::Permanent(
-                        IngressPermanentError::CanisterStopped(canister_id),
+                    return Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::CanisterStopped(canister_id),
                     ));
                 }
             }
@@ -481,7 +493,9 @@ impl IngressManager {
         // Skip the message if there aren't enough cycles to induct the message.
         let effective_canister_id =
             extract_effective_canister_id(msg, self.subnet_id).map_err(|_| {
-                ValidationError::Permanent(IngressPermanentError::InvalidManagementMessage)
+                ValidationError::InvalidArtifact(
+                    InvalidIngressPayloadReason::InvalidManagementMessage,
+                )
             })?;
         let subnet_size = state
             .metadata
@@ -509,15 +523,15 @@ impl IngressManager {
                         subnet_size,
                         false, // error here is not returned back to the user => no need to reveal top up balance
                     ) {
-                        return Err(ValidationError::Permanent(
-                            IngressPermanentError::InsufficientCycles(err),
+                        return Err(ValidationError::InvalidArtifact(
+                            InvalidIngressPayloadReason::InsufficientCycles(err),
                         ));
                     }
                     *cumulative_ingress_cost += ingress_cost;
                 }
                 None => {
-                    return Err(ValidationError::Permanent(
-                        IngressPermanentError::CanisterNotFound(payer),
+                    return Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::CanisterNotFound(payer),
                     ));
                 }
             },
@@ -534,14 +548,15 @@ impl IngressManager {
             &self.registry_root_of_trust_provider(context.registry_version),
         ) {
             let message_id = MessageId::from(&ingress_id);
-            return Err(ValidationError::Permanent(match err {
+            return Err(ValidationError::InvalidArtifact(match err {
                 RequestValidationError::InvalidIngressExpiry(msg)
                 | RequestValidationError::InvalidDelegationExpiry(msg) => {
-                    IngressPermanentError::IngressExpired(message_id, msg)
+                    InvalidIngressPayloadReason::IngressExpired(message_id, msg)
                 }
-                err => {
-                    IngressPermanentError::IngressValidationError(message_id, format!("{}", err))
-                }
+                err => InvalidIngressPayloadReason::IngressValidationError(
+                    message_id,
+                    format!("{}", err),
+                ),
             }));
         }
         Ok(())
@@ -557,12 +572,10 @@ impl IngressHistorySet {
     fn new(
         ingress_hist_reader: &dyn IngressHistoryReader,
         certified_height: Height,
-    ) -> Result<Self, IngressPayloadValidationError> {
-        let set = ingress_hist_reader
+    ) -> Result<Self, IngressHistoryError> {
+        ingress_hist_reader
             .get_status_at_height(certified_height)
             .map(|get_status| IngressHistorySet { get_status })
-            .map_err(IngressPermanentError::IngressHistoryError)?;
-        Ok(set)
     }
 }
 
@@ -635,7 +648,10 @@ mod tests {
     // use the `RegistryClient` which spawns tokio tasks. Without tokio, the tests
     // would compile but panic at runtime.
     use super::*;
-    use crate::tests::{access_ingress_pool, setup, setup_registry, setup_with_params};
+    use crate::{
+        tests::{access_ingress_pool, setup, setup_registry, setup_with_params},
+        RandomStateKind,
+    };
     use assert_matches::assert_matches;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
     use ic_interfaces::{
@@ -644,9 +660,18 @@ mod tests {
         p2p::consensus::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
         time_source::TimeSource,
     };
+    use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
+    use ic_interfaces_state_manager::{StateManagerError, StateManagerResult};
+    use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_management_canister_types::{CanisterIdRecord, Payload, IC_00};
+    use ic_metrics::MetricsRegistry;
     use ic_replicated_state::CanisterState;
-    use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
+    use ic_test_utilities::{
+        artifact_pool_config::with_test_pool_config,
+        crypto::temp_crypto_component_with_fake_registry,
+        cycles_account_manager::CyclesAccountManagerBuilder,
+    };
+    use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_state::{
         CanisterStateBuilder, MockIngressHistory, ReplicatedStateBuilder,
     };
@@ -659,6 +684,7 @@ mod tests {
         artifact::IngressMessageId,
         batch::IngressPayload,
         ingress::{IngressState, IngressStatus},
+        malicious_flags::MaliciousFlags,
         messages::{MessageId, SignedIngress},
         time::{expiry_time_from_now, UNIX_EPOCH},
         Height, RegistryVersion,
@@ -731,8 +757,8 @@ mod tests {
 
             assert_matches!(
                 ingress_validation,
-                Err(ValidationError::Permanent(
-                    IngressPermanentError::IngressPayloadTooManyMessages(_, _),
+                Err(ValidationError::InvalidArtifact(
+                    InvalidIngressPayloadReason::IngressPayloadTooManyMessages(_, _),
                 ),)
             );
         })
@@ -793,7 +819,6 @@ mod tests {
                         ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                             message_id.clone(),
                             node_test_id(0),
-                            m.count_bytes(),
                         ))]);
                         // check that message is indeed in the pool
                         assert!(ingress_pool.get(&message_id).is_some());
@@ -878,8 +903,8 @@ mod tests {
                 );
                 assert_matches!(
                     ingress_validation,
-                    Err(ValidationError::Permanent(
-                        IngressPermanentError::IngressExpired(_, _)
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::IngressExpired(_, _)
                     ))
                 );
 
@@ -901,8 +926,8 @@ mod tests {
                 );
                 assert_matches!(
                     ingress_validation,
-                    Err(ValidationError::Permanent(
-                        IngressPermanentError::IngressExpired(_, _)
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::IngressExpired(_, _)
                     ))
                 );
             },
@@ -931,8 +956,8 @@ mod tests {
             );
             assert_matches!(
                 ingress_validation,
-                Err(ValidationError::Permanent(
-                    IngressPermanentError::DuplicatedIngressMessage(_)
+                Err(ValidationError::InvalidArtifact(
+                    InvalidIngressPayloadReason::DuplicatedIngressMessage(_)
                 ))
             );
         });
@@ -973,11 +998,9 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    let ingress_size1 = ingress_msg1.count_bytes();
                     ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                         message_id,
                         node_test_id(0),
-                        ingress_size1,
                     ))]);
                 });
 
@@ -1027,11 +1050,9 @@ mod tests {
                         peer_id: node_test_id(0),
                         timestamp: time_source.get_relative_time(),
                     });
-                    let ingress_size1 = ingress_msg1.count_bytes();
                     ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                         message_id,
                         node_test_id(0),
-                        ingress_size1,
                     ))]);
                 });
 
@@ -1101,7 +1122,6 @@ mod tests {
                     ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                         message_id,
                         node_test_id(0),
-                        ingress_msg1.count_bytes(),
                     ))]);
 
                     let message_id = IngressMessageId::from(&ingress_msg2);
@@ -1113,7 +1133,6 @@ mod tests {
                     ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                         message_id,
                         node_test_id(0),
-                        ingress_msg2.count_bytes(),
                     ))]);
                 });
 
@@ -1179,7 +1198,6 @@ mod tests {
                     ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                         message_id,
                         node_test_id(0),
-                        ingress_msg1.count_bytes(),
                     ))]);
 
                     let message_id = IngressMessageId::from(&ingress_msg2);
@@ -1191,7 +1209,6 @@ mod tests {
                     ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                         message_id,
                         node_test_id(0),
-                        ingress_msg2.count_bytes(),
                     ))]);
                 });
 
@@ -1247,8 +1264,8 @@ mod tests {
                 );
                 assert_matches!(
                     ingress_validation,
-                    Err(ValidationError::Permanent(
-                        IngressPermanentError::DuplicatedIngressMessage(_),
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::DuplicatedIngressMessage(_),
                     ),)
                 );
             },
@@ -1285,9 +1302,9 @@ mod tests {
                 );
                 assert_matches!(
                     ingress_validation,
-                    Err(ValidationError::Permanent(IngressPermanentError::IngressHistoryError(
-                            IngressHistoryError::StateNotAvailableYet(h)
-                    ))) if h == Height::from(0)
+                    Err(ValidationError::ValidationFailed(IngressPayloadValidationFailure::IngressHistoryError(h1,
+                            IngressHistoryError::StateNotAvailableYet(h2)
+                    ))) if h1 == Height::from(0) && h2 == Height::from(0)
                 );
             },
         )
@@ -1354,7 +1371,6 @@ mod tests {
                     ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                         message_id1,
                         node_test_id(0),
-                        ingress_msg1.count_bytes(),
                     ))]);
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_msg2.clone(),
@@ -1364,7 +1380,6 @@ mod tests {
                     ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                         message_id2,
                         node_test_id(0),
-                        ingress_msg2.count_bytes(),
                     ))]);
                 });
 
@@ -1444,8 +1459,8 @@ mod tests {
                 assert_matches!(
                     ingress_validation,
                     Err(
-                        ValidationError::Permanent(
-                            IngressPermanentError::IngressValidationError(id, _),
+                        ValidationError::InvalidArtifact(
+                            InvalidIngressPayloadReason::IngressValidationError(id, _),
                         ),
                     ) if id == MessageId::from(&ingress_id2)
                 );
@@ -1546,7 +1561,6 @@ mod tests {
                         ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                             message_id.clone(),
                             node_test_id(0),
-                            m.count_bytes(),
                         ))]);
                         // check that message is indeed in the pool
                         assert!(ingress_pool.get(&message_id).is_some());
@@ -1612,8 +1626,8 @@ mod tests {
                 );
                 assert_matches!(
                     ingress_validation,
-                    Err(ValidationError::Permanent(
-                        IngressPermanentError::InsufficientCycles(_)
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::InsufficientCycles(_)
                     ))
                 );
             },
@@ -1651,8 +1665,8 @@ mod tests {
                 );
                 assert_matches!(
                     ingress_validation,
-                    Err(ValidationError::Permanent(
-                        IngressPermanentError::CanisterNotFound(_)
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::CanisterNotFound(_)
                     ))
                 );
             },
@@ -1696,7 +1710,7 @@ mod tests {
                         ),
                         // Validation should fail since the canister that needs to pay for the
                         // message doesn't exist.
-                        Err(ValidationError::Permanent(IngressPermanentError::CanisterNotFound(canister_id)))
+                        Err(ValidationError::InvalidArtifact(InvalidIngressPayloadReason::CanisterNotFound(canister_id)))
                             if canister_id == canister_test_id(2)
                     );
                 }
@@ -1799,11 +1813,155 @@ mod tests {
                         ),
                         // Validation should fail since the canister that needs to pay for the
                         // message doesn't have enough cycles.
-                        Err(ValidationError::Permanent(IngressPermanentError::InsufficientCycles(err)))
+                        Err(ValidationError::InvalidArtifact(InvalidIngressPayloadReason::InsufficientCycles(err)))
                             if err.canister_id == canister_test_id(2)
                     );
                 }
             },
+        );
+    }
+
+    /// Sets up the ingress manager with all the dependencies and validates the provided payload.
+    fn payload_validation_test_case(
+        payload: IngressPayload,
+        past_ingress: HashSet<IngressMessageId>,
+        validation_context: ValidationContext,
+        ingress_history_response: Result<(), IngressHistoryError>,
+        state_manager_response: StateManagerResult<ReplicatedState>,
+    ) -> ValidationResult<IngressPayloadValidationError> {
+        with_test_replica_logger(|log| {
+            with_test_pool_config(|pool_config| {
+                let mut ingress_hist_reader = MockIngressHistory::new();
+
+                match ingress_history_response {
+                    Ok(()) => ingress_hist_reader
+                        .expect_get_status_at_height()
+                        .returning(|_| Ok(Box::new(|_| IngressStatus::Unknown))),
+                    Err(err) => ingress_hist_reader
+                        .expect_get_status_at_height()
+                        .returning(move |_| Err(err.clone())),
+                };
+
+                let subnet_id = subnet_test_id(0);
+                let node_id = node_test_id(1);
+
+                let registry = setup_registry(subnet_id, 60 * 1024 * 1024);
+
+                let consensus_time = MockConsensusTime::new();
+
+                let mut state_manager = MockStateManager::new();
+                state_manager
+                    .expect_get_state_at()
+                    .return_const(state_manager_response.map(|response| {
+                        ic_interfaces_state_manager::Labeled::new(
+                            Height::new(0),
+                            Arc::new(response),
+                        )
+                    }));
+
+                let metrics_registry = MetricsRegistry::new();
+                let ingress_signature_crypto =
+                    Arc::new(temp_crypto_component_with_fake_registry(node_id));
+                let cycles_account_manager = Arc::new(
+                    CyclesAccountManagerBuilder::new()
+                        .with_subnet_id(subnet_id)
+                        .build(),
+                );
+                let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
+                    node_id,
+                    pool_config,
+                    metrics_registry.clone(),
+                    log.clone(),
+                )));
+                let time_source = FastForwardTimeSource::new();
+                time_source.set_time(UNIX_EPOCH).unwrap();
+                let ingress_manager = IngressManager::new(
+                    time_source,
+                    Arc::new(consensus_time),
+                    Box::new(ingress_hist_reader),
+                    ingress_pool.clone(),
+                    registry,
+                    ingress_signature_crypto,
+                    metrics_registry,
+                    subnet_id,
+                    log,
+                    Arc::new(state_manager),
+                    cycles_account_manager,
+                    MaliciousFlags::default(),
+                    RandomStateKind::Random,
+                );
+
+                ingress_manager.validate_ingress_payload(
+                    &payload,
+                    &past_ingress,
+                    &validation_context,
+                )
+            })
+        })
+    }
+
+    #[test]
+    fn test_validate_empty_payload_succeeds() {
+        let validation_result = payload_validation_test_case(
+            IngressPayload::from(vec![]),
+            HashSet::new(),
+            ValidationContext {
+                time: UNIX_EPOCH,
+                registry_version: RegistryVersion::from(1),
+                certified_height: Height::from(0),
+            },
+            /*history_reader_response=*/ Ok(()),
+            /*state_manager_response=*/ Ok(ReplicatedStateBuilder::default().build()),
+        );
+
+        assert_eq!(validation_result, Ok(()),);
+    }
+
+    #[test]
+    fn test_validate_history_error_results_in_failure() {
+        let certified_height = Height::new(0);
+        let error = IngressHistoryError::StateRemoved(Height::new(1));
+        let validation_result = payload_validation_test_case(
+            IngressPayload::from(vec![]),
+            HashSet::new(),
+            ValidationContext {
+                time: UNIX_EPOCH,
+                registry_version: RegistryVersion::from(1),
+                certified_height,
+            },
+            /*history_reader_response=*/ Err(error.clone()),
+            /*state_manager_response=*/ Ok(ReplicatedStateBuilder::default().build()),
+        );
+
+        assert_eq!(
+            validation_result,
+            Err(IngressPayloadValidationError::ValidationFailed(
+                IngressPayloadValidationFailure::IngressHistoryError(certified_height, error,)
+            ))
+        );
+    }
+
+    #[test]
+    fn test_validate_state_manager_error_results_in_failure() {
+        let certified_height = Height::new(0);
+        let error = StateManagerError::StateNotCommittedYet(Height::new(1));
+        let validation_result = payload_validation_test_case(
+            IngressPayload::from(vec![]),
+            HashSet::new(),
+            ValidationContext {
+                time: UNIX_EPOCH,
+                registry_version: RegistryVersion::from(1),
+                certified_height,
+            },
+            /*history_reader_response=*/ Ok(()),
+            /*state_manager_response=*/ Err(error.clone()),
+        );
+
+        assert_eq!(
+            validation_result,
+            Err(IngressPayloadValidationError::ValidationFailed(
+                IngressPayloadValidationFailure::StateManagerError(certified_height, error,)
+            ))
         );
     }
 
@@ -1846,8 +2004,8 @@ mod tests {
                         ),
                         // Validation should fail since the canister that needs to pay for the
                         // message doesn't have enough cycles.
-                        Err(ValidationError::Permanent(
-                            IngressPermanentError::InvalidManagementMessage
+                        Err(ValidationError::InvalidArtifact(
+                            InvalidIngressPayloadReason::InvalidManagementMessage
                         ))
                     );
 
@@ -1874,8 +2032,8 @@ mod tests {
                         ),
                         // Validation should fail since the canister that needs to pay for the
                         // message doesn't have enough cycles.
-                        Err(ValidationError::Permanent(
-                            IngressPermanentError::InvalidManagementMessage
+                        Err(ValidationError::InvalidArtifact(
+                            InvalidIngressPayloadReason::InvalidManagementMessage
                         ))
                     );
                 }
@@ -1925,7 +2083,6 @@ mod tests {
                     .apply_changes(vec![ChangeAction::MoveToValidated((
                         msg_id,
                         node_test_id(0),
-                        0,
                     ))]);
 
                 let validation_context = ValidationContext {
@@ -1959,7 +2116,6 @@ mod tests {
                 ingress_pool.apply_changes(vec![ChangeAction::MoveToValidated((
                     message_id.clone(),
                     node_test_id(0),
-                    m.count_bytes(),
                 ))]);
                 // check that message is indeed in the pool
                 assert!(ingress_pool.get(&message_id).is_some());

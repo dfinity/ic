@@ -6,7 +6,7 @@ use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types::{
     self as ic00, CanisterChange, CanisterIdRecord, CanisterInstallMode,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, EmptyBlob,
-    InstallCodeArgs, LogVisibility, Method, Payload, UpdateSettingsArgs, IC_00,
+    InstallCodeArgs, Method, Payload, UpdateSettingsArgs, IC_00,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replica_tests as utils;
@@ -712,7 +712,7 @@ fn can_get_canister_information() {
                 None,
                 2592000,
                 Some(5_000_000_000_000u128),
-                LogVisibility::default(),
+                Default::default(),
                 0u128,
                 0u128,
                 0u128,
@@ -770,7 +770,7 @@ fn can_get_canister_information() {
                     None,
                     259200,
                     None,
-                    LogVisibility::default(),
+                    Default::default(),
                     0u128,
                     0u128,
                     0u128,
@@ -792,10 +792,10 @@ fn cannot_run_method_on_empty_canister() {
         let canister = test.create_canister().unwrap();
         match test.ingress(canister, "hello", vec![]) {
             Err(err) => {
-                assert_eq!(err.code(), ErrorCode::CanisterWasmModuleNotFound);
-                assert_eq!(
-                    err.description(),
-                    "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Attempt to execute a message, but the canister contains no Wasm module"
+                err.assert_contains(
+                    ErrorCode::CanisterWasmModuleNotFound,
+                    "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Attempted \
+                    to execute a message, but the canister contains no Wasm module.",
                 );
             }
             rest => panic!("Unexpected behaviour {:?}", rest),

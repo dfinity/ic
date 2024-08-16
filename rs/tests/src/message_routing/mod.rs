@@ -1,6 +1,7 @@
 pub mod compatibility;
 pub mod global_reboot_test;
 pub mod malicious_slices;
+pub mod memory_safety_test;
 pub mod rejoin_test;
 pub mod rejoin_test_large_state;
 pub mod state_sync_malicious_chunk;
@@ -12,9 +13,11 @@ mod common {
     use dfn_candid::candid;
     use futures::{future::join_all, Future};
     use slog::info;
+    use std::env;
     use xnet_test::CanisterId;
 
-    use crate::driver::{test_env::TestEnv, test_env_api::HasDependencies};
+    use ic_system_test_driver::driver::test_env::TestEnv;
+    use ic_system_test_driver::driver::test_env_api::get_dependency_path;
 
     /// Concurrently calls `start` on all canisters in `canisters` with the
     /// given parameters.
@@ -58,9 +61,9 @@ mod common {
         canisters_per_subnet: usize,
     ) -> Vec<Vec<Canister>> {
         let logger = env.logger();
-        let wasm = Wasm::from_file(
-            env.get_dependency_path("rs/rust_canisters/xnet_test/xnet-test-canister.wasm"),
-        );
+        let wasm = Wasm::from_file(get_dependency_path(
+            env::var("XNET_TEST_CANISTER_WASM_PATH").expect("XNET_TEST_CANISTER_WASM_PATH not set"),
+        ));
         let mut futures: Vec<Vec<_>> = Vec::new();
         for subnet_idx in 0..subnets {
             futures.push(vec![]);
@@ -98,10 +101,10 @@ mod common {
         num_canisters: usize,
     ) -> Vec<Canister> {
         let logger = env.logger();
-        let wasm =
-            Wasm::from_file(env.get_dependency_path(
-                "rs/rust_canisters/statesync_test/statesync_test_canister.wasm",
-            ));
+        let wasm = Wasm::from_file(get_dependency_path(
+            env::var("STATESYNC_TEST_CANISTER_WASM_PATH")
+                .expect("STATESYNC_TEST_CANISTER_WASM_PATH not set"),
+        ));
         let mut futures: Vec<_> = Vec::new();
         for canister_idx in 0..num_canisters {
             let new_wasm = wasm.clone();

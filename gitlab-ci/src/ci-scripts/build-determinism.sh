@@ -26,8 +26,8 @@ if grep -q "$TARGET" bazel-targets || grep -qF "//..." bazel-targets; then
     # PATH1
     tar -xf build-ic.tar
 
-    # ignore *.wasm.did files
-    sed -i -e '/.wasm.did/d' "$PATH0/SHA256SUMS" "$PATH1/SHA256SUMS"
+    # ignore *.wasm.gz.did files
+    sed -i -e '/.wasm.gz.did/d' "$PATH0/SHA256SUMS" "$PATH1/SHA256SUMS"
     # TODO(IDX): remove when issue is identified and addressed
     # https://gitlab.com/dfinity-lab/public/ic/-/snippets/3697069
     sed -i -e '/wasm.wasm.gz/d' "$PATH0/SHA256SUMS" "$PATH1/SHA256SUMS"

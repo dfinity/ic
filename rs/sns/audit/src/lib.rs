@@ -5,7 +5,7 @@ use colored::{ColoredString, Colorize};
 use ic_agent::Agent;
 use ic_neurons_fund::u64_to_dec;
 use ic_nns_common::pb::v1::ProposalId;
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     get_neurons_fund_audit_info_response, GetNeuronsFundAuditInfoRequest,
     GetNeuronsFundAuditInfoResponse,
 };
@@ -164,9 +164,9 @@ async fn validate_neurons_fund_sns_swap_participation(
         .into_iter()
         .filter_map(|recipe| {
             if let Some(Investor::CommunityFund(ref investment)) = recipe.investor {
-                let hotkey_principal = investment.hotkey_principal.clone();
+                let controller = investment.try_get_controller().unwrap();
                 let amount_sns_e8s = recipe.sns.clone().unwrap().amount_e8s;
-                Some((hotkey_principal, amount_sns_e8s))
+                Some((controller, amount_sns_e8s))
             } else {
                 None
             }
@@ -177,15 +177,16 @@ async fn validate_neurons_fund_sns_swap_participation(
         format!("SNS swap {} is not in the final state yet, so `neurons_fund_refunds` is not specified.", sns_name)
     })?;
     let refunded_neuron_portions = neurons_fund_refunds.neurons_fund_neuron_portions;
-    let mut refunded_amounts_per_controller = BTreeMap::<String, _>::new();
+    let mut refunded_amounts_per_controller = BTreeMap::new();
     for refunded_neuron_portion in refunded_neuron_portions.iter() {
-        let hotkey_principal = refunded_neuron_portion
-            .hotkey_principal
-            .unwrap()
-            .to_string();
+        #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
+        let controller = refunded_neuron_portion
+            .controller
+            .or(refunded_neuron_portion.hotkey_principal)
+            .unwrap();
         let new_amount_icp_e8s = refunded_neuron_portion.amount_icp_e8s.unwrap();
         refunded_amounts_per_controller
-            .entry(hotkey_principal)
+            .entry(controller)
             .and_modify(|total_amount_icp_e8s| *total_amount_icp_e8s += new_amount_icp_e8s)
             .or_insert(new_amount_icp_e8s);
     }
@@ -197,12 +198,16 @@ async fn validate_neurons_fund_sns_swap_participation(
         .neurons_fund_reserves
         .unwrap()
         .neurons_fund_neuron_portions;
-    let mut initial_amounts_per_controller: BTreeMap<String, _> = BTreeMap::new();
+    let mut initial_amounts_per_controller = BTreeMap::new();
     for initial_neuron_portion in initial_neuron_portions.iter() {
-        let hotkey_principal = initial_neuron_portion.hotkey_principal.unwrap().to_string();
+        #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
+        let controller = initial_neuron_portion
+            .controller
+            .or(initial_neuron_portion.hotkey_principal)
+            .unwrap();
         let new_amount_icp_e8s = initial_neuron_portion.amount_icp_e8s.unwrap();
         initial_amounts_per_controller
-            .entry(hotkey_principal)
+            .entry(controller)
             .and_modify(|total_amount_icp_e8s| *total_amount_icp_e8s += new_amount_icp_e8s)
             .or_insert(new_amount_icp_e8s);
     }
@@ -214,9 +219,13 @@ async fn validate_neurons_fund_sns_swap_participation(
         .neurons_fund_reserves
         .unwrap()
         .neurons_fund_neuron_portions;
-    let mut final_amounts_per_controller: BTreeMap<String, _> = BTreeMap::new();
+    let mut final_amounts_per_controller = BTreeMap::new();
     for final_neuron_portion in final_neuron_portions.iter() {
-        let hotkey_principal = final_neuron_portion.hotkey_principal.unwrap().to_string();
+        #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
+        let hotkey_principal = final_neuron_portion
+            .controller
+            .or(final_neuron_portion.hotkey_principal)
+            .unwrap();
         let new_amount_icp_e8s = final_neuron_portion.amount_icp_e8s.unwrap();
         final_amounts_per_controller
             .entry(hotkey_principal)
@@ -272,36 +281,37 @@ async fn validate_neurons_fund_sns_swap_participation(
             == (sns_neurons_per_backet as u128) * (num_nns_nf_neurons as u128),
     );
 
-    let mut sns_neuron_recipes_per_controller = BTreeMap::<String, Vec<u64>>::new();
-    for (hotkey_principal, amount_sns_e8s) in sns_neuron_recipes.into_iter() {
+    let mut sns_neuron_recipes_per_controller = BTreeMap::<_, Vec<u64>>::new();
+    for (controller, amount_sns_e8s) in sns_neuron_recipes.into_iter() {
         sns_neuron_recipes_per_controller
-            .entry(hotkey_principal.clone())
+            .entry(controller)
             .and_modify(|sns_neurons| {
                 sns_neurons.push(amount_sns_e8s);
             })
             .or_insert(vec![amount_sns_e8s]);
     }
 
-    let mut investment_per_controller_icp_e8s = BTreeMap::<String, Vec<u64>>::new();
+    let mut investment_per_controller_icp_e8s = BTreeMap::<_, Vec<u64>>::new();
     for expected_neuron_portion in final_neuron_portions {
+        #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
         let hotkey_principal = expected_neuron_portion
-            .hotkey_principal
-            .unwrap()
-            .to_string();
+            .controller
+            .or(expected_neuron_portion.hotkey_principal)
+            .unwrap();
         let amount_icp_e8s = expected_neuron_portion.amount_icp_e8s.unwrap();
         investment_per_controller_icp_e8s
-            .entry(hotkey_principal.clone())
+            .entry(hotkey_principal)
             .and_modify(|nns_neurons| {
                 nns_neurons.push(amount_icp_e8s);
             })
             .or_insert(vec![amount_icp_e8s]);
     }
 
-    for (hotkey_principal, nns_neurons) in investment_per_controller_icp_e8s.iter() {
+    for (controller, nns_neurons) in investment_per_controller_icp_e8s.iter() {
         let amount_icp_e8s = nns_neurons.iter().sum::<u64>();
         let amount_icp_e8s = u64_to_dec(amount_icp_e8s)?;
         let sns_neurons = sns_neuron_recipes_per_controller
-            .get(hotkey_principal)
+            .get(controller)
             .expect("All Neuron's Fund participants should have SNS neuron recipes.");
         let amount_sns_e8s = sns_neurons.iter().sum::<u64>();
         let amount_sns_e8s = u64_to_dec(amount_sns_e8s)?;
@@ -318,8 +328,8 @@ async fn validate_neurons_fund_sns_swap_participation(
             .collect::<Vec<_>>()
             .join(", ");
         let msg = format!(
-            "Neurons' Fund controller {} participated with {} ICP e8s ({}), receiving {} SNS token e8s ({}). Error = {}% = {} SNS e8s",
-            hotkey_principal, amount_icp_e8s, nns_neurons_str, amount_sns_e8s, sns_neurons_str, error_per_cent, absolute_error_sns_e8s,
+            "Neurons' Fund controller {:?} participated with {} ICP e8s ({}), receiving {} SNS token e8s ({}). Error = {}% = {} SNS e8s",
+            controller, amount_icp_e8s, nns_neurons_str, amount_sns_e8s, sns_neurons_str, error_per_cent, absolute_error_sns_e8s,
         );
         let cummulative_error_tolerance =
             ERROR_TOLERANCE_ICP_E8S * Decimal::from_usize(nns_neurons.len()).unwrap();

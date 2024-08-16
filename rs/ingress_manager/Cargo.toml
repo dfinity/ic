@@ -10,16 +10,16 @@ documentation.workspace = true
 ic-constants = { path = "../constants" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-logger = { path = "../monitoring/logger" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
-ic-replicated-state = { path = "../replicated_state" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-replicated-state = { path = "../replicated_state" }
 ic-types = { path = "../types/types" }
 ic-validator = { path = "../validator" }
 prometheus = { workspace = true }
@@ -27,7 +27,7 @@ slog = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-criterion = "0.5"
+criterion = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-config = { path = "../config" }
 ic-interfaces-mocks = { path = "../interfaces/mocks" }
@@ -40,8 +40,8 @@ ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
-proptest = { version = "1.0.0" }
-rand = "0.8"
+proptest = { workspace = true }
+rand = { workspace = true }
 tokio = { workspace = true }
 
 [[bench]]

@@ -2,6 +2,7 @@
 mod tests;
 
 pub use askama::Template;
+use candid::Principal;
 use ic_ledger_suite_orchestrator::scheduler::Erc20Token;
 use ic_ledger_suite_orchestrator::state::{
     Archive, Canisters, GitCommitHash, Index, IndexCanister, Ledger, LedgerCanister, State,
@@ -64,8 +65,18 @@ impl CanisterDashboardData {
         if let Some(index) = &canisters.index {
             result.push(Self::from(index));
         }
-        //TODO add archive canisters
+        for archive in &canisters.archives {
+            result.push(Self::from_archive(archive));
+        }
         result
+    }
+
+    pub fn from_archive(canister_id: &Principal) -> Self {
+        Self {
+            canister_type: "Archive".to_string(),
+            canister_id: canister_id.to_string(),
+            installed_from: "N/A".to_string(),
+        }
     }
 }
 

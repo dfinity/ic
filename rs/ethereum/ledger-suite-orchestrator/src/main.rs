@@ -1,4 +1,7 @@
-use ic_cdk_macros::{init, post_upgrade, query};
+use ic_cdk::api::management_canister::main::{
+    canister_status, CanisterIdRecord, CanisterStatusResponse,
+};
+use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_ledger_suite_orchestrator::candid::Erc20Contract as CandidErc20Contract;
 use ic_ledger_suite_orchestrator::candid::{ManagedCanisterIds, OrchestratorArg, OrchestratorInfo};
 use ic_ledger_suite_orchestrator::lifecycle;
@@ -28,6 +31,7 @@ fn get_orchestrator_info() -> OrchestratorInfo {
         cycles_management: s.cycles_management().clone(),
         more_controller_ids: s.more_controller_ids().to_vec(),
         minter_id: s.minter_id().cloned(),
+        ledger_suite_version: s.ledger_suite_version().cloned().map(|v| v.into()),
     })
 }
 
@@ -62,6 +66,16 @@ fn post_upgrade(orchestrator_arg: Option<OrchestratorArg>) {
         }
         None => lifecycle::post_upgrade(None),
     }
+}
+
+#[update]
+async fn get_canister_status() -> CanisterStatusResponse {
+    canister_status(CanisterIdRecord {
+        canister_id: ic_cdk::id(),
+    })
+    .await
+    .expect("failed to fetch canister status")
+    .0
 }
 
 #[query(hidden = true)]
@@ -161,7 +175,7 @@ fn http_request(
 
                 w.encode_gauge(
                     "ledger_suite_orchestrator_stable_memory_bytes",
-                    ic_cdk::api::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
+                    ic_cdk::api::stable::stable64_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
                     "Size of the stable memory allocated by this canister.",
                 )?;
 

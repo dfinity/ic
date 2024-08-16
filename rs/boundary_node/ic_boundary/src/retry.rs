@@ -1,14 +1,15 @@
 use std::sync::Arc;
 
 use axum::{body::Body, extract::State, middleware::Next, response::IntoResponse, Extension};
-use http::{request::Parts, Request};
+use bytes::Bytes;
+use http::{request::Parts, Request, StatusCode};
 use hyper::body;
 use ic_types::{CanisterId, SubnetId};
 
 use crate::{
     http::AxumResponse,
     persist::RouteSubnet,
-    routes::{ApiError, ErrorCause, RequestContext, RequestType},
+    routes::{ApiError, ErrorCause, RequestContext},
     snapshot::Node,
 };
 
@@ -16,6 +17,7 @@ use crate::{
 pub struct RetryParams {
     pub retry_count: usize,
     pub retry_update_call: bool,
+    pub disable_latency_routing: bool,
 }
 
 #[derive(Clone)]
@@ -28,6 +30,19 @@ pub struct RetryResult {
 
 // Check if we need to retry the request based on the response that we got from lower layers
 fn request_needs_retrying(response: &AxumResponse) -> bool {
+    let status = response.status();
+
+    // Retry on 429
+    if status == StatusCode::TOO_MANY_REQUESTS {
+        return true;
+    }
+
+    // Do not retry on other 4xx
+    if status.is_client_error() {
+        return false;
+    }
+
+    // Otherwise check ErrorCause, if it's missing - retry on 5xx
     match response.extensions().get::<ErrorCause>() {
         Some(v) => v.retriable(),
         None => response.status().is_server_error(),
@@ -35,12 +50,12 @@ fn request_needs_retrying(response: &AxumResponse) -> bool {
 }
 
 /// Clones the request from components
-fn request_clone(parts: &Parts, body: &[u8]) -> Request<Body> {
+fn request_clone(parts: &Parts, body: &Bytes) -> Request<Body> {
     let mut request = Request::builder()
         .method(parts.method.clone())
         .uri(parts.uri.clone())
         .version(parts.version)
-        .body(body::Body::from(body.to_vec()))
+        .body(body::Body::from(body.clone()))
         .unwrap();
 
     *request.headers_mut() = parts.headers.clone();
@@ -61,9 +76,12 @@ fn request_clone(parts: &Parts, body: &[u8]) -> Request<Body> {
 
     if let Some(canister_id) = parts.extensions.get::<CanisterId>().cloned() {
         request.extensions_mut().insert(canister_id);
-    };
+    }
     if let Some(subnet_id) = parts.extensions.get::<SubnetId>().cloned() {
         request.extensions_mut().insert(subnet_id);
+    }
+    if let Some(route_subnet) = parts.extensions.get::<Arc<RouteSubnet>>().cloned() {
+        request.extensions_mut().insert(route_subnet);
     }
 
     request
@@ -78,12 +96,15 @@ pub async fn retry_request(
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
     // Select up to 1+retry_count nodes from the subnet if there are any
-    let nodes = subnet.pick_random_nodes(1 + params.retry_count)?;
+    let nodes = if !params.disable_latency_routing && (ctx.request_type.is_call()) {
+        let factor = subnet.fault_tolerance_factor() + 1;
+        subnet.pick_n_out_of_m_closest(1 + params.retry_count, factor)?
+    } else {
+        subnet.pick_random_nodes(1 + params.retry_count)?
+    };
 
     // Skip retrying in certain cases
-    if params.retry_count == 0
-        || (ctx.request_type == RequestType::Call && !params.retry_update_call)
-    {
+    if params.retry_count == 0 || (ctx.request_type.is_call() && !params.retry_update_call) {
         // Pick one node and pass the request down the stack
         // At this point there would be at least one node in the vector
         let node = nodes[0].clone();

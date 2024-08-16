@@ -1,118 +1,7 @@
+use crate::DataSize;
 use candid::{CandidType, Deserialize};
 use serde::Deserializer;
-use std::collections::VecDeque;
 use std::fmt;
-
-// NOTES:
-// 1) We can not use `CountBytes` here because it is implemented in an
-//    upstream crate `rs/types/types`.
-// 2) We can not move `CountBytes` to a downstream crate `rs/types/base_types`
-//    either because it breaks the Rust's orphan rule.
-//    Namely, `CountBytes` becomes a foreign trait for `rs/types/types` crate
-//    which in a combination with a type aliases for `phantom_type::Id`
-//    (also a foreign type) does not allow to implement `CountBytes` for
-//    type aliases using `phantom_type::Id`.
-// Workaround: we implement a standalone trait `DataSize` here and use it
-// instead of `CountBytes`.
-
-/// Trait to reasonably estimate the memory usage of a value in bytes.
-///
-/// It does not take alignment or memory layouts into account,
-/// or unusual behavior or optimizations of allocators.
-/// It is depending entirely on the data inside the type.
-///
-/// Default implementation returns zero.
-pub trait DataSize {
-    /// Default implementation returns zero.
-    fn data_size(&self) -> usize {
-        0
-    }
-}
-
-impl DataSize for u8 {
-    fn data_size(&self) -> usize {
-        std::mem::size_of::<u8>()
-    }
-}
-
-impl DataSize for [u8] {
-    fn data_size(&self) -> usize {
-        std::mem::size_of_val(self)
-    }
-}
-
-impl DataSize for u64 {
-    fn data_size(&self) -> usize {
-        std::mem::size_of::<u64>()
-    }
-}
-
-impl DataSize for &str {
-    fn data_size(&self) -> usize {
-        self.as_bytes().data_size()
-    }
-}
-
-impl DataSize for String {
-    fn data_size(&self) -> usize {
-        self.as_bytes().data_size()
-    }
-}
-
-impl<T: DataSize> DataSize for Vec<T> {
-    fn data_size(&self) -> usize {
-        self.iter().map(|x| x.data_size()).sum()
-    }
-}
-
-impl<T: DataSize> DataSize for VecDeque<T> {
-    fn data_size(&self) -> usize {
-        self.iter().map(|x| x.data_size()).sum()
-    }
-}
-
-#[test]
-fn test_data_size() {
-    // u8.
-    assert_eq!(0_u8.data_size(), 1);
-    assert_eq!(42_u8.data_size(), 1);
-
-    // [u8].
-    let a: [u8; 0] = [];
-    assert_eq!(a.data_size(), 0);
-    assert_eq!([1_u8].data_size(), 1);
-    assert_eq!([1_u8, 2_u8].data_size(), 2);
-
-    // u64.
-    assert_eq!(0_u64.data_size(), 8);
-    assert_eq!(42_u64.data_size(), 8);
-
-    // Vec<u8>.
-    assert_eq!(Vec::<u8>::from([]).data_size(), 0);
-    assert_eq!(Vec::<u8>::from([1]).data_size(), 1);
-    assert_eq!(Vec::<u8>::from([1, 2]).data_size(), 2);
-
-    // VecDeque<u8>.
-    assert_eq!(VecDeque::<u8>::from([]).data_size(), 0);
-    assert_eq!(VecDeque::<u8>::from([1]).data_size(), 1);
-    assert_eq!(VecDeque::<u8>::from([1, 2]).data_size(), 2);
-
-    // &str.
-    assert_eq!("a".data_size(), 1);
-    assert_eq!("ab".data_size(), 2);
-
-    // String.
-    assert_eq!(String::from("a").data_size(), 1);
-    assert_eq!(String::from("ab").data_size(), 2);
-    for size_bytes in 0..1_024 {
-        assert_eq!(
-            String::from_utf8(vec![b'x'; size_bytes])
-                .unwrap()
-                .data_size(),
-            size_bytes
-        );
-    }
-}
 
 /// Indicates that `BoundedVec<...>` template parameter (eg. length, total data size, etc) is unbounded.
 pub const UNBOUNDED: usize = usize::MAX;
@@ -121,7 +10,7 @@ pub const UNBOUNDED: usize = usize::MAX;
 /// - number of elements
 /// - total data size in bytes
 /// - single element data size in bytes
-#[derive(CandidType, Debug, Clone, PartialEq, Eq)]
+#[derive(CandidType, Debug, Clone, PartialEq, Eq, Default)]
 pub struct BoundedVec<
     const MAX_ALLOWED_LEN: usize,
     const MAX_ALLOWED_TOTAL_DATA_SIZE: usize,
@@ -377,7 +266,7 @@ mod tests {
         // This test verifies that the structures containing BoundedVec correctly
         // throw an error when the total data size exceeds the maximum allowed.
         const MAX_ALLOWED_TOTAL_DATA_SIZE: usize = 100;
-        const ELEMENT_SIZE: usize = 7;
+        const ELEMENT_SIZE: usize = 37;
         // Assert element size is not a multiple of total size.
         assert_ne!(MAX_ALLOWED_TOTAL_DATA_SIZE % ELEMENT_SIZE, 0);
         for aimed_total_size in 64..=256 {
@@ -385,7 +274,7 @@ mod tests {
             type BoundedSize =
                 BoundedVec<UNBOUNDED, MAX_ALLOWED_TOTAL_DATA_SIZE, UNBOUNDED, Vec<u8>>;
             impl Payload<'_> for BoundedSize {}
-            let element = vec![42; ELEMENT_SIZE];
+            let element = vec![b'a'; ELEMENT_SIZE - std::mem::size_of::<Vec<u8>>()];
             let elements_count = aimed_total_size / element.data_size();
             let data = BoundedSize::new(vec![element; elements_count]);
             let actual_total_size = data.get().data_size();
@@ -425,7 +314,7 @@ mod tests {
             type BoundedSize =
                 BoundedVec<UNBOUNDED, UNBOUNDED, MAX_ALLOWED_ELEMENT_DATA_SIZE, Vec<u8>>;
             impl Payload<'_> for BoundedSize {}
-            let element = vec![42; element_size];
+            let element = vec![b'a'; element_size - std::mem::size_of::<Vec<u8>>()];
             let data = BoundedSize::new(vec![element; 42]);
 
             // Act.

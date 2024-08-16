@@ -654,3 +654,24 @@ fn test_index_archived_txs_paging() {
     let expected_txids: Vec<u64> = (0..ARCHIVE_TRIGGER_THRESHOLD).rev().collect();
     assert_eq!(expected_txids, actual_txids);
 }
+
+mod metrics {
+    use crate::index_wasm;
+    use candid::Principal;
+    use ic_base_types::{CanisterId, PrincipalId};
+    use ic_icrc1_index::InitArgs;
+
+    #[test]
+    fn should_export_total_memory_usage_bytes_metrics() {
+        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_index_total_memory_bytes_metric(
+            index_wasm(),
+            encode_init_args,
+        );
+    }
+
+    fn encode_init_args(ledger_id: Principal) -> InitArgs {
+        InitArgs {
+            ledger_id: CanisterId::unchecked_from_principal(PrincipalId(ledger_id)),
+        }
+    }
+}

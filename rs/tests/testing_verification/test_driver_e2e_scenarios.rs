@@ -1,7 +1,7 @@
 use anyhow::Result;
-use ic_tests::driver::group::{SystemTestGroup, SystemTestSubGroup};
-use ic_tests::driver::test_env::TestEnv;
-use ic_tests::systest;
+use ic_system_test_driver::driver::group::{SystemTestGroup, SystemTestSubGroup};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::systest;
 use slog::info;
 use std::collections::HashMap;
 use std::process;

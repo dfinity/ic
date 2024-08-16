@@ -20,11 +20,18 @@ use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
+use icrc_ledger_types::icrc21::errors::ErrorInfo;
+use icrc_ledger_types::icrc21::errors::Icrc21Error;
+use icrc_ledger_types::icrc21::requests::ConsentMessageMetadata;
+use icrc_ledger_types::icrc21::requests::{
+    ConsentMessageRequest, ConsentMessageSpec, DisplayMessageType,
+};
+use icrc_ledger_types::icrc21::responses::{ConsentInfo, ConsentMessage};
 use icrc_ledger_types::icrc3;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
-use icrc_ledger_types::icrc3::blocks::BlockRange;
-use icrc_ledger_types::icrc3::blocks::GenericBlock as IcrcBlock;
-use icrc_ledger_types::icrc3::blocks::GetBlocksResponse;
+use icrc_ledger_types::icrc3::blocks::{
+    BlockRange, GenericBlock as IcrcBlock, GetBlocksRequest, GetBlocksResponse,
+};
 use icrc_ledger_types::icrc3::transactions::GetTransactionsRequest;
 use icrc_ledger_types::icrc3::transactions::GetTransactionsResponse;
 use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
@@ -38,6 +45,10 @@ use std::{
     collections::{BTreeMap, HashMap},
     time::{Duration, SystemTime},
 };
+
+pub mod in_memory_ledger;
+pub mod metrics;
+
 pub const FEE: u64 = 10_000;
 pub const DECIMAL_PLACES: u8 = 8;
 pub const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
@@ -251,6 +262,83 @@ fn list_archives(env: &StateMachine, ledger: CanisterId) -> Vec<ArchiveInfo> {
         Vec<ArchiveInfo>
     )
     .expect("failed to decode archives response")
+}
+
+fn icrc21_consent_message(
+    env: &StateMachine,
+    ledger: CanisterId,
+    caller: Principal,
+    consent_msg_request: ConsentMessageRequest,
+) -> Result<ConsentInfo, Icrc21Error> {
+    Decode!(
+        &env.execute_ingress_as(
+            PrincipalId(caller),
+            ledger, "icrc21_canister_call_consent_message", Encode!(&consent_msg_request).unwrap())
+            .expect("failed to query icrc21_consent_message")
+            .bytes(),
+            Result<ConsentInfo, Icrc21Error>
+    )
+    .expect("failed to decode icrc21_canister_call_consent_message response")
+}
+
+pub fn get_all_ledger_and_archive_blocks(
+    state_machine: &StateMachine,
+    ledger_id: CanisterId,
+) -> Vec<Block<Tokens>> {
+    let req = GetBlocksRequest {
+        start: icrc_ledger_types::icrc1::transfer::BlockIndex::from(0u64),
+        length: Nat::from(u32::MAX),
+    };
+    let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
+    let res = state_machine
+        .query(ledger_id, "get_blocks", req)
+        .expect("Failed to send get_blocks request")
+        .bytes();
+    let res = Decode!(&res, GetBlocksResponse).expect("Failed to decode GetBlocksResponse");
+    // Assume that all blocks in the ledger can be retrieved in a single call. This should hold for
+    // most tests.
+    let blocks_in_ledger = res
+        .chain_length
+        .saturating_sub(res.first_index.0.to_u64().unwrap());
+    assert!(
+        blocks_in_ledger <= res.blocks.len() as u64,
+        "Chain length: {}, first block index: {}, retrieved blocks: {}",
+        res.chain_length,
+        res.first_index,
+        res.blocks.len()
+    );
+    let mut blocks = vec![];
+    for archived in res.archived_blocks {
+        let mut remaining = archived.length.clone();
+        let mut next_archived_txid = archived.start.clone();
+        while remaining > 0u32 {
+            let req = GetTransactionsRequest {
+                start: next_archived_txid.clone(),
+                length: remaining.clone(),
+            };
+            let req =
+                Encode!(&req).expect("Failed to encode GetTransactionsRequest for archive node");
+            let canister_id = archived.callback.canister_id;
+            let res = state_machine
+                .query(
+                    CanisterId::unchecked_from_principal(PrincipalId(canister_id)),
+                    archived.callback.method.clone(),
+                    req,
+                )
+                .expect("Failed to send get_blocks request to archive")
+                .bytes();
+            let res = Decode!(&res, BlockRange).unwrap();
+            next_archived_txid += res.blocks.len() as u64;
+            remaining -= res.blocks.len() as u32;
+            blocks.extend(res.blocks);
+        }
+    }
+    blocks.extend(res.blocks);
+    blocks
+        .into_iter()
+        .map(ic_icrc1::Block::try_from)
+        .collect::<Result<Vec<Block<Tokens>>, String>>()
+        .expect("should convert generic blocks to ICRC1 blocks")
 }
 
 fn get_archive_remaining_capacity(env: &StateMachine, archive: Principal) -> u64 {
@@ -777,7 +865,7 @@ where
         standards.push(standard.name);
     }
     standards.sort();
-    assert_eq!(standards, vec!["ICRC-1", "ICRC-2"]);
+    assert_eq!(standards, vec!["ICRC-1", "ICRC-2", "ICRC-21"]);
 }
 pub fn test_metadata<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
@@ -845,7 +933,7 @@ where
         standards.push(standard.name);
     }
     standards.sort();
-    assert_eq!(standards, vec!["ICRC-1", "ICRC-2", "ICRC-3"]);
+    assert_eq!(standards, vec!["ICRC-1", "ICRC-2", "ICRC-21", "ICRC-3"]);
 }
 
 pub fn test_total_supply<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
@@ -1857,6 +1945,39 @@ where
     assert_eq!(token_fee_after_upgrade, NEW_FEE);
 }
 
+pub fn test_install_upgrade_downgrade<T, U, D>(
+    install_ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+    upgrade_ledger_wasm: Vec<u8>,
+    encode_upgrade_args: fn() -> U,
+    downgrade_ledger_wasm: Vec<u8>,
+    encode_downgrade_args: fn() -> D,
+) where
+    T: CandidType,
+    U: CandidType,
+    D: CandidType,
+{
+    let (env, canister_id) = setup(install_ledger_wasm.clone(), encode_init_args, vec![]);
+
+    let args = encode_upgrade_args();
+    let encoded_upgrade_args = Encode!(&args).unwrap();
+    env.upgrade_canister(
+        canister_id,
+        upgrade_ledger_wasm,
+        encoded_upgrade_args.clone(),
+    )
+    .expect("should successfully upgrade ledger canister");
+
+    let args = encode_downgrade_args();
+    let encoded_downgrade_args = Encode!(&args).unwrap();
+    env.upgrade_canister(
+        canister_id,
+        downgrade_ledger_wasm,
+        encoded_downgrade_args.clone(),
+    )
+    .expect("should successfully downgrade ledger canister");
+}
+
 pub fn test_fee_collector<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
     T: CandidType,
@@ -2332,6 +2453,128 @@ pub fn icrc1_test_block_transformation<T>(
     }
 }
 
+pub fn icrc1_test_approval_upgrade<T>(
+    ledger_wasm_mainnet: Vec<u8>,
+    ledger_wasm_current: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let accounts = vec![
+        Account::from(PrincipalId::new_user_test_id(1).0),
+        Account {
+            owner: PrincipalId::new_user_test_id(2).0,
+            subaccount: Some([2; 32]),
+        },
+        Account::from(PrincipalId::new_user_test_id(3).0),
+        Account {
+            owner: PrincipalId::new_user_test_id(4).0,
+            subaccount: Some([4; 32]),
+        },
+    ];
+    let additional_accounts = vec![
+        Account::from(PrincipalId::new_user_test_id(5).0),
+        Account {
+            owner: PrincipalId::new_user_test_id(6).0,
+            subaccount: Some([6; 32]),
+        },
+    ];
+    let mut initial_balances = vec![];
+    for account in &accounts {
+        initial_balances.push((*account, 10_000_000u64));
+    }
+    for account in &additional_accounts {
+        initial_balances.push((*account, 10_000_000u64));
+    }
+
+    // Setup ledger as it is deployed on the mainnet.
+    let (env, canister_id) = setup(
+        ledger_wasm_mainnet.clone(),
+        encode_init_args,
+        initial_balances,
+    );
+
+    const APPROVE_AMOUNT: u64 = 150_000;
+    let expiration =
+        system_time_to_nanos(env.time()) + Duration::from_secs(5 * 3600).as_nanos() as u64;
+
+    let mut expected_allowances = vec![];
+
+    for i in 0..accounts.len() {
+        for j in i + 1..accounts.len() {
+            let mut approve_args = default_approve_args(accounts[j], APPROVE_AMOUNT);
+            approve_args.from_subaccount = accounts[i].subaccount;
+            send_approval(&env, canister_id, accounts[i].owner, &approve_args)
+                .expect("approval failed");
+            expected_allowances.push(get_allowance(&env, canister_id, accounts[i], accounts[j]));
+
+            let mut approve_args = default_approve_args(accounts[i], APPROVE_AMOUNT);
+            approve_args.expires_at = Some(expiration);
+            approve_args.from_subaccount = accounts[j].subaccount;
+            send_approval(&env, canister_id, accounts[j].owner, &approve_args)
+                .expect("approval failed");
+            expected_allowances.push(get_allowance(&env, canister_id, accounts[j], accounts[i]));
+        }
+    }
+
+    let test_upgrade = |ledger_wasm: Vec<u8>| {
+        env.upgrade_canister(
+            canister_id,
+            ledger_wasm,
+            Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+        )
+        .unwrap();
+
+        let mut allowances = vec![];
+        for i in 0..accounts.len() {
+            for j in i + 1..accounts.len() {
+                let allowance = get_allowance(&env, canister_id, accounts[i], accounts[j]);
+                assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
+                allowances.push(allowance);
+                let allowance = get_allowance(&env, canister_id, accounts[j], accounts[i]);
+                assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
+                allowances.push(allowance);
+            }
+        }
+        assert_eq!(expected_allowances, allowances);
+    };
+
+    // Test if the old serialized approvals are correctly deserialized
+    test_upgrade(ledger_wasm_current.clone());
+    // Test if new approvals serialization also works
+    test_upgrade(ledger_wasm_current);
+
+    // Add some more approvals
+    for a1 in &accounts {
+        for a2 in &additional_accounts {
+            let mut approve_args = default_approve_args(*a2, APPROVE_AMOUNT);
+            approve_args.from_subaccount = a1.subaccount;
+            send_approval(&env, canister_id, a1.owner, &approve_args).expect("approval failed");
+
+            let mut approve_args = default_approve_args(*a1, APPROVE_AMOUNT);
+            approve_args.expires_at = Some(expiration);
+            approve_args.from_subaccount = a2.subaccount;
+            send_approval(&env, canister_id, a2.owner, &approve_args).expect("approval failed");
+        }
+    }
+
+    // Test if downgrade works
+    test_upgrade(ledger_wasm_mainnet);
+
+    // See if the additional approvals are there
+    for a1 in &accounts {
+        for a2 in &additional_accounts {
+            let allowance = get_allowance(&env, canister_id, *a1, *a2);
+            assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
+            assert_eq!(allowance.expires_at, None);
+
+            let allowance = get_allowance(&env, canister_id, *a2, *a1);
+            assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
+            assert_eq!(allowance.expires_at, Some(expiration));
+        }
+    }
+}
+
 pub fn default_approve_args(spender: impl Into<Account>, amount: u64) -> ApproveArgs {
     ApproveArgs {
         from_subaccount: None,
@@ -2503,8 +2746,10 @@ where
             Encode!(&approve_args).unwrap(),
         )
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-    assert!(err.description().ends_with("self approval is not allowed"));
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "self approval is not allowed",
+    );
     let allowance = get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 0);
     assert_eq!(allowance.expires_at, None);
@@ -2703,10 +2948,10 @@ where
             Encode!(&approve_args).unwrap(),
         )
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-    assert!(err
-        .description()
-        .ends_with("the minting account cannot delegate mints"));
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "the minting account cannot delegate mints",
+    );
 }
 
 pub fn expect_icrc2_disabled(
@@ -2725,12 +2970,9 @@ pub fn expect_icrc2_disabled(
             Encode!(&approve_args).unwrap(),
         )
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-    assert!(
-        err.description()
-            .ends_with("ICRC-2 features are not enabled on the ledger."),
-        "Expected ICRC-2 disabled error, got: {}",
-        err.description()
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ICRC-2 features are not enabled on the ledger.",
     );
     let err = env
         .execute_ingress_as(
@@ -2740,12 +2982,9 @@ pub fn expect_icrc2_disabled(
             Encode!(&allowance_args).unwrap(),
         )
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-    assert!(
-        err.description()
-            .ends_with("ICRC-2 features are not enabled on the ledger."),
-        "Expected ICRC-2 disabled error, got: {}",
-        err.description()
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ICRC-2 features are not enabled on the ledger.",
     );
     let err = env
         .execute_ingress_as(
@@ -2755,15 +2994,12 @@ pub fn expect_icrc2_disabled(
             Encode!(&transfer_from_args).unwrap(),
         )
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-    assert!(
-        err.description()
-            .ends_with("ICRC-2 features are not enabled on the ledger."),
-        "Expected ICRC-2 disabled error, got: {}",
-        err.description()
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "ICRC-2 features are not enabled on the ledger.",
     );
     let standards = supported_standards(env, canister_id);
-    assert_eq!(standards.len(), 1);
+    assert_eq!(standards.len(), 2);
     assert_eq!(standards[0].name, "ICRC-1");
 }
 
@@ -2836,7 +3072,7 @@ where
         standards.push(standard.name);
     }
     standards.sort();
-    assert_eq!(standards, vec!["ICRC-1", "ICRC-2"]);
+    assert_eq!(standards, vec!["ICRC-1", "ICRC-2", "ICRC-21"]);
 
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
@@ -2982,10 +3218,10 @@ where
             Encode!(&transfer_from_args).unwrap(),
         )
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-    assert!(err
-        .description()
-        .ends_with("the minter account cannot delegate mints"));
+    err.assert_contains(
+        ErrorCode::CanisterCalledTrap,
+        "the minter account cannot delegate mints",
+    );
     assert_eq!(balance_of(&env, canister_id, to.0), 0);
 }
 
@@ -3310,4 +3546,401 @@ pub fn test_icrc1_test_suite<T: candid::CandidType>(
     {
         panic!("The ICRC-1 test suite failed");
     }
+}
+
+fn test_icrc21_transfer_message(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    from_account: Account,
+    receiver_account: Account,
+) {
+    let transfer_args = TransferArg {
+        from_subaccount: from_account.subaccount,
+        to: receiver_account,
+        fee: None,
+        amount: Nat::from(1_000_000u32),
+        created_at_time: Some(system_time_to_nanos(env.time())),
+        memo: Some(Memo::from(b"test_bytes".to_vec())),
+    };
+
+    // We check that the GenericDisplay message is created correctly.
+    let mut args = ConsentMessageRequest {
+        method: "icrc1_transfer".to_owned(),
+        arg: Encode!(&transfer_args).unwrap(),
+        user_preferences: ConsentMessageSpec {
+            metadata: ConsentMessageMetadata {
+                language: "en".to_string(),
+                utc_offset_minutes: Some(60),
+            },
+            device_spec: Some(DisplayMessageType::GenericDisplay),
+        },
+    };
+
+    let expected_transfer_message = "# Approve the transfer of funds
+
+**Amount:**
+0.01 XTST
+
+**From:**
+d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
+
+**To:**
+6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202
+
+**Fee:**
+0.0001 XTST
+
+**Memo:**
+test_bytes";
+
+    let consent_info =
+        icrc21_consent_message(env, canister_id, from_account.owner, args.clone()).unwrap();
+    assert_eq!(consent_info.metadata.language, "en");
+    assert!(matches!(
+        consent_info.consent_message,
+        ConsentMessage::GenericDisplayMessage { .. }
+    ));
+    let message = extract_icrc21_message_string(&consent_info.consent_message);
+    assert_eq!(
+        message, expected_transfer_message,
+        "Expected: {}, got: {}",
+        expected_transfer_message, message
+    );
+    // Make sure the accounts are formatted correctly.
+    assert_eq!(from_account.to_string(), "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101");
+    assert_eq!(receiver_account.to_string(), "6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202");
+    // If we do not set the Memo we expect it to not be included in the resulting message.
+    args.arg = Encode!(&TransferArg {
+        memo: None,
+        ..transfer_args.clone()
+    })
+    .unwrap();
+    let message = extract_icrc21_message_string(
+        &icrc21_consent_message(env, canister_id, from_account.owner, args.clone())
+            .unwrap()
+            .consent_message,
+    );
+    let expected_message = expected_transfer_message.replace("\n\n**Memo:**\ntest_bytes", "");
+    assert_eq!(
+        message, expected_message,
+        "Expected: {}, got: {}",
+        expected_message, message
+    );
+
+    // If the memo is not a valid UTF string, it should be hex encoded.
+    args.arg = Encode!(&TransferArg {
+        memo: Some(vec![0, 159, 146, 150].into()),
+        ..transfer_args.clone()
+    })
+    .unwrap();
+    let message = extract_icrc21_message_string(
+        &icrc21_consent_message(env, canister_id, from_account.owner, args.clone())
+            .unwrap()
+            .consent_message,
+    );
+    let expected_message =
+        expected_transfer_message.replace("test_bytes", &hex::encode(vec![0, 159, 146, 150]));
+    assert_eq!(
+        message, expected_message,
+        "Expected: {}, got: {}",
+        expected_message, message
+    );
+
+    // If the from account is anonymous, the message should not include the from account but only the from subaccount.
+    args.arg = Encode!(&transfer_args.clone()).unwrap();
+    let message = extract_icrc21_message_string(
+        &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
+            .unwrap()
+            .consent_message,
+    );
+    let expected_message = expected_transfer_message.replace("\n\n**From:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**From Subaccount:**\n101010101010101010101010101010101010101010101010101010101010101" );
+    assert_eq!(
+        message, expected_message,
+        "Expected: {}, got: {}",
+        expected_message, message
+    );
+}
+
+fn test_icrc21_approve_message(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    from_account: Account,
+    spender_account: Account,
+) {
+    let message = &icrc21_consent_message(
+        env,
+        canister_id,
+        from_account.owner,
+        ConsentMessageRequest {
+            method: "INVALID_FUNCTION".to_owned(),
+            arg: Encode!(&()).unwrap(),
+            user_preferences: ConsentMessageSpec {
+                metadata: ConsentMessageMetadata {
+                    language: "en".to_string(),
+                    utc_offset_minutes: None,
+                },
+                device_spec: Some(DisplayMessageType::GenericDisplay),
+            },
+        },
+    )
+    .unwrap_err();
+    match message {
+        Icrc21Error::UnsupportedCanisterCall(ErrorInfo { description }) => {
+            assert!(description.contains("The function provided is not supported: INVALID_FUNCTION.\n Supported functions for ICRC-21 are: [\"icrc1_transfer\", \"icrc2_approve\", \"icrc2_transfer_from\"].\n Error is: VariantNotFound"),"Unexpected Error message: {}", description)
+        }
+        _ => panic!("Unexpected error: {:?}", message),
+    }
+
+    // Test the message for icrc2 approve
+    let approve_args = ApproveArgs {
+        spender: spender_account,
+        amount: Nat::from(1_000_000u32),
+        from_subaccount: from_account.subaccount,
+        expires_at: Some(
+            system_time_to_nanos(env.time()) + Duration::from_secs(3600).as_nanos() as u64,
+        ),
+        expected_allowance: Some(Nat::from(1_000_000u32)),
+        created_at_time: Some(system_time_to_nanos(env.time())),
+        fee: Some(Nat::from(FEE)),
+        memo: Some(Memo::from(b"test_bytes".to_vec())),
+    };
+    assert_eq!(spender_account.to_string(), "djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303");
+    let expected_approve_message = "# Authorize another address to withdraw from your account
+
+**The following address is allowed to withdraw from your account:**
+djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303
+
+**Your account:**
+d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
+
+**Requested withdrawal allowance:**
+0.01 XTST
+
+**Current withdrawal allowance:**
+0.01 XTST
+
+**Expiration date:**
+Thu, 06 May 2021 20:17:10 +0000
+
+**Approval fee:**
+0.0001 XTST
+
+**Transaction fees to be paid by:**
+d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
+
+**Memo:**
+test_bytes";
+
+    let mut args = ConsentMessageRequest {
+        method: "icrc2_approve".to_owned(),
+        arg: Encode!(&approve_args).unwrap(),
+        user_preferences: ConsentMessageSpec {
+            metadata: ConsentMessageMetadata {
+                language: "en".to_string(),
+                utc_offset_minutes: None,
+            },
+            device_spec: Some(DisplayMessageType::GenericDisplay),
+        },
+    };
+    let message = extract_icrc21_message_string(
+        &icrc21_consent_message(env, canister_id, from_account.owner, args.clone())
+            .unwrap()
+            .consent_message,
+    );
+    assert_eq!(
+        message, expected_approve_message,
+        "Expected: {}, got: {}",
+        expected_approve_message, message
+    );
+    args.arg = Encode!(&ApproveArgs {
+        expected_allowance: None,
+        ..approve_args.clone()
+    })
+    .unwrap();
+    let message = extract_icrc21_message_string(
+        &icrc21_consent_message(env, canister_id, from_account.owner, args.clone())
+            .unwrap()
+            .consent_message,
+    );
+    // When the expected allowance is not set, a warning should be displayed.
+    let expected_message = expected_approve_message.replace(
+    "\n\n**Current withdrawal allowance:**\n0.01 XTST",
+    "\n\u{26A0} The allowance will be set to 0.01 XTST independently of any previous allowance. Until this transaction has been executed the spender can still exercise the previous allowance (if any) to it's full amount.",
+);
+    assert_eq!(
+        message, expected_message,
+        "Expected: {}, got: {}",
+        expected_message, message
+    );
+
+    args.arg = Encode!(&ApproveArgs {
+        expires_at: None,
+        ..approve_args.clone()
+    })
+    .unwrap();
+
+    let message = extract_icrc21_message_string(
+        &icrc21_consent_message(env, canister_id, from_account.owner, args.clone())
+            .unwrap()
+            .consent_message,
+    );
+    let expected_message =
+        expected_approve_message.replace("Thu, 06 May 2021 20:17:10 +0000", "No expiration.");
+    assert_eq!(
+        message, expected_message,
+        "Expected: {}, got: {}",
+        expected_message, message
+    );
+
+    // If the approver is anonymous, the message should not include the approver account but only the approver subaccount.
+    args.arg = Encode!(&approve_args.clone()).unwrap();
+    let message = extract_icrc21_message_string(
+        &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
+            .unwrap()
+            .consent_message,
+    );
+    let expected_message = expected_approve_message
+.replace("\n\n**Transaction fees to be paid by:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Transaction fees to be paid by your subaccount:**\n101010101010101010101010101010101010101010101010101010101010101" )
+.replace("\n\n**Your account:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Your Subaccount:**\n101010101010101010101010101010101010101010101010101010101010101");
+    assert_eq!(
+        message, expected_message,
+        "Expected: {}, got: {}",
+        expected_message, message
+    );
+
+    // If we set the offset to 1 hour the expiration date should be 1 hour ahead.
+    args.user_preferences.metadata.utc_offset_minutes = Some(60);
+    let message = extract_icrc21_message_string(
+        &icrc21_consent_message(env, canister_id, from_account.owner, args.clone())
+            .unwrap()
+            .consent_message,
+    );
+    let expected_message = expected_approve_message.replace(
+        "Thu, 06 May 2021 20:17:10 +0000",
+        "Thu, 06 May 2021 21:17:10 +0100",
+    );
+    assert_eq!(
+        message, expected_message,
+        "Expected: {}, got: {}",
+        expected_message, message
+    );
+}
+
+fn test_icrc21_transfer_from_message(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    from_account: Account,
+    spender_account: Account,
+    receiver_account: Account,
+) {
+    // Test the message for icrc2 transfer_from
+    let transfer_from_args = TransferFromArgs {
+        from: from_account,
+        spender_subaccount: spender_account.subaccount,
+        to: receiver_account,
+        amount: Nat::from(1_000_000u32),
+        fee: None,
+        created_at_time: None,
+        memo: Some(Memo::from(b"test_bytes".to_vec())),
+    };
+
+    let mut args = ConsentMessageRequest {
+        method: "icrc2_transfer_from".to_owned(),
+        arg: Encode!(&transfer_from_args).unwrap(),
+        user_preferences: ConsentMessageSpec {
+            metadata: ConsentMessageMetadata {
+                language: "en".to_string(),
+                utc_offset_minutes: None,
+            },
+            device_spec: Some(DisplayMessageType::GenericDisplay),
+        },
+    };
+
+    let expected_transfer_from_message = "# Transfer from a withdrawal account
+
+**Withdrawal Account:**
+d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
+
+**Account sending the transfer request:**
+djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303
+
+**Amount to withdraw:**
+0.01 XTST
+
+**To:**
+6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202
+
+**Fee paid by withdrawal account:**
+0.0001 XTST
+
+**Memo:**
+test_bytes";
+
+    let message = extract_icrc21_message_string(
+        &icrc21_consent_message(env, canister_id, spender_account.owner, args.clone())
+            .unwrap()
+            .consent_message,
+    );
+    assert_eq!(
+        message, expected_transfer_from_message,
+        "Expected: {}, got: {}",
+        expected_transfer_from_message, message
+    );
+
+    // If the spender is anonymous, the message should not include the spender account but only the spender subaccount.
+    args.arg = Encode!(&transfer_from_args.clone()).unwrap();
+    let message = extract_icrc21_message_string(
+        &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
+            .unwrap()
+            .consent_message,
+    );
+    let expected_message = expected_transfer_from_message.replace(
+    "\n\n**Account sending the transfer request:**\ndjduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303",
+    "\n\n**Subaccount sending the transfer request:**\n303030303030303030303030303030303030303030303030303030303030303",
+);
+    assert_eq!(
+        message, expected_message,
+        "Expected: {}, got: {}",
+        expected_message, message
+    );
+}
+
+fn extract_icrc21_message_string(consent_message: &ConsentMessage) -> String {
+    match consent_message {
+        ConsentMessage::GenericDisplayMessage(message) => message.to_string(),
+        ConsentMessage::LineDisplayMessage { pages } => pages
+            .iter()
+            .map(|page| page.lines.join(""))
+            .collect::<Vec<String>>()
+            .join(""),
+    }
+}
+
+pub fn test_icrc21_standard<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+    let receiver_account = Account {
+        owner: PrincipalId::new_user_test_id(1).0,
+        subaccount: Some([2; 32]),
+    };
+    let from_account = Account {
+        owner: PrincipalId::new_user_test_id(0).0,
+        subaccount: Some([1; 32]),
+    };
+    let spender_account = Account {
+        owner: PrincipalId::new_user_test_id(2).0,
+        subaccount: Some([3; 32]),
+    };
+
+    test_icrc21_transfer_message(&env, canister_id, from_account, receiver_account);
+    test_icrc21_approve_message(&env, canister_id, from_account, spender_account);
+    test_icrc21_transfer_from_message(
+        &env,
+        canister_id,
+        from_account,
+        spender_account,
+        receiver_account,
+    );
 }

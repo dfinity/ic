@@ -24,10 +24,7 @@ use ic_metrics::buckets::linear_buckets;
 use ic_protobuf::types::v1 as pb;
 use ic_types::crypto::CryptoHashOf;
 use ic_types::NodeId;
-use ic_types::{
-    artifact::ArtifactKind, artifact::ConsensusMessageId, artifact_kind::ConsensusArtifact,
-    consensus::*, Height, SubnetId, Time,
-};
+use ic_types::{artifact::ConsensusMessageId, consensus::*, Height, SubnetId, Time};
 use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
 use std::time::Instant;
 use std::{marker::PhantomData, sync::Arc, time::Duration};
@@ -308,7 +305,7 @@ impl UncachedConsensusPoolImpl {
                     log,
                 ),
             ) as Box<_>,
-            #[cfg(feature = "rocksdb_backend")]
+            #[cfg(target_os = "macos")]
             PersistentPoolBackend::RocksDB(config) => Box::new(
                 crate::rocksdb_pool::PersistentHeightIndexedPool::new_consensus_pool(config, log),
             ) as Box<_>,
@@ -684,7 +681,7 @@ impl ConsensusPool for ConsensusPoolImpl {
     }
 }
 
-impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
+impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
     type ChangeSet = ChangeSet;
 
     fn insert(&mut self, unvalidated_artifact: UnvalidatedConsensusArtifact) {
@@ -700,7 +697,7 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
         self.apply_changes_unvalidated(ops);
     }
 
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<ConsensusArtifact> {
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<ConsensusMessage> {
         let changed = !change_set.is_empty();
         let updates = self.cache.prepare(&change_set);
         let mut unvalidated_ops = PoolSectionOps::new();
@@ -714,7 +711,7 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
                 ChangeAction::AddToValidated(to_add) => {
                     self.record_instant(&to_add);
                     artifacts_with_opt.push(ArtifactWithOpt {
-                        advert: ConsensusArtifact::message_to_advert(&to_add.msg),
+                        artifact: to_add.msg.clone(),
                         is_latency_sensitive: is_latency_sensitive(&to_add.msg),
                     });
                     validated_ops.insert(to_add);
@@ -725,7 +722,7 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
                 ChangeAction::MoveToValidated(to_move) => {
                     if !to_move.is_share() {
                         artifacts_with_opt.push(ArtifactWithOpt {
-                            advert: ConsensusArtifact::message_to_advert(&to_move),
+                            artifact: to_move.clone(),
                             is_latency_sensitive: false,
                         });
                     }
@@ -821,6 +818,7 @@ fn is_latency_sensitive(msg: &ConsensusMessage) -> bool {
         ConsensusMessage::NotarizationShare(_) => true,
         ConsensusMessage::RandomBeaconShare(_) => true,
         ConsensusMessage::RandomTapeShare(_) => true,
+        ConsensusMessage::EquivocationProof(_) => true,
         // Might be big and is relayed and can cause excessive BW usage.
         ConsensusMessage::CatchUpPackage(_) => false,
         ConsensusMessage::CatchUpPackageShare(_) => true,
@@ -828,7 +826,7 @@ fn is_latency_sensitive(msg: &ConsensusMessage) -> bool {
     }
 }
 
-impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
+impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
     fn get(&self, id: &ConsensusMessageId) -> Option<ConsensusMessage> {
         self.validated.get(id)
     }
@@ -1027,6 +1025,7 @@ mod tests {
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
+        artifact::IdentifiableArtifact,
         batch::ValidationContext,
         consensus::{BlockProposal, RandomBeacon},
         crypto::{crypto_hash, CryptoHash, CryptoHashOf},
@@ -1189,11 +1188,11 @@ mod tests {
             assert_eq!(result.artifacts_with_opt.len(), 2);
             assert!(result.poll_immediately);
             assert_eq!(
-                result.artifacts_with_opt[0].advert.id,
+                result.artifacts_with_opt[0].artifact.id(),
                 random_beacon_2.get_id()
             );
             assert_eq!(
-                result.artifacts_with_opt[1].advert.id,
+                result.artifacts_with_opt[1].artifact.id(),
                 random_beacon_3.get_id()
             );
 
@@ -1271,7 +1270,7 @@ mod tests {
             assert_eq!(result.artifacts_with_opt.len(), 1);
             assert!(result.poll_immediately);
             assert_eq!(
-                result.artifacts_with_opt[0].advert.id,
+                result.artifacts_with_opt[0].artifact.id(),
                 random_beacon_share_3.get_id()
             );
 
@@ -1813,7 +1812,7 @@ mod tests {
                 path.join("2").join("random_tape.bin").exists(),
                 "random tape at height 2 was backed up"
             );
-            // notarization at height 2 was not backed up becasue this is height is not
+            // notarization at height 2 was not backed up because this height is not
             // finalized
             assert!(!notarization_path.exists());
             assert_eq!(
@@ -2191,18 +2190,18 @@ mod tests {
             check_iterator(&pool, pool.as_cache().finalized_block(), vec![2, 1, 0]);
 
             // Two notarized rounds added
+            pool.insert_validated(pool.make_next_beacon());
             let block = pool.make_next_block();
             pool.insert_validated(block.clone());
             pool.notarize(&block);
 
+            pool.insert_validated(pool.make_next_beacon());
             let block = pool.make_next_block();
             pool.insert_validated(block.clone());
             pool.notarize(&block);
             check_iterator(&pool, block.clone().into(), vec![4, 3, 2, 1, 0]);
 
             pool.finalize(&block);
-            pool.insert_validated(pool.make_next_beacon());
-            pool.insert_validated(pool.make_next_beacon());
             pool.insert_validated(pool.make_next_tape());
             pool.insert_validated(pool.make_next_tape());
             check_iterator(&pool, block.into(), vec![4, 3, 2, 1, 0]);

@@ -8,7 +8,7 @@ edition = "2021"
 
 candid = { workspace = true }
 futures = { workspace = true }
-ic-adapter-metrics = { path = "../../monitoring/adapter_metrics" }
+ic-adapter-metrics-client = { path = "../../monitoring/adapter_metrics/client" }
 ic-async-utils = { path = "../../async_utils" }
 ic-config = { path = "../../config" }
 ic-error-types = { path = "../../types/error_types" }
@@ -25,8 +25,9 @@ slog = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
-tower-test = "0.4.0"
 ic-test-utilities-time = { path = "../../test_utilities/time" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
+tower-test = "0.4.0"

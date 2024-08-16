@@ -294,7 +294,7 @@ fn test_serve_logs_malformed_request() {
 
     // Step 3.2: Inspect body.
     let body = String::from_utf8(body.into_vec()).unwrap();
-    #[derive(serde_derive::Deserialize, Debug)]
+    #[derive(serde::Deserialize, Debug)]
     struct ResponseBody {
         error_description: String,
     }

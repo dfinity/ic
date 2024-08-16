@@ -17,4 +17,4 @@ serde = { workspace = true }
 [dev-dependencies]
 ic-nervous-system-proto-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-tempfile = "3.1.0"
+tempfile = { workspace = true }

@@ -1,34 +1,7 @@
-//! Utilities for key generation and key identifier generation
-
-use crate::api::CspKeyGenerator;
-use crate::types::{CspPop, CspPublicKey};
-use crate::vault::api::{
-    CspBasicSignatureKeygenError, CspMultiSignatureKeygenError, CspTlsKeygenError,
-};
-use crate::Csp;
-use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_types::NodeId;
-
 #[cfg(test)]
 mod fixtures;
 #[cfg(test)]
 mod tests;
-
-impl CspKeyGenerator for Csp {
-    fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CspBasicSignatureKeygenError> {
-        self.csp_vault.gen_node_signing_key_pair()
-    }
-
-    fn gen_committee_signing_key_pair(
-        &self,
-    ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError> {
-        self.csp_vault.gen_committee_signing_key_pair()
-    }
-
-    fn gen_tls_key_pair(&self, node_id: NodeId) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
-        self.csp_vault.gen_tls_key_pair(node_id)
-    }
-}
 
 /// Some key related utils
 pub mod utils {

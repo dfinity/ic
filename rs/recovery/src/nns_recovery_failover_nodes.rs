@@ -52,6 +52,10 @@ pub struct NNSRecoveryFailoverNodesArgs {
     #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
     pub replica_version: Option<ReplicaVersion>,
 
+    #[clap(long)]
+    /// The replay will stop at this height and make a checkpoint.
+    pub replay_until_height: Option<u64>,
+
     /// IP address of the auxiliary host the registry is uploaded to
     #[clap(long)]
     pub aux_ip: Option<IpAddr>,
@@ -138,7 +142,7 @@ impl NNSRecoveryFailoverNodes {
     pub fn get_local_store_tar(&self) -> PathBuf {
         self.recovery
             .work_dir
-            .join(format!("{}.tar.gz", IC_REGISTRY_LOCAL_STORE))
+            .join(format!("{}.tar.zst", IC_REGISTRY_LOCAL_STORE))
     }
 }
 
@@ -198,6 +202,13 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                         &self.logger,
                         "Enter parent NNS IP to download the registry store from:",
                     );
+                }
+            }
+
+            StepType::ICReplayWithRegistryContent => {
+                if self.params.replay_until_height.is_none() {
+                    self.params.replay_until_height =
+                        read_optional(&self.logger, "Replay until height: ");
                 }
             }
 
@@ -293,6 +304,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                     self.params.subnet_id,
                     self.new_registry_local_store.clone(),
                     CANISTER_CALLER_ID,
+                    self.params.replay_until_height,
                 )?,
             )),
 
@@ -324,7 +336,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
             StepType::ProposeCUP => {
                 let url = if let Some(aux_ip) = self.params.aux_ip {
                     let url_str = format!(
-                        "http://[{}]:8081/tmp/recovery_registry/{}.tar.gz",
+                        "http://[{}]:8081/tmp/recovery_registry/{}.tar.zst",
                         aux_ip, IC_REGISTRY_LOCAL_STORE
                     );
                     Some(Url::parse(&url_str).map_err(|e| {

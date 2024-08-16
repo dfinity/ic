@@ -11,13 +11,12 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},
 };
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::ROOT_CANISTER_ID;
-use ic_nns_governance::{
-    governance::{BitcoinNetwork, BitcoinSetConfigProposal},
-    init::TEST_NEURON_1_ID,
+use ic_nns_governance_api::{
+    bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
     pb::v1::{
         add_or_remove_node_provider::Change,
         manage_neuron::{Command, NeuronIdOrSubaccount},
@@ -125,7 +124,11 @@ pub async fn submit_external_update_proposal(
         )
         .await
         .expect("Error calling the manage_neuron api.");
-    match response.expect("Error making proposal").command.unwrap() {
+    match response
+        .panic_if_error("Error making proposal")
+        .command
+        .unwrap()
+    {
         CommandResponse::MakeProposal(resp) => ProposalId::from(resp.proposal_id.unwrap()),
         other => panic!("Unexpected response: {:?}", other),
     }
@@ -153,7 +156,11 @@ pub async fn submit_external_update_proposal_binary(
     )
     .await;
 
-    match response.expect("Error making proposal").command.unwrap() {
+    match response
+        .panic_if_error("Error making proposal")
+        .command
+        .unwrap()
+    {
         CommandResponse::MakeProposal(resp) => ProposalId::from(resp.proposal_id.unwrap()),
         _ => panic!("Invalid response"),
     }
@@ -287,7 +294,11 @@ pub async fn add_node_provider(nns_canisters: &NnsCanisters<'_>, np: NodeProvide
         .await
         .expect("Error calling the manage_neuron api.");
 
-    let pid = match result.expect("Error making proposal").command.unwrap() {
+    let pid = match result
+        .panic_if_error("Error making proposal")
+        .command
+        .unwrap()
+    {
         CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
         _ => panic!("Invalid response"),
     };
@@ -326,15 +337,23 @@ pub async fn wait_for_final_state(
     get_proposal_info(governance_canister, id).await.unwrap()
 }
 
-/// Appends a few inert bytes to the provided Wasm. Results in a functionally
-/// identical binary.
-pub fn append_inert(wasm: Option<&Wasm>) -> Wasm {
-    let mut wasm = wasm.unwrap().clone().bytes();
-    // This sequence of bytes encodes an empty wasm custom section
-    // named "a". It is harmless to suffix any wasm with it, even multiple
-    // times.
-    wasm.append(&mut vec![0, 2, 1, 97]);
-    Wasm::from_bytes(wasm)
+fn is_gzipped_blob(blob: &[u8]) -> bool {
+    (blob.len() > 4)
+        // Has magic bytes.
+        && (blob[0..2] == [0x1F, 0x8B])
+}
+
+/// Bumps the gzip timestamp of the provided gzipped Wasm.
+/// Results in a functionally identical binary.
+pub fn bump_gzip_timestamp(wasm: &Wasm) -> Wasm {
+    // wasm is gzipped and the subslice [4..8]
+    // is the little endian representation of a timestamp
+    // so we just increment that timestamp
+    let mut new_wasm = wasm.clone().bytes();
+    assert!(is_gzipped_blob(&new_wasm));
+    let t = u32::from_le_bytes(new_wasm[4..8].try_into().unwrap());
+    new_wasm[4..8].copy_from_slice(&(t + 1).to_le_bytes());
+    Wasm::from_bytes(new_wasm)
 }
 
 /// Submits a proposal to upgrade the root canister.
@@ -551,7 +570,7 @@ pub async fn reinstall_nns_canister_by_proposal(
         governance,
         root,
         true,
-        append_inert(Some(&wasm)),
+        bump_gzip_timestamp(&wasm),
         Some(arg),
     )
     .await
@@ -580,7 +599,7 @@ pub async fn maybe_upgrade_root_controlled_canister_to_self(
     // Copy the wasm of the canister to upgrade. We'll need it to upgrade back to
     // it. To observe that the upgrade happens, we need to make the binary different
     // post-upgrade.
-    let wasm = append_inert(Some(canister.wasm().unwrap()));
+    let wasm = bump_gzip_timestamp(canister.wasm().unwrap());
     let wasm_clone = wasm.clone().bytes();
     upgrade_nns_canister_by_proposal(
         canister,

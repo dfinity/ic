@@ -1,17 +1,18 @@
 use std::time::Duration;
 
-use crate::driver::{
-    test_env::TestEnv,
-    test_env_api::{
-        retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-        TopologySnapshot,
-    },
-};
-use crate::retry_with_msg_async;
-use anyhow::{anyhow, bail, Error};
+use anyhow::{anyhow, bail, Context, Error};
 use futures::future::join_all;
 use ic_agent::{export::Principal, Agent};
 use ic_base_types::PrincipalId;
+use ic_system_test_driver::{
+    driver::{
+        test_env::TestEnv,
+        test_env_api::{
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, TopologySnapshot,
+        },
+    },
+    retry_with_msg_async,
+};
 use ic_utils::interfaces::ManagementCanister;
 
 pub fn get_install_url(env: &TestEnv) -> Result<(url::Url, PrincipalId), Error> {
@@ -140,60 +141,39 @@ pub async fn set_counters_on_counter_canisters(
     backoff: Duration,
     retry_timeout: Duration,
 ) {
-    let mut requests_all = vec![];
-    // Dispatch all write calls sequentially. As there is no polling, each call should return very fast.
+    let mut requests = vec![];
     for (idx, canister_id) in canisters.into_iter().enumerate() {
-        let mut requests = vec![];
         let calls_count = counter_values[idx];
         for _ in 0..calls_count {
-            let request_id = retry_with_msg_async!(
+            let agent_clone = agent.clone();
+
+            let request = move || {
+                let agent_clone = agent_clone.clone();
+
+                async move {
+                    agent_clone
+                        .update(&canister_id, "write")
+                        .call_and_wait()
+                        .await
+                        .map(|_| ())
+                        .with_context(|| "write call failed")
+                }
+            };
+
+            let request = retry_with_msg_async!(
                 format!("write call on canister={canister_id}"),
                 log,
                 retry_timeout,
                 backoff,
-                || async {
-                    let result = agent.update(&canister_id, "write").call().await;
-                    if let Ok(id) = result {
-                        Ok(id)
-                    } else {
-                        bail!(
-                            "write call on canister={canister_id} failed, err: {:?}",
-                            result.unwrap_err()
-                        )
-                    }
-                }
-            )
-            .await
-            .expect("write call on canister={canister_id} failed");
+                request
+            );
 
-            requests.push((canister_id, request_id));
+            requests.push(request);
         }
-        requests_all.push(requests);
     }
 
-    // Poll all results sequentially.
-    // Overall polling duration should be roughly equal to a single polling duration. As all requests were submitted at nearly same time.
-    for (canister_id, request_id) in requests_all.into_iter().flatten() {
-        retry_with_msg_async!(
-            format!("call wait on canister={canister_id}"),
-            log,
-            retry_timeout,
-            backoff,
-            || async {
-                let result = agent.wait(request_id, canister_id).await;
-                if result.is_ok() {
-                    Ok(())
-                } else {
-                    bail!(
-                        "wait call on canister={canister_id} failed, err: {:?}",
-                        result.unwrap_err()
-                    )
-                }
-            }
-        )
-        .await
-        .expect("wait call on canister={canister_id} failed");
-    }
+    // Dispatch all requests in parallel.
+    futures::future::try_join_all(requests).await.unwrap();
 }
 
 pub async fn read_counters_on_counter_canisters(
@@ -206,7 +186,7 @@ pub async fn read_counters_on_counter_canisters(
     // Perform query read calls on canisters sequentially.
     let mut results = vec![];
     for canister_id in canisters {
-        let read_result = retry_with_msg_async!(
+        let read_result = ic_system_test_driver::retry_with_msg_async!(
             format!("call read on canister={canister_id}"),
             log,
             retry_timeout,

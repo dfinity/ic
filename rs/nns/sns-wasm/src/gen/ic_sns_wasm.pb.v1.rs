@@ -204,6 +204,22 @@ pub struct GetWasmResponse {
     #[prost(message, optional, tag = "1")]
     pub wasm: ::core::option::Option<SnsWasm>,
 }
+/// Similar to GetWasmRequest, but only returns the NNS proposal ID that blessed the wasm.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetProposalIdThatAddedWasmRequest {
+    #[prost(bytes = "vec", tag = "1")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+}
+/// The NNS proposal ID that blessed the wasm, if it was recorded.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetProposalIdThatAddedWasmResponse {
+    #[prost(uint64, optional, tag = "1")]
+    pub proposal_id: ::core::option::Option<u64>,
+}
 /// Payload to deploy a new SNS.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -360,7 +376,8 @@ pub struct PrettySnsVersion {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetNextSnsVersionRequest {
-    /// The current version recorded on the SNS (in Governance, the "deployed_version" field)
+    /// The current version recorded on the SNS (in Governance, the "deployed_version" field). This
+    /// field is still required when governance_canister_id is provided.
     #[prost(message, optional, tag = "1")]
     pub current_version: ::core::option::Option<SnsVersion>,
     /// If supplied, will replace "caller" to allow verifying the response a particular
@@ -500,7 +517,7 @@ pub mod get_deployed_sns_by_proposal_id_response {
         DeployedSns(super::DeployedSns),
     }
 }
-/// The argument for get_wasm, which consists of the WASM hash to be retrieved.
+/// The request type for get_wasm_metadata, which returns the metadata for a given wasm
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -524,7 +541,7 @@ pub struct MetadataSection {
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub contents: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
-/// The response for get_wasm, which returns a WASM if it is found, or None.
+/// The response for get_wasm_metadata, which returns the metadata for a given wasm
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

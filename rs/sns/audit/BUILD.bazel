@@ -3,9 +3,10 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/neurons_fund",
     "//rs/nns/common",
-    "//rs/nns/governance",
+    "//rs/nns/governance/api",
     "//rs/sns/governance",
     "//rs/sns/swap",
     "@crate_index//:candid",

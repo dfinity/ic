@@ -25,21 +25,23 @@ Success::
 
 end::catalog[] */
 
+use std::env;
 use std::time::Duration;
 
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    HasDependencies, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, IcNodeSnapshot,
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer,
+    IcNodeSnapshot,
 };
-use crate::util::{
+use ic_system_test_driver::util::{
     assert_nodes_health_statuses, assert_subnet_can_make_progress, block_on, runtime_from_url,
     EndpointsStatus,
 };
 
-use crate::driver::ic::InternetComputer;
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::InternetComputer;
 use slog::{info, Logger};
 use tokio::time::sleep;
 use xnet_test::{CanisterId, Metrics};
@@ -77,9 +79,9 @@ pub fn test(env: TestEnv) {
         .map(|n| runtime_from_url(n.get_public_url(), n.effective_canister_id()))
         .collect();
     // Step 1: Install Xnet canisters on each subnet.
-    let wasm = Wasm::from_file(
-        env.get_dependency_path("rs/rust_canisters/xnet_test/xnet-test-canister.wasm"),
-    );
+    let wasm = Wasm::from_file(get_dependency_path(
+        env::var("XNET_TEST_CANISTER_WASM_PATH").expect("XNET_TEST_CANISTER_WASM_PATH not set"),
+    ));
     info!(log, "Installing Xnet canisters on subnets ...");
     let canisters = install_canisters(&runtimes, SUBNETS_COUNT, CANISTERS_PER_SUBNET, wasm);
     let canisters_count = canisters.iter().map(Vec::len).sum::<usize>();

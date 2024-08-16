@@ -25,6 +25,7 @@ def rust_canbench(name, results_file, **kwargs):
     wasm_rust_binary_rule(
         name = name + "_wasm",
         binary = ":{name}_bin".format(name = name),
+        opt = "3",
     )
 
     canbench_bin = "$(location @crate_index//:canbench__canbench)"

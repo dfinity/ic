@@ -1,6 +1,6 @@
 //! Offers cryptographically secure pseudorandom number generation (CSPRNG).
 use ic_crypto_sha2::{DomainSeparationContext, Sha256};
-use ic_types::consensus::{RandomBeacon, RandomTape};
+use ic_types::consensus::RandomBeacon;
 use ic_types::crypto::CryptoHashable;
 use ic_types::Randomness;
 use rand::{CryptoRng, Error, RngCore, SeedableRng};
@@ -52,14 +52,6 @@ impl Csprng {
         Csprng {
             rng: ChaCha20Rng::from_seed(seed),
         }
-    }
-
-    /// Creates a CSPRNG seed from the given random tape.
-    ///
-    /// The returned seed can be used to create a CSPRNG with
-    /// `Csprng::from_seed_and_purpose`.
-    pub fn seed_from_random_tape(random_tape: &RandomTape) -> Randomness {
-        Csprng::seed_from_crypto_hashable(random_tape)
     }
 
     /// Creates a CSPRNG seed from the given crypto hashable.

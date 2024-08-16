@@ -1,16 +1,14 @@
 use dfn_candid::{candid, candid_one};
 use ic_canister_client_sender::Sender;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_3_ID,
+};
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
-use ic_nns_governance::{
-    init::{TEST_NEURON_1_ID, TEST_NEURON_2_ID, TEST_NEURON_3_ID},
-    pb::v1::{
-        manage_neuron::{Command, NeuronIdOrSubaccount},
-        manage_neuron_response::Command as CommandResponse,
-        proposal::Action,
-        GovernanceError, KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse, ManageNeuron,
-        ManageNeuronResponse, NeuronInfo, Proposal, ProposalStatus,
-    },
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron::NeuronIdOrSubaccount, manage_neuron_response::Command as CommandResponse,
+    GovernanceError, KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse, MakeProposalRequest,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NeuronInfo,
+    ProposalActionRequest, ProposalStatus,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -45,27 +43,29 @@ fn test_known_neurons() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuron {
+                ManageNeuronRequest {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
                         ic_nns_common::pb::v1::NeuronId {
                             id: TEST_NEURON_1_ID,
                         },
                     )),
                     id: None,
-                    command: Some(Command::MakeProposal(Box::new(Proposal {
-                        title: Some("Naming neuron 2.".to_string()),
-                        summary: "".to_string(),
-                        url: "".to_string(),
-                        action: Some(Action::RegisterKnownNeuron(KnownNeuron {
-                            id: Some(NeuronId {
-                                id: TEST_NEURON_2_ID,
-                            }),
-                            known_neuron_data: Some(KnownNeuronData {
-                                name: "NeuronTwo".to_string(),
-                                description: None,
-                            }),
-                        })),
-                    }))),
+                    command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
+                        MakeProposalRequest {
+                            title: Some("Naming neuron 2.".to_string()),
+                            summary: "".to_string(),
+                            url: "".to_string(),
+                            action: Some(ProposalActionRequest::RegisterKnownNeuron(KnownNeuron {
+                                id: Some(NeuronId {
+                                    id: TEST_NEURON_2_ID,
+                                }),
+                                known_neuron_data: Some(KnownNeuronData {
+                                    name: "NeuronTwo".to_string(),
+                                    description: None,
+                                }),
+                            })),
+                        },
+                    ))),
                 },
                 &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
             )
@@ -76,34 +76,40 @@ fn test_known_neurons() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuron {
+                ManageNeuronRequest {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
                         ic_nns_common::pb::v1::NeuronId {
                             id: TEST_NEURON_1_ID,
                         },
                     )),
                     id: None,
-                    command: Some(Command::MakeProposal(Box::new(Proposal {
-                        title: Some("Naming neuron 3.".to_string()),
-                        summary: "".to_string(),
-                        url: "".to_string(),
-                        action: Some(Action::RegisterKnownNeuron(KnownNeuron {
-                            id: Some(NeuronId {
-                                id: TEST_NEURON_3_ID,
-                            }),
-                            known_neuron_data: Some(KnownNeuronData {
-                                name: "NeuronThree".to_string(),
-                                description: None,
-                            }),
-                        })),
-                    }))),
+                    command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
+                        MakeProposalRequest {
+                            title: Some("Naming neuron 3.".to_string()),
+                            summary: "".to_string(),
+                            url: "".to_string(),
+                            action: Some(ProposalActionRequest::RegisterKnownNeuron(KnownNeuron {
+                                id: Some(NeuronId {
+                                    id: TEST_NEURON_3_ID,
+                                }),
+                                known_neuron_data: Some(KnownNeuronData {
+                                    name: "NeuronThree".to_string(),
+                                    description: None,
+                                }),
+                            })),
+                        },
+                    ))),
                 },
                 &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
             )
             .await
             .expect("Error calling the manage_neuron api.");
 
-        let pid_1 = match result_1.expect("Error making proposal").command.unwrap() {
+        let pid_1 = match result_1
+            .panic_if_error("Error making proposal")
+            .command
+            .unwrap()
+        {
             CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
             some_error => {
                 panic!(
@@ -112,7 +118,11 @@ fn test_known_neurons() {
                 )
             }
         };
-        let pid_2 = match result_2.expect("Error making proposal").command.unwrap() {
+        let pid_2 = match result_2
+            .panic_if_error("Error making proposal")
+            .command
+            .unwrap()
+        {
             CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
             some_error => {
                 panic!(

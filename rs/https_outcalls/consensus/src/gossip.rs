@@ -3,15 +3,16 @@
 pub use crate::pool_manager::CanisterHttpPoolManagerImpl;
 use ic_consensus_utils::registry_version_at_height;
 use ic_interfaces::{
-    canister_http::CanisterHttpPool, consensus_pool::ConsensusPoolCache,
-    p2p::consensus::PriorityFnAndFilterProducer,
+    canister_http::CanisterHttpPool,
+    consensus_pool::ConsensusPoolCache,
+    p2p::consensus::{Priority, PriorityFn, PriorityFnFactory},
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    artifact::{CanisterHttpResponseId, Priority, PriorityFn},
-    artifact_kind::CanisterHttpArtifact,
+    artifact::CanisterHttpResponseId, canister_http::CanisterHttpResponseShare,
+    messages::CallbackId,
 };
 use std::{collections::BTreeSet, sync::Arc};
 
@@ -42,7 +43,7 @@ impl CanisterHttpGossipImpl {
     }
 }
 
-impl<Pool: CanisterHttpPool> PriorityFnAndFilterProducer<CanisterHttpArtifact, Pool>
+impl<Pool: CanisterHttpPool> PriorityFnFactory<CanisterHttpResponseShare, Pool>
     for CanisterHttpGossipImpl
 {
     fn get_priority_function(
@@ -78,7 +79,8 @@ impl<Pool: CanisterHttpPool> PriorityFnAndFilterProducer<CanisterHttpArtifact, P
 
             // The https outcalls share should be fetched in two cases:
             //  - The Id of the share is part of the state which means it is active.
-            //  - The callback Id is higher than the next callback Id (the next callback Id is the Id used next in execution round).
+            //  - The callback Id is higher than the next callback Id (the next callback Id is the Id used next in execution round), but
+            //    not higher that `MAX_NUMBER_OF_REQUESTS_AHEAD`.
             //    Receiving an callback Id higher is possible because the priority fn is updated periodically (every 3s) with the latest state
             //    and can therefore store stale `known_request_ids` and stale `next_callback_id`.
             if known_request_ids.contains(&id.content.id)
@@ -86,7 +88,7 @@ impl<Pool: CanisterHttpPool> PriorityFnAndFilterProducer<CanisterHttpArtifact, P
                     && id.content.id <= highest_accepted_request_id)
             {
                 Priority::FetchNow
-            } else if (id.content.id > highest_accepted_request_id) {
+            } else if id.content.id > highest_accepted_request_id {
                 Priority::Stash
             } else {
                 Priority::Drop

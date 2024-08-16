@@ -8,5 +8,4 @@ documentation.workspace = true
 
 [dependencies]
 tracing = { workspace = true }
-tracing-flame = "0.2.0"
 tracing-subscriber = { workspace = true }

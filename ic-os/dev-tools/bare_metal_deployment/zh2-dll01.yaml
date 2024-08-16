@@ -1,0 +1,10 @@
+file_share_url: 10.10.101.234
+file_share_dir: /srv/images
+file_share_image_filename: setupos.bmd.img
+inject_image_ipv6_prefix: 2a00:fb01:400:44
+inject_image_ipv6_gateway: 2a00:fb01:400:44::1
+inject_image_ipv4_address: 212.71.126.49
+inject_image_ipv4_gateway: 212.71.126.54
+inject_image_ipv4_prefix_length: 29
+inject_image_domain: bare-metal-deployment.icp5.io
+inject_image_verbose: false

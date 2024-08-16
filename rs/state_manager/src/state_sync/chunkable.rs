@@ -13,8 +13,6 @@ use crate::{
 };
 use ic_interfaces::p2p::state_sync::{AddChunkError, Chunk, ChunkId, Chunkable};
 use ic_logger::{debug, error, fatal, info, trace, warn, ReplicaLogger};
-use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_state_layout::utils::do_copy_overwrite;
 use ic_state_layout::{error::LayoutError, CheckpointLayout, ReadOnly, RwPolicy, StateLayout};
 use ic_sys::mmap::ScopedMmap;
@@ -87,10 +85,8 @@ pub(crate) struct IncompleteState {
     metrics: StateManagerMetrics,
     started_at: Instant,
     fetch_started_at: Option<Instant>,
-    own_subnet_type: SubnetType,
     thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
     state_sync_refs: StateSyncRefs,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     #[allow(dead_code)]
     malicious_flags: MaliciousFlags,
 }
@@ -223,10 +219,8 @@ impl IncompleteState {
             metrics: state_sync.state_manager.metrics.clone(),
             started_at: Instant::now(),
             fetch_started_at: None,
-            own_subnet_type: state_sync.state_manager.own_subnet_type,
             thread_pool,
             state_sync_refs: state_sync.state_sync_refs.clone(),
-            fd_factory: state_sync.state_manager.fd_factory.clone(),
             malicious_flags: state_sync.state_manager.malicious_flags.clone(),
         })
     }
@@ -784,9 +778,7 @@ impl IncompleteState {
         root: &Path,
         height: Height,
         state_layout: &StateLayout,
-        own_subnet_type: SubnetType,
         thread_pool: &mut scoped_threadpool::Pool,
-        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) {
         let _timer = metrics
             .state_sync_metrics
@@ -799,36 +791,21 @@ impl IncompleteState {
             "state sync: start to make a checkpoint from the scratchpad"
         );
 
-        let ro_layout = CheckpointLayout::<ReadOnly>::new_untracked(root.to_path_buf(), height)
-            .expect("failed to create checkpoint layout");
-
-        // Recover the state to make sure it's usable
-        if let Err(err) = crate::checkpoint::load_checkpoint(
-            &ro_layout,
-            own_subnet_type,
-            &metrics.checkpoint_metrics,
-            Some(thread_pool),
-            Arc::clone(&fd_factory),
-        ) {
-            let elapsed = started_at.elapsed();
-            metrics
-                .state_sync_metrics
-                .duration
-                .with_label_values(&["unrecoverable"])
-                .observe(elapsed.as_secs_f64());
-
-            fatal!(
-                log,
-                "Failed to recover synced state {} after {:?}: {}",
-                height,
-                elapsed,
-                err
-            )
-        }
-
         let scratchpad_layout =
             CheckpointLayout::<RwPolicy<()>>::new_untracked(root.to_path_buf(), height)
                 .expect("failed to create checkpoint layout");
+
+        scratchpad_layout
+            .create_unverified_checkpoint_marker()
+            .unwrap_or_else(|err| {
+                fatal!(
+                    log,
+                    "Failed to create a checkpoint marker for state {} at path {}: {}",
+                    height,
+                    scratchpad_layout.raw_path().display(),
+                    err,
+                )
+            });
 
         match state_layout.scratchpad_to_checkpoint(scratchpad_layout, height, Some(thread_pool)) {
             Ok(_) => {
@@ -1127,8 +1104,6 @@ fn maliciously_alter_chunk_data(
         }
     };
 
-    let payload = chunk.clone();
-
     let ix = chunk_id.get();
     match state_sync_chunk_type(ix) {
         StateSyncChunk::MetaManifestChunk => {
@@ -1136,27 +1111,33 @@ fn maliciously_alter_chunk_data(
                 return chunk;
             }
             allowance.meta_manifest_chunk_error_allowance -= 1;
-            let meta_manifest = match decode_meta_manifest(&payload) {
+            let meta_manifest = match decode_meta_manifest(chunk.as_bytes().to_vec().into()) {
                 Ok(meta_manifest) => meta_manifest,
                 Err(_) => {
                     return chunk;
                 }
             };
-            chunk = crate::state_sync::types::maliciously_alter_meta_manifest(meta_manifest);
+            chunk = crate::state_sync::types::maliciously_alter_meta_manifest(meta_manifest).into();
         }
         StateSyncChunk::ManifestChunk(_) => {
             if allowance.manifest_chunk_error_allowance == 0 {
                 return chunk;
             }
             allowance.manifest_chunk_error_allowance -= 1;
-            chunk = crate::state_sync::types::maliciously_alter_chunk_payload(payload);
+            chunk = crate::state_sync::types::maliciously_alter_chunk_payload(
+                chunk.as_bytes().to_vec(),
+            )
+            .into();
         }
         _ => {
             if allowance.state_chunk_error_allowance == 0 {
                 return chunk;
             }
             allowance.state_chunk_error_allowance -= 1;
-            chunk = crate::state_sync::types::maliciously_alter_chunk_payload(payload);
+            chunk = crate::state_sync::types::maliciously_alter_chunk_payload(
+                chunk.as_bytes().to_vec(),
+            )
+            .into();
         }
     }
     // Sleep for 15 seconds to allow the replica connecting to more peers for state sync.
@@ -1201,7 +1182,6 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
         #[cfg(feature = "malicious_code")]
         let chunk = maliciously_alter_chunk_data(chunk, chunk_id, &mut self.malicious_flags);
         let ix = chunk_id.get();
-        let payload = &chunk;
         match &mut self.state {
             DownloadState::Complete => {
                 debug!(
@@ -1213,7 +1193,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
             }
             DownloadState::Blank => {
                 if chunk_id == META_MANIFEST_CHUNK {
-                    let meta_manifest = decode_meta_manifest(payload).map_err(|err| {
+                    let meta_manifest = decode_meta_manifest(chunk).map_err(|err| {
                         warn!(
                             self.log,
                             "Failed to decode meta-manifest chunk for state {}: {}",
@@ -1291,7 +1271,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
 
                 crate::manifest::validate_sub_manifest(
                     manifest_chunk_index,
-                    &payload[..],
+                    chunk.as_bytes(),
                     meta_manifest,
                 )
                 .map_err(|err| {
@@ -1304,7 +1284,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
 
                     AddChunkError::Invalid
                 })?;
-                manifest_in_construction.insert(ix, payload.clone());
+                manifest_in_construction.insert(ix, chunk.take());
                 manifest_chunks.remove(&ix);
 
                 debug!(
@@ -1365,9 +1345,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             &self.root,
                             self.height,
                             &self.state_layout,
-                            self.own_subnet_type,
                             &mut self.thread_pool.lock().unwrap(),
-                            Arc::clone(&self.fd_factory),
                         );
 
                         self.state_sync.deliver_state_sync(
@@ -1446,7 +1424,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                 let (chunk_table_indices, payload_pieces) = match state_sync_chunk_type(ix) {
                     StateSyncChunk::FileChunk(index) => {
                         // If it is a normal chunk, there is only one index mapped to the whole payload.
-                        (vec![index], vec![(0, payload.len())])
+                        (vec![index], vec![(0, chunk.as_bytes().len())])
                     }
                     StateSyncChunk::FileGroupChunk(index) => {
                         // If it is a file group chunk, divide it into pieces according to the `FileGroupChunks`.
@@ -1464,7 +1442,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             cur_offset += chunk_size;
                         }
 
-                        if cur_offset != payload.len() {
+                        if cur_offset != chunk.as_bytes().len() {
                             warn!(self.log, "Received invalid file group chunk {}", ix);
                             return Err(AddChunkError::Invalid);
                         }
@@ -1486,7 +1464,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                 {
                     crate::manifest::validate_chunk(
                         *chunk_table_index as usize,
-                        &payload[start..end],
+                        &chunk.as_bytes()[start..end],
                         manifest,
                     )
                     .map_err(|err| {
@@ -1508,7 +1486,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         &self.metrics.state_sync_metrics,
                         &self.root,
                         *chunk_table_index as usize,
-                        &payload[start..end],
+                        &chunk.as_bytes()[start..end],
                         manifest,
                     );
                 }
@@ -1544,9 +1522,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         &self.root,
                         self.height,
                         &self.state_layout,
-                        self.own_subnet_type,
                         &mut self.thread_pool.lock().unwrap(),
-                        Arc::clone(&self.fd_factory),
                     );
 
                     self.state_sync.deliver_state_sync(

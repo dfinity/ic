@@ -7,10 +7,10 @@ use crate::{
     crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed},
     messages::CallbackId,
     signature::{BasicSignature, BasicSignatureBatch},
-    CountBytes, Time,
+    Time,
 };
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion};
-use ic_error_types::{RejectCode, TryFromError};
+use ic_error_types::RejectCode;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{
@@ -148,14 +148,6 @@ impl TryFrom<pb::CanisterHttpResponseDivergence> for CanisterHttpResponseDiverge
     }
 }
 
-impl CountBytes for CanisterHttpPayload {
-    fn count_bytes(&self) -> usize {
-        let timeouts_size: usize = self.timeouts.iter().map(CountBytes::count_bytes).sum();
-        let response_size: usize = self.responses.iter().map(CountBytes::count_bytes).sum();
-        timeouts_size + response_size
-    }
-}
-
 impl From<&CanisterHttpResponseContent> for pb::CanisterHttpResponseContent {
     fn from(content: &CanisterHttpResponseContent) -> Self {
         let inner = match content {
@@ -164,7 +156,6 @@ impl From<&CanisterHttpResponseContent> for pb::CanisterHttpResponseContent {
             }
             CanisterHttpResponseContent::Reject(error) => {
                 pb::canister_http_response_content::Status::Reject(pb::CanisterHttpReject {
-                    reject_code_old: error.reject_code as u32,
                     message: error.message.clone(),
                     reject_code: pb::RejectCode::from(error.reject_code).into(),
                 })
@@ -190,32 +181,15 @@ impl TryFrom<pb::CanisterHttpResponseContent> for CanisterHttpResponseContent {
                     CanisterHttpResponseContent::Success(payload)
                 }
                 pb::canister_http_response_content::Status::Reject(error) => {
-                    // A value of 0 for `reject_code_old` indicates that the field
-                    // was not set, i.e. we are past a replica version that has
-                    // populated the new field `reject_code` and we can use that
-                    // instead. Otherwise, we should still use the old field
-                    // when decoding.
-                    let reject_code = if error.reject_code_old == 0 {
-                        RejectCode::try_from(pb::RejectCode::try_from(error.reject_code).map_err(
-                            |_| ProxyDecodeError::ValueOutOfRange {
-                                typ: "reject_code",
-                                err: format!("value out of range: {}", error.reject_code),
-                            },
-                        )?)?
-                    } else {
-                        RejectCode::try_from(error.reject_code_old as u64).map_err(
-                            |err| match err {
-                                TryFromError::ValueOutOfRange(range) => {
-                                    ProxyDecodeError::ValueOutOfRange {
-                                        typ: "reject_code",
-                                        err: format!("value out of range: {}", range),
-                                    }
-                                }
-                            },
-                        )?
-                    };
                     CanisterHttpResponseContent::Reject(CanisterHttpReject {
-                        reject_code,
+                        reject_code: RejectCode::try_from(
+                            pb::RejectCode::try_from(error.reject_code).map_err(|_| {
+                                ProxyDecodeError::ValueOutOfRange {
+                                    typ: "reject_code",
+                                    err: format!("value out of range: {}", error.reject_code),
+                                }
+                            })?,
+                        )?,
                         message: error.message,
                     })
                 }

@@ -9,7 +9,6 @@ use std::str::FromStr;
 /// The network_identifier specifies which network a particular object is
 /// associated with.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct NetworkIdentifier {
     pub blockchain: String,
 
@@ -49,7 +48,6 @@ impl TryFrom<&NetworkIdentifier> for CanisterId {
 /// query some object on a specific shard. This identifier is optional for all
 /// non-sharded blockchains.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct SubNetworkIdentifier {
     pub network: String,
 
@@ -68,7 +66,6 @@ impl SubNetworkIdentifier {
 
 /// The block_identifier uniquely identifies a block in a particular network.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct BlockIdentifier {
     /// This is also known as the block height.
     pub index: u64,
@@ -107,7 +104,6 @@ impl TryFrom<BlockIdentifier> for ByteBuf {
 /// the index or hash. If neither property is specified, it is assumed that the
 /// client is making a request at the current block.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct PartialBlockIdentifier {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub index: Option<u64>,
@@ -142,7 +138,6 @@ impl From<BlockIdentifier> for PartialBlockIdentifier {
 /// The transaction_identifier uniquely identifies a transaction in a particular
 /// network and block or in the mempool.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct TransactionIdentifier {
     /// Any transactions that are attributable only to a block (ex: a block event) should use the hash of the block as the identifier. This should be normalized according to the case specified in the transaction_hash_case in network options.
     pub hash: String,
@@ -174,7 +169,6 @@ impl TryFrom<TransactionIdentifier> for ByteBuf {
 /// The operation_identifier uniquely identifies an operation within a
 /// transaction.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct OperationIdentifier {
     /// The operation index is used to ensure each operation has a unique
     /// identifier within a transaction. This index is only relative to the
@@ -205,7 +199,6 @@ impl OperationIdentifier {
 /// fields in the account_identifier are utilized to determine this uniqueness
 /// (including the metadata field, if populated).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct AccountIdentifier {
     /// The address may be a cryptographic public key (or some encoding of it)
     /// or a provided username.
@@ -263,7 +256,6 @@ impl From<icrc_ledger_types::icrc1::account::Account> for AccountIdentifier {
 /// and/or a stake (delegated balance). The sub_account_identifier should
 /// specify which state (if applicable) an account instantiation refers to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct SubAccountIdentifier {
     /// The SubAccount address may be a cryptographic value or some other
     /// identifier (ex: bonded) that uniquely specifies a SubAccount.
@@ -279,7 +271,6 @@ pub struct SubAccountIdentifier {
 
 /// CoinIdentifier uniquely identifies a Coin.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct CoinIdentifier {
     /// Identifier should be populated with a globally unique identifier of a
     /// Coin. In Bitcoin, this identifier would be transaction_hash:index.

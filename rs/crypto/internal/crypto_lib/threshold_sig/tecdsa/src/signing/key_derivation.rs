@@ -79,7 +79,7 @@ impl DerivationPath {
         curve_type: EccCurveType,
         chain_key: &[u8],
         index: &DerivationIndex,
-    ) -> ThresholdEcdsaResult<(Vec<u8>, EccScalar)> {
+    ) -> CanisterThresholdResult<(Vec<u8>, EccScalar)> {
         let mut hmac = Hmac::<Sha512>::new(chain_key);
 
         hmac.write(key_input);
@@ -89,7 +89,7 @@ impl DerivationPath {
 
         let key_offset = EccScalar::from_bytes_wide(curve_type, &hmac_output[..32])?;
 
-        let new_chain_key = hmac_output[32..].to_vec();
+        let new_chain_key = hmac_output[32..64].to_vec();
 
         // If iL >= order, try again with the "next" index
         if key_offset.serialize() != hmac_output[..32] {
@@ -106,6 +106,10 @@ impl DerivationPath {
     ///
     /// See <https://en.bitcoin.it/wiki/BIP_0032#Child_key_derivation_.28CKD.29_functions>
     ///
+    /// In addition to the derived point and chain code described in BIP32, this function
+    /// also returns the scalar which is the discrete logarithm of the difference between
+    /// the input and output points.
+    ///
     /// Extended to support larger inputs, which is needed for
     /// deriving the canister public key
     ///
@@ -116,7 +120,7 @@ impl DerivationPath {
         public_key: &EccPoint,
         chain_key: &[u8],
         index: &DerivationIndex,
-    ) -> ThresholdEcdsaResult<(EccPoint, Vec<u8>, EccScalar)> {
+    ) -> CanisterThresholdResult<(EccPoint, Vec<u8>, EccScalar)> {
         let mut ckd_input = public_key.serialize();
 
         loop {
@@ -140,9 +144,9 @@ impl DerivationPath {
         public_key: &EccPoint,
         chain_key: &[u8],
         index: &DerivationIndex,
-    ) -> ThresholdEcdsaResult<(EccPoint, Vec<u8>, EccScalar)> {
+    ) -> CanisterThresholdResult<(EccPoint, Vec<u8>, EccScalar)> {
         if public_key.curve_type() != EccCurveType::Ed25519 {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
 
         let mut ikm = public_key.serialize();
@@ -162,7 +166,7 @@ impl DerivationPath {
 
         let key_offset = EccScalar::from_bytes_wide(EccCurveType::Ed25519, &okm[0..64])?;
         let new_key = public_key.add_points(&EccPoint::mul_by_g(&key_offset))?;
-        let new_chain_key = okm[64..].to_vec();
+        let new_chain_key = okm[64..96].to_vec();
 
         Ok((new_key, new_chain_key, key_offset))
     }
@@ -170,7 +174,7 @@ impl DerivationPath {
     pub fn derive_tweak(
         &self,
         master_public_key: &EccPoint,
-    ) -> ThresholdEcdsaResult<(EccScalar, Vec<u8>)> {
+    ) -> CanisterThresholdResult<(EccScalar, Vec<u8>)> {
         let zeros = [0u8; 32];
         self.derive_tweak_with_chain_code(master_public_key, &zeros)
     }
@@ -179,16 +183,16 @@ impl DerivationPath {
         &self,
         master_public_key: &EccPoint,
         chain_code: &[u8],
-    ) -> ThresholdEcdsaResult<(EccScalar, Vec<u8>)> {
+    ) -> CanisterThresholdResult<(EccScalar, Vec<u8>)> {
         if chain_code.len() != 32 {
-            return Err(ThresholdEcdsaError::InvalidArguments(format!(
+            return Err(CanisterThresholdError::InvalidArguments(format!(
                 "Invalid chain code length {}",
                 chain_code.len()
             )));
         }
 
         if self.len() > Self::MAXIMUM_DERIVATION_PATH_LENGTH {
-            return Err(ThresholdEcdsaError::InvalidArguments(format!(
+            return Err(CanisterThresholdError::InvalidArguments(format!(
                 "Derivation path len {} larger than allowed maximum of {}",
                 self.len(),
                 Self::MAXIMUM_DERIVATION_PATH_LENGTH

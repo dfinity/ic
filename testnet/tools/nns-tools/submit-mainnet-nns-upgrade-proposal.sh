@@ -97,7 +97,6 @@ submit_nns_upgrade_proposal_mainnet() {
 if ! is_variable_set IC_ADMIN; then
     if [ ! -f "$MY_DOWNLOAD_DIR/ic-admin" ]; then
         PREVIOUS_VERSION=$(extract_previous_version "$PROPOSAL_FILE")
-
         install_binary ic-admin "$PREVIOUS_VERSION" "$MY_DOWNLOAD_DIR"
     fi
     IC_ADMIN=$MY_DOWNLOAD_DIR/ic-admin

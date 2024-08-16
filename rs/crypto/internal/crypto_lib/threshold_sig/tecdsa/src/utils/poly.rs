@@ -48,9 +48,9 @@ impl PartialEq for Polynomial {
 }
 
 impl Polynomial {
-    pub fn new(curve: EccCurveType, coefficients: Vec<EccScalar>) -> ThresholdEcdsaResult<Self> {
+    pub fn new(curve: EccCurveType, coefficients: Vec<EccScalar>) -> CanisterThresholdResult<Self> {
         if !coefficients.iter().all(|s| s.curve_type() == curve) {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
         Ok(Self {
             curve,
@@ -59,7 +59,7 @@ impl Polynomial {
     }
 
     /// Returns the polynomial with constant value `0`.
-    pub fn zero(curve: EccCurveType) -> ThresholdEcdsaResult<Self> {
+    pub fn zero(curve: EccCurveType) -> CanisterThresholdResult<Self> {
         Self::new(curve, vec![])
     }
 
@@ -92,9 +92,9 @@ impl Polynomial {
         constant: &EccScalar,
         num_coefficients: usize,
         rng: &mut R,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         if num_coefficients == 0 {
-            return Err(ThresholdEcdsaError::InvalidArguments(
+            return Err(CanisterThresholdError::InvalidArguments(
                 "Cannot have degree=0 polynomial with given constant".to_string(),
             ));
         }
@@ -140,9 +140,9 @@ impl Polynomial {
     }
 
     /// Polynomial addition
-    fn add(&self, rhs: &Self) -> ThresholdEcdsaResult<Self> {
+    fn add(&self, rhs: &Self) -> CanisterThresholdResult<Self> {
         if self.curve_type() != rhs.curve_type() {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
 
         let max_coef = std::cmp::max(self.coefficients.len(), rhs.coefficients.len());
@@ -157,11 +157,11 @@ impl Polynomial {
     }
 
     /// Compute product of a polynomial and a polynomial
-    pub fn mul(&self, rhs: &Self) -> ThresholdEcdsaResult<Self> {
+    pub fn mul(&self, rhs: &Self) -> CanisterThresholdResult<Self> {
         let curve_type = self.curve_type();
 
         if rhs.curve_type() != curve_type {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
 
         let lhs_coeffs = self.coefficients.len();
@@ -182,9 +182,9 @@ impl Polynomial {
     }
 
     /// Compute product of a polynomial and a scalar
-    fn mul_scalar(&self, scalar: &EccScalar) -> ThresholdEcdsaResult<Self> {
+    fn mul_scalar(&self, scalar: &EccScalar) -> CanisterThresholdResult<Self> {
         if self.curve_type() != scalar.curve_type() {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
 
         let n_coeffs = self.coefficients.len();
@@ -200,9 +200,9 @@ impl Polynomial {
     /// Evaluate the polynomial at x
     ///
     /// This uses Horner's method: <https://en.wikipedia.org/wiki/Horner%27s_method>
-    pub fn evaluate_at(&self, x: &EccScalar) -> ThresholdEcdsaResult<EccScalar> {
+    pub fn evaluate_at(&self, x: &EccScalar) -> CanisterThresholdResult<EccScalar> {
         if self.curve_type() != x.curve_type() {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
 
         if self.coefficients.is_empty() {
@@ -227,7 +227,7 @@ impl Polynomial {
     pub fn interpolate(
         curve: EccCurveType,
         samples: &[(EccScalar, EccScalar)],
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         if samples.is_empty() {
             return Polynomial::zero(curve);
         }
@@ -246,7 +246,7 @@ impl Polynomial {
         // `poly` so that it has the correct values on the previous samples.
         for (ref x, ref y) in &samples[1..] {
             if x.curve_type() != curve || y.curve_type() != curve {
-                return Err(ThresholdEcdsaError::CurveMismatch);
+                return Err(CanisterThresholdError::CurveMismatch);
             }
             // Scale `base` so that its value at `x` is the difference between `y` and
             // `poly`'s current value at `x`: Adding it to `poly` will then make
@@ -259,7 +259,7 @@ impl Polynomial {
 
             let inv = match base.evaluate_at(x)?.invert() {
                 Some(s) => s,
-                None => return Err(ThresholdEcdsaError::InterpolationError),
+                None => return Err(CanisterThresholdError::InterpolationError),
             };
 
             // Scaling factor for the base polynomial: `(y_i-poly(x_i))/base(x_i)`
@@ -290,14 +290,16 @@ pub enum CommitmentOpening {
 
 impl CommitmentOpening {
     pub fn open_dealing(
+        alg: IdkgProtocolAlgorithm,
         verified_dealing: &IDkgDealingInternal,
         associated_data: &[u8],
         dealer_index: NodeIndex,
         opener_index: NodeIndex,
         opener_secret_key: &MEGaPrivateKey,
         opener_public_key: &MEGaPublicKey,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         verified_dealing.ciphertext.decrypt_and_check(
+            alg,
             &verified_dealing.commitment,
             associated_data,
             dealer_index,
@@ -307,13 +309,22 @@ impl CommitmentOpening {
         )
     }
 
-    pub fn serialize(&self) -> ThresholdEcdsaSerializationResult<Vec<u8>> {
-        serde_cbor::to_vec(self).map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
+    pub fn serialize(&self) -> CanisterThresholdSerializationResult<Vec<u8>> {
+        serde_cbor::to_vec(self).map_err(|e| {
+            CanisterThresholdSerializationError(format!(
+                "failed to serialize CommitmentOpening: {}",
+                e
+            ))
+        })
     }
 
-    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaSerializationResult<Self> {
-        serde_cbor::from_slice::<Self>(bytes)
-            .map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
+    pub fn deserialize(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
+        serde_cbor::from_slice::<Self>(bytes).map_err(|e| {
+            CanisterThresholdSerializationError(format!(
+                "failed to deserialize CommitmentOpening: {}",
+                e
+            ))
+        })
     }
 }
 
@@ -342,9 +353,11 @@ impl Debug for CommitmentOpening {
 }
 
 impl TryFrom<&CommitmentOpeningBytes> for CommitmentOpening {
-    type Error = ThresholdEcdsaSerializationError;
+    type Error = CanisterThresholdSerializationError;
 
-    fn try_from(bytes: &CommitmentOpeningBytes) -> Result<Self, ThresholdEcdsaSerializationError> {
+    fn try_from(
+        bytes: &CommitmentOpeningBytes,
+    ) -> Result<Self, CanisterThresholdSerializationError> {
         match bytes {
             CommitmentOpeningBytes::Simple(scalar_bytes) => {
                 Ok(Self::Simple(EccScalar::try_from(scalar_bytes)?))
@@ -358,9 +371,9 @@ impl TryFrom<&CommitmentOpeningBytes> for CommitmentOpening {
 }
 
 impl TryFrom<&IDkgOpening> for CommitmentOpening {
-    type Error = ThresholdEcdsaSerializationError;
+    type Error = CanisterThresholdSerializationError;
 
-    fn try_from(idkg_opening: &IDkgOpening) -> Result<Self, ThresholdEcdsaSerializationError> {
+    fn try_from(idkg_opening: &IDkgOpening) -> Result<Self, CanisterThresholdSerializationError> {
         Self::deserialize(&idkg_opening.internal_opening_raw)
     }
 }
@@ -372,11 +385,11 @@ pub enum CommitmentOpeningBytes {
 }
 
 impl TryFrom<&CommitmentOpening> for CommitmentOpeningBytes {
-    type Error = ThresholdEcdsaSerializationError;
+    type Error = CanisterThresholdSerializationError;
 
     fn try_from(
         commitment_opening: &CommitmentOpening,
-    ) -> Result<Self, ThresholdEcdsaSerializationError> {
+    ) -> Result<Self, CanisterThresholdSerializationError> {
         match commitment_opening {
             CommitmentOpening::Simple(scalar) => {
                 Ok(Self::Simple(EccScalarBytes::try_from(scalar)?))
@@ -395,7 +408,7 @@ pub struct SimpleCommitment {
     pub points: Vec<EccPoint>,
 }
 
-fn evaluate_at(points: &[EccPoint], eval_point: NodeIndex) -> ThresholdEcdsaResult<EccPoint> {
+fn evaluate_at(points: &[EccPoint], eval_point: NodeIndex) -> CanisterThresholdResult<EccPoint> {
     let mut acc = points[points.len() - 1].clone();
     for pt in points.iter().rev().skip(1) {
         acc = acc.mul_by_node_index_vartime(eval_point)?;
@@ -416,9 +429,9 @@ impl SimpleCommitment {
     /// Create a new simple commitment
     ///
     /// The polynomial must have at most num_coefficients coefficients
-    pub fn create(poly: &Polynomial, num_coefficients: usize) -> ThresholdEcdsaResult<Self> {
+    pub fn create(poly: &Polynomial, num_coefficients: usize) -> CanisterThresholdResult<Self> {
         if poly.non_zero_coefficients() > num_coefficients {
-            return Err(ThresholdEcdsaError::InvalidArguments(
+            return Err(CanisterThresholdError::InvalidArguments(
                 "Polynomial has more coefficients than expected".to_string(),
             ));
         }
@@ -432,7 +445,7 @@ impl SimpleCommitment {
         Ok(Self::new(points))
     }
 
-    pub(crate) fn evaluate_at(&self, eval_point: NodeIndex) -> ThresholdEcdsaResult<EccPoint> {
+    pub(crate) fn evaluate_at(&self, eval_point: NodeIndex) -> CanisterThresholdResult<EccPoint> {
         evaluate_at(&self.points, eval_point)
     }
 
@@ -440,13 +453,13 @@ impl SimpleCommitment {
         &self,
         eval_point: NodeIndex,
         value: &EccScalar,
-    ) -> ThresholdEcdsaResult<()> {
+    ) -> CanisterThresholdResult<()> {
         let eval = self.evaluate_at(eval_point)?;
 
         if eval == EccPoint::mul_by_g(value) {
             Ok(())
         } else {
-            Err(ThresholdEcdsaError::InvalidCommitment)
+            Err(CanisterThresholdError::InvalidCommitment)
         }
     }
 }
@@ -475,15 +488,15 @@ impl PedersenCommitment {
         p_values: &Polynomial,
         p_masking: &Polynomial,
         num_coefficients: usize,
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> CanisterThresholdResult<Self> {
         if p_values.curve_type() != p_masking.curve_type() {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
 
         if p_values.non_zero_coefficients() > num_coefficients
             || p_masking.non_zero_coefficients() > num_coefficients
         {
-            return Err(ThresholdEcdsaError::InvalidArguments(
+            return Err(CanisterThresholdError::InvalidArguments(
                 "Polynomial has more coefficients than expected".to_string(),
             ));
         }
@@ -499,7 +512,7 @@ impl PedersenCommitment {
         Ok(Self::new(points))
     }
 
-    pub(crate) fn evaluate_at(&self, eval_point: NodeIndex) -> ThresholdEcdsaResult<EccPoint> {
+    pub(crate) fn evaluate_at(&self, eval_point: NodeIndex) -> CanisterThresholdResult<EccPoint> {
         evaluate_at(&self.points, eval_point)
     }
 
@@ -508,12 +521,12 @@ impl PedersenCommitment {
         eval_point: NodeIndex,
         value: &EccScalar,
         mask: &EccScalar,
-    ) -> ThresholdEcdsaResult<()> {
+    ) -> CanisterThresholdResult<()> {
         let eval = self.evaluate_at(eval_point)?;
         if eval == EccPoint::pedersen(value, mask)? {
             Ok(())
         } else {
-            Err(ThresholdEcdsaError::InvalidCommitment)
+            Err(CanisterThresholdError::InvalidCommitment)
         }
     }
 }
@@ -545,13 +558,13 @@ impl From<PedersenCommitment> for PolynomialCommitment {
 }
 
 impl PolynomialCommitment {
-    pub fn serialize(&self) -> ThresholdEcdsaSerializationResult<Vec<u8>> {
-        serde_cbor::to_vec(self).map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
+    pub fn serialize(&self) -> CanisterThresholdSerializationResult<Vec<u8>> {
+        serde_cbor::to_vec(self).map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
     }
 
-    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaSerializationResult<Self> {
+    pub fn deserialize(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(bytes)
-            .map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
+            .map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
     }
 
     /// This returns a stable serialization of the commitment
@@ -598,7 +611,7 @@ impl PolynomialCommitment {
         self.points().len()
     }
 
-    pub fn evaluate_at(&self, eval_point: NodeIndex) -> ThresholdEcdsaResult<EccPoint> {
+    pub fn evaluate_at(&self, eval_point: NodeIndex) -> CanisterThresholdResult<EccPoint> {
         evaluate_at(self.points(), eval_point)
     }
 
@@ -614,7 +627,7 @@ impl PolynomialCommitment {
         &self,
         index: NodeIndex,
         opening: &CommitmentOpening,
-    ) -> ThresholdEcdsaResult<CommitmentOpening> {
+    ) -> CanisterThresholdResult<CommitmentOpening> {
         // returns an Err if the commitment was invalid:
         self.check_opening(index, opening)?;
         Ok(opening.clone())
@@ -624,13 +637,13 @@ impl PolynomialCommitment {
         &self,
         ctype: PolynomialCommitmentType,
         curve: EccCurveType,
-    ) -> ThresholdEcdsaResult<()> {
+    ) -> CanisterThresholdResult<()> {
         if self.curve_type() != curve {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+            return Err(CanisterThresholdError::CurveMismatch);
         }
 
         if self.ctype() != ctype {
-            return Err(ThresholdEcdsaError::UnexpectedCommitmentType);
+            return Err(CanisterThresholdError::UnexpectedCommitmentType);
         }
 
         Ok(())
@@ -640,7 +653,7 @@ impl PolynomialCommitment {
         &self,
         eval_point: NodeIndex,
         opening: &CommitmentOpening,
-    ) -> ThresholdEcdsaResult<()> {
+    ) -> CanisterThresholdResult<()> {
         match (self, opening) {
             (PolynomialCommitment::Simple(c), CommitmentOpening::Simple(value)) => {
                 c.check_opening(eval_point, value)
@@ -650,7 +663,7 @@ impl PolynomialCommitment {
                 c.check_opening(eval_point, value, mask)
             }
 
-            _ => Err(ThresholdEcdsaError::InconsistentOpeningAndCommitment),
+            _ => Err(CanisterThresholdError::InconsistentOpeningAndCommitment),
         }
     }
 }
@@ -660,9 +673,9 @@ pub struct LagrangeCoefficients {
 }
 
 impl LagrangeCoefficients {
-    pub fn new(coefficients: Vec<EccScalar>) -> ThresholdEcdsaResult<Self> {
+    pub fn new(coefficients: Vec<EccScalar>) -> CanisterThresholdResult<Self> {
         if coefficients.is_empty() {
-            return Err(ThresholdEcdsaError::InterpolationError);
+            return Err(CanisterThresholdError::InterpolationError);
         }
 
         Ok(Self { coefficients })
@@ -676,9 +689,9 @@ impl LagrangeCoefficients {
     /// polynomial `f`, and some elliptic curve point `g`, returns `f(value) * g`.
     ///
     /// See: <https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing#Computationally_efficient_approach>
-    pub fn interpolate_point(&self, y: &[EccPoint]) -> ThresholdEcdsaResult<EccPoint> {
+    pub fn interpolate_point(&self, y: &[EccPoint]) -> CanisterThresholdResult<EccPoint> {
         if y.len() != self.coefficients.len() {
-            return Err(ThresholdEcdsaError::InterpolationError);
+            return Err(CanisterThresholdError::InterpolationError);
         }
         let point_scalar_refs: Vec<(&EccPoint, &EccScalar)> =
             y.iter().zip(self.coefficients.iter()).collect();
@@ -693,9 +706,9 @@ impl LagrangeCoefficients {
     /// polynomial `f`, returns `f(value) * g`.
     ///
     /// See: <https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing#Computationally_efficient_approach>
-    pub fn interpolate_scalar(&self, y: &[EccScalar]) -> ThresholdEcdsaResult<EccScalar> {
+    pub fn interpolate_scalar(&self, y: &[EccScalar]) -> CanisterThresholdResult<EccScalar> {
         if y.len() != self.coefficients.len() {
-            return Err(ThresholdEcdsaError::InterpolationError);
+            return Err(CanisterThresholdError::InterpolationError);
         }
         let curve_type = self.coefficients[0].curve_type();
         let mut result = EccScalar::zero(curve_type);
@@ -709,12 +722,12 @@ impl LagrangeCoefficients {
     ///
     /// Since these are public we don't need to worry about the lack of constant
     /// time behavior from HashSet
-    fn check_for_duplicates(node_index: &[NodeIndex]) -> ThresholdEcdsaResult<()> {
+    fn check_for_duplicates(node_index: &[NodeIndex]) -> CanisterThresholdResult<()> {
         let mut set = std::collections::HashSet::new();
 
         for i in node_index {
             if !set.insert(i) {
-                return Err(ThresholdEcdsaError::InterpolationError);
+                return Err(CanisterThresholdError::InterpolationError);
             }
         }
 
@@ -731,7 +744,7 @@ impl LagrangeCoefficients {
     pub fn at_zero(
         curve_type: EccCurveType,
         samples: &[NodeIndex],
-    ) -> Result<Self, ThresholdEcdsaError> {
+    ) -> Result<Self, CanisterThresholdError> {
         Self::at_value(&EccScalar::zero(curve_type), samples)
     }
 
@@ -742,10 +755,13 @@ impl LagrangeCoefficients {
     ///    * numerator_i = (x_0-value) * (x_1-value) * ... * (x_(i-1)-value) *(x_(i+1)-value) * ... *(x_n-value)
     ///    * denominator_i = (x_0 - x_i) * (x_1 - x_i) * ... * (x_(i-1) - x_i) *
     ///      (x_(i+1) - x_i) * ... * (x_n - x_i)
-    pub fn at_value(value: &EccScalar, samples: &[NodeIndex]) -> Result<Self, ThresholdEcdsaError> {
+    pub fn at_value(
+        value: &EccScalar,
+        samples: &[NodeIndex],
+    ) -> Result<Self, CanisterThresholdError> {
         // This is not strictly required but for our usage it simplifies matters
         if samples.is_empty() {
-            return Err(ThresholdEcdsaError::InterpolationError);
+            return Err(CanisterThresholdError::InterpolationError);
         }
 
         let curve_type = value.curve_type();
@@ -786,7 +802,7 @@ impl LagrangeCoefficients {
 
             let inv = match denom.invert() {
                 Some(s) => s,
-                None => return Err(ThresholdEcdsaError::InterpolationError),
+                None => return Err(CanisterThresholdError::InterpolationError),
             };
 
             *lagrange_i = lagrange_i.mul(&inv)?;

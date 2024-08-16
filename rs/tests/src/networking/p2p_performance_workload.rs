@@ -1,16 +1,17 @@
-use crate::{
+use ic_system_test_driver::{
     canister_api::{CallMode, GenericRequest},
     driver::{
         farm::HostFeature,
         ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
         prometheus_vm::{HasPrometheus, PrometheusVm},
+        simulate_network::{ProductionSubnetTopology, SimulateNetwork},
         test_env::TestEnv,
         test_env_api::{
-            retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            NnsInstallationBuilder, SshSession, SubnetSnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            NnsInstallationBuilder, SubnetSnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
+        universal_vm::{UniversalVm, UniversalVms},
     },
-    retry_with_msg_async,
     util::{agent_observes_canister_module, block_on, spawn_round_robin_workload_engine},
 };
 
@@ -18,7 +19,10 @@ use anyhow::bail;
 use ic_agent::Agent;
 use ic_registry_subnet_type::SubnetType;
 use slog::{debug, info, Logger};
-use std::time::Duration;
+use std::{
+    net::{IpAddr, SocketAddr},
+    time::Duration,
+};
 
 const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 const CANISTER_METHOD: &str = "write";
@@ -27,12 +31,18 @@ const APP_DURATION_THRESHOLD: Duration = Duration::from_secs(60);
 // Parameters related to workload creation.
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(2); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
 
+const JAEGER_VM_NAME: &str = "jaeger-vm";
+
+// 5 minutes
+const DOWNLOAD_PROMETHEUS_WAIT_TIME: Duration = Duration::from_secs(60 * 60);
+
 // Create an IC with two subnets, with variable number of nodes.
 // Install NNS canister on system subnet.
 pub fn config(
     env: TestEnv,
     nodes_nns_subnet: usize,
     nodes_app_subnet: usize,
+    network_simulation: Option<ProductionSubnetTopology>,
     boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
 ) {
     let logger = env.logger();
@@ -40,6 +50,29 @@ pub fn config(
         .with_required_host_features(vec![HostFeature::Performance])
         .start(&env)
         .expect("failed to start prometheus VM");
+
+    let path = get_dependency_path("rs/tests/jaeger_uvm_config_image.zst");
+
+    UniversalVm::new(JAEGER_VM_NAME.to_string())
+        .with_required_host_features(vec![HostFeature::Performance])
+        .with_vm_resources(VmResources {
+            vcpus: Some(NrOfVCPUs::new(16)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
+            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+        })
+        .with_config_img(path)
+        .start(&env)
+        .expect("failed to setup Jaeger Universal VM");
+
+    let deployed_universal_vm = env.get_deployed_universal_vm(JAEGER_VM_NAME).unwrap();
+    let universal_vm = deployed_universal_vm.get_vm().unwrap();
+    let jaeger_ipv6 = universal_vm.ipv6;
+
+    info!(
+        logger,
+        "Jaeger frontend available at: http://[{}]:16686", jaeger_ipv6
+    );
+
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(16)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(33560000)), // 32GiB
@@ -47,6 +80,7 @@ pub fn config(
     };
     InternetComputer::new()
         .with_required_host_features(vec![HostFeature::Performance])
+        .with_jaeger_addr(SocketAddr::new(IpAddr::V6(jaeger_ipv6), 4317))
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_default_vm_resources(vm_resources)
@@ -79,6 +113,15 @@ pub fn config(
                 .expect("Replica did not come up healthy.");
         }
     }
+
+    if let Some(network_simulation) = network_simulation {
+        info!(&logger, "Setting simulated packet loss and RTT.");
+
+        env.topology_snapshot()
+            .subnets()
+            .filter(|s| s.subnet_type() == SubnetType::Application)
+            .for_each(|s| s.apply_network_settings(network_simulation.clone()));
+    }
 }
 
 // Run a test with configurable number of update requests per second,
@@ -89,7 +132,6 @@ pub fn test(
     rps: usize,
     payload_size_bytes: usize,
     duration: Duration,
-    latency: Option<Duration>,
     download_prometheus_data: bool,
 ) {
     let log = env.logger();
@@ -131,7 +173,7 @@ pub fn test(
     );
     block_on(async {
         for agent in app_agents.iter() {
-            retry_with_msg_async!(
+            ic_system_test_driver::retry_with_msg_async!(
                 format!("observing canister module {}", app_canister.to_string()),
                 &log,
                 READY_WAIT_TIMEOUT,
@@ -148,60 +190,57 @@ pub fn test(
         }
     });
     info!(&log, "All agents observe the installed canister module.");
+    if rps == 0 {
+        info!(&log, "Step 4: No workload will be started.");
+        std::thread::sleep(duration);
+    } else {
+        info!(&log, "Step 5: Start workload.");
+        // Spawn one workload per subnet against the counter canister.
+        let payload: Vec<u8> = vec![0; payload_size_bytes];
+        let handle_app_workload = {
+            let requests = vec![GenericRequest::new(
+                app_canister,
+                CANISTER_METHOD.to_string(),
+                payload.clone(),
+                CallMode::UpdateNoPolling,
+            )];
+            spawn_round_robin_workload_engine(
+                log.clone(),
+                requests,
+                app_agents,
+                rps,
+                duration,
+                REQUESTS_DISPATCH_EXTRA_TIMEOUT,
+                vec![APP_DURATION_THRESHOLD],
+            )
+        };
 
-    if let Some(latency) = latency {
-        info!(&log, "Step 4: Modify network control settings.");
-        app_subnet.nodes().for_each(|node| {
-            let session = node
-                .block_on_ssh_session()
-                .expect("Failed to ssh into node");
-            node.block_on_bash_script_from_session(&session, &limit_tc_ssh_command(latency))
-                .expect("Failed to execute bash script from session");
-        });
+        let load_metrics_app = handle_app_workload
+            .join()
+            .expect("Workload execution against Application subnet failed.");
+        info!(
+            &log,
+            "Step 6: Collect metrics from the workloads and perform assertions ..."
+        );
+        info!(&log, "App subnet metrics {load_metrics_app}");
+        let requests_count_below_threshold_app =
+            load_metrics_app.requests_count_below_threshold(APP_DURATION_THRESHOLD);
+        info!(
+            &log,
+            "Application subnet: requests below {} sec: requests_count={:?}\nFailure calls: {}",
+            APP_DURATION_THRESHOLD.as_secs(),
+            requests_count_below_threshold_app,
+            load_metrics_app.failure_calls(),
+        );
     }
-
-    info!(&log, "Step 5: Start workload.");
-    // Spawn one workload per subnet against the counter canister.
-    let payload: Vec<u8> = vec![0; payload_size_bytes];
-    let handle_app_workload = {
-        let requests = vec![GenericRequest::new(
-            app_canister,
-            CANISTER_METHOD.to_string(),
-            payload.clone(),
-            CallMode::Update,
-        )];
-        spawn_round_robin_workload_engine(
-            log.clone(),
-            requests,
-            app_agents,
-            rps,
-            duration,
-            REQUESTS_DISPATCH_EXTRA_TIMEOUT,
-            vec![APP_DURATION_THRESHOLD],
-        )
-    };
-    let load_metrics_app = handle_app_workload
-        .join()
-        .expect("Workload execution against Application subnet failed.");
-    info!(
-        &log,
-        "Step 6: Collect metrics from the workloads and perform assertions ..."
-    );
-    info!(&log, "App subnet metrics {load_metrics_app}");
-    let requests_count_below_threshold_app =
-        load_metrics_app.requests_count_below_threshold(APP_DURATION_THRESHOLD);
-    info!(
-        &log,
-        "Application subnet: requests below {} sec: requests_count={:?}\nFailure calls: {}",
-        APP_DURATION_THRESHOLD.as_secs(),
-        requests_count_below_threshold_app,
-        load_metrics_app.failure_calls(),
-    );
 
     // Download Prometheus data if required.
     if download_prometheus_data {
-        info!(&log, "Waiting before download.");
-        std::thread::sleep(Duration::from_secs(100));
+        info!(
+            &log,
+            "Waiting {:?} before download.", DOWNLOAD_PROMETHEUS_WAIT_TIME
+        );
+        std::thread::sleep(DOWNLOAD_PROMETHEUS_WAIT_TIME);
         info!(&log, "Downloading p8s data");
         env.download_prometheus_data_dir_if_exists();
     }
@@ -220,21 +259,4 @@ fn create_agents_for_subnet(log: &Logger, subnet: &SubnetSnapshot) -> Vec<Agent>
             node.build_default_agent()
         })
         .collect::<_>()
-}
-
-/**
- * 1. Delete existing tc rules (if present).
- * 2. Add a qdisc to introduce latency and increase queue size to 1_000_000.
- * 3. Read the active tc rules.
- */
-fn limit_tc_ssh_command(latency: Duration) -> String {
-    format!(
-        r#"set -euo pipefail
-        sudo tc qdisc del dev {device} root 2> /dev/null || true
-        sudo tc qdisc add dev {device} root netem limit 10000000 delay {latency_ms}ms
-        sudo tc qdisc show dev {device}
-"#,
-        device = "enp1s0",
-        latency_ms = latency.as_millis(),
-    )
 }

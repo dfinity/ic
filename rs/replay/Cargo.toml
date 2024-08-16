@@ -29,14 +29,13 @@ ic-metrics = { path = "../monitoring/metrics" }
 ic-nervous-system-common = { path = "../nervous_system/common" }
 ic-nns-common = { path = "../nns/common" }
 ic-nns-constants = { path = "../nns/constants" }
-ic-nns-governance = { path = "../nns/governance" }
-ic-nns-init = { path = "../nns/init" }
+ic-nns-governance-api = { path = "../nns/governance/api" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
-ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-local-store = { path = "../registry/local_store" }
+ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-transport = { path = "../registry/transport" }
 ic-replicated-state = { path = "../replicated_state" }
@@ -44,15 +43,15 @@ ic-state-manager = { path = "../state_manager" }
 ic-types = { path = "../types/types" }
 icp-ledger = { path = "../rosetta-api/icp_ledger" }
 prost = { workspace = true }
-rand = "0.8"
+rand = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
-slog-async = { version = "2.5", features = ["nested-values"] }
-tempfile = "3.1.0"
+slog-async = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
-url = { version = "2.1.1", features = ["serde"] }
+url = { workspace = true }
 
 [dev-dependencies]
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }

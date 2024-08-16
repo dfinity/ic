@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use arc_swap::ArcSwap;
 use async_trait::async_trait;
@@ -25,8 +25,11 @@ impl Default for NodeHealthCheckerMock {
 impl HealthCheck for NodeHealthCheckerMock {
     async fn check(&self, node: &Node) -> Result<HealthCheckResult, HealthCheckError> {
         let nodes = self.health_map.load_full();
-        let is_healthy = *nodes.get(&node.domain).unwrap();
-        Ok(HealthCheckResult { is_healthy })
+        let latency = match *nodes.get(&node.domain).unwrap() {
+            true => Some(Duration::from_secs(1)),
+            false => None,
+        };
+        Ok(HealthCheckResult { latency })
     }
 }
 

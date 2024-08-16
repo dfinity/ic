@@ -1460,7 +1460,7 @@ fn test_scalar_from_node_index_returns_correct_value() {
     let mut i: NodeIndex = 0;
     loop {
         assert_eq!(Scalar::from_node_index(i), x);
-        if i == NodeIndex::max_value() {
+        if i == NodeIndex::MAX {
             break;
         }
         i = i * 2 + 1;

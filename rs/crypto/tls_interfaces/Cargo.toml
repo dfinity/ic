@@ -7,18 +7,16 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-async-trait = { workspace = true }
-ic-types = { path = "../../types/types" }
 ic-protobuf = { path = "../../protobuf" }
-serde = { workspace = true }
+ic-types = { path = "../../types/types" }
 rustls = { workspace = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true }
 x509-parser = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
 ic-crypto-test-utils-tls = { path = "../test_utils/tls" }
-maplit = "1.0"
 json5 = "0.4.1"
+maplit = "1.0"

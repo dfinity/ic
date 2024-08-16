@@ -29,7 +29,7 @@ ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 prost = { workspace = true }
 slog = { workspace = true }
-slog-term = "2.6.0"
+slog-term = { workspace = true }
 
 [dev-dependencies]
-tempfile = "3.1.0"
+tempfile = { workspace = true }

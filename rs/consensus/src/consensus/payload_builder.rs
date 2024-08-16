@@ -9,7 +9,7 @@ use crate::consensus::{
 use ic_consensus_utils::get_subnet_record;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, ProposalContext},
-    consensus::{PayloadBuilder, PayloadPermanentError, PayloadValidationError},
+    consensus::{InvalidPayloadReason, PayloadBuilder, PayloadValidationError},
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
     self_validating_payload::SelfValidatingPayloadBuilder,
@@ -76,12 +76,16 @@ impl PayloadBuilderImpl {
         registry_client: Arc<dyn RegistryClient>,
         ingress_selector: Arc<dyn IngressSelector>,
         xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
+        canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
         metrics: MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
         let section_builder = vec![
             BatchPayloadSectionBuilder::Ingress(ingress_selector),
             BatchPayloadSectionBuilder::XNet(xnet_payload_builder),
+            BatchPayloadSectionBuilder::CanisterHttp(canister_http_payload_builder),
+            BatchPayloadSectionBuilder::QueryStats(query_stats_payload_builder),
         ];
 
         Self {
@@ -124,7 +128,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
         let mut batch_payload = BatchPayload::default();
         let mut accumulated_size = 0;
 
-        for section_id in section_select {
+        for (priority, section_id) in section_select.into_iter().enumerate() {
             accumulated_size += self.section_builder[section_id]
                 .build_payload(
                     &mut batch_payload,
@@ -139,6 +143,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
                             .saturating_sub(accumulated_size),
                     ),
                     past_payloads,
+                    priority,
                     &self.metrics,
                     &self.logger,
                 )
@@ -183,8 +188,8 @@ impl PayloadBuilder for PayloadBuilderImpl {
             self.metrics.critical_error_payload_too_large.inc();
         }
         if accumulated_size > max_block_payload_size * 2 {
-            return Err(ValidationError::Permanent(
-                PayloadPermanentError::PayloadTooBig {
+            return Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::PayloadTooBig {
                     expected: max_block_payload_size,
                     received: accumulated_size,
                 },
@@ -237,7 +242,7 @@ impl PayloadBuilderImpl {
 #[cfg(test)]
 pub(crate) mod test {
     use super::*;
-    use ic_btc_types_internal::{
+    use ic_btc_replica_types::{
         BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsResponseComplete,
     };
     use ic_consensus_mocks::{dependencies, Dependencies};

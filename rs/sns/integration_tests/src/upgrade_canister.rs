@@ -25,8 +25,8 @@ use ic_sns_governance::pb::v1::{
 use ic_sns_test_utils::{
     itest_helpers::{
         install_governance_canister, install_ledger_canister, install_root_canister,
-        install_swap_canister, local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder,
-        UserInfo,
+        install_swap_canister, local_test_on_sns_subnet, state_machine_test_on_sns_subnet,
+        SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo,
     },
     state_test_helpers::{
         setup_sns_canisters, sns_root_register_dapp_canisters, state_machine_builder_for_sns_tests,
@@ -537,7 +537,7 @@ fn test_upgrade_canister_proposal_too_large() {
 
 #[test]
 fn governance_mem_test() {
-    local_test_on_sns_subnet(|runtime| async move {
+    state_machine_test_on_sns_subnet(|runtime| async move {
         println!("Initializing governance mem test canister...");
 
         let mut runtime = runtime;

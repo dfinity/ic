@@ -279,6 +279,7 @@ impl QueryHandlerMetrics {
 /// - the number of instructions executed in the phase,
 /// - the number of slices executed in the phase,
 /// - the number of messages executed in the phase.
+///
 /// Use `MeasurementScope` instead of observing the metrics manually.
 #[derive(Debug)]
 pub(crate) struct ScopedMetrics {
@@ -302,6 +303,7 @@ pub(crate) struct ScopedMetrics {
 /// 2) Add `let scope = MeasurementScope::root(...)` in the top-most phase.
 /// 3) Add `let scope = MeasurementScope::nested(...)` in a sub-phase.
 /// 4) Tell the scopes about executed instructions using `scope.add()`.
+///
 /// See the `example_usage()` test below for details.
 #[must_use = "Keep the scope in a local variable"]
 #[derive(Debug)]
@@ -444,7 +446,7 @@ pub fn cycles_histogram<S: Into<String>>(
     metrics_registry.histogram(name, help, decimal_buckets_with_zero(6, 15))
 }
 
-/// Returns buckets appropriate for WASM and Stable memories
+/// Returns buckets appropriate for Wasm and Stable memories
 fn memory_buckets() -> Vec<f64> {
     const K: u64 = 1024;
     const M: u64 = K * 1024;

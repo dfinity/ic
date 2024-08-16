@@ -297,6 +297,10 @@ impl<T> Canister<T> {
     pub fn installed_wasm_hash(&self) -> Option<&WasmHash> {
         self.status.installed_wasm_hash()
     }
+
+    pub fn status(&self) -> &ManagedCanisterStatus {
+        &self.status
+    }
 }
 
 impl<T> Serialize for Canister<T> {
@@ -358,6 +362,13 @@ impl ManagedCanisterStatus {
     }
 }
 
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+pub struct LedgerSuiteVersion {
+    pub ledger_compressed_wasm_hash: WasmHash,
+    pub index_compressed_wasm_hash: WasmHash,
+    pub archive_compressed_wasm_hash: WasmHash,
+}
+
 /// Configuration state of the ledger orchestrator.
 #[derive(Debug, PartialEq, Clone, Default)]
 enum ConfigState {
@@ -380,12 +391,7 @@ impl Storable for ConfigState {
     fn to_bytes(&self) -> Cow<[u8]> {
         match &self {
             ConfigState::Uninitialized => Cow::Borrowed(&[]),
-            ConfigState::Initialized(config) => {
-                let mut buf = vec![];
-                ciborium::ser::into_writer(config, &mut buf)
-                    .expect("failed to encode a minter event");
-                Cow::Owned(buf)
-            }
+            ConfigState::Initialized(config) => Cow::Owned(encode(config)),
         }
     }
 
@@ -393,14 +399,21 @@ impl Storable for ConfigState {
         if bytes.is_empty() {
             return ConfigState::Uninitialized;
         }
-        ConfigState::Initialized(
-            ciborium::de::from_reader(bytes.as_ref()).unwrap_or_else(|e| {
-                panic!("failed to decode state bytes {}: {e}", hex::encode(bytes))
-            }),
-        )
+        ConfigState::Initialized(decode(bytes.as_ref()))
     }
 
     const BOUND: Bound = Bound::Unbounded;
+}
+
+fn encode<S: ?Sized + serde::Serialize>(state: &S) -> Vec<u8> {
+    let mut buf = vec![];
+    ciborium::ser::into_writer(state, &mut buf).expect("failed to encode state");
+    buf
+}
+
+fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> T {
+    ciborium::de::from_reader(bytes)
+        .unwrap_or_else(|e| panic!("failed to decode state bytes {}: {e}", hex::encode(bytes)))
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -411,6 +424,8 @@ pub struct State {
     minter_id: Option<Principal>,
     /// Locks preventing concurrent execution timer tasks
     pub active_tasks: BTreeSet<Task>,
+    #[serde(default)]
+    ledger_suite_version: Option<LedgerSuiteVersion>,
 }
 
 impl State {
@@ -434,8 +449,28 @@ impl State {
         self.managed_canisters.canisters.iter()
     }
 
+    pub fn managed_erc20_tokens_iter(&self) -> impl Iterator<Item = &Erc20Token> {
+        self.managed_canisters.canisters.keys()
+    }
+
     pub fn managed_canisters(&self, contract: &Erc20Token) -> Option<&Canisters> {
         self.managed_canisters.canisters.get(contract)
+    }
+
+    pub fn ledger_suite_version(&self) -> Option<&LedgerSuiteVersion> {
+        self.ledger_suite_version.as_ref()
+    }
+
+    /// Initializes the ledger suite version if it is not already set.
+    /// No-op if the ledger suite version is already set.
+    pub fn init_ledger_suite_version(&mut self, version: LedgerSuiteVersion) {
+        if self.ledger_suite_version.is_none() {
+            self.ledger_suite_version = Some(version);
+        }
+    }
+
+    pub fn update_ledger_suite_version(&mut self, new_version: LedgerSuiteVersion) {
+        self.ledger_suite_version = Some(new_version);
     }
 
     fn managed_canisters_mut(&mut self, contract: &Erc20Token) -> Option<&mut Canisters> {
@@ -619,6 +654,7 @@ impl TryFrom<InitArg> for State {
             cycles_management: cycles_management.unwrap_or_default(),
             more_controller_ids,
             minter_id,
+            ledger_suite_version: Default::default(),
             active_tasks: Default::default(),
         };
         state.validate_config()?;

@@ -9,6 +9,10 @@ use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::{mutate_state, State};
 use candid::{candid_method, CandidType, Principal};
 use ethnum;
+use evm_rpc_client::types::candid::{
+    HttpOutcallError as EvmHttpOutcallError,
+    SendRawTransactionStatus as EvmSendRawTransactionStatus,
+};
 use ic_canister_log::log;
 use ic_cdk::api::call::{call_with_payment128, RejectionCode};
 use ic_cdk::api::management_canister::http_request::{
@@ -20,6 +24,7 @@ use ic_ethereum_types::Address;
 pub use metrics::encode as encode_metrics;
 use minicbor::{Decode, Encode};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_json::Value;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
 
@@ -31,7 +36,7 @@ mod tests;
 // the headers size to 8 KiB. We chose a lower limit because headers observed on most providers
 // fit in the constant defined below, and if there is spike, then the payload size adjustment
 // should take care of that.
-const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
+pub const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
 
 // This constant comes from the IC specification:
 // > If provided, the value must not exceed 2MB
@@ -49,6 +54,15 @@ pub fn into_nat(quantity: Quantity) -> candid::Nat {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(transparent)]
 pub struct Data(#[serde(with = "ic_ethereum_types::serde_data")] pub Vec<u8>);
+
+impl std::str::FromStr for Data {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_value(Value::String(s.to_string()))
+            .map_err(|e| format!("failed to parse data from string: {}", e))
+    }
+}
 
 impl AsRef<[u8]> for Data {
     fn as_ref(&self) -> &[u8] {
@@ -110,6 +124,19 @@ pub enum SendRawTransactionResult {
     InsufficientFunds,
     NonceTooLow,
     NonceTooHigh,
+}
+
+impl From<EvmSendRawTransactionStatus> for SendRawTransactionResult {
+    fn from(value: EvmSendRawTransactionStatus) -> Self {
+        match value {
+            EvmSendRawTransactionStatus::Ok(_) => SendRawTransactionResult::Ok,
+            EvmSendRawTransactionStatus::InsufficientFunds => {
+                SendRawTransactionResult::InsufficientFunds
+            }
+            EvmSendRawTransactionStatus::NonceTooLow => SendRawTransactionResult::NonceTooLow,
+            EvmSendRawTransactionStatus::NonceTooHigh => SendRawTransactionResult::NonceTooHigh,
+        }
+    }
 }
 
 impl HttpResponsePayload for SendRawTransactionResult {
@@ -556,6 +583,23 @@ pub enum HttpOutcallError {
         body: String,
         parsing_error: Option<String>,
     },
+}
+
+impl From<EvmHttpOutcallError> for HttpOutcallError {
+    fn from(value: EvmHttpOutcallError) -> Self {
+        match value {
+            EvmHttpOutcallError::IcError { code, message } => Self::IcError { code, message },
+            EvmHttpOutcallError::InvalidHttpJsonRpcResponse {
+                status,
+                body,
+                parsing_error,
+            } => Self::InvalidHttpJsonRpcResponse {
+                status,
+                body,
+                parsing_error,
+            },
+        }
+    }
 }
 
 impl HttpOutcallError {

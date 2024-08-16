@@ -3,8 +3,10 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//rs/certification",
+    "//rs/crypto/sha2",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/rosetta-api/ledger_core",
@@ -13,7 +15,9 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:chrono",
+    "@crate_index//:ciborium",
     "@crate_index//:ic-agent",
+    "@crate_index//:leb128",
     "@crate_index//:rusqlite",
     "@crate_index//:serde",
     "@crate_index//:tokio",
@@ -22,13 +26,14 @@ DEPENDENCIES = [
 ]
 
 PROC_MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 
 TEST_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
     "@crate_index//:actix-rt",
-    "@crate_index//:actix-web",
     "@crate_index//:proptest",
 ]
 

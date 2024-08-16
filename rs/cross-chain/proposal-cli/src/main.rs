@@ -1,10 +1,12 @@
 mod candid;
 mod canister;
+mod dashboard;
 mod git;
 mod proposal;
 
 use crate::candid::encode_upgrade_args;
 use crate::canister::TargetCanister;
+use crate::dashboard::DashboardClient;
 use crate::git::{GitCommitHash, GitRepository};
 use crate::proposal::{InstallProposalTemplate, ProposalTemplate, UpgradeProposalTemplate};
 use clap::{Parser, Subcommand};
@@ -64,7 +66,8 @@ enum Commands {
     },
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let cli = Cli::parse();
     match cli.command {
         Commands::Upgrade {
@@ -77,6 +80,7 @@ fn main() {
             check_dir_has_required_permissions(&output_dir).expect("invalid output directory");
 
             let mut ic_repo = GitRepository::clone_ic();
+            let dashboard = DashboardClient::new();
             let release_notes = ic_repo.release_notes(&canister, &from, &to);
             ic_repo.checkout(&to);
             let upgrade_args = encode_upgrade_args(
@@ -84,6 +88,11 @@ fn main() {
                 args.unwrap_or(canister.default_upgrade_args()),
             );
             let canister_id = ic_repo.parse_canister_id(&canister);
+            let last_upgrade_proposal_id = dashboard
+                .list_canister_upgrade_proposals(&canister_id)
+                .await
+                .last()
+                .cloned();
             let compressed_wasm_hash = ic_repo.build_canister_artifact(&canister);
             let output_dir = output_dir.join(canister.to_string()).join(to.to_string());
 
@@ -92,6 +101,7 @@ fn main() {
                 to,
                 compressed_wasm_hash,
                 canister_id,
+                last_upgrade_proposal_id,
                 upgrade_args,
                 release_notes,
             };
@@ -133,6 +143,9 @@ fn write_to_disk<P: Into<ProposalTemplate>>(
     proposal: P,
     ic_repo: &GitRepository,
 ) {
+    const GOVERNANCE_PROPOSAL_SUMMARY_BYTES_MAX: usize = 30000;
+
+    let mut errors = vec![];
     let proposal = proposal.into();
     if output_dir.exists() {
         fs::remove_dir_all(&output_dir)
@@ -163,6 +176,13 @@ fn write_to_disk<P: Into<ProposalTemplate>>(
     println!("Artifact written to '{}'", artifact.display());
 
     let proposal = proposal.render();
+    if proposal.len() > GOVERNANCE_PROPOSAL_SUMMARY_BYTES_MAX {
+        errors.push(format!(
+            "Proposal summary is too long and will fail validation from the governance canister when submitted: {} bytes (max {})",
+            proposal.len(),
+            GOVERNANCE_PROPOSAL_SUMMARY_BYTES_MAX
+        ));
+    }
     let proposal_summary = output_dir.join("summary.md");
     let mut summary_file = fs::File::create(&proposal_summary)
         .unwrap_or_else(|_| panic!("failed to create {:?}", proposal_summary));
@@ -171,6 +191,14 @@ fn write_to_disk<P: Into<ProposalTemplate>>(
         "Proposal summary written to '{}'",
         proposal_summary.display()
     );
+
+    if !errors.is_empty() {
+        println!("Proposal was generated, but some errors were detected:");
+        for error in errors {
+            println!("  * {}", error);
+        }
+        panic!("errors detected");
+    }
 }
 
 fn check_dir_has_required_permissions(output_dir: &Path) -> Result<(), String> {
