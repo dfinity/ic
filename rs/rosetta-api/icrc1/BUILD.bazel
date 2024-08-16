@@ -108,6 +108,7 @@ rust_ic_test(
         "tests/common.rs",
         "tests/golden_state_upgrade_downgrade.rs",
     ],
+    crate_root = "tests/golden_state_upgrade_downgrade.rs",
     data = [
         "//rs/rosetta-api/icrc1/ledger:ledger_canister.wasm",
         "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm",
