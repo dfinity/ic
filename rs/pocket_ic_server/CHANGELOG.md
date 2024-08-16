@@ -16,11 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New argument `ip_addr` of the endpoint `/http_gateway` to specify the IP address at which the HTTP gateway should listen (defaults to `127.0.0.1`).
 - New GET endpoint `/http_gateway` listing all HTTP gateways and their details.
 - Support for query statistics in the management canister.
+- The argument of the endpoint `/instances/<instance_id>/auto_progress` becomes a struct with an optional field `artificial_delay_ms` specifying the minimum delay between consecutive rounds in auto progress mode.
 - New endpoint `/instances/<instance_id>/api/v2/subnet/...` supporting the IC HTTP subnet read state requests.
 - New endpoint `/api/v2/subnet` of the PocketIC HTTP gateway supporting the IC HTTP subnet read state requests.
 
 ### Changed
 - The argument `listen_at` of the endpoint `/http_gateway` has been renamed to `port`.
+- The endpoint `/instances/<instance_id>/auto_progress` returns an error if the corresponding PocketIC instance is already in auto progress mode.
 
 
 
