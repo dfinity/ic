@@ -1,4 +1,4 @@
-# Proposal to upgrade the ledger suite orchestrator canister
+# Proposal to upgrade the ledger suite orchestrator canister to add ckEURC
 
 Git hash: `3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d`
 
