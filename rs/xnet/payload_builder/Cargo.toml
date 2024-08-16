@@ -34,6 +34,7 @@ ic-xnet-uri = { path = "../uri" }
 prometheus = { workspace = true }
 rand = { workspace = true }
 slog = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]

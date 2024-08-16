@@ -13009,6 +13009,7 @@ dependencies = [
  "reqwest 0.12.5",
  "slog",
  "tempfile",
+ "thiserror",
  "tokio",
  "url",
 ]

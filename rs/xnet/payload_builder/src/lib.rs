@@ -56,6 +56,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
+use thiserror::Error;
 use tokio::{runtime, sync::mpsc};
 
 /// Message and signal indices into a XNet stream or stream slice.
@@ -1449,57 +1450,22 @@ impl SliceValidationResult {
 }
 
 /// Internal error type, to simplify error handling.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
+    #[error("Error retrieving state at height {0}: {1}")]
     GetStateFailed(Height, StateManagerError),
+    #[error("Failed to retrieve list of subnets: {0}")]
     RegistryGetSubnetsFailed(RegistryClientError),
+    #[error("Failed to retrieve registry info for subnet {0}: {1}")]
     RegistryGetSubnetInfoFailed(SubnetId, RegistryClientError),
+    #[error("No nodes in subnet {0}")]
     MissingSubnet(SubnetId),
+    #[error("Failed to retrieve registry info for node {0}: {1}")]
     RegistryGetNodeInfoFailed(NodeId, RegistryClientError),
+    #[error("No XNet endpoint info found for node {0}")]
     MissingXNetEndpoint(NodeId),
+    #[error("Invalid XNet endpoint info for node {0}: {1}")]
     InvalidXNetEndpoint(NodeId, String),
-}
-
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Error::GetStateFailed(_height, e) => Some(e),
-            Error::RegistryGetSubnetsFailed(e) => Some(e),
-            Error::RegistryGetSubnetInfoFailed(_subnet_id, e) => Some(e),
-            Error::RegistryGetNodeInfoFailed(_node_id, e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::GetStateFailed(height, e) => {
-                write!(f, "Error retrieving state at height {}: {}", height, e)
-            }
-            Error::RegistryGetSubnetsFailed(e) => {
-                write!(f, "Failed to retrieve list of subnets: {}", e)
-            }
-            Error::RegistryGetSubnetInfoFailed(subnet_id, e) => write!(
-                f,
-                "Failed to retrieve registry info for subnet {}: {}",
-                subnet_id, e
-            ),
-            Error::MissingSubnet(subnet_id) => write!(f, "No nodes in subnet {}", subnet_id),
-            Error::RegistryGetNodeInfoFailed(node_id, e) => write!(
-                f,
-                "Failed to retrieve registry info for node {}: {}",
-                node_id, e
-            ),
-            Error::MissingXNetEndpoint(node_id) => {
-                write!(f, "No XNet endpoint info found for node {}", node_id)
-            }
-            Error::InvalidXNetEndpoint(node_id, e) => {
-                write!(f, "Invalid XNet endpoint info for node {}: {}", node_id, e)
-            }
-        }
-    }
 }
 
 impl Error {
@@ -1541,13 +1507,13 @@ pub trait XNetClient: Sync + Send {
     ) -> Result<CertifiedStreamSlice, XNetClientError>;
 }
 
-type XNetClientBody = http_body_util::Full<hyper::body::Bytes>;
+type XNetRequestBody = http_body_util::Full<hyper::body::Bytes>;
 
 /// The default `XNetClient` implementation, wrapping an HTTP client (for both
 /// configuration and connection pooling).
 struct XNetClientImpl {
     /// An HTTP client to be used for querying.
-    http_client: Client<TlsConnector, Request<XNetClientBody>>,
+    http_client: Client<TlsConnector, Request<XNetRequestBody>>,
 
     /// Response body (encoded slice) size.
     response_body_size: HistogramVec,
@@ -1570,7 +1536,7 @@ impl XNetClientImpl {
         let https = TlsConnector::new_for_tests(tls);
 
         // TODO(MR-28) Make timeout configurable.
-        let http_client: Client<TlsConnector, Request<XNetClientBody>> =
+        let http_client: Client<TlsConnector, Request<XNetRequestBody>> =
             Client::builder(TokioExecutor::new())
                 .pool_idle_timeout(Some(Duration::from_secs(600)))
                 .pool_max_idle_per_host(1)

@@ -176,7 +176,7 @@ async fn enqueue_task(State(ctx): State<Context>, request: Request<Body>) -> imp
         .unwrap_or_else(|e| panic!("XNet Endpoint Handler shut down unexpectedly: {}", e)))
 }
 
-async fn start_server(
+fn start_server(
     address: SocketAddr,
     ctx: Context,
     runtime_handle: runtime::Handle,
@@ -185,6 +185,7 @@ async fn start_server(
     log: ReplicaLogger,
     shutdown_notify: Arc<Notify>,
 ) -> SocketAddr {
+    let _guard = runtime_handle.enter();
     let router = any(enqueue_task).with_state(ctx);
     let hyper_service =
         hyper::service::service_fn(move |request: Request<Incoming>| router.clone().call(request));
@@ -300,7 +301,7 @@ impl XNetEndpoint {
 
         let shutdown_notify = Arc::new(Notify::new());
 
-        let address = runtime_handle.block_on(start_server(
+        let address = start_server(
             config.address,
             ctx,
             runtime_handle.clone(),
@@ -308,7 +309,7 @@ impl XNetEndpoint {
             registry_client,
             log.clone(),
             shutdown_notify.clone(),
-        ));
+        );
 
         info!(log, "XNet Endpoint listening on {}", address);
 
