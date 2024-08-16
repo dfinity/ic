@@ -12,3 +12,4 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 regex = { workspace = true }
 walkdir = { workspace = true }
+tempfile = { workspace = true }

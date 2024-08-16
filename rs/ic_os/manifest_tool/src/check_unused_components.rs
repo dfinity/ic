@@ -17,16 +17,16 @@ pub fn check_unused_components(repo_root: &Path) -> Result<()> {
 
     if unused_files.is_empty() {
         println!("No unused files found.");
-        return Ok(())
+        Ok(())
     } else {
-        return Err(anyhow::anyhow!(
+        Err(anyhow::anyhow!(
             "Unused files found:\n{}",
             unused_files
                 .iter()
                 .map(|unused_file| unused_file.display().to_string())
                 .collect::<Vec<_>>()
                 .join("\n")
-        ));
+        ))
     }
 }
 
@@ -70,4 +70,84 @@ fn collect_manifest_files(icos_manifest: &IcosManifest) -> HashSet<PathBuf> {
     }
 
     manifest_files
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::components_parser::{Manifest, ManifestEntry};
+    use std::fs::File;
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_collect_repo_files() {
+        let dir = tempdir().unwrap();
+        let file1 = dir.path().join("file1.txt");
+        let file2 = dir.path().join("file2.bzl");
+        let file3 = dir.path().join("README.md");
+
+        File::create(&file1).unwrap();
+        File::create(&file2).unwrap();
+        File::create(&file3).unwrap();
+
+        let repo_files = collect_repo_files(dir.path()).unwrap();
+
+        assert!(repo_files.contains(&file1));
+        assert!(!repo_files.contains(&file2));
+        assert!(!repo_files.contains(&file3));
+    }
+
+    #[test]
+    fn test_collect_manifest_files() {
+        let mut manifest = Manifest::new();
+        manifest.add_entry(ManifestEntry::new(
+            PathBuf::from("src/lib.rs"),
+            PathBuf::from("lib.rs"),
+        ));
+
+        let icos_manifest = IcosManifest {
+            guestos: manifest.clone(),
+            hostos: manifest.clone(),
+            setupos: manifest.clone(),
+            boundary_guestos: manifest.clone(),
+        };
+
+        let manifest_files = collect_manifest_files(&icos_manifest);
+
+        assert!(manifest_files.contains(&PathBuf::from("src/lib.rs")));
+    }
+
+    #[test]
+    fn test_check_unused_components() {
+        let repo_root: tempfile::TempDir = tempdir().unwrap();
+        let components_dir = repo_root.path().join("ic-os/components");
+        std::fs::create_dir_all(&components_dir).unwrap();
+
+        let used_file = components_dir.join("used_file.rs");
+        let unused_file = components_dir.join("unused_file.rs");
+        File::create(&used_file).unwrap();
+        File::create(&unused_file).unwrap();
+
+        let guestos_manifest_path = components_dir.join("guestos.bzl");
+        let mut guestos_manifest_file = File::create(&guestos_manifest_path).unwrap();
+        writeln!(
+            guestos_manifest_file,
+            r#"Label("used_file.rs"): "used_file.rs""#
+        )
+        .unwrap();
+
+        // must create other manifest files to avoid read error
+        let hostos_manifest_path = components_dir.join("hostos.bzl");
+        File::create(&hostos_manifest_path).unwrap();
+        let setupos_manifest_path = components_dir.join("setupos.bzl");
+        File::create(&setupos_manifest_path).unwrap();
+        let boundary_guestos_manifest_path = components_dir.join("boundary-guestos.bzl");
+        File::create(&boundary_guestos_manifest_path).unwrap();
+
+        let result = check_unused_components(repo_root.path());
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("unused_file.rs"));
+    }
 }

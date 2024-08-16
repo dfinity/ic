@@ -29,7 +29,7 @@ impl IcosManifest {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Manifest {
     pub manifest: Vec<ManifestEntry>,
 }
@@ -46,9 +46,10 @@ impl Manifest {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ManifestEntry {
     pub source: PathBuf,
+    #[allow(dead_code)]
     pub destination: PathBuf,
 }
 
@@ -97,4 +98,30 @@ pub fn get_icos_manifest(repo_root: &Path) -> Result<IcosManifest> {
         setupos_manifest,
         boundary_guestos_manifest,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_get_manifest() {
+        let dir = tempdir().unwrap();
+        let manifest_path = dir.path().join("test.bzl");
+        let components_path = dir.path().join("components");
+
+        fs::create_dir(&components_path).unwrap();
+
+        let mut file = File::create(&manifest_path).unwrap();
+        writeln!(file, r#"Label("src/lib.rs"): "lib.rs""#).unwrap();
+
+        let manifest = get_manifest(&manifest_path, &components_path).unwrap();
+        let entry = &manifest.manifest[0];
+
+        assert_eq!(entry.source, components_path.join("src/lib.rs"));
+        assert_eq!(entry.destination, PathBuf::from("lib.rs"));
+    }
 }

@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:regex",
     "@crate_index//:walkdir",
+    "@crate_index//:tempfile",
 ]
 
 MACRO_DEPENDENCIES = [
