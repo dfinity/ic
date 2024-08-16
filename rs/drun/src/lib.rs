@@ -58,7 +58,7 @@ mod message;
 
 // drun will panic if it takes more than this many batches
 // until a response for a message is received
-const MAX_BATCHES_UNTIL_RESPONSE: u64 = 10000;
+const MAX_BATCHES_UNTIL_RESPONSE: u64 = 100_000;
 // how long to wait between batches
 const WAIT_PER_BATCH: Duration = Duration::from_millis(5);
 
