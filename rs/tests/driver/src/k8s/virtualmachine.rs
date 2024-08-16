@@ -32,6 +32,7 @@ spec:
       domain:
         cpu:
           cores: {cpus}
+          model: host-passthrough
         firmware:
           bootloader:
             efi:
@@ -49,6 +50,7 @@ spec:
             passt: {}
             ports:
             - port: 22
+            - port: 8001
             - port: 8332
             - port: 18444
             - port: 20443
@@ -119,6 +121,7 @@ spec:
       domain:
         cpu:
           cores: {cpus}
+          model: host-passthrough
         firmware:
           bootloader:
             efi:
@@ -144,6 +147,7 @@ spec:
                 protocol: UDP
               - port: 4444
               - port: 7070
+              - port: 8001
               - port: 8080
               - port: 8332
               - port: 9090

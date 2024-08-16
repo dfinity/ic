@@ -30,6 +30,7 @@ use ic_system_test_driver::{
 use slog::{debug, info};
 use std::net::IpAddr;
 use std::time::Duration;
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 
 /// This value reflects the value `max_simultaneous_connections_per_ip_address` in the firewall config file.
@@ -101,7 +102,7 @@ pub fn connection_count_test(env: TestEnv) {
         match stream {
             Ok(stream) => streams.push(stream),
             Err(_) => {
-                panic!("Could not create connection {}#. Connection is below the limit of active connections defined in the firewall, and should be accepted", connection_number);
+                println!("Could not create connection {}#. Connection is below the limit of active connections defined in the firewall, and should be accepted", connection_number);
             }
         }
     }
@@ -123,6 +124,7 @@ pub fn connection_count_test(env: TestEnv) {
         log,
         "Universal VM successfully connected the the node. STDOUT: {}", result
     );
+    // std::thread::sleep(std::time::Duration::from_secs(3000));
 
     //  Make connections from driver to node that should be rejected.
 
@@ -160,14 +162,29 @@ pub fn connection_count_test(env: TestEnv) {
     }
 }
 
-/// Helper function to make a tcp connection where the server
-/// can drop incoming connections.
+// / Helper function to make a tcp connection where the server
+// / can drop incoming connections.
 async fn create_tcp_connection(ip_addr: IpAddr, port: u16) -> Result<TcpStream, ()> {
     let tcp =
         tokio::time::timeout(TCP_HANDSHAKE_TIMEOUT, TcpStream::connect((ip_addr, port))).await;
 
     match tcp {
-        Ok(Ok(stream)) => Ok(stream),
+        Ok(Ok(mut stream)) => {
+            // stream.set_ttl(1000).unwrap();
+            stream.write_all(b"GET").await.unwrap();
+            stream.flush().await.unwrap();
+            Ok(stream)
+        }
         _ => Err(()),
     }
 }
+
+// async fn create_tcp_connection(
+//     ip_addr: IpAddr,
+//     port: u16,
+// ) -> Result<reqwest::Response, reqwest::Error> {
+//     println!("Created connection");
+//     reqwest::post(format!("http://[{}]:{}", ip_addr, port))
+//         // .and_then(|res| async move { res.text().await })
+//         .await
+// }

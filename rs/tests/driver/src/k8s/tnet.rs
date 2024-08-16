@@ -310,7 +310,6 @@ impl TNet {
 
         let source = DvSource::url(url.into());
         let dvinfo = DvInfo::new(name, source, DataVolumeContentType::Archive, "50Gi");
-        info!("Creating DV {} from {}", name, url);
         create_datavolume(&api_dv, &dvinfo, self.owner_reference()).await?;
         // wait for the datavolume to be ready
         tokio::time::timeout(tokio::time::Duration::from_secs(300), async {
@@ -510,6 +509,8 @@ spec:
       name: port-4444
     - port: 7070
       name: port-7070
+    - port: 8001
+      name: port-8001
     - port: 8080
       name: port-8080
     - port: 8100

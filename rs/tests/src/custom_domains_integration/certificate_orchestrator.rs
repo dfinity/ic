@@ -43,6 +43,7 @@ use anyhow::Error;
 // * update the DNS records and update the custom domain mapping
 pub fn test_end_to_end_registration(env: TestEnv) {
     let logger = env.logger();
+    info!(&logger, "Starting the test");
 
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_VM_ID)
