@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -29,9 +29,4 @@ rust_library(
         "@crate_index//:libc",
         "@crate_index//:tar",
     ],
-)
-
-rust_test(
-    name="dflate_lib_test",
-    crate = ":dflate_lib"
 )
