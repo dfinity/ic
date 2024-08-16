@@ -5,6 +5,7 @@ use crate::{
     },
     storage::with_node_provider_rewards_log,
 };
+use ic_stable_structures::{Memory, Storable};
 
 pub(crate) fn record_node_provider_rewards(most_recent_rewards: MonthlyNodeProviderRewards) {
     let rewards = ArchivedMonthlyNodeProviderRewards {
@@ -30,12 +31,18 @@ pub(crate) fn latest_node_provider_rewards() -> Option<ArchivedMonthlyNodeProvid
     })
 }
 
-pub(crate) fn list_node_provider_rewards(limit: u64) -> Vec<ArchivedMonthlyNodeProviderRewards> {
-    // limit try_into is safe because of u32 is always equal or smaller than usize
-    with_node_provider_rewards_log(|log| {
-        let len: u64 = log.len();
+pub(crate) fn list_node_provider_rewards(
+    limit: u64,
+    page: Option<u32>,
+) -> Vec<ArchivedMonthlyNodeProviderRewards> {
+    let page = page.unwrap_or(0);
 
-        let end_range = len;
+    // If we have 10 entries, they're 0..9
+    // If we are getting newest first, we want to return 9..4, then 4..0
+
+    with_node_provider_rewards_log(|log| {
+        let len = log.len();
+        let end_range = len.saturating_sub(page as u64 * limit);
         let start_range = end_range.saturating_sub(limit);
 
         (start_range..end_range)

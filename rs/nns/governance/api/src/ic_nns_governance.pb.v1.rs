@@ -4701,7 +4701,8 @@ pub struct DateRangeFilter {
     pub end_timestamp_seconds: Option<u64>,
 }
 
-/// A Request to list minted node provider rewards
+/// A Request to list minted node provider rewards.  Rewards are listed in descending order of date
+/// minted, meaning that the latest rewards are always returned first.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Clone, PartialEq)]

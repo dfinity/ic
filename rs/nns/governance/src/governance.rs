@@ -4312,9 +4312,13 @@ impl Governance {
         self.heap_data.most_recent_monthly_node_provider_rewards = Some(most_recent_rewards);
     }
 
-    pub fn list_node_provider_rewards(&self, limit: u64) -> Vec<MonthlyNodeProviderRewards> {
+    pub fn list_node_provider_rewards(
+        &self,
+        limit: u64,
+        page: Option<u32>,
+    ) -> Vec<MonthlyNodeProviderRewards> {
         let limit = limit.min(MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS);
-        list_node_provider_rewards(limit)
+        list_node_provider_rewards(limit, page)
             .into_iter()
             .map(|archived| match archived.version {
                 Some(archived_monthly_node_provider_rewards::Version::Version1(v1)) => {

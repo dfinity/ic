@@ -745,9 +745,9 @@ fn list_node_provider_rewards() {
 
 #[candid_method(query, rename = "list_node_provider_rewards")]
 fn list_node_provider_rewards_(
-    _req: ListNodeProviderRewardsRequest,
+    req: ListNodeProviderRewardsRequest,
 ) -> ListNodeProviderRewardsResponse {
-    let rewards = governance().list_node_provider_rewards(5);
+    let rewards = governance().list_node_provider_rewards(5, req.page);
 
     ListNodeProviderRewardsResponse {
         rewards: rewards
