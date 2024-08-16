@@ -1,5 +1,5 @@
 {
-  "checksum": "b8f5c546714a2fd2ce702051dd8da9f2c7e988036a0357c3c75d6deaefba88a6",
+  "checksum": "55127aa74f80179bb5ec1c9836dc880d1c07e2d228ea8f6a5e1666bb497d5e20",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17410,10 +17410,6 @@
             {
               "id": "ed25519-dalek 2.1.1",
               "target": "ed25519_dalek"
-            },
-            {
-              "id": "either 1.9.0",
-              "target": "either"
             },
             {
               "id": "erased-serde 0.3.31",
@@ -36029,38 +36025,30 @@
         ],
         "crate_features": {
           "common": [
+            "elf",
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
           "selects": {
             "aarch64-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "aarch64-unknown-nixos-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "arm-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "armv7-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "i686-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
@@ -36073,14 +36061,10 @@
               "system"
             ],
             "x86_64-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "x86_64-unknown-nixos-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ]
@@ -78901,7 +78885,6 @@
     "dyn-clone 1.0.14",
     "ed25519-dalek 2.1.1",
     "educe 0.4.23",
-    "either 1.9.0",
     "erased-serde 0.3.31",
     "escargot 0.5.8",
     "ethers-core 2.0.10",

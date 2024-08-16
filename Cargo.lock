@@ -10858,7 +10858,6 @@ dependencies = [
 name = "ic-replica-setup-ic-network"
 version = "0.9.0"
 dependencies = [
- "either",
  "ic-artifact-downloader",
  "ic-artifact-manager",
  "ic-artifact-pool",
