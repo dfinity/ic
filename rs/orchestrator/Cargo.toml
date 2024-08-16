@@ -32,6 +32,7 @@ ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-protobuf = { path = "../protobuf" }
+ic-registry-canister-api = { path = "../registry/canister/api" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-local-store = { path = "../registry/local_store" }
@@ -44,7 +45,6 @@ nix = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
-registry-canister = { path = "../registry/canister" }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }

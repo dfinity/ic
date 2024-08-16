@@ -1,5 +1,5 @@
 {
-  "checksum": "a2cd27021fc945f3c9bdab9d2a0aa77e367af5af7f14a42230f9cdd83cf0ba23",
+  "checksum": "b8f5c546714a2fd2ce702051dd8da9f2c7e988036a0357c3c75d6deaefba88a6",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4339,7 +4339,7 @@
               "target": "http_body"
             },
             {
-              "id": "http-body-util 0.1.0",
+              "id": "http-body-util 0.1.2",
               "target": "http_body_util"
             },
             {
@@ -4633,7 +4633,7 @@
               "target": "http_body"
             },
             {
-              "id": "http-body-util 0.1.0",
+              "id": "http-body-util 0.1.2",
               "target": "http_body_util"
             },
             {
@@ -4762,7 +4762,7 @@
               "target": "http_body"
             },
             {
-              "id": "http-body-util 0.1.0",
+              "id": "http-body-util 0.1.2",
               "target": "http_body_util"
             },
             {
@@ -5121,7 +5121,7 @@
               "target": "http_body"
             },
             {
-              "id": "http-body-util 0.1.0",
+              "id": "http-body-util 0.1.2",
               "target": "http_body_util"
             },
             {
@@ -17452,6 +17452,10 @@
               "target": "form_urlencoded"
             },
             {
+              "id": "fqdn 0.3.11",
+              "target": "fqdn"
+            },
+            {
               "id": "fs_extra 1.3.0",
               "target": "fs_extra"
             },
@@ -17518,7 +17522,7 @@
               "target": "http_body"
             },
             {
-              "id": "http-body-util 0.1.0",
+              "id": "http-body-util 0.1.2",
               "target": "http_body_util"
             },
             {
@@ -17612,6 +17616,10 @@
               "target": "ic_http_certification"
             },
             {
+              "id": "ic-http-gateway 0.0.0",
+              "target": "ic_http_gateway"
+            },
+            {
               "id": "ic-metrics-encoder 1.1.1",
               "target": "ic_metrics_encoder"
             },
@@ -17684,7 +17692,7 @@
               "target": "insta"
             },
             {
-              "id": "instant-acme 0.3.4",
+              "id": "instant-acme 0.7.1",
               "target": "instant_acme"
             },
             {
@@ -17750,6 +17758,14 @@
             {
               "id": "little-loadshedder 0.1.0",
               "target": "little_loadshedder"
+            },
+            {
+              "id": "lmdb-rkv 0.14.99",
+              "target": "lmdb"
+            },
+            {
+              "id": "lmdb-rkv-sys 0.11.99",
+              "target": "lmdb_sys"
             },
             {
               "id": "local-ip-address 0.5.6",
@@ -22578,6 +22594,51 @@
       ],
       "license_file": "LICENSE.txt"
     },
+    "fqdn 0.3.11": {
+      "name": "fqdn",
+      "version": "0.3.11",
+      "package_url": "https://github.com/Orange-OpenSource/fqdn",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/fqdn/0.3.11/download",
+          "sha256": "08b1eaa7dfddeab6036292995620bf0435712e619db6d7690605897e76975eb0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "fqdn",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "fqdn",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "domain-label-cannot-start-or-end-with-hyphen"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.3.11"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": null
+    },
     "fragile 2.0.0": {
       "name": "fragile",
       "version": "2.0.0",
@@ -26053,7 +26114,7 @@
               "target": "http_body"
             },
             {
-              "id": "http-body-util 0.1.0",
+              "id": "http-body-util 0.1.2",
               "target": "http_body_util"
             }
           ],
@@ -26069,14 +26130,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "http-body-util 0.1.0": {
+    "http-body-util 0.1.2": {
       "name": "http-body-util",
-      "version": "0.1.0",
+      "version": "0.1.2",
       "package_url": "https://github.com/hyperium/http-body",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/http-body-util/0.1.0/download",
-          "sha256": "41cb79eb393015dadd30fc252023adb0b2400a0caee0fa2a077e6e21a551e840"
+          "url": "https://static.crates.io/crates/http-body-util/0.1.2/download",
+          "sha256": "793429d76616a256bcb62c2a2ec2bed781c8307e797e2598c50010f2bee2544f"
         }
       },
       "targets": [
@@ -26124,13 +26185,13 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.1.0"
+        "version": "0.1.2"
       },
       "license": "MIT",
       "license_ids": [
         "MIT"
       ],
-      "license_file": null
+      "license_file": "LICENSE"
     },
     "http-range-header 0.3.1": {
       "name": "http-range-header",
@@ -27548,7 +27609,7 @@
               "target": "hex"
             },
             {
-              "id": "http-body-util 0.1.0",
+              "id": "http-body-util 0.1.2",
               "target": "http_body_util"
             },
             {
@@ -27914,7 +27975,7 @@
                 "target": "http_body_to_bytes"
               },
               {
-                "id": "http-body-util 0.1.0",
+                "id": "http-body-util 0.1.2",
                 "target": "http_body_util"
               },
               {
@@ -29116,6 +29177,96 @@
         },
         "edition": "2021",
         "version": "2.6.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-http-gateway 0.0.0": {
+      "name": "ic-http-gateway",
+      "version": "0.0.0",
+      "package_url": "https://github.com/dfinity/http-gateway",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/http-gateway",
+          "commitish": {
+            "Rev": "a1f63eb17b0a89f7fadcab67b3a0afe1720ef9b3"
+          },
+          "strip_prefix": "packages/ic-http-gateway"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_http_gateway",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_http_gateway",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bytes 1.6.1",
+              "target": "bytes"
+            },
+            {
+              "id": "candid 0.10.6",
+              "target": "candid"
+            },
+            {
+              "id": "futures 0.3.30",
+              "target": "futures"
+            },
+            {
+              "id": "http 1.1.0",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.0",
+              "target": "http_body"
+            },
+            {
+              "id": "http-body-util 0.1.2",
+              "target": "http_body_util"
+            },
+            {
+              "id": "ic-agent 0.37.1",
+              "target": "ic_agent"
+            },
+            {
+              "id": "ic-http-certification 2.6.0",
+              "target": "ic_http_certification"
+            },
+            {
+              "id": "ic-response-verification 2.6.0",
+              "target": "ic_response_verification"
+            },
+            {
+              "id": "ic-utils 0.37.0",
+              "target": "ic_utils"
+            },
+            {
+              "id": "thiserror 1.0.62",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.0.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -32183,14 +32334,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "instant-acme 0.3.4": {
+    "instant-acme 0.7.1": {
       "name": "instant-acme",
-      "version": "0.3.4",
+      "version": "0.7.1",
       "package_url": "https://github.com/instant-labs/instant-acme",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/instant-acme/0.3.4/download",
-          "sha256": "a927127668f21e3f846fde7459c56ea908292cf3fbb80b700001481a2ff4671d"
+          "url": "https://static.crates.io/crates/instant-acme/0.7.1/download",
+          "sha256": "71bc444149bab1b339ba7e92e81d7615227feba7fd635b8551a3a170021598d0"
         }
       },
       "targets": [
@@ -32215,7 +32366,8 @@
         "crate_features": {
           "common": [
             "default",
-            "hyper-rustls"
+            "hyper-rustls",
+            "ring"
           ],
           "selects": {}
         },
@@ -32226,16 +32378,40 @@
               "target": "base64"
             },
             {
-              "id": "hyper 0.14.27",
+              "id": "bytes 1.6.1",
+              "target": "bytes"
+            },
+            {
+              "id": "http 1.1.0",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.0",
+              "target": "http_body"
+            },
+            {
+              "id": "http-body-util 0.1.2",
+              "target": "http_body_util"
+            },
+            {
+              "id": "hyper 1.4.1",
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.24.2",
+              "id": "hyper-rustls 0.27.2",
               "target": "hyper_rustls"
             },
             {
-              "id": "ring 0.16.20",
+              "id": "hyper-util 0.1.6",
+              "target": "hyper_util"
+            },
+            {
+              "id": "ring 0.17.7",
               "target": "ring"
+            },
+            {
+              "id": "rustls-pki-types 1.7.0",
+              "target": "rustls_pki_types"
             },
             {
               "id": "serde 1.0.203",
@@ -32253,7 +32429,16 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.4"
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.74",
+              "target": "async_trait"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.7.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -35844,30 +36029,38 @@
         ],
         "crate_features": {
           "common": [
-            "elf",
-            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
           "selects": {
             "aarch64-unknown-linux-gnu": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
             "aarch64-unknown-nixos-gnu": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
             "arm-unknown-linux-gnueabi": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
             "armv7-unknown-linux-gnueabi": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
             "i686-unknown-linux-gnu": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
@@ -35880,10 +36073,14 @@
               "system"
             ],
             "x86_64-unknown-linux-gnu": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
             "x86_64-unknown-nixos-gnu": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ]
@@ -35996,6 +36193,182 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "lmdb-rkv 0.14.99": {
+      "name": "lmdb-rkv",
+      "version": "0.14.99",
+      "package_url": "https://github.com/mozilla/lmdb-rs.git",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity-lab/lmdb-rs",
+          "commitish": {
+            "Rev": "4d952c8f1dca79de855af892b444d7112567b58d"
+          }
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "lmdb",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "lmdb",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 1.3.2",
+              "target": "bitflags"
+            },
+            {
+              "id": "byteorder 1.5.0",
+              "target": "byteorder"
+            },
+            {
+              "id": "libc 0.2.155",
+              "target": "libc"
+            },
+            {
+              "id": "lmdb-rkv-sys 0.11.99",
+              "target": "lmdb_sys"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.14.99"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "lmdb-rkv-sys 0.11.99": {
+      "name": "lmdb-rkv-sys",
+      "version": "0.11.99",
+      "package_url": "https://github.com/mozilla/lmdb-rs.git",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity-lab/lmdb-rs",
+          "commitish": {
+            "Rev": "4d952c8f1dca79de855af892b444d7112567b58d"
+          },
+          "strip_prefix": "lmdb-sys"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "lmdb_sys",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "lmdb_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "libc 0.2.155",
+              "target": "libc"
+            },
+            {
+              "id": "lmdb-rkv-sys 0.11.99",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "extra_deps": {
+          "common": [
+            "@lmdb//:lmdb"
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.11.99"
+      },
+      "build_script_attrs": {
+        "data": {
+          "common": [
+            "@lmdb//:lmdb.h"
+          ],
+          "selects": {}
+        },
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cc 1.0.83",
+              "target": "cc"
+            },
+            {
+              "id": "pkg-config 0.3.27",
+              "target": "pkg_config"
+            }
+          ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "LMDB_H_PATH": "$(location @lmdb//:lmdb.h)",
+            "LMDB_NO_BUILD": "1"
+          },
+          "selects": {}
+        }
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
     },
     "local-channel 0.1.4": {
       "name": "local-channel",
@@ -37650,7 +38023,7 @@
               "target": "http_body"
             },
             {
-              "id": "http-body-util 0.1.0",
+              "id": "http-body-util 0.1.2",
               "target": "http_body_util"
             },
             {
@@ -52165,7 +52538,7 @@
                 "target": "http_body"
               },
               {
-                "id": "http-body-util 0.1.0",
+                "id": "http-body-util 0.1.2",
                 "target": "http_body_util"
               },
               {
@@ -52531,8 +52904,7 @@
             "alloc",
             "default",
             "dev_urandom_fallback",
-            "once_cell",
-            "std"
+            "once_cell"
           ],
           "selects": {}
         },
@@ -66459,7 +66831,7 @@
               "target": "http_body"
             },
             {
-              "id": "http-body-util 0.1.0",
+              "id": "http-body-util 0.1.2",
               "target": "http_body_util"
             },
             {
@@ -78539,6 +78911,7 @@
     "ff 0.12.1",
     "flate2 1.0.30",
     "form_urlencoded 1.2.1",
+    "fqdn 0.3.11",
     "fs_extra 1.3.0",
     "futures 0.3.30",
     "futures-util 0.3.30",
@@ -78555,7 +78928,7 @@
     "http 1.1.0",
     "http-body 0.4.6",
     "http-body 1.0.0",
-    "http-body-util 0.1.0",
+    "http-body-util 0.1.2",
     "httptest 0.15.4",
     "humantime 2.1.0",
     "humantime-serde 1.1.1",
@@ -78579,6 +78952,7 @@
     "ic-certification 2.6.0",
     "ic-certified-map 0.3.4",
     "ic-http-certification 2.6.0",
+    "ic-http-gateway 0.0.0",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 2.6.0",
     "ic-stable-structures 0.6.5",
@@ -78598,7 +78972,7 @@
     "indoc 1.0.9",
     "inferno 0.11.19",
     "insta 1.34.0",
-    "instant-acme 0.3.4",
+    "instant-acme 0.7.1",
     "intmap 1.1.0",
     "ipnet 2.8.0",
     "isocountry 0.3.2",
@@ -78615,6 +78989,8 @@
     "libfuzzer-sys 0.4.7",
     "libnss 0.5.0",
     "little-loadshedder 0.1.0",
+    "lmdb-rkv 0.14.99",
+    "lmdb-rkv-sys 0.11.99",
     "local-ip-address 0.5.6",
     "lru 0.7.8",
     "mach2 0.4.2",
