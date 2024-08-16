@@ -325,6 +325,7 @@ pub fn start_server(
     let ingress_filter = Arc::new(Mutex::new(ingress_filter));
 
     let call_handler = IngressValidatorBuilder::builder(
+        log.clone(),
         node_id,
         subnet_id,
         registry_client.clone(),
@@ -333,7 +334,6 @@ pub fn start_server(
         ingress_throttler.clone(),
         ingress_tx.clone(),
     )
-    .with_logger(log.clone())
     .with_malicious_flags(malicious_flags.clone())
     .build();
 
@@ -357,6 +357,7 @@ pub fn start_server(
     );
 
     let query_router = QueryServiceBuilder::builder(
+        log.clone(),
         node_id,
         query_signer,
         registry_client.clone(),
@@ -364,18 +365,17 @@ pub fn start_server(
         delegation_from_nns.clone(),
         query_execution_service,
     )
-    .with_logger(log.clone())
     .with_health_status(health_status.clone())
     .with_malicious_flags(malicious_flags.clone())
     .build_router();
 
     let canister_read_state_router = CanisterReadStateServiceBuilder::builder(
+        log.clone(),
         state_reader.clone(),
         registry_client.clone(),
         ingress_verifier,
         delegation_from_nns.clone(),
     )
-    .with_logger(log.clone())
     .with_health_status(health_status.clone())
     .with_malicious_flags(malicious_flags)
     .build_router();

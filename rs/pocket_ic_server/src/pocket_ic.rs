@@ -31,6 +31,7 @@ use ic_https_outcalls_service::CanisterHttpSendResponse;
 use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_interfaces_state_manager::StateReader;
+use ic_logger::ReplicaLogger;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId,
     Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs,
@@ -73,7 +74,7 @@ use std::hash::Hash;
 use std::str::FromStr;
 use std::{
     cmp::max,
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     fs::File,
     io::{BufReader, Write},
     path::PathBuf,
@@ -145,9 +146,12 @@ struct SubnetConfigInternal {
     pub alloc_range: Option<CanisterIdRange>,
 }
 
+pub(crate) type ReplicaLoggers = Arc<RwLock<HashMap<SubnetId, ReplicaLogger>>>;
+
 pub struct PocketIc {
     state_dir: Option<PathBuf>,
     subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
+    replica_loggers: ReplicaLoggers,
     routing_table: RoutingTable,
     /// Created on initialization and updated if a new subnet is created.
     topology: TopologyInternal,
@@ -203,6 +207,10 @@ impl Drop for PocketIc {
 }
 
 impl PocketIc {
+    pub(crate) fn replica_loggers(&self) -> ReplicaLoggers {
+        self.replica_loggers.clone()
+    }
+
     pub(crate) fn topology(&self) -> Topology {
         let mut topology = Topology(BTreeMap::new());
         let subnets = self.subnets.read().unwrap();
@@ -529,9 +537,19 @@ impl PocketIc {
         )
         .0;
 
+        let replica_loggers = Arc::new(RwLock::new(
+            subnets
+                .read()
+                .unwrap()
+                .iter()
+                .map(|(subnet_id, sm)| (*subnet_id, sm.replica_logger.clone()))
+                .collect(),
+        ));
+
         Self {
             state_dir,
             subnets,
+            replica_loggers,
             routing_table,
             topology,
             randomness: StdRng::seed_from_u64(42),
@@ -1550,6 +1568,7 @@ impl Operation for CallRequest {
                 let ingress_filter = subnet.ingress_filter.clone();
 
                 let ingress_validator = IngressValidatorBuilder::builder(
+                    subnet.replica_logger.clone(),
                     node.node_id,
                     subnet.get_subnet_id(),
                     subnet.registry_client.clone(),
@@ -1683,6 +1702,7 @@ impl Operation for QueryRequest {
                 subnet.certify_latest_state();
                 let query_handler = subnet.query_handler.clone();
                 let svc = QueryServiceBuilder::builder(
+                    subnet.replica_logger.clone(),
                     node.node_id,
                     Arc::new(PocketNodeSigner(node.signing_key.clone())),
                     subnet.registry_client.clone(),
@@ -1748,6 +1768,7 @@ impl Operation for ReadStateRequest {
                 let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
                 subnet.certify_latest_state();
                 let svc = CanisterReadStateServiceBuilder::builder(
+                    subnet.replica_logger.clone(),
                     subnet.state_manager.clone(),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
@@ -2241,6 +2262,11 @@ fn route(
                     for subnet in pic.subnets.read().unwrap().values() {
                         subnet.execute_round();
                     }
+                    // We update the replica loggers.
+                    pic.replica_loggers
+                        .write()
+                        .unwrap()
+                        .insert(sm.get_subnet_id(), sm.replica_logger.clone());
                     Ok(sm)
                 } else {
                     // If the request is not an update call to create a canister using the provisional API,
