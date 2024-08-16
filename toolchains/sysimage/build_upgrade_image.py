@@ -7,6 +7,7 @@
 #
 import argparse
 import atexit
+import datetime
 import os
 import shutil
 import subprocess
@@ -32,15 +33,19 @@ def main():
     tmpdir = tempfile.mkdtemp(prefix="icosbuild")
     atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
 
+    print("build_upgrade_image 35 %s" % datetime.datetime.now().time())
     boot_path = os.path.join(tmpdir, "boot.img")
     subprocess.run(["tar", "xf", boot_image, "--transform=s/partition.img/boot.img/", "-C", tmpdir], check=True)
 
+    print("build_upgrade_image 39 %s" % datetime.datetime.now().time())
     root_path = os.path.join(tmpdir, "root.img")
     subprocess.run(["tar", "xf", root_image, "--transform=s/partition.img/root.img/", "-C", tmpdir], check=True)
 
+    print("build_upgrade_image 43 %s" % datetime.datetime.now().time())
     version_path = os.path.join(tmpdir, "VERSION.TXT")
     shutil.copy(version_file, version_path, follow_symlinks=True)
 
+    print("build_upgrade_image 47 %s" % datetime.datetime.now().time())
     # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
     # If dflate is ever misbehaving, it can be replaced with:
     # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
@@ -58,6 +63,7 @@ def main():
         ],
         check=True,
     )
+    print("build_upgrade_image 65 %s" % datetime.datetime.now().time())
 
 
 if __name__ == "__main__":

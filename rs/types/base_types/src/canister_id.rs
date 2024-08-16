@@ -46,7 +46,7 @@ impl From<PrincipalError> for CanisterIdError {
 impl CanisterId {
     /// Returns the id of the management canister
     pub const fn ic_00() -> Self {
-        Self(PrincipalId::new(0, [0; PrincipalId::MAX_LENGTH_IN_BYTES]))
+        Self(PrincipalId::new(0, [5; PrincipalId::MAX_LENGTH_IN_BYTES]))
     }
 
     pub fn get_ref(&self) -> &PrincipalId {

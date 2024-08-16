@@ -71,7 +71,7 @@ impl BoundaryNodeManager {
 
     pub(crate) async fn check(&mut self) {
         let registry_version = self.registry.get_latest_version();
-
+        println!("testing");
         match self
             .registry
             .get_api_boundary_node_version(self.node_id, registry_version)

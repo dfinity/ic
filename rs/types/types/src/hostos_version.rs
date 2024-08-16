@@ -35,7 +35,7 @@ impl AsRef<str> for HostosVersion {
 
 /// Checks if a valid HostOS version is allowed to contain specified char.
 fn is_valid_version_symbol(c: char) -> bool {
-    matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '_' | '-')
+    matches!(c, 'a'..='z' | '0'..='9' | '.' | '_' | '-')
 }
 
 impl TryFrom<&str> for HostosVersion {

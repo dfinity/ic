@@ -116,7 +116,7 @@ impl<
                     let new_element_data_size = element.data_size();
                     if new_element_data_size > MAX_ALLOWED_ELEMENT_DATA_SIZE {
                         return Err(serde::de::Error::custom(format!(
-                            "The single element data size exceeds maximum allowed {}",
+                            "The single element data size  exceeds maximum allowed {}",
                             MAX_ALLOWED_ELEMENT_DATA_SIZE
                         )));
                     }

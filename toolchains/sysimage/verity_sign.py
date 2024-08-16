@@ -5,6 +5,7 @@
 #
 import argparse
 import atexit
+import datetime
 import os
 import re
 import subprocess
@@ -15,6 +16,7 @@ root_hash_re = re.compile("Root hash:[ \t]+([a-f0-9]+).*")
 
 
 def main():
+    print("verity %s" % datetime.datetime.now().time())
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input", help="Input (tzst) file of tree to operate in", type=str)
     parser.add_argument("-o", "--output", help="Target (tzst) file of tree to write to", type=str)
@@ -43,7 +45,7 @@ def main():
     tmpdir = tempfile.mkdtemp(prefix="icosbuild")
     partition = os.path.join(tmpdir, "partition.img")
     atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
-
+    print("verity 48 %s" % datetime.datetime.now().time())
     subprocess.run(
         [
             "tar",
@@ -54,6 +56,7 @@ def main():
         ],
         check=True,
     )
+    print("verity 59 %s" % datetime.datetime.now().time())
 
     verity_cmdline = [
         "/usr/sbin/veritysetup",
@@ -85,6 +88,7 @@ def main():
         if proc.returncode != 0:
             raise RuntimeError("Verity setup failed")
 
+    print("verity 91 %s" % datetime.datetime.now().time())
     with open(args.root_hash, "w") as f:
         f.write(root_hash + "\n")
 
@@ -103,6 +107,8 @@ def main():
         check=True,
     )
 
+    print("verity 110 %s" % datetime.datetime.now().time())
+
     subprocess.run(
         [
             "zstd",
@@ -114,6 +120,7 @@ def main():
         ],
         check=True,
     )
+    print("verity 123 %s" % datetime.datetime.now().time())
 
 
 if __name__ == "__main__":
