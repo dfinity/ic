@@ -101,6 +101,7 @@ impl Purger {
             }
             self.purge_validated_shares_by_finalized_height(new_finalized_height, &mut changeset);
             self.purge_equivocation_proofs_by_finalized_height(
+                pool,
                 new_finalized_height,
                 &mut changeset,
             );
@@ -293,17 +294,26 @@ impl Purger {
     /// be purged from the pool.
     fn purge_equivocation_proofs_by_finalized_height(
         &self,
+        pool: &PoolReader,
         finalized_height: Height,
         changeset: &mut ChangeSet,
     ) {
-        changeset.push(ChangeAction::PurgeValidatedOfTypeBelow(
-            PurgeableArtifactType::EquivocationProof,
-            finalized_height.increment(),
-        ));
-        trace!(
-            self.log,
-            "Purge validated equivocation proofs at and below {finalized_height:?}"
-        );
+        if pool
+            .pool()
+            .validated()
+            .equivocation_proof()
+            .height_range()
+            .is_some()
+        {
+            changeset.push(ChangeAction::PurgeValidatedOfTypeBelow(
+                PurgeableArtifactType::EquivocationProof,
+                finalized_height.increment(),
+            ));
+            trace!(
+                self.log,
+                "Purge validated equivocation proofs at and below {finalized_height:?}"
+            );
+        }
     }
 
     /// Ask state manager to purge all states below the given height
@@ -537,10 +547,6 @@ mod tests {
                         PurgeableArtifactType::FinalizationShare,
                         purge_height.increment()
                     ),
-                    ChangeAction::PurgeValidatedOfTypeBelow(
-                        PurgeableArtifactType::EquivocationProof,
-                        purge_height.increment()
-                    )
                 ]
             );
 
@@ -576,10 +582,6 @@ mod tests {
                     ),
                     ChangeAction::PurgeValidatedOfTypeBelow(
                         PurgeableArtifactType::FinalizationShare,
-                        pool_reader.get_finalized_height().increment()
-                    ),
-                    ChangeAction::PurgeValidatedOfTypeBelow(
-                        PurgeableArtifactType::EquivocationProof,
                         pool_reader.get_finalized_height().increment()
                     ),
                     ChangeAction::PurgeValidatedBelow(get_purge_height(&pool_reader).unwrap()),
