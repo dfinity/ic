@@ -442,6 +442,7 @@ pub struct PageMap {
     storage: Storage,
 
     /// The height of the checkpoint that backs the page map.
+    #[validate_eq(Ignore)]
     pub base_height: Option<Height>,
 
     /// The map containing pages overriding pages from `storage`.
@@ -457,6 +458,7 @@ pub struct PageMap {
     #[validate_eq(Ignore)]
     unflushed_delta: PageDelta,
 
+    #[validate_eq(Ignore)]
     has_stripped_unflushed_deltas: bool,
 
     /// The allocator for PageDelta pages.
