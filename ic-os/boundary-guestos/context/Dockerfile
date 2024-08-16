@@ -25,7 +25,7 @@ WORKDIR /tmp
 
 # Download and verify ic-gateway
 RUN \
-    curl -L -O https://boundary-nodes.s3.eu-central-1.amazonaws.com/ic-gateway_0.1.40_amd64.deb && \
+    curl -L -O https://github.com/dfinity/ic-gateway/releases/download/v0.1.40/ic-gateway_0.1.40_amd64.deb && \
     echo "b0f36751ab15c5f0d541a6491c20a65ae64ea077  ic-gateway_0.1.40_amd64.deb" | shasum -c
 
 #
