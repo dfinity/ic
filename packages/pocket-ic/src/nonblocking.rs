@@ -21,6 +21,7 @@ use ic_cdk::api::management_canister::main::{
 use reqwest::Url;
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
+use slog::Level;
 use std::fs::File;
 use std::future::Future;
 use std::path::PathBuf;
@@ -125,7 +126,7 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
-        log_level: Option<String>,
+        log_level: Option<Level>,
     ) -> Self {
         let subnet_config_set = subnet_config_set.into();
         if state_dir.is_none()
@@ -137,7 +138,7 @@ impl PocketIc {
             subnet_config_set,
             state_dir,
             nonmainnet_features,
-            log_level,
+            log_level: log_level.map(|l| l.to_string()),
         };
 
         let parent_pid = std::os::unix::process::parent_id();

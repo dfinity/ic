@@ -14,6 +14,7 @@ use rcgen::{CertificateParams, KeyPair};
 use reqwest::blocking::Client;
 use reqwest::Client as NonblockingClient;
 use reqwest::{StatusCode, Url};
+use slog::Level;
 use std::io::Read;
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -521,7 +522,7 @@ fn canister_and_replica_logs() {
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
         .with_server_url(server_url)
-        .with_log_level("info".to_string())
+        .with_log_level(Level::Info)
         .build();
 
     let canister_id = pic.create_canister();
@@ -555,7 +556,7 @@ fn canister_and_no_replica_logs() {
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
         .with_server_url(server_url)
-        .with_log_level("error".to_string())
+        .with_log_level(Level::Error)
         .build();
 
     let canister_id = pic.create_canister();
