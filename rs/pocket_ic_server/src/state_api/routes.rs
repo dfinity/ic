@@ -35,8 +35,8 @@ use ic_http_endpoints_public::cors_layer;
 use ic_state_machine_tests::Level;
 use ic_types::CanisterId;
 use pocket_ic::common::rest::{
-    self, ApiResponse, ExtendedSubnetConfigSet, HttpGatewayConfig, HttpGatewayDetails,
-    InstanceConfig, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
+    self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
+    HttpGatewayDetails, InstanceConfig, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
     RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawMessageId,
     RawMockCanisterHttpResponse, RawSetStableMemory, RawStableMemory, RawSubmitIngressResult,
     RawSubnetId, RawTime, RawWasmResult, Topology,
@@ -1170,9 +1170,19 @@ pub async fn stop_http_gateway(
 pub async fn auto_progress(
     State(AppState { api_state, .. }): State<AppState>,
     Path(id): Path<InstanceId>,
+    extract::Json(auto_progress_config): extract::Json<AutoProgressConfig>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
-    api_state.auto_progress(id).await;
-    (StatusCode::OK, Json(ApiResponse::Success(())))
+    if let Err(e) = api_state
+        .auto_progress(id, auto_progress_config.artificial_delay_ms)
+        .await
+    {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::Error { message: e }),
+        )
+    } else {
+        (StatusCode::OK, Json(ApiResponse::Success(())))
+    }
 }
 
 pub async fn stop_progress(

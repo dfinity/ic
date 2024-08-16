@@ -1,9 +1,9 @@
 use crate::common::rest::{
-    ApiResponse, BlobCompression, BlobId, CanisterHttpRequest, CreateHttpGatewayResponse,
-    CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend, HttpGatewayConfig,
-    HttpGatewayInfo, HttpsConfig, InstanceConfig, InstanceId, MockCanisterHttpResponse,
-    RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult,
-    RawCycles, RawEffectivePrincipal, RawMessageId, RawMockCanisterHttpResponse,
+    ApiResponse, AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest,
+    CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
+    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, InstanceConfig, InstanceId,
+    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
+    RawCanisterResult, RawCycles, RawEffectivePrincipal, RawMessageId, RawMockCanisterHttpResponse,
     RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime,
     RawVerifyCanisterSigArg, RawWasmResult, SubnetId, Topology,
 };
@@ -295,7 +295,10 @@ impl PocketIc {
         let now = std::time::SystemTime::now();
         self.set_time(now).await;
         let endpoint = "auto_progress";
-        self.post::<(), _>(endpoint, "").await;
+        let auto_progress_config = AutoProgressConfig {
+            artificial_delay_ms: None,
+        };
+        self.post::<(), _>(endpoint, auto_progress_config).await;
         self.instance_url()
     }
 

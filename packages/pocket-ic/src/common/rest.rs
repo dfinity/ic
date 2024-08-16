@@ -15,6 +15,11 @@ use std::path::PathBuf;
 pub type InstanceId = usize;
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct AutoProgressConfig {
+    pub artificial_delay_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub enum HttpGatewayBackend {
     Replica(String),
     PocketIcInstance(InstanceId),
