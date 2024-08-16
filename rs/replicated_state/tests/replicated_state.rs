@@ -936,7 +936,7 @@ proptest! {
             if let Some(raw_msg) = requests.pop_front() {
                 prop_assert_eq!(&msg, &raw_msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw_msg);
             } else {
-                panic!("Pop yielded an element that was not contained in the respective queue");
+                prop_assert!(false, "Pop yielded an element that was not contained in the respective queue");
             }
 
             raw_requests.push_back(requests);
@@ -987,7 +987,7 @@ proptest! {
                     consumed += 1;
                     prop_assert_eq!(&msg, &raw_msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw_msg);
                 } else {
-                    panic!("Pop yielded an element that was not contained in the respective queue");
+                    prop_assert!(false, "Pop yielded an element that was not contained in the respective queue");
                 }
 
                 raw_requests.push_back(requests);

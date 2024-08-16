@@ -2018,7 +2018,7 @@ proptest! {
             if let Some(msg) = canister_queues.pop_canister_output(&raw.receiver()) {
                 prop_assert_eq!(raw, msg);
             } else {
-                panic!("Not all unconsumed messages left in canister queues");
+                prop_assert!(false, "Not all unconsumed messages left in canister queues");
             }
         }
 
@@ -2067,7 +2067,7 @@ proptest! {
             if let Some(msg) = canister_queues.pop_canister_output(&raw.receiver()) {
                 prop_assert_eq!(&raw, &msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw);
             } else {
-                panic!("Not all unconsumed messages left in canister queues");
+                prop_assert!(false, "Not all unconsumed messages left in canister queues");
             }
         }
 
