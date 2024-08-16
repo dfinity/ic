@@ -17,7 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New GET endpoint `/http_gateway` listing all HTTP gateways and their details.
 - Support for query statistics in the management canister.
 - The argument of the endpoint `/instances/<instance_id>/auto_progress` becomes a struct with an optional field `artificial_delay_ms` specifying the minimum delay between consecutive rounds in auto progress mode.
-- Support for *verified application* subnets.
+- Support for verified application subnets: the record types `SubnetConfigSet` and `ExtendedSubnetConfigSet` contain a new field `verified_application` specifying verified application subnets;
+  the enumeration type `SubnetKind` has a new variant `VerifiedApplication`.
 
 ### Changed
 - The argument `listen_at` of the endpoint `/http_gateway` has been renamed to `port`.
