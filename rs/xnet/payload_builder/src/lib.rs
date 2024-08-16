@@ -1622,40 +1622,20 @@ impl XNetClient for XNetClientImpl {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum XNetClientError {
+    #[error("XNet request timed out")]
     Timeout,
+    #[error("XNet request failed: {0}")]
     RequestFailed(hyper_util::client::legacy::Error),
+    #[error("No stream")]
     NoContent,
+    #[error("HTTP {0}: {1}")]
     ErrorResponse(hyper::StatusCode, String),
+    #[error("Error reading response body: {0}")]
     BodyReadError(Box<dyn std::error::Error + Send + Sync>),
+    #[error("Error decoding XNet proto into Rust struct: {0}")]
     ProxyDecodeError(ProxyDecodeError),
-}
-
-impl std::error::Error for XNetClientError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            XNetClientError::RequestFailed(e) => Some(e),
-            XNetClientError::BodyReadError(e) => Some(&**e),
-            XNetClientError::ProxyDecodeError(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
-impl std::fmt::Display for XNetClientError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            XNetClientError::Timeout => write!(f, "XNet request timed out"),
-            XNetClientError::RequestFailed(e) => write!(f, "XNet request failed: {}", e),
-            XNetClientError::NoContent => write!(f, "No stream"),
-            XNetClientError::ErrorResponse(status, msg) => write!(f, "HTTP {}: {}", status, msg),
-            XNetClientError::BodyReadError(e) => write!(f, "Error reading response body: {}", e),
-            XNetClientError::ProxyDecodeError(e) => {
-                write!(f, "Error decoding XNet proto into Rust struct: {}", e)
-            }
-        }
-    }
 }
 
 impl XNetClientError {
