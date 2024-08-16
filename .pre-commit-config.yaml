@@ -70,7 +70,7 @@ repos:
     name: Check for unused components
     entry: ./pre-commit/check-unused-components
     language: script
-    stages: [commit]
+    always_run: true
     pass_filenames: false
     verbose: true
 
