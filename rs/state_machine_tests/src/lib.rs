@@ -704,6 +704,7 @@ impl From<u64> for StateMachineNode {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 enum SignatureSecretKey {
     EcdsaSecp256k1(ic_crypto_ecdsa_secp256k1::PrivateKey),
     SchnorrBip340(ic_crypto_ecdsa_secp256k1::PrivateKey),
