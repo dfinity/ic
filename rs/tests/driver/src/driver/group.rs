@@ -1105,6 +1105,12 @@ async fn stream_journald_from_cursor(
     unwrap_or_return!(
         cursor,
         stream
+            .write_all(format!("Host: {ipv6}:19531\n").as_bytes())
+            .await
+    );
+    unwrap_or_return!(
+        cursor,
+        stream
             .write_all(format!("Range: entries={cursor}:0:\n\r\n\r").as_bytes())
             .await
     );
