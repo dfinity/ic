@@ -68,8 +68,7 @@ repos:
 
   - id: check-unused-components
     name: Check for unused components
-    entry: >
-          bash -c 'bazel run //rs/ic_os/manifest_tool -- --repo-root $(git rev-parse --show-toplevel) check-unused-components'
+    entry: bazel run //rs/ic_os/manifest_tool -- --repo-root $(git rev-parse --show-toplevel) check-unused-components
     language: script
     always_run: true
     pass_filenames: false
