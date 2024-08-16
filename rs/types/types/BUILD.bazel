@@ -60,7 +60,7 @@ rust_library(
     crate_name = "ic_types",
     proc_macro_deps = [
         # Keep sorted.
-	"//rs/utils/validate_eq_derive",
+        "//rs/utils/validate_eq_derive",
         "@crate_index//:strum_macros",
     ],
     rustc_flags = select({
