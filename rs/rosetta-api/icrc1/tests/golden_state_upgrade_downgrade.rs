@@ -1,3 +1,4 @@
+use crate::common::ledger_mainnet_wasm;
 use candid::Encode;
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -9,6 +10,8 @@ use ic_nns_test_utils_golden_nns_state::{
 use ic_state_machine_tests::StateMachine;
 use std::path::PathBuf;
 use std::str::FromStr;
+
+mod common;
 
 // u64 ledgers
 const CK_BTC_LEDGER: (&str, &str) = ("mxzaz-hqaaa-aaaar-qaada-cai", "ckBTC");
@@ -91,6 +94,7 @@ fn should_upgrade_icrc_ck_canisters_with_golden_state() {
 #[test]
 fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     let ledger_wasm = ledger_wasm();
+    let mainnet_ledger_wasm = Wasm::from_bytes(ledger_mainnet_wasm());
 
     let canister_id_and_names = vec![
         DRAGGINZ,
@@ -130,6 +134,12 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
             &state_machine,
             canister_id_and_name,
             bump_gzip_timestamp(&ledger_wasm),
+        );
+        // Downgrade back to the mainnet ledger version
+        upgrade_canister(
+            &state_machine,
+            canister_id_and_name,
+            mainnet_ledger_wasm.clone(),
         );
     }
 }

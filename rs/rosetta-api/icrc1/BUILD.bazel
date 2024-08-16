@@ -105,14 +105,17 @@ rust_ic_test(
     # Therefore, size = "large" is not large enough.
     size = "enormous",
     srcs = [
+        "tests/common.rs",
         "tests/golden_state_upgrade_downgrade.rs",
     ],
     data = [
         "//rs/rosetta-api/icrc1/ledger:ledger_canister.wasm",
         "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm",
+        "@mainnet_ic-icrc1-ledger//file",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1",
+        "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister.wasm)",
         "IC_ICRC1_LEDGER_U256_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm)",
     },
@@ -137,8 +140,12 @@ rust_ic_test(
 [
     rust_ic_test(
         name = "upgrade_downgrade" + name_suffix,
-        srcs = ["tests/upgrade_downgrade.rs"],
+        srcs = [
+            "tests/common.rs",
+            "tests/upgrade_downgrade.rs",
+        ],
         crate_features = features,
+        crate_root = "tests/upgrade_downgrade.rs",
         data = [
             "//rs/rosetta-api/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz",
             "//rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm",
