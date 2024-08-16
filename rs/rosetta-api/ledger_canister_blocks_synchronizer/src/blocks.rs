@@ -77,7 +77,7 @@ mod database_access {
             } => {
                 from_account = Some(from.to_hex());
                 allowance = Some(al.get_e8s().to_string());
-                expected_allowance = eal.map(|a| a.get_e8s().to_string());
+                expected_allowance = eal.map(|eal| eal.get_e8s().to_string());
                 spender_account = Some(spender.to_hex());
                 expires_at = ea.map(timestamp_to_iso8601);
                 fee = Some(f.get_e8s().to_string());
@@ -791,6 +791,30 @@ impl Blocks {
                 [],
             )?;
         }
+
+        tx.execute(
+            r#"
+            CREATE INDEX IF NOT EXISTS block_idx_account_balances 
+            ON account_balances(block_idx)
+            "#,
+            [],
+        )?;
+
+        tx.execute(
+            r#"
+        CREATE INDEX IF NOT EXISTS tx_hash_index 
+        ON blocks(tx_hash)
+        "#,
+            [],
+        )?;
+
+        tx.execute(
+            r#"
+        CREATE INDEX IF NOT EXISTS block_hash_index 
+        ON blocks(block_hash)
+        "#,
+            [],
+        )?;
 
         tx.commit()
     }
