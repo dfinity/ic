@@ -31,7 +31,7 @@ impl IcosManifest {
 
 #[derive(Debug)]
 pub struct Manifest {
-    pub manifest: Vec<Entry>,
+    pub manifest: Vec<ManifestEntry>,
 }
 
 impl Manifest {
@@ -41,22 +41,22 @@ impl Manifest {
         }
     }
 
-    pub fn add_entry(&mut self, component: Entry) {
+    pub fn add_entry(&mut self, component: ManifestEntry) {
         self.manifest.push(component);
     }
 }
 
 #[derive(Debug)]
-pub struct Entry {
+pub struct ManifestEntry {
     pub source: PathBuf,
-    pub _destination: PathBuf,
+    pub destination: PathBuf,
 }
 
-impl Entry {
+impl ManifestEntry {
     pub fn new(source: PathBuf, destination: PathBuf) -> Self {
-        Entry {
+        ManifestEntry {
             source,
-            _destination: destination,
+            destination,
         }
     }
 }
@@ -72,7 +72,7 @@ fn get_manifest(manifest_path: &Path, components_path: &Path) -> Result<Manifest
     for cap in re.captures_iter(&manifest_contents) {
         let source = components_path.join(&cap[1]);
         let destination = PathBuf::from(&cap[2]);
-        manifest.add_entry(Entry::new(source, destination));
+        manifest.add_entry(ManifestEntry::new(source, destination));
     }
 
     Ok(manifest)
