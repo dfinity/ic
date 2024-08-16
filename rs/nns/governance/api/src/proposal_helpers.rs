@@ -1,11 +1,10 @@
-// NOTE: We do not use internal types here, but rather API types
-// TODO: Move this to nns/test_utils/src/governance.rs
+use crate::pb::v1::{
+    manage_neuron_response::Command as CommandResponse, ExecuteNnsFunction, MakeProposalRequest,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NnsFunction,
+    ProposalActionRequest,
+};
 use candid::{CandidType, Decode, Encode};
 use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_governance_api::pb::v1::{
-    manage_neuron::Command, manage_neuron_response::Command as CommandResponse, proposal,
-    ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal,
-};
 
 /// Simplified the process of creating an ExternalUpdate proposal.
 pub fn create_external_update_proposal_candid<T: CandidType>(
@@ -14,7 +13,7 @@ pub fn create_external_update_proposal_candid<T: CandidType>(
     url: &str,
     nns_function: NnsFunction,
     payload: T,
-) -> Proposal {
+) -> MakeProposalRequest {
     create_external_update_proposal_binary(
         title,
         summary,
@@ -30,28 +29,30 @@ pub fn create_external_update_proposal_binary(
     url: &str,
     nns_function: NnsFunction,
     payload: Vec<u8>,
-) -> Proposal {
-    Proposal {
+) -> MakeProposalRequest {
+    MakeProposalRequest {
         title: Some(title.to_string()),
         summary: summary.to_string(),
         url: url.to_string(),
-        action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: nns_function as i32,
-            payload,
-        })),
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: nns_function as i32,
+                payload,
+            },
+        )),
     }
 }
 
 /// Wraps the given proposal into a MakeProposal command, and wraps the command
 /// into a payload to call `manage_neuron`.
 pub fn create_make_proposal_payload(
-    proposal: Proposal,
+    proposal: MakeProposalRequest,
     proposer_neuron_id: &NeuronId,
-) -> ManageNeuron {
-    ManageNeuron {
+) -> ManageNeuronRequest {
+    ManageNeuronRequest {
         id: Some((*proposer_neuron_id).into()),
         neuron_id_or_subaccount: None,
-        command: Some(Command::MakeProposal(Box::new(proposal))),
+        command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(proposal))),
     }
 }
 
