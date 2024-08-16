@@ -1079,7 +1079,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["sha2"],
             ),
             "rstack-self": crate.spec(
-                version = "^0.3",
+                git = "https://github.com/ninegua/rstack",
+                rev = "ba2ec279889afde30693f6b034658e5e862da2a9",
+                features = ["static"],
             ),
             "rstest": crate.spec(
                 version = "^0.19",
