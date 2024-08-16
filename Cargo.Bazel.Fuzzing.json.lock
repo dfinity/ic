@@ -1,5 +1,5 @@
 {
-  "checksum": "b8f5c546714a2fd2ce702051dd8da9f2c7e988036a0357c3c75d6deaefba88a6",
+  "checksum": "2d762a45ee0136e5124cb2a9284bd5712b43f30ed72690bdca29c7c2519b9e35",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -36029,38 +36029,30 @@
         ],
         "crate_features": {
           "common": [
+            "elf",
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
           "selects": {
             "aarch64-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "aarch64-unknown-nixos-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "arm-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "armv7-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "i686-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
@@ -36073,14 +36065,10 @@
               "system"
             ],
             "x86_64-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ],
             "x86_64-unknown-nixos-gnu": [
-              "elf",
-              "errno",
               "prctl",
               "system"
             ]
@@ -53677,9 +53665,12 @@
       "version": "0.3.3",
       "package_url": "https://github.com/sfackler/rstack",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rstack/0.3.3/download",
-          "sha256": "e7df9d3ebd4f17b52e6134efe2fa20021c80688cbe823d481a729a993b730493"
+        "Git": {
+          "remote": "https://github.com/ninegua/rstack",
+          "commitish": {
+            "Rev": "ba2ec279889afde30693f6b034658e5e862da2a9"
+          },
+          "strip_prefix": "rstack"
         }
       },
       "targets": [
@@ -53703,6 +53694,7 @@
         ],
         "crate_features": {
           "common": [
+            "static",
             "unwind",
             "unwind_"
           ],
@@ -53723,7 +53715,7 @@
               "target": "log"
             },
             {
-              "id": "unwind 0.4.1",
+              "id": "unwind 0.4.2",
               "target": "unwind",
               "alias": "unwind_"
             }
@@ -53745,9 +53737,12 @@
       "version": "0.3.0",
       "package_url": "https://github.com/sfackler/rstack",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rstack-self/0.3.0/download",
-          "sha256": "6dd5030da3aba0ec731502f74ec38e63798eea6bc8b8ba5972129afe3eababd2"
+        "Git": {
+          "remote": "https://github.com/ninegua/rstack",
+          "commitish": {
+            "Rev": "ba2ec279889afde30693f6b034658e5e862da2a9"
+          },
+          "strip_prefix": "rstack-self"
         }
       },
       "targets": [
@@ -53772,6 +53767,7 @@
         "crate_features": {
           "common": [
             "default",
+            "static",
             "unwind"
           ],
           "selects": {}
@@ -69421,14 +69417,17 @@
       ],
       "license_file": "LICENSE.txt"
     },
-    "unwind 0.4.1": {
+    "unwind 0.4.2": {
       "name": "unwind",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "package_url": "https://github.com/sfackler/rstack",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/unwind/0.4.1/download",
-          "sha256": "f0e0da3c8d6b71dbaf219188cc0e7f9ca3943f3263ca479920338d92d7ea5e07"
+        "Git": {
+          "remote": "https://github.com/ninegua/rstack",
+          "commitish": {
+            "Rev": "ba2ec279889afde30693f6b034658e5e862da2a9"
+          },
+          "strip_prefix": "unwind"
         }
       },
       "targets": [
@@ -69464,7 +69463,8 @@
         ],
         "crate_features": {
           "common": [
-            "ptrace"
+            "ptrace",
+            "static"
           ],
           "selects": {}
         },
@@ -69479,18 +69479,18 @@
               "target": "libc"
             },
             {
-              "id": "unwind 0.4.1",
+              "id": "unwind 0.4.2",
               "target": "build_script_build"
             },
             {
-              "id": "unwind-sys 0.1.3",
+              "id": "unwind-sys 0.1.4",
               "target": "unwind_sys"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.4.1"
+        "version": "0.4.2"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -69499,7 +69499,7 @@
         "link_deps": {
           "common": [
             {
-              "id": "unwind-sys 0.1.3",
+              "id": "unwind-sys 0.1.4",
               "target": "unwind_sys"
             }
           ],
@@ -69513,14 +69513,17 @@
       ],
       "license_file": null
     },
-    "unwind-sys 0.1.3": {
+    "unwind-sys 0.1.4": {
       "name": "unwind-sys",
-      "version": "0.1.3",
+      "version": "0.1.4",
       "package_url": "https://github.com/sfackler/rstack",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/unwind-sys/0.1.3/download",
-          "sha256": "d554005b247de226d124a523cae6cd6a4348277071258296dda837cf760e02e7"
+        "Git": {
+          "remote": "https://github.com/ninegua/rstack",
+          "commitish": {
+            "Rev": "ba2ec279889afde30693f6b034658e5e862da2a9"
+          },
+          "strip_prefix": "unwind-sys"
         }
       },
       "targets": [
@@ -69556,7 +69559,8 @@
         ],
         "crate_features": {
           "common": [
-            "ptrace"
+            "ptrace",
+            "static"
           ],
           "selects": {}
         },
@@ -69567,14 +69571,14 @@
               "target": "libc"
             },
             {
-              "id": "unwind-sys 0.1.3",
+              "id": "unwind-sys 0.1.4",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.1.3"
+        "version": "0.1.4"
       },
       "build_script_attrs": {
         "data_glob": [
