@@ -1950,23 +1950,27 @@ prop_compose! {
     }
 }
 
-proptest! {
-    #[test]
-    fn output_into_iter_peek_and_next_consistent(
-        (mut canister_queues, raw_requests) in arb_canister_output_queues(10, Some(5))
-    ) {
-        let mut output_iter = canister_queues.output_into_iter();
+#[test_strategy::proptest]
+fn output_into_iter_peek_and_next_consistent(
+    #[strategy(arb_canister_output_queues(10, Some(5)))] test: (
+        CanisterQueues,
+        VecDeque<RequestOrResponse>,
+    ),
+) {
+    let (mut canister_queues, raw_requests) = test;
+    let mut output_iter = canister_queues.output_into_iter();
 
-        let mut popped = 0;
-        while let Some(msg) = output_iter.peek() {
-            popped += 1;
-            prop_assert_eq!(Some(msg.clone()), output_iter.next());
-        }
-
-        prop_assert_eq!(output_iter.next(), None);
-        prop_assert_eq!(raw_requests.len(), popped);
+    let mut popped = 0;
+    while let Some(msg) = output_iter.peek() {
+        popped += 1;
+        prop_assert_eq!(Some(msg.clone()), output_iter.next());
     }
 
+    prop_assert_eq!(output_iter.next(), None);
+    prop_assert_eq!(raw_requests.len(), popped);
+}
+
+proptest! {
     #[test]
     fn output_into_iter_peek_and_next_consistent_with_excludes(
         (mut canister_queues, raw_requests) in arb_canister_output_queues(10, None),
