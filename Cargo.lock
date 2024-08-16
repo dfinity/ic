@@ -10089,6 +10089,7 @@ dependencies = [
  "ic-nns-handler-lifeline-interface",
  "ic-nns-handler-root",
  "ic-protobuf",
+ "ic-registry-canister-api",
  "ic-registry-keys",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
@@ -10425,6 +10426,16 @@ dependencies = [
  "thiserror",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "ic-registry-canister-api"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-base-types",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]
@@ -12068,6 +12079,7 @@ dependencies = [
  "ic-prep",
  "ic-protobuf",
  "ic-regedit",
+ "ic-registry-canister-api",
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-keys",
@@ -15698,6 +15710,7 @@ dependencies = [
  "ic-metrics",
  "ic-nns-constants",
  "ic-protobuf",
+ "ic-registry-canister-api",
  "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",
@@ -15720,7 +15733,6 @@ dependencies = [
  "prometheus",
  "prost",
  "rand 0.8.5",
- "registry-canister",
  "serde",
  "serde_cbor",
  "slog",
@@ -17346,6 +17358,7 @@ dependencies = [
  "ic-nns-test-utils",
  "ic-nns-test-utils-macros",
  "ic-protobuf",
+ "ic-registry-canister-api",
  "ic-registry-client-fake",
  "ic-registry-keys",
  "ic-registry-nns-data-provider",
@@ -19607,6 +19620,7 @@ dependencies = [
  "ic-protobuf",
  "ic-recovery",
  "ic-regedit",
+ "ic-registry-canister-api",
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-keys",

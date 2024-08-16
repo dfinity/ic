@@ -1,5 +1,5 @@
 {
-  "checksum": "b5ea882ca8e0b23791b91008e3131d853e7d86119df46439d6ff40093ce00e28",
+  "checksum": "b13f08dba5d6f39fe2fd0bc21ff12ca043d03065cc37f83393ae39ead122172a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17719,6 +17719,14 @@
             {
               "id": "little-loadshedder 0.1.0",
               "target": "little_loadshedder"
+            },
+            {
+              "id": "lmdb-rkv 0.14.99",
+              "target": "lmdb"
+            },
+            {
+              "id": "lmdb-rkv-sys 0.11.99",
+              "target": "lmdb_sys"
             },
             {
               "id": "local-ip-address 0.5.6",
@@ -35965,6 +35973,182 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "lmdb-rkv 0.14.99": {
+      "name": "lmdb-rkv",
+      "version": "0.14.99",
+      "package_url": "https://github.com/mozilla/lmdb-rs.git",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity-lab/lmdb-rs",
+          "commitish": {
+            "Rev": "4d952c8f1dca79de855af892b444d7112567b58d"
+          }
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "lmdb",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "lmdb",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 1.3.2",
+              "target": "bitflags"
+            },
+            {
+              "id": "byteorder 1.5.0",
+              "target": "byteorder"
+            },
+            {
+              "id": "libc 0.2.155",
+              "target": "libc"
+            },
+            {
+              "id": "lmdb-rkv-sys 0.11.99",
+              "target": "lmdb_sys"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.14.99"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "lmdb-rkv-sys 0.11.99": {
+      "name": "lmdb-rkv-sys",
+      "version": "0.11.99",
+      "package_url": "https://github.com/mozilla/lmdb-rs.git",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity-lab/lmdb-rs",
+          "commitish": {
+            "Rev": "4d952c8f1dca79de855af892b444d7112567b58d"
+          },
+          "strip_prefix": "lmdb-sys"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "lmdb_sys",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "lmdb_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "libc 0.2.155",
+              "target": "libc"
+            },
+            {
+              "id": "lmdb-rkv-sys 0.11.99",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "extra_deps": {
+          "common": [
+            "@lmdb//:lmdb"
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.11.99"
+      },
+      "build_script_attrs": {
+        "data": {
+          "common": [
+            "@lmdb//:lmdb.h"
+          ],
+          "selects": {}
+        },
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cc 1.0.83",
+              "target": "cc"
+            },
+            {
+              "id": "pkg-config 0.3.27",
+              "target": "pkg_config"
+            }
+          ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "LMDB_H_PATH": "$(location @lmdb//:lmdb.h)",
+            "LMDB_NO_BUILD": "1"
+          },
+          "selects": {}
+        }
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
     },
     "local-channel 0.1.4": {
       "name": "local-channel",
@@ -78261,6 +78445,8 @@
     "libfuzzer-sys 0.4.7",
     "libnss 0.5.0",
     "little-loadshedder 0.1.0",
+    "lmdb-rkv 0.14.99",
+    "lmdb-rkv-sys 0.11.99",
     "local-ip-address 0.5.6",
     "lru 0.7.8",
     "mach2 0.4.2",
