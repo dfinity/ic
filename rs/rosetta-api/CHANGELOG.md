@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - /call endpoint with the method 'query_block_range' to fetch multiple blocks at once
 ### Changed
-- consolidate block and transaction tables into a single table 
+- [BREAKING CHANGE]: consolidate block and transaction tables into a single table 
 
 ## [2.0.0] - 2024-01-18
 ### Fixes
