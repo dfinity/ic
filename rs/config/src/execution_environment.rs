@@ -138,7 +138,7 @@ pub const MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER: usize = 1;
 /// Maximum number of http outcall requests in-flight on a subnet.
 /// To support 100 req/s with a worst case request latency of 30s the queue size needs buffer 100 req/s * 30s = 3000 req.
 /// The worst case request latency used here should be equivalent to the request timeout in the adapter.
-const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 3000;
+pub const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 3000;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default)]

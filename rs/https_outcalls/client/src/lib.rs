@@ -23,6 +23,7 @@ pub fn setup_canister_http_client(
     metrics_registry: &MetricsRegistry,
     adapter_config: AdaptersConfig,
     query_handler: QueryExecutionService,
+    max_canister_http_requests_in_flight: usize,
     log: ReplicaLogger,
     subnet_type: SubnetType,
 ) -> Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send> {
@@ -64,6 +65,7 @@ pub fn setup_canister_http_client(
                         rt_handle,
                         channel,
                         query_handler,
+                        max_canister_http_requests_in_flight,
                         metrics_registry.clone(),
                         subnet_type,
                     ))
