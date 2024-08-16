@@ -40,7 +40,7 @@ if __name__ == "__main__":
     assert len(ic_repo) == 1
     scanner_job = DependencyScanner(
         BazelTrivyContainer(app_owner_msg_subscriber=notifier),
-        JiraFindingDataSource(finding_data_source_subscribers),
+        JiraFindingDataSource(finding_data_source_subscribers, app_owner_msg_subscriber=notifier),
         scanner_subscribers,
         SlackFindingsFailoverDataStore(projects=ic_repo[0].projects)
     )
