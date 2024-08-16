@@ -1,4 +1,8 @@
-from data_source.slack_findings_failover.parse_format import parse_slack_field, parse_slack_optional_hyperlink, parse_finding_project
+from data_source.slack_findings_failover.parse_format import (
+    parse_finding_project,
+    parse_slack_field,
+    parse_slack_optional_hyperlink,
+)
 
 
 def test_parse_slack_field():
