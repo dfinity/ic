@@ -601,27 +601,17 @@ fn get_disqualified_ranks(
     range: HeightRange,
 ) -> RankMap {
     let mut rank_map = RankMap::new(cfg);
-    let Some(proof_range) = pool.pool().validated().equivocation_proof().height_range() else {
-        return rank_map;
-    };
-
-    let narrowed_range = HeightRange::new(
-        std::cmp::max(range.min, proof_range.min),
-        std::cmp::min(range.max, proof_range.max),
-    );
-
     for proof in pool
         .pool()
         .validated()
         .equivocation_proof()
-        .get_by_height_range(narrowed_range)
+        .get_by_height_range(range)
     {
         let Ok(previous_beacon) = get_previous_beacon(pool, proof.height) else {
             continue;
         };
-        let Ok(Some(rank)) = membership
-            .get_block_maker_rank(proof.height, &previous_beacon, proof.signer)
-            .map_err(membership_error_to_validation_error)
+        let Ok(Some(rank)) =
+            membership.get_block_maker_rank(proof.height, &previous_beacon, proof.signer)
         else {
             continue;
         };
@@ -1045,9 +1035,7 @@ impl Validator {
             }
 
             // Skip validation and drop the block if it has a higher rank than a
-            // known valid block. Note that this must happen after we first allow
-            // "block with notarization" validation (see above). Otherwise we may
-            // get stuck when a block maker equivocates.
+            // known valid block.
             if let Some(min_rank) = valid_qualified_ranks.get_lowest_rank(proposal.height()) {
                 if proposal.rank() > min_rank {
                     // Skip them instead of removal because we don't want to end up
@@ -1063,21 +1051,6 @@ impl Validator {
                     }
                     continue;
                 }
-            }
-
-            // We only validate blocks from a block maker of a certain rank after a
-            // rank-based delay. If this time has not elapsed yet, we ignore the block for
-            // now.
-            if !is_time_to_make_block(
-                &self.log,
-                self.registry_client.as_ref(),
-                self.replica_config.subnet_id,
-                pool_reader,
-                proposal.height(),
-                proposal.rank(),
-                self.time_source.as_ref(),
-            ) {
-                continue;
             }
 
             // Disqualify rank if equivocation was found. If there already
@@ -1107,6 +1080,21 @@ impl Validator {
                     // Blocks from disqualified ranks can be ignored at this point
                     continue;
                 }
+            }
+
+            // We only validate blocks from a block maker of a certain rank after a
+            // rank-based delay. If this time has not elapsed yet, we ignore the block for
+            // now.
+            if !is_time_to_make_block(
+                &self.log,
+                self.registry_client.as_ref(),
+                self.replica_config.subnet_id,
+                pool_reader,
+                proposal.height(),
+                proposal.rank(),
+                self.time_source.as_ref(),
+            ) {
+                continue;
             }
 
             // The artifact was already verified at this point, so we can do
@@ -3725,9 +3713,6 @@ pub mod test {
             pool.insert_validated(block.clone());
             pool.insert_unvalidated(second_block.clone());
             pool.insert_unvalidated(third_block.clone());
-            time_source
-                .set_time(third_block.content.as_ref().context.time)
-                .ok();
 
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
             assert_matches!(
