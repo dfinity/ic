@@ -40,6 +40,7 @@ message SnsWasmStableIndex {
   bytes hash = 1;
   uint32 offset = 2;
   uint32 size = 3;
+  repeated MetadataSection metadata = 4;
 }
 
 // Specifies the upgrade path for SNS instances.
