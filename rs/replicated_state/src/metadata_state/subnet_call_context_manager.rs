@@ -891,6 +891,16 @@ impl SignWithThresholdContext {
             _ => panic!("ECDSA arguments not found."),
         }
     }
+
+    /// Returns Schnorr arguments.
+    /// Panics if arguments are not for Schnorr
+    /// Should only be called if `is_schnorr` returns true.
+    pub fn schnorr_args(&self) -> &SchnorrArguments {
+        match &self.args {
+            ThresholdArguments::Schnorr(args) => args,
+            _ => panic!("Schnorr arguments not found."),
+        }
+    }
 }
 
 impl From<&SignWithThresholdContext> for pb_metadata::SignWithThresholdContext {
