@@ -21,7 +21,7 @@ use ic_config::{
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_public::{
     metrics::HttpHandlerMetrics, CallServiceV2, CallServiceV3, CanisterReadStateServiceBuilder,
-    IngressValidatorBuilder, QueryServiceBuilder,
+    IngressValidatorBuilder, QueryServiceBuilder, SubnetReadStateServiceBuilder,
 };
 use ic_https_outcalls_adapter_client::CanisterHttpAdapterClientImpl;
 use ic_https_outcalls_service::canister_http_service_server::CanisterHttpService;
@@ -1731,12 +1731,12 @@ impl Operation for QueryRequest {
 }
 
 #[derive(Debug)]
-pub struct ReadStateRequest {
+pub struct CanisterReadStateRequest {
     pub effective_canister_id: CanisterId,
     pub bytes: Bytes,
 }
 
-impl Operation for ReadStateRequest {
+impl Operation for CanisterReadStateRequest {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         match route(
             pic,
@@ -1781,9 +1781,57 @@ impl Operation for ReadStateRequest {
         self.bytes.hash(&mut hasher);
         let hash = Digest(hasher.finish());
         OpId(format!(
-            "read_state({},{})",
+            "canister_read_state({},{})",
             self.effective_canister_id, hash,
         ))
+    }
+}
+
+#[derive(Debug)]
+pub struct SubnetReadStateRequest {
+    pub subnet_id: SubnetId,
+    pub bytes: Bytes,
+}
+
+impl Operation for SubnetReadStateRequest {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        match route(pic, EffectivePrincipal::SubnetId(self.subnet_id), false) {
+            Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
+            Ok(subnet) => {
+                let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
+                subnet.certify_latest_state();
+                let svc = SubnetReadStateServiceBuilder::builder(
+                    Arc::new(RwLock::new(delegation)),
+                    subnet.state_manager.clone(),
+                )
+                .build_service();
+
+                let request = axum::http::Request::builder()
+                    .method(Method::POST)
+                    .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
+                    .uri(format!(
+                        "/api/v2/subnet/{}/read_state",
+                        PrincipalId(self.subnet_id.get().into())
+                    ))
+                    .body(self.bytes.clone().into())
+                    .unwrap();
+                let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
+
+                let fut: ApiResponse = Box::pin(into_api_response(resp));
+                OpOut::RawResponse(fut.shared())
+            }
+        }
+    }
+
+    fn retry_if_busy(&self) -> bool {
+        true
+    }
+
+    fn id(&self) -> OpId {
+        let mut hasher = Sha256::new();
+        self.bytes.hash(&mut hasher);
+        let hash = Digest(hasher.finish());
+        OpId(format!("subnet_read_state({},{})", self.subnet_id, hash,))
     }
 }
 

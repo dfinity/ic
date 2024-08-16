@@ -764,6 +764,30 @@ impl ApiState {
             (resp.status(), resp)
         }
 
+        async fn handler_api_subnet(
+            api_version: ApiVersion,
+            replica_url: String,
+            subnet_id: SubnetId,
+            endpoint: &str,
+            bytes: Bytes,
+        ) -> (StatusCode, Response<Incoming>) {
+            let client =
+                Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
+            let url = format!(
+                "{}/api/{}/subnet/{}/{}",
+                replica_url, api_version, subnet_id, endpoint
+            );
+            let req = Request::builder()
+                .method(Method::POST)
+                .uri(url)
+                .header(CONTENT_TYPE, "application/cbor")
+                .body(Full::<Bytes>::new(bytes))
+                .unwrap();
+            let resp = client.request(req).await.unwrap();
+
+            (resp.status(), resp)
+        }
+
         async fn handler_call_v2(
             State(replica_url): State<String>,
             Path(effective_canister_id): Path<CanisterId>,
@@ -809,7 +833,7 @@ impl ApiState {
             .await
         }
 
-        async fn handler_read_state(
+        async fn handler_canister_read_state(
             State(replica_url): State<String>,
             Path(effective_canister_id): Path<CanisterId>,
             bytes: Bytes,
@@ -822,6 +846,14 @@ impl ApiState {
                 bytes,
             )
             .await
+        }
+
+        async fn handler_subnet_read_state(
+            State(replica_url): State<String>,
+            Path(subnet_id): Path<SubnetId>,
+            bytes: Bytes,
+        ) -> (StatusCode, Response<Incoming>) {
+            handler_api_subnet(ApiVersion::V2, replica_url, subnet_id, "read_state", bytes).await
         }
 
         let ip_addr = http_gateway_config
@@ -881,28 +913,39 @@ impl ApiState {
 
             let domain_resolver = Arc::new(domain_resolver) as Arc<dyn ResolvesDomain>;
 
-            let router = Router::new()
-                .route("/api/v2/status", get(handler_status))
+            let router_api_v2 = Router::new()
                 .route(
-                    "/api/v2/canister/:ecid/call",
+                    "/canister/:ecid/call",
                     post(handler_call_v2)
                         .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
                 .route(
-                    "/api/v3/canister/:ecid/call",
-                    post(handler_call_v3)
-                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
-                )
-                .route(
-                    "/api/v2/canister/:ecid/query",
+                    "/canister/:ecid/query",
                     post(handler_query)
                         .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
                 .route(
-                    "/api/v2/canister/:ecid/read_state",
-                    post(handler_read_state)
+                    "/canister/:ecid/read_state",
+                    post(handler_canister_read_state)
                         .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
+                .route(
+                    "/subnet/:sid/read_state",
+                    post(handler_subnet_read_state)
+                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                )
+                .route("/status", get(handler_status))
+                .fallback(|| async { (StatusCode::NOT_FOUND, "") });
+            let router_api_v3 = Router::new()
+                .route(
+                    "/canister/:ecid/call",
+                    post(handler_call_v3)
+                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                )
+                .fallback(|| async { (StatusCode::NOT_FOUND, "") });
+            let router = Router::new()
+                .nest("/api/v2", router_api_v2)
+                .nest("/api/v3", router_api_v3)
                 .fallback(
                     post(handler)
                         .get(handler)
