@@ -4,10 +4,10 @@ use ic_system_test_driver::{
         farm::HostFeature,
         ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
         prometheus_vm::{HasPrometheus, PrometheusVm},
-        simulate_network::{simulate_network, NetworkSimulation},
+        simulate_network::{ProductionSubnetTopology, SimulateNetwork},
         test_env::TestEnv,
         test_env_api::{
-            HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
             NnsInstallationBuilder, SubnetSnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
         universal_vm::{UniversalVm, UniversalVms},
@@ -42,7 +42,7 @@ pub fn config(
     env: TestEnv,
     nodes_nns_subnet: usize,
     nodes_app_subnet: usize,
-    network_simulation: Option<NetworkSimulation>,
+    network_simulation: Option<ProductionSubnetTopology>,
     boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
 ) {
     let logger = env.logger();
@@ -51,7 +51,7 @@ pub fn config(
         .start(&env)
         .expect("failed to start prometheus VM");
 
-    let path = env.get_dependency_path("rs/tests/jaeger_uvm_config_image.zst");
+    let path = get_dependency_path("rs/tests/jaeger_uvm_config_image.zst");
 
     UniversalVm::new(JAEGER_VM_NAME.to_string())
         .with_required_host_features(vec![HostFeature::Performance])
@@ -120,7 +120,7 @@ pub fn config(
         env.topology_snapshot()
             .subnets()
             .filter(|s| s.subnet_type() == SubnetType::Application)
-            .for_each(|s| simulate_network(s, &network_simulation));
+            .for_each(|s| s.apply_network_settings(network_simulation.clone()));
     }
 }
 

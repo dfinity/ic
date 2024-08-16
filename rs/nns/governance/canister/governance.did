@@ -236,6 +236,7 @@ type GovernanceCachedMetrics = record {
   total_staked_maturity_e8s_equivalent_seed : nat64;
   community_fund_total_staked_e8s : nat64;
   not_dissolving_neurons_e8s_buckets_seed : vec record { nat64; float64 };
+  public_neuron_subset_metrics : opt NeuronSubsetMetrics;
   timestamp_seconds : nat64;
   seed_neuron_count : nat64;
 };
@@ -265,6 +266,13 @@ type InitialTokenDistribution = record {
   swap_distribution : opt SwapDistribution;
 };
 type InstallCode = record {
+  skip_stopping_before_installing : opt bool;
+  wasm_module_hash : opt blob;
+  canister_id : opt principal;
+  arg_hash : opt blob;
+  install_mode : opt int32;
+};
+type InstallCodeRequest = record {
   arg : opt blob;
   wasm_module : opt blob;
   skip_stopping_before_installing : opt bool;
@@ -304,6 +312,12 @@ type ListProposalInfo = record {
   include_status : vec int32;
 };
 type ListProposalInfoResponse = record { proposal_info : vec ProposalInfo };
+type MakeProposalRequest = record {
+  url : text;
+  title : opt text;
+  action : opt ProposalActionRequest;
+  summary : text;
+};
 type MakeProposalResponse = record {
   message : opt text;
   proposal_id : opt NeuronId;
@@ -316,6 +330,25 @@ type MakingSnsProposal = record {
 type ManageNeuron = record {
   id : opt NeuronId;
   command : opt Command;
+  neuron_id_or_subaccount : opt NeuronIdOrSubaccount;
+};
+type ManageNeuronCommandRequest = variant {
+  Spawn : Spawn;
+  Split : Split;
+  Follow : Follow;
+  ClaimOrRefresh : ClaimOrRefresh;
+  Configure : Configure;
+  RegisterVote : RegisterVote;
+  Merge : Merge;
+  DisburseToNeuron : DisburseToNeuron;
+  MakeProposal : MakeProposalRequest;
+  StakeMaturity : StakeMaturity;
+  MergeMaturity : MergeMaturity;
+  Disburse : Disburse;
+};
+type ManageNeuronRequest = record {
+  id : opt NeuronId;
+  command : opt ManageNeuronCommandRequest;
   neuron_id_or_subaccount : opt NeuronIdOrSubaccount;
 };
 type ManageNeuronResponse = record { command : opt Command_1 };
@@ -537,6 +570,24 @@ type Proposal = record {
   action : opt Action;
   summary : text;
 };
+type ProposalActionRequest = variant {
+  RegisterKnownNeuron : KnownNeuron;
+  ManageNeuron : ManageNeuronRequest;
+  UpdateCanisterSettings : UpdateCanisterSettings;
+  InstallCode : InstallCodeRequest;
+  StopOrStartCanister : StopOrStartCanister;
+  CreateServiceNervousSystem : CreateServiceNervousSystem;
+  ExecuteNnsFunction : ExecuteNnsFunction;
+  RewardNodeProvider : RewardNodeProvider;
+  OpenSnsTokenSwap : OpenSnsTokenSwap;
+  SetSnsTokenSwapOpenTimeWindow : SetSnsTokenSwapOpenTimeWindow;
+  SetDefaultFollowees : SetDefaultFollowees;
+  RewardNodeProviders : RewardNodeProviders;
+  ManageNetworkEconomics : NetworkEconomics;
+  ApproveGenesisKyc : Principals;
+  AddOrRemoveNodeProvider : AddOrRemoveNodeProvider;
+  Motion : Motion;
+};
 type ProposalData = record {
   id : opt NeuronId;
   failure_reason : opt GovernanceError;
@@ -750,14 +801,14 @@ service : (Governance) -> {
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;
   list_node_providers : () -> (ListNodeProvidersResponse) query;
   list_proposals : (ListProposalInfo) -> (ListProposalInfoResponse) query;
-  manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
+  manage_neuron : (ManageNeuronRequest) -> (ManageNeuronResponse);
   settle_community_fund_participation : (SettleCommunityFundParticipation) -> (
       Result,
     );
   settle_neurons_fund_participation : (
       SettleNeuronsFundParticipationRequest,
     ) -> (SettleNeuronsFundParticipationResponse);
-  simulate_manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
+  simulate_manage_neuron : (ManageNeuronRequest) -> (ManageNeuronResponse);
   transfer_gtc_neuron : (NeuronId, NeuronId) -> (Result);
   update_node_provider : (UpdateNodeProvider) -> (Result);
 }

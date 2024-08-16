@@ -110,13 +110,12 @@ pub fn registration(env: TestEnv) {
 pub fn upgrade(env: TestEnv) {
     let logger = env.logger();
 
-    let original_version = env
-        .read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
+    let original_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
         .expect("tip-of-branch IC version");
 
     let target_version = HostosVersion::try_from(format!("{original_version}-test")).unwrap();
-    let url = env.get_hostos_update_img_test_url().unwrap();
-    let sha256 = env.get_hostos_update_img_test_sha256().unwrap();
+    let url = get_hostos_update_img_test_url().unwrap();
+    let sha256 = get_hostos_update_img_test_sha256().unwrap();
 
     let initial_topology = env.topology_snapshot();
     setup_nested_vms(env.clone());

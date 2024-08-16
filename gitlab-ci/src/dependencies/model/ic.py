@@ -70,3 +70,9 @@ def get_ic_repo_ci_pipeline_base_url() -> str:
     if IS_PRIVATE:
         return "https://github.com/dfinity/ic-private/actions/runs/"
     return "https://github.com/dfinity/ic/actions/runs/"
+
+
+def __test_get_ic_path() :
+    if IS_PRIVATE:
+        return "ic-private"
+    return "ic"

@@ -397,19 +397,31 @@ impl SocketReaderWithTimeout {
             )
         };
 
-        debug_assert_eq!(
-            result,
-            0,
-            "setsockopt failed with result={}, error={}",
-            result,
-            std::io::Error::last_os_error()
-        );
-
         if result == 0 {
             self.socket_timeout = timeout;
             Ok(())
         } else {
-            Err(std::io::Error::last_os_error())
+            // OS error 9 corresponds to the `BAD_FILE_DESCRIPTOR` error.
+            // This error may happen here if the main process terminates the
+            // sandbox process and immediately closes the socket while the
+            // sandbox process is attempting to update socket timeout here.
+            //
+            // Note that this is likely to happen in tests that create many
+            // `SandboxedExecutionController`s and sandbox processes.
+            const BAD_FILE_DESCRIPTOR: i32 = 9;
+            let err = std::io::Error::last_os_error();
+
+            // Any error besides `BAD_FILE_DESCRIPTOR` is unexpected.
+            debug_assert_eq!(
+                err.raw_os_error(),
+                Some(BAD_FILE_DESCRIPTOR),
+                "setsockopt failed with result={}, error={}, kind={:?}, code={:?}",
+                result,
+                err,
+                err.kind(),
+                err.raw_os_error()
+            );
+            Err(err)
         }
     }
 }

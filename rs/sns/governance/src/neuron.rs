@@ -61,6 +61,18 @@ impl Neuron {
         NeuronPermissionType::ManageVotingPermission,
     ];
 
+    pub const PERMISSIONS_FOR_NEURONS_FUND_NNS_NEURON_CONTROLLER:
+        &'static [NeuronPermissionType] = &[
+        NeuronPermissionType::ManageVotingPermission,
+        NeuronPermissionType::SubmitProposal,
+        NeuronPermissionType::Vote,
+    ];
+
+    pub const PERMISSIONS_FOR_NEURONS_FUND_NNS_NEURON_HOTKEY: &'static [NeuronPermissionType] = &[
+        NeuronPermissionType::SubmitProposal,
+        NeuronPermissionType::Vote,
+    ];
+
     // Utility methods on neurons.
 
     /// Returns the neuron's state.
@@ -173,6 +185,7 @@ impl Neuron {
     ///   and is applied against the total voting power of the neuron. It is represented
     ///   as a percent in the range of 0 and 100 where 0 will result in 0 voting power,
     ///   and 100 will result in unadjusted voting power.
+    ///
     /// max_dissolve_delay_seconds and max_neuron_age_for_age_bonus are defined in
     /// the nervous system parameters.
     pub fn voting_power(
@@ -778,6 +791,10 @@ impl NeuronId {
         subaccount[0] = id.len().try_into().unwrap();
         subaccount[1..1 + id.len()].copy_from_slice(id);
         NeuronId::from(subaccount)
+    }
+
+    pub fn test_neuron_ids<const N: usize>() -> [NeuronId; N] {
+        core::array::from_fn(|i| NeuronId::new_test_neuron_id(10 + i as u64))
     }
 }
 

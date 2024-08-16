@@ -1186,6 +1186,107 @@ pub mod manage_neuron_response {
         StakeMaturity(StakeMaturityResponse),
     }
 }
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[compare_default]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct MakeProposalRequest {
+    #[prost(string, optional, tag = "20")]
+    pub title: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, tag = "1")]
+    pub summary: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub url: ::prost::alloc::string::String,
+    #[prost(
+        oneof = "ProposalActionRequest",
+        tags = "10, 12, 13, 14, 15, 16, 21, 24, 25, 26, 27"
+    )]
+    pub action: ::core::option::Option<ProposalActionRequest>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Oneof)]
+pub enum ProposalActionRequest {
+    #[prost(message, tag = "10")]
+    ManageNeuron(::prost::alloc::boxed::Box<ManageNeuronRequest>),
+    #[prost(message, tag = "12")]
+    ManageNetworkEconomics(NetworkEconomics),
+    #[prost(message, tag = "13")]
+    Motion(Motion),
+    #[prost(message, tag = "14")]
+    ExecuteNnsFunction(ExecuteNnsFunction),
+    #[prost(message, tag = "15")]
+    ApproveGenesisKyc(ApproveGenesisKyc),
+    #[prost(message, tag = "16")]
+    AddOrRemoveNodeProvider(AddOrRemoveNodeProvider),
+    #[prost(message, tag = "17")]
+    RewardNodeProvider(RewardNodeProvider),
+    #[prost(message, tag = "18")]
+    SetDefaultFollowees(SetDefaultFollowees),
+    #[prost(message, tag = "19")]
+    RewardNodeProviders(RewardNodeProviders),
+    #[prost(message, tag = "21")]
+    RegisterKnownNeuron(KnownNeuron),
+    #[prost(message, tag = "22")]
+    SetSnsTokenSwapOpenTimeWindow(SetSnsTokenSwapOpenTimeWindow),
+    #[prost(message, tag = "23")]
+    OpenSnsTokenSwap(OpenSnsTokenSwap),
+    #[prost(message, tag = "24")]
+    CreateServiceNervousSystem(CreateServiceNervousSystem),
+    #[prost(message, tag = "25")]
+    InstallCode(InstallCodeRequest),
+    #[prost(message, tag = "26")]
+    StopOrStartCanister(StopOrStartCanister),
+    #[prost(message, tag = "27")]
+    UpdateCanisterSettings(UpdateCanisterSettings),
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ManageNeuronRequest {
+    #[prost(message, optional, tag = "1")]
+    pub id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
+    #[prost(oneof = "manage_neuron::NeuronIdOrSubaccount", tags = "11, 12")]
+    pub neuron_id_or_subaccount: ::core::option::Option<manage_neuron::NeuronIdOrSubaccount>,
+    #[prost(
+        oneof = "ManageNeuronCommandRequest",
+        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15"
+    )]
+    pub command: ::core::option::Option<ManageNeuronCommandRequest>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Oneof)]
+pub enum ManageNeuronCommandRequest {
+    #[prost(message, tag = "2")]
+    Configure(manage_neuron::Configure),
+    #[prost(message, tag = "3")]
+    Disburse(manage_neuron::Disburse),
+    #[prost(message, tag = "4")]
+    Spawn(manage_neuron::Spawn),
+    #[prost(message, tag = "5")]
+    Follow(manage_neuron::Follow),
+    #[prost(message, tag = "6")]
+    MakeProposal(::prost::alloc::boxed::Box<MakeProposalRequest>),
+    #[prost(message, tag = "7")]
+    RegisterVote(manage_neuron::RegisterVote),
+    #[prost(message, tag = "8")]
+    Split(manage_neuron::Split),
+    #[prost(message, tag = "9")]
+    DisburseToNeuron(manage_neuron::DisburseToNeuron),
+    #[prost(message, tag = "10")]
+    ClaimOrRefresh(manage_neuron::ClaimOrRefresh),
+    #[prost(message, tag = "13")]
+    MergeMaturity(manage_neuron::MergeMaturity),
+    #[prost(message, tag = "14")]
+    Merge(manage_neuron::Merge),
+    #[prost(message, tag = "15")]
+    StakeMaturity(manage_neuron::StakeMaturity),
+}
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[compare_default]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -1630,7 +1731,6 @@ pub mod neurons_fund_snapshot {
         #[prost(message, optional, tag = "6")]
         pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
         /// The principals that can vote, propose, and follow on behalf of this neuron.
-        /// TODO(NNS1-3199): Populate this field with the neuron's hotkeys.
         #[prost(message, repeated, tag = "7")]
         pub hotkeys: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
         /// Deprecated. Please use `controller` instead (not `hotkeys`!)
@@ -2321,17 +2421,18 @@ pub struct InstallCode {
     /// The install mode. Either install, reinstall, or upgrade. Required.
     #[prost(enumeration = "install_code::CanisterInstallMode", optional, tag = "2")]
     pub install_mode: ::core::option::Option<i32>,
-    /// The wasm module to install. required.
-    #[prost(bytes = "vec", optional, tag = "3")]
-    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
-    pub wasm_module: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
-    /// The arg to pass to the canister. Optional.
-    #[prost(bytes = "vec", optional, tag = "4")]
-    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
-    pub arg: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+
     /// Whether to skip stopping the canister before installing. Optional. Default is false.
     #[prost(bool, optional, tag = "5")]
     pub skip_stopping_before_installing: ::core::option::Option<bool>,
+
+    #[prost(bytes = "vec", optional, tag = "6")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub wasm_module_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+
+    #[prost(bytes = "vec", optional, tag = "7")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub arg_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// Nested message and enum types in `InstallCode`.
 pub mod install_code {
@@ -2382,6 +2483,25 @@ pub mod install_code {
         }
     }
 }
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InstallCodeRequest {
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(enumeration = "install_code::CanisterInstallMode", optional, tag = "2")]
+    pub install_mode: ::core::option::Option<i32>,
+    #[prost(bytes = "vec", optional, tag = "3")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub wasm_module: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bytes = "vec", optional, tag = "4")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub arg: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bool, optional, tag = "5")]
+    pub skip_stopping_before_installing: ::core::option::Option<bool>,
+}
+
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2804,6 +2924,9 @@ pub mod governance {
         pub total_staked_e8s_non_self_authenticating_controller: ::core::option::Option<u64>,
         #[prost(message, optional, tag = "38")]
         pub non_self_authenticating_controller_neuron_subset_metrics:
+            ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
+        #[prost(message, optional, tag = "39")]
+        pub public_neuron_subset_metrics:
             ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
     }
     /// Nested message and enum types in `GovernanceCachedMetrics`.

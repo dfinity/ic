@@ -555,6 +555,31 @@ pub struct WasmChunkStoreMetadata {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct LogVisibilityAllowedViewers {
+    #[prost(message, repeated, tag = "1")]
+    pub principals: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct LogVisibilityV2 {
+    #[prost(oneof = "log_visibility_v2::LogVisibilityV2", tags = "1, 2, 3")]
+    pub log_visibility_v2: ::core::option::Option<log_visibility_v2::LogVisibilityV2>,
+}
+/// Nested message and enum types in `LogVisibilityV2`.
+pub mod log_visibility_v2 {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum LogVisibilityV2 {
+        #[prost(int32, tag = "1")]
+        Controllers(i32),
+        #[prost(int32, tag = "2")]
+        Public(i32),
+        #[prost(message, tag = "3")]
+        AllowedViewers(super::LogVisibilityAllowedViewers),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterLogRecord {
     #[prost(uint64, tag = "1")]
     pub idx: u64,
@@ -647,8 +672,13 @@ pub struct CanisterStateBits {
     #[prost(message, optional, tag = "41")]
     pub total_query_stats: ::core::option::Option<TotalQueryStats>,
     /// Log visibility for the canister.
+    ///
+    /// TODO(EXC-1670): remove this field.
     #[prost(enumeration = "LogVisibility", tag = "42")]
     pub log_visibility: i32,
+    /// Log visibility for the canister.
+    #[prost(message, optional, tag = "51")]
+    pub log_visibility_v2: ::core::option::Option<LogVisibilityV2>,
     /// Log records of the canister.
     #[prost(message, repeated, tag = "43")]
     pub canister_log_records: ::prost::alloc::vec::Vec<CanisterLogRecord>,
@@ -664,10 +694,15 @@ pub struct CanisterStateBits {
     /// The next local snapshot ID.
     #[prost(uint64, tag = "46")]
     pub next_snapshot_id: u64,
+    /// Captures the memory usage of all snapshots associated with a canister.
+    #[prost(uint64, tag = "52")]
+    pub snapshots_memory_usage: u64,
     #[prost(int64, tag = "48")]
     pub priority_credit: i64,
     #[prost(enumeration = "LongExecutionMode", tag = "49")]
     pub long_execution_mode: i32,
+    #[prost(uint64, optional, tag = "50")]
+    pub wasm_memory_threshold: ::core::option::Option<u64>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }
@@ -811,6 +846,10 @@ impl CyclesUseCase {
         }
     }
 }
+/// TODO(EXC-1670): Migrate to pb_canister_state_bits::LogVisibilityV2.
+/// The current enum only supports i32 values, which limits the
+/// storage of allowed_viewers principals. LogVisibilityV2 will
+/// support both enum values and a list of principals.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum LogVisibility {

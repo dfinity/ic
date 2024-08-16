@@ -6,7 +6,9 @@ use ic_agent::agent::{http_transport::ReqwestTransport, CallResponse};
 use ic_management_canister_types::ProvisionalCreateCanisterWithCyclesArgs;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_utils::interfaces::ManagementCanister;
-use pocket_ic::common::rest::{HttpsConfig, InstanceConfig, SubnetConfigSet};
+use pocket_ic::common::rest::{
+    HttpGatewayBackend, HttpGatewayDetails, HttpsConfig, InstanceConfig, SubnetConfigSet,
+};
 use pocket_ic::{PocketIc, PocketIcBuilder, WasmResult};
 use rcgen::{CertificateParams, KeyPair};
 use reqwest::blocking::Client;
@@ -14,7 +16,7 @@ use reqwest::Client as NonblockingClient;
 use reqwest::{StatusCode, Url};
 use std::io::Read;
 use std::io::Write;
-use std::net::{IpAddr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
@@ -225,7 +227,7 @@ fn test_port_file() {
     }
 }
 
-async fn test_gateway(https: bool) {
+async fn test_gateway(server_url: Url, https: bool) {
     // create PocketIC instance
     let mut pic = PocketIcBuilder::new()
         .with_nns_subnet()
@@ -269,6 +271,7 @@ async fn test_gateway(https: bool) {
         .unwrap();
 
     // make PocketIc instance live with an HTTP gateway
+    let domains = Some(vec![localhost.to_string(), alt_domain.to_string()]);
     let https_config = if https {
         Some(HttpsConfig {
             cert_path: cert_path.into_os_string().into_string().unwrap(),
@@ -278,32 +281,50 @@ async fn test_gateway(https: bool) {
         None
     };
     let port = pic
-        .make_live_with_params(
-            None,
-            Some(vec![localhost.to_string(), alt_domain.to_string()]),
-            https_config,
-        )
+        .make_live_with_params(None, domains.clone(), https_config.clone())
         .await
         .port_or_known_default()
         .unwrap();
+
+    // check that an HTTP gateway with the matching port is returned when listing all HTTP gateways
+    // and its details are set properly
+    let client = NonblockingClient::new();
+    let http_gateways: Vec<HttpGatewayDetails> = client
+        .get(server_url.join("http_gateway").unwrap())
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let http_gateway_details = http_gateways
+        .into_iter()
+        .find(|details| details.port == port)
+        .unwrap();
+    assert_eq!(
+        http_gateway_details.forward_to,
+        HttpGatewayBackend::PocketIcInstance(pic.instance_id)
+    );
+    assert_eq!(http_gateway_details.domains, domains);
+    assert_eq!(http_gateway_details.https_config, https_config);
 
     // create a non-blocking reqwest client resolving localhost/example.com and <canister-id>.localhost/example.com to [::1]
     let mut builder = NonblockingClient::builder()
         .resolve(
             localhost,
-            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
         )
         .resolve(
             sub_localhost,
-            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
         )
         .resolve(
             alt_domain,
-            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
         )
         .resolve(
             sub_alt_domain,
-            SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), port),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
         );
     // add a custom root certificate
     if https {
@@ -374,12 +395,14 @@ async fn test_gateway(https: bool) {
 
 #[tokio::test]
 async fn test_http_gateway() {
-    test_gateway(false).await;
+    let server_url = start_server();
+    test_gateway(server_url, false).await;
 }
 
 #[tokio::test]
 async fn test_https_gateway() {
-    test_gateway(true).await;
+    let server_url = start_server();
+    test_gateway(server_url, true).await;
 }
 
 #[test]
@@ -759,5 +782,132 @@ fn test_specified_id_call_v3() {
                 CallResponse::Response(..) => {}
             })
             .unwrap();
+    })
+}
+
+/// Test that query stats are available via the management canister.
+#[test]
+fn test_query_stats() {
+    const INIT_CYCLES: u128 = 2_000_000_000_000;
+
+    // Create PocketIC instance with a single app subnet.
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
+
+    // We create a counter canister on the app subnet.
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    let counter_wasm = wat::parse_str(COUNTER_WAT).unwrap();
+    pic.install_canister(canister_id, counter_wasm, vec![], None);
+
+    // The query stats are still at zero.
+    let query_stats = pic.canister_status(canister_id, None).unwrap().query_stats;
+    let zero: candid::Nat = 0_u64.into();
+    assert_eq!(query_stats.num_calls_total, zero);
+    assert_eq!(query_stats.num_instructions_total, zero);
+    assert_eq!(query_stats.request_payload_bytes_total, zero);
+    assert_eq!(query_stats.response_payload_bytes_total, zero);
+
+    // Execute 13 query calls (one per each app subnet node) on the counter canister in each of 4 query stats epochs.
+    // Every single query call has different arguments so that query calls are not cached.
+    let mut n: u64 = 0;
+    for _ in 0..4 {
+        for _ in 0..13 {
+            pic.query_call(
+                canister_id,
+                Principal::anonymous(),
+                "read",
+                n.to_le_bytes().to_vec(),
+            )
+            .unwrap();
+            n += 1;
+        }
+        // Execute one epoch.
+        for _ in 0..60 {
+            pic.tick();
+        }
+    }
+
+    // Now the number of calls should be set to 26 (13 calls per epoch from 2 epochs) due to a delay in query stats aggregation.
+    let query_stats = pic.canister_status(canister_id, None).unwrap().query_stats;
+    assert_eq!(query_stats.num_calls_total, candid::Nat::from(26_u64));
+    assert_ne!(query_stats.num_instructions_total, candid::Nat::from(0_u64));
+    assert_eq!(
+        query_stats.request_payload_bytes_total,
+        candid::Nat::from(208_u64)
+    ); // we sent 8 bytes per call
+    assert_eq!(
+        query_stats.response_payload_bytes_total,
+        candid::Nat::from(104_u64)
+    ); // the counter canister responds with 4 bytes per call
+}
+
+/// Test that query stats are available via the management canister in the live mode of PocketIC.
+#[test]
+fn test_query_stats_live() {
+    const INIT_CYCLES: u128 = 2_000_000_000_000;
+
+    // Create PocketIC instance with one NNS subnet and one app subnet.
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    // Retrieve the app subnet from the topology.
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+
+    // We create a counter canister on the app subnet.
+    let canister_id = pic.create_canister_on_subnet(None, None, app_subnet);
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    let counter_wasm = wat::parse_str(COUNTER_WAT).unwrap();
+    pic.install_canister(canister_id, counter_wasm, vec![], None);
+
+    // Query stats should be collected in the live mode.
+    let endpoint = pic.make_live(None);
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    rt.block_on(async {
+        let agent = ic_agent::Agent::builder()
+            .with_url(endpoint.clone())
+            .build()
+            .unwrap();
+        agent.fetch_root_key().await.unwrap();
+
+        let ic00 = ManagementCanister::create(&agent);
+
+        let query_stats = ic00
+            .canister_status(&canister_id)
+            .await
+            .unwrap()
+            .0
+            .query_stats;
+        assert_eq!(query_stats.num_calls_total, candid::Nat::from(0_u64));
+
+        let mut n: u64 = 0;
+        loop {
+            // Make one query call per app subnet node.
+            for _ in 0..13 {
+                agent
+                    .query(&canister_id, "read")
+                    .with_arg(n.to_le_bytes().to_vec())
+                    .call()
+                    .await
+                    .unwrap();
+                n += 1;
+            }
+
+            let current_query_stats = ic00
+                .canister_status(&canister_id)
+                .await
+                .unwrap()
+                .0
+                .query_stats;
+            if query_stats.num_calls_total != current_query_stats.num_calls_total {
+                break;
+            }
+        }
     })
 }

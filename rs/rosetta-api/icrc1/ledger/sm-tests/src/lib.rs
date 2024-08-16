@@ -20,6 +20,7 @@ use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
+use icrc_ledger_types::icrc21::errors::ErrorInfo;
 use icrc_ledger_types::icrc21::errors::Icrc21Error;
 use icrc_ledger_types::icrc21::requests::ConsentMessageMetadata;
 use icrc_ledger_types::icrc21::requests::{
@@ -28,9 +29,9 @@ use icrc_ledger_types::icrc21::requests::{
 use icrc_ledger_types::icrc21::responses::{ConsentInfo, ConsentMessage};
 use icrc_ledger_types::icrc3;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
-use icrc_ledger_types::icrc3::blocks::BlockRange;
-use icrc_ledger_types::icrc3::blocks::GenericBlock as IcrcBlock;
-use icrc_ledger_types::icrc3::blocks::GetBlocksResponse;
+use icrc_ledger_types::icrc3::blocks::{
+    BlockRange, GenericBlock as IcrcBlock, GetBlocksRequest, GetBlocksResponse,
+};
 use icrc_ledger_types::icrc3::transactions::GetTransactionsRequest;
 use icrc_ledger_types::icrc3::transactions::GetTransactionsResponse;
 use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
@@ -45,6 +46,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+pub mod in_memory_ledger;
 pub mod metrics;
 
 pub const FEE: u64 = 10_000;
@@ -277,6 +279,66 @@ fn icrc21_consent_message(
             Result<ConsentInfo, Icrc21Error>
     )
     .expect("failed to decode icrc21_canister_call_consent_message response")
+}
+
+pub fn get_all_ledger_and_archive_blocks(
+    state_machine: &StateMachine,
+    ledger_id: CanisterId,
+) -> Vec<Block<Tokens>> {
+    let req = GetBlocksRequest {
+        start: icrc_ledger_types::icrc1::transfer::BlockIndex::from(0u64),
+        length: Nat::from(u32::MAX),
+    };
+    let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
+    let res = state_machine
+        .query(ledger_id, "get_blocks", req)
+        .expect("Failed to send get_blocks request")
+        .bytes();
+    let res = Decode!(&res, GetBlocksResponse).expect("Failed to decode GetBlocksResponse");
+    // Assume that all blocks in the ledger can be retrieved in a single call. This should hold for
+    // most tests.
+    let blocks_in_ledger = res
+        .chain_length
+        .saturating_sub(res.first_index.0.to_u64().unwrap());
+    assert!(
+        blocks_in_ledger <= res.blocks.len() as u64,
+        "Chain length: {}, first block index: {}, retrieved blocks: {}",
+        res.chain_length,
+        res.first_index,
+        res.blocks.len()
+    );
+    let mut blocks = vec![];
+    for archived in res.archived_blocks {
+        let mut remaining = archived.length.clone();
+        let mut next_archived_txid = archived.start.clone();
+        while remaining > 0u32 {
+            let req = GetTransactionsRequest {
+                start: next_archived_txid.clone(),
+                length: remaining.clone(),
+            };
+            let req =
+                Encode!(&req).expect("Failed to encode GetTransactionsRequest for archive node");
+            let canister_id = archived.callback.canister_id;
+            let res = state_machine
+                .query(
+                    CanisterId::unchecked_from_principal(PrincipalId(canister_id)),
+                    archived.callback.method.clone(),
+                    req,
+                )
+                .expect("Failed to send get_blocks request to archive")
+                .bytes();
+            let res = Decode!(&res, BlockRange).unwrap();
+            next_archived_txid += res.blocks.len() as u64;
+            remaining -= res.blocks.len() as u32;
+            blocks.extend(res.blocks);
+        }
+    }
+    blocks.extend(res.blocks);
+    blocks
+        .into_iter()
+        .map(ic_icrc1::Block::try_from)
+        .collect::<Result<Vec<Block<Tokens>>, String>>()
+        .expect("should convert generic blocks to ICRC1 blocks")
 }
 
 fn get_archive_remaining_capacity(env: &StateMachine, archive: Principal) -> u64 {
@@ -3605,6 +3667,30 @@ fn test_icrc21_approve_message(
     from_account: Account,
     spender_account: Account,
 ) {
+    let message = &icrc21_consent_message(
+        env,
+        canister_id,
+        from_account.owner,
+        ConsentMessageRequest {
+            method: "INVALID_FUNCTION".to_owned(),
+            arg: Encode!(&()).unwrap(),
+            user_preferences: ConsentMessageSpec {
+                metadata: ConsentMessageMetadata {
+                    language: "en".to_string(),
+                    utc_offset_minutes: None,
+                },
+                device_spec: Some(DisplayMessageType::GenericDisplay),
+            },
+        },
+    )
+    .unwrap_err();
+    match message {
+        Icrc21Error::UnsupportedCanisterCall(ErrorInfo { description }) => {
+            assert!(description.contains("The function provided is not supported: INVALID_FUNCTION.\n Supported functions for ICRC-21 are: [\"icrc1_transfer\", \"icrc2_approve\", \"icrc2_transfer_from\"].\n Error is: VariantNotFound"),"Unexpected Error message: {}", description)
+        }
+        _ => panic!("Unexpected error: {:?}", message),
+    }
+
     // Test the message for icrc2 approve
     let approve_args = ApproveArgs {
         spender: spender_account,

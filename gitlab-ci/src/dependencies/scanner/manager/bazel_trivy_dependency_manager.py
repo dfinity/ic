@@ -332,7 +332,7 @@ class BazelTrivyContainer(DependencyManager):
         raise NotImplementedError
 
     def get_findings(
-        self, repository_name: str, project: Project, engine_version: typing.Optional[int]
+        self, repository_name: str, project: Project, engine_version: typing.Optional[str]
     ) -> typing.List[Finding]:
         path = self.root.parent / project.path
 

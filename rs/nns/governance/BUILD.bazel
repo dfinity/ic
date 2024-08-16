@@ -26,9 +26,11 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
+    "//rs/nervous_system/temporary",
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/gtc_accounts",
+    "//rs/nns/handlers/root/interface",
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/rosetta-api/icp_ledger",
@@ -129,6 +131,14 @@ MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
+LIB_SRCS = glob(
+    ["src/**/*.rs"],
+    exclude = [
+        "**/*tests.rs",
+        "**/tests/**",
+    ],
+)
+
 cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
@@ -140,10 +150,7 @@ cargo_build_script(
 
 rust_library(
     name = "governance",
-    srcs = glob(
-        ["src/**/*.rs"],
-        exclude = ["**/*tests.rs"],
-    ),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_name = "ic_nns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -155,10 +162,7 @@ rust_library(
 
 rust_library(
     name = "governance--test_feature",
-    srcs = glob(
-        ["src/**/*.rs"],
-        exclude = ["**/*tests.rs"],
-    ),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_features = ["test"],
     crate_name = "ic_nns_governance",
@@ -171,10 +175,7 @@ rust_library(
 
 rust_library(
     name = "governance--canbench_feature",
-    srcs = glob(
-        ["src/**/*.rs"],
-        exclude = ["**/*tests.rs"],
-    ),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_features = ["canbench-rs"],
     crate_name = "ic_nns_governance",
@@ -232,7 +233,6 @@ rust_canister(
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/governance.did"],
-    opt = "z",  # TODO: undo once dfx-extensions do not ungzip canister modules
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance.did",
     deps = DEPENDENCIES + [
@@ -247,7 +247,6 @@ rust_canister(
     aliases = ALIASES,
     compile_data = ["canister/governance_test.did"],
     crate_features = ["test"],
-    opt = "z",  # TODO: undo once dfx-extensions do not ungzip canister modules
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance_test.did",
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [

@@ -371,6 +371,7 @@ impl ExecutionEnvironment {
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         heap_delta_rate_limit: NumBytes,
         upload_wasm_chunk_instructions: NumInstructions,
+        canister_snapshot_baseline_instructions: NumInstructions,
     ) -> Self {
         // Assert the flag implication: DTS => sandboxing.
         assert!(
@@ -393,6 +394,7 @@ impl ExecutionEnvironment {
             heap_delta_rate_limit,
             upload_wasm_chunk_instructions,
             config.embedders_config.wasm_max_size,
+            canister_snapshot_baseline_instructions,
         );
         let metrics = ExecutionEnvironmentMetrics::new(metrics_registry);
         let canister_manager = CanisterManager::new(
@@ -453,7 +455,9 @@ impl ExecutionEnvironment {
     }
 
     /// Executes a replicated message sent to a subnet.
-    /// Returns the new replicated state and the number of left instructions.
+    ///
+    /// Returns the new replicated state and an optional number of instructions
+    /// consumed by the message execution.
     #[allow(clippy::cognitive_complexity)]
     #[allow(clippy::too_many_arguments)]
     pub fn execute_subnet_message(
@@ -1300,6 +1304,7 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::BitcoinGetBalance)
             | Ok(Ic00Method::BitcoinGetUtxos)
+            | Ok(Ic00Method::BitcoinGetBlockHeaders)
             | Ok(Ic00Method::BitcoinSendTransaction)
             | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => {
                 // Code path can only be triggered if there are no bitcoin canisters to route
@@ -1371,21 +1376,29 @@ impl ExecutionEnvironment {
             },
 
             Ok(Ic00Method::TakeCanisterSnapshot) => match self.config.canister_snapshots {
-                FlagStatus::Enabled => {
-                    let res = TakeCanisterSnapshotArgs::decode(payload).and_then(|args| {
-                        self.take_canister_snapshot(
+                FlagStatus::Enabled => match TakeCanisterSnapshotArgs::decode(payload) {
+                    Err(err) => ExecuteSubnetMessageResult::Finished {
+                        response: Err(err),
+                        refund: msg.take_cycles(),
+                    },
+                    Ok(args) => {
+                        let (result, instructions_used) = self.take_canister_snapshot(
                             *msg.sender(),
                             &mut state,
                             args,
                             registry_settings.subnet_size,
                             round_limits,
-                        )
-                    });
-                    ExecuteSubnetMessageResult::Finished {
-                        response: res,
-                        refund: msg.take_cycles(),
+                        );
+                        let msg_result = ExecuteSubnetMessageResult::Finished {
+                            response: result,
+                            refund: msg.take_cycles(),
+                        };
+
+                        let state =
+                            self.finish_subnet_message_execution(state, msg, msg_result, since);
+                        return (state, Some(instructions_used));
                     }
-                }
+                },
                 FlagStatus::Disabled => {
                     let err = Err(UserError::new(
                         ErrorCode::CanisterContractViolation,
@@ -1406,7 +1419,8 @@ impl ExecutionEnvironment {
                     },
                     Ok(args) => {
                         let origin = msg.canister_change_origin(args.get_sender_canister_version());
-                        let (result, instruction_used) = self.load_canister_snapshot(
+                        let (result, instructions_used) = self.load_canister_snapshot(
+                            registry_settings.subnet_size,
                             *msg.sender(),
                             &mut state,
                             args,
@@ -1420,7 +1434,7 @@ impl ExecutionEnvironment {
 
                         let state =
                             self.finish_subnet_message_execution(state, msg, msg_result, since);
-                        return (state, Some(instruction_used));
+                        return (state, Some(instructions_used));
                     }
                 },
                 FlagStatus::Disabled => {
@@ -1491,8 +1505,13 @@ impl ExecutionEnvironment {
             }
         };
 
-        // Note that some branches above like `InstallCode` and `SignWithECDSA`
-        // have early returns. If you modify code below, please also update
+        // Note that some branches above have early returns:
+        //   - `InstallCode`
+        //   - `InstallChunkedCode`
+        //   - `TakeCanisterSnapshot`
+        //   - `LoadCanisterSnapshot`
+        //   - `SignWithECDSA`
+        // If you modify code below, please also update
         // these cases.
         let state = self.finish_subnet_message_execution(state, msg, result, since);
         (state, Some(NumInstructions::from(0)))
@@ -2036,15 +2055,18 @@ impl ExecutionEnvironment {
         args: TakeCanisterSnapshotArgs,
         subnet_size: usize,
         round_limits: &mut RoundLimits,
-    ) -> Result<Vec<u8>, UserError> {
+    ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
         let canister_id = args.get_canister_id();
         // Take canister out.
         let mut canister = match state.take_canister_state(&canister_id) {
             None => {
-                return Err(UserError::new(
-                    ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
-                ))
+                return (
+                    Err(UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        format!("Canister {} not found.", &canister_id),
+                    )),
+                    NumInstructions::new(0),
+                )
             }
             Some(canister) => canister,
         };
@@ -2052,30 +2074,28 @@ impl ExecutionEnvironment {
         let resource_saturation =
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
         let replace_snapshot = args.replace_snapshot();
-        let result = self
-            .canister_manager
-            .take_canister_snapshot(
-                subnet_size,
-                sender,
-                &mut canister,
-                replace_snapshot,
-                state,
-                round_limits,
-                &resource_saturation,
-            )
-            .map(|response| {
-                state.metadata.heap_delta_estimate += NumBytes::from(response.total_size());
-                response.encode()
-            })
-            .map_err(|err| err.into());
+        let (result, instructions_used) = self.canister_manager.take_canister_snapshot(
+            subnet_size,
+            sender,
+            &mut canister,
+            replace_snapshot,
+            state,
+            round_limits,
+            &resource_saturation,
+        );
         // Put canister back.
         state.put_canister_state(canister);
-        result
+
+        match result {
+            Ok(response) => (Ok(response.encode()), instructions_used),
+            Err(err) => (Err(err.into()), instructions_used),
+        }
     }
 
     /// Loads a canister snapshot onto an existing canister.
     fn load_canister_snapshot(
         &self,
+        subnet_size: usize,
         sender: PrincipalId,
         state: &mut ReplicatedState,
         args: LoadCanisterSnapshotArgs,
@@ -2099,6 +2119,7 @@ impl ExecutionEnvironment {
 
         let snapshot_id = args.snapshot_id();
         let (instructions_used, result) = self.canister_manager.load_canister_snapshot(
+            subnet_size,
             sender,
             &old_canister,
             snapshot_id,
@@ -2920,6 +2941,7 @@ impl ExecutionEnvironment {
     /// - If the execution is finished, then it outputs the subnet response.
     /// - If the execution is paused, then it enqueues it to the task queue of
     ///   the canister.
+    ///
     /// In both cases, the functions gets the canister from the result and adds
     /// it to the replicated state.
     fn process_install_code_result(

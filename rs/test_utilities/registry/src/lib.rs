@@ -317,6 +317,11 @@ impl SubnetRecordBuilder {
         self
     }
 
+    pub fn with_dkg_dealings_per_block(mut self, dkg_dealings_per_block: u64) -> Self {
+        self.record.dkg_dealings_per_block = dkg_dealings_per_block;
+        self
+    }
+
     pub fn build(self) -> SubnetRecord {
         self.record
     }

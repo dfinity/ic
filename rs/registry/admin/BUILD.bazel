@@ -53,6 +53,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
+    "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:url",
@@ -63,6 +64,7 @@ BASE_DEPENDENCIES = [
 DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/sns/init",
     "//rs/nns/governance",
+    "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
     "//rs/nns/handlers/root/impl:root",
     "//rs/sns/swap",
@@ -83,6 +85,7 @@ MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/registry/admin-derive",
     "@crate_index//:async-trait",
+    "@crate_index//:strum_macros",
 ]
 
 DEV_DEPENDENCIES = [

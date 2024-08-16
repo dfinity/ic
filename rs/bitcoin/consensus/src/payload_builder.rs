@@ -125,6 +125,7 @@ impl BitcoinPayloadBuilder {
         validation_context: &ValidationContext,
         past_callback_ids: BTreeSet<u64>,
         byte_limit: NumBytes,
+        priority: usize,
     ) -> Result<SelfValidatingPayload, GetPayloadError> {
         // Retrieve the `ReplicatedState` required by `validation_context`.
         let state = self
@@ -223,10 +224,11 @@ impl BitcoinPayloadBuilder {
             // maximum block size of the IC is also 4MiB. This makes it impossible to transport a
             // BTC block via an IC block, since including the metadata would make the block too
             // large. We therefore allow a response to be oversized, if it is the first response in
-            // the block. Since we tolerate up to 2x the size margin currently, this will pass validation
+            // the block.
+            // Since we tolerate up to 2x the size margin currently, this will pass validation
             // but trigger a warning.
-            if response_size + current_payload_size > byte_limit.get() && current_payload_size != 0
-            {
+            let first_response_in_block = current_payload_size == 0 && priority == 0;
+            if response_size + current_payload_size > byte_limit.get() && !first_response_in_block {
                 // Stop if we're about to exceed the byte limit.
                 break;
             }
@@ -263,6 +265,7 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
         validation_context: &ValidationContext,
         past_payloads: &[&SelfValidatingPayload],
         byte_limit: NumBytes,
+        priority: usize,
     ) -> (SelfValidatingPayload, NumBytes) {
         let since = Instant::now();
 
@@ -276,6 +279,7 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
             validation_context,
             past_callback_ids,
             byte_limit,
+            priority,
         ) {
             Ok(payload) => {
                 self.metrics
@@ -343,17 +347,17 @@ impl BatchPayloadBuilder for BitcoinPayloadBuilder {
         let since = Instant::now();
 
         let delivered_ids = parse::parse_past_payload_ids(past_payloads, &self.log);
-        let payload = match self.get_self_validating_payload_impl(context, delivered_ids, max_size)
-        {
-            Ok(payload) => payload,
-            Err(e) => {
-                log!(self.log, e.log_level(), "{}", e);
-                self.metrics
-                    .observe_build_duration(e.to_label_value(), since);
+        let payload =
+            match self.get_self_validating_payload_impl(context, delivered_ids, max_size, 0) {
+                Ok(payload) => payload,
+                Err(e) => {
+                    log!(self.log, e.log_level(), "{}", e);
+                    self.metrics
+                        .observe_build_duration(e.to_label_value(), since);
 
-                return vec![];
-            }
-        };
+                    return vec![];
+                }
+            };
 
         parse::payload_to_bytes(&payload, max_size, &self.log)
     }
