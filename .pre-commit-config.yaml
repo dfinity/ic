@@ -66,6 +66,14 @@ repos:
     stages: [manual]
     pass_filenames: false
 
+  - id: check-unused-components
+    name: Check for unused components
+    entry: bazel run //rs/ic_os/manifest_tool -- --repo-root $(git rev-parse --show-toplevel) check-unused-components
+    pass_filenames: false
+    language: system
+    stages: [commit]
+    verbose: true
+
 - repo: https://github.com/willthames/ansible-lint.git
   rev: v4.2.0
   hooks:
