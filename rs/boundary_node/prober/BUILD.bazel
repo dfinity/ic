@@ -1,7 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
-
 DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:anyhow",
@@ -47,6 +45,7 @@ rust_binary(
     ],
     compile_data = ["src/canister.wat"],
     proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 

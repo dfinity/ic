@@ -3,10 +3,12 @@ use candid::{Decode, Encode, Principal};
 use canister_test::PrincipalId;
 use ic_agent::Agent;
 use ic_nns_common::{pb::v1::ProposalId, types::NeuronId};
-use ic_nns_governance::proposals::proposal_submission::create_make_proposal_payload;
-use ic_nns_governance_api::pb::v1::{
-    manage_neuron_response, manage_neuron_response::MakeProposalResponse, ManageNeuronResponse,
-    Proposal, ProposalInfo,
+use ic_nns_governance_api::{
+    pb::v1::{
+        manage_neuron_response, manage_neuron_response::MakeProposalResponse, MakeProposalRequest,
+        ManageNeuronResponse, ProposalInfo,
+    },
+    proposal_helpers::create_make_proposal_payload,
 };
 use ic_system_test_driver::{
     driver::{
@@ -52,7 +54,7 @@ impl GovernanceClient {
     pub async fn make_proposal(
         &self,
         neuron_details: &NeuronDetails,
-        proposal: &Proposal,
+        proposal: &MakeProposalRequest,
     ) -> ProposalId {
         debug!(&self.logger, "[governance_client] Making Proposal");
         let neuron_id: NeuronId = neuron_details.neuron.id.unwrap().into();

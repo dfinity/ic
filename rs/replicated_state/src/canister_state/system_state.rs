@@ -363,6 +363,12 @@ pub struct SystemState {
 
     /// Next local snapshot id.
     pub next_snapshot_id: u64,
+
+    /// Cumulative memory usage of all snapshots that belong to this canister.
+    ///
+    /// This amount contributes to the total `memory_usage` of the canister as
+    /// reported by `CanisterState::memory_usage`.
+    pub snapshots_memory_usage: NumBytes,
 }
 
 /// A wrapper around the different canister statuses.
@@ -733,6 +739,7 @@ impl SystemState {
             canister_log: Default::default(),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
+            snapshots_memory_usage: NumBytes::from(0),
         }
     }
 
@@ -761,6 +768,7 @@ impl SystemState {
         canister_log: CanisterLog,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
+        snapshots_memory_usage: NumBytes,
     ) -> Self {
         Self {
             controllers,
@@ -788,6 +796,7 @@ impl SystemState {
             canister_log,
             wasm_memory_limit,
             next_snapshot_id,
+            snapshots_memory_usage,
         }
     }
 

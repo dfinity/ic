@@ -16,6 +16,8 @@ DEPENDENCIES = [
     "@crate_index//:bincode",
     "@crate_index//:byteorder",
     "@crate_index//:clap_3_2_25",
+    "@crate_index//:lmdb-rkv",
+    "@crate_index//:lmdb-rkv-sys",
     "@crate_index//:nix",
     "@crate_index//:prometheus",
     "@crate_index//:prost",
@@ -24,8 +26,6 @@ DEPENDENCIES = [
     "@crate_index//:slog",
     "@crate_index//:strum",
     "@crate_index//:tempfile",
-    "@lmdb_rkv",
-    "@lmdb_rkv//lmdb-sys",
 ] + select({
     "@platforms//os:osx": [
         "@crate_index//:rocksdb",
@@ -62,10 +62,6 @@ rust_library(
     name = "artifact_pool",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    crate_features = select({
-        "@platforms//os:osx": ["rocksdb_backend"],
-        "//conditions:default": [],
-    }),
     crate_name = "ic_artifact_pool",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
