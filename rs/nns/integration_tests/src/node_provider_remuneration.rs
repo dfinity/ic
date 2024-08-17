@@ -14,9 +14,9 @@ use ic_nns_governance_api::pb::v1::{
     add_or_remove_node_provider::Change,
     manage_neuron_response::Command as CommandResponse,
     reward_node_provider::{RewardMode, RewardToAccount},
-    AddOrRemoveNodeProvider, ExecuteNnsFunction, GovernanceError, ListNodeProviderRewardsRequest,
-    MakeProposalRequest, NetworkEconomics, NnsFunction, NodeProvider, Proposal,
-    ProposalActionRequest, RewardNodeProvider, RewardNodeProviders,
+    AddOrRemoveNodeProvider, DateRangeFilter, ExecuteNnsFunction, GovernanceError,
+    ListNodeProviderRewardsRequest, MakeProposalRequest, NetworkEconomics, NnsFunction,
+    NodeProvider, Proposal, ProposalActionRequest, RewardNodeProvider, RewardNodeProviders,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -207,15 +207,8 @@ fn test_list_node_provider_rewards() {
     let received_ts: Vec<u64> = response.rewards.iter().map(|r| r.timestamp).collect();
     let minted_rewards_timestamps: Vec<u64> = minted_rewards.iter().map(|r| r.timestamp).collect();
 
-    println!(
-        "{:?}",
-        minted_rewards_timestamps
-            .iter()
-            .rev()
-            .cloned()
-            .collect::<Vec<_>>()
-    );
-
+    println!("{:?}", minted_rewards_timestamps);
+    // First we test paging all the results with no filters.
     assert_eq!(
         received_ts,
         minted_rewards_timestamps[8..13]
@@ -273,6 +266,52 @@ fn test_list_node_provider_rewards() {
             .collect::<Vec<_>>()
     );
     assert_eq!(response.next_page, None);
+
+    // Next we test the date filter with no start_date
+    let response = nns_list_node_provider_rewards(
+        &state_machine,
+        ListNodeProviderRewardsRequest {
+            page: None,
+            date_filter: Some(DateRangeFilter {
+                start_timestamp_seconds: None,
+                end_timestamp_seconds: Some(minted_rewards_timestamps[11]),
+            }),
+        },
+    );
+    let received_ts: Vec<u64> = response.rewards.iter().map(|r| r.timestamp).collect();
+    assert_eq!(
+        received_ts,
+        minted_rewards_timestamps[7..12]
+            .into_iter()
+            .rev()
+            .cloned()
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(response.next_page, Some(1));
+
+    // Next we test the date filter with no end_date
+    let response = nns_list_node_provider_rewards(
+        &state_machine,
+        ListNodeProviderRewardsRequest {
+            page: None,
+            date_filter: Some(DateRangeFilter {
+                start_timestamp_seconds: Some(minted_rewards_timestamps[9]),
+                end_timestamp_seconds: Some(minted_rewards_timestamps[11]),
+            }),
+        },
+    );
+    let received_ts: Vec<u64> = response.rewards.iter().map(|r| r.timestamp).collect();
+    assert_eq!(
+        received_ts,
+        minted_rewards_timestamps[9..12]
+            .into_iter()
+            .rev()
+            .cloned()
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(response.next_page, None);
+
+    // Next we test the date filter with a start and end_date
 }
 #[test]
 fn test_automated_node_provider_remuneration() {

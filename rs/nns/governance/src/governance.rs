@@ -20,6 +20,7 @@ use crate::{
     },
     node_provider_rewards::{
         latest_node_provider_rewards, list_node_provider_rewards, record_node_provider_rewards,
+        DateRangeFilter,
     },
     pb::v1::{
         add_or_remove_node_provider::Change,
@@ -4316,9 +4317,10 @@ impl Governance {
         &self,
         limit: u64,
         page: Option<u32>,
+        date_filter: Option<DateRangeFilter>,
     ) -> (Option<u32>, Vec<MonthlyNodeProviderRewards>) {
         let limit = limit.min(MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS);
-        let (next_page, rewards) = list_node_provider_rewards(limit, page);
+        let (next_page, rewards) = list_node_provider_rewards(limit, page, date_filter);
         let rewards = rewards
             .into_iter()
             .map(|archived| match archived.version {

@@ -88,7 +88,7 @@ fn test_list_node_provider_rewards_api() {
 
     governance.update_most_recent_monthly_node_provider_rewards(rewards_2.clone());
 
-    let (next_page, rewards) = governance.list_node_provider_rewards(2, None);
+    let (next_page, rewards) = governance.list_node_provider_rewards(2, None, None);
 
     assert_eq!(rewards, vec![rewards_2, rewards_1]);
     assert_eq!(next_page, None);
@@ -171,7 +171,7 @@ fn test_list_node_provider_rewards_api_with_paging_and_filters() {
     governance.update_most_recent_monthly_node_provider_rewards(rewards_5.clone());
     governance.update_most_recent_monthly_node_provider_rewards(rewards_6.clone());
 
-    let (next_page, rewards) = governance.list_node_provider_rewards(6, None);
+    let (next_page, rewards) = governance.list_node_provider_rewards(6, None, None);
 
     // limit of 5
     assert_eq!(rewards.len(), 5);
