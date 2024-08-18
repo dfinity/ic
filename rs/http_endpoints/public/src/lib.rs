@@ -146,7 +146,7 @@ pub struct HttpError {
 #[derive(Clone)]
 struct HttpHandler {
     call_router: Router,
-    call_v3_router: Router,
+    call_v3_router: Option<Router>,
     query_router: Router,
     catchup_router: Router,
     dashboard_router: Router,
@@ -302,6 +302,7 @@ pub fn start_server(
     tracing_handle: ReloadHandles,
     certified_height_watcher: watch::Receiver<Height>,
     completed_execution_messages_rx: Receiver<(MessageId, Height)>,
+    enable_v3_call_handler: bool,
 ) {
     let listen_addr = config.listen_addr;
     info!(log, "Starting HTTP server...");
@@ -337,24 +338,30 @@ pub fn start_server(
     .with_malicious_flags(malicious_flags.clone())
     .build();
 
-    let call_router = call::CallServiceV2::new_router(call_handler.clone());
-    let (ingress_watcher_handle, _) = IngressWatcher::start(
-        rt_handle.clone(),
-        log.clone(),
-        metrics.clone(),
-        certified_height_watcher,
-        completed_execution_messages_rx,
-        CancellationToken::new(),
-    );
+    let (call_router, call_v3_router) = if enable_v3_call_handler {
+        let call_router = call::CallServiceV2::new_router(call_handler.clone(), false);
+        let (ingress_watcher_handle, _) = IngressWatcher::start(
+            rt_handle.clone(),
+            log.clone(),
+            metrics.clone(),
+            certified_height_watcher,
+            completed_execution_messages_rx,
+            CancellationToken::new(),
+        );
 
-    let call_v3_router = call::CallServiceV3::new_router(
-        call_handler,
-        ingress_watcher_handle,
-        metrics.clone(),
-        config.ingress_message_certificate_timeout_seconds,
-        delegation_from_nns.clone(),
-        state_reader.clone(),
-    );
+        let call_v3_router = call::CallServiceV3::new_router(
+            call_handler,
+            ingress_watcher_handle,
+            metrics.clone(),
+            config.ingress_message_certificate_timeout_seconds,
+            delegation_from_nns.clone(),
+            state_reader.clone(),
+        );
+        (call_router, Some(call_v3_router))
+    } else {
+        let call_router = call::CallServiceV2::new_router(call_handler.clone(), true);
+        (call_router, None)
+    };
 
     let query_router = QueryServiceBuilder::builder(
         node_id,
@@ -616,7 +623,6 @@ fn make_router(
                     )),
             ),
         )
-        .merge(http_handler.call_v3_router)
         .merge(
             http_handler.query_router.layer(
                 ServiceBuilder::new()
@@ -701,6 +707,11 @@ fn make_router(
                     )),
             ),
         );
+
+    let final_router = match http_handler.call_v3_router {
+        Some(call_v3_router) => final_router.merge(call_v3_router),
+        None => final_router,
+    };
 
     final_router.layer(
         ServiceBuilder::new()

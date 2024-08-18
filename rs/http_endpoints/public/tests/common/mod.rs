@@ -72,6 +72,8 @@ use tokio::{
 use tower::{util::BoxCloneService, Service, ServiceExt};
 use tower_test::mock::Handle;
 
+const ENABLE_V3_CALL_HANDLER: bool = false;
+
 pub type IngressFilterHandle =
     Handle<(ProvisionalWhitelist, SignedIngressContent), Result<(), UserError>>;
 pub type QueryExecutionHandle =
@@ -497,6 +499,7 @@ impl HttpEndpointBuilder {
             ic_tracing::ReloadHandles::new(tracing_subscriber::reload::Layer::new(vec![]).1),
             certified_height_watcher_rx,
             terminal_state_ingress_messages_rx,
+            ENABLE_V3_CALL_HANDLER,
         );
 
         HttpEndpointHandles {

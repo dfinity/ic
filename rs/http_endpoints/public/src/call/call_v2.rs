@@ -27,19 +27,24 @@ impl CallServiceV2 {
         "/api/v2/canister/:effective_canister_id/call"
     }
 
-    pub(crate) fn new_router(call_handler: IngressValidator) -> Router {
-        Router::new().route_service(
-            Self::route(),
-            axum::routing::post(call_v2)
-                .with_state(call_handler)
-                .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
-        )
+    pub(crate) fn new_router(call_handler: IngressValidator, include_v3_endpoint: bool) -> Router {
+        let service = axum::routing::post(call_v2)
+            .with_state(call_handler)
+            .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable()));
+
+        let router = Router::new().route(Self::route(), service.clone());
+
+        if include_v3_endpoint {
+            router.route("/api/v3/canister/:effective_canister_id/call", service)
+        } else {
+            router
+        }
     }
 
     pub fn new_service(
         call_handler: IngressValidator,
     ) -> BoxCloneService<Request<Body>, Response, Infallible> {
-        let router = Self::new_router(call_handler);
+        let router = Self::new_router(call_handler, false);
         BoxCloneService::new(router.into_service())
     }
 }
