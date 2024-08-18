@@ -23,7 +23,7 @@ edition.workspace = true
 base64 = "^0.13.1"
 candid = "^0.10.2"
 hex = { workspace = true }
-ic-cdk = "0.13.2"
+ic-cdk = "0.13.4"
 reqwest = { workspace = true }
 schemars = "0.8.16"
 serde = { workspace = true }
