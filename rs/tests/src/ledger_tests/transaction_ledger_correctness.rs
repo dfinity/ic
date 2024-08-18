@@ -22,8 +22,7 @@ end::catalog[] */
 
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCanisterEnvVars,
-    NnsInstallationBuilder,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
 };
 use ic_system_test_driver::util::{block_on, runtime_from_url};
 use rand_chacha::ChaCha8Rng;
@@ -78,7 +77,6 @@ pub fn config(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    env.set_nns_canisters_env_vars().unwrap();
     let logger = env.logger();
     let topology = env.topology_snapshot();
     let nns_node = topology.root_subnet().nodes().next().unwrap();

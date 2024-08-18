@@ -9,8 +9,6 @@ use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus::dkg::{make_registry_cup, make_registry_cup_from_cup_contents};
 use ic_consensus_utils::crypto::SignVerify;
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_crypto_ecdsa_secp256k1::{PrivateKey, PublicKey};
-use ic_crypto_extended_bip32::{DerivationIndex, DerivationPath};
 use ic_crypto_test_utils_ni_dkg::{
     dummy_initial_dkg_transcript_with_master_key, sign_message, SecretKeyBytes,
 };
@@ -22,11 +20,12 @@ use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
 use ic_http_endpoints_public::{metrics::HttpHandlerMetrics, IngressWatcher, IngressWatcherHandle};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
+use ic_interfaces::batch_payload::BatchPayloadBuilder;
 use ic_interfaces::{
-    batch_payload::IntoMessages,
+    batch_payload::{IntoMessages, PastPayload, ProposalContext},
     canister_http::{CanisterHttpChangeAction, CanisterHttpPool},
     certification::{Verifier, VerifierError},
-    consensus::PayloadBuilder as ConsensusPayloadBuilder,
+    consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
     consensus_pool::ConsensusTime,
     execution_environment::{IngressFilterService, IngressHistoryReader, QueryExecutionService},
     ingress_pool::{
@@ -40,12 +39,14 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
-    self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
+    self as ic00, CanisterIdRecord, InstallCodeArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
+    Method, Payload,
 };
 pub use ic_management_canister_types::{
-    CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2,
-    CanisterStatusType, EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, SignWithECDSAReply,
-    SignWithSchnorrReply, UpdateSettingsArgs,
+    CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
+    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, EcdsaCurve, EcdsaKeyId,
+    HttpHeader, HttpMethod, SchnorrAlgorithm, SchnorrKeyId, SignWithECDSAReply,
+    SignWithSchnorrReply, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
@@ -138,7 +139,7 @@ pub use ic_types::{
     messages::{CallbackId, HttpRequestError, MessageId},
     signature::BasicSignature,
     time::Time,
-    CanisterId, CryptoHashOfState, Cycles, PrincipalId, SubnetId, UserId,
+    CanisterId, CryptoHashOfState, Cycles, NumBytes, PrincipalId, SubnetId, UserId,
 };
 use ic_xnet_payload_builder::{
     certified_slice_pool::{certified_slice_count_bytes, CertifiedSliceError},
@@ -151,7 +152,6 @@ pub use ic_error_types::RejectCode;
 use maplit::btreemap;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde::Serialize;
-use sha2::{Digest, Sha256};
 pub use slog::Level;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -580,6 +580,100 @@ impl XNetSlicePool for PocketXNetSlicePoolImpl {
     fn garbage_collect_slice(&self, _subnet_id: SubnetId, _stream_position: ExpectedIndices) {}
 }
 
+/// A custom `QueryStatsPayloadBuilderImpl` that uses a single
+/// `QueryStatsPayloadBuilderImpl` to retrieve total query stats
+/// and turns them into a collection of fractional query stats
+/// for each node of the corresponding subnet.
+/// Those fractional query stats are stored in the field `pending_payloads`
+/// until they become part of a block and get `purge`d.
+struct PocketQueryStatsPayloadBuilderImpl {
+    query_stats_payload_builder: Box<dyn BatchPayloadBuilder>,
+    node_ids: Vec<NodeId>,
+    pending_payloads: RwLock<Vec<QueryStatsPayload>>,
+}
+
+impl PocketQueryStatsPayloadBuilderImpl {
+    pub(crate) fn new(
+        query_stats_payload_builder: Box<dyn BatchPayloadBuilder>,
+        node_ids: Vec<NodeId>,
+    ) -> Self {
+        Self {
+            query_stats_payload_builder,
+            node_ids,
+            pending_payloads: RwLock::new(Vec::new()),
+        }
+    }
+
+    pub(crate) fn purge(&self, payload: &QueryStatsPayload) {
+        assert!(self.pending_payloads.read().unwrap().contains(payload));
+        self.pending_payloads
+            .write()
+            .unwrap()
+            .retain(|p| p != payload);
+    }
+}
+
+impl BatchPayloadBuilder for PocketQueryStatsPayloadBuilderImpl {
+    fn build_payload(
+        &self,
+        height: Height,
+        max_size: NumBytes,
+        past_payloads: &[PastPayload],
+        context: &ValidationContext,
+    ) -> Vec<u8> {
+        if let Some(payload) = self.pending_payloads.read().unwrap().iter().next() {
+            return payload.serialize_with_limit(max_size);
+        }
+        let serialized_payload = self.query_stats_payload_builder.build_payload(
+            height,
+            max_size,
+            past_payloads,
+            context,
+        );
+        let num_nodes = self.node_ids.len();
+        if let Some(payload) = QueryStatsPayload::deserialize(&serialized_payload).unwrap() {
+            assert!(self.node_ids.contains(&payload.proposer));
+            *self.pending_payloads.write().unwrap() = self
+                .node_ids
+                .iter()
+                .map(|node_id| {
+                    let mut payload = payload.clone();
+                    payload.proposer = *node_id;
+                    // scale down the stats by the number of nodes
+                    // since they'll be aggregated across all nodes
+                    payload.stats = payload
+                        .stats
+                        .into_iter()
+                        .map(|mut s| {
+                            s.stats.num_calls /= num_nodes as u32;
+                            s.stats.num_instructions /= num_nodes as u64;
+                            s.stats.ingress_payload_size /= num_nodes as u64;
+                            s.stats.egress_payload_size /= num_nodes as u64;
+                            s
+                        })
+                        .collect();
+                    payload
+                })
+                .collect();
+        }
+        if let Some(payload) = self.pending_payloads.read().unwrap().iter().next() {
+            payload.serialize_with_limit(max_size)
+        } else {
+            vec![]
+        }
+    }
+
+    fn validate_payload(
+        &self,
+        _height: Height,
+        _proposal_context: &ProposalContext,
+        _payload: &[u8],
+        _past_payloads: &[PastPayload],
+    ) -> Result<(), PayloadValidationError> {
+        Ok(())
+    }
+}
+
 /// A replica node of the subnet with the corresponding `StateMachine`.
 pub struct StateMachineNode {
     pub node_id: NodeId,
@@ -608,6 +702,13 @@ impl From<u64> for StateMachineNode {
             signing_key,
         }
     }
+}
+
+#[allow(clippy::large_enum_variant)]
+enum SignatureSecretKey {
+    EcdsaSecp256k1(ic_crypto_ecdsa_secp256k1::PrivateKey),
+    SchnorrBip340(ic_crypto_ecdsa_secp256k1::PrivateKey),
+    Ed25519(ic_crypto_ed25519::DerivedPrivateKey),
 }
 
 /// Represents a replicated state machine detached from the network layer that
@@ -640,7 +741,7 @@ pub struct StateMachine {
     nonce: AtomicU64,
     time: AtomicU64,
     idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-    idkg_subnet_secret_keys: BTreeMap<MasterPublicKeyId, PrivateKey>,
+    idkg_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
     replica_logger: ReplicaLogger,
     pub nodes: Vec<StateMachineNode>,
     pub batch_summary: Option<BatchSummary>,
@@ -652,6 +753,7 @@ pub struct StateMachine {
     pub ingress_watcher_handle: IngressWatcherHandle,
     /// A drop guard to gracefully cancel the ingress watcher task.
     _ingress_watcher_drop_guard: tokio_util::sync::DropGuard,
+    query_stats_payload_builder: Arc<PocketQueryStatsPayloadBuilderImpl>,
     // This field must be the last one so that the temporary directory is deleted at the very end.
     state_dir: Box<dyn StateMachineStateDir>,
     // DO NOT PUT ANY FIELDS AFTER `state_dir`!!!
@@ -710,7 +812,6 @@ pub struct StateMachineBuilder {
     nns_subnet_id: Option<SubnetId>,
     subnet_id: Option<SubnetId>,
     routing_table: RoutingTable,
-    use_cost_scaling_flag: bool,
     enable_canister_snapshots: bool,
     idkg_keys_signing_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
     ecdsa_signature_fee: Option<Cycles>,
@@ -737,7 +838,6 @@ impl StateMachineBuilder {
             checkpoint_interval_length: None,
             subnet_type: SubnetType::System,
             enable_canister_snapshots: false,
-            use_cost_scaling_flag: false,
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
             nns_subnet_id: None,
             subnet_id: None,
@@ -850,13 +950,6 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn with_use_cost_scaling_flag(self, use_cost_scaling_flag: bool) -> Self {
-        Self {
-            use_cost_scaling_flag,
-            ..self
-        }
-    }
-
     pub fn with_canister_snapshots(self, enable_canister_snapshots: bool) -> Self {
         Self {
             enable_canister_snapshots,
@@ -956,7 +1049,6 @@ impl StateMachineBuilder {
             self.subnet_type,
             self.subnet_size,
             self.subnet_id,
-            self.use_cost_scaling_flag,
             self.enable_canister_snapshots,
             self.idkg_keys_signing_enabled_status,
             self.ecdsa_signature_fee,
@@ -1056,6 +1148,7 @@ impl StateMachineBuilder {
             sm.ingress_manager.clone(),
             Arc::new(xnet_payload_builder),
             sm.canister_http_payload_builder.clone(),
+            sm.query_stats_payload_builder.clone(),
             sm.metrics_registry.clone(),
             sm.replica_logger.clone(),
         ));
@@ -1171,10 +1264,15 @@ impl StateMachine {
             .write()
             .unwrap()
             .apply_changes(changeset);
+        let query_stats = QueryStatsPayload::deserialize(&batch_payload.query_stats).unwrap();
+        if let Some(ref query_stats) = query_stats {
+            self.query_stats_payload_builder.purge(query_stats);
+        }
         let mut payload = PayloadBuilder::new()
             .with_ingress_messages(ingress_messages)
             .with_xnet_payload(xnet_payload)
-            .with_consensus_responses(http_responses);
+            .with_consensus_responses(http_responses)
+            .with_query_stats(query_stats);
 
         // Push responses to ECDSA management canister calls into `PayloadBuilder`.
         let sign_with_ecdsa_contexts = state
@@ -1182,26 +1280,23 @@ impl StateMachine {
             .subnet_call_context_manager
             .sign_with_ecdsa_contexts();
         for (callback, ecdsa_context) in sign_with_ecdsa_contexts {
-            // The chain code is an additional input used during the key derivation process
-            // to ensure deterministic generation of child keys from the master key.
-            // We are using an array with 32 zeros by default.
-            let derivation_path = DerivationPath::new(
-                std::iter::once(ecdsa_context.request.sender.get().as_slice().to_vec())
-                    .chain(ecdsa_context.derivation_path.clone().into_iter())
-                    .map(DerivationIndex)
-                    .collect::<Vec<_>>(),
-            );
-            let ecdsa_secret_key = self
-                .idkg_subnet_secret_keys
-                .get(&ecdsa_context.key_id())
-                .unwrap();
-            let signature = sign_prehashed_message_with_derived_key(
-                ecdsa_secret_key,
-                &ecdsa_context.ecdsa_args().message_hash,
-                derivation_path,
-            );
-
-            let reply = SignWithECDSAReply { signature };
+            let reply = {
+                if let Some(SignatureSecretKey::EcdsaSecp256k1(k)) =
+                    self.idkg_subnet_secret_keys.get(&ecdsa_context.key_id())
+                {
+                    let path = ic_crypto_ecdsa_secp256k1::DerivationPath::from_canister_id_and_path(
+                        ecdsa_context.request.sender.get().as_slice(),
+                        &ecdsa_context.derivation_path,
+                    );
+                    let dk = k.derive_subkey(&path).0;
+                    let signature = dk
+                        .sign_digest_with_ecdsa(&ecdsa_context.ecdsa_args().message_hash)
+                        .to_vec();
+                    SignWithECDSAReply { signature }
+                } else {
+                    panic!("No ECDSA key with key id {} found", ecdsa_context.key_id());
+                }
+            };
 
             payload.consensus_responses.push(ConsensusResponse::new(
                 callback,
@@ -1252,7 +1347,6 @@ impl StateMachine {
         subnet_type: SubnetType,
         subnet_size: usize,
         subnet_id: Option<SubnetId>,
-        use_cost_scaling_flag: bool,
         enable_canister_snapshots: bool,
         idkg_keys_signing_enabled_status: BTreeMap<MasterPublicKeyId, bool>,
         ecdsa_signature_fee: Option<Cycles>,
@@ -1332,14 +1426,12 @@ impl StateMachine {
             ..Default::default()
         };
 
-        let mut cycles_account_manager = CyclesAccountManager::new(
+        let cycles_account_manager = Arc::new(CyclesAccountManager::new(
             subnet_config.scheduler_config.max_instructions_per_message,
             subnet_type,
             subnet_id,
             subnet_config.cycles_account_manager_config,
-        );
-        cycles_account_manager.set_using_cost_scaling(use_cost_scaling_flag);
-        let cycles_account_manager = Arc::new(cycles_account_manager);
+        ));
         let state_manager = Arc::new(StateManagerImpl::new(
             Arc::new(FakeVerifier),
             subnet_id,
@@ -1428,60 +1520,107 @@ impl StateMachine {
             malicious_flags.clone(),
         );
 
-        // The following key has been randomly generated using:
-        // https://sourcegraph.com/github.com/dfinity/ic/-/blob/rs/crypto/ecdsa_secp256k1/src/lib.rs
-        // It's the sec1 representation of the key in a hex string.
-        // let private_key: PrivateKey = PrivateKey::generate();
-        // let private_str = hex::encode(private_key.serialize_sec1());
-        // We always set it to the same value to have deterministic results.
-        // Please do not use this private key anywhere.
-        let private_key_bytes =
-            hex::decode("fb7d1f5b82336bb65b82bf4f27776da4db71c1ef632c6a7c171c0cbfa2ea4920")
-                .unwrap();
-
-        let ecdsa_secret_key: PrivateKey =
-            PrivateKey::deserialize_sec1(private_key_bytes.as_slice()).unwrap();
-
-        let master_ecdsa_public_key = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+        let master_ecdsa_public_key = EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: "master_ecdsa_public_key".to_string(),
-        });
+        };
 
         let mut idkg_subnet_public_keys = BTreeMap::new();
         let mut idkg_subnet_secret_keys = BTreeMap::new();
 
         for key_id in idkg_keys_signing_enabled_status.keys() {
-            let private_key: PrivateKey = if *key_id == master_ecdsa_public_key {
-                // ckETH tests rely on using the hard-coded ecdsa_secret_key
-                ecdsa_secret_key.clone()
-            } else {
-                let mut hasher = Sha256::new();
-                hasher.update(seed);
-                hasher.update(format!("{:?}", key_id).as_bytes());
-                PrivateKey::generate_using_rng(&mut StdRng::from_seed(hasher.finalize().into()))
-            };
-            idkg_subnet_secret_keys.insert(key_id.clone(), private_key.clone());
-            match key_id {
-                MasterPublicKeyId::Ecdsa(_) => {
-                    idkg_subnet_public_keys.insert(
-                        key_id.clone(),
-                        MasterPublicKey {
-                            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-                            public_key: private_key.public_key().serialize_sec1(true),
-                        },
-                    );
+            let (public_key, private_key) = match key_id {
+                MasterPublicKeyId::Ecdsa(id) if *id == master_ecdsa_public_key => {
+                    // ckETH tests rely on using the hard-coded ecdsa_secret_key
+
+                    // The following key has been randomly generated using:
+                    // https://sourcegraph.com/github.com/dfinity/ic/-/blob/rs/crypto/ecdsa_secp256k1/src/lib.rs
+                    // It's the sec1 representation of the key in a hex string.
+                    // let private_key: PrivateKey = PrivateKey::generate();
+                    // let private_str = hex::encode(private_key.serialize_sec1());
+                    // We always set it to the same value to have deterministic results.
+                    // Please do not use this private key anywhere.
+                    let private_key_bytes = hex::decode(
+                        "fb7d1f5b82336bb65b82bf4f27776da4db71c1ef632c6a7c171c0cbfa2ea4920",
+                    )
+                    .unwrap();
+
+                    let private_key = ic_crypto_ecdsa_secp256k1::PrivateKey::deserialize_sec1(
+                        private_key_bytes.as_slice(),
+                    )
+                    .unwrap();
+
+                    let public_key = MasterPublicKey {
+                        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+                        public_key: private_key.public_key().serialize_sec1(true),
+                    };
+
+                    let private_key = SignatureSecretKey::EcdsaSecp256k1(private_key);
+
+                    (public_key, private_key)
                 }
-                MasterPublicKeyId::Schnorr(_) => {
-                    idkg_subnet_public_keys.insert(
-                        key_id.clone(),
-                        MasterPublicKey {
+                MasterPublicKeyId::Ecdsa(id) => {
+                    use ic_crypto_ecdsa_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
+
+                    let path =
+                        DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
+
+                    let private_key = PrivateKey::generate_from_seed(&seed).derive_subkey(&path).0;
+
+                    let public_key = MasterPublicKey {
+                        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+                        public_key: private_key.public_key().serialize_sec1(true),
+                    };
+
+                    let private_key = SignatureSecretKey::EcdsaSecp256k1(private_key);
+
+                    (public_key, private_key)
+                }
+                MasterPublicKeyId::Schnorr(id) => match id.algorithm {
+                    SchnorrAlgorithm::Bip340Secp256k1 => {
+                        use ic_crypto_ecdsa_secp256k1::{
+                            DerivationIndex, DerivationPath, PrivateKey,
+                        };
+
+                        let path =
+                            DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
+
+                        let private_key =
+                            PrivateKey::generate_from_seed(&seed).derive_subkey(&path).0;
+
+                        let public_key = MasterPublicKey {
                             algorithm_id: AlgorithmId::ThresholdSchnorrBip340,
-                            // TODO(EXC-1658): generate a valid Schnorr public key.
-                            public_key: private_key.public_key().serialize_sec1(true),
-                        },
-                    );
-                }
+                            public_key: private_key.public_key().serialize_bip340(),
+                        };
+
+                        let private_key = SignatureSecretKey::SchnorrBip340(private_key);
+
+                        (public_key, private_key)
+                    }
+                    SchnorrAlgorithm::Ed25519 => {
+                        use ic_crypto_ed25519::{DerivationIndex, DerivationPath, PrivateKey};
+
+                        let path =
+                            DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
+
+                        let private_key =
+                            PrivateKey::generate_from_seed(&seed).derive_subkey(&path).0;
+
+                        let public_key = MasterPublicKey {
+                            algorithm_id: AlgorithmId::ThresholdEd25519,
+                            public_key: private_key.public_key().serialize_raw().to_vec(),
+                        };
+
+                        let private_key = SignatureSecretKey::Ed25519(private_key);
+
+                        (public_key, private_key)
+                    }
+                },
             };
+
+            idkg_subnet_secret_keys.insert(key_id.clone(), private_key);
+
+            idkg_subnet_public_keys.insert(key_id.clone(), public_key);
         }
 
         let time_source = FastForwardTimeSource::new();
@@ -1505,6 +1644,18 @@ impl StateMachine {
             cycles_account_manager,
             malicious_flags,
             RandomStateKind::Deterministic,
+        ));
+
+        let query_stats_payload_builder = execution_services
+            .query_stats_payload_builder
+            .into_payload_builder(
+                state_manager.clone(),
+                nodes[0].node_id,
+                replica_logger.clone(),
+            );
+        let pocket_query_stats_payload_builder = Arc::new(PocketQueryStatsPayloadBuilderImpl::new(
+            query_stats_payload_builder,
+            nodes.iter().map(|n| n.node_id).collect(),
         ));
 
         Self {
@@ -1549,6 +1700,7 @@ impl StateMachine {
             consensus_pool_cache,
             canister_http_pool,
             canister_http_payload_builder,
+            query_stats_payload_builder: pocket_query_stats_payload_builder,
         }
     }
 
@@ -1859,20 +2011,22 @@ impl StateMachine {
         context: &SignWithThresholdContext,
     ) -> SignWithECDSAReply {
         assert!(context.is_ecdsa());
-        let derivation_path = DerivationPath::new(
-            std::iter::once(context.request.sender.get().as_slice().to_vec())
-                .chain(context.derivation_path.clone())
-                .map(DerivationIndex)
-                .collect::<Vec<_>>(),
-        );
-        let ecdsa_secret_key = self.idkg_subnet_secret_keys.get(&context.key_id()).unwrap();
-        let signature = sign_prehashed_message_with_derived_key(
-            ecdsa_secret_key,
-            &context.ecdsa_args().message_hash,
-            derivation_path,
-        );
 
-        SignWithECDSAReply { signature }
+        if let Some(SignatureSecretKey::EcdsaSecp256k1(k)) =
+            self.idkg_subnet_secret_keys.get(&context.key_id())
+        {
+            let path = ic_crypto_ecdsa_secp256k1::DerivationPath::from_canister_id_and_path(
+                context.request.sender.get().as_slice(),
+                &context.derivation_path,
+            );
+            let dk = k.derive_subkey(&path).0;
+            let signature = dk
+                .sign_digest_with_ecdsa(&context.ecdsa_args().message_hash)
+                .to_vec();
+            SignWithECDSAReply { signature }
+        } else {
+            panic!("No ECDSA key with key id {} found", context.key_id());
+        }
     }
 
     fn build_sign_with_schnorr_reply(
@@ -1880,7 +2034,41 @@ impl StateMachine {
         context: &SignWithThresholdContext,
     ) -> SignWithSchnorrReply {
         assert!(context.is_schnorr());
-        let signature = vec![1, 2, 3]; // TODO(EXC-1658): generate a valid Schnorr signature.
+
+        let signature = match self.idkg_subnet_secret_keys.get(&context.key_id()) {
+            Some(SignatureSecretKey::SchnorrBip340(k)) => {
+                let path = ic_crypto_ecdsa_secp256k1::DerivationPath::from_canister_id_and_path(
+                    context.request.sender.get().as_slice(),
+                    &context.derivation_path[..],
+                );
+                let (dk, _cc) = k.derive_subkey(&path);
+
+                let message = {
+                    if context.schnorr_args().message.len() == 32 {
+                        let mut message = [0u8; 32];
+                        message.copy_from_slice(&context.schnorr_args().message);
+                        message
+                    } else {
+                        panic!("Currently BIP340 signing of messages != 32 bytes not supported")
+                    }
+                };
+
+                dk.sign_message_with_bip340_no_rng(&message).to_vec()
+            }
+            Some(SignatureSecretKey::Ed25519(k)) => {
+                let path = ic_crypto_ed25519::DerivationPath::from_canister_id_and_path(
+                    context.request.sender.get().as_slice(),
+                    &context.derivation_path[..],
+                );
+                let (dk, _cc) = k.derive_subkey(&path);
+
+                dk.sign_message(&context.schnorr_args().message).to_vec()
+            }
+            _ => {
+                panic!("No Schnorr key with specified key id found");
+            }
+        };
+
         SignWithSchnorrReply { signature }
     }
 
@@ -2368,11 +2556,12 @@ impl StateMachine {
                 CertificationScope::Full,
                 None,
             );
+            self.state_manager.flush_tip_channel();
 
             other_env.import_canister_state(
                 self.state_manager
                     .state_layout()
-                    .checkpoint(height)
+                    .checkpoint_verified(height)
                     .unwrap()
                     .canister(&canister_id)
                     .unwrap()
@@ -2583,6 +2772,47 @@ impl StateMachine {
             .encode(),
         )
         .map(|_| ())
+    }
+
+    pub fn take_canister_snapshot(
+        &self,
+        args: TakeCanisterSnapshotArgs,
+    ) -> Result<CanisterSnapshotResponse, UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.get_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::TakeCanisterSnapshot,
+            args.encode(),
+        )
+        .map(|res| match res {
+            WasmResult::Reply(data) => CanisterSnapshotResponse::decode(&data),
+            WasmResult::Reject(reason) => {
+                panic!("take_canister_snapshot call rejected: {}", reason)
+            }
+        })?
+    }
+
+    pub fn load_canister_snapshot(
+        &self,
+        args: LoadCanisterSnapshotArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        self.execute_ingress_as(
+            PrincipalId::new_anonymous(),
+            ic00::IC_00,
+            Method::LoadCanisterSnapshot,
+            args.encode(),
+        )
+        .map(|res| match res {
+            WasmResult::Reply(data) => Ok(data),
+            WasmResult::Reject(reason) => {
+                panic!("load_canister_snapshot call rejected: {}", reason)
+            }
+        })?
     }
 
     /// Returns true if the canister with the specified id exists.
@@ -3208,40 +3438,6 @@ fn certify_hash(
             },
         },
     }
-}
-
-fn sign_prehashed_message_with_derived_key(
-    ecdsa_secret_key: &PrivateKey,
-    message_hash: &[u8],
-    derivation_path: DerivationPath,
-) -> Vec<u8> {
-    const CHAIN_CODE: &[u8] = &[0; 32];
-
-    let public_key = ecdsa_secret_key.public_key();
-    let derived_public_key_bytes = derivation_path
-        .public_key_derivation(&public_key.serialize_sec1(true), CHAIN_CODE)
-        .expect("couldn't derive ecdsa public key");
-
-    let derived_private_key_bytes = derivation_path
-        .private_key_derivation(&ecdsa_secret_key.serialize_sec1(), CHAIN_CODE)
-        .expect("couldn't derive ecdsa private key");
-    let derived_private_key =
-        PrivateKey::deserialize_sec1(&derived_private_key_bytes.derived_private_key)
-            .expect("couldn't deserialize to sec1 ecdsa private key");
-    let derived_public_key =
-        PublicKey::deserialize_sec1(&derived_public_key_bytes.derived_public_key)
-            .expect("couldn't deserialize sec1");
-
-    assert_eq!(
-        derived_private_key.public_key().serialize_sec1(true),
-        derived_public_key_bytes.derived_public_key
-    );
-    let signature = derived_private_key
-        .sign_digest(message_hash)
-        .expect("failed to sign");
-
-    assert!(derived_public_key.verify_signature_prehashed(message_hash, &signature));
-    signature.to_vec()
 }
 
 #[derive(Clone)]

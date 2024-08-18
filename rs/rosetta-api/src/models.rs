@@ -267,7 +267,6 @@ impl FromStr for UnsignedTransaction {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct Error(pub rosetta_core::miscellaneous::Error);
 
 impl From<Error> for rosetta_core::miscellaneous::Error {
@@ -317,7 +316,6 @@ impl actix_web::ResponseError for Error {
 /// A MempoolTransactionRequest is utilized to retrieve a transaction from the
 /// mempool.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct MempoolTransactionRequest {
     #[serde(rename = "network_identifier")]
     pub network_identifier: NetworkIdentifier,
@@ -339,7 +337,6 @@ impl MempoolTransactionRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct NeuronSubaccountComponents {
     #[serde(rename = "public_key")]
     pub public_key: PublicKey,
@@ -352,7 +349,6 @@ pub struct NeuronSubaccountComponents {
 /// We use this type to make query to the governance
 /// canister about the current neuron information.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 #[serde(tag = "account_type")]
 pub enum BalanceAccountType {
     #[serde(rename = "ledger")]
@@ -384,7 +380,6 @@ impl Default for BalanceAccountType {
 
 /// The type of metadata for the /account/balance endpoint.
 #[derive(Debug, Default, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct AccountBalanceMetadata {
     #[serde(rename = "account_type")]
     #[serde(flatten)]
@@ -488,7 +483,6 @@ fn test_neuron_info_request_parsing() {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub enum NeuronState {
     #[serde(rename = "NOT_DISSOLVING")]
     NotDissolving,
@@ -502,7 +496,6 @@ pub enum NeuronState {
 
 /// Response for neuron public information.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct NeuronInfoResponse {
     #[serde(rename = "verified_query")]
     pub verified_query: bool,

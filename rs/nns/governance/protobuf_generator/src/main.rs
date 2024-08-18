@@ -1,5 +1,5 @@
 use ic_nns_governance_protobuf_generator::{generate_prost_files, ProtoPaths};
-use std::{fs::copy, path::PathBuf};
+use std::path::PathBuf;
 
 fn main() {
     let manifest_dir = PathBuf::from(
@@ -36,11 +36,4 @@ fn main() {
         },
         out.as_ref(),
     );
-    // Duplicate into API lib
-    let api_src_lib = manifest_dir.join("../api/src");
-    copy(
-        out.join("ic_nns_governance.pb.v1.rs").as_path(),
-        api_src_lib.join("ic_nns_governance.pb.v1.rs").as_path(),
-    )
-    .unwrap();
 }

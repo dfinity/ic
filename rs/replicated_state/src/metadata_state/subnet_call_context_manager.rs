@@ -808,6 +808,16 @@ pub enum ThresholdArguments {
     Schnorr(SchnorrArguments),
 }
 
+impl ThresholdArguments {
+    /// Returns the generic key id.
+    pub fn key_id(&self) -> MasterPublicKeyId {
+        match self {
+            ThresholdArguments::Ecdsa(args) => MasterPublicKeyId::Ecdsa(args.key_id.clone()),
+            ThresholdArguments::Schnorr(args) => MasterPublicKeyId::Schnorr(args.key_id.clone()),
+        }
+    }
+}
+
 impl From<&ThresholdArguments> for pb_metadata::ThresholdArguments {
     fn from(context: &ThresholdArguments) -> Self {
         let threshold_scheme = match context {
@@ -879,6 +889,16 @@ impl SignWithThresholdContext {
         match &self.args {
             ThresholdArguments::Ecdsa(args) => args,
             _ => panic!("ECDSA arguments not found."),
+        }
+    }
+
+    /// Returns Schnorr arguments.
+    /// Panics if arguments are not for Schnorr
+    /// Should only be called if `is_schnorr` returns true.
+    pub fn schnorr_args(&self) -> &SchnorrArguments {
+        match &self.args {
+            ThresholdArguments::Schnorr(args) => args,
+            _ => panic!("Schnorr arguments not found."),
         }
     }
 }

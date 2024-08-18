@@ -1,6 +1,16 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = [
+    # Keep sorted.
+    "//rs/nervous_system/common:__pkg__",
+    "//rs/nns:__subpackages__",
+    "//rs/rosetta-api:__pkg__",
+    "//rs/rosetta-api/icp_ledger:__subpackages__",
+    "//rs/rosetta-api/ledger_canister_blocks_synchronizer:__pkg__",
+    "//rs/rust_canisters:__subpackages__",
+    "//rs/sns/test_utils:__pkg__",
+    "//rs/tests:__subpackages__",
+])
 
 rust_library(
     name = "dfn_protobuf",

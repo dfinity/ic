@@ -239,6 +239,10 @@ fn wat_id<'a>(wat: &QuoteWat<'a>) -> Option<Id<'a>> {
     }
 }
 
+// False positive clippy lint.
+// Issue: https://github.com/rust-lang/rust-clippy/issues/12856
+// Fixed in: https://github.com/rust-lang/rust-clippy/pull/12892
+#[allow(clippy::needless_borrows_for_generic_args)]
 /// The tests seem to assume there is an existing `spectest` which provides
 /// these exports.
 fn define_spectest_exports(linker: &mut Linker<()>, mut store: &mut Store<()>) {

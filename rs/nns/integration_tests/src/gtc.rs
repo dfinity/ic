@@ -8,7 +8,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
-use ic_nns_governance::pb::v1::{GovernanceError, Neuron, NeuronInfo};
+use ic_nns_governance_api::pb::v1::{GovernanceError, Neuron, NeuronInfo};
 use ic_nns_gtc::{
     pb::v1::AccountState,
     test_constants::{

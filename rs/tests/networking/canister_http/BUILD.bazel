@@ -2,7 +2,7 @@ load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//rs/tests:system_tests.bzl", "uvm_config_image")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 exports_files([
     "universal_vm_activation.sh",
@@ -47,4 +47,7 @@ copy_file(
     name = "minica_image",
     src = "@minica//image",
     out = "minica.tar",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )

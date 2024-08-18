@@ -10,13 +10,13 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::{pb::v1::NeuronId as ProtoNeuronId, types::UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     add_or_remove_node_provider::Change,
     manage_neuron_response::Command as CommandResponse,
-    proposal::Action,
     reward_node_provider::{RewardMode, RewardToAccount},
-    AddOrRemoveNodeProvider, ExecuteNnsFunction, GovernanceError, NetworkEconomics, NnsFunction,
-    NodeProvider, Proposal, RewardNodeProvider, RewardNodeProviders,
+    AddOrRemoveNodeProvider, ExecuteNnsFunction, GovernanceError, MakeProposalRequest,
+    NetworkEconomics, NnsFunction, NodeProvider, ProposalActionRequest, RewardNodeProvider,
+    RewardNodeProviders,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -466,14 +466,14 @@ fn test_automated_node_provider_remuneration() {
 }
 
 /// Helper function for making NNS proposals for this test
-fn submit_nns_proposal(state_machine: &StateMachine, action: Action) {
+fn submit_nns_proposal(state_machine: &StateMachine, action: ProposalActionRequest) {
     let response = nns_governance_make_proposal(
         state_machine,
         Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR).get_principal_id(),
         ProtoNeuronId {
             id: TEST_NEURON_1_ID,
         },
-        &Proposal {
+        &MakeProposalRequest {
             title: Some(
                 "<proposal created by test_automated_node_provider_remuneration>".to_string(),
             ),
@@ -577,7 +577,7 @@ fn assert_account_balance(state_machine: &StateMachine, account: AccountIdentifi
 fn reward_node_providers_via_registry(state_machine: &StateMachine) {
     submit_nns_proposal(
         state_machine,
-        Action::RewardNodeProviders(RewardNodeProviders {
+        ProposalActionRequest::RewardNodeProviders(RewardNodeProviders {
             rewards: vec![],
             use_registry_derived_rewards: Some(true),
         }),
@@ -613,7 +613,7 @@ fn add_data_centers(state_machine: &StateMachine) {
     };
     submit_nns_proposal(
         state_machine,
-        Action::ExecuteNnsFunction(ExecuteNnsFunction {
+        ProposalActionRequest::ExecuteNnsFunction(ExecuteNnsFunction {
             nns_function: NnsFunction::AddOrRemoveDataCenters as i32,
             payload: Encode!(&payload).unwrap(),
         }),
@@ -669,7 +669,7 @@ fn add_node_rewards_table(state_machine: &StateMachine) {
 
     submit_nns_proposal(
         state_machine,
-        Action::ExecuteNnsFunction(ExecuteNnsFunction {
+        ProposalActionRequest::ExecuteNnsFunction(ExecuteNnsFunction {
             nns_function: NnsFunction::UpdateNodeRewardsTable as i32,
             payload: Encode!(&payload).unwrap(),
         }),
@@ -679,7 +679,7 @@ fn add_node_rewards_table(state_machine: &StateMachine) {
 fn add_node_provider(state_machine: &StateMachine, node_provider: NodeProvider) {
     submit_nns_proposal(
         state_machine,
-        Action::AddOrRemoveNodeProvider(AddOrRemoveNodeProvider {
+        ProposalActionRequest::AddOrRemoveNodeProvider(AddOrRemoveNodeProvider {
             change: Some(Change::ToAdd(node_provider)),
         }),
     );
@@ -705,7 +705,7 @@ fn add_node_operator(
 
     submit_nns_proposal(
         state_machine,
-        Action::ExecuteNnsFunction(ExecuteNnsFunction {
+        ProposalActionRequest::ExecuteNnsFunction(ExecuteNnsFunction {
             nns_function: NnsFunction::AssignNoid as i32,
             payload: Encode!(&payload).unwrap(),
         }),
