@@ -24,6 +24,7 @@ type DefiniteCanisterSettings = record {
   memory_allocation : nat;
   compute_allocation : nat;
   reserved_cycles_limit : nat;
+  wasm_memory_limit : nat;
 };
 
 type QueryStats = record {
