@@ -925,6 +925,7 @@ impl PocketIc {
             controllers: Some(new_controllers),
             compute_allocation: None,
             memory_allocation: None,
+            freezing_threshold: None,
             reserved_cycles_limit: None,
             wasm_memory_limit: None,
         };
