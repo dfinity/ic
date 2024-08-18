@@ -72,7 +72,7 @@ use tokio::{
 use tower::{util::BoxCloneService, Service, ServiceExt};
 use tower_test::mock::Handle;
 
-const ENABLE_V3_CALL_HANDLER: bool = false;
+const ENABLE_V3_CALL_HANDLER: bool = true;
 
 pub type IngressFilterHandle =
     Handle<(ProvisionalWhitelist, SignedIngressContent), Result<(), UserError>>;

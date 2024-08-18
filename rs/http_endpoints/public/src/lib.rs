@@ -1137,8 +1137,9 @@ mod tests {
         let http_handler = HttpHandler {
             call_router: Router::new()
                 .route(call::CallServiceV2::route(), axum::routing::post(dummy)),
-            call_v3_router: Router::new()
-                .route(call::CallServiceV3::route(), axum::routing::post(dummy)),
+            call_v3_router: Some(
+                Router::new().route(call::CallServiceV3::route(), axum::routing::post(dummy)),
+            ),
             query_router: Router::new()
                 .route(QueryService::route(), axum::routing::post(dummy_cbor)),
             catchup_router: Router::new().route(
