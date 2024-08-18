@@ -1,5 +1,5 @@
 {
-  "checksum": "edd1ca0d538601b3971468ea3c3649051fa4f6fd2fcae6fa8bb71d35555876e0",
+  "checksum": "64c4210fdc9ebdde6393c85326421f516e8903c9113fdbbee8f029f9c5fe5315",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17398,7 +17398,7 @@
               "target": "ic_cbor"
             },
             {
-              "id": "ic-cdk 0.13.2",
+              "id": "ic-cdk 0.13.4",
               "target": "ic_cdk"
             },
             {
@@ -28251,14 +28251,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk 0.13.2": {
+    "ic-cdk 0.13.4": {
       "name": "ic-cdk",
-      "version": "0.13.2",
+      "version": "0.13.4",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.13.2/download",
-          "sha256": "f8859bc2b863a77750acf199e1fb7e3fc403e1b475855ba13f59cb4e4036d238"
+          "url": "https://static.crates.io/crates/ic-cdk/0.13.4/download",
+          "sha256": "393d356e44d2470c90562356d4bde631b8addb5d81b7d29b0b58e17be7f1a2ca"
         }
       },
       "targets": [
@@ -28287,7 +28287,7 @@
               "target": "candid"
             },
             {
-              "id": "ic0 0.21.1",
+              "id": "ic0 0.23.0",
               "target": "ic0"
             },
             {
@@ -28305,13 +28305,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "ic-cdk-macros 0.13.2",
+              "id": "ic-cdk-macros 0.13.3",
               "target": "ic_cdk_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.13.2"
+        "version": "0.13.4"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -28521,14 +28521,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk-macros 0.13.2": {
+    "ic-cdk-macros 0.13.3": {
       "name": "ic-cdk-macros",
-      "version": "0.13.2",
+      "version": "0.13.3",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-macros/0.13.2/download",
-          "sha256": "a45800053d80a6df839a71aaea5797e723188c0b992618208ca3b941350c7355"
+          "url": "https://static.crates.io/crates/ic-cdk-macros/0.13.3/download",
+          "sha256": "7b2a7d0338dbd29d63df3445402dc9cd792d2f65ceccf36d4f9a88529ca2b62d"
         }
       },
       "targets": [
@@ -28569,18 +28569,18 @@
               "target": "serde"
             },
             {
-              "id": "serde_tokenstream 0.1.7",
+              "id": "serde_tokenstream 0.2.1",
               "target": "serde_tokenstream"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.66",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.13.2"
+        "version": "0.13.3"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -28691,7 +28691,7 @@
               "target": "futures"
             },
             {
-              "id": "ic-cdk 0.13.2",
+              "id": "ic-cdk 0.13.4",
               "target": "ic_cdk"
             },
             {
@@ -45884,7 +45884,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-cdk 0.13.2",
+              "id": "ic-cdk 0.13.4",
               "target": "ic_cdk"
             },
             {
@@ -78986,7 +78986,7 @@
     "ic-canister-log 0.2.0",
     "ic-canister-sig-creation 1.0.1",
     "ic-cbor 2.6.0",
-    "ic-cdk 0.13.2",
+    "ic-cdk 0.13.4",
     "ic-cdk-macros 0.9.0",
     "ic-cdk-timers 0.7.0",
     "ic-certification 2.6.0",
