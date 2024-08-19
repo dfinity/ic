@@ -1569,7 +1569,13 @@ impl XNetClient for XNetClientImpl {
         // TODO(MR-28) Make timeout configurable.
         let result = tokio::time::timeout(Duration::from_secs(5), async {
             let request_start = Instant::now();
-            let result = self.http_client.get(endpoint.url.clone()).await;
+
+            let response = self
+                .http_client
+                .get(endpoint.url.clone())
+                .await
+                .map_err(XNetClientError::RequestFailed)?;
+
             // While this is not exactly roundtrip time (it may include multiple roundtrips
             // e.g. if a TLS connection needs to be established first), it is a good enough
             // approximation. Else, we would have to use explicit pings to measure actual
@@ -1578,8 +1584,6 @@ impl XNetClient for XNetClientImpl {
                 endpoint.node_id,
                 Instant::now().saturating_duration_since(request_start),
             );
-
-            let response = result.map_err(XNetClientError::RequestFailed)?;
 
             let status = response.status();
 
