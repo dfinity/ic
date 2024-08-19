@@ -73,7 +73,7 @@ impl<Pool: CanisterHttpPool> PriorityFnFactory<CanisterHttpResponseShare, Pool>
             }
 
             // We derive the highest accepted request id from the next expected request id, plus the
-            // number of maximal number of requests we can have in-flight.
+            // number of maximal number of new requests we can get between the function calls.
             let highest_accepted_request_id =
                 CallbackId::from(next_callback_id.get() + MAX_NUMBER_OF_REQUESTS_AHEAD);
 
