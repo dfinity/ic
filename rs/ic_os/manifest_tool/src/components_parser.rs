@@ -66,7 +66,7 @@ fn parse_manifest(manifest_contents: &str, components_path: &Path) -> Result<Man
     let re = Regex::new(r#"Label\("(.+?)"\): "(.+?)""#)?;
     let mut manifest = Manifest::new();
 
-    for cap in re.captures_iter(&manifest_contents) {
+    for cap in re.captures_iter(manifest_contents) {
         let source = components_path.join(&cap[1]);
         let destination = PathBuf::from(&cap[2]);
         manifest.add_entry(ManifestEntry::new(source, destination));
