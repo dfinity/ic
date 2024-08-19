@@ -20,5 +20,6 @@
     "Product Security": "eng-prodsec",
     "runtime": "runtime-code-reviews",
     "sdk": "sdk",
-    "utopia": "eng-utopia"
+    "utopia": "eng-utopia",
+    "languages": "eng-motoko"
 }
