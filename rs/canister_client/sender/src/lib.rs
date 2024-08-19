@@ -190,7 +190,7 @@ impl Sender {
             Self::SigKeys(sig_keys) => match sig_keys {
                 SigKeys::Ed25519(key_pair) => Ok(Some(key_pair.sign(&msg).to_vec())),
                 SigKeys::EcdsaSecp256k1(key_pair) => {
-                    Ok(Some(key_pair.sk.sign_message(&msg).to_vec()))
+                    Ok(Some(key_pair.sk.sign_message_with_ecdsa(&msg).to_vec()))
                 }
             },
             Self::ExternalHsm { sign, .. } => sign(&msg).map(Some),
