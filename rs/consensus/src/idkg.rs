@@ -648,61 +648,49 @@ mod tests {
         let args = IDkgPriorityFnArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
-            requested_transcripts,
-            requested_signatures: BTreeSet::new(),
-            active_transcripts: BTreeSet::new(),
         };
 
         let tests = vec![
             // Signed dealings
             (
-                IDkgMessageAttribute::Dealing(xnet_transcript_id),
+                IDkgMessageId::Dealing(xnet_transcript_id),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageAttribute::Dealing(transcript_id_fetch_1),
+                IDkgMessageId::Dealing(transcript_id_fetch_1),
                 Priority::FetchNow,
             ),
+            (IDkgMessageId::Dealing(transcript_id_drop), Priority::Drop),
             (
-                IDkgMessageAttribute::Dealing(transcript_id_drop),
-                Priority::Drop,
-            ),
-            (
-                IDkgMessageAttribute::Dealing(transcript_id_fetch_2),
+                IDkgMessageId::Dealing(transcript_id_fetch_2),
                 Priority::FetchNow,
             ),
-            (
-                IDkgMessageAttribute::Dealing(transcript_id_stash),
-                Priority::Stash,
-            ),
+            (IDkgMessageId::Dealing(transcript_id_stash), Priority::Stash),
             // Dealing support
             (
-                IDkgMessageAttribute::DealingSupport(xnet_transcript_id),
+                IDkgMessageId::DealingSupport(xnet_transcript_id),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageAttribute::DealingSupport(transcript_id_fetch_1),
+                IDkgMessageId::DealingSupport(transcript_id_fetch_1),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageAttribute::DealingSupport(transcript_id_drop),
+                IDkgMessageId::DealingSupport(transcript_id_drop),
                 Priority::Drop,
             ),
             (
-                IDkgMessageAttribute::DealingSupport(transcript_id_fetch_2),
+                IDkgMessageId::DealingSupport(transcript_id_fetch_2),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageAttribute::DealingSupport(transcript_id_stash),
+                IDkgMessageId::DealingSupport(transcript_id_stash),
                 Priority::Stash,
             ),
         ];
 
-        for (attr, expected) in tests {
-            assert_eq!(
-                compute_priority(&attr, subnet_id, &args, &metrics),
-                expected
-            );
+        for (id, expected) in tests {
+            assert_eq!(compute_priority(&id, subnet_id, &args), expected);
         }
     }
 

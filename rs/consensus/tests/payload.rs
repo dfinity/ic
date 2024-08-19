@@ -175,6 +175,7 @@ fn consensus_produces_expected_batches() {
             consensus_pool.read().unwrap().get_block_cache(),
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
+            metrics_registry.clone(),
             no_op_logger(),
             MaliciousFlags::default(),
         );
