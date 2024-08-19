@@ -24,9 +24,6 @@ rust_binary(
     crate_name = "manifest_tool",
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
     deps = DEPENDENCIES,
 )
 
