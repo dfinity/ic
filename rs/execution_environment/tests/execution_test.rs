@@ -2359,3 +2359,212 @@ fn helper_tests_for_illegal_data_buffer_access(env: &StateMachine, canister_id: 
         "Should return error if input data is copied to out of bound internal buffer. Instead, it returns unexpected message: {}.", ret_val.description()
     );
 }
+
+#[test]
+fn set_wasm_memory_limit_below_memory_usage() {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig::default(),
+    ));
+
+    let wat = "(module (memory $memory 65535))";
+
+    let canister_id = env
+        .install_canister_with_cycles(
+            wat::parse_str(wat).unwrap(),
+            vec![],
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_wasm_memory_limit(10_000_000_000)
+                    .build(),
+            ),
+            Cycles::new(1_000_000 * B),
+        )
+        .unwrap();
+
+    let wasm_memory_limit: u64 = env
+        .canister_status(canister_id)
+        .unwrap()
+        .unwrap()
+        .settings()
+        .wasm_memory_limit()
+        .0
+        .try_into()
+        .unwrap();
+
+    assert_eq!(wasm_memory_limit, 10_000_000_000);
+
+    env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_wasm_memory_limit(10)
+            .build(),
+    )
+    .unwrap();
+
+    let wasm_memory_limit: u64 = env
+        .canister_status(canister_id)
+        .unwrap()
+        .unwrap()
+        .settings()
+        .wasm_memory_limit()
+        .0
+        .try_into()
+        .unwrap();
+
+    assert_eq!(wasm_memory_limit, 10);
+}
+
+#[test]
+fn set_wasm_memory_limit_to_4_gib() {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig::default(),
+    ));
+
+    let initial_cycles = Cycles::new(1_000_000 * B);
+    let canister_id = create_universal_canister_with_cycles(&env, None, initial_cycles);
+
+    env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_wasm_memory_limit(4 * 1024 * 1024 * 1024)
+            .build(),
+    )
+    .unwrap();
+
+    let wasm_memory_limit: u64 = env
+        .canister_status(canister_id)
+        .unwrap()
+        .unwrap()
+        .settings()
+        .wasm_memory_limit()
+        .0
+        .try_into()
+        .unwrap();
+
+    assert_eq!(wasm_memory_limit, 4 * 1024 * 1024 * 1024);
+
+    let result = env
+        .execute_ingress(
+            canister_id,
+            "update",
+            wasm().push_bytes(&[1, 2, 3]).append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![1, 2, 3]));
+}
+
+#[test]
+fn set_wasm_memory_limit_to_zero() {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig::default(),
+    ));
+
+    let initial_cycles = Cycles::new(1_000_000 * B);
+    let canister_id = create_universal_canister_with_cycles(&env, None, initial_cycles);
+
+    env.update_settings(
+        &canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_wasm_memory_limit(0)
+            .build(),
+    )
+    .unwrap();
+
+    let wasm_memory_limit: u64 = env
+        .canister_status(canister_id)
+        .unwrap()
+        .unwrap()
+        .settings()
+        .wasm_memory_limit()
+        .0
+        .try_into()
+        .unwrap();
+
+    assert_eq!(wasm_memory_limit, 0);
+
+    // The Wasm memory limit of 0 means that there is no limit.
+    let result = env
+        .execute_ingress(
+            canister_id,
+            "update",
+            wasm().push_bytes(&[1, 2, 3]).append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![1, 2, 3]));
+}
+
+#[test]
+fn set_wasm_memory_limit_from_another_canister() {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig::default(),
+    ));
+
+    let initial_cycles = Cycles::new(1_000_000 * B);
+    let canister1 = create_universal_canister_with_cycles(&env, None, initial_cycles);
+    let canister2 = create_universal_canister_with_cycles(
+        &env,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![PrincipalId::new_anonymous(), canister1.get()])
+                .build(),
+        ),
+        initial_cycles,
+    );
+
+    let result = env
+        .execute_ingress(
+            canister1,
+            "update",
+            wasm()
+                .call_simple(
+                    IC_00,
+                    "update_settings",
+                    call_args()
+                        .other_side(
+                            UpdateSettingsArgs {
+                                canister_id: canister2.get(),
+                                settings: CanisterSettingsArgsBuilder::new()
+                                    .with_wasm_memory_limit(4 * 1024 * 1024 * 1024)
+                                    .build(),
+                                sender_canister_version: None,
+                            }
+                            .encode(),
+                        )
+                        .on_reply(wasm().message_payload().append_and_reply())
+                        .on_reject(wasm().reject_message().reject()),
+                )
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
+
+    let wasm_memory_limit: u64 = env
+        .canister_status(canister2)
+        .unwrap()
+        .unwrap()
+        .settings()
+        .wasm_memory_limit()
+        .0
+        .try_into()
+        .unwrap();
+
+    assert_eq!(wasm_memory_limit, 4 * 1024 * 1024 * 1024);
+
+    let result = env
+        .execute_ingress(
+            canister2,
+            "update",
+            wasm().push_bytes(&[1, 2, 3]).append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![1, 2, 3]));
+}
