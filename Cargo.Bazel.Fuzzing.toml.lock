@@ -5947,7 +5947,6 @@ dependencies = [
  "cfg-if 1.0.0",
  "ecdsa",
  "elliptic-curve",
- "once_cell",
  "sha2 0.10.8",
  "signature",
 ]

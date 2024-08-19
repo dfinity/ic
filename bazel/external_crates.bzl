@@ -716,13 +716,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 rev = "01d6e705afb663487cf61226e087c6874fac72a0",
                 package = "k256",
                 features = [
-                    "arithmetic",
-                    "ecdsa",
-                    "pem",
-                    "pkcs8",
-                    "precomputed-tables",
                     "schnorr",
-                    "std",
                 ],
                 default_features = False,
             ),
