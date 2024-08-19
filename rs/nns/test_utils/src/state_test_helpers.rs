@@ -46,12 +46,11 @@ use ic_nns_governance_api::pb::v1::{
         JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey, Split, StakeMaturity,
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
-    Empty, ExecuteNnsFunction, Governance, GovernanceError, InstallCode, InstallCodeRequest,
-    ListNeurons, ListNeuronsResponse, ListNodeProviderRewardsRequest,
-    ListNodeProviderRewardsResponse, ListProposalInfo, ListProposalInfoResponse,
-    MakeProposalRequest, ManageNeuron, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, Proposal,
-    ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
+    Empty, ExecuteNnsFunction, Governance, GovernanceError, InstallCodeRequest, ListNeurons,
+    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
+    ListProposalInfo, ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest,
+    ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
+    NnsFunction, ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
 };
 use ic_nns_handler_lifeline_interface::UpgradeRootProposal;
 use ic_nns_handler_root::init::RootCanisterInitPayload;

@@ -63,18 +63,18 @@ pub(crate) fn list_node_provider_rewards(
     with_node_provider_rewards_log(|log| {
         // naive filtering implementation is okay b/c our data set is very small
         // (1/month for years will not give us much to work through for some time)
-        // TODO - migrate to BTreeMap storage...
+        // TODO - migrate to BTreeMap storage with keys as dates and change this to use range lookup
         let rewards = log
             .iter()
             .flat_map(|rewards| {
                 let timestamp = rewards
                     .version
                     .clone()
-                    .and_then(|v| match v {
-                        Version::Version1(v1) => Some(v1),
+                    .map(|v| match v {
+                        Version::Version1(v1) => v1,
                     })
                     .and_then(|v1| v1.rewards)
-                    .and_then(|rewards| Some(rewards.timestamp));
+                    .map(|rewards| rewards.timestamp);
 
                 if let Some(timestamp) = timestamp {
                     if timestamp >= start_timestamp && timestamp <= end_timestamp {
@@ -83,7 +83,7 @@ pub(crate) fn list_node_provider_rewards(
                         None
                     }
                 } else {
-                    return None;
+                    None
                 }
             })
             .collect::<Vec<_>>();
