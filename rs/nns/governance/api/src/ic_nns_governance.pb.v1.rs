@@ -4703,7 +4703,5 @@ pub struct ListNodeProviderRewardsRequest {}
 #[derive(Clone, PartialEq)]
 pub struct ListNodeProviderRewardsResponse {
     /// The list of minted node provider rewards
-    rewards: Vec<MonthlyNodeProviderRewards>,
-    /// The next page token to be used in the next request to get the next set of results.
-    next_page: Option<u32>,
+    pub rewards: Vec<MonthlyNodeProviderRewards>,
 }

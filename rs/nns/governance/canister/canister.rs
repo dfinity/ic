@@ -739,8 +739,8 @@ async fn get_monthly_node_provider_rewards_() -> Result<RewardNodeProviders, Gov
 
 #[export_name = "canister_query list_node_provider_rewards"]
 fn list_node_provider_rewards() {
-    debug_log("get_minted_node_provider_rewards");
-    over(candid, |req| list_node_provider_rewards_(req))
+    debug_log("list_node_provider_rewards");
+    over(candid_one, list_node_provider_rewards_)
 }
 
 #[candid_method(query, rename = "list_node_provider_rewards")]
@@ -754,7 +754,6 @@ fn list_node_provider_rewards_(
             .into_iter()
             .map(MonthlyNodeProviderRewards::from)
             .collect(),
-        next_page: None,
     }
 }
 
