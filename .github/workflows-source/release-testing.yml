@@ -82,7 +82,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
-          retention-days: 30
+          retention-days: 14
           if-no-files-found: ignore
           compression-level: 9
           path: |
@@ -110,7 +110,7 @@ jobs:
         if: always()
         with:
           name: ${{ github.job }}-bep
-          retention-days: 30
+          retention-days: 14
           if-no-files-found: ignore
           compression-level: 9
           path: |
@@ -138,7 +138,7 @@ jobs:
         if: always()
         with:
           name: ${{ github.job }}-bep
-          retention-days: 30
+          retention-days: 14
           if-no-files-found: ignore
           compression-level: 9
           path: |
