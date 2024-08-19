@@ -124,6 +124,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use ic_nns_governance::governance::tla;
+
 /// The 'fake' module is the old scheme for providing NNS test fixtures, aka
 /// the FakeDriver. It is being used here until the older tests have been
 /// ported to the new 'fixtures' module.
@@ -4958,51 +4960,6 @@ fn test_cant_disburse_without_paying_fees() {
     );
 }
 
-// TODO(oggy): check something sensible
-fn tla_check_traces() {
-    use ic_nns_governance::governance::tla::{check_tla_code_link, PredicateDescription};
-
-    let mut traces = {
-        use ic_nervous_system_common::tla::TLA_TRACES;
-        let mut traces = TLA_TRACES.write().unwrap();
-        std::mem::take(&mut (*traces))
-    };
-    for mut trace in &mut traces {
-        ic_nns_governance::governance::tla::post_process_trace(&mut trace);
-        // println!("TLA Constants: {:#?}", trace.constants);
-        // println!("TLA Trace: {:#?}", trace.state_pairs);
-    }
-    let runfiles_dir = std::env::var("RUNFILES_DIR").expect("RUNFILES_DIR is not set");
-
-    // Construct paths to the data files
-    let apalache = PathBuf::from(&runfiles_dir).join("tla_apalache/bin/apalache-mc");
-    let tla_models_path = PathBuf::from(&runfiles_dir).join("ic/rs/nns/governance/tla");
-    let split_neuron_model = tla_models_path.join("Split_Neuron_Apalache.tla");
-
-    for trace in &traces {
-        for pair in &trace.state_pairs {
-            check_tla_code_link(
-                &apalache,
-                PredicateDescription {
-                    tla_module: split_neuron_model.clone(),
-                    transition_predicate: "Next".to_string(),
-                    predicate_parameters: Vec::new(),
-                },
-                pair.clone(),
-                trace.constants.clone(),
-            )
-            .expect(format!(
-                "Potential divergence detected from the model in TLA process {} in the step from state\n{:#?}\nto state\n{:#?}", 
-                trace.update.process_id, 
-                pair.start, 
-                pair.end
-            ).as_str());
-        }
-    }
-
-    // assert!(traces.is_empty());
-}
-
 /// Checks that split_neuron fails if the preconditions are not met. In
 /// particular, an attempt to split a neuron fails if:
 /// * 1. the neuron does not exist.
@@ -5139,7 +5096,7 @@ fn test_neuron_split_fails() {
     //  There is still only one ledger account.
     driver.assert_num_neuron_accounts_exist(1);
 
-    tla_check_traces();
+    tla::check_traces();
 }
 
 #[test]
@@ -5244,7 +5201,7 @@ fn test_neuron_split() {
     expected_neuron_ids.sort_unstable();
     assert_eq!(neuron_ids, expected_neuron_ids);
 
-    tla_check_traces();
+    tla::check_traces();
 }
 
 #[test]
