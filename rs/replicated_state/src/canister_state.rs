@@ -636,5 +636,5 @@ pub fn num_bytes_try_from(pages: NumWasmPages) -> Result<NumBytes, String> {
 }
 
 pub mod testing {
-    pub use super::queues::testing::{new_canister_queues_for_test, CanisterQueuesTesting};
+    pub use super::queues::testing::{new_canister_output_queues_for_test, CanisterQueuesTesting};
 }

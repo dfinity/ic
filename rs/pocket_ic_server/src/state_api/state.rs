@@ -1124,7 +1124,12 @@ impl ApiState {
         Some(())
     }
 
-    pub async fn auto_progress(&self, instance_id: InstanceId) {
+    pub async fn auto_progress(
+        &self,
+        instance_id: InstanceId,
+        artificial_delay_ms: Option<u64>,
+    ) -> Result<(), String> {
+        let artificial_delay = Duration::from_millis(artificial_delay_ms.unwrap_or_default());
         let progress_threads = self.progress_threads.read().await;
         let mut progress_thread = progress_threads[instance_id].lock().await;
         let instances = self.instances.clone();
@@ -1161,13 +1166,20 @@ impl ApiState {
                         return;
                     }
                     let duration = start.elapsed();
-                    sleep(std::cmp::max(duration, MIN_OPERATION_DELAY)).await;
+                    sleep(std::cmp::max(
+                        duration,
+                        std::cmp::max(artificial_delay, MIN_OPERATION_DELAY),
+                    ))
+                    .await;
                     if received_stop_signal(&mut rx) {
                         return;
                     }
                 }
             });
             *progress_thread = Some(ProgressThread { handle, sender: tx });
+            Ok(())
+        } else {
+            Err("Auto progress mode has already been enabled.".to_string())
         }
     }
 

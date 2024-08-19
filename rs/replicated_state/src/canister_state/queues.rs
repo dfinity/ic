@@ -2087,10 +2087,10 @@ pub mod testing {
     }
 
     #[allow(dead_code)]
-    /// Produces `CanisterQueues` together with a `VecDeque` of raw requests
-    /// where the raw requests appear in the same order in the `VecDeque` as
-    /// one would expect them being returned by the iterator.
-    pub fn new_canister_queues_for_test(
+    /// Produces a `CanisterQueues` with requests enqueued in output queues,
+    /// together with a `VecDeque` of raw requests, in the order in which they would
+    /// be returned by `CanisterOutputQueuesIterator`.
+    pub fn new_canister_output_queues_for_test(
         requests: Vec<Request>,
         sender: CanisterId,
         num_receivers: usize,
