@@ -1743,6 +1743,56 @@ where
                 )
             })
     }
+
+    // TODO[NNS1-2997]: Remove this function once the migration is completed.
+    pub async fn populate_wasm_metadata(
+        thread_safe_sns: &'static LocalKey<RefCell<SnsWasmCanister<M>>>,
+    ) {
+        // 2. Compute metadata for all marked WASMs.
+        let all_wasm_hashes = thread_safe_sns.with(|sns_canister| {
+            sns_canister
+                .borrow()
+                .wasm_indexes
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+        });
+        for hash in all_wasm_hashes {
+            ic_cdk_timers::set_timer(std::time::Duration::from_millis(0), move || {
+                let future = async move {
+                    thread_safe_sns.with(|sns_canister| {
+                        if let Some(index) = sns_canister.borrow().wasm_indexes.get(&hash) {
+                            if index.metadata == vec![] {
+                                let metadata = sns_canister
+                                    .borrow()
+                                    .get_wasm_metadata_impl(GetWasmMetadataRequestPb {
+                                        hash: Some(hash.to_vec()),
+                                    })
+                                    .unwrap_or_else(|err| {
+                                        panic!(
+                                            "Cannot obtain metadata for WASM with hash `{:?}`: {}",
+                                            hash, err
+                                        )
+                                    });
+                                let metadata = metadata
+                                    .into_iter()
+                                    .map(MetadataSectionPb::from)
+                                    .collect::<Vec<_>>();
+                                sns_canister
+                                    .borrow_mut()
+                                    .wasm_indexes
+                                    .entry(hash)
+                                    .and_modify(|index| {
+                                        index.metadata = metadata;
+                                    });
+                            }
+                        }
+                    });
+                };
+                ic_cdk::spawn(future)
+            });
+        }
+    }
 }
 
 /// Converts a vector of u8s to array of length 32 (the size of our sha256 hash)

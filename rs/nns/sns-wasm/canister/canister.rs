@@ -6,6 +6,7 @@ use dfn_core::{
     over, over_async, over_init,
 };
 use ic_base_types::{PrincipalId, SubnetId};
+use ic_cdk::heartbeat;
 use ic_management_canister_types::{
     CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CreateCanisterArgs, InstallCodeArgs,
     Method, UpdateSettingsArgs,
@@ -332,6 +333,12 @@ fn canister_post_upgrade() {
     SNS_WASM.with(|c| c.replace(SnsWasmCanister::<CanisterStableMemory>::from_stable_memory()));
 
     println!("{}Completed post upgrade", LOG_PREFIX);
+}
+
+// TODO[NNS1-2997]: Remove this function once the migration is completed.
+#[heartbeat]
+async fn heartbeat() {
+    SnsWasmCanister::populate_wasm_metadata(&SNS_WASM).await
 }
 
 #[export_name = "canister_update add_wasm"]
