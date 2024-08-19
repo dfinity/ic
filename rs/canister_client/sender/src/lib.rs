@@ -62,7 +62,7 @@ impl Ed25519KeyPair {
 
 impl Secp256k1KeyPair {
     pub fn sign(&self, msg: &[u8]) -> Vec<u8> {
-        self.sk.sign_message(msg).to_vec()
+        self.sk.sign_message_with_ecdsa(msg).to_vec()
     }
     pub fn generate<R: Rng + CryptoRng>(rng: &mut R) -> Self {
         let mut rng = ChaCha20Rng::from_seed(rng.gen());
