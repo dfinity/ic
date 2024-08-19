@@ -922,6 +922,14 @@ impl ExecutionEnvironment {
                                             canister_http_request_context.max_response_bytes,
                                             registry_settings.subnet_size,
                                         );
+                                    // Here we make sure that we do not let upper layers open new
+                                    // http calls while the maximum number of calls is in-flight.
+                                    // Later, in the http adapter we also have a bounded queue of
+                                    // the same size, but this queue alone is not enough as it is
+                                    // used as the interface between DSM and consensus, and the latter
+                                    // consumes requests from this queue upon the request processing
+                                    // start. This means more elements can be added to the queue, while
+                                    // previous requests are still in-flight.
                                     if state
                                         .metadata
                                         .subnet_call_context_manager
