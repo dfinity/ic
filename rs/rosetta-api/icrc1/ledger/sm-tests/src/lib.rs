@@ -2550,6 +2550,8 @@ pub fn icrc1_test_upgrade_serialization<T>(
     // Test the new wasm serialization
     test_upgrade(ledger_wasm_current.clone(), balances.clone());
     // Test serializing to the memory manager
+    test_upgrade(ledger_wasm_upgradetomemorymanager.clone(), balances.clone());
+    // Test upgrade to memory manager again
     test_upgrade(ledger_wasm_upgradetomemorymanager, balances.clone());
     // Test deserializing from memory manager
     test_upgrade(ledger_wasm_current, balances.clone());
