@@ -15,6 +15,8 @@ pub use tla_instrumentation::checker::{check_tla_code_link, PredicateDescription
 pub use ic_nervous_system_common::tla::{TLA_INSTRUMENTATION_STATE, TLA_TRACES};
 pub use ic_nervous_system_common::{tla_log_locals, tla_log_request, tla_log_response};
 
+use std::path::PathBuf;
+
 use icp_ledger::{AccountIdentifier, Subaccount};
 
 fn subaccount_to_tla(subaccount: &Subaccount) -> TlaValue {
@@ -140,11 +142,11 @@ fn default_account() -> TlaValue {
     "".to_tla_value()
 }
 
-pub fn post_process_trace(trace: &mut UpdateTrace) {
+fn post_process_trace(trace: &mut Vec<ResolvedStatePair>) {
     for ResolvedStatePair {
         ref mut start,
         ref mut end,
-    } in &mut trace.state_pairs
+    } in trace
     {
         for state in &mut [start, end] {
             state
@@ -173,6 +175,51 @@ pub fn post_process_trace(trace: &mut UpdateTrace) {
     }
 }
 
+fn extract_split_neuron_constants(pid: &str, trace: &Vec<ResolvedStatePair>) -> TlaConstantAssignment {
+    let constants = BTreeMap::from([
+        (
+            "Neuron_Ids".to_string(),
+            function_domain_union(trace, "neuron").to_tla_value(),
+        ),
+        (
+            "MIN_STAKE".to_string(),
+            trace
+                .first()
+                .map(|pair| {
+                    pair.start
+                        .get("min_stake")
+                        .expect("min_stake not recorded")
+                        .clone()
+                })
+                .unwrap_or(0_u64.to_tla_value()),
+        ),
+        (
+            "TRANSACTION_FEE".to_string(),
+            trace
+                .first()
+                .map(|pair| {
+                    pair.start
+                        .get("transaction_fee")
+                        .expect("transaction_fee not recorded")
+                        .clone()
+                })
+                .unwrap_or(0_u64.to_tla_value()),
+        ),
+        ("Minting_Account_Id".to_string(), governance_account_id()),
+        (
+            "Split_Neuron_Process_Ids".to_string(),
+            BTreeSet::from([pid]).to_tla_value(),
+        ),
+        ("Governance_Account_Ids".to_string(), {
+            let mut ids = function_domain_union(trace, "neuron_id_by_account");
+            ids.insert(governance_account_id());
+            ids.to_tla_value()
+        }),
+    ]);
+    TlaConstantAssignment { constants }
+}
+
+
 pub fn split_neuron_desc() -> Update {
     const PID: &str = "Split_Neuron_PID";
     let default_locals = VarAssignment::new()
@@ -188,48 +235,45 @@ pub fn split_neuron_desc() -> Update {
         end_label: Label::new("Done"),
         process_id: PID.to_string(),
         canister_name: "governance".to_string(),
-        constants_extractor: |trace| {
-            let constants = BTreeMap::from([
-                (
-                    "Neuron_Ids".to_string(),
-                    function_domain_union(trace, "neuron").to_tla_value(),
-                ),
-                (
-                    "MIN_STAKE".to_string(),
-                    trace
-                        .first()
-                        .map(|pair| {
-                            pair.start
-                                .get("min_stake")
-                                .expect("min_stake not recorded")
-                                .clone()
-                        })
-                        .unwrap_or(0_u64.to_tla_value()),
-                ),
-                (
-                    "TRANSACTION_FEE".to_string(),
-                    trace
-                        .first()
-                        .map(|pair| {
-                            pair.start
-                                .get("transaction_fee")
-                                .expect("transaction_fee not recorded")
-                                .clone()
-                        })
-                        .unwrap_or(0_u64.to_tla_value()),
-                ),
-                ("Minting_Account_Id".to_string(), governance_account_id()),
-                (
-                    "Split_Neuron_Process_Ids".to_string(),
-                    BTreeSet::from([PID]).to_tla_value(),
-                ),
-                ("Governance_Account_Ids".to_string(), {
-                    let mut ids = function_domain_union(trace, "neuron_id_by_account");
-                    ids.insert(governance_account_id());
-                    ids.to_tla_value()
-                }),
-            ]);
-            TlaConstantAssignment { constants }
+        post_process: |trace| {
+            let constants = extract_split_neuron_constants(PID, trace);
+            post_process_trace(trace);
+            constants
         },
     }
+}
+
+pub fn check_traces() {
+    let mut traces = TLA_TRACES.write().unwrap();
+    let traces = std::mem::take(&mut (*traces));
+
+    let runfiles_dir = std::env::var("RUNFILES_DIR").expect("RUNFILES_DIR is not set");
+
+    // Construct paths to the data files
+    let apalache = PathBuf::from(&runfiles_dir).join("tla_apalache/bin/apalache-mc");
+    let tla_models_path = PathBuf::from(&runfiles_dir).join("ic/rs/nns/governance/tla");
+    let split_neuron_model = tla_models_path.join("Split_Neuron_Apalache.tla");
+
+    for trace in traces {
+        for pair in &trace.state_pairs {
+            check_tla_code_link(
+                &apalache,
+                PredicateDescription {
+                    tla_module: split_neuron_model.clone(),
+                    transition_predicate: "Next".to_string(),
+                    predicate_parameters: Vec::new(),
+                },
+                pair.clone(),
+                trace.constants.clone(),
+            )
+            .expect(format!(
+                "Potential divergence detected from the model in TLA process {} in the step from state\n{:#?}\nto state\n{:#?}", 
+                trace.update.process_id, 
+                pair.start, 
+                pair.end
+            ).as_str());
+        }
+    }
+
+    // assert!(traces.is_empty());
 }
