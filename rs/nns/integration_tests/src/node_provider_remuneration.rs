@@ -16,7 +16,7 @@ use ic_nns_governance_api::pb::v1::{
     reward_node_provider::{RewardMode, RewardToAccount},
     AddOrRemoveNodeProvider, DateRangeFilter, ExecuteNnsFunction, GovernanceError,
     ListNodeProviderRewardsRequest, MakeProposalRequest, NetworkEconomics, NnsFunction,
-    NodeProvider, Proposal, ProposalActionRequest, RewardNodeProvider, RewardNodeProviders,
+    NodeProvider, ProposalActionRequest, RewardNodeProvider, RewardNodeProviders,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -241,7 +241,7 @@ fn test_list_node_provider_rewards() {
     assert_eq!(
         received_ts,
         minted_rewards_timestamps[3..8]
-            .into_iter()
+            .iter()
             .rev()
             .cloned()
             .collect::<Vec<_>>()
@@ -260,7 +260,7 @@ fn test_list_node_provider_rewards() {
     assert_eq!(
         received_ts,
         minted_rewards_timestamps[0..3]
-            .into_iter()
+            .iter()
             .rev()
             .cloned()
             .collect::<Vec<_>>()
@@ -282,7 +282,7 @@ fn test_list_node_provider_rewards() {
     assert_eq!(
         received_ts,
         minted_rewards_timestamps[7..12]
-            .into_iter()
+            .iter()
             .rev()
             .cloned()
             .collect::<Vec<_>>()
@@ -304,7 +304,7 @@ fn test_list_node_provider_rewards() {
     assert_eq!(
         received_ts,
         minted_rewards_timestamps[9..13]
-            .into_iter()
+            .iter()
             .rev()
             .cloned()
             .collect::<Vec<_>>()
@@ -326,7 +326,7 @@ fn test_list_node_provider_rewards() {
     assert_eq!(
         received_ts,
         minted_rewards_timestamps[9..12]
-            .into_iter()
+            .iter()
             .rev()
             .cloned()
             .collect::<Vec<_>>()

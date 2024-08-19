@@ -57,8 +57,6 @@ pub(crate) fn list_node_provider_rewards(
     let date_filter = date_filter.unwrap_or_default();
     let start_timestamp = date_filter.start.unwrap_or(0);
     let end_timestamp = date_filter.end.unwrap_or(u64::MAX);
-    // If we have 10 entries, they're 0..9
-    // If we are getting newest first, we want to return 9..4, then 4..0
 
     with_node_provider_rewards_log(|log| {
         // naive filtering implementation is okay b/c our data set is very small
@@ -90,8 +88,13 @@ pub(crate) fn list_node_provider_rewards(
 
         let len: u64 = rewards.len().try_into().unwrap();
 
+        // the end of the range is last result minus the page number times the limit
         let end_range = len.saturating_sub(page as u64 * limit);
+        // start of range is just the end minus the limit, but not less than 0
         let start_range = end_range.saturating_sub(limit);
+
+        // If we have 10 entries, they're 0..9
+        // If we are getting newest first, we want to return 9..4, then 4..0, thus the rev() call
         let rewards = (start_range..end_range)
             .rev()
             .map(|index| rewards[index as usize].clone())
