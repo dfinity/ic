@@ -42,6 +42,7 @@ pub enum ArtifactMutation<T: IdentifiableArtifact> {
 /// to the unvalidated section) might not generate adverts or purged IDs, `changed`
 /// indicates if the mutation changed the pool's state at all.
 pub struct ChangeResult<T: IdentifiableArtifact> {
+    /// The list of replication mutations returned by the client. Mutations are applied in order.
     pub mutations: Vec<ArtifactMutation<T>>,
     /// The field instructs the polling component (the one that calls `on_state_change` + `apply_changes`)
     /// that polling immediately can be benefitial. For example, polling consensus when the field is set to

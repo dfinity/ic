@@ -230,19 +230,9 @@ fn process_messages<Artifact: IdentifiableArtifact + 'static>(
             .with_metrics(|| client.process_changes(time_source.as_ref(), batched_artifact_events));
 
         // We must first send the addition to the replication manager because in theory in one batch we can have both an addition and removal of the same artifact.
-        let mut purged = vec![];
         for mutation in mutations {
-            match mutation {
-                ArtifactMutation::Insert(artifact_with_opt) => {
-                    let _ = send_advert.blocking_send(ArtifactMutation::Insert(artifact_with_opt));
-                }
-                ArtifactMutation::Remove(id) => purged.push(id),
-            };
+            let _ = send_advert.blocking_send(mutation);
         }
-        for id in purged {
-            let _ = send_advert.blocking_send(ArtifactMutation::Remove(id));
-        }
-
         last_on_state_change_result = poll_immediately;
     }
 }
