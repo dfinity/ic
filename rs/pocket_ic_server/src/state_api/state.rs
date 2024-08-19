@@ -5,18 +5,33 @@ use crate::pocket_ic::{
     AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, GetCanisterHttp, MockCanisterHttp,
     PocketIc,
 };
-use crate::InstanceId;
-use crate::{OpId, Operation};
+use crate::state_api::canister_id::{self, DomainResolver, ResolvesDomain};
+use crate::{InstanceId, OpId, Operation};
+use axum::{
+    extract::{Request as AxumRequest, State},
+    middleware::Next,
+    response::{IntoResponse, Response},
+    Extension,
+};
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
 use base64;
+use candid::Principal;
+use fqdn::{fqdn, FQDN};
 use futures::future::Shared;
-use hyper::header::{HeaderValue, HOST};
-use hyper::Version;
+use http::{
+    header::{
+        ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, COOKIE, DNT,
+        IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
+    },
+    HeaderName, Method, StatusCode,
+};
+use http_body_util::{BodyExt, LengthLimitError, Limited};
 use hyper_legacy::{client::connect::HttpConnector, Client};
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_socks2::SocksConnector;
 use ic_http_endpoints_public::cors_layer;
+use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
 use ic_https_outcalls_adapter::CanisterHttp;
 use ic_https_outcalls_adapter_client::grpc_status_code_to_reject;
 use ic_https_outcalls_service::{
@@ -26,8 +41,10 @@ use ic_https_outcalls_service::{
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_state_machine_tests::RejectCode;
-use ic_types::canister_http::CanisterHttpRequestId;
-use ic_types::{canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES, CanisterId, SubnetId};
+use ic_types::{
+    canister_http::{CanisterHttpRequestId, MAX_CANISTER_HTTP_RESPONSE_BYTES},
+    CanisterId, SubnetId,
+};
 use pocket_ic::common::rest::{
     CanisterHttpHeader, CanisterHttpMethod, CanisterHttpReject, CanisterHttpReply,
     CanisterHttpRequest, CanisterHttpResponse, HttpGatewayBackend, HttpGatewayConfig,
@@ -35,7 +52,7 @@ use pocket_ic::common::rest::{
 };
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
+use std::{collections::HashMap, fmt, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::{
     sync::mpsc::error::TryRecvError,
     sync::mpsc::Receiver,
@@ -44,6 +61,7 @@ use tokio::{
     time::{self, sleep, Instant},
 };
 use tonic::Request;
+use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, info, trace};
 
 // The maximum wait time for a computation to finish synchronously.
@@ -380,6 +398,229 @@ fn received_stop_signal(rx: &mut Receiver<()>) -> bool {
     }
 }
 
+// ADAPTED from ic-gateway
+
+const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
+const MAX_REQUEST_BODY_SIZE: usize = 10 * 1_048_576;
+const MINUTE: Duration = Duration::from_secs(60);
+
+#[derive(Clone)]
+struct RequestCtx {
+    pub verify: bool,
+}
+
+fn layer(methods: &[Method]) -> CorsLayer {
+    CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(methods.to_vec())
+        .expose_headers([
+            ACCEPT_RANGES,
+            CONTENT_LENGTH,
+            CONTENT_RANGE,
+            HEADER_IC_CANISTER_ID,
+        ])
+        .allow_headers([
+            USER_AGENT,
+            DNT,
+            IF_NONE_MATCH,
+            IF_MODIFIED_SINCE,
+            CACHE_CONTROL,
+            CONTENT_TYPE,
+            RANGE,
+            COOKIE,
+            HEADER_IC_CANISTER_ID,
+        ])
+        .max_age(10 * MINUTE)
+}
+
+// Categorized possible causes for request processing failures
+// Not using Error as inner type since it's not cloneable
+#[derive(Debug, Clone)]
+enum ErrorCause {
+    UnableToReadBody(String),
+    RequestTooLarge,
+    NoAuthority,
+    UnknownDomain,
+    CanisterIdNotFound,
+}
+
+impl ErrorCause {
+    const fn status_code(&self) -> StatusCode {
+        match self {
+            Self::UnableToReadBody(_) => StatusCode::REQUEST_TIMEOUT,
+            Self::RequestTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::NoAuthority => StatusCode::BAD_REQUEST,
+            Self::UnknownDomain => StatusCode::BAD_REQUEST,
+            Self::CanisterIdNotFound => StatusCode::BAD_REQUEST,
+        }
+    }
+
+    fn details(&self) -> Option<String> {
+        match self {
+            Self::UnableToReadBody(x) => Some(x.clone()),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for ErrorCause {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::UnableToReadBody(_) => write!(f, "unable_to_read_body"),
+            Self::RequestTooLarge => write!(f, "request_too_large"),
+            Self::NoAuthority => write!(f, "no_authority"),
+            Self::UnknownDomain => write!(f, "unknown_domain"),
+            Self::CanisterIdNotFound => write!(f, "canister_id_not_found"),
+        }
+    }
+}
+
+// Creates the response from ErrorCause and injects itself into extensions to be visible by middleware
+impl IntoResponse for ErrorCause {
+    fn into_response(self) -> Response {
+        let body = self
+            .details()
+            .map_or_else(|| self.to_string(), |x| format!("{self}: {x}\n"));
+
+        let mut resp = (self.status_code(), body).into_response();
+
+        resp.extensions_mut().insert(self);
+        resp
+    }
+}
+
+pub(crate) struct HandlerState {
+    client: HttpGatewayClient,
+    resolver: DomainResolver,
+}
+
+impl HandlerState {
+    fn new(client: HttpGatewayClient, resolver: DomainResolver) -> Self {
+        Self { client, resolver }
+    }
+
+    pub(crate) fn resolver(&self) -> &DomainResolver {
+        &self.resolver
+    }
+}
+
+// Main HTTP->IC request handler
+async fn handler(
+    State(state): State<Arc<HandlerState>>,
+    canister_id: Option<Extension<Principal>>,
+    host_canister_id: Option<canister_id::HostHeader>,
+    query_param_canister_id: Option<canister_id::QueryParam>,
+    referer_host_canister_id: Option<canister_id::RefererHeaderHost>,
+    referer_query_param_canister_id: Option<canister_id::RefererHeaderQueryParam>,
+    Extension(ctx): Extension<Arc<RequestCtx>>,
+    request: AxumRequest,
+) -> Result<Response, ErrorCause> {
+    let canister_id = canister_id.map(|v| v.0);
+    let host_canister_id = host_canister_id.map(|v| v.0);
+    let query_param_canister_id = query_param_canister_id.map(|v| v.0);
+    let referer_host_canister_id = referer_host_canister_id.map(|v| v.0);
+    let referer_query_param_canister_id = referer_query_param_canister_id.map(|v| v.0);
+    let canister_id = canister_id
+        .or(host_canister_id)
+        .or(query_param_canister_id)
+        .or(referer_host_canister_id)
+        .or(referer_query_param_canister_id)
+        .ok_or(ErrorCause::CanisterIdNotFound)?;
+
+    let (parts, body) = request.into_parts();
+
+    // Collect the request body up to the limit
+    let body = Limited::new(body, MAX_REQUEST_BODY_SIZE)
+        .collect()
+        .await
+        .map_err(|e| {
+            // TODO improve the inferring somehow
+            e.downcast_ref::<LengthLimitError>().map_or_else(
+                || ErrorCause::UnableToReadBody(e.to_string()),
+                |_| ErrorCause::RequestTooLarge,
+            )
+        })?
+        .to_bytes()
+        .to_vec();
+
+    let args = HttpGatewayRequestArgs {
+        canister_request: CanisterRequest::from_parts(parts, body),
+        canister_id,
+    };
+
+    let resp = {
+        // Execute the request
+        let mut req = state.client.request(args);
+        // Skip verification if it's disabled globally or if it is a "raw" request.
+        req.unsafe_set_skip_verification(!ctx.verify);
+        req.send().await
+    };
+
+    // Convert it into Axum response
+    let response = resp.canister_response.into_response();
+
+    Ok(response)
+}
+
+// Attempts to extract host from HTTP2 "authority" pseudo-header or from HTTP/1.1 "Host" header
+fn extract_authority(request: &AxumRequest) -> Option<FQDN> {
+    // Try HTTP2 first, then Host header
+    request
+        .uri()
+        .authority()
+        .map(|x| x.host())
+        .or_else(|| {
+            request
+                .headers()
+                .get(http::header::HOST)
+                .and_then(|x| x.to_str().ok())
+                // Split if it has a port
+                .and_then(|x| x.split(':').next())
+        })
+        .and_then(|x| FQDN::from_str(x).ok())
+}
+
+async fn validate_middleware(
+    State(resolver): State<Arc<dyn ResolvesDomain>>,
+    mut request: AxumRequest,
+    next: Next,
+) -> Result<impl IntoResponse, ErrorCause> {
+    // Extract the authority
+    let Some(authority) = extract_authority(&request) else {
+        return Err(ErrorCause::NoAuthority);
+    };
+
+    // Resolve the domain
+    let lookup = resolver
+        .resolve(&authority)
+        .ok_or(ErrorCause::UnknownDomain)?;
+
+    // Inject canister_id separately if it was resolved
+    if let Some(v) = lookup.canister_id {
+        request.extensions_mut().insert(v);
+    }
+
+    // Inject request context
+    // TODO remove Arc?
+    let ctx = Arc::new(RequestCtx {
+        verify: lookup.verify,
+    });
+    request.extensions_mut().insert(ctx.clone());
+
+    // Execute the request
+    let mut response = next.run(request).await;
+
+    // Inject the same into the response
+    response.extensions_mut().insert(ctx);
+    if let Some(v) = lookup.canister_id {
+        response.extensions_mut().insert(v);
+    }
+
+    Ok(response)
+}
+
+// END ADAPTED from ic-gateway
+
 impl ApiState {
     // Helper function for auto progress mode.
     // Executes an operation to completion and returns its `OpOut`
@@ -472,19 +713,15 @@ impl ApiState {
         http_gateway_config: HttpGatewayConfig,
     ) -> HttpGatewayInfo {
         use crate::state_api::routes::verify_cbor_content_header;
-        use axum::extract::{DefaultBodyLimit, Path, Request as AxumRequest, State};
-        use axum::handler::Handler;
-        use axum::middleware::{self, Next};
-        use axum::response::Response as AxumResponse;
+        use axum::extract::{DefaultBodyLimit, Path, State};
+        use axum::middleware::from_fn_with_state;
         use axum::routing::{get, post};
         use axum::Router;
         use http_body_util::Full;
         use hyper::body::{Bytes, Incoming};
         use hyper::header::CONTENT_TYPE;
-        use hyper::{Method, Request, Response, StatusCode, Uri};
+        use hyper::{Method, Request, Response, StatusCode};
         use hyper_util::client::legacy::{connect::HttpConnector, Client};
-        use icx_proxy::{agent_handler, AppState, DnsCanisterConfig, ResolverState, Validator};
-        use std::str::FromStr;
 
         async fn handler_status(
             State(replica_url): State<String>,
@@ -587,29 +824,6 @@ impl ApiState {
             .await
         }
 
-        // converts an HTTP request to an HTTP/1.1 request required by icx-proxy
-        async fn http2_middleware(mut request: AxumRequest, next: Next) -> AxumResponse {
-            let uri = Uri::try_from(
-                request
-                    .uri()
-                    .path_and_query()
-                    .map(|v| v.as_str())
-                    .unwrap_or(request.uri().path()),
-            )
-            .unwrap();
-            let authority = request.uri().authority().map(|a| a.to_string());
-            *request.version_mut() = Version::HTTP_11;
-            *request.uri_mut() = uri;
-            if let Some(authority) = authority {
-                if !request.headers().contains_key(HOST) {
-                    request
-                        .headers_mut()
-                        .insert(HOST, HeaderValue::from_str(&authority).unwrap());
-                }
-            }
-            next.run(request).await
-        }
-
         let ip_addr = http_gateway_config
             .ip_addr
             .unwrap_or("127.0.0.1".to_string());
@@ -651,19 +865,21 @@ impl ApiState {
                 .build()
                 .unwrap();
             agent.fetch_root_key().await.unwrap();
-            let replica_uri = Uri::from_str(&replica_url).unwrap();
-            let replicas = vec![(agent, replica_uri)];
-            let gateway_domains = http_gateway_config
-                .domains
-                .unwrap_or(vec!["localhost".to_string()]);
-            let aliases: Vec<String> = vec![];
-            let suffixes: Vec<String> = gateway_domains;
-            let resolver = ResolverState {
-                dns: DnsCanisterConfig::new(aliases, suffixes).unwrap(),
-            };
-            let validator = Validator::default();
-            let app_state = AppState::new_for_testing(replicas, resolver, validator);
-            let fallback_handler = agent_handler.with_state(app_state);
+            let client = ic_http_gateway::HttpGatewayClientBuilder::new()
+                .with_agent(agent)
+                .build()
+                .unwrap();
+            let domain_resolver = DomainResolver::new(
+                http_gateway_config
+                    .domains
+                    .unwrap_or(vec!["localhost".to_string()])
+                    .iter()
+                    .map(|d| fqdn!(d))
+                    .collect(),
+            );
+            let state_handler = Arc::new(HandlerState::new(client, domain_resolver.clone()));
+
+            let domain_resolver = Arc::new(domain_resolver) as Arc<dyn ResolvesDomain>;
 
             let router = Router::new()
                 .route("/api/v2/status", get(handler_status))
@@ -687,10 +903,23 @@ impl ApiState {
                     post(handler_read_state)
                         .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
-                .fallback_service(fallback_handler)
+                .fallback(
+                    post(handler)
+                        .get(handler)
+                        .put(handler)
+                        .delete(handler)
+                        .layer(layer(&[
+                            Method::HEAD,
+                            Method::GET,
+                            Method::POST,
+                            Method::PUT,
+                            Method::DELETE,
+                        ]))
+                        .with_state(state_handler),
+                )
                 .layer(DefaultBodyLimit::disable())
                 .layer(cors_layer())
-                .layer(middleware::from_fn(http2_middleware))
+                .layer(from_fn_with_state(domain_resolver, validate_middleware))
                 .with_state(replica_url.trim_end_matches('/').to_string())
                 .into_make_service();
 
@@ -895,7 +1124,12 @@ impl ApiState {
         Some(())
     }
 
-    pub async fn auto_progress(&self, instance_id: InstanceId) {
+    pub async fn auto_progress(
+        &self,
+        instance_id: InstanceId,
+        artificial_delay_ms: Option<u64>,
+    ) -> Result<(), String> {
+        let artificial_delay = Duration::from_millis(artificial_delay_ms.unwrap_or_default());
         let progress_threads = self.progress_threads.read().await;
         let mut progress_thread = progress_threads[instance_id].lock().await;
         let instances = self.instances.clone();
@@ -932,13 +1166,20 @@ impl ApiState {
                         return;
                     }
                     let duration = start.elapsed();
-                    sleep(std::cmp::max(duration, MIN_OPERATION_DELAY)).await;
+                    sleep(std::cmp::max(
+                        duration,
+                        std::cmp::max(artificial_delay, MIN_OPERATION_DELAY),
+                    ))
+                    .await;
                     if received_stop_signal(&mut rx) {
                         return;
                     }
                 }
             });
             *progress_thread = Some(ProgressThread { handle, sender: tx });
+            Ok(())
+        } else {
+            Err("Auto progress mode has already been enabled.".to_string())
         }
     }
 

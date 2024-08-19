@@ -31,7 +31,7 @@ fn should_pass_wycheproof_ecdsa_secp256k1_verification_tests() -> Result<(), Key
         for test in &test_group.tests {
             // The Wycheproof ECDSA tests do not normalize s so we must use
             // the verification method that accepts either valid s
-            let accepted = pk.verify_signature_with_malleability(&test.msg, &test.sig);
+            let accepted = pk.verify_ecdsa_signature_with_malleability(&test.msg, &test.sig);
             assert_eq!(accepted, test.result == wycheproof::TestResult::Valid);
         }
     }
@@ -40,21 +40,16 @@ fn should_pass_wycheproof_ecdsa_secp256k1_verification_tests() -> Result<(), Key
 }
 
 #[test]
-fn test_sign_prehash_works_with_any_size_input_gte_16() {
+fn test_sign_prehash_works_with_any_size_input() {
     let rng = &mut test_rng();
 
     let sk = PrivateKey::generate_using_rng(rng);
     let pk = sk.public_key();
 
-    for i in 0..16 {
+    for i in 0..1024 {
         let buf = vec![0x42; i];
-        assert_eq!(sk.sign_digest(&buf), None);
-    }
-
-    for i in 16..1024 {
-        let buf = vec![0x42; i];
-        let sig = sk.sign_digest(&buf).unwrap();
-        assert!(pk.verify_signature_prehashed(&buf, &sig));
+        let sig = sk.sign_digest_with_ecdsa(&buf);
+        assert!(pk.verify_ecdsa_signature_prehashed(&buf, &sig));
     }
 }
 
@@ -73,7 +68,7 @@ fn should_use_rfc6979_nonces_for_ecdsa_signature_generation() {
     let message = b"abc";
     let expected_sig = "d8bdb0ddfc8ebb8be42649048e92edc8547d1587b2a8f721738a2ecc0733401c70e86d3042ebbb50dccfbfbdf6c0462c7be45bcd0208d33e34efec273a86eab9";
 
-    let generated_sig = sk.sign_message(message);
+    let generated_sig = sk.sign_message_with_ecdsa(message);
     assert_eq!(hex::encode(generated_sig), expected_sig);
 
     // Now check the prehash variant:
@@ -83,7 +78,7 @@ fn should_use_rfc6979_nonces_for_ecdsa_signature_generation() {
         sha256.update(message);
         sha256.finalize().into()
     };
-    let generated_sig = sk.sign_digest(&message_hash).unwrap();
+    let generated_sig = sk.sign_digest_with_ecdsa(&message_hash);
     assert_eq!(hex::encode(generated_sig), expected_sig);
 }
 
@@ -104,7 +99,30 @@ fn should_reject_long_x_when_deserializing_private_key() {
 }
 
 #[test]
-fn should_accept_signatures_that_we_generate() {
+fn generate_from_seed_is_stable() {
+    let tests = [
+        (
+            "",
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ),
+        (
+            "abcdef",
+            "995da3cf545787d65f9ced52674e92ee8171c87c7a4008aa4349ec47d21609a7",
+        ),
+        (
+            "03fc46909ddfe5ed2f37af7923d846ecab53f962a83e4fc30be550671ceab3e6",
+            "37d0dc8b55b04f4b44824272d4449ebbd6363ab031c91a5cd717cbd60f3fc034",
+        ),
+    ];
+
+    for (seed, expected_key) in tests {
+        let sk = PrivateKey::generate_from_seed(&hex::decode(seed).unwrap());
+        assert_eq!(hex::encode(sk.serialize_sec1()), expected_key);
+    }
+}
+
+#[test]
+fn should_accept_ecdsa_signatures_that_we_generate() {
     use rand::RngCore;
 
     let rng = &mut test_rng();
@@ -115,16 +133,36 @@ fn should_accept_signatures_that_we_generate() {
     for m in 0..100 {
         let mut msg = vec![0u8; m];
         rng.fill_bytes(&mut msg);
-        let sig = sk.sign_message(&msg);
+        let sig = sk.sign_message_with_ecdsa(&msg);
 
         assert_eq!(
-            sk.sign_message(&msg),
+            sk.sign_message_with_ecdsa(&msg),
             sig,
             "ECDSA signature generation is deterministic"
         );
 
-        assert!(pk.verify_signature(&msg, &sig));
-        assert!(pk.verify_signature_with_malleability(&msg, &sig));
+        assert!(pk.verify_ecdsa_signature(&msg, &sig));
+        assert!(pk.verify_ecdsa_signature_with_malleability(&msg, &sig));
+    }
+}
+
+#[test]
+fn should_accept_bip340_signatures_that_we_generate() {
+    use rand::RngCore;
+
+    let mut rng = test_rng();
+
+    for _ in 0..100 {
+        let sk = PrivateKey::generate_using_rng(&mut rng);
+
+        let pk = sk.public_key();
+        println!("{}", hex::encode(pk.serialize_sec1(true)));
+
+        let mut msg = rng.gen::<[u8; 32]>();
+        rng.fill_bytes(&mut msg);
+        let sig = sk.sign_message_with_bip340(&msg, &mut rng);
+
+        assert!(pk.verify_bip340_signature(&msg, &sig));
     }
 }
 
@@ -134,8 +172,8 @@ fn should_reject_high_s_in_signature_unless_malleable() -> Result<(), KeyDecodin
     let msg = b"test";
     let sig = hex::decode("6471F8E5E63D6055AA6F6D3A8EBF49935D1316D6A54B9B09465B3BEB38E3AC14CE0FFBABD8E3248BEEBD568DCBCC7861126B1AB88E721D0206E9D67ECD878C7C").unwrap();
 
-    assert!(!pk.verify_signature(msg, &sig));
-    assert!(pk.verify_signature_with_malleability(msg, &sig));
+    assert!(!pk.verify_ecdsa_signature(msg, &sig));
+    assert!(pk.verify_ecdsa_signature_with_malleability(msg, &sig));
 
     // Test again using the pre-hashed variants:
     let msg_hash: [u8; 32] = {
@@ -145,8 +183,8 @@ fn should_reject_high_s_in_signature_unless_malleable() -> Result<(), KeyDecodin
         sha256.finalize().into()
     };
 
-    assert!(!pk.verify_signature_prehashed(&msg_hash, &sig));
-    assert!(pk.verify_signature_prehashed_with_malleability(&msg_hash, &sig));
+    assert!(!pk.verify_ecdsa_signature_prehashed(&msg_hash, &sig));
+    assert!(pk.verify_ecdsa_signature_prehashed_with_malleability(&msg_hash, &sig));
 
     Ok(())
 }
@@ -256,9 +294,60 @@ fn should_serialization_and_deserialization_round_trip_for_public_keys(
         assert_eq!(key_via_sec1c.serialize_sec1(false), expected);
         assert_eq!(key_via_der.serialize_sec1(false), expected);
         assert_eq!(key_via_pem.serialize_sec1(false), expected);
+
+        // This only holds for keys with an even y coordinate
+        if key.serialize_sec1(false)[0] == 0x02 {
+            let key_via_bip340 = PublicKey::deserialize_bip340(&key.serialize_bip340())?;
+            assert_eq!(key_via_bip340.serialize_sec1(false), expected);
+        }
     }
 
     Ok(())
+}
+
+#[test]
+fn should_match_bip340_reference_test_signatures() {
+    struct Bip340Test {
+        msg: Vec<u8>,
+        sig: Vec<u8>,
+        pk: Vec<u8>,
+        accept: bool,
+    }
+
+    impl Bip340Test {
+        fn new(pk: &'static str, msg: &'static str, sig: &'static str, accept: bool) -> Self {
+            let pk = hex::decode(pk).unwrap();
+            let msg = hex::decode(msg).unwrap();
+            let sig = hex::decode(sig).unwrap();
+            Self {
+                pk,
+                msg,
+                sig,
+                accept,
+            }
+        }
+    }
+
+    let bip340_tests = [
+        Bip340Test::new("F9308A019258C31049344F85F89D5229B531C845836F99B08601F113BCE036F9", "0000000000000000000000000000000000000000000000000000000000000000", "E907831F80848D1069A5371B402410364BDF1C5F8307B0084C55F1CE2DCA821525F66A4A85EA8B71E482A74F382D2CE5EBEEE8FDB2172F477DF4900D310536C0", true),
+        Bip340Test::new("DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659", "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89", "6896BD60EEAE296DB48A229FF71DFE071BDE413E6D43F917DC8DCF8C78DE33418906D11AC976ABCCB20B091292BFF4EA897EFCB639EA871CFA95F6DE339E4B0A", true),
+        Bip340Test::new("DD308AFEC5777E13121FA72B9CC1B7CC0139715309B086C960E18FD969774EB8", "7E2D58D8B3BCDF1ABADEC7829054F90DDA9805AAB56C77333024B9D0A508B75C", "5831AAEED7B44BB74E5EAB94BA9D4294C49BCF2A60728D8B4C200F50DD313C1BAB745879A5AD954A72C45A91C3A51D3C7ADEA98D82F8481E0E1E03674A6F3FB7", true),
+        Bip340Test::new("25D1DFF95105F5253C4022F628A996AD3A0D95FBF21D468A1B33F8C160D8F517", "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", "7EB0509757E246F19449885651611CB965ECC1A187DD51B64FDA1EDC9637D5EC97582B9CB13DB3933705B32BA982AF5AF25FD78881EBB32771FC5922EFC66EA3", true),
+        Bip340Test::new("D69C3509BB99E412E68B0FE8544E72837DFA30746D8BE2AA65975F29D22DC7B9", "4DF3C3F68FCC83B27E9D42C90431A72499F17875C81A599B566C9889B9696703", "00000000000000000000003B78CE563F89A0ED9414F5AA28AD0D96D6795F9C6376AFB1548AF603B3EB45C9F8207DEE1060CB71C04E80F593060B07D28308D7F4", true),
+        Bip340Test::new("DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659", "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89", "FFF97BD5755EEEA420453A14355235D382F6472F8568A18B2F057A14602975563CC27944640AC607CD107AE10923D9EF7A73C643E166BE5EBEAFA34B1AC553E2", false),
+        Bip340Test::new("DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659", "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89", "1FA62E331EDBC21C394792D2AB1100A7B432B013DF3F6FF4F99FCB33E0E1515F28890B3EDB6E7189B630448B515CE4F8622A954CFE545735AAEA5134FCCDB2BD", false),
+        Bip340Test::new("DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659", "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89", "6CFF5C3BA86C69EA4B7376F31A9BCB4F74C1976089B2D9963DA2E5543E177769961764B3AA9B2FFCB6EF947B6887A226E8D7C93E00C5ED0C1834FF0D0C2E6DA6", false),
+        Bip340Test::new("DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659", "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89", "0000000000000000000000000000000000000000000000000000000000000000123DDA8328AF9C23A94C1FEECFD123BA4FB73476F0D594DCB65C6425BD186051", false),
+        Bip340Test::new("DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659", "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89", "00000000000000000000000000000000000000000000000000000000000000017615FBAF5AE28864013C099742DEADB4DBA87F11AC6754F93780D5A1837CF197", false),
+        Bip340Test::new("DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659", "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89", "4A298DACAE57395A15D0795DDBFD1DCB564DA82B0F269BC70A74F8220429BA1D69E89B4C5564D00349106B8497785DD7D1D713A8AE82B32FA79D5F7FC407D39B", false),
+        Bip340Test::new("DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659", "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89", "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F69E89B4C5564D00349106B8497785DD7D1D713A8AE82B32FA79D5F7FC407D39B", false),
+        Bip340Test::new("DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659", "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89", "6CFF5C3BA86C69EA4B7376F31A9BCB4F74C1976089B2D9963DA2E5543E177769FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", false),
+    ];
+
+    for tv in bip340_tests {
+        let pk = PublicKey::deserialize_bip340(&tv.pk).unwrap();
+        assert_eq!(pk.verify_bip340_signature(&tv.msg, &tv.sig), tv.accept);
+    }
 }
 
 #[test]
@@ -335,6 +424,28 @@ fn should_match_slip10_derivation_test_data() {
         hex::encode(derived_secret_key.public_key().serialize_sec1(true)),
         "Derived keys match"
     );
+}
+
+#[test]
+fn should_handle_short_len_prehashed() {
+    // k256 somewhat arbitrarily rejects prehashed digests under 128
+    // bits. This is somewhat ok, since we hopefully don't ever do
+    // this, but it makes an otherwise infalliable function fallible,
+    // which is unfortunate. So we perform the (correct/standard)
+    // prefixing of zero padding the digest in order to make the
+    // function infalliable. Test this using a short input generated
+    // by another ECDSA implementation
+
+    let pk = PublicKey::deserialize_sec1(&hex!(
+        "0374558eb18c338e6116fbd147eba139210774240dcc7dbc450423fc1b0e505d8e"
+    ))
+    .expect("Invalid key");
+
+    let prehash = hex!("2F45495C63D9BD3BD436D855");
+
+    let sig = hex!("307B5A1D99434C89F243BF2678EF969FD24A85BC3B62CFD0E083715FA91879FD918BCF8FAB5F622713284C42A73D5F96CAAE4BD94BC69655A43F18FB1DF89039");
+
+    assert!(pk.verify_ecdsa_signature_prehashed_with_malleability(&prehash, &sig));
 }
 
 #[test]
@@ -420,9 +531,7 @@ mod try_recovery_from_digest {
         let private_key = PrivateKey::generate_using_rng(rng);
         let public_key = private_key.public_key();
         let digest = rng.gen::<[u8; 32]>();
-        let signature = private_key
-            .sign_digest(&digest)
-            .expect("cannot fail because digest > 16 bytes");
+        let signature = private_key.sign_digest_with_ecdsa(&digest);
 
         let recid = public_key
             .try_recovery_from_digest(&digest, &signature)

@@ -1,17 +1,25 @@
-type CanisterStatusResult = record {
-  status : CanisterStatusType;
-  memory_size : nat;
-  cycles : nat;
-  settings : DefiniteCanisterSettings;
-  module_hash : opt vec nat8;
+type UpgradeRootProposalPayload = record {
+  module_arg: blob;
+  stop_upgrade_start: bool;
+  wasm_module: blob;
 };
-type CanisterStatusType = variant { stopped; stopping; running };
-type DefiniteCanisterSettings = record { controllers : vec principal };
+type HardResetRootToVersionPayload = record {
+  wasm_module: blob;
+  init_arg: blob;
+};
+type CanisterSettings = record {
+  controllers: opt vec principal;
+  compute_allocation: opt nat;
+  memory_allocation: opt nat;
+  freezing_threshold: opt nat;
+  reserved_cycles_limit: opt nat;
+  wasm_memory_limit: opt nat;
+  log_visibility: opt LogVisibility;
+};
+type LogVisibility = variant { controllers; public };
+
 service : {
-  upgrade_root:
-   (record {
-      module_arg: blob;
-      stop_upgrade_start: bool;
-      wasm_module: blob;
-    }) -> ();
+  upgrade_root: (UpgradeRootProposalPayload) -> ();
+  hard_reset_root_to_version: (HardResetRootToVersionPayload) -> ();
+  upgrade_root_settings: (CanisterSettings) -> ();
 }
