@@ -129,9 +129,11 @@ mod tests;
 pub mod tla;
 #[cfg(feature = "test")]
 use tla::{
-    split_neuron_desc, tla_log_locals, tla_update_method, InstrumentationState, ToTla,
-    TLA_INSTRUMENTATION_STATE, TLA_TRACES,
+    split_neuron_desc, tla_update_method, InstrumentationState, ToTla, TLA_INSTRUMENTATION_STATE,
+    TLA_TRACES,
 };
+
+use ic_nervous_system_common::tla_log_locals;
 
 // The limits on NNS proposal title len (in bytes).
 const PROPOSAL_TITLE_BYTES_MIN: usize = 5;
