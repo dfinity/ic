@@ -244,6 +244,7 @@ impl FakeDriver {
 
 #[async_trait]
 impl IcpLedger for FakeDriver {
+    // TODO(oggy): add a tla_function here to properly stack labels
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
@@ -265,8 +266,7 @@ impl IcpLedger for FakeDriver {
             "Issuing ledger transfer from account {} (subaccount {}) to account {} amount {} fee {}",
             from_account, from_subaccount.as_ref().map_or_else(||"None".to_string(), ToString::to_string), to_account, amount_e8s, fee_e8s
         );
-        // TODO(oggy): don't do the to_tla_value conversion in the macro,
-        //       can't distinguish between functions and records now - though maybe not necessary?
+        // TODO(oggy): make some macros for nicer record/fn construction
         tla_log_request!(
             "WaitForTransfer",
             Destination::new("ledger"),

@@ -10,6 +10,15 @@ use icp_ledger::{
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 
+#[cfg(feature = "tla")]
+use ic_nervous_system_common::tla::{
+    self, account_to_tla, opt_subaccount_to_tla, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
+};
+#[cfg(feature = "tla")]
+use std::collections::BTreeMap;
+
+use ic_nervous_system_common::{tla_log_request, tla_log_response};
+
 pub struct IcpLedgerCanister {
     id: CanisterId,
 }
@@ -68,6 +77,18 @@ impl IcpLedger for IcpLedgerCanister {
         to: AccountIdentifier,
         memo: u64,
     ) -> Result<u64, NervousSystemError> {
+        tla_log_request!(
+            "WaitForTransfer",
+            Destination::new("ledger"),
+            "Transfer",
+            tla::TlaValue::Record(BTreeMap::from([
+                ("amount".to_string(), amount_e8s.to_tla_value()),
+                ("fee".to_string(), fee_e8s.to_tla_value()),
+                ("from".to_string(), opt_subaccount_to_tla(&from_subaccount)),
+                ("to".to_string(), account_to_tla(to)),
+            ]))
+        );
+
         // Send 'amount_e8s' to the target account.
         //
         // We expect the 'fee_e8s' AND 'amount_e8s' to be
@@ -89,6 +110,21 @@ impl IcpLedger for IcpLedgerCanister {
             },
         )
         .await;
+
+        tla_log_response!(
+            Destination::new("ledger"),
+            if result.is_err() {
+                tla::TlaValue::Variant {
+                    tag: "Fail".to_string(),
+                    value: Box::new(tla::TlaValue::Constant("UNIT".to_string())),
+                }
+            } else {
+                tla::TlaValue::Variant {
+                    tag: "TransferOk".to_string(),
+                    value: Box::new(tla::TlaValue::Constant("UNIT".to_string())),
+                }
+            }
+        );
 
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(format!(

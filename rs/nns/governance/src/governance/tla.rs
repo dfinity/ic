@@ -14,26 +14,14 @@ pub use tla_instrumentation_proc_macros::tla_update_method;
 
 pub use tla_instrumentation::checker::{check_tla_code_link, PredicateDescription};
 
-pub use ic_nervous_system_common::tla::{TLA_INSTRUMENTATION_STATE, TLA_TRACES};
+pub use ic_nervous_system_common::tla::{
+    account_to_tla, opt_subaccount_to_tla, TLA_INSTRUMENTATION_STATE, TLA_TRACES,
+};
 pub use ic_nervous_system_common::{tla_log_locals, tla_log_request, tla_log_response};
 
 use std::path::PathBuf;
 
 use icp_ledger::{AccountIdentifier, Subaccount};
-
-fn subaccount_to_tla(subaccount: &Subaccount) -> TlaValue {
-    let account = AccountIdentifier::new(
-        ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
-        Some(subaccount.clone()),
-    );
-    TlaValue::Literal(account.to_string())
-}
-
-fn raw_subaccount_to_tla_value(account: [u8; 32]) -> TlaValue {
-    subaccount_to_tla(
-        &Subaccount::try_from(&account[..]).expect("Couldn't parse the array as a subaccount"),
-    )
-}
 
 fn neuron_global(gov: &Governance) -> TlaValue {
     let neuron_map: BTreeMap<u64, TlaValue> = gov
@@ -62,6 +50,12 @@ fn neuron_global(gov: &Governance) -> TlaValue {
         })
         .collect();
     neuron_map.to_tla_value()
+}
+
+fn raw_subaccount_to_tla_value(account: [u8; 32]) -> TlaValue {
+    subaccount_to_tla(
+        &Subaccount::try_from(&account[..]).expect("Couldn't parse the array as a subaccount"),
+    )
 }
 
 fn neuron_id_by_account() -> TlaValue {
@@ -107,10 +101,6 @@ macro_rules! tla_get_globals {
     ($self:expr) => {
         tla::get_tla_globals($self)
     };
-}
-
-pub fn account_to_tla(account: AccountIdentifier) -> TlaValue {
-    account.to_string().as_str().to_tla_value()
 }
 
 fn function_domain_union(
