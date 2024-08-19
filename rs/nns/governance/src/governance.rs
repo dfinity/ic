@@ -2669,7 +2669,7 @@ impl Governance {
         .build();
 
         // Add the child neuron to the set of neurons undergoing ledger updates.
-        // let _child_lock = self.lock_neuron_for_command(child_nid.id, in_flight_command.clone())?;
+        let _child_lock = self.lock_neuron_for_command(child_nid.id, in_flight_command.clone())?;
 
         // We need to add the "embryo neuron" to the governance proto only after
         // acquiring the lock. Indeed, in case there is already a pending
