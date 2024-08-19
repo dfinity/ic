@@ -1,23 +1,26 @@
-use crate::convert::{self, from_arg, to_model_account_identifier};
-use crate::errors::ApiError;
-use crate::models::{ConstructionParseRequest, ConstructionParseResponse, ParsedTransaction};
-use crate::request_handler::{verify_network_id, RosettaRequestHandler};
-use crate::request_types::{
-    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity, NeuronInfo,
-    PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType, SetDissolveTimestamp, Spawn,
-    Stake, StakeMaturity, StartDissolve, StopDissolve,
+use crate::{
+    convert::{self, from_arg, to_model_account_identifier},
+    errors::ApiError,
+    models::{ConstructionParseRequest, ConstructionParseResponse, ParsedTransaction},
+    request_handler::{verify_network_id, RosettaRequestHandler},
+    request_types::{
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity,
+        NeuronInfo, PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType,
+        SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
+    },
 };
 use rosetta_core::objects::ObjectMap;
 
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     manage_neuron::{self, Command, NeuronIdOrSubaccount},
     ClaimOrRefreshNeuronFromAccount, ManageNeuron,
 };
 
-use crate::models::seconds::Seconds;
-use crate::request::Request;
-use ic_types::messages::{Blob, HttpCallContent, HttpCanisterUpdate};
-use ic_types::PrincipalId;
+use crate::{models::seconds::Seconds, request::Request};
+use ic_types::{
+    messages::{Blob, HttpCallContent, HttpCanisterUpdate},
+    PrincipalId,
+};
 use icp_ledger::{AccountIdentifier, Operation, SendArgs};
 use std::convert::TryFrom;
 
@@ -595,23 +598,23 @@ fn follow(
 #[cfg(test)]
 mod tests {
     use ic_base_types::CanisterId;
-    use proptest::prop_assert;
-    use proptest::test_runner::TestCaseError;
-    use proptest::{prop_assert_eq, proptest, strategy::Strategy};
+    use proptest::{
+        prop_assert, prop_assert_eq, proptest, strategy::Strategy, test_runner::TestCaseError,
+    };
     use rand_chacha::rand_core::OsRng;
-    use std::str::FromStr;
-    use std::time::SystemTime;
+    use std::{str::FromStr, time::SystemTime};
     use url::Url;
 
-    use crate::ledger_client::LedgerClient;
-    use crate::models::operation::OperationType;
-    use crate::models::Amount;
-    use crate::models::{
-        ConstructionCombineRequest, ConstructionDeriveRequest, ConstructionParseRequest,
-        ConstructionPayloadsRequest, ConstructionPayloadsRequestMetadata, Currency, CurveType,
-        Operation, OperationIdentifier, PublicKey, Signature, SignatureType,
+    use crate::{
+        ledger_client::LedgerClient,
+        models::{
+            operation::OperationType, Amount, ConstructionCombineRequest,
+            ConstructionDeriveRequest, ConstructionParseRequest, ConstructionPayloadsRequest,
+            ConstructionPayloadsRequestMetadata, Currency, CurveType, Operation,
+            OperationIdentifier, PublicKey, Signature, SignatureType,
+        },
+        request_handler::RosettaRequestHandler,
     };
-    use crate::request_handler::RosettaRequestHandler;
     use rosetta_core::objects::ObjectMap;
 
     #[test]

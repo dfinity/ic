@@ -4,7 +4,6 @@ workspace(
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
-load("//third_party/lmdb-rkv-0.14.99:repository.bzl", "lmdb_rkv_repository")
 load("mainnet-canisters.bzl", "mainnet_ck_canisters", "mainnet_core_nns_canisters", "mainnet_sns_canisters")
 
 http_archive(
@@ -316,8 +315,6 @@ container_pull(
 # Third party dependencies that require special treatment
 
 lmdb_repository()
-
-lmdb_rkv_repository(name = "lmdb_rkv")
 
 http_archive(
     name = "pigz",

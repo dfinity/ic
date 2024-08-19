@@ -36,7 +36,9 @@ use ic_system_test_driver::{
     driver::{
         ic::InternetComputer,
         test_env::TestEnv,
-        test_env_api::{HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+        test_env_api::{
+            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+        },
     },
     util::block_on,
 };
@@ -194,7 +196,7 @@ pub fn test_everything(env: TestEnv) {
         let (_cert, tip_idx) = get_tip(&ledger).await;
 
         info!(log, "Starting Rosetta");
-        let rosetta_api_bin_path = rosetta_api_bin_path(&env);
+        let rosetta_api_bin_path = rosetta_api_bin_path();
         let mut rosetta_api_serv = RosettaApiHandle::start(
             env.logger(),
             rosetta_api_bin_path.clone(),
@@ -202,7 +204,7 @@ pub fn test_everything(env: TestEnv) {
             8099,
             ledger.canister_id(),
             governance.canister_id(),
-            rosetta_workspace_path(&env),
+            rosetta_workspace_path(),
             Some(&root_key),
         )
         .await;
@@ -238,18 +240,18 @@ pub fn test_everything(env: TestEnv) {
         );
 
         // Rosetta-cli tests
-        let cli_json = PathBuf::from(format!("{}/rosetta_cli.json", rosetta_workspace_path(&env)));
+        let cli_json = PathBuf::from(format!("{}/rosetta_cli.json", rosetta_workspace_path()));
         let cli_ros = PathBuf::from(format!(
             "{}/rosetta_workflows.ros",
-            rosetta_workspace_path(&env)
+            rosetta_workspace_path()
         ));
         let conf = rosetta_api_serv.generate_rosetta_cli_config(&cli_json, &cli_ros);
         info!(log, "Running rosetta-cli check:construction");
-        rosetta_cli_construction_check(&env, &conf);
+        rosetta_cli_construction_check(&conf);
         info!(log, "check:construction finished successfully");
 
         info!(log, "Running rosetta-cli check:data");
-        rosetta_cli_data_check(&env, &conf);
+        rosetta_cli_data_check(&conf);
         info!(log, "check:data finished successfully");
 
         // Finish up. (calling stop is optional because it would be called on drop, but
@@ -265,7 +267,7 @@ pub fn test_everything(env: TestEnv) {
             8101,
             ledger.canister_id(),
             governance.canister_id(),
-            rosetta_workspace_path(&env),
+            rosetta_workspace_path(),
             Some(&root_key),
         )
         .await;
@@ -300,7 +302,7 @@ pub fn test_everything(env: TestEnv) {
             8100,
             ledger_for_governance.canister_id(),
             governance.canister_id(),
-            rosetta_workspace_path(&env),
+            rosetta_workspace_path(),
             Some(&root_key),
         )
         .await;
@@ -335,7 +337,7 @@ async fn test_wrong_canister_id(env: &TestEnv, node_url: Url, root_key_blob: Opt
     let (_acc1, kp, _pk, pid) = make_user_ed25519(1);
 
     let some_can_id = CanisterId::unchecked_from_principal(pid);
-    let rosetta_api_bin_path = rosetta_api_bin_path(env);
+    let rosetta_api_bin_path = rosetta_api_bin_path();
     let ros = RosettaApiHandle::start(
         env.logger(),
         rosetta_api_bin_path,
@@ -343,7 +345,7 @@ async fn test_wrong_canister_id(env: &TestEnv, node_url: Url, root_key_blob: Opt
         8101,
         some_can_id,
         some_can_id,
-        rosetta_workspace_path(env),
+        rosetta_workspace_path(),
         root_key_blob,
     )
     .await;
@@ -361,8 +363,8 @@ async fn test_wrong_canister_id(env: &TestEnv, node_url: Url, root_key_blob: Opt
     );
 }
 
-fn rosetta_cli_construction_check(env: &TestEnv, conf_file: &str) {
-    let rosetta_cli = rosetta_cli_bin_path(env);
+fn rosetta_cli_construction_check(conf_file: &str) {
+    let rosetta_cli = rosetta_cli_bin_path();
     let output = std::process::Command::new("timeout")
         .args([
             "300s",
@@ -387,8 +389,8 @@ fn rosetta_cli_construction_check(env: &TestEnv, conf_file: &str) {
     );
 }
 
-fn rosetta_cli_data_check(env: &TestEnv, conf_file: &str) {
-    let rosetta_cli = rosetta_cli_bin_path(env);
+fn rosetta_cli_data_check(conf_file: &str) {
+    let rosetta_cli = rosetta_cli_bin_path();
     let output = std::process::Command::new("timeout")
         .args([
             "300s",
@@ -413,19 +415,19 @@ fn rosetta_cli_data_check(env: &TestEnv, conf_file: &str) {
     );
 }
 
-fn rosetta_workspace_path(env: &TestEnv) -> String {
-    env.get_dependency_path("rs/tests/rosetta_workspace")
+fn rosetta_workspace_path() -> String {
+    get_dependency_path("rs/tests/rosetta_workspace")
         .into_os_string()
         .into_string()
         .unwrap()
 }
 
-fn rosetta_api_bin_path(env: &TestEnv) -> PathBuf {
-    env.get_dependency_path("rs/rosetta-api/ic-rosetta-api")
+fn rosetta_api_bin_path() -> PathBuf {
+    get_dependency_path("rs/rosetta-api/ic-rosetta-api")
 }
 
-fn rosetta_cli_bin_path(env: &TestEnv) -> String {
-    env.get_dependency_path("external/rosetta-cli/rosetta-cli")
+fn rosetta_cli_bin_path() -> String {
+    get_dependency_path("external/rosetta-cli/rosetta-cli")
         .into_os_string()
         .into_string()
         .unwrap()

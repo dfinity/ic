@@ -15,7 +15,7 @@ use http::StatusCode;
 use ic_types::CanisterId;
 use tower::Service;
 
-use crate::routes::test::test_route_subnet;
+use crate::routes::{test::test_route_subnet, RequestType};
 
 struct TestState {
     failures: u8,

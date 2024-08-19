@@ -20,6 +20,7 @@ use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
+use icrc_ledger_types::icrc21::errors::ErrorInfo;
 use icrc_ledger_types::icrc21::errors::Icrc21Error;
 use icrc_ledger_types::icrc21::requests::ConsentMessageMetadata;
 use icrc_ledger_types::icrc21::requests::{
@@ -108,7 +109,6 @@ pub struct UpgradeArgs {
     pub transfer_fee: Option<Nat>,
     pub change_fee_collector: Option<ChangeFeeCollector>,
     pub feature_flags: Option<FeatureFlags>,
-    pub maximum_number_of_accounts: Option<u64>,
     pub accounts_overflow_trim_quantity: Option<u64>,
     pub change_archive_options: Option<ChangeArchiveOptions>,
 }
@@ -3681,6 +3681,30 @@ fn test_icrc21_approve_message(
     from_account: Account,
     spender_account: Account,
 ) {
+    let message = &icrc21_consent_message(
+        env,
+        canister_id,
+        from_account.owner,
+        ConsentMessageRequest {
+            method: "INVALID_FUNCTION".to_owned(),
+            arg: Encode!(&()).unwrap(),
+            user_preferences: ConsentMessageSpec {
+                metadata: ConsentMessageMetadata {
+                    language: "en".to_string(),
+                    utc_offset_minutes: None,
+                },
+                device_spec: Some(DisplayMessageType::GenericDisplay),
+            },
+        },
+    )
+    .unwrap_err();
+    match message {
+        Icrc21Error::UnsupportedCanisterCall(ErrorInfo { description }) => {
+            assert!(description.contains("The function provided is not supported: INVALID_FUNCTION.\n Supported functions for ICRC-21 are: [\"icrc1_transfer\", \"icrc2_approve\", \"icrc2_transfer_from\"].\n Error is: VariantNotFound"),"Unexpected Error message: {}", description)
+        }
+        _ => panic!("Unexpected error: {:?}", message),
+    }
+
     // Test the message for icrc2 approve
     let approve_args = ApproveArgs {
         spender: spender_account,

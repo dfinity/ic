@@ -12,10 +12,10 @@ candid = { workspace = true }
 canister-test = { path = "../../../../rust_canisters/canister_test" }
 ed25519-dalek = { workspace = true }
 ic-agent = { workspace = true }
+ic-base-types = { path = "../../../../types/base_types" }
 ic-canister-client = { path = "../../../../canister_client" }
 ic-config = { path = "../../../../config" }
 ic-constants = { path = "../../../../constants" }
-ic-base-types = { path = "../../../../types/base_types" }
 ic-management-canister-types = { path = "../../../../types/management_canister_types" }
 ic-message = { path = "../../../test_canisters/message" }
 ic-nervous-system-common-test-keys = { path = "../../../../nervous_system/common/test_keys" }
