@@ -5,6 +5,11 @@ use walkdir::WalkDir;
 
 use crate::components_parser::{get_icos_manifest, IcosManifest, COMPONENTS_PATH};
 
+const IGNORED_COMPONENT_FILES: &[&str] = &[
+    "components/networking/dev-certs/root_cert_gen.sh",
+    "components/networking/dev-certs/canister_http_test_ca.key",
+];
+
 pub fn check_unused_components(repo_root: &Path) -> Result<()> {
     let icos_manifest = get_icos_manifest(repo_root)?;
 
@@ -42,6 +47,9 @@ fn collect_repo_files(dir: &Path) -> Result<HashSet<PathBuf>, std::io::Error> {
                 if file_name.ends_with(".bzl")
                     || file_name.ends_with(".bazel")
                     || file_name.to_lowercase().starts_with("readme.")
+                    || IGNORED_COMPONENT_FILES.iter().any(|&ignored_file_path| {
+                        path.to_string_lossy().ends_with(ignored_file_path)
+                    })
                 {
                     continue;
                 }
