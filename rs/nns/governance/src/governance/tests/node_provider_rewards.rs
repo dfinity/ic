@@ -90,7 +90,7 @@ fn test_list_node_provider_rewards_api() {
 
     let result = governance.list_node_provider_rewards(2);
 
-    assert_eq!(result, vec![rewards_1, rewards_2]);
+    assert_eq!(result, vec![rewards_2, rewards_1]);
 }
 
 #[test]
@@ -176,6 +176,6 @@ fn test_list_node_provider_rewards_api_with_paging_and_filters() {
     assert_eq!(result.len(), 5);
     assert_eq!(
         result,
-        vec![rewards_2, rewards_3, rewards_4, rewards_5, rewards_6]
+        vec![rewards_6, rewards_5, rewards_4, rewards_3, rewards_2]
     );
 }
