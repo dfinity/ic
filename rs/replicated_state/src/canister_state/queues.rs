@@ -3,7 +3,7 @@ mod queue;
 #[cfg(test)]
 mod tests;
 
-use self::message_pool::{Context, MessagePool};
+use self::message_pool::{Context, Kind, MessagePool};
 use self::queue::{CanisterQueue, CanisterQueueItem, IngressQueue};
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{CanisterState, CheckpointLoadingMetrics, InputQueueType, NextInputQueue, StateError};
@@ -285,7 +285,7 @@ impl CanisterQueues {
                     Ok(_) => {
                         self.pool
                             .take(id)
-                            .expect("peek() returned a message, take() should not fail");
+                            .expect("ger() returned a message, take() should not fail");
                         assert_eq!(Some(*item), queue.pop());
                     }
                 }
@@ -374,15 +374,10 @@ impl CanisterQueues {
         };
 
         self.queue_stats.on_push(&msg, Context::Inbound);
-        match msg {
-            RequestOrResponse::Request(_) => {
-                let id = self.pool.insert_inbound(msg);
-                input_queue.push_request(id)
-            }
-            RequestOrResponse::Response(_) => {
-                let id = self.pool.insert_inbound(msg);
-                input_queue.push_response(id)
-            }
+        let id = self.pool.insert_inbound(msg);
+        match id.kind() {
+            Kind::Request => input_queue.push_request(id),
+            Kind::Response => input_queue.push_response(id),
         }
 
         // Add sender canister ID to the appropriate input schedule queue if it is not
@@ -938,7 +933,7 @@ impl CanisterQueues {
     /// previously empty queue also requires the full set of local canisters to decide whether
     /// the destination canister was local or remote.
     ///
-    /// Returns the number of requests that were timed out.
+    /// Returns the number of messages that were timed out.
     pub fn time_out_messages(
         &mut self,
         current_time: Time,
