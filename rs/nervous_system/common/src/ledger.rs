@@ -12,7 +12,9 @@ use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use mockall::automock;
 
 #[cfg(feature = "test")]
-use crate::tla::{Destination, ToTla, TLA_INSTRUMENTATION_STATE};
+use crate::tla::{
+    self, account_to_tla, opt_subaccount_to_tla, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
+};
 #[cfg(feature = "test")]
 use std::collections::BTreeMap;
 
@@ -131,6 +133,7 @@ impl ICRC1Ledger for IcpLedgerCanister {
 
 #[async_trait]
 impl IcpLedger for IcpLedgerCanister {
+    // TODO(oggy): add a tla_function here to properly stack labels
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
@@ -139,21 +142,17 @@ impl IcpLedger for IcpLedgerCanister {
         to: AccountIdentifier,
         memo: u64,
     ) -> Result<u64, NervousSystemError> {
-        // TODO(oggy): don't do the to_tla_value conversion in the macro,
-        //       can't distinguish between functions and records now - though maybe not necessary?
+        // TODO(oggy): make some macros for nicer record/fn construction
         tla_log_request!(
             "WaitForTransfer",
             Destination::new("ledger"),
             "Transfer",
-            BTreeMap::from([
-                ("amount", amount_e8s),
-                ("fee", fee_e8s),
-                // ("from", if )
-                // TODO(oggy): what to do with options?
-                // ("from_subaccount", ...),
-                // TODO(oggy): what to do with this?
-                // ("to", ...),
-            ])
+            tla::TlaValue::Record(BTreeMap::from([
+                ("amount".to_string(), amount_e8s.to_tla_value()),
+                ("fee".to_string(), fee_e8s.to_tla_value()),
+                ("from".to_string(), opt_subaccount_to_tla(&from_subaccount)),
+                ("to".to_string(), account_to_tla(to)),
+            ]))
         );
 
         // Send 'amount_e8s' to the target account.
@@ -177,6 +176,21 @@ impl IcpLedger for IcpLedgerCanister {
             },
         )
         .await;
+        tla_log_response!(
+            Destination::new("ledger"),
+            if result.is_err() {
+                tla::TlaValue::Variant {
+                    tag: "Fail".to_string(),
+                    value: Box::new(tla::TlaValue::Constant("UNIT".to_string())),
+                }
+            } else {
+                tla::TlaValue::Variant {
+                    tag: "TransferOk".to_string(),
+                    value: Box::new(tla::TlaValue::Constant("UNIT".to_string())),
+                }
+            }
+        );
+
         tla_log_response!(Destination::new("ledger"), result.is_err());
 
         result.map_err(|(code, msg)| {
