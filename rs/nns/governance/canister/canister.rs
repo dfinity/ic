@@ -53,13 +53,14 @@ use ic_nns_governance_api::{
         GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
         ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProviderRewardsRequest,
         ListNodeProviderRewardsResponse, ListNodeProvidersResponse, ListProposalInfo,
-        ListProposalInfoResponse, ManageNeuron, ManageNeuronCommandRequest, ManageNeuronRequest,
+        ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
         ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo,
         NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent, RewardNodeProvider,
         RewardNodeProviders, SettleCommunityFundParticipation,
         SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
         UpdateNodeProvider, Vote,
     },
+    subnet_rental::{SubnetRentalProposalPayload, SubnetRentalRequest},
 };
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
 use prost::Message;
