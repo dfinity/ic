@@ -7,13 +7,15 @@ DEPENDENCIES = [
     "//rs/async_utils",
     "//rs/monitoring/adapter_metrics/service",
     "//rs/monitoring/logger",
+    "@crate_index//:hyper",
+    "@crate_index//:hyper-util",
     "@crate_index//:prometheus",
     "@crate_index//:protobuf",
     "@crate_index//:slog",
     "@crate_index//:slog-async",
     "@crate_index//:tokio",
-    "@crate_index//:tonic",
-    "@crate_index//:tower",
+    "@crate_index//:tonic_0_12_0",
+    "@crate_index//:tower_0_5_0",
 ]
 
 rust_library(

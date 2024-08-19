@@ -11,4 +11,4 @@ ic-metrics = { path = "../../metrics" }
 protobuf = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
-tonic = { workspace = true }
+tonic = "^0.12.0"

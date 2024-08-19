@@ -40,6 +40,7 @@ async fn spinup_canister(wasm_module: Vec<u8>) -> CallResult<()> {
                 memory_allocation: None,
                 freezing_threshold: None,
                 reserved_cycles_limit: None,
+                wasm_memory_limit: None,
             }),
         },
         INITIAL_CYCLES_BALANCE,

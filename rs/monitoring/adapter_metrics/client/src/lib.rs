@@ -1,3 +1,4 @@
+use hyper_util::rt::TokioIo;
 use ic_adapter_metrics_service::adapter_metrics_service_client::AdapterMetricsServiceClient;
 use ic_adapter_metrics_service::ScrapeRequest;
 use ic_async_utils::ExecuteOnTokioRuntime;
@@ -43,9 +44,13 @@ impl AdapterMetrics {
         let endpoint = Endpoint::try_from("http://[::]:50152")
             .unwrap()
             .executor(ExecuteOnTokioRuntime(rt_handle));
+
         let channel = endpoint.connect_with_connector_lazy(service_fn(move |_: Uri| {
-            // Connect to a Uds socket
-            UnixStream::connect(uds_path.clone())
+            let uds_path = uds_path.clone();
+            async move {
+                // Connect to a Uds socket
+                Ok::<_, std::io::Error>(TokioIo::new(UnixStream::connect(uds_path).await?))
+            }
         }));
 
         Self {

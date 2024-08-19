@@ -11,8 +11,8 @@ rust_library(
     deps = [
         # Keep sorted.
         ":build_script",
-        "@crate_index//:prost",
-        "@crate_index//:tonic",
+        "@crate_index//:prost_0_13_0",
+        "@crate_index//:tonic_0_12_0",
     ],
 )
 
@@ -30,7 +30,7 @@ cargo_build_script(
     ],
     deps = [
         # Keep sorted.
-        "@crate_index//:prost-build",
-        "@crate_index//:tonic-build",
+        "@crate_index//:prost-build_0_13_0",
+        "@crate_index//:tonic-build_0_12_0",
     ],
 )

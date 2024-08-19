@@ -3114,6 +3114,7 @@ dependencies = [
  "prost 0.12.2",
  "prost 0.13.1",
  "prost-build 0.12.2",
+ "prost-build 0.13.1",
  "protobuf",
  "publicsuffix",
  "quickcheck",

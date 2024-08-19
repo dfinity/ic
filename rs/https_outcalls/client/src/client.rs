@@ -335,6 +335,7 @@ pub fn grpc_status_code_to_reject(code: Code) -> RejectCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hyper_util::rt::TokioIo;
     use ic_https_outcalls_service::{
         canister_http_service_server::{CanisterHttpService, CanisterHttpServiceServer},
         CanisterHttpSendRequest, CanisterHttpSendResponse,
@@ -402,7 +403,7 @@ mod tests {
 
                 async move {
                     if let Some(client) = client {
-                        Ok(client)
+                        Ok(TokioIo::new(client))
                     } else {
                         Err(std::io::Error::new(
                             std::io::ErrorKind::Other,

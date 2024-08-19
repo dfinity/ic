@@ -15,7 +15,7 @@ use crate::certified_slice_pool::{
 };
 use async_trait::async_trait;
 use hyper::{client::Client, Body, Request, StatusCode, Uri};
-use ic_async_utils::{receive_body_without_timeout, BodyReceiveError};
+use ic_async_utils::BodyReceiveError;
 use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
@@ -1621,13 +1621,17 @@ impl XNetClient for XNetClientImpl {
             })?;
 
             let status = response.status();
-            let content = receive_body_without_timeout(
-                response.into_body(),
-                (5 * POOL_SLICE_BYTE_SIZE_MAX).into(),
-            )
-            .await
-            .map_err(XNetClientError::BodyReadError)?;
-            Ok((status, content))
+
+            // wait for xnet hyper upgrade
+
+            // let content = receive_body_without_timeout(
+            //     response.into_body(),
+            //     (5 * POOL_SLICE_BYTE_SIZE_MAX).into(),
+            // )
+            // .await
+            // .map_err(XNetClientError::BodyReadError)?;
+
+            Ok((status, hyper::body::Bytes::new()))
         })
         .await;
 
