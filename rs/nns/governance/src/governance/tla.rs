@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
-use tokio::task;
+use std::thread;
 
 use super::Governance;
 use crate::storage::with_stable_neuron_indexes;
@@ -248,7 +248,7 @@ pub fn split_neuron_desc() -> Update {
 }
 
 // TODO: use a different model for each update
-pub async fn check_traces() {
+pub fn check_traces() {
     let mut traces = TLA_TRACES.write().unwrap();
     let traces = std::mem::take(&mut (*traces));
 
@@ -259,7 +259,7 @@ pub async fn check_traces() {
     let tla_models_path = PathBuf::from(&runfiles_dir).join("ic/rs/nns/governance/tla");
     let split_neuron_model = tla_models_path.join("Split_Neuron_Apalache.tla");
 
-    let chunk_size = 10;
+    let chunk_size = 20;
     let all_pairs = traces.into_iter().flat_map(|t| {
         t.state_pairs
             .into_iter()
@@ -267,13 +267,13 @@ pub async fn check_traces() {
     });
     let chunks = all_pairs.chunks(chunk_size);
     for chunk in &chunks {
-        let mut set = task::JoinSet::new();
+        let mut handles = vec![];
         for (constants, pair) in chunk {
             let apalache = apalache.clone();
             let constants = constants.clone();
             let pair = pair.clone();
             let tla_module = split_neuron_model.clone();
-            set.spawn_blocking(move || {
+            let handle = thread::spawn(move || {
                 check_tla_code_link(
                     &apalache,
                     PredicateDescription {
@@ -285,7 +285,10 @@ pub async fn check_traces() {
                     constants,
                 )
             });
+            handles.push(handle);
         }
-        while let Some(_res) = set.join_next().await {}
+        for handle in handles {
+            handle.join().unwrap().expect("Apalache call failed");
+        }
     }
 }
