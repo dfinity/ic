@@ -224,7 +224,7 @@ mod eth_get_logs {
 
 #[test]
 fn address_from_pubkey() {
-    use ic_crypto_ecdsa_secp256k1::PublicKey;
+    use ic_crypto_secp256k1::PublicKey;
 
     // Examples come from https://mycrypto.tools/sample_ethaddresses.html
     const EXAMPLES: &[(&str, &str)] = &[

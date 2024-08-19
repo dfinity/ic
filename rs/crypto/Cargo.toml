@@ -15,7 +15,7 @@ ic-adapter-metrics-server = { path = "../monitoring/adapter_metrics/server" }
 ic-async-utils = { path = "../async_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
-ic-crypto-ecdsa-secp256k1 = { path = "ecdsa_secp256k1" }
+ic-crypto-secp256k1 = { path = "secp256k1" }
 ic-crypto-ecdsa-secp256r1 = { path = "ecdsa_secp256r1" }
 ic-crypto-interfaces-sig-verification = { path = "interfaces/sig_verification" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "internal/crypto_lib/basic_sig/ed25519" }
@@ -54,7 +54,7 @@ ic-certification-test-utils = { path = "../certification/test-utils" }
 ic-crypto-ed25519 = { path = "ed25519" }
 ic-crypto-for-verification-only = { path = "for_verification_only" }
 ic-crypto-internal-basic-sig-der-utils = { path = "internal/crypto_lib/basic_sig/der_utils" }
-ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "internal/crypto_lib/basic_sig/ecdsa_secp256k1" }
+ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "internal/crypto_lib/basic_sig/secp256k1" }
 ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "internal/crypto_lib/basic_sig/ecdsa_secp256r1" }
 ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "internal/crypto_lib/basic_sig/rsa_pkcs1" }
 ic-crypto-internal-csp-proptest-utils = { path = "internal/crypto_service_provider/csp_proptest_utils" }
