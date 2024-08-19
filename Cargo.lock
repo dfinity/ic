@@ -16299,6 +16299,7 @@ dependencies = [
  "base64 0.13.1",
  "candid",
  "candid_parser",
+ "ed25519-dalek",
  "flate2",
  "hex",
  "ic-base-types",

@@ -1,4 +1,4 @@
-use candid::Principal;
+use candid::{CandidType, Principal};
 use ic_cdk::api::management_canister::ecdsa::{
     ecdsa_public_key as ic_cdk_ecdsa_public_key, sign_with_ecdsa as ic_cdk_sign_with_ecdsa,
     EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument, EcdsaPublicKeyResponse, SignWithEcdsaArgument,
@@ -8,6 +8,93 @@ use ic_cdk::api::management_canister::http_request::{
     TransformContext, TransformFunc,
 };
 use ic_cdk::{query, update};
+use serde::{Deserialize, Serialize};
+
+#[derive(CandidType, Serialize, Deserialize, Debug, Copy, Clone)]
+pub enum SchnorrAlgorithm {
+    #[serde(rename = "bip340secp256k1")]
+    Bip340Secp256k1,
+    #[serde(rename = "ed25519")]
+    Ed25519,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
+struct SchnorrKeyId {
+    pub algorithm: SchnorrAlgorithm,
+    pub name: String,
+}
+
+#[derive(CandidType, Serialize, Debug)]
+struct SchnorrPublicKeyArgument {
+    pub canister_id: Option<Principal>,
+    pub derivation_path: Vec<Vec<u8>>,
+    pub key_id: SchnorrKeyId,
+}
+
+#[derive(CandidType, Deserialize, Debug)]
+struct SchnorrPublicKeyResponse {
+    pub public_key: Vec<u8>,
+    pub chain_code: Vec<u8>,
+}
+
+#[derive(CandidType, Serialize, Debug)]
+struct SignWithSchnorrArgument {
+    pub message: Vec<u8>,
+    pub derivation_path: Vec<Vec<u8>>,
+    pub key_id: SchnorrKeyId,
+}
+
+#[derive(CandidType, Deserialize, Debug)]
+struct SignWithSchnorrResponse {
+    pub signature: Vec<u8>,
+}
+
+#[update]
+async fn schnorr_public_key(
+    canister_id: Option<Principal>,
+    derivation_path: Vec<Vec<u8>>,
+    key_id: SchnorrKeyId,
+) -> Result<SchnorrPublicKeyResponse, String> {
+    let request = SchnorrPublicKeyArgument {
+        canister_id,
+        derivation_path,
+        key_id,
+    };
+
+    let (res,): (SchnorrPublicKeyResponse,) = ic_cdk::call(
+        Principal::management_canister(),
+        "schnorr_public_key",
+        (request,),
+    )
+    .await
+    .map_err(|e| format!("schnorr_public_key failed {}", e.1))?;
+
+    Ok(res)
+}
+
+#[update]
+async fn sign_with_schnorr(
+    message: Vec<u8>,
+    derivation_path: Vec<Vec<u8>>,
+    key_id: SchnorrKeyId,
+) -> Result<Vec<u8>, String> {
+    let internal_request = SignWithSchnorrArgument {
+        message,
+        derivation_path,
+        key_id,
+    };
+
+    let (internal_reply,): (SignWithSchnorrResponse,) = ic_cdk::api::call::call_with_payment(
+        Principal::management_canister(),
+        "sign_with_schnorr",
+        (internal_request,),
+        25_000_000_000,
+    )
+    .await
+    .map_err(|e| format!("sign_with_schnorr failed {e:?}"))?;
+
+    Ok(internal_reply.signature)
+}
 
 #[update]
 async fn ecdsa_public_key(

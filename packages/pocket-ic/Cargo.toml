@@ -37,6 +37,7 @@ tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
+ed25519-dalek = "2.1"
 flate2 = { workspace = true }
 ic-base-types = { path = "../../rs/types/base_types" }
 ic-universal-canister = { path = "../../rs/universal_canister/lib" }
