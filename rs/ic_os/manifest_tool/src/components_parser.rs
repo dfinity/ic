@@ -62,12 +62,8 @@ impl ManifestEntry {
     }
 }
 
-fn get_manifest(manifest_path: &Path, components_path: &Path) -> Result<Manifest> {
-    let manifest_contents = fs::read_to_string(manifest_path)
-        .with_context(|| format!("Failed to read file: {:?}", manifest_path))?;
-
+fn parse_manifest(manifest_contents: &str, components_path: &Path) -> Result<Manifest> {
     let re = Regex::new(r#"Label\("(.+?)"\): "(.+?)""#)?;
-
     let mut manifest = Manifest::new();
 
     for cap in re.captures_iter(&manifest_contents) {
@@ -77,6 +73,13 @@ fn get_manifest(manifest_path: &Path, components_path: &Path) -> Result<Manifest
     }
 
     Ok(manifest)
+}
+
+fn get_manifest(manifest_path: &Path, components_path: &Path) -> Result<Manifest> {
+    let manifest_contents = fs::read_to_string(manifest_path)
+        .with_context(|| format!("Failed to read file: {:?}", manifest_path))?;
+
+    parse_manifest(&manifest_contents, components_path)
 }
 
 pub fn get_icos_manifest(repo_root: &Path) -> Result<IcosManifest> {
