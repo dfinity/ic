@@ -37,12 +37,11 @@ pub(crate) fn list_node_provider_rewards(limit: u64) -> Vec<ArchivedMonthlyNodeP
 
         let end_range = len;
         let start_range = end_range.saturating_sub(limit);
-        let rewards = (start_range..end_range)
+
+        (start_range..end_range)
             .rev()
             .flat_map(|index| log.get(index))
-            .collect();
-
-        rewards
+            .collect()
     })
 }
 
