@@ -17,6 +17,7 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
+    "//rs/nervous_system/common/test_utils",
     "//rs/nervous_system/root",
     "//rs/nns/cmc",
     "//rs/nns/common",

@@ -553,6 +553,7 @@ k256 = { version = "0.13.3", default-features = false, features = [
 ] }
 lazy_static = "1.4.0"
 libc = "0.2.155"
+libflate = "2.0.0"
 libnss = "0.5.0"
 local-ip-address = "0.5.6"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }

@@ -7,6 +7,7 @@ use canister_test::Project;
 use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
+use ic_nervous_system_common_test_utils::wasm_helpers;
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::{
@@ -32,14 +33,10 @@ use std::{
 };
 
 /// Get a valid tiny WASM for use in tests of a particular SnsCanisterType.
-/// The WASM is the gzip encoding of the trivial WASM 0061736d01000000.
 pub fn test_wasm(canister_type: SnsCanisterType, modify_with: Option<u8>) -> SnsWasm {
     create_modified_sns_wasm(
         &SnsWasm {
-            wasm: hex::decode(
-                "1f8b0808f5a434660003612e7761736d0063482cce656460600000ce334b1c08000000",
-            )
-            .unwrap(),
+            wasm: wasm_helpers::gzip_wasm(wasm_helpers::SMALLEST_VALID_WASM_BYTES),
             canister_type: canister_type.into(),
             ..SnsWasm::default()
         },

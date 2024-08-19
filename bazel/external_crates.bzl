@@ -735,7 +735,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.155",
             ),
             "libflate": crate.spec(
-                version = "^1.1.2",
+                version = "^2.0.0",
             ),
             "libfuzzer-sys": crate.spec(
                 version = "^0.4.7",
