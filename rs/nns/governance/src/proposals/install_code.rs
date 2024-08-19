@@ -202,9 +202,9 @@ mod tests {
         };
 
         let is_invalid_proposal_with_keywords = |install_code: InstallCode, keywords: Vec<&str>| {
-            let error = install_code
-                .validate()
-                .expect_err("Expecting validation error for {install_code:?} but got Ok(())");
+            let error = install_code.validate().expect_err(&format!(
+                "Expecting validation error for {install_code:?} but got Ok(())"
+            ));
             assert_eq!(error.error_type, ErrorType::InvalidProposal as i32);
             for keyword in keywords {
                 let error_message = error.error_message.to_lowercase();

@@ -89,6 +89,7 @@ use ic_nns_constants::{
     LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
     SUBNET_RENTAL_CANISTER_ID,
 };
+use ic_nns_governance_api::subnet_rental::SubnetRentalRequest;
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_swap::pb::v1::{self as sns_swap_pb, Lifecycle, NeuronsFundParticipationConstraints};
@@ -114,7 +115,6 @@ use std::{
     convert::{TryFrom, TryInto},
     fmt,
     ops::RangeInclusive,
-    str::FromStr,
     string::ToString,
 };
 
@@ -432,6 +432,8 @@ impl NnsFunction {
                 | NnsFunction::UpdateUnassignedNodesConfig
                 | NnsFunction::UpdateElectedHostosVersions
                 | NnsFunction::UpdateNodesHostosVersion
+                | NnsFunction::BlessReplicaVersion
+                | NnsFunction::RetireReplicaVersion
         )
     }
 }
@@ -612,10 +614,22 @@ impl NnsFunction {
                 (REGISTRY_CANISTER_ID, "deploy_guestos_to_all_subnet_nodes")
             }
             NnsFunction::UpdateElectedHostosVersions => {
-                (REGISTRY_CANISTER_ID, "update_elected_hostos_versions")
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "{:?} is an obsolete NnsFunction. Use ReviseElectedHostosVersions instead",
+                        self
+                    ),
+                ));
             }
             NnsFunction::UpdateNodesHostosVersion => {
-                (REGISTRY_CANISTER_ID, "update_nodes_hostos_version")
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "{:?} is an obsolete NnsFunction. Use DeployHostosToSomeNodes instead",
+                        self
+                    ),
+                ));
             }
             NnsFunction::ReviseElectedHostosVersions => {
                 // TODO[NNS1-3000]: Rename Registry API ednpoints callable only by NNS Governance.
@@ -675,12 +689,10 @@ impl NnsFunction {
             }
             NnsFunction::BitcoinSetConfig => (ROOT_CANISTER_ID, "call_canister"),
             NnsFunction::BlessReplicaVersion | NnsFunction::RetireReplicaVersion => {
-                // Bless and retire replica version proposals are deprecated and
-                // can no longer be used.
                 return Err(GovernanceError::new_with_message(
                     ErrorType::InvalidProposal,
                     format!(
-                        "{:?} is a deprecated NnsFunction. Use ReviseElectedGuestosVersions instead",
+                        "{:?} is an obsolete NnsFunction. Use ReviseElectedGuestosVersions instead",
                         self
                     ),
                 ));
@@ -690,7 +702,14 @@ impl NnsFunction {
                 (REGISTRY_CANISTER_ID, "remove_api_boundary_nodes")
             }
             NnsFunction::UpdateApiBoundaryNodesVersion => {
-                (REGISTRY_CANISTER_ID, "update_api_boundary_nodes_version")
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "{:?} is an obsolete NnsFunction. Use DeployGuestosToSomeApiBoundaryNodes \
+                        instead",
+                        self
+                    ),
+                ));
             }
             NnsFunction::DeployGuestosToSomeApiBoundaryNodes => {
                 // TODO[NNS1-3000]: Rename Registry API for consistency.
@@ -754,8 +773,6 @@ impl Proposal {
                             | NnsFunction::RemoveNodeOperators
                             | NnsFunction::RemoveNodes
                             | NnsFunction::UpdateUnassignedNodesConfig
-                            | NnsFunction::UpdateElectedHostosVersions
-                            | NnsFunction::UpdateNodesHostosVersion
                             | NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes => {
                                 Topic::NodeAdmin
                             }
@@ -798,6 +815,8 @@ impl Proposal {
                             NnsFunction::UpdateAllowedPrincipals => Topic::SnsAndCommunityFund,
                             NnsFunction::UpdateSnsWasmSnsSubnetIds => Topic::SubnetManagement,
                             // Retired NnsFunctions
+                            NnsFunction::UpdateNodesHostosVersion
+                            | NnsFunction::UpdateElectedHostosVersions => Topic::NodeAdmin,
                             NnsFunction::BlessReplicaVersion
                             | NnsFunction::RetireReplicaVersion => Topic::IcOsVersionElection,
                             NnsFunction::AddApiBoundaryNodes
@@ -8220,69 +8239,4 @@ impl TimeWarp {
             timestamp_s - ((-self.delta_s) as u64)
         }
     }
-}
-
-#[derive(candid::CandidType, serde::Serialize, candid::Deserialize, Clone, Debug, Copy)]
-pub enum BitcoinNetwork {
-    #[serde(rename = "mainnet")]
-    Mainnet,
-    #[serde(rename = "testnet")]
-    Testnet,
-}
-
-impl FromStr for BitcoinNetwork {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "mainnet" => Ok(Self::Mainnet),
-            "testnet" => Ok(Self::Testnet),
-            other => Err(format!("Unknown bitcoin network {}. Valid bitcoin networks are \"mainnet\" and \"testnet\".", other))
-        }
-    }
-}
-
-// A proposal payload to set the Bitcoin configuration.
-#[derive(candid::CandidType, serde::Serialize, candid::Deserialize, Clone, Debug)]
-pub struct BitcoinSetConfigProposal {
-    pub network: BitcoinNetwork,
-    pub payload: Vec<u8>,
-}
-
-/// A proposal payload for a subnet rental request,
-/// used to deserialize `ExecuteNnsFunction.payload`,
-/// where `ExecuteNnsFunction.nns_function == NnsFunction::SubnetRentalRequest as i32`.
-/// Also used to serialize the subnet rental request payload in `ic-admin`.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, Debug)]
-pub struct SubnetRentalRequest {
-    pub user: PrincipalId,
-    pub rental_condition_id: RentalConditionId,
-}
-
-// The following two Subnet Rental Canister types are copied
-// from the Subnet Rental Canister's repository and used
-// to serialize the payload passed to Subnet Rental Canister's
-// method `execute_rental_request_proposal`.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, Copy, Debug)]
-pub enum RentalConditionId {
-    App13CH,
-}
-
-impl FromStr for RentalConditionId {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "App13CH" => Ok(Self::App13CH),
-            other => Err(format!("Unknown rental condition ID {}", other)),
-        }
-    }
-}
-
-#[derive(candid::CandidType, candid::Deserialize)]
-pub struct SubnetRentalProposalPayload {
-    pub user: PrincipalId,
-    pub rental_condition_id: RentalConditionId,
-    pub proposal_id: u64,
-    pub proposal_creation_time_seconds: u64,
 }

@@ -396,7 +396,7 @@ fn ecdsa_secp256k1_signature_and_public_key<R: Rng + CryptoRng>(
             buf.extend_from_slice(request_id.as_bytes());
             Sha256::hash(&buf)
         };
-        let signature_bytes = sk.sign_digest(&bytes_to_sign).expect("failed to sign");
+        let signature_bytes = sk.sign_digest_with_ecdsa(&bytes_to_sign);
         BasicSigOf::new(BasicSig(signature_bytes.to_vec()))
     };
 
