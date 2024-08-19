@@ -119,9 +119,20 @@ mod tests {
         fs::create_dir(&components_path).unwrap();
 
         let mut file = File::create(&manifest_path).unwrap();
-        writeln!(file, r#"Label("src/lib.rs"): "lib.rs""#).unwrap();
+        writeln!(
+            file,
+            r#"
+        # This is a comment and should be ignored (example: file.rs)
+        Label("src/lib.rs"): "lib.rs"
+        # Another comment about file.rs
+    "#
+        )
+        .unwrap();
 
         let manifest = get_manifest(&manifest_path, &components_path).unwrap();
+
+        assert_eq!(manifest.manifest.len(), 1); // Ensure only a single valid entry is parsed
+
         let entry = &manifest.manifest[0];
 
         assert_eq!(entry.source, components_path.join("src/lib.rs"));
