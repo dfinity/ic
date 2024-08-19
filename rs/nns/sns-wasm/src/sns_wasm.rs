@@ -5017,7 +5017,8 @@ mod test {
                     result: Some(Result::Error(SnsWasmError {
                         message:
                             "Cannot read metadata sections from WASM: Cannot parse WASM: Could not \
-                            parse the data as WASM module. Bad version number (at offset 4)"
+                            parse the data as WASM module. unknown binary version:  0x1000001 \
+                            (at offset 0x4)"
                                 .to_string()
                     }))
                 });

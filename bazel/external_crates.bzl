@@ -649,7 +649,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.0",
             ),
             "ic-wasm": crate.spec(
-                version = "^0.7.1",
+                version = "^0.8.0",
                 features = [
                     "exe",
                 ],
