@@ -1590,6 +1590,68 @@ fn management_canister_xnet_to_nns_called_from_non_nns() {
 }
 
 #[test]
+fn http_request_bound_holds() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        // set number of max in-flight calls to 10
+        .with_max_canister_http_requests_in_flight(10)
+        .build();
+    test.state_mut().metadata.own_subnet_features.http_requests = true;
+
+    // Create payload of the request.
+    let url = "https://".to_string();
+    let response_size_limit = 1000u64;
+    let transform_method_name = "transform".to_string();
+    let transform_context = vec![0, 1, 2];
+    let args = CanisterHttpRequestArgs {
+        url: url.clone(),
+        max_response_bytes: Some(response_size_limit),
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: caller_canister.get().0,
+                method: transform_method_name.clone(),
+            }),
+            context: transform_context.clone(),
+        }),
+    };
+
+    // Create request to HTTP_REQUEST method.
+    let payload = args.clone().encode();
+    test.inject_call_to_ic00(Method::HttpRequest, payload, Cycles::new(1_000_000_000));
+    test.execute_all();
+    // Check that the SubnetCallContextManager contains the request.
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+
+    // Now we try to inject more than the maximum number of requests we allow to be in-flight
+
+    for _ in 0..15 {
+        let payload = args.clone().encode();
+        test.inject_call_to_ic00(Method::HttpRequest, payload, Cycles::new(1_000_000_000));
+    }
+
+    test.execute_all();
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+
+    // Check that the SubnetCallContextManager contains the maximum number but not more
+    assert_eq!(canister_http_request_contexts.len(), 10);
+}
+
+#[test]
 fn management_canister_xnet_called_from_non_nns() {
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
