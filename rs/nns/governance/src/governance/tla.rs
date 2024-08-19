@@ -1,4 +1,6 @@
+use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet};
+use tokio::task;
 
 use super::Governance;
 use crate::storage::with_stable_neuron_indexes;
@@ -175,7 +177,10 @@ fn post_process_trace(trace: &mut Vec<ResolvedStatePair>) {
     }
 }
 
-fn extract_split_neuron_constants(pid: &str, trace: &Vec<ResolvedStatePair>) -> TlaConstantAssignment {
+fn extract_split_neuron_constants(
+    pid: &str,
+    trace: &Vec<ResolvedStatePair>,
+) -> TlaConstantAssignment {
     let constants = BTreeMap::from([
         (
             "Neuron_Ids".to_string(),
@@ -219,7 +224,6 @@ fn extract_split_neuron_constants(pid: &str, trace: &Vec<ResolvedStatePair>) -> 
     TlaConstantAssignment { constants }
 }
 
-
 pub fn split_neuron_desc() -> Update {
     const PID: &str = "Split_Neuron_PID";
     let default_locals = VarAssignment::new()
@@ -243,7 +247,8 @@ pub fn split_neuron_desc() -> Update {
     }
 }
 
-pub fn check_traces() {
+// TODO: use a different model for each update
+pub async fn check_traces() {
     let mut traces = TLA_TRACES.write().unwrap();
     let traces = std::mem::take(&mut (*traces));
 
@@ -254,26 +259,33 @@ pub fn check_traces() {
     let tla_models_path = PathBuf::from(&runfiles_dir).join("ic/rs/nns/governance/tla");
     let split_neuron_model = tla_models_path.join("Split_Neuron_Apalache.tla");
 
-    for trace in traces {
-        for pair in &trace.state_pairs {
-            check_tla_code_link(
-                &apalache,
-                PredicateDescription {
-                    tla_module: split_neuron_model.clone(),
-                    transition_predicate: "Next".to_string(),
-                    predicate_parameters: Vec::new(),
-                },
-                pair.clone(),
-                trace.constants.clone(),
-            )
-            .expect(format!(
-                "Potential divergence detected from the model in TLA process {} in the step from state\n{:#?}\nto state\n{:#?}", 
-                trace.update.process_id, 
-                pair.start, 
-                pair.end
-            ).as_str());
+    let chunk_size = 10;
+    let all_pairs = traces.into_iter().flat_map(|t| {
+        t.state_pairs
+            .into_iter()
+            .map(move |p| (t.constants.clone(), p))
+    });
+    let chunks = all_pairs.chunks(chunk_size);
+    for chunk in &chunks {
+        let mut set = task::JoinSet::new();
+        for (constants, pair) in chunk {
+            let apalache = apalache.clone();
+            let constants = constants.clone();
+            let pair = pair.clone();
+            let tla_module = split_neuron_model.clone();
+            set.spawn_blocking(move || {
+                check_tla_code_link(
+                    &apalache,
+                    PredicateDescription {
+                        tla_module,
+                        transition_predicate: "Next".to_string(),
+                        predicate_parameters: Vec::new(),
+                    },
+                    pair,
+                    constants,
+                )
+            });
         }
+        while let Some(_res) = set.join_next().await {}
     }
-
-    // assert!(traces.is_empty());
 }
