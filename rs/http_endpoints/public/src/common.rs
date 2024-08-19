@@ -230,6 +230,10 @@ impl IntoResponse for CborUserError {
     fn into_response(self) -> axum::response::Response {
         let reject_response: CBOR = CBOR::Map(BTreeMap::from([
             (
+                CBOR::Text("status".to_string()),
+                CBOR::Text("non_replicated_rejection".to_string()),
+            ),
+            (
                 CBOR::Text("error_code".to_string()),
                 CBOR::Text(self.0.code().to_string()),
             ),
