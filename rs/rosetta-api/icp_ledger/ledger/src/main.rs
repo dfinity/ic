@@ -270,7 +270,7 @@ async fn icrc1_send(
     to_account: Account,
     spender_account: Option<Account>,
     created_at_time: Option<u64>,
-    start: Option<u64>,
+    start: u64,
 ) -> Result<BlockIndex, CoreTransferError<Tokens>> {
     let from = AccountIdentifier::from(from_account);
     let to = AccountIdentifier::from(to_account);
@@ -363,14 +363,8 @@ async fn icrc1_send(
 
     let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
     archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
-    if let Some(start) = start {
-        let end = ic_cdk::api::instruction_counter();
-        ic_cdk::eprintln!(
-            "{}",
-            format!("instructions used in transfer {}", end - start)
-        );
-    }
-    Ok(block_index)
+    let end = ic_cdk::api::instruction_counter();
+    Ok(end - start)
 }
 
 thread_local! {
@@ -1070,7 +1064,7 @@ async fn icrc1_transfer(
             arg.to,
             None,
             arg.created_at_time,
-            Some(start),
+            start,
         )
         .await
         .map_err(convert_transfer_error)
@@ -1102,6 +1096,7 @@ fn icrc1_transfer_candid() {
 
 #[candid_method(update, rename = "icrc2_transfer_from")]
 async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
+    let start = ic_cdk::api::instruction_counter();
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
         trap_with("ICRC-2 features are not enabled on the ledger.");
     }
@@ -1118,7 +1113,7 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
             arg.to,
             Some(spender_account),
             arg.created_at_time,
-            None,
+            start,
         )
         .await
         .map_err(convert_transfer_error)
@@ -1696,6 +1691,71 @@ fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
 #[export_name = "canister_query icrc2_allowance"]
 fn icrc2_allowance_candid() {
     over(candid_one, icrc2_allowance)
+}
+
+fn max_length_principal(index: u32) -> [u8; 29] {
+    const MAX_PRINCIPAL: [u8; 29] = [1_u8; 29];
+    let bytes: [u8; 4] = index.to_be_bytes();
+    let mut principal = MAX_PRINCIPAL;
+    principal[0] = bytes[0];
+    principal[1] = bytes[1];
+    principal[2] = bytes[2];
+    principal[3] = bytes[3];
+    principal
+}
+
+#[candid_method(update, rename = "add_accounts")]
+async fn add_accounts(start_num: (u64, u64)) -> Result<u64, String> {
+    let fee = Some(Access::with_ledger(|ledger| {
+        ledger.transfer_fee().transfer_fee.into()
+    }));
+
+    let now = TimeStamp::from_nanos_since_unix_epoch(time_nanos());
+
+    let mut to = Account {
+        owner: Principal::from_slice(max_length_principal(1).as_slice()),
+        subaccount: Some([11_u8; 32]),
+    };
+
+    use serde_bytes::ByteBuf;
+
+    let mut args = TransferArg {
+        from_subaccount: Some([11_u8; 32]),
+        to,
+        fee,
+        amount: Nat::from(1u64),
+        memo: None,
+        created_at_time: None,
+    };
+
+    for i in start_num.0..start_num.0 + start_num.1 {
+        to.owner = Principal::from_slice(max_length_principal(i.try_into().unwrap()).as_slice());
+        args.to = to;
+        let res = icrc1_transfer(args.clone()).await;
+        match res {
+            Ok(_) => {}
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+
+    Ok(
+        Access::with_ledger(|ledger| ledger.stable_balances.store.len())
+            .try_into()
+            .unwrap(),
+    )
+}
+
+#[export_name = "canister_update add_accounts"]
+fn add_accounts_candid() {
+    over_async_may_reject(candid_one, |arg: (u64, u64)| async move {
+        if !LEDGER.read().unwrap().can_send(&caller()) {
+            return Err(
+                "Anonymous principal cannot send token transfers on the ledger.".to_string(),
+            );
+        }
+
+        Ok(add_accounts(arg).await)
+    })
 }
 
 #[candid_method(update, rename = "icrc21_canister_call_consent_message")]

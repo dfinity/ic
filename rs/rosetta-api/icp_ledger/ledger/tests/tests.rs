@@ -1138,17 +1138,13 @@ use rand::Rng;
 
 #[test]
 fn test_icp_upgrade() {
-    let ledger_wasm_add_acc = get_file_as_byte_vec(
-        &"/home/maciejmodelski/ledger-canister_notify-method-add_accounts.wasm.gz".to_string(),
-    );
-
     let env = StateMachine::new();
     let mut initial_balances = HashMap::new();
     let from = Account {
         owner: PrincipalId::new_user_test_id(1).0,
         subaccount: Some([11_u8; 32]),
     };
-    initial_balances.insert(from.into(), Tokens::from_e8s(100_000_000_000_000));
+    initial_balances.insert(from.into(), Tokens::from_e8s(100_000_000_000_000_000));
     let payload = LedgerCanisterInitPayload::builder()
         .minting_account(MINTER.into())
         .icrc1_minting_account(MINTER)
@@ -1160,29 +1156,11 @@ fn test_icp_upgrade() {
         .unwrap();
     let canister_id = env
         .install_canister(
-            ledger_wasm_add_acc,
+            ledger_wasm(),
             CandidOne(payload).into_bytes().unwrap(),
             None,
         )
         .expect("Unable to install the Ledger canister with the new init");
-
-    let num_balances = 800_000;
-    let num_approvals = 100_000;
-
-    let balances_batch_size = 100_000u32;
-    let approvals_batch_size = 50_000u32;
-
-    println!("adding {num_balances} balances");
-
-    let state = || {
-        Decode!(
-            &env.query(canister_id, "state", Encode!().unwrap())
-                .expect("Unable to call the state endpoint")
-                .bytes(),
-            ledger_canister::LedgerStateType
-        )
-        .expect("Unable to decode the result of the state endpoint")
-    };
 
     let send_batch = |method_name: &str, start: u64, num: u64| {
         let payload = Encode!(&(start as u64, num as u64)).unwrap();
@@ -1198,187 +1176,51 @@ fn test_icp_upgrade() {
             .expect(&format!("{} failed", method_name));
         let after = Instant::now();
 
-        println!(
-            "{} took {} ms",
-            method_name,
-            after.duration_since(before).as_millis()
-        );
+        // println!(
+        //     "{} took {} ms",
+        //     method_name,
+        //     after.duration_since(before).as_millis()
+        // );
         let res = Decode!(&assert_reply(result), Result<u64, String>).unwrap();
         match res {
             Ok(x) => {
-                println!("all added by {}: {x}", method_name);
+                // println!("all added by {}: {x}", method_name);
                 return x;
             }
             Err(e) => panic!("failed with {e}"),
         }
     };
 
-    let print_mem = || {
-        let mem = env
-            .canister_status(canister_id)
-            .unwrap()
-            .unwrap()
-            .memory_size()
-            .get();
+    let step = 25_000;
+    let mut target = step;
+    let sample = 10;
+    let mut curr = 0;
 
-        println!("total memory: {mem}");
-    };
+    loop {
+        let mut max_instr = 0;
+        let mut total: f64 = 0.0;
+        for i in 0..sample {
+            let to = account(100_000_000 + curr + i);
+            let instructions = transfer(&env, canister_id, from, to, 1).expect("transfer failed");
+            if instructions > max_instr {
+                max_instr = instructions
+            };
+            total += instructions as f64;
+        }
+        let average = (total / sample as f64) as u64;
+        println!("{curr},{average},{max_instr}");
 
-    let mut balances_count = 0;
-    for i in 0..num_balances / balances_batch_size {
-        balances_count = send_batch(
-            "add_accounts",
-            (i * balances_batch_size).into(),
-            balances_batch_size.into(),
-        );
-    }
-    balances_count = send_batch(
-        "add_accounts",
-        balances_count,
-        (num_balances % balances_batch_size).into(),
-    );
-    assert!(balances_count >= num_balances as u64);
+        curr += sample;
 
-    print_mem();
+        // println!("add_account: {}, {}", curr, target - curr);
+        curr = send_batch("add_accounts", curr, target - curr);
+        // println!("curr: {}", curr);
+        target += step;
 
-    let mut approval_count = 0;
-    for i in 0..num_approvals / approvals_batch_size {
-        approval_count = send_batch(
-            "add_approvals",
-            (i * approvals_batch_size).into(),
-            approvals_batch_size.into(),
-        );
-    }
-    approval_count = send_batch(
-        "add_approvals",
-        approval_count,
-        (num_approvals % approvals_batch_size).into(),
-    );
-    assert!(approval_count >= num_approvals as u64);
-
-    println!("upgrading with {balances_count} balances and {approval_count} approvals");
-
-    print_mem();
-
-    let mut accounts = vec![];
-    let mut rng = rand::thread_rng();
-    for _ in 0..30 {
-        accounts.push(rng.gen_range(0..num_balances));
-    }
-    accounts.push(0);
-    accounts.push(1);
-    accounts.push(num_approvals);
-    accounts.sort();
-
-    let mut spenders = vec![];
-    let mut rng = rand::thread_rng();
-    for _ in 0..30 {
-        spenders.push(rng.gen_range(0..num_approvals));
-    }
-    spenders.push(0);
-    spenders.push(1);
-    spenders.push(num_approvals);
-    spenders.sort();
-
-    // collect the balances before the upgrade
-    let mut expected_balances = vec![];
-    for acc in &accounts {
-        expected_balances.push(ic_icrc1_ledger_sm_tests::balance_of(
-            &env,
-            canister_id,
-            account(*acc as u64),
-        ));
-    }
-
-    // collect the approvals before the upgrade
-    let mut expected_allowances = vec![];
-    for spender in &spenders {
-        expected_allowances.push(ic_icrc1_ledger_sm_tests::get_allowance(
-            &env,
-            canister_id,
-            from,
-            account(*spender as u64),
-        ));
-    }
-
-    env.upgrade_canister(
-        canister_id,
-        ledger_wasm(),
-        Encode!(&LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
-            maximum_number_of_accounts: None,
-            icrc1_minting_account: None,
-            feature_flags: Some(FeatureFlags { icrc2: true }),
-        })))
-        .unwrap(),
-    )
-    .unwrap();
-
-    print_mem();
-
-    // wait until the Ledger is ready
-    let mut num_retry = 1000;
-    while num_retry > 0 && state() != ledger_canister::LedgerStateType::Ready {
-        num_retry -= 1;
-        env.advance_time(std::time::Duration::from_secs(1));
+        use std::time::Duration;
+        env.advance_time(Duration::from_secs(60 * 60 * 24));
         env.tick();
     }
-    if num_retry == 0 && state() != ledger_canister::LedgerStateType::Ready {
-        panic!("Ledger is not ready");
-    }
-
-    // verify that the balances are still there
-    let mut actual_balances = vec![];
-    for acc in accounts {
-        let balance = ic_icrc1_ledger_sm_tests::balance_of(&env, canister_id, account(acc as u64));
-        println!("balance for account {}: {:?}", acc, balance);
-        actual_balances.push(balance);
-    }
-
-    // verify that the approvals are still there
-    let mut actual_allowances = vec![];
-    for spender in spenders {
-        let allowance = ic_icrc1_ledger_sm_tests::get_allowance(
-            &env,
-            canister_id,
-            from,
-            account(spender as u64),
-        );
-        println!("allowance for spender {}: {:?}", spender, allowance);
-        actual_allowances.push(allowance);
-    }
-
-    assert_eq!(expected_balances, actual_balances);
-    assert_eq!(expected_allowances, actual_allowances);
-
-    for i in 0..10 {
-        let spender = account(10_000_000 + i);
-        let mut approve_args = default_approve_args(spender, 100_000_000_000_000);
-        approve_args.from_subaccount = from.subaccount;
-        let block_index =
-            send_approval(&env, canister_id, from.owner, &approve_args).expect("approval failed");
-        let mut transfer_from_args = default_transfer_from_args(from, spender, 1);
-        transfer_from_args.spender_subaccount = spender.subaccount;
-        use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
-        let block_index = Decode!(
-            &env.execute_ingress_as(
-                PrincipalId(spender.owner),
-                canister_id,
-                "icrc2_transfer_from",
-                Encode!(&transfer_from_args)
-                .unwrap()
-            )
-            .expect("failed to apply approval")
-            .bytes(),
-            Result<Nat, TransferFromError>
-        )
-        .expect("failed to decode transfer_from response")
-        .map(|n| n.0.to_u64().unwrap())
-        .expect("transfer_from failed");
-    }
-    for i in 0..10 {
-        let to = account(20_000_000 + i);
-        transfer(&env, canister_id, from, to, 1_000_000).expect("transfer failed");
-    }    
 }
 
 fn max_length_principal(index: u32) -> [u8; 29] {
