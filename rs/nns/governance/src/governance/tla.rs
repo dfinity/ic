@@ -239,8 +239,12 @@ pub fn split_neuron_desc() -> Update {
 
 // TODO: use a different model for each update
 pub fn check_traces() {
-    let mut traces = TLA_TRACES.write().unwrap();
-    let traces = std::mem::take(&mut (*traces));
+    let traces = {
+        // Introduce a scope to drop the write lock immediately, in order
+        // not to poison the lock if we panic later
+        let mut t = TLA_TRACES.write().unwrap();
+        std::mem::take(&mut (*t))
+    };
 
     let runfiles_dir = std::env::var("RUNFILES_DIR").expect("RUNFILES_DIR is not set");
 
@@ -278,7 +282,11 @@ pub fn check_traces() {
             handles.push(handle);
         }
         for handle in handles {
-            handle.join().unwrap().expect("Apalache call failed");
+            handle.join().unwrap().unwrap_or_else(|e| {
+                println!("Possible divergence from the TLA model detected while checking the state pair:\n{:#?}\nwith constants:\n{:#?}", e.pair, e.constants);
+                println!("Apalache returned:\n{:#?}", e.apalache_error);
+                panic!("Apalache check failed")
+            });
         }
     }
 }
