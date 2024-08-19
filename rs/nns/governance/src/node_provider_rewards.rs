@@ -31,7 +31,6 @@ pub(crate) fn latest_node_provider_rewards() -> Option<ArchivedMonthlyNodeProvid
 }
 
 pub(crate) fn list_node_provider_rewards(limit: u64) -> Vec<ArchivedMonthlyNodeProviderRewards> {
-    use dfn_core::println;
     // limit try_into is safe because of u32 is always equal or smaller than usize
     with_node_provider_rewards_log(|log| {
         let len = log.len();
