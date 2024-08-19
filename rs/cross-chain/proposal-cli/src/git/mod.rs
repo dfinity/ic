@@ -39,7 +39,7 @@ impl Display for GitCommitHash {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct CompressedWasmHash(String);
 
 impl Display for CompressedWasmHash {
