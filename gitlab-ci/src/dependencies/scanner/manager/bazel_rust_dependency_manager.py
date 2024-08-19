@@ -231,7 +231,7 @@ class BazelRustDependencyManager(DependencyManager):
         return changed
 
     def get_findings(
-        self, repository_name: str, project: typing.Optional[Project], engine_version: typing.Optional[int]
+        self, repository_name: str, project: Project, engine_version: typing.Optional[str]
     ) -> typing.List[Finding]:
         finding_builder: typing.List[Finding] = []
         # Unless cargo dependency is completely removed from the system,
@@ -240,8 +240,9 @@ class BazelRustDependencyManager(DependencyManager):
         # perform the move. The second result will be used for creating the findings,
         # and the delta between the results will be logged for now.
         # TODO : Remove when cargo is completely out of the system.
-        project_path = project.path if project else "ic"
-        path = self.root.parent / project_path
+
+        path = self.root.parent / project.path
+
         # currently only the ic repo uses bazel
         use_bazel = repository_name == "ic"
         if use_bazel:

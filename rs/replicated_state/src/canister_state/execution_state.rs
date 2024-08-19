@@ -157,6 +157,9 @@ pub struct ExportedFunctions {
 
     /// Cached info about exporting a global timer method to skip expensive BTreeSet lookup.
     exports_global_timer: bool,
+
+    /// Cached info about exporting a on low Wasm memory to skip expensive BTreeSet lookup.
+    exports_on_low_wasm_memory: bool,
 }
 
 impl ExportedFunctions {
@@ -165,10 +168,13 @@ impl ExportedFunctions {
             exported_functions.contains(&WasmMethod::System(SystemMethod::CanisterHeartbeat));
         let exports_global_timer =
             exported_functions.contains(&WasmMethod::System(SystemMethod::CanisterGlobalTimer));
+        let exports_on_low_wasm_memory =
+            exported_functions.contains(&WasmMethod::System(SystemMethod::CanisterOnLowWasmMemory));
         Self {
             exported_functions: Arc::new(exported_functions),
             exports_heartbeat,
             exports_global_timer,
+            exports_on_low_wasm_memory,
         }
     }
 
@@ -177,6 +183,9 @@ impl ExportedFunctions {
             // Cached values.
             WasmMethod::System(SystemMethod::CanisterHeartbeat) => self.exports_heartbeat,
             WasmMethod::System(SystemMethod::CanisterGlobalTimer) => self.exports_global_timer,
+            WasmMethod::System(SystemMethod::CanisterOnLowWasmMemory) => {
+                self.exports_on_low_wasm_memory
+            }
             // Expensive lookup.
             _ => self.exported_functions.contains(method),
         }
@@ -434,6 +443,7 @@ pub struct ExecutionState {
     /// - it is "shallow-copied" when cloning the execution state
     /// - all execution states cloned from each other (and also having the same
     ///   wasm_binary) share the same compilation cache object
+    ///
     /// The latter property ensures that compilation for queries is cached
     /// properly when loading a state from checkpoint.
     pub wasm_binary: Arc<WasmBinary>,
@@ -553,6 +563,14 @@ impl ExecutionState {
     /// Returns the number of global variables in the Wasm module.
     pub fn num_wasm_globals(&self) -> usize {
         self.exported_globals.len()
+    }
+
+    /// Returns the amount of heap delta represented by this canister's execution state.
+    /// See also comment on `CanisterState::heap_delta`.
+    pub(crate) fn heap_delta(&self) -> NumBytes {
+        let delta_pages = self.wasm_memory.page_map.num_delta_pages()
+            + self.stable_memory.page_map.num_delta_pages();
+        NumBytes::from((delta_pages * PAGE_SIZE) as u64)
     }
 }
 

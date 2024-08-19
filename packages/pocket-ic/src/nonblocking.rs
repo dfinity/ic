@@ -1,10 +1,11 @@
 use crate::common::rest::{
-    ApiResponse, BlobCompression, BlobId, CreateHttpGatewayResponse, CreateInstanceResponse,
-    ExtendedSubnetConfigSet, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayInfo, HttpsConfig,
-    InstanceConfig, InstanceId, RawAddCycles, RawCanisterCall, RawCanisterId, RawCanisterResult,
-    RawCycles, RawEffectivePrincipal, RawMessageId, RawSetStableMemory, RawStableMemory,
-    RawSubmitIngressResult, RawSubnetId, RawTime, RawVerifyCanisterSigArg, RawWasmResult, SubnetId,
-    Topology,
+    ApiResponse, AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest,
+    CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
+    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, InstanceConfig, InstanceId,
+    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
+    RawCanisterResult, RawCycles, RawEffectivePrincipal, RawMessageId, RawMockCanisterHttpResponse,
+    RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime,
+    RawVerifyCanisterSigArg, RawWasmResult, SubnetId, Topology,
 };
 use crate::{CallError, PocketIcBuilder, UserError, WasmResult, DEFAULT_MAX_REQUEST_TIME_MS};
 use candid::{
@@ -34,7 +35,7 @@ const POLLING_PERIOD_MS: u64 = 10;
 const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
-const LOCALHOST: &str = "127.0.0.1";
+const LOCALHOST: &str = "localhost";
 
 // The minimum joint size of a canister's WASM
 // and its initial argument blob for which
@@ -289,7 +290,10 @@ impl PocketIc {
         let now = std::time::SystemTime::now();
         self.set_time(now).await;
         let endpoint = "auto_progress";
-        self.post::<(), _>(endpoint, "").await;
+        let auto_progress_config = AutoProgressConfig {
+            artificial_delay_ms: None,
+        };
+        self.post::<(), _>(endpoint, auto_progress_config).await;
         self.instance_url()
     }
 
@@ -352,7 +356,7 @@ impl PocketIc {
 
     async fn start_http_gateway(
         &mut self,
-        listen_at: Option<u16>,
+        port: Option<u16>,
         domains: Option<Vec<String>>,
         https_config: Option<HttpsConfig>,
     ) -> Url {
@@ -361,7 +365,8 @@ impl PocketIc {
         }
         let endpoint = self.server_url.join("http_gateway").unwrap();
         let http_gateway_config = HttpGatewayConfig {
-            listen_at,
+            ip_addr: None,
+            port,
             forward_to: HttpGatewayBackend::PocketIcInstance(self.instance_id),
             domains: domains.clone(),
             https_config: https_config.clone(),
@@ -1183,6 +1188,36 @@ impl PocketIc {
             )
             .await?;
         self.await_call(message_id).await
+    }
+
+    /// Get the pending canister HTTP outcalls.
+    /// Note that an additional `PocketIc::tick` is necessary after a canister
+    /// executes a message making a canister HTTP outcall for the HTTP outcall
+    /// to be retrievable here.
+    /// Note that, unless a PocketIC instance is in auto progress mode,
+    /// a response to the pending canister HTTP outcalls
+    /// must be produced by the test driver and passed on to the PocketIC instace
+    /// using `PocketIc::mock_canister_http_response`.
+    /// In auto progress mode, the PocketIC server produces a response for every
+    /// pending canister HTTP outcall by actually making an HTTP request
+    /// to the specified URL.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
+    pub async fn get_canister_http(&self) -> Vec<CanisterHttpRequest> {
+        let endpoint = "read/get_canister_http";
+        let res: Vec<RawCanisterHttpRequest> = self.get(endpoint).await;
+        res.into_iter().map(|r| r.into()).collect()
+    }
+
+    /// Mock a response to a pending canister HTTP outcall.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
+    pub async fn mock_canister_http_response(
+        &self,
+        mock_canister_http_response: MockCanisterHttpResponse,
+    ) {
+        let endpoint = "update/mock_canister_http";
+        let raw_mock_canister_http_response: RawMockCanisterHttpResponse =
+            mock_canister_http_response.into();
+        self.post(endpoint, raw_mock_canister_http_response).await
     }
 }
 

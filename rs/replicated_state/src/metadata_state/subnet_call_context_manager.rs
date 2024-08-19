@@ -780,14 +780,14 @@ impl TryFrom<pb_metadata::EcdsaArguments> for EcdsaArguments {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SchnorrArguments {
     pub key_id: SchnorrKeyId,
-    pub message: Vec<u8>,
+    pub message: Arc<Vec<u8>>,
 }
 
 impl From<&SchnorrArguments> for pb_metadata::SchnorrArguments {
     fn from(args: &SchnorrArguments) -> Self {
         Self {
             key_id: Some((&args.key_id).into()),
-            message: args.message.clone(),
+            message: args.message.to_vec(),
         }
     }
 }
@@ -797,7 +797,7 @@ impl TryFrom<pb_metadata::SchnorrArguments> for SchnorrArguments {
     fn try_from(context: pb_metadata::SchnorrArguments) -> Result<Self, Self::Error> {
         Ok(SchnorrArguments {
             key_id: try_from_option_field(context.key_id, "SchnorrArguments::key_id")?,
-            message: context.message,
+            message: Arc::new(context.message),
         })
     }
 }
@@ -806,6 +806,16 @@ impl TryFrom<pb_metadata::SchnorrArguments> for SchnorrArguments {
 pub enum ThresholdArguments {
     Ecdsa(EcdsaArguments),
     Schnorr(SchnorrArguments),
+}
+
+impl ThresholdArguments {
+    /// Returns the generic key id.
+    pub fn key_id(&self) -> MasterPublicKeyId {
+        match self {
+            ThresholdArguments::Ecdsa(args) => MasterPublicKeyId::Ecdsa(args.key_id.clone()),
+            ThresholdArguments::Schnorr(args) => MasterPublicKeyId::Schnorr(args.key_id.clone()),
+        }
+    }
 }
 
 impl From<&ThresholdArguments> for pb_metadata::ThresholdArguments {
@@ -879,6 +889,16 @@ impl SignWithThresholdContext {
         match &self.args {
             ThresholdArguments::Ecdsa(args) => args,
             _ => panic!("ECDSA arguments not found."),
+        }
+    }
+
+    /// Returns Schnorr arguments.
+    /// Panics if arguments are not for Schnorr
+    /// Should only be called if `is_schnorr` returns true.
+    pub fn schnorr_args(&self) -> &SchnorrArguments {
+        match &self.args {
+            ThresholdArguments::Schnorr(args) => args,
+            _ => panic!("Schnorr arguments not found."),
         }
     }
 }

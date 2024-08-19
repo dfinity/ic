@@ -27,6 +27,12 @@ message Percentage {
   optional uint64 basis_points = 1;
 }
 
+// A list of principals.
+// Needed to allow prost to generate the equivalent of Optional<Vec<PrincipalId>>.
+message Principals {
+  repeated ic_base_types.pb.v1.PrincipalId principals = 1;
+}
+
 // A Canister that will be transferred to an SNS.
 message Canister {
   // The id of the canister.

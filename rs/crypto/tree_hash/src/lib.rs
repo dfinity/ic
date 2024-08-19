@@ -27,8 +27,9 @@ pub use tree_hash::*;
 /// - If you have a single [`Label`], use `Path::from(Label)`.
 ///
 /// - If you have an iterator that contains [`Label`] or `&Label` use
-/// `Path::from_iter(iterator)`.
-// Implemented as a newtype to allow implementation of traits like
+///   `Path::from_iter(iterator)`.
+///
+// Implemented as a new type to allow implementation of traits like
 // `fmt::Display`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct Path(Vec<Label>);
@@ -97,12 +98,12 @@ impl Path {
 ///
 /// Note that
 /// - `Label`s are compared by comparing their byte representation.
-/// Therefore, `Label`s casted from other representations must not
-/// necessarily retain their original ordering, e.g., if `Label`s are
-/// obtained via `From<String>`.
+///   Therefore, `Label`s casted from other representations must not
+///   necessarily retain their original ordering, e.g., if `Label`s are
+///   obtained via `From<String>`.
 /// - `Label`s that hold a reference to an object are compared with
-/// other labels by comparing the bytes of the underlying representation,
-/// i.e., as if the `Label` would hold the bytes and not the reference.
+///   other labels by comparing the bytes of the underlying representation,
+///   i.e., as if the `Label` would hold the bytes and not the reference.
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(from = "&serde_bytes::Bytes")]
 #[serde(into = "serde_bytes::ByteBuf")]

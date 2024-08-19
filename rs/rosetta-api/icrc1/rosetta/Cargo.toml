@@ -58,7 +58,7 @@ tower-request-id = "^0.3.0"
 tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
-url = "2.2.1"
+url = { workspace = true }
 
 [lib]
 path = "src/lib.rs"
@@ -77,7 +77,7 @@ ic-utils = { workspace = true }
 once_cell = "1.8.0"
 pocket-ic = { path = "../../../../packages/pocket-ic" }
 ring = { version = "0.16.11", features = ["std"] }
-url = "2.3.1"
+url = { workspace = true }
 
 [[test]]
 name = "integration_tests"
@@ -86,6 +86,3 @@ path = "tests/integration_tests.rs"
 [[test]]
 name = "system_tests"
 path = "tests/system_tests.rs"
-
-
-

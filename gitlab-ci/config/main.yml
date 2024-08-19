@@ -301,7 +301,7 @@ bazel-test-macos:
     - !reference [.rules-master-pipeline-no-merge-train-rust-bazel-changed, rules]
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
       variables:
-        BAZEL_EXTRA_ARGS: "--test_tag_filters=test_macos,test_macos_master"
+        BAZEL_EXTRA_ARGS: "--test_tag_filters=test_macos"
   tags:
     - macos
   variables:
@@ -382,7 +382,7 @@ python-ci-tests:
   script:
     - |
       set -xeuo pipefail
-      pip3 install --ignore-installed -r requirements.txt
+      PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
       cd gitlab-ci/src
       pytest --ignore=gitlab_config/ -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
 
@@ -500,7 +500,7 @@ notify-gitlab-success:
   dependencies: [] # don't copy artifacts from other jobs
   script:
     - |
-      pip3 install --ignore-installed -r requirements.txt
+      PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
 
       # TODO(IDX-2856): remove this top level "if" when we will not need to run the job for schedule pipelines.
       if [[ "$CI_PIPELINE_SOURCE" == "push" ]] && [[ "$CI_COMMIT_REF_NAME" =~ ^rc--.* ]]; then
@@ -525,7 +525,7 @@ notify-gitlab-failure:
   dependencies: [] # don't copy artifacts from other jobs
   script:
     - |
-      pip3 install --ignore-installed -r requirements.txt
+      PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
 
       echo "notify gitlab failure"
       if [[ "${CI_COMMIT_MESSAGE,,}" =~ hotfix ]]; then

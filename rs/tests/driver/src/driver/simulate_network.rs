@@ -1,67 +1,156 @@
 //! This module contains functionality to simulate a subnet's
 /// network, RTT and Packet Loss, during system tests.
 use super::{
-    super::driver::test_env_api::SshSession,
+    super::{driver::test_env_api::SshSession, util::get_config},
     test_env_api::{IcNodeContainer, SubnetSnapshot},
 };
 use std::time::Duration;
 
-pub fn simulate_network(subnet: SubnetSnapshot, topology: &NetworkSimulation) {
-    let nodes: Vec<_> = subnet.nodes().collect();
+pub trait SimulateNetwork<NetworkSettings> {
+    fn apply_network_settings(&self, network_settings: NetworkSettings);
+}
 
-    match topology {
-        NetworkSimulation::Subnet(subnet) => {
-            assert_eq!(
-                nodes.len(),
-                subnet.subnet_size(),
-                "Subnet size must match the size of the simulated topology."
+impl SimulateNetwork<ProductionSubnetTopology> for SubnetSnapshot {
+    fn apply_network_settings(&self, network_settings: ProductionSubnetTopology) {
+        let nodes: Vec<_> = self.nodes().collect();
+
+        assert_eq!(
+            nodes.len(),
+            network_settings.subnet_size(),
+            "Subnet size must match the size of the simulated topology."
+        );
+
+        const ARRAY_REPEAT_VALUE: String = String::new();
+        let mut tc_commands: [String; 13] = [ARRAY_REPEAT_VALUE; 13];
+
+        let packet_loss = network_settings.packet_loss();
+        let rtt = network_settings.rtt();
+
+        for source_node in 0..13 {
+            let mut tc_command =
+                String::from("sudo tc qdisc del dev enp1s0 root 2> /dev/null || true \n");
+            tc_command.push_str("sudo tc qdisc add dev enp1s0 root handle 1: htb \n");
+            tc_command.push_str(
+                "sudo tc class add dev enp1s0 parent 1: classid 1:1 htb rate 2000Mbps \n",
             );
 
-            const ARRAY_REPEAT_VALUE: String = String::new();
-            let mut tc_commands: [String; 13] = [ARRAY_REPEAT_VALUE; 13];
-
-            let packet_loss = subnet.packet_loss();
-            let rtt = subnet.rtt();
-
-            for source_node in 0..13 {
-                let mut tc_command =
-                    String::from("sudo tc qdisc del dev enp1s0 root 2> /dev/null || true \n");
-                tc_command.push_str("sudo tc qdisc add dev enp1s0 root handle 1: prio \n");
-
-                let source_ip = nodes[source_node].get_ip_addr();
-                for destination_node in 0..13 {
-                    if source_node == destination_node {
-                        continue;
-                    }
-                    let destination_ip = nodes[destination_node].get_ip_addr();
-
-                    tc_command.push_str(&format!(
-                        "sudo tc qdisc add dev enp1s0 parent 1:{destination_node} handle {destination_node}0: netem limit 10000000 loss {:.3}% delay {}ms \n",
+            for destination_node in 0..13 {
+                if source_node == destination_node {
+                    continue;
+                }
+                let destination_ip = nodes[destination_node].get_ip_addr();
+                // tc class id start at 1 and we already defined one above so we need to start from 2..
+                let tc_class_id = destination_node + 2;
+                tc_command.push_str(&format!(
+                    "sudo tc class add dev enp1s0 parent 1:1 classid 1:{} htb rate 2000Mbps \n",
+                    tc_class_id,
+                ));
+                tc_command.push_str(&format!(
+                        "sudo tc qdisc add dev enp1s0 handle {}: parent 1:{} netem limit 10000000 loss {:.3}% delay {}ms \n",
+                        tc_class_id,
+                        tc_class_id,
                         packet_loss[(12) * source_node + destination_node].2 * 100.0,
                         (rtt[(12) * source_node + destination_node].2 * 1000.0 / 2.0) as u64
                     ));
-                    tc_command.push_str(&format!("sudo tc filter add dev enp1s0 protocol ip parent 1:0 prio {destination_node} u32 match ip6 src {source_ip} match ip6 dst {destination_ip} flowid 1:{destination_node} \n"));
-                }
-                tc_commands[source_node] = tc_command;
+                tc_command.push_str(&format!("sudo tc filter add dev enp1s0 protocol ipv6 parent 1: pref {} u32 match ip6 dst {destination_ip} flowid 1:{} \n", tc_class_id, tc_class_id ));
             }
-
-            nodes.iter().enumerate().for_each(|(idx, node)| {
-                let session = node
-                    .block_on_ssh_session()
-                    .expect("Failed to ssh into node");
-                node.block_on_bash_script_from_session(&session, &tc_commands[idx])
-                    .expect("Failed to execute bash script from session");
-            });
+            tc_command.push_str(
+                "sudo tc class add dev enp1s0 parent 1:1 classid 1:999 htb rate 2000Mbps \n",
+            );
+            tc_command.push_str(
+                "sudo tc qdisc add dev enp1s0 parent 1:999 handle 999: netem limit 10000000 \n",
+            );
+            tc_command.push_str("sudo tc filter add dev enp1s0 protocol ipv6 parent 1: pref 999 u32 match ip6 dst ::/0 flowid 1:999 \n");
+            tc_commands[source_node] = tc_command;
         }
-        NetworkSimulation::FixedRtt(rtt) => {
-            let latency = rtt.div_f64(2.0);
-            nodes.iter().for_each(|node| {
-                let session = node
-                    .block_on_ssh_session()
-                    .expect("Failed to ssh into node");
-                node.block_on_bash_script_from_session(&session, &limit_tc_ssh_command(latency))
-                    .expect("Failed to execute bash script from session");
-            });
+
+        nodes.iter().enumerate().for_each(|(idx, node)| {
+            let session = node
+                .block_on_ssh_session()
+                .expect("Failed to ssh into node");
+            node.block_on_bash_script_from_session(&session, &tc_commands[idx])
+                .expect("Failed to execute bash script from session");
+        });
+    }
+}
+
+impl SimulateNetwork<FixedNetworkSimulation> for SubnetSnapshot {
+    fn apply_network_settings(&self, network_settings: FixedNetworkSimulation) {
+        let nodes: Vec<_> = self.nodes().collect();
+
+        const DEVICE_NAME: &str = "enp1s0"; // network interface name
+
+        let cfg = get_config();
+        let p2p_listen_port = cfg.transport.unwrap().listening_port;
+
+        let bandwidth_mbit_per_sec = network_settings
+            .bandwidth_mbit_per_sec
+            .unwrap_or(100_000_000);
+        let latency_ms = network_settings.latency.map(|d| d.as_millis()).unwrap_or(0);
+
+        let packet_loss = network_settings.packet_loss.unwrap_or(0.0);
+        assert!(
+            (0.0..=1.0).contains(&packet_loss),
+            "Packet loss must be between 0.0 and 1.0"
+        );
+
+        let packet_loss_percentage = format!("{:.3}", packet_loss);
+        let command = format!(
+            r#"set -euo pipefail
+sudo tc qdisc del dev {DEVICE_NAME} root 2> /dev/null || true
+sudo tc qdisc add dev {DEVICE_NAME} root handle 1: htb default 10
+sudo tc class add dev {DEVICE_NAME} parent 1: classid 1:10 htb rate {bandwidth_mbit_per_sec}mbit ceil {bandwidth_mbit_per_sec}mbit
+sudo tc qdisc add dev {DEVICE_NAME} parent 1:10 handle 10: netem delay {latency_ms}ms loss {packet_loss_percentage}% limit 10000000
+sudo tc filter add dev {DEVICE_NAME} parent 1: protocol ipv6 prio 1 u32 match ip6 dport {p2p_listen_port} 0xFFFF flowid 1:10
+sudo tc qdisc show dev {DEVICE_NAME}
+"#,
+        );
+
+        nodes.iter().for_each(|node| {
+            let session = node
+                .block_on_ssh_session()
+                .expect("Failed to ssh into node");
+            node.block_on_bash_script_from_session(&session, &command)
+                .expect("Failed to execute bash script from session");
+        });
+    }
+}
+
+#[derive(Default, Clone, Debug)]
+pub struct FixedNetworkSimulation {
+    packet_loss: Option<f64>,
+    latency: Option<Duration>,
+    bandwidth_mbit_per_sec: Option<u32>,
+}
+
+impl FixedNetworkSimulation {
+    pub const fn new() -> Self {
+        Self {
+            packet_loss: None,
+            latency: None,
+            bandwidth_mbit_per_sec: None,
+        }
+    }
+
+    /// Sets the packet loss in each direction in decimal form (0.0 to 1.0).
+    pub const fn with_packet_loss(self, packet_loss: f64) -> Self {
+        Self {
+            packet_loss: Some(packet_loss),
+            ..self
+        }
+    }
+
+    pub const fn with_latency(self, latency: Duration) -> Self {
+        Self {
+            latency: Some(latency),
+            ..self
+        }
+    }
+
+    pub const fn with_bandwidth(self, bandwidth_mbit_per_sec: u32) -> Self {
+        Self {
+            bandwidth_mbit_per_sec: Some(bandwidth_mbit_per_sec),
+            ..self
         }
     }
 }
@@ -70,13 +159,6 @@ pub fn simulate_network(subnet: SubnetSnapshot, topology: &NetworkSimulation) {
 pub enum ProductionSubnetTopology {
     LHG73,
     IO67,
-}
-
-#[derive(Clone, Debug)]
-pub enum NetworkSimulation {
-    Subnet(ProductionSubnetTopology),
-    /// Sets the RTT to a fixed value between all nodes.
-    FixedRtt(Duration),
 }
 
 impl ProductionSubnetTopology {
@@ -100,23 +182,6 @@ impl ProductionSubnetTopology {
             ProductionSubnetTopology::IO67 => 13,
         }
     }
-}
-
-/**
- * 1. Delete existing tc rules (if present).
- * 2. Add a qdisc to introduce latency and increase queue size to 1_000_000.
- * 3. Read the active tc rules.
- */
-fn limit_tc_ssh_command(latency: Duration) -> String {
-    format!(
-        r#"set -euo pipefail
-        sudo tc qdisc del dev {device} root 2> /dev/null || true
-        sudo tc qdisc add dev {device} root netem limit 10000000 delay {latency_ms}ms
-        sudo tc qdisc show dev {device}
-"#,
-        device = "enp1s0",
-        latency_ms = latency.as_millis(),
-    )
 }
 
 const LHG_73_RTT: [(u64, u64, f64); 156] = [

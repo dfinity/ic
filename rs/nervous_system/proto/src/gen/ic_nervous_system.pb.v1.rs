@@ -51,6 +51,15 @@ pub struct Percentage {
     #[prost(uint64, optional, tag = "1")]
     pub basis_points: ::core::option::Option<u64>,
 }
+/// A list of principals.
+/// Needed to allow prost to generate the equivalent of Optional<Vec<PrincipalId>>.
+#[derive(Eq, candid::CandidType, candid::Deserialize, comparable::Comparable, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Principals {
+    #[prost(message, repeated, tag = "1")]
+    pub principals: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+}
 /// A Canister that will be transferred to an SNS.
 #[derive(
     Eq,

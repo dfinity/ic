@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/protobuf",
+    "//rs/registry/canister/api",
     "//rs/registry/keys",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_features",
@@ -39,6 +40,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-certified-map",
     "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:idna",
     "@crate_index//:ipnet",
     "@crate_index//:lazy_static",
     "@crate_index//:leb128",
@@ -122,7 +124,6 @@ rust_canister(
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/registry.did"],
-    opt = "z",  # TODO: undo once dfx-extensions do not ungzip canister modules
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/registry.did",
     deps = DEPENDENCIES + [":canister"] + [":build_script"],
