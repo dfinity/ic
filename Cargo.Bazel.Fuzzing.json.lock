@@ -7568,86 +7568,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "bls12_381 0.7.1": {
-      "name": "bls12_381",
-      "version": "0.7.1",
-      "package_url": "https://github.com/zkcrypto/bls12_381",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bls12_381/0.7.1/download",
-          "sha256": "a3c196a77437e7cc2fb515ce413a6401291578b5afc8ecb29a3c7ab957f05941"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bls12_381",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bls12_381",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "digest",
-            "experimental",
-            "group",
-            "groups",
-            "pairing",
-            "pairings"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "digest 0.9.0",
-              "target": "digest"
-            },
-            {
-              "id": "ff 0.12.1",
-              "target": "ff"
-            },
-            {
-              "id": "group 0.12.1",
-              "target": "group"
-            },
-            {
-              "id": "pairing 0.22.0",
-              "target": "pairing"
-            },
-            {
-              "id": "rand_core 0.6.4",
-              "target": "rand_core"
-            },
-            {
-              "id": "subtle 2.5.0",
-              "target": "subtle"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.7.1"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "borsh 0.10.3": {
       "name": "borsh",
       "version": "0.10.3",
@@ -17619,7 +17539,7 @@
               "target": "ic_utils"
             },
             {
-              "id": "ic-verify-bls-signature 0.2.0",
+              "id": "ic-verify-bls-signature 0.6.0",
               "target": "ic_verify_bls_signature"
             },
             {
@@ -24283,68 +24203,6 @@
       ],
       "license_file": null
     },
-    "group 0.12.1": {
-      "name": "group",
-      "version": "0.12.1",
-      "package_url": "https://github.com/zkcrypto/group",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/group/0.12.1/download",
-          "sha256": "5dfbfb3a6cfbd390d5c9564ab283a0349b9b9fcd46a706c1eb10e0db70bfbac7"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "group",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "group",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "ff 0.12.1",
-              "target": "ff"
-            },
-            {
-              "id": "rand_core 0.6.4",
-              "target": "rand_core"
-            },
-            {
-              "id": "subtle 2.5.0",
-              "target": "subtle"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.12.1"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "group 0.13.0": {
       "name": "group",
       "version": "0.13.0",
@@ -29717,73 +29575,6 @@
       ],
       "license_file": null
     },
-    "ic-verify-bls-signature 0.2.0": {
-      "name": "ic-verify-bls-signature",
-      "version": "0.2.0",
-      "package_url": null,
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-verify-bls-signature/0.2.0/download",
-          "sha256": "dd0f1f8d75f50002970cc2136f909287bf1d59024fbc80ebffbee871afcbd237"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_verify_bls_signature",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_verify_bls_signature",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bls12_381 0.7.1",
-              "target": "bls12_381"
-            },
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
-            },
-            {
-              "id": "lazy_static 1.4.0",
-              "target": "lazy_static"
-            },
-            {
-              "id": "pairing 0.22.0",
-              "target": "pairing"
-            },
-            {
-              "id": "rand 0.6.5",
-              "target": "rand"
-            },
-            {
-              "id": "sha2 0.9.9",
-              "target": "sha2"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.2.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
     "ic-verify-bls-signature 0.5.0": {
       "name": "ic-verify-bls-signature",
       "version": "0.5.0",
@@ -29854,6 +29645,78 @@
         },
         "edition": "2021",
         "version": "0.5.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
+    "ic-verify-bls-signature 0.6.0": {
+      "name": "ic-verify-bls-signature",
+      "version": "0.6.0",
+      "package_url": null,
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-verify-bls-signature/0.6.0/download",
+          "sha256": "cd6c4261586eb473fe1219de63186a98e554985d5fd6f3488036c8fb82452e27"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_verify_bls_signature",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_verify_bls_signature",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "hex",
+            "lazy_static"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "ic_bls12_381 0.10.0",
+              "target": "ic_bls12_381",
+              "alias": "bls12_381"
+            },
+            {
+              "id": "lazy_static 1.4.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "pairing 0.23.0",
+              "target": "pairing"
+            },
+            {
+              "id": "sha2 0.10.8",
+              "target": "sha2"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -43311,54 +43174,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "pairing 0.22.0": {
-      "name": "pairing",
-      "version": "0.22.0",
-      "package_url": "https://github.com/zkcrypto/pairing",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/pairing/0.22.0/download",
-          "sha256": "135590d8bdba2b31346f9cd1fb2a912329f5135e832a4f422942eb6ead8b6b3b"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "pairing",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "pairing",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "group 0.12.1",
-              "target": "group"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.22.0"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "pairing 0.23.0": {
       "name": "pairing",
       "version": "0.23.0",
@@ -49587,7 +49402,6 @@
         "crate_features": {
           "common": [
             "alloc",
-            "default",
             "rand_os",
             "std"
           ],
@@ -78755,7 +78569,7 @@
     "ic-stable-structures 0.6.5",
     "ic-test-state-machine-client 3.0.1",
     "ic-utils 0.37.0",
-    "ic-verify-bls-signature 0.2.0",
+    "ic-verify-bls-signature 0.6.0",
     "ic-wasm 0.7.1",
     "ic-xrc-types 1.2.0",
     "ic0 0.18.11",
