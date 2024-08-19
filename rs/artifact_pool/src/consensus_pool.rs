@@ -24,10 +24,14 @@ use ic_metrics::buckets::linear_buckets;
 use ic_protobuf::types::v1 as pb;
 use ic_types::crypto::CryptoHashOf;
 use ic_types::NodeId;
-use ic_types::{artifact::ConsensusMessageId, consensus::*, Height, SubnetId, Time};
+use ic_types::{
+    artifact::{ConsensusMessageId, IdentifiableArtifact},
+    consensus::*,
+    Height, SubnetId, Time,
+};
 use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
 use std::time::Instant;
-use std::{marker::PhantomData, sync::Arc, time::Duration};
+use std::{collections::HashSet, marker::PhantomData, sync::Arc, time::Duration};
 
 #[derive(Debug, Clone)]
 pub enum PoolSectionOp<T> {
@@ -790,7 +794,10 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
             .max_height()
             .unwrap_or_default();
         self.apply_changes_unvalidated(unvalidated_ops);
-        let mut purged = self.apply_changes_validated(validated_ops);
+        let mut purged = self
+            .apply_changes_validated(validated_ops)
+            .drain(..)
+            .collect::<HashSet<_>>();
 
         if let Some(backup) = &self.backup {
             self.backup_artifacts(backup, latest_finalization_height, artifacts_for_backup);
@@ -800,9 +807,14 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
             self.cache.update(self, updates);
         }
 
-        let mut mutations = Vec::with_capacity(artifacts_with_opt.len() + purged.len());
-        mutations.extend(artifacts_with_opt.drain(..).map(ArtifactMutation::Insert));
-        mutations.extend(purged.drain(..).map(ArtifactMutation::Remove));
+        let mut mutations = vec![];
+        mutations.extend(
+            artifacts_with_opt
+                .drain(..)
+                .filter(|x| !purged.contains(&x.artifact.id()))
+                .map(ArtifactMutation::Insert),
+        );
+        mutations.extend(purged.drain().map(ArtifactMutation::Remove));
         ChangeResult {
             mutations,
             poll_immediately: changed,

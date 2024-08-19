@@ -11,8 +11,11 @@ use ic_interfaces::{
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::{consensus, consensus::dkg, consensus::dkg::DkgMessageId, Height};
+use ic_types::{
+    artifact::IdentifiableArtifact, consensus, consensus::dkg, consensus::dkg::DkgMessageId, Height,
+};
 use prometheus::IntCounter;
+use std::collections::HashSet;
 
 /// The DkgPool is used to store messages that are exchanged between replicas in
 /// the process of executing DKG.
@@ -102,7 +105,7 @@ impl MutablePool<dkg::Message> for DkgPoolImpl {
     fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<dkg::Message> {
         let changed = !change_set.is_empty();
         let mut artifacts_with_opt = Vec::new();
-        let mut purged = Vec::new();
+        let mut purged = HashSet::new();
         for action in change_set {
             match action {
                 ChangeAction::HandleInvalid(id, reason) => {
@@ -135,12 +138,17 @@ impl MutablePool<dkg::Message> for DkgPoolImpl {
                         .remove(&id)
                         .expect("Unvalidated artifact was not found.");
                 }
-                ChangeAction::Purge(height) => purged.append(&mut self.purge(height)),
+                ChangeAction::Purge(height) => purged.extend(self.purge(height).drain(..)),
             }
         }
-        let mut mutations = Vec::with_capacity(artifacts_with_opt.len() + purged.len());
-        mutations.extend(artifacts_with_opt.drain(..).map(ArtifactMutation::Insert));
-        mutations.extend(purged.drain(..).map(ArtifactMutation::Remove));
+        let mut mutations = Vec::with_capacity(purged.len());
+        mutations.extend(
+            artifacts_with_opt
+                .drain(..)
+                .filter(|x| !purged.contains(&x.artifact.id()))
+                .map(ArtifactMutation::Insert),
+        );
+        mutations.extend(purged.drain().map(ArtifactMutation::Remove));
         ChangeResult {
             mutations,
             poll_immediately: changed,

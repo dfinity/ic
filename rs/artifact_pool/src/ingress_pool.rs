@@ -26,7 +26,7 @@ use ic_types::{
     CountBytes, NodeId, Time,
 };
 use prometheus::IntCounter;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 const INGRESS_MESSAGE_ARTIFACT_TYPE: &str = "ingress_message";
@@ -295,7 +295,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
     /// Apply changeset to the Ingress Pool
     fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<SignedIngress> {
         let mut artifacts_with_opt = Vec::new();
-        let mut purged = Vec::new();
+        let mut purged = HashSet::new();
         for change_action in change_set {
             match change_action {
                 ChangeAction::MoveToValidated((message_id, source_node_id)) => {
@@ -349,7 +349,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                 ChangeAction::RemoveFromValidated(message_id) => {
                     match self.validated.remove(&message_id) {
                         Some(artifact) => {
-                            purged.push(message_id);
+                            purged.insert(message_id);
                             let size = artifact.msg.signed_ingress.count_bytes();
                             debug!(
                                 self.log,
@@ -375,9 +375,20 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                 }
             }
         }
-        let mut mutations = Vec::with_capacity(artifacts_with_opt.len() + purged.len());
-        mutations.extend(artifacts_with_opt.drain(..).map(ArtifactMutation::Insert));
-        mutations.extend(purged.drain(..).map(ArtifactMutation::Remove));
+
+        let mut mutations = Vec::with_capacity(purged.len());
+        mutations.extend(
+            artifacts_with_opt
+                .drain(..)
+                .filter(|x| {
+                    !purged.contains(&IngressMessageId::new(
+                        x.artifact.expiry_time(),
+                        x.artifact.id(),
+                    ))
+                })
+                .map(ArtifactMutation::Insert),
+        );
+        mutations.extend(purged.drain().map(ArtifactMutation::Remove));
         ChangeResult {
             mutations,
             poll_immediately: false,

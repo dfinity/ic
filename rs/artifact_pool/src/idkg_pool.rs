@@ -25,17 +25,17 @@ use ic_interfaces::{
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_types::artifact::{IDkgMessageId, IdentifiableArtifact};
 use ic_types::consensus::{
     idkg::{
         EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefixOf, IDkgStats,
-        SchnorrSigShare, SignedIDkgComplaint, SignedIDkgOpening,
+        SchnorrSigShare, SigShare, SignedIDkgComplaint, SignedIDkgOpening,
     },
     CatchUpPackage,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
-use ic_types::{artifact::IDkgMessageId, consensus::idkg::SigShare};
 use prometheus::IntCounter;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use strum::IntoEnumIterator;
@@ -434,7 +434,7 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
         let mut validated_ops = IDkgPoolSectionOps::new();
         let changed = !change_set.is_empty();
         let mut artifacts_with_opt = Vec::new();
-        let mut purged = Vec::new();
+        let mut purged = HashSet::new();
         for action in change_set {
             match action {
                 IDkgChangeAction::AddToValidated(message) => {
@@ -460,7 +460,7 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
                     validated_ops.insert(message);
                 }
                 IDkgChangeAction::RemoveValidated(msg_id) => {
-                    purged.push(msg_id.clone());
+                    purged.insert(msg_id.clone());
                     validated_ops.remove(msg_id);
                 }
                 IDkgChangeAction::RemoveUnvalidated(msg_id) => {
@@ -472,7 +472,7 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
                     if self.unvalidated.as_pool_section().contains(&msg_id) {
                         unvalidated_ops.remove(msg_id);
                     } else if self.validated.as_pool_section().contains(&msg_id) {
-                        purged.push(msg_id.clone());
+                        purged.insert(msg_id.clone());
                         validated_ops.remove(msg_id);
                     } else {
                         warn!(
@@ -486,9 +486,14 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
 
         self.unvalidated.mutate(unvalidated_ops);
         self.validated.mutate(validated_ops);
-        let mut mutations = Vec::with_capacity(artifacts_with_opt.len() + purged.len());
-        mutations.extend(artifacts_with_opt.drain(..).map(ArtifactMutation::Insert));
-        mutations.extend(purged.drain(..).map(ArtifactMutation::Remove));
+        let mut mutations = Vec::with_capacity(purged.len());
+        mutations.extend(
+            artifacts_with_opt
+                .drain(..)
+                .filter(|x| !purged.contains(&x.artifact.id()))
+                .map(ArtifactMutation::Insert),
+        );
+        mutations.extend(purged.drain().map(ArtifactMutation::Remove));
         ChangeResult {
             mutations,
             poll_immediately: changed,
