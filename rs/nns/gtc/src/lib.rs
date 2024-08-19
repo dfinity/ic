@@ -337,7 +337,7 @@ pub mod test_constants {
         }
 
         pub fn sign(&self, msg: &[u8]) -> Vec<u8> {
-            self.secret_key().sign_message(msg).to_vec()
+            self.secret_key().sign_message_with_ecdsa(msg).to_vec()
         }
 
         /// Assert that `self.public_key_hex` is the hex-encoding of
