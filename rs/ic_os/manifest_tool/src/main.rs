@@ -23,11 +23,6 @@ struct ManifestArgs {
 }
 
 pub fn main() -> Result<()> {
-    #[cfg(not(target_os = "linux"))]
-    {
-        eprintln!("ERROR: this only runs on Linux.");
-        std::process::exit(1);
-    }
     let opts = ManifestArgs::parse();
 
     match opts.command {
