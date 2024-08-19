@@ -4,8 +4,11 @@ use crate::{
 };
 
 use ic_nns_common::pb::v1::NeuronId;
-use ic_stable_structures::{btreemap::Iter as SBTIter, Memory, StableBTreeMap};
+use ic_stable_structures::{Memory, StableBTreeMap};
 use icp_ledger::Subaccount;
+
+#[cfg(feature = "test")]
+use ic_stable_structures::btreemap::Iter as SBTIter;
 
 /// An index to make it easy to lookup neuron id by subaccount.
 pub struct NeuronSubaccountIndex<M: Memory> {
