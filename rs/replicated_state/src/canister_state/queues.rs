@@ -21,6 +21,8 @@ use ic_types::messages::{
     MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
 };
 use ic_types::{CanisterId, CountBytes, Cycles, Time};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 use std::convert::{From, TryFrom};
 use std::ops::{AddAssign, SubAssign};
@@ -30,7 +32,7 @@ pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
 
 /// Encapsulates information about `CanisterQueues`,
 /// used in detecting a loop when consuming the input messages.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
 pub struct CanisterQueuesLoopDetector {
     pub local_queue_skip_count: usize,
     pub remote_queue_skip_count: usize,
@@ -70,12 +72,14 @@ impl CanisterQueuesLoopDetector {
 /// Encapsulates the `InductionPool` component described in the spec. The reason
 /// for bundling together the induction pool and output queues is to reliably
 /// implement backpressure via queue slot reservations for response messages.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
 pub struct CanisterQueues {
     /// Queue of ingress (user) messages.
+    #[validate_eq(CompareWithValidateEq)]
     ingress_queue: IngressQueue,
 
     /// Per remote canister input and output queues.
+    #[validate_eq(CompareWithValidateEq)]
     canister_queues: BTreeMap<CanisterId, (InputQueue, OutputQueue)>,
 
     /// FIFO queue of local subnet sender canister IDs ensuring round-robin
@@ -108,6 +112,7 @@ pub struct CanisterQueues {
     memory_usage_stats: MemoryUsageStats,
 
     /// Round-robin across ingress and cross-net input queues for pop_input().
+    #[validate_eq(Ignore)]
     next_input_queue: NextInputQueue,
 }
 
@@ -121,16 +126,19 @@ pub struct CanisterQueues {
 /// Encapsulates the `InductionPool` component described in the spec. The reason
 /// for bundling together the induction pool and output queues is to reliably
 /// implement backpressure via queue slot reservations for response messages.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
 pub struct NewCanisterQueues {
     /// Queue of ingress (user) messages.
+    #[validate_eq(CompareWithValidateEq)]
     ingress_queue: IngressQueue,
 
     /// Per remote canister input and output queues.
+    #[validate_eq(CompareWithValidateEq)]
     canister_queues: BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
 
     /// Pool holding all messages in `canister_queues`, with support for time-based
     /// expiration and load shedding.
+    #[validate_eq(Ignore)]
     pool: MessagePool,
 
     /// Slot and memory reservation stats. Message count and size stats are
@@ -158,6 +166,7 @@ pub struct NewCanisterQueues {
     remote_subnet_input_schedule: VecDeque<CanisterId>,
 
     /// Round-robin across ingress and cross-net input queues for `pop_input()`.
+    #[validate_eq(Ignore)]
     next_input_queue: NextInputQueue,
 }
 
@@ -2087,10 +2096,10 @@ pub mod testing {
     }
 
     #[allow(dead_code)]
-    /// Produces `CanisterQueues` together with a `VecDeque` of raw requests
-    /// where the raw requests appear in the same order in the `VecDeque` as
-    /// one would expect them being returned by the iterator.
-    pub fn new_canister_queues_for_test(
+    /// Produces a `CanisterQueues` with requests enqueued in output queues,
+    /// together with a `VecDeque` of raw requests, in the order in which they would
+    /// be returned by `CanisterOutputQueuesIterator`.
+    pub fn new_canister_output_queues_for_test(
         requests: Vec<Request>,
         sender: CanisterId,
         num_receivers: usize,

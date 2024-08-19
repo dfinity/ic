@@ -61,13 +61,16 @@ jobs:
           BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=system_test_nightly"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - name: Upload bazel-bep
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
-          retention-days: 90
+          retention-days: 14
           if-no-files-found: ignore
           compression-level: 9
-          path: bazel-bep.pb
+          path: |
+            bazel-bep.pb
+            profile.json
   bazel-system-test-staging:
     name: Bazel System Test Staging
     continue-on-error: True
@@ -99,13 +102,15 @@ jobs:
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - name: Upload bazel-bep
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: ${{ github.job }}-bep
-          retention-days: 90
+          retention-days: 14
           if-no-files-found: ignore
           compression-level: 9
           path: |
             bazel-bep.pb
+            profile.json
   bazel-system-test-hotfix:
     name: Bazel System Test Hotfix
     runs-on:
@@ -136,13 +141,15 @@ jobs:
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - name: Upload bazel-bep
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: ${{ github.job }}-bep
-          retention-days: 90
+          retention-days: 14
           if-no-files-found: ignore
           compression-level: 9
           path: |
             bazel-bep.pb
+            profile.json
   dependency-scan-release-cut:
     name: Dependency Scan for Release
     runs-on:
