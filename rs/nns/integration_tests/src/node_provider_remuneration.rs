@@ -143,7 +143,7 @@ fn test_list_node_provider_rewards() {
     );
 
     // Assert the most recent monthly Node Provider reward was set as expected
-    let mut most_recent_rewards =
+    let most_recent_rewards =
         nns_get_most_recent_monthly_node_provider_rewards(&state_machine).unwrap();
     let this_rewards_timestamp = most_recent_rewards.timestamp;
 
@@ -207,7 +207,7 @@ fn test_list_node_provider_rewards() {
     assert_eq!(
         received_ts,
         minted_rewards_timestamps[8..13]
-            .into_iter()
+            .iter()
             .rev()
             .cloned()
             .collect::<Vec<_>>()
@@ -217,7 +217,7 @@ fn test_list_node_provider_rewards() {
     assert_eq!(
         response.rewards,
         minted_rewards[8..13]
-            .into_iter()
+            .iter()
             .rev()
             .cloned()
             .collect::<Vec<_>>()
