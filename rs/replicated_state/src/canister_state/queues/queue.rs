@@ -111,7 +111,7 @@ pub(crate) struct CanisterQueue {
     /// Number of enqueued request references.
     ///
     /// Invariants:
-    ///  * `request_slots == queue.iter().filter(|msg| !msg.is_response()).count()`
+    ///  * `request_slots == queue.iter().filter(|item| !item.is_response()).count()`
     ///  * `request_slots <= capacity`
     request_slots: usize,
 
@@ -119,7 +119,7 @@ pub(crate) struct CanisterQueue {
     /// responses.
     ///
     /// Invariants:
-    ///  * `response_slots >= queue.iter().filter(|msg| msg.is_response()).count()`
+    ///  * `response_slots >= queue.iter().filter(|item| item.is_response()).count()`
     ///  * `response_slots <= capacity`
     response_slots: usize,
 }

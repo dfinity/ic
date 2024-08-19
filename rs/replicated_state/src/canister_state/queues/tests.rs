@@ -987,7 +987,13 @@ fn fixture_with_empty_queues_in_input_schedules() -> CanisterQueues {
 
     // Time out the messages from `other_1`, `other_3`, `other_4` and `other_6`.
     queues.time_out_all_messages_with_deadlines();
-    debug_assert!(queues.queues.stats_ok());
+    assert!(queues.queues.stats_ok());
+    assert_eq!(
+        Ok(()),
+        queues
+            .queues
+            .schedules_ok(&queues.this, &BTreeMap::default())
+    );
 
     let queues = queues.queues;
 
@@ -1105,6 +1111,54 @@ fn roundtrip_encode_gced_queue_in_input_schedule() {
         .unwrap();
 
     assert_eq!(queues, decoded);
+}
+
+#[test]
+fn test_push_into_empty_queue_in_input_schedule() {
+    let other_1 = canister_test_id(1);
+    let other_2 = canister_test_id(2);
+
+    let mut queues = CanisterQueuesMultiFixture::new();
+
+    // 1 local and 1 remote input queue holding best-effort requests.
+    queues
+        .push_input_request_with_deadline(other_1, coarse_time(1), LocalSubnet)
+        .unwrap();
+    queues
+        .push_input_request_with_deadline(other_2, coarse_time(1), RemoteSubnet)
+        .unwrap();
+
+    // Time out all messages.
+    queues.time_out_all_messages_with_deadlines();
+    assert!(queues.queues.stats_ok());
+    assert_eq!(
+        Ok(()),
+        queues
+            .queues
+            .schedules_ok(&queues.this, &BTreeMap::default())
+    );
+    assert!(!queues.has_input());
+
+    // Push another round of messages into the 2 queues.
+    queues
+        .push_input_request_with_deadline(other_1, coarse_time(1), LocalSubnet)
+        .unwrap();
+    queues
+        .push_input_request_with_deadline(other_2, coarse_time(1), RemoteSubnet)
+        .unwrap();
+
+    assert_eq!(
+        Ok(()),
+        queues
+            .queues
+            .schedules_ok(&queues.this, &BTreeMap::default())
+    );
+    assert!(queues.has_input());
+
+    assert!(queues.pop_input().is_some());
+    assert!(queues.pop_input().is_some());
+    assert!(queues.pop_input().is_none());
+    assert!(!queues.has_input());
 }
 
 /// Enqueues 6 output requests across 3 canisters and consumes them.
@@ -1372,6 +1426,9 @@ fn decode_invalid_input_schedule() {
     decoded
         .remote_subnet_input_schedule
         .clone_from(&queues.remote_subnet_input_schedule);
+    decoded
+        .input_schedule_canisters
+        .clone_from(&queues.input_schedule_canisters);
     assert_eq!(queues, decoded);
 }
 
@@ -1487,6 +1544,9 @@ fn decode_backward_compatibility() {
     expected_queues
         .local_subnet_input_schedule
         .push_back(local_canister);
+    expected_queues
+        .input_schedule_canisters
+        .insert(local_canister);
 
     //
     // `remote_canister`'s queues.
