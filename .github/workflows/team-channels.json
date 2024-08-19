@@ -12,6 +12,7 @@
     "ic-owners-owners": "owners-owners",
     "idx": "eng-idx-bots",
     "InfraSec": "eng-infrasec",
+    "languages": "eng-motoko",
     "networking": "eng-networking",
     "nns-team": "eng-nns",
     "node": "eng-node-prs",
@@ -20,6 +21,5 @@
     "Product Security": "eng-prodsec",
     "runtime": "runtime-code-reviews",
     "sdk": "sdk",
-    "utopia": "eng-utopia",
-    "languages": "eng-motoko"
+    "utopia": "eng-utopia"
 }
