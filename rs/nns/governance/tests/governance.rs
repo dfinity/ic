@@ -93,7 +93,8 @@ use ic_nns_governance::{
         WaitForQuietStateDesc,
     },
     proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
-    temporarily_disable_private_neuron_enforcement, temporarily_enable_private_neuron_enforcement,
+    temporarily_disable_private_neuron_enforcement, temporarily_disable_set_visibility_proposals,
+    temporarily_enable_private_neuron_enforcement, temporarily_enable_set_visibility_proposals,
 };
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -6373,46 +6374,67 @@ fn test_add_and_remove_hot_key() {
 
 // TODO(NNS1-3228): Delete this.
 #[test]
-fn test_set_visibility_manage_neuron_proposals_are_not_allowed_yet() {
+fn test_are_set_visibility_proposals_enabled_flag() {
     // Step 1: Prepare the world.
 
-    let p = match std::env::var("NEURON_CSV_PATH") {
-        Ok(v) => PathBuf::from(v),
-        Err(_) => PathBuf::from("tests/neurons.csv"),
-    };
-    let mut builder = GovernanceCanisterInitPayloadBuilder::new();
-    let init_neurons = &mut builder.add_all_neurons_from_csv_file(&p).proto.neurons;
+    let mut random = StdRng::seed_from_u64(485_539_390);
 
-    let (_, mut gov) = governance_with_neurons(
-        &init_neurons
-            .values()
-            .map(|n| n.clone().into())
-            .collect::<Vec<Neuron>>(),
+    let mut new_neuron = || {
+        let id = random.gen();
+        let controller = PrincipalId::new_user_test_id(id);
+        let account = compute_neuron_staking_subaccount_bytes(controller, random.gen()).to_vec();
+
+        Neuron {
+            id: Some(NeuronId { id }),
+            account,
+            controller: Some(controller),
+
+            dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
+            // Enough to make a proposal, but not a whale.
+            cached_neuron_stake_e8s: random.gen_range(100..=200) * E8,
+
+            ..Default::default()
+        }
+    };
+
+    // This can make and vote on ManageNeuron proposals that target the puppet
+    // Neuron.
+    let leader = new_neuron();
+
+    let puppet = Neuron {
+        // Follows leader on the NeuronManagement topic.
+        followees: hashmap! {
+            Topic::NeuronManagement as i32 => Followees {
+                followees: vec![leader.id.unwrap()],
+            },
+        },
+
+        ..new_neuron()
+    };
+
+    let governance_proto = GovernanceProtoBuilder::new()
+        .with_neurons(vec![leader.clone(), puppet.clone()])
+        .build();
+
+    let fake_driver = fake::FakeDriver::default();
+    let mut governance = Governance::new(
+        governance_proto,
+        fake_driver.get_fake_env(),
+        fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
     );
 
-    let neuron = init_neurons[&25].clone();
-    let new_controller = init_neurons[&42].controller.unwrap();
-
-    assert!(!gov
-        .neuron_store
-        .get_neuron_ids_readable_by_caller(new_controller)
-        .contains(neuron.id.as_ref().unwrap()));
-
-    // Step 2: Call the code under test.
-
-    // Add a hot key to the neuron and make sure that gets reflected in the
-    // principal to neuron ids index.
-    let error = gov
-        .make_proposal(
-            neuron.id.as_ref().unwrap(),
-            neuron.controller.as_ref().unwrap(),
+    let mut make_set_visibility_proposal = || -> Result<ProposalId, GovernanceError> {
+        governance.make_proposal(
+            leader.id.as_ref().unwrap(),
+            leader.controller.as_ref().unwrap(),
             &Proposal {
-                title: Some("SetVisibility".to_string()),
-                summary: "SetVisibility".to_string(),
+                title: Some("SetVisibility of puppet to Public".to_string()),
+                summary: "SetVisibility of puppet to Public".to_string(),
                 url: "https://forum.dfinity.org/set_visibility".to_string(),
                 action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                        neuron.id.unwrap(),
+                        puppet.id.unwrap(),
                     )),
                     command: Some(manage_neuron::Command::Configure(
                         manage_neuron::Configure {
@@ -6427,28 +6449,56 @@ fn test_set_visibility_manage_neuron_proposals_are_not_allowed_yet() {
                 }))),
             },
         )
-        .unwrap_err();
+    };
 
-    // Step 3: Inspect results.
+    // Case A: SetVisibility (ManageNeuron) proposals are disabled. When we
+    // start rolling out neuron visibility, this will be the case. This is so
+    // that clients (esp nns-dapp) will not suddenly see these kinds of
+    // proposals when they might not know how to handle them.
+    {
+        let _restore_on_drop = temporarily_disable_set_visibility_proposals();
 
-    // Decompose the error.
-    let GovernanceError {
-        error_type,
-        error_message,
-    } = &error;
+        // Step 2: Call the code under test.
+        let result = make_set_visibility_proposal();
 
-    // Inspect the error type.
-    assert_eq!(
-        ErrorType::try_from(*error_type),
-        Ok(ErrorType::Unavailable),
-        "{:?}",
-        error,
-    );
+        // Step 3: Inspect result(s).
 
-    // Make sure the error message looks right.
-    let message = error_message.to_lowercase();
-    for key_word in ["visibility", "allowed", "yet"] {
-        assert!(message.contains(key_word), "{:?}", error);
+        let error = result.unwrap_err();
+
+        // Decompose the error.
+        let GovernanceError {
+            error_type,
+            error_message,
+        } = &error;
+
+        // Inspect the error type.
+        assert_eq!(
+            ErrorType::try_from(*error_type),
+            Ok(ErrorType::Unavailable),
+            "{:?}",
+            error,
+        );
+
+        // Make sure the error message looks right.
+        let message = error_message.to_lowercase();
+        for key_word in ["visibility", "allowed", "yet"] {
+            assert!(message.contains(key_word), "{:?}", error);
+        }
+    }
+
+    // Case B: SetVisibility proposals are enabled. Eventually, we'll want to
+    // allow these, after clients (esp nns-dapp) are ready for them.
+    {
+        let _restore_on_drop = temporarily_enable_set_visibility_proposals();
+
+        // Step 2: Call the code under test.
+        let result = make_set_visibility_proposal();
+
+        // Step 3: Inspect result(s).
+
+        // After unwrapping, no further inspection is needed. Also, it is
+        // unclear what ID to expect. The main thing is that we get an ID back.
+        let _proposal_id: ProposalId = result.unwrap();
     }
 }
 
