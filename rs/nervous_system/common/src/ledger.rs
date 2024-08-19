@@ -191,8 +191,6 @@ impl IcpLedger for IcpLedgerCanister {
             }
         );
 
-        tla_log_response!(Destination::new("ledger"), result.is_err());
-
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(format!(
                 "Error calling method 'send' of the ledger canister. Code: {:?}. Message: {}",
