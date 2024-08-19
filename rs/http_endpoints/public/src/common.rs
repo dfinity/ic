@@ -9,7 +9,6 @@ use http_body_util::BodyExt;
 use hyper::{header, Response, StatusCode};
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
-use ic_error_types::UserError;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{info, warn, ReplicaLogger};
@@ -27,9 +26,8 @@ use ic_validator::{
     CanisterIdSet, HttpRequestVerifier, HttpRequestVerifierImpl, RequestValidationError,
 };
 use serde::{Deserialize, Serialize};
-use serde_cbor::value::Value as CBOR;
 use std::sync::Arc;
-use std::{collections::BTreeMap, time::Duration};
+use std::time::Duration;
 use tokio::time::timeout;
 use tower::{load_shed::error::Overloaded, timeout::error::Elapsed, BoxError};
 use tower_http::cors::{CorsLayer, Vary};
@@ -207,46 +205,6 @@ where
             )
                 .into_response()),
         }
-    }
-}
-
-/// Converts a user error into an HTTP response.
-///
-/// We need this conversion because we validate user requests twice:
-///
-///   1. Ingress filter checks user messages before including them in blocks
-///      so that we don't have to reach a consensus on payloads that we will
-///      throw away in the execution.
-///      We cannot put UserErrors produced at this stage in the state tree;
-///      We have to return them in the  HTTP body.
-///
-///   2. Once messages reach execution, we include UserErrors into the state tree.
-///      Users can fetch the details via the read_state endpoint.
-///
-/// make_response conversion applies the first case.
-pub struct CborUserError(pub UserError);
-
-impl IntoResponse for CborUserError {
-    fn into_response(self) -> axum::response::Response {
-        let reject_response: CBOR = CBOR::Map(BTreeMap::from([
-            (
-                CBOR::Text("status".to_string()),
-                CBOR::Text("non_replicated_rejection".to_string()),
-            ),
-            (
-                CBOR::Text("error_code".to_string()),
-                CBOR::Text(self.0.code().to_string()),
-            ),
-            (
-                CBOR::Text("reject_message".to_string()),
-                CBOR::Text(self.0.description().to_string()),
-            ),
-            (
-                CBOR::Text("reject_code".to_string()),
-                CBOR::Integer(self.0.reject_code() as i128),
-            ),
-        ]));
-        Cbor(reject_response).into_response()
     }
 }
 

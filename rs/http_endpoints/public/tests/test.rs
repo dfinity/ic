@@ -523,10 +523,6 @@ fn test_request_too_slow() {
 #[rstest]
 #[case(test_agent::Call::V2, CBOR::Map(BTreeMap::from([
             (
-                CBOR::Text("status".to_string()),
-                CBOR::Text("non_replicated_rejection".to_string()),
-            ),
-            (
                 CBOR::Text("error_code".to_string()),
                 CBOR::Text("IC0204".to_string()),
             ),

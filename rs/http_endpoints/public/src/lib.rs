@@ -338,8 +338,9 @@ pub fn start_server(
     .with_malicious_flags(malicious_flags.clone())
     .build();
 
-    let (call_router, call_v3_router) = if enable_v3_call_handler {
-        let call_router = call::CallServiceV2::new_router(call_handler.clone(), false);
+    let call_router = call::CallServiceV2::new_router(call_handler.clone());
+
+    let call_v3_router = if enable_v3_call_handler {
         let (ingress_watcher_handle, _) = IngressWatcher::start(
             rt_handle.clone(),
             log.clone(),
@@ -348,19 +349,16 @@ pub fn start_server(
             completed_execution_messages_rx,
             CancellationToken::new(),
         );
-
-        let call_v3_router = call::CallServiceV3::new_router(
+        Some(call::CallServiceV3::new_router(
             call_handler,
             ingress_watcher_handle,
             metrics.clone(),
             config.ingress_message_certificate_timeout_seconds,
             delegation_from_nns.clone(),
             state_reader.clone(),
-        );
-        (call_router, Some(call_v3_router))
+        ))
     } else {
-        let call_router = call::CallServiceV2::new_router(call_handler.clone(), true);
-        (call_router, None)
+        None
     };
 
     let query_router = QueryServiceBuilder::builder(
