@@ -276,6 +276,10 @@ impl Upgrade {
     }
 
     async fn do_create_checkpoint(&self, subnet_id: SubnetId) -> OrchestratorResult<()> {
+        if let Err(e) = self.stop_replica() {
+            warn!(self.logger, "Failed to stop replica with error {:?}", e);
+        }
+
         let config_str = "/run/ic-node/config/ic.json5";
         let replay = "/opt/ic/bin/ic-replay";
 
