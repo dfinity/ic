@@ -15,7 +15,7 @@ pub use tla_instrumentation_proc_macros::tla_update_method;
 pub use tla_instrumentation::checker::{check_tla_code_link, PredicateDescription};
 
 pub use ic_nervous_system_common::tla::{
-    account_to_tla, opt_subaccount_to_tla, TLA_INSTRUMENTATION_STATE, TLA_TRACES,
+    account_to_tla, opt_subaccount_to_tla, subaccount_to_tla, TLA_INSTRUMENTATION_STATE, TLA_TRACES,
 };
 pub use ic_nervous_system_common::{tla_log_locals, tla_log_request, tla_log_response};
 
