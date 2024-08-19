@@ -1099,7 +1099,7 @@ fn test_schnorr() {
     pic.install_canister(canister, test_canister_wasm(), vec![], None);
 
     // We define the message, derivation path, and ECDSA key ID to use in this test.
-    let message = b"Hello, world!";
+    let message = b"Hello, world!==================="; // must be of length 32 bytes for BIP340
     let derivation_path = vec!["my message".as_bytes().to_vec()];
     for algorithm in [SchnorrAlgorithm::Bip340Secp256k1, SchnorrAlgorithm::Ed25519] {
         for name in ["key_1", "test_key_1", "dfx_test_key1"] {
@@ -1107,7 +1107,6 @@ fn test_schnorr() {
                 algorithm,
                 name: name.to_string(),
             };
-            println!("key ID: {:?}", key_id);
 
             // We get the Schnorr public key and signature via update calls to the test canister.
             let schnorr_public_key = update_candid::<
@@ -1135,11 +1134,10 @@ fn test_schnorr() {
             // We verify the Schnorr signature.
             match key_id.algorithm {
                 SchnorrAlgorithm::Bip340Secp256k1 => {
-                    use k256::schnorr::signature::Verifier;
                     use k256::schnorr::{Signature, VerifyingKey};
                     let vk = VerifyingKey::from_bytes(&schnorr_public_key.public_key[1..]).unwrap();
                     let sig = Signature::try_from(schnorr_signature.as_slice()).unwrap();
-                    vk.verify(message, &sig).unwrap();
+                    vk.verify_raw(message, &sig).unwrap();
                 }
                 SchnorrAlgorithm::Ed25519 => {
                     use ed25519_dalek::{Signature, Verifier, VerifyingKey};

@@ -32,7 +32,7 @@ TEST_DEPENDENCIES = [
     "@crate_index//:candid_parser",
     "@crate_index//:ed25519-dalek",
     "@crate_index//:flate2",
-    "@crate_index//:k256",
+    "@crate_index//:k256_schnorr",
     "@crate_index//:lazy_static",
     "@crate_index//:wat",
 ]

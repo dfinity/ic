@@ -1,5 +1,5 @@
 {
-  "checksum": "370448d815061bc7c787110fed4d7c57190bbb66251366195630761973a2854f",
+  "checksum": "63e38226438911be52d0913727dd8508da2ba94fdacfe48a1ceaf1a2aa03c258",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17701,6 +17701,11 @@
             {
               "id": "k256 0.13.3",
               "target": "k256"
+            },
+            {
+              "id": "k256 0.13.3",
+              "target": "k256",
+              "alias": "k256_schnorr"
             },
             {
               "id": "k8s-openapi 0.20.0",
