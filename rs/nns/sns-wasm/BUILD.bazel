@@ -62,6 +62,7 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/nervous_system/common/test_utils",
     "//rs/nns/sns-wasm/protobuf_generator:lib",
     "//rs/nns/test_utils",
     "//rs/registry/helpers",
@@ -75,7 +76,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/compare_dirs",
     "//rs/test_utilities/types",
     "@crate_index//:candid_parser",
-    "@crate_index//:libflate",
     "@crate_index//:pretty_assertions",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",

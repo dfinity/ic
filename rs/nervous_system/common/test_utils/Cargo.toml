@@ -10,4 +10,5 @@ futures = { workspace = true }
 ic-nervous-system-common = { path = "../../common" }
 icp-ledger = { path = "../../../rosetta-api/icp_ledger" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+libflate = { workspace = true }
 prometheus-parse = { workspace = true }

@@ -36,7 +36,6 @@ ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 ic-wasm = { workspace = true }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
-libflate = "1.1.2"
 maplit = "1.0.2"
 prost = { workspace = true }
 serde = { workspace = true }

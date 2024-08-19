@@ -307,8 +307,10 @@ pub fn get_next_sns_version(
     Decode!(&response_bytes, GetNextSnsVersionResponse).unwrap()
 }
 
-/// Adds non-functional wasms to the SNS-WASM canister (to avoid expensive init process in certain tests)
-/// To add additional dummy wasms, set "group_number" to Some(1) or Some(2) to get additional distinct entries.
+/// Adds non-functional WASMs to the SNS-WASM canister (useful for avoiding expensive init process
+/// in certain tests). The optional argument `group_number` specifies which group of WASMs you are
+/// adding so that they will have different content and therefore different hashes; setting
+/// `group_number` to `None` is appropriate in tests that call this function just once.
 pub fn add_dummy_wasms_to_sns_wasms(
     machine: &StateMachine,
     group_number: Option<u8>,

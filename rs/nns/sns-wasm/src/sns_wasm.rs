@@ -1962,6 +1962,7 @@ mod test {
     use async_trait::async_trait;
     use ic_base_types::PrincipalId;
     use ic_crypto_sha2::Sha256;
+    use ic_nervous_system_common_test_utils::wasm_helpers;
     use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
     use ic_nns_handler_root_interface::client::{
         SpyNnsRootCanisterClient, SpyNnsRootCanisterClientCall, SpyNnsRootCanisterClientReply,
@@ -2142,7 +2143,7 @@ mod test {
     /// Provides a small wasm
     fn smallest_valid_wasm() -> SnsWasm {
         SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            wasm: wasm_helpers::SMALLEST_VALID_WASM_BYTES.to_vec(),
             canister_type: i32::from(SnsCanisterType::Governance),
             proposal_id: Some(2),
         }
@@ -2161,19 +2162,8 @@ mod test {
         name: &str,
         contents: Vec<u8>,
     ) -> Vec<u8> {
-        use ic_wasm::{metadata, utils};
-
-        let kind = if is_public {
-            metadata::Kind::Public
-        } else {
-            metadata::Kind::Private
-        };
-
-        let mut wasm_module = utils::parse_wasm(&wasm.wasm, false).unwrap();
-        metadata::add_metadata(&mut wasm_module, kind, name, contents);
-
-        wasm.wasm = wasm_module.emit_wasm();
-
+        wasm.wasm =
+            wasm_helpers::annotate_wasm_with_metadata(&wasm.wasm[..], is_public, name, contents);
         Sha256::hash(&wasm.wasm).to_vec()
     }
 
@@ -4969,17 +4959,11 @@ mod test {
             GetWasmMetadataResponse as GetWasmMetadataResponsePb,
             MetadataSection as MetadataSectionPb,
         };
-        use libflate::gzip;
         use pretty_assertions::assert_eq;
 
         // Gzips a wasm, returning the hash of its compressed representation.
         fn gzip_wasm(wasm: &mut SnsWasm) -> Vec<u8> {
-            wasm.wasm = {
-                let mut encoder = gzip::Encoder::new(Vec::new()).unwrap();
-                std::io::copy(&mut &wasm.wasm[..], &mut encoder).unwrap();
-                encoder.finish().into_result().unwrap()
-            };
-
+            wasm.wasm = wasm_helpers::gzip_wasm(&wasm.wasm[..]);
             Sha256::hash(&wasm.wasm).to_vec()
         }
 

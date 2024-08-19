@@ -9461,6 +9461,7 @@ dependencies = [
  "ic-nervous-system-common",
  "icp-ledger",
  "icrc-ledger-types",
+ "libflate 1.3.0",
  "prometheus-parse",
 ]
 
@@ -11695,7 +11696,6 @@ dependencies = [
  "ic-wasm",
  "icp-ledger",
  "icrc-ledger-types",
- "libflate 1.3.0",
  "maplit",
  "pretty_assertions",
  "prost",
