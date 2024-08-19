@@ -55,7 +55,7 @@ tokio = { workspace = true }
 tokio-io-timeout = "1.2.0"
 tokio-rustls = { workspace = true }
 tokio-util = { workspace = true }
-tower = { workspace = true }
+tower = { version = "^0.5.0", features = ["full"] }
 tower-http = { workspace = true }
 tracing-flame = "0.2.0"
 tracing-subscriber = { workspace = true }
