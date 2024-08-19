@@ -125,7 +125,7 @@ impl RosettaSupportedKeyPair for Ed25519KeyPair {
 
 impl RosettaSupportedKeyPair for Secp256k1KeyPair {
     fn sign(&self, msg: &[u8]) -> Vec<u8> {
-        self.secret_key.sign_message(msg).to_vec()
+        self.secret_key.sign_message_with_ecdsa(msg).to_vec()
     }
 
     //The default serialization version for the Public Key is sec1
