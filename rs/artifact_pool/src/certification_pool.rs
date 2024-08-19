@@ -16,7 +16,7 @@ use ic_types::consensus::IsShare;
 use ic_types::crypto::crypto_hash;
 use ic_types::NodeId;
 use ic_types::{
-    artifact::{CertificationMessageId, IdentifiableArtifact},
+    artifact::CertificationMessageId,
     consensus::certification::{
         Certification, CertificationMessage, CertificationMessageHash, CertificationShare,
     },
@@ -204,15 +204,14 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
 
     fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<CertificationMessage> {
         let changed = !change_set.is_empty();
-        let mut artifacts_with_opt = Vec::new();
-        let mut purged = HashSet::new();
+        let mut mutations = vec![];
 
         change_set.into_iter().for_each(|action| match action {
             ChangeAction::AddToValidated(msg) => {
-                artifacts_with_opt.push(ArtifactWithOpt {
+                mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
                     artifact: msg.clone(),
                     is_latency_sensitive: true,
-                });
+                }));
                 self.validated_pool_metrics
                     .received_artifact_bytes
                     .with_label_values(&[msg.label()])
@@ -222,11 +221,11 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
 
             ChangeAction::MoveToValidated(msg) => {
                 if !msg.is_share() {
-                    artifacts_with_opt.push(ArtifactWithOpt {
+                    mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
                         artifact: msg.clone(),
                         // relayed
                         is_latency_sensitive: false,
-                    });
+                    }));
                 }
                 let label = msg.label().to_owned();
 
@@ -253,7 +252,12 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
 
             ChangeAction::RemoveAllBelow(height) => {
                 self.remove_all_unvalidated_below(height);
-                purged.extend(self.persistent_pool.purge_below(height));
+                mutations.extend(
+                    self.persistent_pool
+                        .purge_below(height)
+                        .drain(..)
+                        .map(ArtifactMutation::Remove),
+                );
             }
 
             ChangeAction::HandleInvalid(msg, reason) => {
@@ -270,14 +274,6 @@ impl MutablePool<CertificationMessage> for CertificationPoolImpl {
             self.update_metrics();
         }
 
-        let mut mutations = Vec::with_capacity(purged.len());
-        mutations.extend(
-            artifacts_with_opt
-                .drain(..)
-                .filter(|x| !purged.contains(&x.artifact.id()))
-                .map(ArtifactMutation::Insert),
-        );
-        mutations.extend(purged.drain().map(ArtifactMutation::Remove));
         ChangeResult {
             mutations,
             poll_immediately: changed,

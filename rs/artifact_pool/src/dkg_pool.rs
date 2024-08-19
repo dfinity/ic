@@ -11,11 +11,8 @@ use ic_interfaces::{
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::{
-    artifact::IdentifiableArtifact, consensus, consensus::dkg, consensus::dkg::DkgMessageId, Height,
-};
+use ic_types::{consensus, consensus::dkg, consensus::dkg::DkgMessageId, Height};
 use prometheus::IntCounter;
-use std::collections::HashSet;
 
 /// The DkgPool is used to store messages that are exchanged between replicas in
 /// the process of executing DKG.
@@ -104,8 +101,7 @@ impl MutablePool<dkg::Message> for DkgPoolImpl {
     /// section.
     fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<dkg::Message> {
         let changed = !change_set.is_empty();
-        let mut artifacts_with_opt = Vec::new();
-        let mut purged = HashSet::new();
+        let mut mutations = vec![];
         for action in change_set {
             match action {
                 ChangeAction::HandleInvalid(id, reason) => {
@@ -114,18 +110,18 @@ impl MutablePool<dkg::Message> for DkgPoolImpl {
                     self.unvalidated.remove(&id);
                 }
                 ChangeAction::AddToValidated(message) => {
-                    artifacts_with_opt.push(ArtifactWithOpt {
+                    mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
                         artifact: message.clone(),
                         is_latency_sensitive: true,
-                    });
+                    }));
                     self.validated.insert(DkgMessageId::from(&message), message);
                 }
                 ChangeAction::MoveToValidated(message) => {
-                    artifacts_with_opt.push(ArtifactWithOpt {
+                    mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
                         artifact: message.clone(),
                         // relayed
                         is_latency_sensitive: false,
-                    });
+                    }));
                     let id = DkgMessageId::from(&message);
                     self.unvalidated
                         .remove(&id)
@@ -138,17 +134,11 @@ impl MutablePool<dkg::Message> for DkgPoolImpl {
                         .remove(&id)
                         .expect("Unvalidated artifact was not found.");
                 }
-                ChangeAction::Purge(height) => purged.extend(self.purge(height).drain(..)),
+                ChangeAction::Purge(height) => {
+                    mutations.extend(self.purge(height).drain(..).map(ArtifactMutation::Remove))
+                }
             }
         }
-        let mut mutations = Vec::with_capacity(purged.len());
-        mutations.extend(
-            artifacts_with_opt
-                .drain(..)
-                .filter(|x| !purged.contains(&x.artifact.id()))
-                .map(ArtifactMutation::Insert),
-        );
-        mutations.extend(purged.drain().map(ArtifactMutation::Remove));
         ChangeResult {
             mutations,
             poll_immediately: changed,

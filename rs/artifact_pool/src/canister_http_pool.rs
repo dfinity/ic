@@ -14,12 +14,11 @@ use ic_interfaces::{
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    artifact::{CanisterHttpResponseId, IdentifiableArtifact},
+    artifact::CanisterHttpResponseId,
     canister_http::{CanisterHttpResponse, CanisterHttpResponseShare},
     crypto::CryptoHashOf,
 };
 use prometheus::IntCounter;
-use std::collections::HashSet;
 
 const POOL_CANISTER_HTTP: &str = "canister_http";
 const POOL_CANISTER_HTTP_CONTENT: &str = "canister_http_content";
@@ -116,15 +115,14 @@ impl MutablePool<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
         change_set: CanisterHttpChangeSet,
     ) -> ChangeResult<CanisterHttpResponseShare> {
         let changed = !change_set.is_empty();
-        let mut artifacts_with_opt = Vec::new();
-        let mut purged = HashSet::new();
+        let mut mutations = vec![];
         for action in change_set {
             match action {
                 CanisterHttpChangeAction::AddToValidated(share, content) => {
-                    artifacts_with_opt.push(ArtifactWithOpt {
+                    mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
                         artifact: share.clone(),
                         is_latency_sensitive: true,
-                    });
+                    }));
                     self.validated.insert(share, ());
                     self.content
                         .insert(ic_types::crypto::crypto_hash(&content), content);
@@ -136,7 +134,7 @@ impl MutablePool<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
                 }
                 CanisterHttpChangeAction::RemoveValidated(id) => {
                     if self.validated.remove(&id).is_some() {
-                        purged.insert(id);
+                        mutations.push(ArtifactMutation::Remove(id));
                     }
                 }
                 CanisterHttpChangeAction::RemoveUnvalidated(id) => {
@@ -155,14 +153,6 @@ impl MutablePool<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
                 }
             }
         }
-        let mut mutations = Vec::with_capacity(purged.len());
-        mutations.extend(
-            artifacts_with_opt
-                .drain(..)
-                .filter(|x| !purged.contains(&x.artifact.id()))
-                .map(ArtifactMutation::Insert),
-        );
-        mutations.extend(purged.drain().map(ArtifactMutation::Remove));
         ChangeResult {
             mutations,
             poll_immediately: changed,

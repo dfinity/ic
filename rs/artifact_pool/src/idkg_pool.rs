@@ -25,7 +25,7 @@ use ic_interfaces::{
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::artifact::{IDkgMessageId, IdentifiableArtifact};
+use ic_types::artifact::IDkgMessageId;
 use ic_types::consensus::{
     idkg::{
         EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefixOf, IDkgStats,
@@ -35,7 +35,7 @@ use ic_types::consensus::{
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
 use prometheus::IntCounter;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use strum::IntoEnumIterator;
@@ -433,15 +433,14 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
         let mut unvalidated_ops = IDkgPoolSectionOps::new();
         let mut validated_ops = IDkgPoolSectionOps::new();
         let changed = !change_set.is_empty();
-        let mut artifacts_with_opt = Vec::new();
-        let mut purged = HashSet::new();
+        let mut mutations = vec![];
         for action in change_set {
             match action {
                 IDkgChangeAction::AddToValidated(message) => {
-                    artifacts_with_opt.push(ArtifactWithOpt {
+                    mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
                         artifact: message.clone(),
                         is_latency_sensitive: true,
-                    });
+                    }));
                     validated_ops.insert(message);
                 }
                 IDkgChangeAction::MoveToValidated(message) => {
@@ -450,17 +449,17 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
                         | IDkgMessage::EcdsaSigShare(_)
                         | IDkgMessage::SchnorrSigShare(_)
                         | IDkgMessage::Dealing(_) => (),
-                        _ => artifacts_with_opt.push(ArtifactWithOpt {
+                        _ => mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
                             artifact: message.clone(),
                             // relayed
                             is_latency_sensitive: false,
-                        }),
+                        })),
                     }
                     unvalidated_ops.remove(IDkgArtifactId::from(&message));
                     validated_ops.insert(message);
                 }
                 IDkgChangeAction::RemoveValidated(msg_id) => {
-                    purged.insert(msg_id.clone());
+                    mutations.push(ArtifactMutation::Remove(msg_id.clone()));
                     validated_ops.remove(msg_id);
                 }
                 IDkgChangeAction::RemoveUnvalidated(msg_id) => {
@@ -472,7 +471,7 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
                     if self.unvalidated.as_pool_section().contains(&msg_id) {
                         unvalidated_ops.remove(msg_id);
                     } else if self.validated.as_pool_section().contains(&msg_id) {
-                        purged.insert(msg_id.clone());
+                        mutations.push(ArtifactMutation::Remove(msg_id.clone()));
                         validated_ops.remove(msg_id);
                     } else {
                         warn!(
@@ -483,17 +482,8 @@ impl MutablePool<IDkgMessage> for IDkgPoolImpl {
                 }
             }
         }
-
         self.unvalidated.mutate(unvalidated_ops);
         self.validated.mutate(validated_ops);
-        let mut mutations = Vec::with_capacity(purged.len());
-        mutations.extend(
-            artifacts_with_opt
-                .drain(..)
-                .filter(|x| !purged.contains(&x.artifact.id()))
-                .map(ArtifactMutation::Insert),
-        );
-        mutations.extend(purged.drain().map(ArtifactMutation::Remove));
         ChangeResult {
             mutations,
             poll_immediately: changed,

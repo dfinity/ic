@@ -26,7 +26,7 @@ use ic_types::{
     CountBytes, NodeId, Time,
 };
 use prometheus::IntCounter;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 const INGRESS_MESSAGE_ARTIFACT_TYPE: &str = "ingress_message";
@@ -294,8 +294,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
 
     /// Apply changeset to the Ingress Pool
     fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<SignedIngress> {
-        let mut artifacts_with_opt = Vec::new();
-        let mut purged = HashSet::new();
+        let mut mutations = vec![];
         for change_action in change_set {
             match change_action {
                 ChangeAction::MoveToValidated((message_id, source_node_id)) => {
@@ -304,10 +303,10 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                     match self.remove_unvalidated(&message_id) {
                         Some((unvalidated_artifact, size)) => {
                             if source_node_id == self.node_id {
-                                artifacts_with_opt.push(ArtifactWithOpt {
+                                mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
                                     artifact: unvalidated_artifact.message.signed_ingress.clone(),
                                     is_latency_sensitive: false,
-                                });
+                                }));
                             }
                             self.validated.insert(
                                 message_id,
@@ -349,7 +348,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                 ChangeAction::RemoveFromValidated(message_id) => {
                     match self.validated.remove(&message_id) {
                         Some(artifact) => {
-                            purged.insert(message_id);
+                            mutations.push(ArtifactMutation::Remove(message_id));
                             let size = artifact.msg.signed_ingress.count_bytes();
                             debug!(
                                 self.log,
@@ -366,29 +365,17 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                     }
                 }
                 ChangeAction::PurgeBelowExpiry(expiry) => {
-                    purged.extend(
+                    mutations.extend(
                         self.validated
                             .purge_below(expiry)
-                            .map(|i| (&i.msg.signed_ingress).into()),
+                            .map(|i| (&i.msg.signed_ingress).into())
+                            .map(ArtifactMutation::Remove),
                     );
                     let _unused = self.unvalidated.purge_below(expiry);
                 }
             }
         }
 
-        let mut mutations = Vec::with_capacity(purged.len());
-        mutations.extend(
-            artifacts_with_opt
-                .drain(..)
-                .filter(|x| {
-                    !purged.contains(&IngressMessageId::new(
-                        x.artifact.expiry_time(),
-                        x.artifact.id(),
-                    ))
-                })
-                .map(ArtifactMutation::Insert),
-        );
-        mutations.extend(purged.drain().map(ArtifactMutation::Remove));
         ChangeResult {
             mutations,
             poll_immediately: false,

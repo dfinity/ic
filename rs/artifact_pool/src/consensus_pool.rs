@@ -24,14 +24,10 @@ use ic_metrics::buckets::linear_buckets;
 use ic_protobuf::types::v1 as pb;
 use ic_types::crypto::CryptoHashOf;
 use ic_types::NodeId;
-use ic_types::{
-    artifact::{ConsensusMessageId, IdentifiableArtifact},
-    consensus::*,
-    Height, SubnetId, Time,
-};
+use ic_types::{artifact::ConsensusMessageId, consensus::*, Height, SubnetId, Time};
 use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
 use std::time::Instant;
-use std::{collections::HashSet, marker::PhantomData, sync::Arc, time::Duration};
+use std::{marker::PhantomData, sync::Arc, time::Duration};
 
 #[derive(Debug, Clone)]
 pub enum PoolSectionOp<T> {
@@ -706,7 +702,7 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
         let updates = self.cache.prepare(&change_set);
         let mut unvalidated_ops = PoolSectionOps::new();
         let mut validated_ops = PoolSectionOps::new();
-        let mut artifacts_with_opt = Vec::new();
+        let mut mutations = vec![];
         // DO NOT Add a default nop. Explicitly mention all cases.
         // This helps with keeping this readable and obvious what
         // change is causing tests to break.
@@ -714,10 +710,10 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
             match change_action {
                 ChangeAction::AddToValidated(to_add) => {
                     self.record_instant(&to_add);
-                    artifacts_with_opt.push(ArtifactWithOpt {
+                    mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
                         artifact: to_add.msg.clone(),
                         is_latency_sensitive: is_latency_sensitive(&to_add.msg),
-                    });
+                    }));
                     validated_ops.insert(to_add);
                 }
                 ChangeAction::RemoveFromValidated(to_remove) => {
@@ -725,10 +721,10 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
                 }
                 ChangeAction::MoveToValidated(to_move) => {
                     if !to_move.is_share() {
-                        artifacts_with_opt.push(ArtifactWithOpt {
+                        mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
                             artifact: to_move.clone(),
                             is_latency_sensitive: false,
-                        });
+                        }));
                     }
                     let msg_id = to_move.get_id();
                     let timestamp = self.unvalidated.get_timestamp(&msg_id).unwrap_or_else(|| {
@@ -794,10 +790,11 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
             .max_height()
             .unwrap_or_default();
         self.apply_changes_unvalidated(unvalidated_ops);
-        let mut purged = self
-            .apply_changes_validated(validated_ops)
-            .drain(..)
-            .collect::<HashSet<_>>();
+        mutations.extend(
+            self.apply_changes_validated(validated_ops)
+                .drain(..)
+                .map(ArtifactMutation::Remove),
+        );
 
         if let Some(backup) = &self.backup {
             self.backup_artifacts(backup, latest_finalization_height, artifacts_for_backup);
@@ -807,14 +804,6 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
             self.cache.update(self, updates);
         }
 
-        let mut mutations = vec![];
-        mutations.extend(
-            artifacts_with_opt
-                .drain(..)
-                .filter(|x| !purged.contains(&x.artifact.id()))
-                .map(ArtifactMutation::Insert),
-        );
-        mutations.extend(purged.drain().map(ArtifactMutation::Remove));
         ChangeResult {
             mutations,
             poll_immediately: changed,
