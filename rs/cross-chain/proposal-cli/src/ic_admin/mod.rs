@@ -47,13 +47,19 @@ impl IcAdminArgs {
         proposal: &ProposalTemplate,
         generated_files: ProposalFiles,
     ) -> String {
+        let mode = match proposal {
+            ProposalTemplate::Upgrade(_) => "upgrade",
+            ProposalTemplate::Install(_) => "install",
+        }
+        .to_string();
         IcAdminTemplate {
             args: self,
+            mode,
             canister_id: *proposal.canister_id(),
-            wasm_module_path: generated_files.wasm,
+            wasm_module_path: generated_files.wasm.to_string_lossy().to_string(),
             wasm_module_sha256: proposal.compressed_wasm_hash().clone(),
-            arg: generated_files.arg,
-            summary_file: generated_files.summary,
+            arg: generated_files.arg.to_string_lossy().to_string(),
+            summary_file: generated_files.summary.to_string_lossy().to_string(),
         }
         .render()
         .expect("failed to render ic-admin template")
@@ -71,19 +77,25 @@ pub struct ProposalFiles {
 pub struct IcAdminTemplate {
     pub args: IcAdminArgs,
 
+    /// The mode to use when updating the canister.
+    // We could use CanisterInstallMode instead, but it lives in the `ic-management-canister-types` crate
+    // which has a somewhat large number of dependencies for what we need here, which is
+    // just a simple enum with 2 variants.
+    mode: String,
+
     /// The ID of the canister to modify
     pub canister_id: Principal,
 
     /// The file system path to the new wasm module to ship.
-    pub wasm_module_path: PathBuf,
+    pub wasm_module_path: String,
 
     /// The sha256 of the new wasm module to ship.
     pub wasm_module_sha256: CompressedWasmHash,
 
     /// The path to a binary file containing the initialization or upgrade args of the
     /// canister.
-    pub arg: PathBuf,
+    pub arg: String,
 
     /// A file containing a human-readable summary of the proposal content.
-    pub summary_file: PathBuf,
+    pub summary_file: String,
 }
