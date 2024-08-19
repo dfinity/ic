@@ -388,7 +388,9 @@ fn icrc1_test_upgrade_serialization() {
 }
 
 mod metrics {
-    use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
+    use crate::{
+        encode_init_args, encode_upgrade_args, ledger_wasm, ledger_wasm_upgradetomemorymanager,
+    };
     use ic_icrc1_ledger_sm_tests::metrics::LedgerSuiteType;
 
     #[test]
@@ -420,6 +422,7 @@ mod metrics {
     fn should_set_ledger_upgrade_instructions_consumed_metric() {
         ic_icrc1_ledger_sm_tests::metrics::assert_ledger_upgrade_instructions_consumed_metric_set(
             ledger_wasm(),
+            Some(ledger_wasm_upgradetomemorymanager()),
             encode_init_args,
             encode_upgrade_args,
         );
