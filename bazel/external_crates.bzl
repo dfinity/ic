@@ -968,10 +968,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.0",
             ),
             "prost": crate.spec(
-                version = "^0.12",
+                version = "^0.13",
             ),
             "prost-build": crate.spec(
-                version = "^0.12",
+                version = "^0.13",
             ),
             "protobuf": crate.spec(
                 version = "^2.28.0",
@@ -1355,10 +1355,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.9",
             ),
             "tonic": crate.spec(
-                version = "^0.11.0",
+                version = "^0.12.0",
             ),
             "tonic-build": crate.spec(
-                version = "^0.11.0",
+                version = "^0.12.0",
             ),
             "tower": crate.spec(
                 version = "^0.4.13",
