@@ -47,6 +47,8 @@ use ic_types::{
     },
     CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
 };
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::WasmHash;
 use serde::{Deserialize, Serialize};
 use std::ops::Bound::{Included, Unbounded};
@@ -62,7 +64,7 @@ pub type StreamMap = BTreeMap<SubnetId, Stream>;
 
 /// Replicated system metadata.  Used primarily for inter-canister messaging and
 /// history queries.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
 pub struct SystemMetadata {
     /// History of ingress messages as they traversed through the
     /// system.
@@ -164,6 +166,7 @@ pub struct SystemMetadata {
     /// Responses to `BitcoinGetSuccessors` can be larger than the max inter-canister
     /// response limit. To work around this limitation, large responses are paginated
     /// and are stored here temporarily until they're fetched by the calling canister.
+    #[validate_eq(Ignore)]
     pub bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<BlockBlob>>,
 
     /// Metrics collecting blockmaker stats (block proposed and failures to propose a block)

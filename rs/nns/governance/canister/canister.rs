@@ -46,17 +46,18 @@ use ic_nns_governance_api::{
         governance_error::ErrorType,
         manage_neuron::{
             claim_or_refresh::{By, MemoAndController},
-            ClaimOrRefresh, Command, NeuronIdOrSubaccount, RegisterVote,
+            ClaimOrRefresh, NeuronIdOrSubaccount, RegisterVote,
         },
         manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
         ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
         GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
         ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProvidersResponse,
-        ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
-        MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo, NodeProvider, Proposal,
-        ProposalInfo, RestoreAgingSummary, RewardEvent, RewardNodeProvider, RewardNodeProviders,
-        SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
-        SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
+        ListProposalInfo, ListProposalInfoResponse, ManageNeuronCommandRequest,
+        ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
+        Neuron, NeuronInfo, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
+        RewardNodeProvider, RewardNodeProviders, SettleCommunityFundParticipation,
+        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
+        UpdateNodeProvider, Vote,
     },
     subnet_rental::{SubnetRentalProposalPayload, SubnetRentalRequest},
 };
@@ -406,9 +407,9 @@ fn vote() {
     over_async(
         candid,
         |(neuron_id, proposal_id, vote): (NeuronId, ProposalId, Vote)| async move {
-            manage_neuron_(ManageNeuron {
+            manage_neuron_(ManageNeuronRequest {
                 id: Some(NeuronIdProto::from(neuron_id)),
-                command: Some(Command::RegisterVote(RegisterVote {
+                command: Some(ManageNeuronCommandRequest::RegisterVote(RegisterVote {
                     proposal: Some(ProposalIdProto::from(proposal_id)),
                     vote: vote as i32,
                 })),
@@ -447,9 +448,9 @@ fn claim_or_refresh_neuron_from_account() {
 async fn claim_or_refresh_neuron_from_account_(
     claim_or_refresh: ClaimOrRefreshNeuronFromAccount,
 ) -> ClaimOrRefreshNeuronFromAccountResponse {
-    let manage_neuron_response = manage_neuron_(ManageNeuron {
+    let manage_neuron_response = manage_neuron_(ManageNeuronRequest {
         id: None,
-        command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+        command: Some(ManageNeuronCommandRequest::ClaimOrRefresh(ClaimOrRefresh {
             by: Some(By::MemoAndController(MemoAndController {
                 memo: claim_or_refresh.memo,
                 controller: claim_or_refresh.controller,
@@ -524,7 +525,7 @@ fn manage_neuron() {
 }
 
 #[candid_method(update, rename = "manage_neuron")]
-async fn manage_neuron_(manage_neuron: ManageNeuron) -> ManageNeuronResponse {
+async fn manage_neuron_(manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     let response = governance_mut()
         .manage_neuron(&caller(), &(gov_pb::ManageNeuron::from(manage_neuron)))
         .await;
@@ -556,7 +557,7 @@ fn simulate_manage_neuron() {
 }
 
 #[candid_method(update, rename = "simulate_manage_neuron")]
-fn simulate_manage_neuron_(manage_neuron: ManageNeuron) -> ManageNeuronResponse {
+fn simulate_manage_neuron_(manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     let response =
         governance().simulate_manage_neuron(&caller(), gov_pb::ManageNeuron::from(manage_neuron));
     ManageNeuronResponse::from(response)

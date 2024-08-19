@@ -99,6 +99,7 @@ DEPENDENCIES = [
     "//rs/tree_deserializer",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
+    "//rs/registry/canister/api",
     "//rs/types/types_test_utils",
     "//rs/types/types",
     "//rs/types/wasm_types",

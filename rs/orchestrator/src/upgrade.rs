@@ -859,6 +859,13 @@ fn report_master_public_key_changed_metric(
     path: PathBuf,
     metrics: &OrchestratorMetrics,
 ) -> OrchestratorResult<()> {
+    // If the file doesn't exist then there is nothing to report.
+    if !path
+        .try_exists()
+        .map_err(OrchestratorError::key_monitoring_error)?
+    {
+        return Ok(());
+    }
     let file = std::fs::File::open(path).map_err(OrchestratorError::key_monitoring_error)?;
     let key_changes: BTreeMap<String, u64> =
         serde_cbor::from_reader(file).map_err(OrchestratorError::key_monitoring_error)?;
@@ -1031,9 +1038,17 @@ mod tests {
 
             let metrics_new = OrchestratorMetrics::new(&MetricsRegistry::new());
             report_master_public_key_changed_metric(setup.path(), &metrics_new).unwrap();
-            let after_restart = get_master_key_changed_metric(&key_id, &metrics);
+            let after_restart = get_master_key_changed_metric(&key_id, &metrics_new);
 
             assert_eq!(after_restart, after);
+
+            // If there are no persisted metrics we should not report anything
+            let metrics_new = OrchestratorMetrics::new(&MetricsRegistry::new());
+            let path = setup.path().parent().unwrap().join("test");
+            report_master_public_key_changed_metric(path, &metrics_new).unwrap();
+            let non_existent = get_master_key_changed_metric(&key_id, &metrics_new);
+
+            assert_eq!(non_existent, 0);
         });
     }
 
