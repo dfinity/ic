@@ -296,6 +296,28 @@ fn test_list_node_provider_rewards() {
             page: None,
             date_filter: Some(DateRangeFilter {
                 start_timestamp_seconds: Some(minted_rewards_timestamps[9]),
+                end_timestamp_seconds: None,
+            }),
+        },
+    );
+    let received_ts: Vec<u64> = response.rewards.iter().map(|r| r.timestamp).collect();
+    assert_eq!(
+        received_ts,
+        minted_rewards_timestamps[9..13]
+            .into_iter()
+            .rev()
+            .cloned()
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(response.next_page, None);
+
+    // Next we test the date filter with a start and end_date
+    let response = nns_list_node_provider_rewards(
+        &state_machine,
+        ListNodeProviderRewardsRequest {
+            page: None,
+            date_filter: Some(DateRangeFilter {
+                start_timestamp_seconds: Some(minted_rewards_timestamps[9]),
                 end_timestamp_seconds: Some(minted_rewards_timestamps[11]),
             }),
         },
@@ -310,8 +332,6 @@ fn test_list_node_provider_rewards() {
             .collect::<Vec<_>>()
     );
     assert_eq!(response.next_page, None);
-
-    // Next we test the date filter with a start and end_date
 }
 #[test]
 fn test_automated_node_provider_remuneration() {
