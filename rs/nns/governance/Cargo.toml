@@ -85,6 +85,9 @@ comparable = { version = "0.5", features = ["derive"] }
 canbench-rs = { version = "0.1.4", optional = true }
 ic-cdk = { workspace = true, optional = true }
 
+tla-instrumentation = { git = "https://github.com/oggy-dfin/tla-instrumentation.git", rev = "f6a55e456f63e4a941eb4916f31e3bcc3bd053f4", package = "tla_instrumentation" }
+tla-instrumentation-proc-macros = { git = "https://github.com/oggy-dfin/tla-instrumentation.git", rev = "f6a55e456f63e4a941eb4916f31e3bcc3bd053f4", package = "tla_instrumentation_proc_macros" }
+
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 csv = "1.1"
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
