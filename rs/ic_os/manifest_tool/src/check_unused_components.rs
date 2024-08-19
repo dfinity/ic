@@ -16,9 +16,10 @@ pub fn check_unused_components(repo_root: &Path) -> Result<()> {
     let components_path: PathBuf = repo_root.join(COMPONENTS_PATH);
 
     let repo_files: HashSet<PathBuf> = collect_repo_files(&components_path)?;
+    let filtered_repo_files = filter_ignored_files(repo_files);
     let manifest_files: HashSet<PathBuf> = collect_manifest_files(&icos_manifest);
 
-    let unused_files: Vec<&PathBuf> = repo_files.difference(&manifest_files).collect();
+    let unused_files: Vec<&PathBuf> = filtered_repo_files.difference(&manifest_files).collect();
 
     if unused_files.is_empty() {
         println!("No unused files found.");
@@ -43,22 +44,38 @@ fn collect_repo_files(dir: &Path) -> Result<HashSet<PathBuf>, std::io::Error> {
         let path = entry.path().to_path_buf();
 
         if path.is_file() {
-            if let Some(file_name) = path.file_name().and_then(|s| s.to_str()) {
-                if file_name.ends_with(".bzl")
-                    || file_name.ends_with(".bazel")
-                    || file_name.to_lowercase().starts_with("readme.")
-                    || IGNORED_COMPONENT_FILES.iter().any(|&ignored_file_path| {
-                        path.to_string_lossy().ends_with(ignored_file_path)
-                    })
-                {
-                    continue;
-                }
-            }
             files.insert(path);
         }
     }
 
     Ok(files)
+}
+
+fn filter_ignored_files(files: HashSet<PathBuf>) -> HashSet<PathBuf> {
+    files
+        .into_iter()
+        .filter(|path| {
+            let file_name = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or_default();
+
+            if file_name.ends_with(".bzl") || file_name.ends_with(".bazel") {
+                return false;
+            }
+            if file_name.to_lowercase().starts_with("readme.") {
+                return false;
+            }
+            if IGNORED_COMPONENT_FILES
+                .iter()
+                .any(|&ignored_file_path| path.to_string_lossy().ends_with(ignored_file_path))
+            {
+                return false;
+            }
+
+            true
+        })
+        .collect()
 }
 
 fn collect_manifest_files(icos_manifest: &IcosManifest) -> HashSet<PathBuf> {
@@ -89,7 +106,7 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn test_collect_repo_files() {
+    fn test_collect_repo_files_and_filter() {
         let dir = tempdir().unwrap();
         let file1 = dir.path().join("file1.txt");
         let file2 = dir.path().join("file2.bzl");
@@ -100,10 +117,11 @@ mod tests {
         File::create(&file3).unwrap();
 
         let repo_files = collect_repo_files(dir.path()).unwrap();
+        let filtered_repo_files = filter_ignored_files(repo_files);
 
-        assert!(repo_files.contains(&file1));
-        assert!(!repo_files.contains(&file2));
-        assert!(!repo_files.contains(&file3));
+        assert!(filtered_repo_files.contains(&file1));
+        assert!(!filtered_repo_files.contains(&file2));
+        assert!(!filtered_repo_files.contains(&file3));
     }
 
     #[test]
