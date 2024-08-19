@@ -61,14 +61,14 @@ process ( Split_Neuron \in Split_Neuron_Process_Ids )
     {
     SplitNeuron1:
         either {
-            \* Simulate early failed calls that don't change the state; 
-            \* not so useful for model checking, but needed to follow the code traces.
+            \* Simulate calls that just fail early and don't change the state. 
+            \* Not so useful for model checking, but needed to follow the code traces.
             goto Done;
         } or {
         \* Need to make sure there is an element of Split_Neuron_Account_Ids for each
         \* member of Split_Neuron_Process_Ids
         with(nid \in DOMAIN(neuron) \ locks; 
-             amt \in 0..neuron[nid].cached_stake; 
+             amt \in (MIN_STAKE+TRANSACTION_FEE)..neuron[nid].cached_stake; 
              fresh_account_id \in Governance_Account_Ids \ {neuron[n].account : n \in DOMAIN(neuron)};
             ) {
             sn_parent_neuron_id := nid;
