@@ -180,15 +180,9 @@
 //! Completed pre-signatures are delivered to the deterministic state machnine,
 //! where they are matched with incoming signature requests.
 
-<<<<<<< HEAD:rs/consensus/src/ecdsa.rs
-use crate::ecdsa::complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl};
-use crate::ecdsa::metrics::{
-    timed_call, EcdsaClientMetrics, CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
-=======
 use crate::idkg::complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl};
 use crate::idkg::metrics::{
-    timed_call, IDkgClientMetrics, IDkgGossipMetrics, CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS,
->>>>>>> origin/master:rs/consensus/src/idkg.rs
+    timed_call, IDkgClientMetrics, CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS,
 };
 use crate::idkg::pre_signer::{IDkgPreSigner, IDkgPreSignerImpl};
 use crate::idkg::signer::{ThresholdSigner, ThresholdSignerImpl};
@@ -447,10 +441,6 @@ pub struct IDkgGossipImpl {
     subnet_id: SubnetId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-<<<<<<< HEAD:rs/consensus/src/ecdsa.rs
-=======
-    metrics: IDkgGossipMetrics,
->>>>>>> origin/master:rs/consensus/src/idkg.rs
 }
 
 impl IDkgGossipImpl {
@@ -464,10 +454,6 @@ impl IDkgGossipImpl {
             subnet_id,
             consensus_block_cache,
             state_reader,
-<<<<<<< HEAD:rs/consensus/src/ecdsa.rs
-=======
-            metrics: IDkgGossipMetrics::new(metrics_registry),
->>>>>>> origin/master:rs/consensus/src/idkg.rs
         }
     }
 }
@@ -514,39 +500,19 @@ impl IDkgPriorityFnArgs {
     }
 }
 
-<<<<<<< HEAD:rs/consensus/src/ecdsa.rs
-impl<Pool: IDkgPool> PriorityFnFactory<IDkgMessage, Pool> for EcdsaGossipImpl {
+impl<Pool: IDkgPool> PriorityFnFactory<IDkgMessage, Pool> for IDkgGossipImpl {
     fn get_priority_function(&self, _idkg_pool: &Pool) -> PriorityFn<IDkgMessageId> {
         let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;
-        let args = EcdsaPriorityFnArgs::new(&block_reader, self.state_reader.as_ref());
-        Box::new(move |id: &'_ IDkgMessageId| compute_priority(id, subnet_id, &args))
-=======
-impl<Pool: IDkgPool> PriorityFnFactory<IDkgMessage, Pool> for IDkgGossipImpl {
-    fn get_priority_function(
-        &self,
-        _idkg_pool: &Pool,
-    ) -> PriorityFn<IDkgMessageId, IDkgMessageAttribute> {
-        let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
-        let subnet_id = self.subnet_id;
         let args = IDkgPriorityFnArgs::new(&block_reader, self.state_reader.as_ref());
-        let metrics = self.metrics.clone();
-        Box::new(move |_, attr: &'_ IDkgMessageAttribute| {
-            compute_priority(attr, subnet_id, &args, &metrics)
-        })
->>>>>>> origin/master:rs/consensus/src/idkg.rs
+        Box::new(move |id| compute_priority(id, subnet_id, &args))
     }
 }
 
 fn compute_priority(
     id: &IDkgMessageId,
     subnet_id: SubnetId,
-<<<<<<< HEAD:rs/consensus/src/ecdsa.rs
-    args: &EcdsaPriorityFnArgs,
-=======
     args: &IDkgPriorityFnArgs,
-    metrics: &IDkgGossipMetrics,
->>>>>>> origin/master:rs/consensus/src/idkg.rs
 ) -> Priority {
     match id {
         IDkgMessageId::Dealing(_, data) => {
@@ -615,9 +581,6 @@ mod tests {
 
     use super::*;
     use ic_test_utilities::state_manager::RefMockStateManager;
-    use ic_test_utilities_types::ids::node_test_id;
-    use ic_types::consensus::idkg::dealing_prefix;
-    use ic_types::consensus::idkg::dealing_support_prefix;
     use ic_types::consensus::idkg::{IDkgUIDGenerator, PreSigId};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::{consensus::idkg::RequestId, PrincipalId, SubnetId};
@@ -659,6 +622,11 @@ mod tests {
         // Only the context with matched quadruple should be in "requested"
         let args = IDkgPriorityFnArgs::new(&block_reader, state_manager.as_ref());
         assert_eq!(args.certified_height, height);
+        assert_eq!(args.requested_signatures.len(), 1);
+        assert_eq!(
+            args.requested_signatures.first().unwrap(),
+            &expected_request_id
+        );
     }
 
     // Tests the priority computation for dealings/support.
@@ -668,76 +636,73 @@ mod tests {
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
         let xnet_transcript_id = IDkgTranscriptId::new(xnet_subnet_id, 1, Height::from(1000));
         let transcript_id_fetch_1 = IDkgTranscriptId::new(subnet_id, 1, Height::from(80));
-        let transcript_id_drop: IDkgTranscriptId =
-            IDkgTranscriptId::new(subnet_id, 2, Height::from(70));
+        let transcript_id_drop = IDkgTranscriptId::new(subnet_id, 2, Height::from(70));
         let transcript_id_fetch_2 = IDkgTranscriptId::new(subnet_id, 3, Height::from(102));
         let transcript_id_stash = IDkgTranscriptId::new(subnet_id, 4, Height::from(200));
 
-        let dealing_prefix_fetch_1 = dealing_prefix(&transcript_id_fetch_1, &node_test_id(0));
-        let dealing_prefix_fetch_2 = dealing_prefix(&transcript_id_fetch_2, &node_test_id(0));
-        let dealing_prefix_stash = dealing_prefix(&transcript_id_stash, &node_test_id(0));
-
-        let dealing_support_prefix_fetch_1 =
-            dealing_support_prefix(&transcript_id_fetch_1, &node_test_id(0), &node_test_id(1));
-        let dealing_support_prefix_fetch_2 =
-            dealing_support_prefix(&transcript_id_fetch_2, &node_test_id(0), &node_test_id(1));
-        let dealing_support_prefix_stash =
-            dealing_support_prefix(&transcript_id_stash, &node_test_id(0), &node_test_id(1));
-
         let metrics_registry = MetricsRegistry::new();
-<<<<<<< HEAD:rs/consensus/src/ecdsa.rs
-=======
         let metrics = IDkgGossipMetrics::new(metrics_registry);
->>>>>>> origin/master:rs/consensus/src/idkg.rs
 
         let mut requested_transcripts = BTreeSet::new();
         requested_transcripts.insert(transcript_id_fetch_1);
         let args = IDkgPriorityFnArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
+            requested_transcripts,
+            requested_signatures: BTreeSet::new(),
+            active_transcripts: BTreeSet::new(),
         };
 
         let tests = vec![
             // Signed dealings
             (
-                IDkgMessageId::Dealing(dealing_prefix_fetch_1, dealing_prefix_fetch_1),
+                IDkgMessageAttribute::Dealing(xnet_transcript_id),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageId::Dealing(transcript_id_fetch_1),
-                Priority::FetchNow,
-            ),
-            (IDkgMessageId::Dealing(transcript_id_drop), Priority::Drop),
-            (
-                IDkgMessageId::Dealing(transcript_id_fetch_2),
-                Priority::FetchNow,
-            ),
-            (IDkgMessageId::Dealing(transcript_id_stash), Priority::Stash),
-            // Dealing support
-            (
-                IDkgMessageId::DealingSupport(xnet_transcript_id),
+                IDkgMessageAttribute::Dealing(transcript_id_fetch_1),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageId::DealingSupport(transcript_id_fetch_1),
-                Priority::FetchNow,
-            ),
-            (
-                IDkgMessageId::DealingSupport(transcript_id_drop),
+                IDkgMessageAttribute::Dealing(transcript_id_drop),
                 Priority::Drop,
             ),
             (
-                IDkgMessageId::DealingSupport(transcript_id_fetch_2),
+                IDkgMessageAttribute::Dealing(transcript_id_fetch_2),
                 Priority::FetchNow,
             ),
             (
-                IDkgMessageId::DealingSupport(transcript_id_stash),
+                IDkgMessageAttribute::Dealing(transcript_id_stash),
+                Priority::Stash,
+            ),
+            // Dealing support
+            (
+                IDkgMessageAttribute::DealingSupport(xnet_transcript_id),
+                Priority::FetchNow,
+            ),
+            (
+                IDkgMessageAttribute::DealingSupport(transcript_id_fetch_1),
+                Priority::FetchNow,
+            ),
+            (
+                IDkgMessageAttribute::DealingSupport(transcript_id_drop),
+                Priority::Drop,
+            ),
+            (
+                IDkgMessageAttribute::DealingSupport(transcript_id_fetch_2),
+                Priority::FetchNow,
+            ),
+            (
+                IDkgMessageAttribute::DealingSupport(transcript_id_stash),
                 Priority::Stash,
             ),
         ];
 
-        for (id, expected) in tests {
-            assert_eq!(compute_priority(&id, subnet_id, &args), expected);
+        for (attr, expected) in tests {
+            assert_eq!(
+                compute_priority(&attr, subnet_id, &args, &metrics),
+                expected
+            );
         }
     }
 
@@ -768,18 +733,16 @@ mod tests {
         };
 
         let metrics_registry = MetricsRegistry::new();
-<<<<<<< HEAD:rs/consensus/src/ecdsa.rs
-
-        let args = EcdsaPriorityFnArgs {
-=======
         let metrics = IDkgGossipMetrics::new(metrics_registry);
 
         let mut requested_signatures = BTreeSet::new();
         requested_signatures.insert(request_id_fetch_1.clone());
         let args = IDkgPriorityFnArgs {
->>>>>>> origin/master:rs/consensus/src/idkg.rs
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
+            requested_transcripts: BTreeSet::new(),
+            requested_signatures,
+            active_transcripts: BTreeSet::new(),
         };
 
         let tests = vec![
@@ -817,8 +780,11 @@ mod tests {
             ),
         ];
 
-        for (id, expected) in tests {
-            assert_eq!(compute_priority(&id, subnet_id, &args), expected);
+        for (attr, expected) in tests {
+            assert_eq!(
+                compute_priority(&attr, subnet_id, &args, &metrics),
+                expected
+            );
         }
     }
 
@@ -833,10 +799,7 @@ mod tests {
         let transcript_id_fetch_3 = IDkgTranscriptId::new(subnet_id, 5, Height::from(80));
 
         let metrics_registry = MetricsRegistry::new();
-<<<<<<< HEAD:rs/consensus/src/ecdsa.rs
-=======
         let metrics = IDkgGossipMetrics::new(metrics_registry);
->>>>>>> origin/master:rs/consensus/src/idkg.rs
 
         let mut active_transcripts = BTreeSet::new();
         active_transcripts.insert(transcript_id_fetch_1);
@@ -845,6 +808,9 @@ mod tests {
         let args = IDkgPriorityFnArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
+            requested_transcripts,
+            requested_signatures: BTreeSet::new(),
+            active_transcripts,
         };
 
         let tests = vec![
@@ -892,8 +858,11 @@ mod tests {
             ),
         ];
 
-        for (id, expected) in tests {
-            assert_eq!(compute_priority(&id, subnet_id, &args), expected);
+        for (attr, expected) in tests {
+            assert_eq!(
+                compute_priority(&attr, subnet_id, &args, &metrics),
+                expected
+            );
         }
     }
 }

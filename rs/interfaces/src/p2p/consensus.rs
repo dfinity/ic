@@ -130,7 +130,6 @@ pub trait ArtifactAssembler<A1: IdentifiableArtifact, A2: PbArtifact>:
     fn assemble_message<P: Peers + Send + 'static>(
         &self,
         id: <A2 as IdentifiableArtifact>::Id,
-        attr: <A2 as IdentifiableArtifact>::Attribute,
         artifact: Option<(A2, NodeId)>,
         peers: P,
     ) -> impl std::future::Future<Output = Result<(A1, NodeId), Aborted>> + Send;

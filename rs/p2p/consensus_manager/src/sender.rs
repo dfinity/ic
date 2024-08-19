@@ -427,7 +427,6 @@ mod tests {
         async fn assemble_message<P: Peers + Send + 'static>(
             &self,
             _id: <U64Artifact as IdentifiableArtifact>::Id,
-            _attr: <U64Artifact as IdentifiableArtifact>::Attribute,
             _artifact: Option<(U64Artifact, NodeId)>,
             _peers: P,
         ) -> Result<(U64Artifact, NodeId), Aborted> {
