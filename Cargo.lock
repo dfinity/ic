@@ -12940,7 +12940,7 @@ name = "ic-xnet-hyper"
 version = "0.9.0"
 dependencies = [
  "hyper 1.4.1",
- "hyper-rustls 0.27.1",
+ "hyper-rustls 0.27.2",
  "hyper-util",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-tls",
