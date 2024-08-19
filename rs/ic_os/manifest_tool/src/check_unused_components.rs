@@ -17,6 +17,7 @@ pub fn check_unused_components(repo_root: &Path) -> Result<()> {
 
     let repo_files: HashSet<PathBuf> = collect_repo_files(&components_path)?;
     let filtered_repo_files = filter_ignored_files(repo_files);
+
     let manifest_files: HashSet<PathBuf> = collect_manifest_files(&icos_manifest);
 
     let unused_files: Vec<&PathBuf> = filtered_repo_files.difference(&manifest_files).collect();
