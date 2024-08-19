@@ -8,12 +8,11 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_governance_api::pb::v1::{
     add_or_remove_node_provider::Change,
-    manage_neuron::{Command, NeuronIdOrSubaccount},
+    manage_neuron::NeuronIdOrSubaccount,
     manage_neuron_response::Command as CommandResponse,
-    proposal::Action,
     reward_node_provider::{RewardMode, RewardToAccount},
-    AddOrRemoveNodeProvider, ManageNeuron, ManageNeuronResponse, NodeProvider, Proposal,
-    ProposalStatus, RewardNodeProvider,
+    AddOrRemoveNodeProvider, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, NodeProvider, ProposalActionRequest, ProposalStatus, RewardNodeProvider,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -55,22 +54,26 @@ fn test_node_provider_rewards() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuron {
+                ManageNeuronRequest {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
                         id: TEST_NEURON_1_ID,
                     })),
                     id: None,
-                    command: Some(Command::MakeProposal(Box::new(Proposal {
-                        title: Some("Just want to add this NP.".to_string()),
-                        summary: "".to_string(),
-                        url: "".to_string(),
-                        action: Some(Action::AddOrRemoveNodeProvider(AddOrRemoveNodeProvider {
-                            change: Some(Change::ToAdd(NodeProvider {
-                                id: Some(np_pid),
-                                reward_account: None,
-                            })),
-                        })),
-                    }))),
+                    command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
+                        MakeProposalRequest {
+                            title: Some("Just want to add this NP.".to_string()),
+                            summary: "".to_string(),
+                            url: "".to_string(),
+                            action: Some(ProposalActionRequest::AddOrRemoveNodeProvider(
+                                AddOrRemoveNodeProvider {
+                                    change: Some(Change::ToAdd(NodeProvider {
+                                        id: Some(np_pid),
+                                        reward_account: None,
+                                    })),
+                                },
+                            )),
+                        },
+                    ))),
                 },
                 &user,
             )
@@ -109,26 +112,32 @@ fn test_node_provider_rewards() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuron {
+                ManageNeuronRequest {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
                         id: TEST_NEURON_1_ID,
                     })),
                     id: None,
-                    command: Some(Command::MakeProposal(Box::new(Proposal {
-                        title: Some("Just want to add this NP.".to_string()),
-                        summary: "".to_string(),
-                        url: "".to_string(),
-                        action: Some(Action::RewardNodeProvider(RewardNodeProvider {
-                            node_provider: Some(NodeProvider {
-                                id: Some(np_pid),
-                                reward_account: None,
-                            }),
-                            amount_e8s: 234 * 100_000_000,
-                            reward_mode: Some(RewardMode::RewardToAccount(RewardToAccount {
-                                to_account: Some(to_account.into()),
-                            })),
-                        })),
-                    }))),
+                    command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
+                        MakeProposalRequest {
+                            title: Some("Just want to add this NP.".to_string()),
+                            summary: "".to_string(),
+                            url: "".to_string(),
+                            action: Some(ProposalActionRequest::RewardNodeProvider(
+                                RewardNodeProvider {
+                                    node_provider: Some(NodeProvider {
+                                        id: Some(np_pid),
+                                        reward_account: None,
+                                    }),
+                                    amount_e8s: 234 * 100_000_000,
+                                    reward_mode: Some(RewardMode::RewardToAccount(
+                                        RewardToAccount {
+                                            to_account: Some(to_account.into()),
+                                        },
+                                    )),
+                                },
+                            )),
+                        },
+                    ))),
                 },
                 &user,
             )

@@ -54,7 +54,6 @@ fn upgrade_ledger(
         change_fee_collector,
         max_memo_length: None,
         feature_flags: None,
-        maximum_number_of_accounts: None,
         accounts_overflow_trim_quantity: None,
         change_archive_options: None,
     }));
