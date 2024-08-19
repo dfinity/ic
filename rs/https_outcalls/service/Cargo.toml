@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-prost = { workspace = true }
-tonic = { workspace = true }
+prost = "0.13.1"
+tonic = "0.12.0"
 
 [build-dependencies]
-tonic-build = { workspace = true }
+tonic-build = "0.12.1"

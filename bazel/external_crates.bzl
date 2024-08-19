@@ -532,7 +532,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "hyper-socks2": crate.spec(
-                version = "^0.8.0",
+                version = "^0.9.1",
                 default_features = False,
                 features = [
                     "rustls",
@@ -970,6 +970,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "prost": crate.spec(
                 version = "^0.12",
             ),
+            "prost_0_13_0": crate.spec(
+                package = "prost",
+                version = "^0.13.1",
+            ),
             "prost-build": crate.spec(
                 version = "^0.12",
             ),
@@ -1357,11 +1361,24 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "tonic": crate.spec(
                 version = "^0.11.0",
             ),
+            "tonic_0_12_0": crate.spec(
+                package = "tonic",
+                version = "^0.12.0",
+            ),
             "tonic-build": crate.spec(
                 version = "^0.11.0",
             ),
+            "tonic-build_0_12_0": crate.spec(
+                package = "tonic-build",
+                version = "^0.12.1",
+            ),
             "tower": crate.spec(
                 version = "^0.4.13",
+                features = ["full"],
+            ),
+            "tower_0_5_0": crate.spec(
+                package = "tower",
+                version = "^0.5.0",
                 features = ["full"],
             ),
             "tower_http_0_4_4": crate.spec(

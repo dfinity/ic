@@ -25,8 +25,8 @@ DEPENDENCIES = [
     "@crate_index//:prometheus",
     "@crate_index//:slog",
     "@crate_index//:tokio",
-    "@crate_index//:tonic",
-    "@crate_index//:tower",
+    "@crate_index//:tonic_0_12_0",
+    "@crate_index//:tower_0_5_0",
     "@crate_index//:tracing",
 ]
 
