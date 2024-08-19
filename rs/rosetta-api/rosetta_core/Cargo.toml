@@ -12,7 +12,7 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 candid = { workspace = true }
-ecdsa-secp256k1 = { path = "../../crypto/internal/crypto_lib/basic_sig/secp256k1", package = "ic-crypto-internal-basic-sig-ecdsa-secp256k1" }
+ecdsa-secp256k1 = { path = "../../crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1", package = "ic-crypto-internal-basic-sig-ecdsa-secp256k1" }
 hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-crypto-secp256k1 = { path = "../../crypto/secp256k1" }
