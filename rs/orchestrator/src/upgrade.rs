@@ -860,7 +860,10 @@ fn report_master_public_key_changed_metric(
     metrics: &OrchestratorMetrics,
 ) -> OrchestratorResult<()> {
     // If the file doesn't exist then there is nothing to report.
-    if !path.try_exists().map_err(OrchestratorError::key_monitoring_error)? {
+    if !path
+        .try_exists()
+        .map_err(OrchestratorError::key_monitoring_error)?
+    {
         return Ok(());
     }
     let file = std::fs::File::open(path).map_err(OrchestratorError::key_monitoring_error)?;
