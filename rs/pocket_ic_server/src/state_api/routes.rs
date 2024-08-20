@@ -1032,7 +1032,8 @@ fn contains_unimplemented(config: ExtendedSubnetConfigSet) -> bool {
             .into_iter()
             .flatten()
             .chain(config.system)
-            .chain(config.application),
+            .chain(config.application)
+            .chain(config.verified_application),
         |spec: pocket_ic::common::rest::SubnetSpec| {
             spec.get_subnet_id().is_some() || !spec.is_supported()
         },

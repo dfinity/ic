@@ -1,5 +1,5 @@
 {
-  "checksum": "71942979764b5e6cb7f52cc7ead4c12e9a4bf198c893a13e3a87d3392dcb7c57",
+  "checksum": "f2f4c7228fb0b359d3bb8794277ae009c3499908eddda01113f108ed13314135",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -9789,7 +9789,7 @@
               "target": "candid"
             },
             {
-              "id": "ic-cdk 0.12.1",
+              "id": "ic-cdk 0.12.2",
               "target": "ic_cdk"
             },
             {
@@ -17495,7 +17495,7 @@
               "target": "ic_cbor"
             },
             {
-              "id": "ic-cdk 0.13.2",
+              "id": "ic-cdk 0.13.5",
               "target": "ic_cdk"
             },
             {
@@ -28038,7 +28038,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-cdk 0.14.0",
+              "id": "ic-cdk 0.14.1",
               "target": "ic_cdk"
             },
             {
@@ -28148,14 +28148,14 @@
       ],
       "license_file": null
     },
-    "ic-cdk 0.12.1": {
+    "ic-cdk 0.12.2": {
       "name": "ic-cdk",
-      "version": "0.12.1",
+      "version": "0.12.2",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.12.1/download",
-          "sha256": "9f3d204af0b11c45715169c997858edb58fa8407d08f4fae78a6b415dd39a362"
+          "url": "https://static.crates.io/crates/ic-cdk/0.12.2/download",
+          "sha256": "0e908da565d9e304e83732500069ebb959e3d2cad80f894889ea37207112c7a0"
         }
       },
       "targets": [
@@ -28208,7 +28208,7 @@
           ],
           "selects": {}
         },
-        "version": "0.12.1"
+        "version": "0.12.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -28216,14 +28216,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk 0.13.2": {
+    "ic-cdk 0.13.5": {
       "name": "ic-cdk",
-      "version": "0.13.2",
+      "version": "0.13.5",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.13.2/download",
-          "sha256": "f8859bc2b863a77750acf199e1fb7e3fc403e1b475855ba13f59cb4e4036d238"
+          "url": "https://static.crates.io/crates/ic-cdk/0.13.5/download",
+          "sha256": "3b1da6a25b045f9da3c9459c0cb2b0700ac368ee16382975a17185a23b9c18ab"
         }
       },
       "targets": [
@@ -28276,7 +28276,7 @@
           ],
           "selects": {}
         },
-        "version": "0.13.2"
+        "version": "0.13.5"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -28284,14 +28284,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk 0.14.0": {
+    "ic-cdk 0.14.1": {
       "name": "ic-cdk",
-      "version": "0.14.0",
+      "version": "0.14.1",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.14.0/download",
-          "sha256": "ff384f182459bec490a7f50a58bbdf8f7a6934de4dcc259e30c70641bcbcb917"
+          "url": "https://static.crates.io/crates/ic-cdk/0.14.1/download",
+          "sha256": "9cff1a3c3db565e3384c9c9d6d676b0a3f89a0886f4f787294d9c946d844369f"
         }
       },
       "targets": [
@@ -28344,7 +28344,7 @@
           ],
           "selects": {}
         },
-        "version": "0.14.0"
+        "version": "0.14.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -28656,7 +28656,7 @@
               "target": "futures"
             },
             {
-              "id": "ic-cdk 0.13.2",
+              "id": "ic-cdk 0.13.5",
               "target": "ic_cdk"
             },
             {
@@ -35817,30 +35817,38 @@
         ],
         "crate_features": {
           "common": [
-            "elf",
-            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
           "selects": {
             "aarch64-unknown-linux-gnu": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
             "aarch64-unknown-nixos-gnu": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
             "arm-unknown-linux-gnueabi": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
             "armv7-unknown-linux-gnueabi": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
             "i686-unknown-linux-gnu": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
@@ -35853,10 +35861,14 @@
               "system"
             ],
             "x86_64-unknown-linux-gnu": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ],
             "x86_64-unknown-nixos-gnu": [
+              "elf",
+              "errno",
               "prctl",
               "system"
             ]
@@ -45695,7 +45707,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-cdk 0.13.2",
+              "id": "ic-cdk 0.13.5",
               "target": "ic_cdk"
             },
             {
@@ -78557,7 +78569,7 @@
     "ic-canister-log 0.2.0",
     "ic-canister-sig-creation 1.0.1",
     "ic-cbor 2.6.0",
-    "ic-cdk 0.13.2",
+    "ic-cdk 0.13.5",
     "ic-cdk-macros 0.9.0",
     "ic-cdk-timers 0.7.0",
     "ic-certification 2.6.0",
