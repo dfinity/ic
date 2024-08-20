@@ -255,6 +255,7 @@ mod tests {
         assert!(
             matches!(&result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == id)
         );
+        assert!(matches!(&result.mutations[1], ArtifactMutation::Insert(_)));
         assert!(result.poll_immediately);
         assert_eq!(result.mutations.len(), 2);
         assert_eq!(share, pool.lookup_validated(&id).unwrap());
