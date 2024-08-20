@@ -24,7 +24,6 @@ ic-cdk-timers = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
-ic-metrics-encoder = "1"
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }

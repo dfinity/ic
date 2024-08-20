@@ -120,13 +120,8 @@ pub fn sign(msg: &[u8], sk: &types::SecretKeyBytes) -> CryptoResult<types::Signa
                 }
             })?;
 
-    if let Some(sig_bytes) = signing_key.sign_digest_with_ecdsa(msg) {
-        Ok(types::SignatureBytes(sig_bytes))
-    } else {
-        Err(CryptoError::InvalidArgument {
-            message: format!("Cannot ECDSA sign a digest of {} bytes", msg.len()),
-        })
-    }
+    let sig_bytes = signing_key.sign_digest_with_ecdsa(msg);
+    Ok(types::SignatureBytes(sig_bytes))
 }
 
 /// Verify a signature using a secp256k1 public key
