@@ -12,12 +12,10 @@ jobs:
   test-evm-rpc:
     name: Test (EVM RPC)
     runs-on:
-      group: IC-Prod
-    container:
-      image: dfinity/ic-build:c09c09c9b48ca3ad09407c1cc8fa3e9483954ee046c64d23410d88b23f95e2f3
+      group: ubuntu-latest
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Build Rust package
-        run: cargo build --package ic-cketh-minter
+        run: cargo +nightly build --package ic-cketh-minter
