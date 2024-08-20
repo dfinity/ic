@@ -718,10 +718,10 @@ pub enum ValidationError {
     UrlParseError(String),
     // #[error("hostname not allowed: {0}")]
     HostNotAllowed(String),
-    // #[error("credential path not allowed")]
-    CredentialPathNotAllowed,
-    // #[error("credential header not allowed")]
-    CredentialHeaderNotAllowed,
+    // #[error("API key not allowed")]
+    ApiKeyNotAllowed,
+    // #[error("header not allowed")]
+    HeaderNotAllowed,
 }
 
 pub fn are_errors_consistent<T: PartialEq>(
