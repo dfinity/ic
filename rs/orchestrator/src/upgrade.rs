@@ -376,12 +376,32 @@ impl Upgrade {
             .any(|h| h == height.get());
 
         if checkpoint_exists {
-            info!(self.logger, "Checkpoint at height {height} already exists",);
+            info!(self.logger, "Checkpoint at height {height} already exists");
             return Ok(());
         }
 
-        let mut replay = Command::new(replay);
+        let mut cp = Command::new("cp");
+        cp.arg("-R")
+            .arg("/var/lib/ic/data/ic_state/checkpoints")
+            .arg("/var/lib/ic/backup/checkpoints");
 
+        info!(
+            self.logger,
+            "Copying existing checkpoints to backup partition: {cp:?}"
+        );
+        match cp.output().await {
+            Ok(output) => {
+                let stdout = String::from_utf8(output.stdout).unwrap_or_default();
+                let stderr = String::from_utf8(output.stderr).unwrap_or_default();
+                stdout.lines().for_each(|line| info!(self.logger, "{line}"));
+                stderr.lines().for_each(|line| warn!(self.logger, "{line}"));
+            }
+            Err(err) => {
+                error!(self.logger, "{err:?}");
+            }
+        }
+
+        let mut replay = Command::new(replay);
         replay
             .arg(config_str)
             .arg("--subnet-id")
@@ -389,13 +409,13 @@ impl Upgrade {
             .arg("--replay-until-height")
             .arg(height.to_string());
 
-        info!(self.logger, "Executing ic-replay: {replay:?}",);
+        info!(self.logger, "Executing ic-replay: {replay:?}");
         match replay.output().await {
             Ok(output) => {
                 let stdout = String::from_utf8(output.stdout).unwrap_or_default();
                 let stderr = String::from_utf8(output.stderr).unwrap_or_default();
-                info!(self.logger, "{stdout}");
-                info!(self.logger, "{stderr}");
+                stdout.lines().for_each(|line| info!(self.logger, "{line}"));
+                stderr.lines().for_each(|line| warn!(self.logger, "{line}"));
             }
             Err(err) => {
                 error!(self.logger, "{err:?}");
