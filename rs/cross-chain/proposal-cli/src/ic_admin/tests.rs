@@ -1,5 +1,4 @@
 use super::{IcAdminArgs, IcAdminTemplate};
-use crate::git::CompressedWasmHash;
 use askama::Template;
 
 #[test]
@@ -92,9 +91,9 @@ fn ic_admin_template() -> IcAdminTemplate {
         mode: "upgrade".to_string(),
         canister_id: "vxkom-oyaaa-aaaar-qafda-cai".parse().unwrap(),
         wasm_module_path: "wasm.gz".to_string(),
-        wasm_module_sha256: CompressedWasmHash(
-            "3a6d39b5e94cdef5203bca62720e75a28cd071ff434d22b9746403ac7ae59614".to_string(),
-        ),
+        wasm_module_sha256: "3a6d39b5e94cdef5203bca62720e75a28cd071ff434d22b9746403ac7ae59614"
+            .parse()
+            .unwrap(),
         arg: "arg".to_string(),
         summary_file: "summary.md".to_string(),
     }
