@@ -163,9 +163,8 @@ pub fn set_up_env_vars_for_all_canisters<P: AsRef<Path>>(wasm_dir: P) {
                 continue 'outer;
             }
         }
-        // if no file is found, fail the assert
-        assert!(
-            false,
+        // if no file is found, panic!
+        panic!(
             "The provided --wasm-dir, '{}', must contain all NNS canister wasms, but it misses {}.wasm or {}.wasm.gz",
             wasm_dir.as_ref().display(),
             canister,
