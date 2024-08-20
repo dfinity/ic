@@ -731,7 +731,7 @@ pub struct StateMachine {
         tower::buffer::Buffer<IngressFilterService, (ProvisionalWhitelist, SignedIngressContent)>,
     payload_builder: Arc<RwLock<Option<PayloadBuilderImpl>>>,
     message_routing: SyncMessageRouting,
-    metrics_registry: MetricsRegistry,
+    pub metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     pub query_handler:
         tower::buffer::Buffer<QueryExecutionService, (Query, Option<CertificateDelegation>)>,
@@ -742,7 +742,7 @@ pub struct StateMachine {
     time: AtomicU64,
     idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     idkg_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
-    replica_logger: ReplicaLogger,
+    pub replica_logger: ReplicaLogger,
     pub nodes: Vec<StateMachineNode>,
     pub batch_summary: Option<BatchSummary>,
     time_source: Arc<FastForwardTimeSource>,

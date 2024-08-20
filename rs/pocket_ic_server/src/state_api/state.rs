@@ -2,8 +2,8 @@
 /// Axum handlers operate on a global state of type ApiState, whose
 /// interface guarantees consistency and determinism.
 use crate::pocket_ic::{
-    AdvanceTimeAndTick, ApiResponse, EffectivePrincipal, GetCanisterHttp, MockCanisterHttp,
-    PocketIc,
+    AdvanceTimeAndTick, ApiResponse, CanisterHttpAdapters, EffectivePrincipal, GetCanisterHttp,
+    MockCanisterHttp, PocketIc,
 };
 use crate::state_api::canister_id::{self, DomainResolver, ResolvesDomain};
 use crate::{InstanceId, OpId, Operation};
@@ -27,9 +27,6 @@ use http::{
     HeaderName, Method, StatusCode,
 };
 use http_body_util::{BodyExt, LengthLimitError, Limited};
-use hyper_legacy::{client::connect::HttpConnector, Client};
-use hyper_rustls::HttpsConnectorBuilder;
-use hyper_socks2::SocksConnector;
 use ic_http_endpoints_public::cors_layer;
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
 use ic_https_outcalls_adapter::CanisterHttp;
@@ -38,12 +35,10 @@ use ic_https_outcalls_service::{
     canister_http_service_server::CanisterHttpService, CanisterHttpSendRequest,
     CanisterHttpSendResponse, HttpHeader, HttpMethod,
 };
-use ic_logger::replica_logger::no_op_logger;
-use ic_metrics::MetricsRegistry;
 use ic_state_machine_tests::RejectCode;
 use ic_types::{
     canister_http::{CanisterHttpRequestId, MAX_CANISTER_HTTP_RESPONSE_BYTES},
-    CanisterId, SubnetId,
+    CanisterId, PrincipalId, SubnetId,
 };
 use pocket_ic::common::rest::{
     CanisterHttpHeader, CanisterHttpMethod, CanisterHttpReject, CanisterHttpReply,
@@ -113,8 +108,9 @@ struct ProgressThread {
 
 /// The state of the PocketIC API.
 pub struct ApiState {
-    // impl note: If locks are acquired on both fields, acquire first on instances, then on graph.
+    // impl note: If locks are acquired on multiple fields, acquire first on `instances`, then on `canister_http_adapters`, and then on `graph`.
     instances: Arc<RwLock<Vec<Mutex<InstanceState>>>>,
+    canister_http_adapters: Arc<RwLock<HashMap<InstanceId, CanisterHttpAdapters>>>,
     graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
     // threads making IC instances progress automatically
     progress_threads: RwLock<Vec<Mutex<Option<ProgressThread>>>>,
@@ -167,6 +163,14 @@ impl PocketIcApiStateBuilder {
             .collect();
         let graph = RwLock::new(graph);
 
+        let canister_http_adapters = RwLock::new(
+            self.initial_instances
+                .iter()
+                .enumerate()
+                .map(|(instance_id, instance)| (instance_id, instance.canister_http_adapters()))
+                .collect(),
+        );
+
         let instances: Vec<_> = self
             .initial_instances
             .into_iter()
@@ -181,6 +185,7 @@ impl PocketIcApiStateBuilder {
 
         Arc::new(ApiState {
             instances: instances.into(),
+            canister_http_adapters: canister_http_adapters.into(),
             graph: graph.into(),
             progress_threads,
             sync_wait_time,
@@ -691,15 +696,20 @@ impl ApiState {
 
     pub async fn add_instance(&self, instance: PocketIc) -> InstanceId {
         let mut instances = self.instances.write().await;
+        let mut canister_http_adapters = self.canister_http_adapters.write().await;
         let mut progress_threads = self.progress_threads.write().await;
+        let instance_id = instances.len();
+        canister_http_adapters.insert(instance_id, instance.canister_http_adapters().clone());
         instances.push(Mutex::new(InstanceState::Available(instance)));
         progress_threads.push(Mutex::new(None));
-        instances.len() - 1
+        instance_id
     }
 
     pub async fn delete_instance(&self, instance_id: InstanceId) {
         self.stop_progress(instance_id).await;
         let instances = self.instances.read().await;
+        let mut canister_http_adapters = self.canister_http_adapters.write().await;
+        canister_http_adapters.remove(&instance_id);
         let mut instance_state = instances[instance_id].lock().await;
         if let InstanceState::Available(pocket_ic) =
             std::mem::replace(&mut *instance_state, InstanceState::Deleted)
@@ -764,6 +774,30 @@ impl ApiState {
             (resp.status(), resp)
         }
 
+        async fn handler_api_subnet(
+            api_version: ApiVersion,
+            replica_url: String,
+            subnet_id: SubnetId,
+            endpoint: &str,
+            bytes: Bytes,
+        ) -> (StatusCode, Response<Incoming>) {
+            let client =
+                Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
+            let url = format!(
+                "{}/api/{}/subnet/{}/{}",
+                replica_url, api_version, subnet_id, endpoint
+            );
+            let req = Request::builder()
+                .method(Method::POST)
+                .uri(url)
+                .header(CONTENT_TYPE, "application/cbor")
+                .body(Full::<Bytes>::new(bytes))
+                .unwrap();
+            let resp = client.request(req).await.unwrap();
+
+            (resp.status(), resp)
+        }
+
         async fn handler_call_v2(
             State(replica_url): State<String>,
             Path(effective_canister_id): Path<CanisterId>,
@@ -809,7 +843,7 @@ impl ApiState {
             .await
         }
 
-        async fn handler_read_state(
+        async fn handler_canister_read_state(
             State(replica_url): State<String>,
             Path(effective_canister_id): Path<CanisterId>,
             bytes: Bytes,
@@ -822,6 +856,14 @@ impl ApiState {
                 bytes,
             )
             .await
+        }
+
+        async fn handler_subnet_read_state(
+            State(replica_url): State<String>,
+            Path(subnet_id): Path<SubnetId>,
+            bytes: Bytes,
+        ) -> (StatusCode, Response<Incoming>) {
+            handler_api_subnet(ApiVersion::V2, replica_url, subnet_id, "read_state", bytes).await
         }
 
         let ip_addr = http_gateway_config
@@ -881,28 +923,39 @@ impl ApiState {
 
             let domain_resolver = Arc::new(domain_resolver) as Arc<dyn ResolvesDomain>;
 
-            let router = Router::new()
-                .route("/api/v2/status", get(handler_status))
+            let router_api_v2 = Router::new()
                 .route(
-                    "/api/v2/canister/:ecid/call",
+                    "/canister/:ecid/call",
                     post(handler_call_v2)
                         .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
                 .route(
-                    "/api/v3/canister/:ecid/call",
-                    post(handler_call_v3)
-                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
-                )
-                .route(
-                    "/api/v2/canister/:ecid/query",
+                    "/canister/:ecid/query",
                     post(handler_query)
                         .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
                 .route(
-                    "/api/v2/canister/:ecid/read_state",
-                    post(handler_read_state)
+                    "/canister/:ecid/read_state",
+                    post(handler_canister_read_state)
                         .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
+                .route(
+                    "/subnet/:sid/read_state",
+                    post(handler_subnet_read_state)
+                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                )
+                .route("/status", get(handler_status))
+                .fallback(|| async { (StatusCode::NOT_FOUND, "") });
+            let router_api_v3 = Router::new()
+                .route(
+                    "/canister/:ecid/call",
+                    post(handler_call_v3)
+                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                )
+                .fallback(|| async { (StatusCode::NOT_FOUND, "") });
+            let router = Router::new()
+                .nest("/api/v2", router_api_v2)
+                .nest("/api/v3", router_api_v3)
                 .fallback(
                     post(handler)
                         .get(handler)
@@ -985,42 +1038,8 @@ impl ApiState {
 
     async fn make_http_request(
         canister_http_request: CanisterHttpRequest,
+        canister_http_adapter: &CanisterHttp,
     ) -> Result<CanisterHttpReply, (RejectCode, String)> {
-        // Socks client setup
-        // We don't really use the Socks client in PocketIC as we set `socks_proxy_allowed: false` in the request,
-        // but we still have to provide one when constructing the production `CanisterHttp` object
-        // and thus we use a reserved (and invalid) proxy IP address.
-        let mut http_connector = HttpConnector::new();
-        http_connector.enforce_http(false);
-        http_connector.set_connect_timeout(Some(Duration::from_secs(2)));
-        let proxy_connector = SocksConnector {
-            proxy_addr: "http://240.0.0.0:8080"
-                .parse::<tonic::transport::Uri>()
-                .expect("Failed to parse socks url."),
-            auth: None,
-            connector: http_connector.clone(),
-        };
-        let https_connector = HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .https_only()
-            .enable_http1()
-            .wrap_connector(proxy_connector);
-        let socks_client = Client::builder().build::<_, hyper_legacy::Body>(https_connector);
-
-        // Https client setup.
-        let builder = HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .https_or_http()
-            .enable_http1();
-        let https_client = Client::builder()
-            .build::<_, hyper_legacy::Body>(builder.wrap_connector(http_connector));
-
-        let canister_http = CanisterHttp::new(
-            https_client,
-            socks_client,
-            no_op_logger(),
-            &MetricsRegistry::default(),
-        );
         let canister_http_request = CanisterHttpSendRequest {
             url: canister_http_request.url,
             method: match canister_http_request.http_method {
@@ -1043,7 +1062,7 @@ impl ApiState {
             socks_proxy_allowed: false,
         };
         let request = Request::new(canister_http_request);
-        canister_http
+        canister_http_adapter
             .canister_http_send(request)
             .await
             .map(|adapter_response| {
@@ -1071,6 +1090,7 @@ impl ApiState {
 
     async fn process_canister_http_requests(
         instances: Arc<RwLock<Vec<Mutex<InstanceState>>>>,
+        canister_http_adapters: Arc<RwLock<HashMap<InstanceId, CanisterHttpAdapters>>>,
         graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
         instance_id: InstanceId,
         rx: &mut Receiver<()>,
@@ -1092,15 +1112,25 @@ impl ApiState {
         for canister_http_request in canister_http_requests {
             let subnet_id = canister_http_request.subnet_id;
             let request_id = canister_http_request.request_id;
-            let response = match Self::make_http_request(canister_http_request).await {
-                Ok(reply) => CanisterHttpResponse::CanisterHttpReply(reply),
-                Err((reject_code, e)) => {
-                    CanisterHttpResponse::CanisterHttpReject(CanisterHttpReject {
-                        reject_code: reject_code as u64,
-                        message: e,
-                    })
-                }
-            };
+            let canister_http_adapters = canister_http_adapters.read().await;
+            let canister_http_adapters = canister_http_adapters
+                .get(&instance_id)
+                .unwrap()
+                .lock()
+                .await;
+            let canister_http_adapter = canister_http_adapters
+                .get(&SubnetId::from(PrincipalId::from(subnet_id)))
+                .unwrap();
+            let response =
+                match Self::make_http_request(canister_http_request, canister_http_adapter).await {
+                    Ok(reply) => CanisterHttpResponse::CanisterHttpReply(reply),
+                    Err((reject_code, e)) => {
+                        CanisterHttpResponse::CanisterHttpReject(CanisterHttpReject {
+                            reject_code: reject_code as u64,
+                            message: e,
+                        })
+                    }
+                };
             let mock_canister_http_response = MockCanisterHttpResponse {
                 subnet_id,
                 request_id,
@@ -1133,6 +1163,7 @@ impl ApiState {
         let progress_threads = self.progress_threads.read().await;
         let mut progress_thread = progress_threads[instance_id].lock().await;
         let instances = self.instances.clone();
+        let canister_http_adapters = self.canister_http_adapters.clone();
         let graph = self.graph.clone();
         if progress_thread.is_none() {
             let (tx, mut rx) = mpsc::channel::<()>(1);
@@ -1156,6 +1187,7 @@ impl ApiState {
                     }
                     if Self::process_canister_http_requests(
                         instances.clone(),
+                        canister_http_adapters.clone(),
                         graph.clone(),
                         instance_id,
                         &mut rx,
