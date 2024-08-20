@@ -1056,6 +1056,17 @@ fn test_upgrade_serialization() {
     test_upgrade(ledger_wasm_upgradetomemorymanager.clone());
     // Test upgrade to memory manager again
     test_upgrade(ledger_wasm_upgradetomemorymanager);
+
+    // Current mainnet wasm cannot deserialize from memory manager
+    match env.upgrade_canister(
+        canister_id,
+        ledger_wasm_mainnet.clone(),
+        Encode!(&LedgerCanisterPayload::Upgrade(None)).unwrap(),
+    ) {
+        Ok(_) => panic!("Upgrade from memory manager directly to mainnet should fail!"),
+        Err(e) => assert!(e.description().contains("Decoding stable memory failed")),
+    };
+
     // Test deserializing from memory manager
     test_upgrade(ledger_wasm_current);
     // Test if downgrade works
