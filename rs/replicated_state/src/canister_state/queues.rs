@@ -181,7 +181,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
 
         // Queue must be non-empty and message at the head of queue non-stale.
         let msg = pop_and_advance(queue, self.pool).unwrap();
-        debug_assert_eq!(Ok(()), canister_queue_ok(queue, &self.pool, receiver));
+        debug_assert_eq!(Ok(()), canister_queue_ok(queue, self.pool, receiver));
 
         if queue.len() > 0 {
             self.size += queue.len();
@@ -456,9 +456,9 @@ impl CanisterQueues {
 
         while let Some(sender) = input_schedule.front() {
             // The sender's input queue.
-            let Some((input_queue, _)) = self.canister_queues.get_mut(&sender) else {
+            let Some((input_queue, _)) = self.canister_queues.get_mut(sender) else {
                 // Queue pair was garbage collected.
-                assert!(self.input_schedule_canisters.remove(&sender));
+                assert!(self.input_schedule_canisters.remove(sender));
                 input_schedule.pop_front();
                 continue;
             };
