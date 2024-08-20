@@ -2382,8 +2382,15 @@ pub(crate) mod testing {
         fn modify_streams<F: FnOnce(&mut StreamMap)>(&mut self, f: F) {
             f(&mut self.streams);
 
-            // Recompute stats from scratch.
-            self.responses_size_bytes = Streams::calculate_stats(&self.streams);
+            // Update `responses_size_bytes`, retaining all previous keys with a default
+            // byte size of zero (so that the respective canister's
+            // `transient_stream_responses_size_bytes` is correctly reset to zero).
+            self.responses_size_bytes
+                .values_mut()
+                .for_each(|size| *size = 0);
+            for (canister_id, size_bytes) in Streams::calculate_stats(&self.streams) {
+                self.responses_size_bytes.insert(canister_id, size_bytes);
+            }
         }
     }
 
