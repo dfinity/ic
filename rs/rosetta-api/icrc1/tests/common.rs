@@ -1,5 +1,5 @@
-pub fn ledger_mainnet_wasm() -> Vec<u8> {
-    load_wasm_using_env_var("IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH")
+pub fn ledger_wasm() -> Vec<u8> {
+    load_wasm_using_env_var("IC_ICRC1_LEDGER_WASM_PATH")
 }
 
 pub fn load_wasm_using_env_var(env_var: &str) -> Vec<u8> {

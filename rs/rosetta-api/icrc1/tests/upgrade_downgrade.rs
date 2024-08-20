@@ -1,4 +1,4 @@
-use crate::common::{ledger_mainnet_wasm, load_wasm_using_env_var};
+use crate::common::{ledger_wasm, load_wasm_using_env_var};
 use candid::{Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg, UpgradeArg as IndexUpgradeArg};
@@ -148,6 +148,6 @@ fn install_index_ng(env: &StateMachine, init_arg: IndexInitArg) -> CanisterId {
     .unwrap()
 }
 
-fn ledger_wasm() -> Vec<u8> {
-    load_wasm_using_env_var("IC_ICRC1_LEDGER_WASM_PATH")
+fn ledger_mainnet_wasm() -> Vec<u8> {
+    load_wasm_using_env_var("IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH")
 }
