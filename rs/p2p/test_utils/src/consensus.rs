@@ -287,9 +287,7 @@ impl PriorityFnFactory<U64Artifact, TestConsensus<U64Artifact>> for TestConsensu
     fn get_priority_function(
         &self,
         _pool: &TestConsensus<U64Artifact>,
-    ) -> ic_interfaces::p2p::consensus::PriorityFn<
-        <U64Artifact as IdentifiableArtifact>::Id,
-    > {
+    ) -> ic_interfaces::p2p::consensus::PriorityFn<<U64Artifact as IdentifiableArtifact>::Id> {
         Box::new(|_| Priority::FetchNow)
     }
 }
