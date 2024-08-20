@@ -1,11 +1,11 @@
 use crate::metrics::{
-    AdapterMetrics, LABEL_BODY_RECEIVE_SIZE, LABEL_BODY_RECEIVE_UNKNOWN, LABEL_CONNECT,
-    LABEL_DOWNLOAD, LABEL_HEADER_RECEIVE_SIZE, LABEL_HTTP_METHOD, LABEL_REQUEST_HEADERS,
-    LABEL_RESPONSE_HEADERS, LABEL_UPLOAD, LABEL_URL_PARSE,
+    AdapterMetrics, LABEL_BODY_RECEIVE_SIZE, LABEL_CONNECT, LABEL_DOWNLOAD,
+    LABEL_HEADER_RECEIVE_SIZE, LABEL_HTTP_METHOD, LABEL_REQUEST_HEADERS, LABEL_RESPONSE_HEADERS,
+    LABEL_UPLOAD, LABEL_URL_PARSE,
 };
 use core::convert::TryFrom;
 use http::{header::USER_AGENT, HeaderName, HeaderValue, Uri};
-use http_body_util::{BodyExt, Full, LengthLimitError};
+use http_body_util::{BodyExt, Full};
 use hyper::{
     body::Bytes,
     header::{HeaderMap, ToStrError},
@@ -239,36 +239,11 @@ impl CanisterHttpService for CanisterHttp {
         .map(|col| col.to_bytes())
         .map_err(|err| {
             debug!(self.logger, "Failed to fetch body: {}", err);
-            match err.source() {
-                Some(source) => {
-                    if source.is::<LengthLimitError>() {
-                        self.metrics
-                            .request_errors
-                            .with_label_values(&[LABEL_BODY_RECEIVE_SIZE])
-                            .inc();
-                        Status::new(tonic::Code::OutOfRange, err.to_string())
-                    } else {
-                        self.metrics
-                            .request_errors
-                            .with_label_values(&[LABEL_BODY_RECEIVE_UNKNOWN])
-                            .inc();
-                        Status::new(
-                            tonic::Code::Unavailable,
-                            format!("Failed to fetch body: {}", err),
-                        )
-                    }
-                }
-                None => {
-                    self.metrics
-                        .request_errors
-                        .with_label_values(&[LABEL_BODY_RECEIVE_UNKNOWN])
-                        .inc();
-                    Status::new(
-                        tonic::Code::Unavailable,
-                        format!("Failed to fetch body: {}", err),
-                    )
-                }
-            }
+            self.metrics
+                .request_errors
+                .with_label_values(&[LABEL_BODY_RECEIVE_SIZE])
+                .inc();
+            Status::new(tonic::Code::OutOfRange, err.to_string())
         })?;
 
         self.metrics
