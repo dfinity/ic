@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/registry/helpers",
     "//rs/registry/local_store",
     "//rs/types/types",
+    "@crate_index//:anyhow",
     "@crate_index//:chrono",
     "@crate_index//:clap_3_2_25",
     "@crate_index//:rand",
