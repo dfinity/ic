@@ -239,33 +239,11 @@ impl CanisterHttpService for CanisterHttp {
         .map(|col| col.to_bytes())
         .map_err(|err| {
             debug!(self.logger, "Failed to fetch body: {}", err);
-            // if err.
             self.metrics
                 .request_errors
                 .with_label_values(&[LABEL_BODY_RECEIVE_SIZE])
                 .inc();
             Status::new(tonic::Code::OutOfRange, err.to_string())
-            // match err {
-            // SysTransient error
-            // BodyReceiveError::Timeout(e) | BodyReceiveError::Unavailable(e) => {
-            //     self.metrics
-            //         .request_errors
-            //         .with_label_values(&[LABEL_BODY_RECEIVE_TIMEOUT])
-            //         .inc();
-            //     Status::new(
-            //         tonic::Code::Unavailable,
-            //         format!("Failed to fetch body: {}", e),
-            //     )
-            // }
-            // // SysFatal error
-            // BodyReceiveError::TooLarge(e) => {
-            //     self.metrics
-            //         .request_errors
-            //         .with_label_values(&[LABEL_BODY_RECEIVE_SIZE])
-            //         .inc();
-            //     Status::new(tonic::Code::OutOfRange, e)
-            // }
-            // }
         })?;
 
         self.metrics

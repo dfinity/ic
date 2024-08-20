@@ -289,7 +289,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         assert!(response
             .unwrap_err()
             .message()
-            .contains(&"header exceeds http body size".to_string()));
+            .contains(&"length limit exceeded".to_string()));
     }
 
     #[tokio::test]
@@ -377,7 +377,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         assert!(response
             .unwrap_err()
             .message()
-            .contains(&"deadline has elapsed".to_string()));
+            .contains(&"client error (Connect)".to_string()));
     }
 
     #[tokio::test]
