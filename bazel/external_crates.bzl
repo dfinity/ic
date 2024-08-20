@@ -53,8 +53,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 "LMDB_NO_BUILD": "1",
                 "LMDB_H_PATH": "$(location @lmdb//:lmdb.h)",
             },
-            # ensure LMDB lib is available at runtime
-            deps = ["@lmdb"],
+            # NOTE: lmdb is linked statically so we don't need any runtime deps
         )],
         "p256": [crate.annotation(
             rustc_flags = [

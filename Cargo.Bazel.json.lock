@@ -1,5 +1,5 @@
 {
-  "checksum": "c0efbc6191752ef14d30992898fa54ead8b56fef84b891e21a54649664a55d08",
+  "checksum": "7ffd75aaff3f6eb0aef88c8eb873b25842034f49bf50bf4fce3f1b85c5b28d0b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -36145,12 +36145,6 @@
               "id": "lmdb-rkv-sys 0.11.99",
               "target": "build_script_build"
             }
-          ],
-          "selects": {}
-        },
-        "extra_deps": {
-          "common": [
-            "@lmdb//:lmdb"
           ],
           "selects": {}
         },

@@ -3,7 +3,6 @@ package(default_visibility = ["//visibility:public"])
 exports_files(["lmdb.h"])
 
 cc_library(
-    linkstatic = True,
     name = "lmdb",
     srcs = [
         "mdb.c",
@@ -11,4 +10,5 @@ cc_library(
         "midl.h",
     ],
     hdrs = ["lmdb.h"],
+    linkstatic = True,
 )
