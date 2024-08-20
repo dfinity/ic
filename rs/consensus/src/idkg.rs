@@ -622,11 +622,6 @@ mod tests {
         // Only the context with matched quadruple should be in "requested"
         let args = IDkgPriorityFnArgs::new(&block_reader, state_manager.as_ref());
         assert_eq!(args.certified_height, height);
-        assert_eq!(args.requested_signatures.len(), 1);
-        assert_eq!(
-            args.requested_signatures.first().unwrap(),
-            &expected_request_id
-        );
     }
 
     // Tests the priority computation for dealings/support.
@@ -728,9 +723,6 @@ mod tests {
         let args = IDkgPriorityFnArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
-            requested_transcripts: BTreeSet::new(),
-            requested_signatures,
-            active_transcripts: BTreeSet::new(),
         };
 
         let tests = vec![
@@ -768,11 +760,8 @@ mod tests {
             ),
         ];
 
-        for (attr, expected) in tests {
-            assert_eq!(
-                compute_priority(&attr, subnet_id, &args, &metrics),
-                expected
-            );
+        for (id, expected) in tests {
+            assert_eq!(compute_priority(&id, subnet_id, &args), expected);
         }
     }
 
@@ -796,9 +785,6 @@ mod tests {
         let args = IDkgPriorityFnArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
-            requested_transcripts,
-            requested_signatures: BTreeSet::new(),
-            active_transcripts,
         };
 
         let tests = vec![
@@ -846,11 +832,8 @@ mod tests {
             ),
         ];
 
-        for (attr, expected) in tests {
-            assert_eq!(
-                compute_priority(&attr, subnet_id, &args, &metrics),
-                expected
-            );
+        for (id, expected) in tests {
+            assert_eq!(compute_priority(&id, subnet_id, &args), expected);
         }
     }
 }
