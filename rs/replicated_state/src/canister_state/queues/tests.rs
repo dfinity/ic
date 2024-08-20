@@ -1970,190 +1970,225 @@ fn output_into_iter_peek_and_next_consistent(
     prop_assert_eq!(raw_requests.len(), popped);
 }
 
-proptest! {
-    #[test]
-    fn output_into_iter_peek_and_next_consistent_with_excludes(
-        (mut canister_queues, raw_requests) in arb_canister_output_queues(10, None),
-        start in 0..=1,
-        exclude_step in 2..=5,
-    ) {
+#[test_strategy::proptest]
+fn output_into_iter_peek_and_next_consistent_with_excludes(
+    #[strategy(arb_canister_output_queues(10, None))] test: (
+        CanisterQueues,
+        VecDeque<RequestOrResponse>,
+    ),
+    #[strategy(0..=1_u64)] start: u64,
+    #[strategy(2..=5_u64)] exclude_step: u64,
+) {
+    let (mut canister_queues, raw_requests) = test;
+    let mut output_iter = canister_queues.output_into_iter();
+
+    let mut i = start;
+    let mut popped = 0;
+    let mut excluded = 0;
+    while let Some(msg) = output_iter.peek() {
+        i += 1;
+        if i % exclude_step == 0 {
+            output_iter.exclude_queue();
+            excluded += 1;
+            continue;
+        }
+        popped += 1;
+        prop_assert_eq!(Some(msg.clone()), output_iter.next());
+    }
+    prop_assert_eq!(output_iter.pop(), None);
+    prop_assert_eq!(raw_requests.len(), excluded + popped);
+}
+
+#[test_strategy::proptest]
+fn output_into_iter_leaves_non_consumed_messages_untouched(
+    #[strategy(arb_canister_output_queues(10, Some(5)))] test: (
+        CanisterQueues,
+        VecDeque<RequestOrResponse>,
+    ),
+) {
+    let (mut canister_queues, mut raw_requests) = test;
+    let num_requests = raw_requests.len();
+
+    // Consume half of the messages in the canister queues and verify whether we pop the
+    // expected elements.
+    {
+        let mut output_iter = canister_queues.output_into_iter();
+
+        for _ in 0..num_requests / 2 {
+            let popped_message = output_iter.next().unwrap();
+            let expected_message = raw_requests.pop_front().unwrap();
+            prop_assert_eq!(popped_message, expected_message);
+        }
+
+        prop_assert_eq!(
+            canister_queues.output_message_count(),
+            num_requests - num_requests / 2
+        );
+    }
+
+    // Ensure that the messages that have not been consumed above are still in the queues
+    // after dropping `output_iter`.
+    while let Some(raw) = raw_requests.pop_front() {
+        if let Some(msg) = canister_queues.pop_canister_output(&raw.receiver()) {
+            prop_assert_eq!(raw, msg);
+        } else {
+            prop_assert!(false, "Not all unconsumed messages left in canister queues");
+        }
+    }
+
+    // Ensure that there are no messages left in the canister queues.
+    prop_assert_eq!(canister_queues.output_message_count(), 0);
+}
+
+#[test_strategy::proptest]
+fn output_into_iter_with_exclude_leaves_excluded_queues_untouched(
+    #[strategy(arb_canister_output_queues(10, None))] test: (
+        CanisterQueues,
+        VecDeque<RequestOrResponse>,
+    ),
+    #[strategy(0..=1_u64)] start: u64,
+    #[strategy(2..=5_u64)] exclude_step: u64,
+) {
+    let (mut canister_queues, mut raw_requests) = test;
+    let mut excluded_requests = VecDeque::new();
+    // Consume half of the messages in the canister queues and verify whether we pop the
+    // expected elements.
+    {
         let mut output_iter = canister_queues.output_into_iter();
 
         let mut i = start;
-        let mut popped = 0;
         let mut excluded = 0;
-        while let Some(msg) = output_iter.peek() {
+        while let Some(peeked_message) = output_iter.peek() {
             i += 1;
             if i % exclude_step == 0 {
                 output_iter.exclude_queue();
+                // We only have one message per queue, so popping this request
+                // should leave us with a consistent expected queue
+                excluded_requests.push_back(raw_requests.pop_front().unwrap());
                 excluded += 1;
                 continue;
             }
-            popped += 1;
-            prop_assert_eq!(Some(msg.clone()), output_iter.next());
+
+            let peeked_message = peeked_message.clone();
+            let popped_message = output_iter.pop().unwrap();
+            prop_assert_eq!(&popped_message, &peeked_message);
+            let expected_message = raw_requests.pop_front().unwrap();
+            prop_assert_eq!(&popped_message, &expected_message);
         }
-        prop_assert_eq!(output_iter.pop(), None);
-        prop_assert_eq!(raw_requests.len(), excluded + popped);
+
+        prop_assert_eq!(canister_queues.output_message_count(), excluded);
     }
 
-    #[test]
-    fn output_into_iter_leaves_non_consumed_messages_untouched(
-        (mut canister_queues, mut raw_requests) in arb_canister_output_queues(10, Some(5)),
-    ) {
-        let num_requests = raw_requests.len();
-
-        // Consume half of the messages in the canister queues and verify whether we pop the
-        // expected elements.
-        {
-            let mut output_iter = canister_queues.output_into_iter();
-
-            for _ in 0..num_requests / 2 {
-                let popped_message = output_iter.next().unwrap();
-                let expected_message = raw_requests.pop_front().unwrap();
-                prop_assert_eq!(popped_message, expected_message);
-            }
-
-            prop_assert_eq!(canister_queues.output_message_count(), num_requests - num_requests / 2);
+    // Ensure that the messages that have not been consumed above are still in the queues
+    // after dropping `output_iter`.
+    while let Some(raw) = excluded_requests.pop_front() {
+        if let Some(msg) = canister_queues.pop_canister_output(&raw.receiver()) {
+            prop_assert_eq!(&raw, &msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw);
+        } else {
+            prop_assert!(false, "Not all unconsumed messages left in canister queues");
         }
-
-        // Ensure that the messages that have not been consumed above are still in the queues
-        // after dropping `output_iter`.
-        while let Some(raw) = raw_requests.pop_front() {
-            if let Some(msg) = canister_queues.pop_canister_output(&raw.receiver()) {
-                prop_assert_eq!(raw, msg);
-            } else {
-                prop_assert!(false, "Not all unconsumed messages left in canister queues");
-            }
-        }
-
-        // Ensure that there are no messages left in the canister queues.
-        prop_assert_eq!(canister_queues.output_message_count(), 0);
     }
 
-    #[test]
-    fn output_into_iter_with_exclude_leaves_excluded_queues_untouched(
-        (mut canister_queues, mut raw_requests) in arb_canister_output_queues(10, None),
-        start in 0..=1,
-        exclude_step in 2..=5,
-    ) {
-        let mut excluded_requests = VecDeque::new();
-        // Consume half of the messages in the canister queues and verify whether we pop the
-        // expected elements.
-        {
-            let mut output_iter = canister_queues.output_into_iter();
+    // Ensure that there are no messages left in the canister queues.
+    prop_assert_eq!(canister_queues.output_message_count(), 0);
+}
 
-            let mut i = start;
-            let mut excluded = 0;
-            while let Some(peeked_message) = output_iter.peek() {
-                i += 1;
-                if i % exclude_step == 0 {
-                    output_iter.exclude_queue();
-                    // We only have one message per queue, so popping this request
-                    // should leave us with a consistent expected queue
-                    excluded_requests.push_back(raw_requests.pop_front().unwrap());
-                    excluded += 1;
-                    continue;
-                }
+#[test_strategy::proptest]
+fn output_into_iter_yields_correct_elements(
+    #[strategy(arb_canister_output_queues(10, Some(5)))] test: (
+        CanisterQueues,
+        VecDeque<RequestOrResponse>,
+    ),
+) {
+    let (mut canister_queues, raw_requests) = test;
+    let recovered: VecDeque<_> = canister_queues.output_into_iter().collect();
 
-                let peeked_message = peeked_message.clone();
-                let popped_message = output_iter.pop().unwrap();
-                prop_assert_eq!(&popped_message, &peeked_message);
-                let expected_message = raw_requests.pop_front().unwrap();
-                prop_assert_eq!(&popped_message, &expected_message);
-            }
+    prop_assert_eq!(raw_requests, recovered);
+}
 
-            prop_assert_eq!(canister_queues.output_message_count(), excluded);
-        }
+#[test_strategy::proptest]
+fn output_into_iter_exclude_leaves_state_untouched(
+    #[strategy(arb_canister_output_queues(10, Some(5)))] test: (
+        CanisterQueues,
+        VecDeque<RequestOrResponse>,
+    ),
+) {
+    let (mut canister_queues, _raw_requests) = test;
+    let expected_canister_queues = canister_queues.clone();
+    let mut output_iter = canister_queues.output_into_iter();
 
-        // Ensure that the messages that have not been consumed above are still in the queues
-        // after dropping `output_iter`.
-        while let Some(raw) = excluded_requests.pop_front() {
-            if let Some(msg) = canister_queues.pop_canister_output(&raw.receiver()) {
-                prop_assert_eq!(&raw, &msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw);
-            } else {
-                prop_assert!(false, "Not all unconsumed messages left in canister queues");
-            }
-        }
-
-        // Ensure that there are no messages left in the canister queues.
-        prop_assert_eq!(canister_queues.output_message_count(), 0);
+    while output_iter.peek().is_some() {
+        output_iter.exclude_queue();
     }
+    // Check that there's nothing left to pop.
+    prop_assert!(output_iter.next().is_none());
 
-    #[test]
-    fn output_into_iter_yields_correct_elements(
-        (mut canister_queues, raw_requests) in arb_canister_output_queues(10, Some(5))
-    ) {
-        let recovered: VecDeque<_> = canister_queues
-            .output_into_iter()
-            .collect();
+    prop_assert_eq!(expected_canister_queues, canister_queues);
+}
 
-        prop_assert_eq!(raw_requests, recovered);
+#[test_strategy::proptest]
+fn output_into_iter_peek_pop_loop_terminates(
+    #[strategy(arb_canister_output_queues(10, Some(5)))] test: (
+        CanisterQueues,
+        VecDeque<RequestOrResponse>,
+    ),
+) {
+    let (mut canister_queues, _raw_requests) = test;
+    let mut output_iter = canister_queues.output_into_iter();
+
+    while let Some(msg) = output_iter.peek() {
+        prop_assert_eq!(Some(msg.clone()), output_iter.next());
     }
+    prop_assert_eq!(None, output_iter.next());
+}
 
-    #[test]
-    fn output_into_iter_exclude_leaves_state_untouched(
-        (mut canister_queues, _) in arb_canister_output_queues(10, Some(5)),
-    ) {
-        let expected_canister_queues = canister_queues.clone();
-        let mut output_iter = canister_queues.output_into_iter();
+#[test_strategy::proptest]
+fn output_into_iter_peek_pop_loop_with_excludes_terminates(
+    #[strategy(arb_canister_output_queues(10, Some(5)))] test: (
+        CanisterQueues,
+        VecDeque<RequestOrResponse>,
+    ),
+    #[strategy(0..=1_u64)] start: u64,
+    #[strategy(2..=5_u64)] exclude_step: u64,
+) {
+    let (mut canister_queues, _raw_requests) = test;
+    let mut output_iter = canister_queues.output_into_iter();
 
-        while output_iter.peek().is_some() {
+    let mut i = start;
+    while let Some(msg) = output_iter.peek() {
+        i += 1;
+        if i % exclude_step == 0 {
             output_iter.exclude_queue();
+            continue;
         }
-        // Check that there's nothing left to pop.
-        prop_assert!(output_iter.next().is_none());
-
-        prop_assert_eq!(expected_canister_queues, canister_queues);
+        prop_assert_eq!(Some(msg.clone()), output_iter.next());
     }
+}
 
-    #[test]
-    fn output_into_iter_peek_pop_loop_terminates(
-        (mut canister_queues, _) in arb_canister_output_queues(10, Some(5)),
-    ) {
-        let mut output_iter = canister_queues.output_into_iter();
+#[test_strategy::proptest]
+fn output_into_iter_peek_with_stale_references(
+    #[strategy(arb_canister_output_queues(10, Some(5)))] test: (
+        CanisterQueues,
+        VecDeque<RequestOrResponse>,
+    ),
+    #[any] deadline: u32,
+) {
+    let (mut canister_queues, _raw_requests) = test;
+    let own_canister_id = canister_test_id(13);
+    let local_canisters = BTreeMap::new();
+    // Time out some messages.
+    canister_queues.time_out_requests(
+        coarse_time(deadline).into(),
+        &own_canister_id,
+        &local_canisters,
+    );
 
-        while let Some(msg) = output_iter.peek() {
-            prop_assert_eq!(Some(msg.clone()), output_iter.next());
-        }
-        prop_assert_eq!(None, output_iter.next());
+    // Peek and pop until the output queues are empty.
+    let mut output_iter = canister_queues.output_into_iter();
+    while let Some(msg) = output_iter.peek() {
+        prop_assert_eq!(Some(msg.clone()), output_iter.next());
     }
-
-    #[test]
-    fn output_into_iter_peek_pop_loop_with_excludes_terminates(
-        (mut canister_queues, _) in arb_canister_output_queues(10, Some(5)),
-        start in 0..=1,
-        exclude_step in 2..=5,
-    ) {
-        let mut output_iter = canister_queues.output_into_iter();
-
-        let mut i = start;
-        while let Some(msg) = output_iter.peek() {
-            i += 1;
-            if i % exclude_step == 0 {
-                output_iter.exclude_queue();
-                continue;
-            }
-            prop_assert_eq!(Some(msg.clone()), output_iter.next());
-        }
-    }
-
-    #[test]
-    fn output_into_iter_peek_with_stale_references(
-        (mut canister_queues, _) in arb_canister_output_queues(10, Some(5)),
-        deadline in any::<u32>(),
-    ) {
-        let own_canister_id = canister_test_id(13);
-        let local_canisters = BTreeMap::new();
-        // Time out some messages.
-        canister_queues.time_out_requests(coarse_time(deadline).into(), &own_canister_id, &local_canisters);
-
-        // Peek and pop until the output queues are empty.
-        let mut output_iter = canister_queues.output_into_iter();
-        while let Some(msg) = output_iter.peek() {
-            prop_assert_eq!(Some(msg.clone()), output_iter.next());
-        }
-        prop_assert_eq!(None, output_iter.next());
-    }
+    prop_assert_eq!(None, output_iter.next());
 }
 
 /// Tests that 'has_expired_deadlines` reports:
