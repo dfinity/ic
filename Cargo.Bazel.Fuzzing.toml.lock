@@ -647,6 +647,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-socks5"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8da2537846e16b96d2972ee52a3b355663872a1a687ce6d57a3b6f6b6a181c89"
+dependencies = [
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "async-stream"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -745,7 +755,7 @@ dependencies = [
  "serde_urlencoded",
  "sync_wrapper 0.1.2",
  "tokio",
- "tower",
+ "tower 0.4.13",
  "tower-layer",
  "tower-service",
 ]
@@ -779,7 +789,7 @@ dependencies = [
  "serde_urlencoded",
  "sync_wrapper 1.0.1",
  "tokio",
- "tower",
+ "tower 0.4.13",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -840,7 +850,7 @@ dependencies = [
  "mime",
  "pin-project-lite",
  "serde",
- "tower",
+ "tower 0.4.13",
  "tower-layer",
  "tower-service",
 ]
@@ -872,7 +882,7 @@ dependencies = [
  "opentelemetry_sdk 0.21.2",
  "pin-project-lite",
  "prometheus",
- "tower",
+ "tower 0.4.13",
 ]
 
 [[package]]
@@ -914,7 +924,7 @@ dependencies = [
  "rustls-pemfile 2.1.2",
  "tokio",
  "tokio-rustls 0.24.1",
- "tower",
+ "tower 0.4.13",
  "tower-service",
 ]
 
@@ -3005,7 +3015,8 @@ dependencies = [
  "hyper 1.4.1",
  "hyper-rustls 0.24.2",
  "hyper-rustls 0.27.2",
- "hyper-socks2",
+ "hyper-socks2 0.8.0",
+ "hyper-socks2 0.9.1",
  "hyper-util",
  "hyperlocal-next",
  "ic-agent",
@@ -3208,7 +3219,8 @@ dependencies = [
  "toml",
  "tonic",
  "tonic-build",
- "tower",
+ "tower 0.4.13",
+ "tower 0.5.0",
  "tower-http 0.4.4",
  "tower-http 0.5.2",
  "tower-request-id",
@@ -4662,6 +4674,25 @@ dependencies = [
 
 [[package]]
 name = "hyper-rustls"
+version = "0.26.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0bea761b46ae2b24eb4aef630d8d1c398157b6fc29e6350ecf090a0b70c952c"
+dependencies = [
+ "futures-util",
+ "http 1.1.0",
+ "hyper 1.4.1",
+ "hyper-util",
+ "log",
+ "rustls 0.22.4",
+ "rustls-native-certs 0.7.0",
+ "rustls-pki-types",
+ "tokio",
+ "tokio-rustls 0.25.0",
+ "tower-service",
+]
+
+[[package]]
+name = "hyper-rustls"
 version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ee4be2c948921a1a5320b629c4193916ed787a7f7f293fd3f7f5a6c9de74155"
@@ -4685,7 +4716,7 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc38166fc2732d450e9372388d269eb38ff0b75a3cfb4c542e65b2f6893629c4"
 dependencies = [
- "async-socks5",
+ "async-socks5 0.5.1",
  "futures",
  "http 0.2.12",
  "hyper 0.14.27",
@@ -4694,6 +4725,24 @@ dependencies = [
  "rustls-native-certs 0.6.3",
  "thiserror",
  "tokio",
+]
+
+[[package]]
+name = "hyper-socks2"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "51c227614c208f7e7c2e040526912604a1a957fe467c9c2f5b06c5d032337dab"
+dependencies = [
+ "async-socks5 0.6.0",
+ "http 1.1.0",
+ "hyper 1.4.1",
+ "hyper-rustls 0.26.0",
+ "hyper-util",
+ "rustls 0.22.4",
+ "rustls-native-certs 0.7.0",
+ "thiserror",
+ "tokio",
+ "tower-service",
 ]
 
 [[package]]
@@ -4723,7 +4772,7 @@ dependencies = [
  "pin-project-lite",
  "socket2 0.5.7",
  "tokio",
- "tower",
+ "tower 0.4.13",
  "tower-service",
  "tracing",
 ]
@@ -4809,7 +4858,7 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
- "tower",
+ "tower 0.4.13",
  "url",
 ]
 
@@ -5981,7 +6030,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tokio-util",
- "tower",
+ "tower 0.4.13",
  "tower-http 0.4.4",
  "tracing",
 ]
@@ -6319,7 +6368,7 @@ checksum = "856dc94aeafb8a00035e563f6835585f7aa8d0d4e78aae7967a252f61675c535"
 dependencies = [
  "thiserror",
  "tokio",
- "tower",
+ "tower 0.4.13",
 ]
 
 [[package]]
@@ -6626,7 +6675,7 @@ dependencies = [
  "simple_logger",
  "tokio",
  "tokio-rustls 0.24.1",
- "tower",
+ "tower 0.4.13",
  "tower-http 0.5.2",
  "url",
 ]
@@ -9338,6 +9387,20 @@ dependencies = [
 
 [[package]]
 name = "rustls"
+version = "0.22.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf4ef73721ac7bcd79b2b315da7779d8fc09718c6b3d2d1b2d94850eb8c18432"
+dependencies = [
+ "log",
+ "ring 0.17.7",
+ "rustls-pki-types",
+ "rustls-webpki 0.102.6",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "rustls"
 version = "0.23.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c58f8c84392efc0a126acce10fa59ff7b3d2ac06ab451a33f2741989b806b044"
@@ -11052,6 +11115,17 @@ dependencies = [
 
 [[package]]
 name = "tokio-rustls"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "775e0c0f0adb3a2f22a00c4745d728b479985fc15ee7ca6a2608388c5569860f"
+dependencies = [
+ "rustls 0.22.4",
+ "rustls-pki-types",
+ "tokio",
+]
+
+[[package]]
+name = "tokio-rustls"
 version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c7bc40d0e5a97695bb96e27995cd3a08538541b0a846f65bba7a359f36700d4"
@@ -11188,7 +11262,7 @@ dependencies = [
  "prost",
  "tokio",
  "tokio-stream",
- "tower",
+ "tower 0.4.13",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -11229,6 +11303,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "tower"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36b837f86b25d7c0d7988f00a54e74739be6477f2aac6201b8f429a7569991b7"
+dependencies = [
+ "futures-core",
+ "futures-util",
+ "hdrhistogram",
+ "indexmap 2.2.6",
+ "pin-project-lite",
+ "slab",
+ "sync_wrapper 0.1.2",
+ "tokio",
+ "tokio-util",
+ "tower-layer",
+ "tower-service",
+ "tracing",
+]
+
+[[package]]
 name = "tower-http"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11247,7 +11341,7 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "tokio-util",
- "tower",
+ "tower 0.4.13",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -11270,7 +11364,7 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "tokio-util",
- "tower",
+ "tower 0.4.13",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -11330,7 +11424,7 @@ dependencies = [
  "pin-project",
  "thiserror",
  "tokio",
- "tower",
+ "tower 0.4.13",
  "tower-layer",
  "tracing",
 ]

@@ -13,7 +13,9 @@ http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
 hyper-rustls = { workspace = true }
-hyper-socks2 = { workspace = true }
+hyper-socks2 = { version = "^0.9.1", default-features = false, features = [
+    "rustls",
+] }
 ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics/server" }
 ic-async-utils = { path = "../../async_utils" }
 ic-config = { path = "../../config" }
@@ -28,6 +30,8 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
+# tonic = "0.12.0"
+# tower = { version = "0.5.0", features = ["full"] }
 
 [dev-dependencies]
 async-stream = { workspace = true }

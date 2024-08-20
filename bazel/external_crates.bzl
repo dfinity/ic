@@ -531,6 +531,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "full",
                 ],
             ),
+            "hyper-socks2_0_9_0": crate.spec(
+                package = "hyper-socks2",
+                version = "^0.9.1",
+                default_features = False,
+                features = [
+                    "rustls",
+                ],
+            ),
             "hyper-socks2": crate.spec(
                 version = "^0.8.0",
                 default_features = False,
@@ -1366,6 +1374,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "tower": crate.spec(
                 version = "^0.4.13",
+                features = ["full"],
+            ),
+            "tower_0_5_0": crate.spec(
+                package = "tower",
+                version = "^0.5.0",
                 features = ["full"],
             ),
             "tower_http_0_4_4": crate.spec(

@@ -31,7 +31,7 @@ use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tonic::transport::{
     server::{Connected, Router},
-    Server, Uri,
+    Server,
 };
 use tower::layer::util::Identity;
 
@@ -50,7 +50,7 @@ impl AdapterServer {
         let proxy_connector = SocksConnector {
             proxy_addr: config
                 .socks_proxy
-                .parse::<Uri>()
+                .parse()
                 .expect("Failed to parse socks url."),
             auth: None,
             connector: http_connector.clone(),

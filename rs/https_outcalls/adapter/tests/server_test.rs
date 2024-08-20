@@ -451,13 +451,8 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let channel = Endpoint::try_from("http://[::]:50151")
             .unwrap()
             .connect_with_connector_lazy(service_fn(move |_: Uri| {
-                let uds_path = path.clone();
-                async move {
-                    // Connect to a Uds socket
-                    Ok::<_, std::io::Error>(hyper_util::rt::TokioIo::new(
-                        UnixStream::connect(uds_path).await?,
-                    ))
-                }
+                // Connect to a Uds socket
+                UnixStream::connect(path.clone())
             }));
 
         CanisterHttpServiceClient::new(channel)
