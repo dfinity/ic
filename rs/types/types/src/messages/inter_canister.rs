@@ -16,6 +16,8 @@ use ic_protobuf::{
     types::v1 as pb_types,
 };
 use ic_utils::{byte_slice_fmt::truncate_and_format, str::StrEllipsize};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -88,7 +90,7 @@ impl RequestMetadata {
 }
 
 /// Canister-to-canister request message.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Request {
     pub receiver: CanisterId,
@@ -97,6 +99,7 @@ pub struct Request {
     pub payment: Cycles,
     pub method_name: String,
     #[serde(with = "serde_bytes")]
+    #[validate_eq(Ignore)]
     pub method_payload: Vec<u8>,
     pub metadata: Option<RequestMetadata>,
     /// If non-zero, this is a best-effort call.
@@ -409,13 +412,14 @@ impl TryFrom<pb_queues::response::ResponsePayload> for Payload {
 }
 
 /// Canister-to-canister response message.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Response {
     pub originator: CanisterId,
     pub respondent: CanisterId,
     pub originator_reply_callback: CallbackId,
     pub refund: Cycles,
+    #[validate_eq(Ignore)]
     pub response_payload: Payload,
     /// If non-zero, this is a best-effort call.
     pub deadline: CoarseTime,
@@ -465,6 +469,20 @@ impl Hash for Response {
 pub enum RequestOrResponse {
     Request(Arc<Request>),
     Response(Arc<Response>),
+}
+
+impl ValidateEq for RequestOrResponse {
+    fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
+        match (self, rhs) {
+            (RequestOrResponse::Request(ref l), RequestOrResponse::Request(ref r)) => {
+                l.validate_eq(r)
+            }
+            (RequestOrResponse::Response(ref l), RequestOrResponse::Response(ref r)) => {
+                l.validate_eq(r)
+            }
+            _ => Err("RequestOrResponse enum mismatch".to_string()),
+        }
+    }
 }
 
 impl RequestOrResponse {

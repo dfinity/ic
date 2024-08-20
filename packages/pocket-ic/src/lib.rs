@@ -261,6 +261,12 @@ impl PocketIcBuilder {
         self
     }
 
+    /// Add an empty verified application subnet
+    pub fn with_verified_application_subnet(mut self) -> Self {
+        self.config.verified_application.push(SubnetSpec::default());
+        self
+    }
+
     pub fn with_benchmarking_application_subnet(mut self) -> Self {
         self.config
             .application
