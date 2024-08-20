@@ -135,6 +135,11 @@ pub const MAX_ALLOWED_CONTROLLERS_COUNT: usize = 10;
 /// Maximum number of canister snapshots that can be stored for a single canister.
 pub const MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER: usize = 1;
 
+/// Maximum number of http outcall requests in-flight on a subnet.
+/// To support 100 req/s with a worst case request latency of 30s the queue size needs buffer 100 req/s * 30s = 3000 req.
+/// The worst case request latency used here should be equivalent to the request timeout in the adapter.
+pub const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 3000;
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default)]
 pub struct Config {
@@ -275,6 +280,8 @@ pub struct Config {
     // TODO(EXC-1633): remove this flag once the feature is enabled by default.
     /// Indicates whether `Ic00Method::SignWithSchnorr` is enabled.
     pub ic00_sign_with_schnorr: FlagStatus,
+
+    pub max_canister_http_requests_in_flight: usize,
 }
 
 impl Default for Config {
@@ -348,6 +355,7 @@ impl Default for Config {
             ic00_compute_initial_i_dkg_dealings: FlagStatus::Enabled,
             ic00_schnorr_public_key: FlagStatus::Enabled,
             ic00_sign_with_schnorr: FlagStatus::Enabled,
+            max_canister_http_requests_in_flight: MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
         }
     }
 }
