@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New GET endpoint `/http_gateway` listing all HTTP gateways and their details.
 - Support for query statistics in the management canister.
 - The argument of the endpoint `/instances/<instance_id>/auto_progress` becomes a struct with an optional field `artificial_delay_ms` specifying the minimum delay between consecutive rounds in auto progress mode.
+- ECDSA support (IC mainnet-like): there are three ECDSA keys with names `dfx_test_key1`, `test_key_1`, and `key_1` on the II and fiduciary subnet.
+- tSchnorr support (IC mainnet-like): there are three Schnorr keys with names `dfx_test_key1`, `test_key_1`, and `key_1` and algorithm BIP340 as well as three Schnorr keys with names `dfx_test_key1`, `test_key_1`, and `key_1` and algorithm Ed25519 on the II and fiduciary subnet. The messages to sign with tSchnorr must be of length 32 bytes.
 
 ### Changed
 - The argument `listen_at` of the endpoint `/http_gateway` has been renamed to `port`.

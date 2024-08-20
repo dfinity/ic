@@ -440,7 +440,7 @@ impl PocketIc {
                 builder = builder.with_subnet_id(subnet_id);
             }
 
-            if subnet_kind == SubnetKind::II {
+            if subnet_kind == SubnetKind::II || subnet_kind == SubnetKind::Fiduciary {
                 for algorithm in [SchnorrAlgorithm::Bip340Secp256k1, SchnorrAlgorithm::Ed25519] {
                     for name in ["key_1", "test_key_1", "dfx_test_key1"] {
                         let key_id = SchnorrKeyId {
