@@ -1059,7 +1059,7 @@ fn state_dir_timestamp(dir: &Path) -> anyhow::Result<DateTime<Utc>> {
     let path = dir.join(TIMESTAMP_FILE_NAME);
     let timestamp_str =
         std::fs::read_to_string(&path).context("Failed to read the timestamp file")?;
-    let timestamp = DateTime::parse_from_rfc2822(&timestamp_str.trim())
+    let timestamp = DateTime::parse_from_rfc2822(timestamp_str.trim())
         .context("Failed to parse the timestamp")?;
 
     Ok(timestamp.into())
