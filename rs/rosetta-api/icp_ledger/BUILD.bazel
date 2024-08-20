@@ -200,8 +200,8 @@ rust_ic_test_suite(
         "MAINNET_ICP_LEDGER_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
     },
     tags = [
-        "fi_tests_nightly", # Run this test in the fi-tests-nightly GitHub Action job.
-        "no-sandbox", # such that the test can access the file $SSH_AUTH_SOCK.
+        "fi_tests_nightly",  # Run this test in the fi-tests-nightly GitHub Action job.
+        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
         "requires-network",  # Because mainnet state is downloaded (and used).
     ],
     deps = [
