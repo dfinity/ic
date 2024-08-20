@@ -747,16 +747,13 @@ fn list_node_provider_rewards() {
 fn list_node_provider_rewards_(
     req: ListNodeProviderRewardsRequest,
 ) -> ListNodeProviderRewardsResponse {
-    let (next_page, rewards) =
-        governance().list_node_provider_rewards(5, req.page, req.date_filter.map(|d| d.into()));
+    let rewards = governance()
+        .list_node_provider_rewards(req.date_filter.map(|d| d.into()))
+        .into_iter()
+        .map(MonthlyNodeProviderRewards::from)
+        .collect();
 
-    ListNodeProviderRewardsResponse {
-        rewards: rewards
-            .into_iter()
-            .map(MonthlyNodeProviderRewards::from)
-            .collect(),
-        next_page,
-    }
+    ListNodeProviderRewardsResponse { rewards }
 }
 
 #[export_name = "canister_query list_known_neurons"]

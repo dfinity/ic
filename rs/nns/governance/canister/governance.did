@@ -306,11 +306,9 @@ type ListNeuronsResponse = record {
   full_neurons : vec Neuron;
 };
 type ListNodeProviderRewardsRequest = record {
-  page : opt nat32;
   date_filter : opt DateRangeFilter;
 };
 type ListNodeProviderRewardsResponse = record {
-  next_page : opt nat32;
   rewards : vec MonthlyNodeProviderRewards;
 };
 type ListNodeProvidersResponse = record { node_providers : vec NodeProvider };

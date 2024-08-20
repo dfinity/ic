@@ -4695,9 +4695,10 @@ impl ProposalRewardStatus {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct DateRangeFilter {
-    /// The start date of the range as seconds since epoch
+    /// The start date of the range as seconds since epoch.  When not provided,
+    /// no start date is assumed.
     pub start_timestamp_seconds: Option<u64>,
-    /// The end date of the range
+    /// The end date of the range as seconds since epoch.  When not provided, no end date is assumed.
     pub end_timestamp_seconds: Option<u64>,
 }
 
@@ -4707,8 +4708,6 @@ pub struct DateRangeFilter {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct ListNodeProviderRewardsRequest {
-    /// The next page - a token used to get the next set of results.
-    pub page: Option<u32>,
     /// Filter for the dates of the rewards
     pub date_filter: Option<DateRangeFilter>,
 }
@@ -4721,6 +4720,4 @@ pub struct ListNodeProviderRewardsRequest {
 pub struct ListNodeProviderRewardsResponse {
     /// The list of minted node provider rewards
     pub rewards: Vec<MonthlyNodeProviderRewards>,
-    /// The next page token to be used in the next request to get the next set of results.
-    pub next_page: Option<u32>,
 }

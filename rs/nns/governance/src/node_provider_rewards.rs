@@ -9,8 +9,8 @@ use crate::{
 // Filter type
 #[derive(Default)]
 pub struct DateRangeFilter {
-    start: Option<u64>,
-    end: Option<u64>,
+    pub(crate) start: Option<u64>,
+    pub(crate) end: Option<u64>,
 }
 
 // Conversion from API type
@@ -48,12 +48,9 @@ pub(crate) fn latest_node_provider_rewards() -> Option<ArchivedMonthlyNodeProvid
 }
 
 pub(crate) fn list_node_provider_rewards(
-    limit: u64,
-    page: Option<u32>,
+    limit: usize,
     date_filter: Option<DateRangeFilter>,
-) -> (Option<u32>, Vec<ArchivedMonthlyNodeProviderRewards>) {
-    let page = page.unwrap_or(0);
-
+) -> Vec<ArchivedMonthlyNodeProviderRewards> {
     let date_filter = date_filter.unwrap_or_default();
     let start_timestamp = date_filter.start.unwrap_or(0);
     let end_timestamp = date_filter.end.unwrap_or(u64::MAX);
@@ -64,47 +61,23 @@ pub(crate) fn list_node_provider_rewards(
         // TODO - migrate to BTreeMap storage with keys as dates and change this to use range lookup
         let rewards = log
             .iter()
-            .flat_map(|rewards| {
-                let timestamp = rewards
+            .filter(|rewards| {
+                // we drill down to get the timestamp and compare it to the filters
+                rewards
                     .version
                     .clone()
                     .map(|v| match v {
                         Version::Version1(v1) => v1,
                     })
                     .and_then(|v1| v1.rewards)
-                    .map(|rewards| rewards.timestamp);
-
-                if let Some(timestamp) = timestamp {
-                    if timestamp >= start_timestamp && timestamp <= end_timestamp {
-                        Some(rewards)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
+                    .map(|rewards| rewards.timestamp)
+                    .map(|ts| ts >= start_timestamp && ts <= end_timestamp)
+                    .unwrap_or(false)
             })
             .collect::<Vec<_>>();
 
-        let len: u64 = rewards.len().try_into().unwrap();
-
-        // the end of the range is last result minus the page number times the limit
-        let end_range = len.saturating_sub(page as u64 * limit);
-        // start of range is just the end minus the limit, but not less than 0
-        let start_range = end_range.saturating_sub(limit);
-
-        // If we have 10 entries, they're 0..9
-        // If we are getting newest first, we want to return 9..4, then 4..0, thus the rev() call
-        let rewards = (start_range..end_range)
-            .rev()
-            .map(|index| rewards[index as usize].clone())
-            .collect();
-
-        if start_range == 0 {
-            (None, rewards)
-        } else {
-            (Some(page + 1), rewards)
-        }
+        // Most recent rewards first
+        rewards.into_iter().rev().take(limit).collect()
     })
 }
 

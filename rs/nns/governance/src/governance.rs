@@ -189,7 +189,7 @@ pub const MAX_NUMBER_OF_NEURONS: usize = 350_000;
 /// The maximum number results returned by the method `list_proposals`.
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
 
-const MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS: u64 = 5;
+const MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS: usize = 24;
 
 /// The number of e8s per ICP;
 const E8S_PER_ICP: u64 = TOKEN_SUBDIVIDABLE_BY;
@@ -4315,13 +4315,9 @@ impl Governance {
 
     pub fn list_node_provider_rewards(
         &self,
-        limit: u64,
-        page: Option<u32>,
         date_filter: Option<DateRangeFilter>,
-    ) -> (Option<u32>, Vec<MonthlyNodeProviderRewards>) {
-        let limit = limit.min(MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS);
-        let (next_page, rewards) = list_node_provider_rewards(limit, page, date_filter);
-        let rewards = rewards
+    ) -> Vec<MonthlyNodeProviderRewards> {
+        list_node_provider_rewards(MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS, date_filter)
             .into_iter()
             .map(|archived| match archived.version {
                 Some(archived_monthly_node_provider_rewards::Version::Version1(v1)) => {
@@ -4329,8 +4325,7 @@ impl Governance {
                 }
                 _ => panic!("Should not be possible!"),
             })
-            .collect();
-        (next_page, rewards)
+            .collect()
     }
 
     pub fn get_most_recent_monthly_node_provider_rewards(

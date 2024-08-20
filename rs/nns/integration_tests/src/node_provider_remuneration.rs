@@ -196,22 +196,18 @@ fn test_list_node_provider_rewards() {
 
     let response = nns_list_node_provider_rewards(
         &state_machine,
-        ListNodeProviderRewardsRequest {
-            page: None,
-            date_filter: None,
-        },
+        ListNodeProviderRewardsRequest { date_filter: None },
     );
 
-    assert_eq!(response.rewards.len(), 5);
+    assert_eq!(response.rewards.len(), 13);
 
     let received_ts: Vec<u64> = response.rewards.iter().map(|r| r.timestamp).collect();
     let minted_rewards_timestamps: Vec<u64> = minted_rewards.iter().map(|r| r.timestamp).collect();
 
-    println!("{:?}", minted_rewards_timestamps);
-    // First we test paging all the results with no filters.
+    // First we test getting all the results with no filters.
     assert_eq!(
         received_ts,
-        minted_rewards_timestamps[8..13]
+        minted_rewards_timestamps[..]
             .iter()
             .rev()
             .cloned()
@@ -221,57 +217,13 @@ fn test_list_node_provider_rewards() {
     // check rewards are as expected
     assert_eq!(
         response.rewards,
-        minted_rewards[8..13]
-            .iter()
-            .rev()
-            .cloned()
-            .collect::<Vec<_>>()
+        minted_rewards[..].iter().rev().cloned().collect::<Vec<_>>()
     );
-    assert_eq!(response.next_page, Some(1));
-
-    let response = nns_list_node_provider_rewards(
-        &state_machine,
-        ListNodeProviderRewardsRequest {
-            page: response.next_page,
-            date_filter: None,
-        },
-    );
-
-    let received_ts: Vec<u64> = response.rewards.iter().map(|r| r.timestamp).collect();
-    assert_eq!(
-        received_ts,
-        minted_rewards_timestamps[3..8]
-            .iter()
-            .rev()
-            .cloned()
-            .collect::<Vec<_>>()
-    );
-    assert_eq!(response.next_page, Some(2));
-
-    let response = nns_list_node_provider_rewards(
-        &state_machine,
-        ListNodeProviderRewardsRequest {
-            page: response.next_page,
-            date_filter: None,
-        },
-    );
-
-    let received_ts: Vec<u64> = response.rewards.iter().map(|r| r.timestamp).collect();
-    assert_eq!(
-        received_ts,
-        minted_rewards_timestamps[0..3]
-            .iter()
-            .rev()
-            .cloned()
-            .collect::<Vec<_>>()
-    );
-    assert_eq!(response.next_page, None);
 
     // Next we test the date filter with no start_date
     let response = nns_list_node_provider_rewards(
         &state_machine,
         ListNodeProviderRewardsRequest {
-            page: None,
             date_filter: Some(DateRangeFilter {
                 start_timestamp_seconds: None,
                 end_timestamp_seconds: Some(minted_rewards_timestamps[11]),
@@ -281,19 +233,17 @@ fn test_list_node_provider_rewards() {
     let received_ts: Vec<u64> = response.rewards.iter().map(|r| r.timestamp).collect();
     assert_eq!(
         received_ts,
-        minted_rewards_timestamps[7..12]
+        minted_rewards_timestamps[0..=11]
             .iter()
             .rev()
             .cloned()
             .collect::<Vec<_>>()
     );
-    assert_eq!(response.next_page, Some(1));
 
     // Next we test the date filter with no end_date
     let response = nns_list_node_provider_rewards(
         &state_machine,
         ListNodeProviderRewardsRequest {
-            page: None,
             date_filter: Some(DateRangeFilter {
                 start_timestamp_seconds: Some(minted_rewards_timestamps[9]),
                 end_timestamp_seconds: None,
@@ -303,19 +253,17 @@ fn test_list_node_provider_rewards() {
     let received_ts: Vec<u64> = response.rewards.iter().map(|r| r.timestamp).collect();
     assert_eq!(
         received_ts,
-        minted_rewards_timestamps[9..13]
+        minted_rewards_timestamps[9..]
             .iter()
             .rev()
             .cloned()
             .collect::<Vec<_>>()
     );
-    assert_eq!(response.next_page, None);
 
     // Next we test the date filter with a start and end_date
     let response = nns_list_node_provider_rewards(
         &state_machine,
         ListNodeProviderRewardsRequest {
-            page: None,
             date_filter: Some(DateRangeFilter {
                 start_timestamp_seconds: Some(minted_rewards_timestamps[9]),
                 end_timestamp_seconds: Some(minted_rewards_timestamps[11]),
@@ -325,13 +273,12 @@ fn test_list_node_provider_rewards() {
     let received_ts: Vec<u64> = response.rewards.iter().map(|r| r.timestamp).collect();
     assert_eq!(
         received_ts,
-        minted_rewards_timestamps[9..12]
+        minted_rewards_timestamps[9..=11]
             .iter()
             .rev()
             .cloned()
             .collect::<Vec<_>>()
     );
-    assert_eq!(response.next_page, None);
 }
 #[test]
 fn test_automated_node_provider_remuneration() {
