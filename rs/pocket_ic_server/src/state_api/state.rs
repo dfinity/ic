@@ -709,12 +709,17 @@ impl ApiState {
         self.stop_progress(instance_id).await;
         let instances = self.instances.read().await;
         let mut canister_http_adapters = self.canister_http_adapters.write().await;
-        canister_http_adapters.remove(&instance_id);
-        let mut instance_state = instances[instance_id].lock().await;
-        if let InstanceState::Available(pocket_ic) =
-            std::mem::replace(&mut *instance_state, InstanceState::Deleted)
-        {
-            std::mem::drop(pocket_ic);
+        loop {
+            let mut instance_state = instances[instance_id].lock().await;
+            if let InstanceState::Available(pocket_ic) =
+                std::mem::replace(&mut *instance_state, InstanceState::Deleted)
+            {
+                std::mem::drop(pocket_ic);
+                canister_http_adapters.remove(&instance_id);
+                break;
+            }
+            drop(instance_state);
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
     }
 
@@ -1372,6 +1377,7 @@ impl ApiState {
                             drop(graph_guard);
                             let mut instance_state = instances[instance_id].blocking_lock();
                             if let InstanceState::Deleted = &*instance_state {
+                                error!("The instance is deleted immediately after an operation. This is a bug!");
                                 std::mem::drop(pocket_ic);
                             } else {
                                 *instance_state = InstanceState::Available(pocket_ic);
