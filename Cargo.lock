@@ -8695,6 +8695,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-hash-of",
  "ic-metrics-encoder",
+ "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "icrc-ledger-client",

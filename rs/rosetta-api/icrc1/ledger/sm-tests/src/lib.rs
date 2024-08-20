@@ -2452,9 +2452,10 @@ pub fn icrc1_test_block_transformation<T>(
     }
 }
 
-pub fn icrc1_test_approval_upgrade<T>(
+pub fn icrc1_test_upgrade_serialization<T>(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current: Vec<u8>,
+    ledger_wasm_upgradetomemorymanager: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
 ) where
     T: CandidType,
@@ -2479,11 +2480,9 @@ pub fn icrc1_test_approval_upgrade<T>(
         },
     ];
     let mut initial_balances = vec![];
-    for account in &accounts {
-        initial_balances.push((*account, 10_000_000u64));
-    }
-    for account in &additional_accounts {
-        initial_balances.push((*account, 10_000_000u64));
+    let all_accounts = [accounts.clone(), additional_accounts.clone()].concat();
+    for (index, account) in all_accounts.iter().enumerate() {
+        initial_balances.push((*account, 10_000_000u64 + index as u64));
     }
 
     // Setup ledger as it is deployed on the mainnet.
@@ -2515,8 +2514,12 @@ pub fn icrc1_test_approval_upgrade<T>(
             expected_allowances.push(get_allowance(&env, canister_id, accounts[j], accounts[i]));
         }
     }
+    let mut balances = BTreeMap::new();
+    for account in &all_accounts {
+        balances.insert(account, Nat::from(balance_of(&env, canister_id, *account)));
+    }
 
-    let test_upgrade = |ledger_wasm: Vec<u8>| {
+    let test_upgrade = |ledger_wasm: Vec<u8>, balances: BTreeMap<&Account, Nat>| {
         env.upgrade_canister(
             canister_id,
             ledger_wasm,
@@ -2536,12 +2539,22 @@ pub fn icrc1_test_approval_upgrade<T>(
             }
         }
         assert_eq!(expected_allowances, allowances);
+
+        for account in &all_accounts {
+            assert_eq!(balance_of(&env, canister_id, *account), balances[account]);
+        }
     };
 
-    // Test if the old serialized approvals are correctly deserialized
-    test_upgrade(ledger_wasm_current.clone());
-    // Test if new approvals serialization also works
-    test_upgrade(ledger_wasm_current);
+    // Test if the old serialized approvals and balances are correctly deserialized
+    test_upgrade(ledger_wasm_current.clone(), balances.clone());
+    // Test the new wasm serialization
+    test_upgrade(ledger_wasm_current.clone(), balances.clone());
+    // Test serializing to the memory manager
+    test_upgrade(ledger_wasm_upgradetomemorymanager.clone(), balances.clone());
+    // Test upgrade to memory manager again
+    test_upgrade(ledger_wasm_upgradetomemorymanager, balances.clone());
+    // Test deserializing from memory manager
+    test_upgrade(ledger_wasm_current, balances.clone());
 
     // Add some more approvals
     for a1 in &accounts {
@@ -2549,16 +2562,18 @@ pub fn icrc1_test_approval_upgrade<T>(
             let mut approve_args = default_approve_args(*a2, APPROVE_AMOUNT);
             approve_args.from_subaccount = a1.subaccount;
             send_approval(&env, canister_id, a1.owner, &approve_args).expect("approval failed");
+            balances.insert(a1, balances[a1].clone() - approve_args.fee.unwrap());
 
             let mut approve_args = default_approve_args(*a1, APPROVE_AMOUNT);
             approve_args.expires_at = Some(expiration);
             approve_args.from_subaccount = a2.subaccount;
             send_approval(&env, canister_id, a2.owner, &approve_args).expect("approval failed");
+            balances.insert(a2, balances[a2].clone() - approve_args.fee.unwrap());
         }
     }
 
-    // Test if downgrade works
-    test_upgrade(ledger_wasm_mainnet);
+    // Test downgrade to mainnet wasm
+    test_upgrade(ledger_wasm_mainnet, balances);
 
     // See if the additional approvals are there
     for a1 in &accounts {
