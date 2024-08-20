@@ -1,5 +1,5 @@
 use ic_metrics::{
-    buckets::{add_bucket, decimal_buckets},
+    buckets::{add_bucket, decimal_buckets, linear_buckets},
     MetricsRegistry,
 };
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
@@ -170,10 +170,10 @@ impl HttpHandlerMetrics {
             ),
             ingress_watcher_wait_for_certification_duration_seconds: metrics_registry.histogram(
                 "replica_http_ingress_watcher_wait_for_certification_duration_seconds",
-                "The duration the call v3 handler waits for subscribing to a message. I.e. `IngressWatcherHandle::subscribe_for_certification()`.",
+                "The duration the call v3 handler waits for a message to complete execution at some height, h, and for h to become certified.",
                 // We have the final bucket at 10s as that is the maximum time the handler waits for certification
-                // 10ms - 10s.
-                add_bucket(10.0, decimal_buckets(-2, 0)),
+                // 0.75s - 1.10s - 1.45s - 1.70s - ... - 10.5s
+                add_bucket(10.0, linear_buckets(0.75, 0.35, 30)),
             ),
             call_v3_certificate_status_total: metrics_registry.int_counter_vec(
                 "replica_http_call_v3_certificate_status_total",
