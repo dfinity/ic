@@ -3639,10 +3639,16 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 state_manager,
+                time_source,
+                payload_builder,
                 mut pool,
                 ..
             } = setup_dependencies(pool_config, &subnet_members);
 
+            payload_builder
+                .get_mut()
+                .expect_validate_payload()
+                .returning(|_, _, _, _| Ok(()));
             state_manager
                 .get_mut()
                 .expect_latest_certified_height()
@@ -3653,8 +3659,17 @@ pub mod test {
             let block = pool.make_next_block();
             pool.insert_validated(block.clone());
             pool.insert_unvalidated(block.clone());
+            time_source
+                .set_time(block.content.as_ref().context.time)
+                .ok();
+
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(&changeset, &[]);
+            assert_matches!(
+                changeset[..],
+                [ChangeAction::MoveToValidated(
+                    ConsensusMessage::BlockProposal(_)
+                )]
+            );
             pool.remove_unvalidated(block.clone());
 
             let mut second_block = block.clone();
