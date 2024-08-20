@@ -6448,6 +6448,7 @@ dependencies = [
  "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-test-utils",
  "phantom_newtype",
  "prometheus",
  "proptest",
