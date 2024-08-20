@@ -13,4 +13,5 @@ message SlotUpdate {
 
 message Advert {
   bytes id = 1;
+  reserved 2;
 }
