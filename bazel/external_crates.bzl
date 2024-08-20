@@ -604,7 +604,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "2.6.0",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.13.1",
+                version = "^0.13.5",
             ),
             "ic-cdk-timers": crate.spec(
                 version = "^0.7.0",
@@ -646,7 +646,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["raw"],
             ),
             "ic-verify-bls-signature": crate.spec(
-                version = "^0.2.0",
+                version = "^0.6.0",
+                features = [
+                    "alloc",
+                ],
+                default_features = False,
             ),
             "ic-wasm": crate.spec(
                 version = "^0.7.1",

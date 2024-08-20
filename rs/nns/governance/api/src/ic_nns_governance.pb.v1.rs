@@ -4689,3 +4689,19 @@ impl ProposalRewardStatus {
         }
     }
 }
+
+/// A Request to list minted node provider rewards
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq)]
+pub struct ListNodeProviderRewardsRequest {}
+
+/// A Response to list minted node provider rewards.
+/// Includes optional paging information to get next set of results.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq)]
+pub struct ListNodeProviderRewardsResponse {
+    /// The list of minted node provider rewards
+    pub rewards: Vec<MonthlyNodeProviderRewards>,
+}
