@@ -1034,12 +1034,11 @@ impl Validator {
                 continue;
             }
 
-            // Skip validation and drop the block if it has a higher rank than a
-            // known valid block.
+            // Skip validation if proposal has a higher rank than a known
+            // valid block. We skip the block instead of removing it because
+            // a higher-rank proposal might still be notarized in the future.
             if let Some(min_rank) = valid_qualified_ranks.get_lowest_rank(proposal.height()) {
                 if proposal.rank() > min_rank {
-                    // Skip them instead of removal because we don't want to end up
-                    // requesting these artifacts again.
                     let id = proposal.get_id();
                     if self.unvalidated_for_too_long(pool_reader, &id) {
                         warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
