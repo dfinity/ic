@@ -12,6 +12,9 @@ use ic_protobuf::registry::{
     node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload},
     node_rewards::v2::UpdateNodeRewardsTableProposalPayload,
 };
+use ic_registry_canister_api::{
+    AddNodePayload, UpdateNodeDirectlyPayload, UpdateNodeIPv4ConfigDirectlyPayload,
+};
 use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
     deserialize_get_value_request,
@@ -49,7 +52,6 @@ use registry_canister::{
         do_update_elected_hostos_versions::{
             ReviseElectedHostosVersionsPayload, UpdateElectedHostosVersionsPayload,
         },
-        do_update_node_directly::UpdateNodeDirectlyPayload,
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
         do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
         do_update_nodes_hostos_version::{
@@ -62,10 +64,9 @@ use registry_canister::{
             AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
         },
         node_management::{
-            do_add_node::AddNodePayload, do_remove_node_directly::RemoveNodeDirectlyPayload,
+            do_remove_node_directly::RemoveNodeDirectlyPayload,
             do_remove_nodes::RemoveNodesPayload,
             do_update_node_domain_directly::UpdateNodeDomainDirectlyPayload,
-            do_update_node_ipv4_config_directly::UpdateNodeIPv4ConfigDirectlyPayload,
         },
         prepare_canister_migration::PrepareCanisterMigrationPayload,
         reroute_canister_ranges::RerouteCanisterRangesPayload,

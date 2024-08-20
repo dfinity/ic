@@ -40,20 +40,15 @@ fn should_pass_wycheproof_ecdsa_secp256k1_verification_tests() -> Result<(), Key
 }
 
 #[test]
-fn test_sign_prehash_works_with_any_size_input_gte_16() {
+fn test_sign_prehash_works_with_any_size_input() {
     let rng = &mut test_rng();
 
     let sk = PrivateKey::generate_using_rng(rng);
     let pk = sk.public_key();
 
-    for i in 0..16 {
+    for i in 0..1024 {
         let buf = vec![0x42; i];
-        assert_eq!(sk.sign_digest_with_ecdsa(&buf), None);
-    }
-
-    for i in 16..1024 {
-        let buf = vec![0x42; i];
-        let sig = sk.sign_digest_with_ecdsa(&buf).unwrap();
+        let sig = sk.sign_digest_with_ecdsa(&buf);
         assert!(pk.verify_ecdsa_signature_prehashed(&buf, &sig));
     }
 }
@@ -83,7 +78,7 @@ fn should_use_rfc6979_nonces_for_ecdsa_signature_generation() {
         sha256.update(message);
         sha256.finalize().into()
     };
-    let generated_sig = sk.sign_digest_with_ecdsa(&message_hash).unwrap();
+    let generated_sig = sk.sign_digest_with_ecdsa(&message_hash);
     assert_eq!(hex::encode(generated_sig), expected_sig);
 }
 
@@ -100,6 +95,29 @@ fn should_reject_long_x_when_deserializing_private_key() {
     for long_len in 33..128 {
         let long_x = vec![42; long_len];
         assert!(PrivateKey::deserialize_sec1(&long_x).is_err());
+    }
+}
+
+#[test]
+fn generate_from_seed_is_stable() {
+    let tests = [
+        (
+            "",
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ),
+        (
+            "abcdef",
+            "995da3cf545787d65f9ced52674e92ee8171c87c7a4008aa4349ec47d21609a7",
+        ),
+        (
+            "03fc46909ddfe5ed2f37af7923d846ecab53f962a83e4fc30be550671ceab3e6",
+            "37d0dc8b55b04f4b44824272d4449ebbd6363ab031c91a5cd717cbd60f3fc034",
+        ),
+    ];
+
+    for (seed, expected_key) in tests {
+        let sk = PrivateKey::generate_from_seed(&hex::decode(seed).unwrap());
+        assert_eq!(hex::encode(sk.serialize_sec1()), expected_key);
     }
 }
 
@@ -142,7 +160,7 @@ fn should_accept_bip340_signatures_that_we_generate() {
 
         let mut msg = rng.gen::<[u8; 32]>();
         rng.fill_bytes(&mut msg);
-        let sig = sk.sign_bip340(&msg, &mut rng);
+        let sig = sk.sign_message_with_bip340(&msg, &mut rng);
 
         assert!(pk.verify_bip340_signature(&msg, &sig));
     }
@@ -409,6 +427,28 @@ fn should_match_slip10_derivation_test_data() {
 }
 
 #[test]
+fn should_handle_short_len_prehashed() {
+    // k256 somewhat arbitrarily rejects prehashed digests under 128
+    // bits. This is somewhat ok, since we hopefully don't ever do
+    // this, but it makes an otherwise infalliable function fallible,
+    // which is unfortunate. So we perform the (correct/standard)
+    // prefixing of zero padding the digest in order to make the
+    // function infalliable. Test this using a short input generated
+    // by another ECDSA implementation
+
+    let pk = PublicKey::deserialize_sec1(&hex!(
+        "0374558eb18c338e6116fbd147eba139210774240dcc7dbc450423fc1b0e505d8e"
+    ))
+    .expect("Invalid key");
+
+    let prehash = hex!("2F45495C63D9BD3BD436D855");
+
+    let sig = hex!("307B5A1D99434C89F243BF2678EF969FD24A85BC3B62CFD0E083715FA91879FD918BCF8FAB5F622713284C42A73D5F96CAAE4BD94BC69655A43F18FB1DF89039");
+
+    assert!(pk.verify_ecdsa_signature_prehashed_with_malleability(&prehash, &sig));
+}
+
+#[test]
 fn key_derivation_matches_bip32() {
     // SLIP10 differs from BIP32 only in the case that a 256-bit HMAC
     // output is greater than the group order. For secp256k1 this occurs
@@ -491,9 +531,7 @@ mod try_recovery_from_digest {
         let private_key = PrivateKey::generate_using_rng(rng);
         let public_key = private_key.public_key();
         let digest = rng.gen::<[u8; 32]>();
-        let signature = private_key
-            .sign_digest_with_ecdsa(&digest)
-            .expect("cannot fail because digest > 16 bytes");
+        let signature = private_key.sign_digest_with_ecdsa(&digest);
 
         let recid = public_key
             .try_recovery_from_digest(&digest, &signature)

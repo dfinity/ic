@@ -30,6 +30,21 @@ pub(crate) fn latest_node_provider_rewards() -> Option<ArchivedMonthlyNodeProvid
     })
 }
 
+pub(crate) fn list_node_provider_rewards(limit: u64) -> Vec<ArchivedMonthlyNodeProviderRewards> {
+    // limit try_into is safe because of u32 is always equal or smaller than usize
+    with_node_provider_rewards_log(|log| {
+        let len: u64 = log.len();
+
+        let end_range = len;
+        let start_range = end_range.saturating_sub(limit);
+
+        (start_range..end_range)
+            .rev()
+            .flat_map(|index| log.get(index))
+            .collect()
+    })
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

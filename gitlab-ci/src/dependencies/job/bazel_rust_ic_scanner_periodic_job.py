@@ -17,6 +17,7 @@ REPOS_TO_SCAN = [
     Repository("response-verification", "https://github.com/dfinity/response-verification", [Project(name="response-verification", path="response-verification", owner=Team.TRUST_TEAM)]),
     Repository("agent-rs", "https://github.com/dfinity/agent-rs", [Project(name="agent-rs", path="agent-rs", owner=Team.SDK_TEAM)]),
     Repository("ic-canister-sig-creation", "https://github.com/dfinity/ic-canister-sig-creation", [Project(name="ic-canister-sig-creation", path="ic-canister-sig-creation", owner=Team.GIX_TEAM)]),
+    Repository("ic-gateway", "https://github.com/dfinity/ic-gateway", [Project(name="ic-gateway", path="ic-gateway", owner=Team.BOUNDARY_NODE_TEAM)]),
 ]
 
 if __name__ == "__main__":
@@ -37,13 +38,13 @@ if __name__ == "__main__":
         notify_on_finding_deleted=notify_on_finding_deleted,
         notify_on_scan_job_succeeded=notify_on_scan_job_succeeded,
         notify_on_scan_job_failed=notify_on_scan_job_failed,
-        merge_request_base_url= get_ic_repo_merge_request_base_url(),
-        ci_pipeline_base_url= get_ic_repo_ci_pipeline_base_url()
+        merge_request_base_url=get_ic_repo_merge_request_base_url(),
+        ci_pipeline_base_url=get_ic_repo_ci_pipeline_base_url()
     )
     notifier = NotificationCreator(config)
     finding_data_source_subscribers = [notifier]
     scanner_subscribers = [notifier]
     scanner_job = DependencyScanner(
-        BazelRustDependencyManager(), JiraFindingDataSource(finding_data_source_subscribers), scanner_subscribers
+        BazelRustDependencyManager(), JiraFindingDataSource(finding_data_source_subscribers, app_owner_msg_subscriber=notifier), scanner_subscribers
     )
-    scanner_job.do_periodic_scan([get_ic_repo_for_rust()] +  REPOS_TO_SCAN)
+    scanner_job.do_periodic_scan([get_ic_repo_for_rust()] + REPOS_TO_SCAN)
