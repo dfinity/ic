@@ -23,6 +23,7 @@ use maplit::{btreemap, hashmap};
 use std::convert::TryFrom;
 
 mod neurons_fund;
+mod node_provider_rewards;
 mod stake_maturity;
 
 #[test]
@@ -134,6 +135,84 @@ mod settle_neurons_fund_participation_request_tests {
 } // end mod settle_neurons_fund_participation_request_tests
 
 #[cfg(feature = "test")]
+mod settle_neurons_fund_participation_mem_tests {
+    use crate::{
+        governance::MAX_NEURONS_FUND_PARTICIPANTS,
+        neurons_fund::{
+            neurons_fund_neuron::MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON, NeuronsFundNeuronPortion,
+            NeuronsFundSnapshot,
+        },
+        pb::v1 as gov_pb,
+    };
+    use ic_base_types::PrincipalId;
+    use ic_nns_common::pb::v1::NeuronId;
+    use ic_nns_governance_api::pb::v1::SettleNeuronsFundParticipationResponse;
+
+    fn make_dummy_neuron_portion() -> NeuronsFundNeuronPortion {
+        NeuronsFundNeuronPortion {
+            id: Default::default(),
+            hotkeys: Default::default(),
+            controller: Default::default(),
+            amount_icp_e8s: 1_000_000_000,
+            maturity_equivalent_icp_e8s: 1_000_000_000,
+            is_capped: false,
+        }
+    }
+
+    /// This test ensures that the number of bytes representing the response payload of
+    /// `NnsGov.settle_neurons_fund_participation` is (worst-case) within IC ingress message limits.
+    /// See https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/resource-limits
+    #[test]
+    fn settle_neurons_fund_participation_ingress_mem_limits_pass() {
+        let neurons = (0..MAX_NEURONS_FUND_PARTICIPANTS).map(|id| {
+            let hotkeys = (0..(MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON as u64))
+                .map(|k| PrincipalId::new_user_test_id(MAX_NEURONS_FUND_PARTICIPANTS + k))
+                .collect();
+
+            NeuronsFundNeuronPortion {
+                hotkeys,
+                id: NeuronId { id },
+                ..make_dummy_neuron_portion()
+            }
+        });
+        let response = Ok(NeuronsFundSnapshot::new(neurons));
+        let intermediate = gov_pb::SettleNeuronsFundParticipationResponse::from(response);
+        let payload = SettleNeuronsFundParticipationResponse::from(intermediate);
+        let bytes = candid::encode_args((payload,)).unwrap();
+        assert!(bytes.len() < 2_000_000);
+    }
+
+    /// This test may be adjusted slightly; it is here to help monitor the potentially unbounded
+    /// `NnsGov.settle_neurons_fund_participation` response payload byte size.
+    #[test]
+    fn settle_neurons_fund_participation_ingress_mem_limits_worst_case_bound() {
+        let neurons = (0..MAX_NEURONS_FUND_PARTICIPANTS).map(|id| {
+            let hotkeys = (0..(MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON as u64))
+                .map(|k| PrincipalId::new_user_test_id(MAX_NEURONS_FUND_PARTICIPANTS + k))
+                .collect();
+
+            NeuronsFundNeuronPortion {
+                id: NeuronId { id },
+                hotkeys,
+                ..make_dummy_neuron_portion()
+            }
+        });
+        let response = Ok(NeuronsFundSnapshot::new(neurons));
+        let intermediate = gov_pb::SettleNeuronsFundParticipationResponse::from(response);
+        let payload = SettleNeuronsFundParticipationResponse::from(intermediate);
+        let bytes = candid::encode_args((payload,)).unwrap();
+        // The following bound is obtained experimentally.
+        let expected_bytes_cap = 620_113;
+        assert!(
+            bytes.len() < expected_bytes_cap,
+            "The bytes.len() = {}, expected_bytes_cap = {}",
+            bytes.len(),
+            expected_bytes_cap
+        );
+    }
+}
+
+#[cfg(feature = "test")]
 mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
     use super::*;
     use ic_nervous_system_proto::pb::v1 as pb;
@@ -200,7 +279,6 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 initial_token_distribution: None,
                 swap_start_timestamp_seconds: None,
                 swap_due_timestamp_seconds: None,
-                neurons_fund_participants: None,
                 nns_proposal_id: None,
                 neuron_basket_construction_parameters: None,
                 ..converted
@@ -297,7 +375,6 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 // We'll examine these later
                 initial_token_distribution: None,
                 neuron_basket_construction_parameters: None,
-                neurons_fund_participants: None,
                 swap_start_timestamp_seconds: None,
                 swap_due_timestamp_seconds: None,
                 nns_proposal_id: None,
@@ -400,7 +477,6 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
         );
 
         assert_eq!(converted.nns_proposal_id, None);
-        assert_eq!(converted.neurons_fund_participants, None);
         assert_eq!(converted.swap_start_timestamp_seconds, None);
         assert_eq!(converted.swap_due_timestamp_seconds, None);
     }
@@ -607,7 +683,6 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                 confirmation_text: original_swap_parameters.confirmation_text.clone(),
                 restricted_countries: original_swap_parameters.restricted_countries.clone(),
                 nns_proposal_id: Some(proposal_id),
-                neurons_fund_participants: None,
                 neurons_fund_participation: Some(true),
 
                 neurons_fund_participation_constraints: Some(
@@ -1548,4 +1623,50 @@ fn topic_min_max_test() {
         assert!(topic >= Topic::MIN, "Topic::MIN needs to be updated");
         assert!(topic <= Topic::MAX, "Topic::MAX needs to be updated");
     }
+}
+
+#[cfg(feature = "test")]
+#[test]
+fn test_update_neuron_errors_out_expectedly() {
+    fn build_neuron_proto(account: Vec<u8>) -> NeuronProto {
+        NeuronProto {
+            account,
+            id: Some(NeuronId { id: 1 }),
+            controller: Some(PrincipalId::new_user_test_id(1)),
+            followees: hashmap! {
+                2 => Followees {
+                    followees: vec![NeuronId { id : 3}]
+                }
+            },
+            aging_since_timestamp_seconds: 1,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(42)),
+            ..Default::default()
+        }
+    }
+
+    let neuron1_subaccount_blob = vec![1; 32];
+    let neuron1_subaccount = Subaccount::try_from(neuron1_subaccount_blob.as_slice()).unwrap();
+    let neuron1 = build_neuron_proto(neuron1_subaccount_blob.clone());
+    let neurons = btreemap! { 1 => neuron1 };
+    let governance_proto = GovernanceProto {
+        neurons,
+        ..Default::default()
+    };
+    let mut governance = Governance::new(
+        governance_proto,
+        Box::<MockEnvironment>::default(),
+        Box::new(StubIcpLedger {}),
+        Box::new(StubCMC {}),
+    );
+
+    assert_eq!(
+        governance.update_neuron(build_neuron_proto(vec![0; 32])),
+        Err(GovernanceError::new_with_message(
+            ErrorType::PreconditionFailed,
+            format!(
+                "Cannot change the subaccount {} of a neuron.",
+                neuron1_subaccount
+            ),
+        )),
+    );
 }

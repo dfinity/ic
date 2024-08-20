@@ -29,7 +29,7 @@ use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob,
-    InstallCodeArgs, InstallCodeArgsV2, LogVisibility, MasterPublicKeyId, Method, Payload,
+    InstallCodeArgs, InstallCodeArgsV2, LogVisibilityV2, MasterPublicKeyId, Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
 use ic_metrics::MetricsRegistry;
@@ -690,7 +690,7 @@ impl ExecutionTest {
     pub fn set_log_visibility(
         &mut self,
         canister_id: CanisterId,
-        log_visibility: LogVisibility,
+        log_visibility: LogVisibilityV2,
     ) -> Result<WasmResult, UserError> {
         let payload = UpdateSettingsArgs {
             canister_id: canister_id.into(),
@@ -1003,6 +1003,12 @@ impl ExecutionTest {
                     .system_state
                     .task_queue
                     .push_front(ExecutionTask::GlobalTimer);
+            }
+            CanisterTask::OnLowWasmMemory => {
+                canister
+                    .system_state
+                    .task_queue
+                    .push_front(ExecutionTask::OnLowWasmMemory);
             }
         }
         let result = execute_canister(
@@ -1620,6 +1626,7 @@ pub struct ExecutionTestBuilder {
     resource_saturation_scaling: usize,
     heap_delta_rate_limit: NumBytes,
     upload_wasm_chunk_instructions: NumInstructions,
+    canister_snapshot_baseline_instructions: NumInstructions,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1659,6 +1666,8 @@ impl Default for ExecutionTestBuilder {
             resource_saturation_scaling: 1,
             heap_delta_rate_limit: scheduler_config.heap_delta_rate_limit,
             upload_wasm_chunk_instructions: scheduler_config.upload_wasm_chunk_instructions,
+            canister_snapshot_baseline_instructions: scheduler_config
+                .canister_snapshot_baseline_instructions,
         }
     }
 }
@@ -1730,7 +1739,7 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_disabled_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
+    pub fn with_signing_disabled_idkg_key(mut self, key_id: MasterPublicKeyId) -> Self {
         self.idkg_keys_with_signing_enabled.insert(key_id, false);
         self
     }
@@ -1953,6 +1962,15 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_max_canister_http_requests_in_flight(
+        mut self,
+        max_canister_http_requests_in_flight: usize,
+    ) -> Self {
+        self.execution_config.max_canister_http_requests_in_flight =
+            max_canister_http_requests_in_flight;
+        self
+    }
+
     pub fn with_wasm64(mut self) -> Self {
         self.execution_config.embedders_config.feature_flags.wasm64 = FlagStatus::Enabled;
         self
@@ -1960,11 +1978,6 @@ impl ExecutionTestBuilder {
 
     pub fn with_metering_type(mut self, metering_type: MeteringType) -> Self {
         self.execution_config.embedders_config.metering_type = metering_type;
-        self
-    }
-
-    pub fn with_wasm_chunk_store(mut self, status: FlagStatus) -> Self {
-        self.execution_config.wasm_chunk_store = status;
         self
     }
 
@@ -1978,14 +1991,6 @@ impl ExecutionTestBuilder {
 
     pub fn with_snapshots(mut self, status: FlagStatus) -> Self {
         self.execution_config.canister_snapshots = status;
-        self
-    }
-
-    pub fn with_canister_logging(mut self, status: FlagStatus) -> Self {
-        self.execution_config
-            .embedders_config
-            .feature_flags
-            .canister_logging = status;
         self
     }
 
@@ -2199,6 +2204,7 @@ impl ExecutionTestBuilder {
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             self.heap_delta_rate_limit,
             self.upload_wasm_chunk_instructions,
+            self.canister_snapshot_baseline_instructions,
         );
         let (query_stats_collector, _) =
             ic_query_stats::init_query_stats(self.log.clone(), &config, &metrics_registry);

@@ -20,11 +20,10 @@ pub trait KeyManager {
     /// 3. the secret key store contains all corresponding secret keys.
     ///
     /// Returns the status of the public keys as follows:
-    /// * [`AllKeysRegistered`]:
-    /// Registry contains all required public keys and
-    /// secret key store contains all corresponding secret keys.
+    /// * [`AllKeysRegistered`]: Registry contains all required public keys and
+    ///   secret key store contains all corresponding secret keys.
     ///
-    /// [`AllKeysRegistered`]: PublicKeyRegistrationStatus::AllKeysRegistered
+    /// * [`AllKeysRegistered`]: PublicKeyRegistrationStatus::AllKeysRegistered
     ///
     /// # Errors
     /// * [`CheckKeysWithRegistryError::PublicKeyNotFound`] in case a public key of the node was

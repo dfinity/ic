@@ -20,7 +20,7 @@ use ic_interfaces::crypto::CurrentNodePublicKeysError;
 use ic_protobuf::registry::crypto::v1::{AlgorithmId as AlgorithmIdProto, PublicKey};
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
-    IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
+    IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
     idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
@@ -692,7 +692,7 @@ pub trait PublicAndSecretKeyStoreCspVault {
     ///   and potentially additionally stored public keys, like rotated IDKG dealing encryption public keys)
     ///   have a corresponding secret key in the secret key store,
     /// * all public keys are valid, also with respect to the current time.
-    /// If all check passes, the current node public keys in validated form is returned.
+    ///   If all check passes, the current node public keys in validated form is returned.
     ///
     /// # Errors
     /// The method return on the first encountered error and will not check further any other key pairs.
@@ -836,7 +836,7 @@ pub enum IDkgCreateDealingVaultError {
 pub trait ThresholdEcdsaSignerCspVault {
     /// Generate a signature share.
     #[allow(clippy::too_many_arguments)]
-    fn ecdsa_sign_share(
+    fn create_ecdsa_sig_share(
         &self,
         derivation_path: ExtendedDerivationPath,
         hashed_message: Vec<u8>,
@@ -847,7 +847,7 @@ pub trait ThresholdEcdsaSignerCspVault {
         kappa_times_lambda_raw: IDkgTranscriptInternalBytes,
         key_times_lambda_raw: IDkgTranscriptInternalBytes,
         algorithm_id: AlgorithmId,
-    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
+    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaCreateSigShareError>;
 }
 
 /// Type-safe serialization of [`IDkgTranscriptInternal`].

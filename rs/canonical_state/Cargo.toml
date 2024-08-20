@@ -7,11 +7,11 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-error-types = { path = "../types/error_types" }
 ic-base-types = { path = "../types/base_types" }
 ic-canonical-state-tree-hash = { path = "./tree_hash" }
 ic-certification-version = { path = "./certification_version" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
+ic-error-types = { path = "../types/error_types" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
@@ -27,16 +27,17 @@ strum_macros = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+hex = { workspace = true }
 ic-canonical-state-tree-hash-test-utils = { path = "tree_hash/test_utils" }
 ic-crypto-sha2 = { path = "../crypto/sha2/" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
+ic-sys = { path = "../sys" }
 ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
-ic-sys = { path = "../sys" }
-hex = { workspace = true }
 lazy_static = { workspace = true }
 maplit = "1.0.2"
 proptest = "1.0"

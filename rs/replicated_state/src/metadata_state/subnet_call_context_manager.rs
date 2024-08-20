@@ -34,8 +34,6 @@ const NONCE_SIZE: usize = 32;
 pub enum SubnetCallContext {
     SetupInitialDKG(SetupInitialDkgContext),
     CanisterHttpRequest(CanisterHttpRequestContext),
-    // TODO(EXC-1621): remove after fully migrating to `IDkgDealings`.
-    EcdsaDealings(EcdsaDealingsContext),
     IDkgDealings(IDkgDealingsContext),
     BitcoinGetSuccessors(BitcoinGetSuccessorsContext),
     BitcoinSendTransactionInternal(BitcoinSendTransactionInternalContext),
@@ -47,7 +45,6 @@ impl SubnetCallContext {
         match &self {
             SubnetCallContext::SetupInitialDKG(context) => &context.request,
             SubnetCallContext::CanisterHttpRequest(context) => &context.request,
-            SubnetCallContext::EcdsaDealings(context) => &context.request,
             SubnetCallContext::IDkgDealings(context) => &context.request,
             SubnetCallContext::BitcoinGetSuccessors(context) => &context.request,
             SubnetCallContext::BitcoinSendTransactionInternal(context) => &context.request,
@@ -59,7 +56,6 @@ impl SubnetCallContext {
         match &self {
             SubnetCallContext::SetupInitialDKG(context) => context.time,
             SubnetCallContext::CanisterHttpRequest(context) => context.time,
-            SubnetCallContext::EcdsaDealings(context) => context.time,
             SubnetCallContext::IDkgDealings(context) => context.time,
             SubnetCallContext::BitcoinGetSuccessors(context) => context.time,
             SubnetCallContext::BitcoinSendTransactionInternal(context) => context.time,
@@ -215,8 +211,6 @@ pub struct SubnetCallContextManager {
     pub setup_initial_dkg_contexts: BTreeMap<CallbackId, SetupInitialDkgContext>,
     pub sign_with_threshold_contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
     pub canister_http_request_contexts: BTreeMap<CallbackId, CanisterHttpRequestContext>,
-    // TODO(EXC-1621): remove after fully migrating to `idkg_dealings_contexts`.
-    pub ecdsa_dealings_contexts: BTreeMap<CallbackId, EcdsaDealingsContext>,
     pub idkg_dealings_contexts: BTreeMap<CallbackId, IDkgDealingsContext>,
     pub bitcoin_get_successors_contexts: BTreeMap<CallbackId, BitcoinGetSuccessorsContext>,
     pub bitcoin_send_transaction_internal_contexts:
@@ -245,9 +239,6 @@ impl SubnetCallContextManager {
             SubnetCallContext::CanisterHttpRequest(context) => {
                 self.canister_http_request_contexts
                     .insert(callback_id, context);
-            }
-            SubnetCallContext::EcdsaDealings(context) => {
-                self.ecdsa_dealings_contexts.insert(callback_id, context);
             }
             SubnetCallContext::IDkgDealings(context) => {
                 self.idkg_dealings_contexts.insert(callback_id, context);
@@ -291,19 +282,6 @@ impl SubnetCallContextManager {
                             context.request.sender
                         );
                         SubnetCallContext::SignWithThreshold(context)
-                    })
-            })
-            .or_else(|| {
-                self.ecdsa_dealings_contexts
-                    .remove(&callback_id)
-                    .map(|context| {
-                        info!(
-                            logger,
-                            "Received the response for ComputeInitialEcdsaDealings request with key_id {:?} from {:?}",
-                            context.key_id,
-                            context.request.sender
-                        );
-                        SubnetCallContext::EcdsaDealings(context)
                     })
             })
             .or_else(|| {
@@ -511,16 +489,6 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                     },
                 )
                 .collect(),
-            ecdsa_dealings_contexts: item
-                .ecdsa_dealings_contexts
-                .iter()
-                .map(
-                    |(callback_id, context)| pb_metadata::EcdsaDealingsContextTree {
-                        callback_id: callback_id.get(),
-                        context: Some(context.into()),
-                    },
-                )
-                .collect(),
             bitcoin_get_successors_contexts: item
                 .bitcoin_get_successors_contexts
                 .iter()
@@ -619,14 +587,6 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             canister_http_request_contexts.insert(CallbackId::new(entry.callback_id), context);
         }
 
-        let mut ecdsa_dealings_contexts = BTreeMap::<CallbackId, EcdsaDealingsContext>::new();
-        for entry in item.ecdsa_dealings_contexts {
-            let pb_context =
-                try_from_option_field(entry.context, "SystemMetadata::EcdsaDealingsContext")?;
-            let context = EcdsaDealingsContext::try_from((time, pb_context))?;
-            ecdsa_dealings_contexts.insert(CallbackId::new(entry.callback_id), context);
-        }
-
         let mut idkg_dealings_contexts = BTreeMap::<CallbackId, IDkgDealingsContext>::new();
         for entry in item.idkg_dealings_contexts {
             let pb_context =
@@ -700,7 +660,6 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             setup_initial_dkg_contexts,
             sign_with_threshold_contexts,
             canister_http_request_contexts,
-            ecdsa_dealings_contexts,
             bitcoin_get_successors_contexts,
             bitcoin_send_transaction_internal_contexts,
             canister_management_calls: CanisterManagementCalls {
@@ -821,14 +780,14 @@ impl TryFrom<pb_metadata::EcdsaArguments> for EcdsaArguments {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SchnorrArguments {
     pub key_id: SchnorrKeyId,
-    pub message: Vec<u8>,
+    pub message: Arc<Vec<u8>>,
 }
 
 impl From<&SchnorrArguments> for pb_metadata::SchnorrArguments {
     fn from(args: &SchnorrArguments) -> Self {
         Self {
             key_id: Some((&args.key_id).into()),
-            message: args.message.clone(),
+            message: args.message.to_vec(),
         }
     }
 }
@@ -838,7 +797,7 @@ impl TryFrom<pb_metadata::SchnorrArguments> for SchnorrArguments {
     fn try_from(context: pb_metadata::SchnorrArguments) -> Result<Self, Self::Error> {
         Ok(SchnorrArguments {
             key_id: try_from_option_field(context.key_id, "SchnorrArguments::key_id")?,
-            message: context.message,
+            message: Arc::new(context.message),
         })
     }
 }
@@ -847,6 +806,16 @@ impl TryFrom<pb_metadata::SchnorrArguments> for SchnorrArguments {
 pub enum ThresholdArguments {
     Ecdsa(EcdsaArguments),
     Schnorr(SchnorrArguments),
+}
+
+impl ThresholdArguments {
+    /// Returns the generic key id.
+    pub fn key_id(&self) -> MasterPublicKeyId {
+        match self {
+            ThresholdArguments::Ecdsa(args) => MasterPublicKeyId::Ecdsa(args.key_id.clone()),
+            ThresholdArguments::Schnorr(args) => MasterPublicKeyId::Schnorr(args.key_id.clone()),
+        }
+    }
 }
 
 impl From<&ThresholdArguments> for pb_metadata::ThresholdArguments {
@@ -922,6 +891,16 @@ impl SignWithThresholdContext {
             _ => panic!("ECDSA arguments not found."),
         }
     }
+
+    /// Returns Schnorr arguments.
+    /// Panics if arguments are not for Schnorr
+    /// Should only be called if `is_schnorr` returns true.
+    pub fn schnorr_args(&self) -> &SchnorrArguments {
+        match &self.args {
+            ThresholdArguments::Schnorr(args) => args,
+            _ => panic!("Schnorr arguments not found."),
+        }
+    }
 }
 
 impl From<&SignWithThresholdContext> for pb_metadata::SignWithThresholdContext {
@@ -958,59 +937,6 @@ impl TryFrom<pb_metadata::SignWithThresholdContext> for SignWithThresholdContext
                 .zip(context.height)
                 .map(|(q, h)| (q, Height::from(h))),
             nonce: context.nonce.map(try_into_array_nonce).transpose()?,
-        })
-    }
-}
-
-// TODO(EXC-1621): remove after migrating to `idkg_dealings_contexts`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct EcdsaDealingsContext {
-    pub request: Request,
-    pub key_id: EcdsaKeyId,
-    pub nodes: BTreeSet<NodeId>,
-    pub registry_version: RegistryVersion,
-    pub time: Time,
-}
-
-impl From<&EcdsaDealingsContext> for pb_metadata::EcdsaDealingsContext {
-    fn from(context: &EcdsaDealingsContext) -> Self {
-        Self {
-            request: Some((&context.request).into()),
-            key_id: Some((&context.key_id).into()),
-            nodes: context
-                .nodes
-                .iter()
-                .map(|node_id| node_id_into_protobuf(*node_id))
-                .collect(),
-            registry_version: context.registry_version.get(),
-            time: Some(pb_metadata::Time {
-                time_nanos: context.time.as_nanos_since_unix_epoch(),
-            }),
-        }
-    }
-}
-
-impl TryFrom<(Time, pb_metadata::EcdsaDealingsContext)> for EcdsaDealingsContext {
-    type Error = ProxyDecodeError;
-    fn try_from(
-        (time, context): (Time, pb_metadata::EcdsaDealingsContext),
-    ) -> Result<Self, Self::Error> {
-        let request: Request =
-            try_from_option_field(context.request, "EcdsaDealingsContext::request")?;
-        let key_id: EcdsaKeyId =
-            try_from_option_field(context.key_id, "EcdsaDealingsContext::key_id")?;
-        let mut nodes = BTreeSet::<NodeId>::new();
-        for node_id in context.nodes {
-            nodes.insert(node_id_try_from_option(Some(node_id))?);
-        }
-        Ok(EcdsaDealingsContext {
-            request,
-            key_id,
-            nodes,
-            registry_version: RegistryVersion::from(context.registry_version),
-            time: context
-                .time
-                .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
         })
     }
 }
@@ -1351,7 +1277,6 @@ mod testing {
             setup_initial_dkg_contexts: Default::default(),
             sign_with_threshold_contexts: Default::default(),
             canister_http_request_contexts: Default::default(),
-            ecdsa_dealings_contexts: Default::default(),
             idkg_dealings_contexts: Default::default(),
             bitcoin_get_successors_contexts: Default::default(),
             bitcoin_send_transaction_internal_contexts: Default::default(),

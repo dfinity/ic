@@ -1,19 +1,18 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "NNS_CANISTER_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test_nns")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_client",
     "//rs/nervous_system/common/test_keys",
     "//rs/nns/common",
-    "//rs/nns/governance",
     "//rs/nns/test_utils",
     "//rs/registry/subnet_type",
     "//rs/rust_canisters/canister_test",
-    "//rs/tests",
+    "//rs/tests/consensus/utils",
     "//rs/tests/driver:ic-system-test-driver",
     "//rs/types/types",
     "@crate_index//:anyhow",
@@ -39,7 +38,7 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-system_test(
+system_test_nns(
     name = "registration",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -51,11 +50,11 @@ system_test(
     test_timeout = "eternal",
     uses_guestos_dev = True,
     uses_setupos_dev = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
 )
 
-system_test(
+system_test_nns(
     name = "upgrade",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -68,6 +67,6 @@ system_test(
     uses_guestos_dev = True,
     uses_hostos_dev_test = True,
     uses_setupos_dev = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
 )

@@ -10,6 +10,7 @@ use ic_system_test_driver::driver::{
         AttachImageSpec, CreateVmRequest, Farm, GroupMetadata, GroupSpec, ImageLocation, VmType,
     },
     ic::{Subnet, VmAllocationStrategy},
+    resource::build_empty_image,
 };
 use ic_types::ReplicaVersion;
 use reqwest::blocking::Client;
@@ -42,6 +43,9 @@ struct Args {
     /// Key to be used for `admin` SSH
     #[clap(long)]
     ssh_key_path: Option<PathBuf>,
+    /// Should a nested VM configuration be used
+    #[clap(long)]
+    nested: bool,
 }
 
 fn main() {
@@ -99,16 +103,42 @@ fn main() {
         },
     );
 
+    // Adjust VM configuration for nested setup
+    let (image_location, vm_type, vm_size) = if args.nested {
+        // Create an empty image, this will be used as the "main" drive
+        let empty_image_name = "empty.img.tar.zst";
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let empty_image = build_empty_image(tmp_dir.path(), empty_image_name).unwrap();
+        let empty_image_id = farm
+            .upload_file(&group_name, empty_image, empty_image_name)
+            .unwrap();
+
+        (
+            ImageLocation::IcOsImageViaId { id: empty_image_id },
+            VmType::Nested,
+            Some(101.into()), // 101 GibiByte image
+        )
+    } else {
+        (
+            ImageLocation::IcOsImageViaUrl {
+                url: url.clone(),
+                sha256: sha256.clone(),
+            },
+            VmType::Production,
+            None, // Do not expand image
+        )
+    };
+
     // Allocate new VM on Farm
     let vm_name = "main";
     let request = CreateVmRequest::new(
         vm_name.to_string(),
-        VmType::Production,
+        vm_type,
         2.into(),        // 2 vCPUs
         25165824.into(), // 24 GibiBytes RAM
         Vec::new(),
-        ImageLocation::IcOsImageViaUrl { url, sha256 },
-        Some(100.into()), // 100 GibiByte image
+        image_location,
+        vm_size,
         false,
         None,
         Vec::new(),
@@ -149,54 +179,66 @@ fn main() {
         Vec::new(),
     );
     let initialized_ic = ic_config.initialize().unwrap();
-    // The first node from the first subnet will be our only node.
-    let node = initialized_ic
-        .initialized_topology
-        .values()
-        .next()
-        .unwrap()
-        .initialized_nodes
-        .values()
-        .next()
-        .unwrap();
 
-    // Construct SSH Key Directory
-    let keys_dir = tempdir.as_ref().join("ssh_authorized_keys");
-    std::fs::create_dir(&keys_dir).unwrap();
-    if let Some(key) = ssh_key_path {
-        std::fs::copy(key, keys_dir.join("admin")).unwrap();
+    // Create initial guest configuration directly, when not nested, otherwise, attach the SetupOS installer
+    if !args.nested {
+        // The first node from the first subnet will be our only node.
+        let node = initialized_ic
+            .initialized_topology
+            .values()
+            .next()
+            .unwrap()
+            .initialized_nodes
+            .values()
+            .next()
+            .unwrap();
+
+        // Construct SSH Key Directory
+        let keys_dir = tempdir.as_ref().join("ssh_authorized_keys");
+        std::fs::create_dir(&keys_dir).unwrap();
+        if let Some(key) = ssh_key_path {
+            std::fs::copy(key, keys_dir.join("admin")).unwrap();
+        }
+
+        // Build config image
+        let filename = "config.tar.gz";
+        let config_path = tempdir.as_ref().join(filename);
+        let local_store = prep_dir.join("ic_registry_local_store");
+        Command::new(build_bootstrap_script)
+            .arg(&config_path)
+            .arg("--nns_url")
+            .arg(ipv6_addr.to_string())
+            .arg("--ic_crypto")
+            .arg(node.crypto_path())
+            .arg("--ic_registry_local_store")
+            .arg(&local_store)
+            .arg("--accounts_ssh_authorized_keys")
+            .arg(&keys_dir)
+            .status()
+            .unwrap();
+
+        // Upload config image
+        let image_id = farm
+            .upload_file(&group_name, &config_path, filename)
+            .unwrap();
+
+        // Attach image
+        farm.attach_disk_images(
+            &group_name,
+            vm_name,
+            "usb-storage",
+            vec![AttachImageSpec::new(image_id)],
+        )
+        .unwrap();
+    } else {
+        farm.attach_disk_images(
+            &group_name,
+            vm_name,
+            "usb-storage",
+            vec![AttachImageSpec::via_url(url, sha256)],
+        )
+        .unwrap();
     }
-
-    // Build config image
-    let filename = "config.tar.gz";
-    let config_path = tempdir.as_ref().join(filename);
-    let local_store = prep_dir.join("ic_registry_local_store");
-    Command::new(build_bootstrap_script)
-        .arg(&config_path)
-        .arg("--nns_url")
-        .arg(ipv6_addr.to_string())
-        .arg("--ic_crypto")
-        .arg(node.crypto_path())
-        .arg("--ic_registry_local_store")
-        .arg(&local_store)
-        .arg("--accounts_ssh_authorized_keys")
-        .arg(&keys_dir)
-        .status()
-        .unwrap();
-
-    // Upload config image
-    let image_id = farm
-        .upload_file(&group_name, &config_path, filename)
-        .unwrap();
-
-    // Attach image
-    farm.attach_disk_images(
-        &group_name,
-        vm_name,
-        "usb-storage",
-        vec![AttachImageSpec::new(image_id)],
-    )
-    .unwrap();
 
     // Start VM
     farm.start_vm(&group_name, vm_name).unwrap();

@@ -1,8 +1,6 @@
 use crate::host::command_utilities::handle_command_output;
 use crate::host::hsm::{attach_hsm, detach_hsm};
-use crate::protocol::{
-    Command, HostOSVsockVersion, NodeIdData, NotifyData, Payload, Response, UpgradeData,
-};
+use crate::protocol::{Command, HostOSVsockVersion, NotifyData, Payload, Response, UpgradeData};
 use sha2::Digest;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -12,7 +10,6 @@ pub fn dispatch(command: &Command) -> Response {
     match command {
         AttachHSM => attach_hsm(),
         DetachHSM => detach_hsm(),
-        SetNodeId(node_id) => set_node_id(node_id),
         Upgrade(upgrade_data) => upgrade_hostos(upgrade_data),
         Notify(notify_data) => notify(notify_data),
         GetVsockProtocol => get_hostos_vsock_version(),
@@ -23,12 +20,8 @@ pub fn dispatch(command: &Command) -> Response {
 // get_hostos_version
 const HOSTOS_VERSION_FILE_PATH: &str = "/opt/ic/share/version.txt";
 
-// set_node_id
-const NODE_ID_FILE_PATH: &str = "/boot/config/node-id";
-const SETUP_HOSTNAME_FILE_PATH: &str = "/opt/ic/bin/setup-hostname.sh";
-
 // upgrade
-const UPGRADE_FILE_PATH: &str = "/tmp/upgrade.tar.gz";
+const UPGRADE_FILE_PATH: &str = "/tmp/upgrade";
 const INSTALL_UPGRADE_FILE_PATH: &str = "/opt/ic/bin/install-upgrade.sh";
 
 const VSOCK_VERSION: HostOSVsockVersion = HostOSVsockVersion {
@@ -48,27 +41,6 @@ fn get_hostos_version() -> Response {
 // HostOSVsockVersion command used for backwards compatibility
 fn get_hostos_vsock_version() -> Response {
     Ok(Payload::HostOSVsockVersion(VSOCK_VERSION))
-}
-
-fn set_node_id(node_id: &NodeIdData) -> Response {
-    let mut node_id_file = OpenOptions::new()
-        .write(true)
-        .open(NODE_ID_FILE_PATH)
-        .map_err(|err| {
-            println!("Error opening file: {}", err);
-            err.to_string()
-        })?;
-
-    match node_id_file.write_all(node_id.node_id.as_bytes()) {
-        Ok(_) => println!("Node ID written to file"),
-        Err(err) => println!("Error writing Node ID to file: {}", err),
-    }
-
-    let command_output = std::process::Command::new(SETUP_HOSTNAME_FILE_PATH)
-        .arg("--type=host")
-        .output();
-
-    handle_command_output(command_output)
 }
 
 fn notify(notify_data: &NotifyData) -> Response {
@@ -99,33 +71,32 @@ fn notify(notify_data: &NotifyData) -> Response {
     Ok(Payload::NoPayload)
 }
 
-fn create_hostos_upgrade_file(upgrade_url: &str) -> Result<(), String> {
+fn create_hostos_upgrade_file(upgrade_url: &str, file_path: &str) -> Result<(), String> {
     let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(60 * 5))
         .build()
         .map_err(|err| format!("Could not build download client: {}", err))?;
 
-    let response = client
+    let mut response = client
         .get(upgrade_url)
         .send()
         .map_err(|err| format!("Could not download url: {}", err))?;
-
-    let hostos_upgrade_contents = response
-        .bytes()
-        .map_err(|err| format!("Could not read downloaded contents: {}", err))?;
 
     let mut upgrade_file = OpenOptions::new()
         .write(true)
         .truncate(true)
         .create(true)
-        .open(UPGRADE_FILE_PATH)
+        .open(file_path)
         .map_err(|err| format!("Could not open upgrade file: {}", err))?;
-    upgrade_file
-        .write_all(&hostos_upgrade_contents)
-        .map_err(|err| format!("Could not write to upgrade file: {}", err))?;
-    upgrade_file
-        .flush()
-        .map_err(|err| format!("Could not flush upgrade file: {}", err))?;
+
+    if let Err(copy_err) = std::io::copy(&mut response, &mut upgrade_file) {
+        // Report on file download progress
+        match upgrade_file.metadata() {
+            Ok(metadata) => println!("Write error, '{}' bytes written", metadata.len()),
+            Err(metadata_err) => println!("Could not check file metadata: {}", metadata_err),
+        }
+
+        return Err(format!("Could not write upgrade file: {}", copy_err));
+    }
 
     Ok(())
 }
@@ -180,7 +151,7 @@ fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
     // hash matches.
     if verify_hash(&upgrade_data.target_hash).is_err() {
         println!("Creating hostos upgrade file...");
-        create_hostos_upgrade_file(&upgrade_data.url)?;
+        create_hostos_upgrade_file(&upgrade_data.url, UPGRADE_FILE_PATH)?;
 
         println!("Verifying hostos upgrade file hash...");
         verify_hash(&upgrade_data.target_hash)?;

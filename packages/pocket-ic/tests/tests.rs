@@ -1,6 +1,7 @@
 use candid::{decode_one, encode_one, Principal};
 use ic_base_types::PrincipalId;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
+use ic_cdk::api::management_canister::http_request::HttpResponse;
 use ic_cdk::api::management_canister::main::{CanisterId, CanisterSettings};
 use ic_universal_canister::{wasm, CallArgs, UNIVERSAL_CANISTER_WASM};
 use icp_ledger::{
@@ -8,7 +9,10 @@ use icp_ledger::{
     Symbol, Tokens, TransferArgs, TransferError,
 };
 use pocket_ic::{
-    common::rest::{BlobCompression, SubnetConfigSet, SubnetKind},
+    common::rest::{
+        BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
+        SubnetConfigSet, SubnetKind,
+    },
     update_candid, PocketIc, PocketIcBuilder, WasmResult,
 };
 use sha2::{Digest, Sha256};
@@ -549,17 +553,18 @@ fn test_multiple_large_xnet_payloads() {
 #[test]
 fn test_get_and_set_and_advance_time() {
     let pic = PocketIc::new();
-    pic.set_time(SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1234567890));
+    let unix_time_secs = 1630328630;
+    pic.set_time(SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs));
     let time = pic.get_time();
     assert_eq!(
         time,
-        SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1234567890)
+        SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs)
     );
     pic.advance_time(std::time::Duration::from_secs(420));
     let time = pic.get_time();
     assert_eq!(
         time,
-        SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1234567890 + 420)
+        SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs + 420)
     );
 }
 
@@ -1154,8 +1159,9 @@ fn test_ecdsa_disabled() {
     .unwrap()
     .0
     .unwrap_err();
-    assert!(ecsda_public_key_error
-        .contains("Requested unknown iDKG key: ecdsa:Secp256k1:dfx_test_key1, existing keys: []"));
+    assert!(ecsda_public_key_error.contains(
+        "Requested unknown threshold key: ecdsa:Secp256k1:dfx_test_key1, existing keys: []"
+    ));
 
     let ecdsa_signature_err =
         update_candid::<(Vec<u8>, Vec<Vec<u8>>, String), (Result<Vec<u8>, String>,)>(
@@ -1167,5 +1173,114 @@ fn test_ecdsa_disabled() {
         .unwrap()
         .0
         .unwrap_err();
-    assert!(ecdsa_signature_err.contains("Requested unknown iDKG key: ecdsa:Secp256k1:dfx_test_key1, existing keys with signing enabled: []"));
+    assert!(ecdsa_signature_err.contains("Requested unknown or signing disabled threshold key: ecdsa:Secp256k1:dfx_test_key1, existing keys with signing enabled: []"));
+}
+
+#[test]
+fn test_canister_http() {
+    let pic = PocketIc::new();
+
+    // Create a canister and charge it with 2T cycles.
+    let can_id = pic.create_canister();
+    pic.add_cycles(can_id, INIT_CYCLES);
+
+    // Install the test canister wasm file on the canister.
+    let test_wasm = test_canister_wasm();
+    pic.install_canister(can_id, test_wasm, vec![], None);
+
+    // Submit an update call to the test canister making a canister http outcall
+    // and mock a canister http outcall response.
+    let call_id = pic
+        .submit_call(
+            can_id,
+            Principal::anonymous(),
+            "canister_http",
+            encode_one(()).unwrap(),
+        )
+        .unwrap();
+
+    // We need a pair of ticks for the test canister method to make the http outcall
+    // and for the management canister to start processing the http outcall.
+    pic.tick();
+    pic.tick();
+    let canister_http_requests = pic.get_canister_http();
+    assert_eq!(canister_http_requests.len(), 1);
+    let canister_http_request = &canister_http_requests[0];
+
+    let body = b"hello".to_vec();
+    let mock_canister_http_response = MockCanisterHttpResponse {
+        subnet_id: canister_http_request.subnet_id,
+        request_id: canister_http_request.request_id,
+        response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+            status: 200,
+            headers: vec![],
+            body: body.clone(),
+        }),
+    };
+    pic.mock_canister_http_response(mock_canister_http_response);
+
+    // Now the test canister will receive the http outcall response
+    // and reply to the ingress message from the test driver.
+    let reply = pic.await_call(call_id).unwrap();
+    match reply {
+        WasmResult::Reply(data) => {
+            let http_response: HttpResponse = decode_one(&data).unwrap();
+            assert_eq!(http_response.body, body);
+        }
+        WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
+    };
+
+    // There should be no more pending canister http outcalls.
+    let canister_http_requests = pic.get_canister_http();
+    assert_eq!(canister_http_requests.len(), 0);
+
+    // Submit an update call to the test canister making a canister http outcall
+    // with a transform function (clearing http response headers and setting
+    // the response body equal to the transform context fixed in the test canister)
+    // and mock a canister http outcall response.
+    let call_id = pic
+        .submit_call(
+            can_id,
+            Principal::anonymous(),
+            "canister_http_with_transform",
+            encode_one(()).unwrap(),
+        )
+        .unwrap();
+    // We need a pair of ticks for the test canister method to make the http outcall
+    // and for the management canister to start processing the http outcall.
+    pic.tick();
+    pic.tick();
+    let canister_http_requests = pic.get_canister_http();
+    assert_eq!(canister_http_requests.len(), 1);
+    let canister_http_request = &canister_http_requests[0];
+
+    let mock_canister_http_response = MockCanisterHttpResponse {
+        subnet_id: canister_http_request.subnet_id,
+        request_id: canister_http_request.request_id,
+        response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+            status: 200,
+            headers: vec![],
+            body: body.clone(),
+        }),
+    };
+    pic.mock_canister_http_response(mock_canister_http_response);
+
+    // Now the test canister will receive the http outcall response
+    // and reply to the ingress message from the test driver.
+    let reply = pic.await_call(call_id).unwrap();
+    match reply {
+        WasmResult::Reply(data) => {
+            let http_response: HttpResponse = decode_one(&data).unwrap();
+            // http response headers are cleared by the transform function
+            assert!(http_response.headers.is_empty());
+            // mocked non-empty response body is transformed to the transform context
+            // by the transform function
+            assert_eq!(http_response.body, b"this is my transform context".to_vec());
+        }
+        WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
+    };
+
+    // There should be no more pending canister http outcalls.
+    let canister_http_requests = pic.get_canister_http();
+    assert_eq!(canister_http_requests.len(), 0);
 }

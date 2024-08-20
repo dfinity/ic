@@ -70,13 +70,13 @@ impl WasmCompilerProxy {
             .map_err(|e| unexpected(&format!("Failed to create a socket: {}", e)))?;
         use std::os::unix::io::AsRawFd;
 
-        launcher
+        let _ignore = launcher
             .launch_compiler(crate::protocol::launchersvc::LaunchCompilerRequest {
                 exec_path: exec_path.to_string(),
                 argv: argv.to_vec(),
                 socket: socket_b.as_raw_fd(),
             })
-            .on_completion(|_| ());
+            .sync();
 
         let socket_a = Arc::new(socket_a);
         let send_worker =
@@ -160,7 +160,7 @@ impl Drop for WasmCompilerProxy {
 pub fn compiler_sandbox_main() {
     let logger_config = ic_config::logger::Config {
         log_destination: ic_config::logger::LogDestination::Stderr,
-        level: slog::Level::Warning,
+        level: ic_config::logger::Level::Warning,
         ..Default::default()
     };
     let (log, _log_guard) = ic_logger::new_replica_logger_from_config(&logger_config);

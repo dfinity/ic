@@ -2,10 +2,11 @@ use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
+use ic_nervous_system_common_test_utils::get_gauge;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance::pb::v1::governance::migration::MigrationStatus;
+use ic_nns_governance_api::pb::v1::governance::migration::MigrationStatus;
 use ic_nns_test_utils::state_test_helpers::{
-    get_canister_status, get_gauge, nns_create_super_powerful_neuron, nns_get_migrations,
+    get_canister_status, nns_create_super_powerful_neuron, nns_get_migrations,
     nns_propose_upgrade_nns_canister, scrape_metrics,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
@@ -39,6 +40,7 @@ fn test_copy_inactive_neurons_to_stable_memory() {
         GOVERNANCE_CANISTER_ID, // Target, i.e. the canister that we want to upgrade.
         new_wasm_content,       // The new code that we want the canister to start running.
         module_arg,
+        false,
     );
     println!("Done proposing governance upgrade: {:?}", proposal_id);
 

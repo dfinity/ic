@@ -6,12 +6,12 @@ use std::{
 };
 
 use ic_interfaces::p2p::consensus::{
-    ArtifactWithOpt, ChangeResult, ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer,
-    UnvalidatedArtifact, ValidatedPoolReader,
+    ArtifactMutation, ArtifactWithOpt, ChangeResult, ChangeSetProducer, MutablePool, Priority,
+    PriorityFnFactory, UnvalidatedArtifact, ValidatedPoolReader,
 };
 use ic_logger::ReplicaLogger;
 use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
-use ic_types::{artifact::Priority, NodeId};
+use ic_types::NodeId;
 use serde::{Deserialize, Serialize};
 
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
@@ -139,7 +139,7 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
         peer_pool.values_mut().for_each(|x| x.remove(*id));
     }
 
-    fn apply_changes(&mut self, change_set: Self::ChangeSet) -> ChangeResult<U64Artifact> {
+    fn apply_changes(&mut self, mut change_set: Self::ChangeSet) -> ChangeResult<U64Artifact> {
         let mut poll_immediately = false;
         if !change_set.0.is_empty() {
             poll_immediately = true;
@@ -147,16 +147,17 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
         if !change_set.1.is_empty() {
             poll_immediately = true;
         }
+        let mut mutations = vec![];
+        mutations.extend(change_set.0.drain(..).map(|m| {
+            ArtifactMutation::Insert(ArtifactWithOpt {
+                artifact: self.id_to_msg(m).into(),
+                is_latency_sensitive: self.latency_sensitive,
+            })
+        }));
+
+        mutations.extend(change_set.1.drain(..).map(ArtifactMutation::Remove));
         ChangeResult {
-            purged: change_set.1,
-            artifacts_with_opt: change_set
-                .0
-                .into_iter()
-                .map(|m| ArtifactWithOpt {
-                    artifact: self.id_to_msg(m).into(),
-                    is_latency_sensitive: self.latency_sensitive,
-                })
-                .collect(),
+            mutations,
             poll_immediately,
         }
     }
@@ -286,13 +287,11 @@ impl ValidatedPoolReader<U64Artifact> for TestConsensus<U64Artifact> {
     }
 }
 
-impl PriorityFnAndFilterProducer<U64Artifact, TestConsensus<U64Artifact>>
-    for TestConsensus<U64Artifact>
-{
+impl PriorityFnFactory<U64Artifact, TestConsensus<U64Artifact>> for TestConsensus<U64Artifact> {
     fn get_priority_function(
         &self,
         _pool: &TestConsensus<U64Artifact>,
-    ) -> ic_types::artifact::PriorityFn<
+    ) -> ic_interfaces::p2p::consensus::PriorityFn<
         <U64Artifact as IdentifiableArtifact>::Id,
         <U64Artifact as IdentifiableArtifact>::Attribute,
     > {

@@ -47,6 +47,7 @@
 
 use anyhow::Result;
 
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{
@@ -54,10 +55,7 @@ use ic_system_test_driver::driver::ic::{
 };
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::{
-    HasTopologySnapshot, NnsCanisterWasmStrategy, NnsCustomizations,
-};
-use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
+use ic_system_test_driver::driver::test_env_api::{HasTopologySnapshot, NnsCustomizations};
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -85,7 +83,6 @@ pub fn setup(env: TestEnv) {
         .expect("failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         NnsCustomizations::default(),
     );
     env.sync_with_prometheus();

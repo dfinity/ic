@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 base64 = { workspace = true }
 hex = { workspace = true }
+ic-icrc1-test-utils = { path = "../icrc1/test_utils" }
 ic-rosetta-api = { path = "../" }
 ic-types = { path = "../../types/types" }
 icp-ledger = { path = "../icp_ledger" }
@@ -21,5 +22,4 @@ serde_json = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-url = "2.1.1"
-ic-icrc1-test-utils = { path = "../icrc1/test_utils" }
+url = { workspace = true }

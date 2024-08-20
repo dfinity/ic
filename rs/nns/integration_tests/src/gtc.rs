@@ -8,9 +8,8 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
-use ic_nns_governance::pb::v1::{GovernanceError, Neuron, NeuronInfo};
+use ic_nns_governance_api::pb::v1::{GovernanceError, Neuron, NeuronInfo};
 use ic_nns_gtc::{
-    der_encode,
     pb::v1::AccountState,
     test_constants::{
         TestIdentity, TEST_IDENTITY_1, TEST_IDENTITY_2, TEST_IDENTITY_3, TEST_IDENTITY_4,
@@ -142,7 +141,7 @@ pub fn test_gtc_at_genesis() {
 
     let sign_cmd = move |msg: &[u8]| Ok(TEST_IDENTITY_1.sign(msg));
     let sender = Sender::ExternalHsm {
-        pub_key: der_encode(&TEST_IDENTITY_1.public_key()),
+        pub_key: TEST_IDENTITY_1.public_key().serialize_der(),
         sign: Arc::new(sign_cmd),
     };
 
@@ -200,7 +199,7 @@ fn assert_unclaimed_neurons_can_be_forwarded(
 ) {
     let sign_cmd = move |msg: &[u8]| Ok(TEST_IDENTITY_1.sign(msg));
     let sender = Sender::ExternalHsm {
-        pub_key: der_encode(&TEST_IDENTITY_1.public_key()),
+        pub_key: TEST_IDENTITY_1.public_key().serialize_der(),
         sign: Arc::new(sign_cmd),
     };
 
@@ -308,7 +307,7 @@ fn assert_neurons_can_be_donated(
 ) {
     let sign_cmd = move |msg: &[u8]| Ok(test_identity.sign(msg));
     let sender = Sender::ExternalHsm {
-        pub_key: der_encode(&test_identity.public_key()),
+        pub_key: test_identity.public_key().serialize_der(),
         sign: Arc::new(sign_cmd),
     };
 
@@ -427,7 +426,7 @@ fn assert_neurons_can_be_claimed(
 ) {
     let sign_cmd = move |msg: &[u8]| Ok(test_identity.sign(msg));
     let sender = Sender::ExternalHsm {
-        pub_key: der_encode(&test_identity.public_key()),
+        pub_key: test_identity.public_key().serialize_der(),
         sign: Arc::new(sign_cmd),
     };
     // Assert that `test_identity` has not yet claimed their neurons

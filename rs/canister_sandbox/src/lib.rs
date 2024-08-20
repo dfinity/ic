@@ -172,11 +172,11 @@ pub fn canister_sandbox_main() {
         .expect("Error from the sandbox process due to unknown embedder config.");
 
     // Currently Wasmtime uses the default rayon thread-pool with a thread per core.
-    // In production this results in 64 threads. This MR reduces the default
-    // thread pool size to 10 in the sandbox process because
-    // benchmarks show that 10 is the sweet spot.
+    // In production this results in 64 threads. The number of threads is set to 8,
+    // which is used for parallel page copying in the page allocator.
+    // The compilation rayon threads are now only used in the compiler sandbox.
     rayon::ThreadPoolBuilder::new()
-        .num_threads(EmbeddersConfig::default().num_rayon_compilation_threads)
+        .num_threads(EmbeddersConfig::default().num_rayon_page_allocator_threads)
         .build_global()
         .unwrap();
 
@@ -196,7 +196,7 @@ pub fn run_canister_sandbox(
     // hardcoding the parameters.
     let logger_config = ic_config::logger::Config {
         log_destination: ic_config::logger::LogDestination::Stderr,
-        level: slog::Level::Warning,
+        level: ic_config::logger::Level::Warning,
         ..Default::default()
     };
     let (log, _log_guard) = new_replica_logger_from_config(&logger_config);

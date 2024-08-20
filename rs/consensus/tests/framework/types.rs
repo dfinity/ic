@@ -6,17 +6,17 @@ use ic_artifact_pool::{
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::{
     consensus::{ConsensusGossipImpl, ConsensusImpl},
-    dkg, ecdsa,
+    dkg, idkg,
 };
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     certification::ChangeSet,
     consensus_pool::ChangeSet as ConsensusChangeSet,
-    ecdsa::IDkgChangeSet,
+    idkg::IDkgChangeSet,
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
-    p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
+    p2p::consensus::{ChangeSetProducer, Priority, PriorityFn, PriorityFnFactory},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
@@ -34,7 +34,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, IDkgStatsNoOp};
 use ic_types::{
-    artifact::{IdentifiableArtifact, Priority, PriorityFn},
+    artifact::IdentifiableArtifact,
     consensus::{
         certification::CertificationMessage, dkg::Message as DkgMessage, idkg::IDkgMessage,
         CatchUpPackage, ConsensusMessage,
@@ -112,7 +112,7 @@ pub enum InputMessage {
     Consensus(ConsensusMessage),
     Dkg(Box<DkgMessage>),
     Certification(CertificationMessage),
-    Ecdsa(IDkgMessage),
+    IDkg(IDkgMessage),
 }
 
 /// A Message is a tuple of [`InputMessage`] with a timestamp.
@@ -271,7 +271,7 @@ pub(crate) struct PriorityFnState<Artifact: IdentifiableArtifact> {
 }
 
 impl<Artifact: IdentifiableArtifact> PriorityFnState<Artifact> {
-    pub fn new<Pool, Producer: PriorityFnAndFilterProducer<Artifact, Pool>>(
+    pub fn new<Pool, Producer: PriorityFnFactory<Artifact, Pool>>(
         producer: &Producer,
         pool: &Pool,
     ) -> RefCell<Self> {
@@ -286,7 +286,7 @@ impl<Artifact: IdentifiableArtifact> PriorityFnState<Artifact> {
     }
 
     /// Compute a new priority function
-    pub fn refresh<Pool, Producer: PriorityFnAndFilterProducer<Artifact, Pool>>(
+    pub fn refresh<Pool, Producer: PriorityFnFactory<Artifact, Pool>>(
         &mut self,
         producer: &Producer,
         pool: &Pool,
@@ -305,9 +305,9 @@ pub struct ComponentModifier {
         )
             -> Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
     >,
-    pub(crate) ecdsa: Box<
+    pub(crate) idkg: Box<
         dyn Fn(
-            ecdsa::EcdsaImpl,
+            idkg::IDkgImpl,
         )
             -> Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
     >,
@@ -317,7 +317,7 @@ impl Default for ComponentModifier {
     fn default() -> Self {
         Self {
             consensus: Box::new(|x: ConsensusImpl| Box::new(x)),
-            ecdsa: Box::new(|x: ecdsa::EcdsaImpl| Box::new(x)),
+            idkg: Box::new(|x: idkg::IDkgImpl| Box::new(x)),
         }
     }
 }
@@ -332,13 +332,13 @@ pub fn apply_modifier_consensus(
     }
 }
 
-pub fn apply_modifier_ecdsa(
+pub fn apply_modifier_idkg(
     modifier: &Option<ComponentModifier>,
-    ecdsa: ecdsa::EcdsaImpl,
+    idkg: idkg::IDkgImpl,
 ) -> Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>> {
     match modifier {
-        Some(f) => (f.ecdsa)(ecdsa),
-        _ => Box::new(ecdsa),
+        Some(f) => (f.idkg)(idkg),
+        _ => Box::new(idkg),
     }
 }
 
@@ -349,8 +349,7 @@ pub struct ConsensusDriver<'a> {
         Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
     pub(crate) consensus_gossip: ConsensusGossipImpl,
     pub(crate) dkg: dkg::DkgImpl,
-    pub(crate) ecdsa:
-        Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
+    pub(crate) idkg: Box<dyn ChangeSetProducer<idkg_pool::IDkgPoolImpl, ChangeSet = IDkgChangeSet>>,
     pub(crate) certifier:
         Box<dyn ChangeSetProducer<CertificationPoolImpl, ChangeSet = ChangeSet> + 'a>,
     pub(crate) logger: ReplicaLogger,

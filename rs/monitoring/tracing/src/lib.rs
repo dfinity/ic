@@ -18,7 +18,8 @@ impl ReloadHandles {
     pub fn push(&self, layer: BoxedRegistryLayer) {
         // ignore errors
         let _ = self.0.modify(|layers| {
-            layers.push(layer);
+            // The layers variable can contain at most 5 elements thanks to the concurrency rate limiter.
+            layers.insert(0, layer);
         });
     }
 

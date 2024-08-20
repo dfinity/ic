@@ -18,7 +18,7 @@ use std::convert::{AsMut, AsRef, TryFrom, TryInto};
 use std::hash::Hash;
 
 use super::{
-    EcdsaBlockReader, IDkgTranscriptParamsRef, MaskedTranscript, RandomTranscriptParams,
+    IDkgBlockReader, IDkgTranscriptParamsRef, MaskedTranscript, RandomTranscriptParams,
     RandomUnmaskedTranscriptParams, TranscriptLookupError, TranscriptRef,
     UnmaskedTimesMaskedParams, UnmaskedTranscript,
 };
@@ -294,7 +294,7 @@ impl PreSignatureQuadrupleRef {
     /// Resolves the refs to get the PreSignatureQuadruple.
     pub fn translate(
         &self,
-        resolver: &dyn EcdsaBlockReader,
+        resolver: &dyn IDkgBlockReader,
     ) -> Result<EcdsaPreSignatureQuadruple, PreSignatureQuadrupleError> {
         let kappa_unmasked = resolver
             .transcript(self.kappa_unmasked_ref.as_ref())
@@ -397,7 +397,7 @@ impl TryFrom<&pb::PreSignatureQuadrupleRef> for PreSignatureQuadrupleRef {
 
 /// Counterpart of ThresholdEcdsaSigInputs that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ThresholdEcdsaSigInputsRef {
     pub derivation_path: ExtendedDerivationPath,
@@ -431,7 +431,7 @@ impl ThresholdEcdsaSigInputsRef {
     /// Resolves the refs to get the ThresholdEcdsaSigInputs.
     pub fn translate(
         &self,
-        resolver: &dyn EcdsaBlockReader,
+        resolver: &dyn IDkgBlockReader,
     ) -> Result<ThresholdEcdsaSigInputs, ThresholdEcdsaSigInputsError> {
         let presig_quadruple = self
             .presig_quadruple_ref

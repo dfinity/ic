@@ -14,7 +14,10 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      options: >-
+        -e NODE_NAME
+        -v /cache:/cache
     timeout-minutes: 60 # 1 hour
     steps:
       - name: Checkout

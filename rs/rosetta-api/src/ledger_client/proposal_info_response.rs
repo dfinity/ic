@@ -1,5 +1,5 @@
 use crate::errors::ApiError;
-use ic_nns_governance::pb::v1::ProposalInfo;
+use ic_nns_governance_api::pb::v1::ProposalInfo;
 use rosetta_core::objects::ObjectMap;
 use serde_json::Value;
 
