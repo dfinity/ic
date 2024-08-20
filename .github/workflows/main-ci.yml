@@ -9,8 +9,8 @@ on:
   pull_request:
 
 jobs:
-  test-evm-rpc:
-    name: Test (EVM RPC)
+  build-evm-rpc:
+    name: Build (EVM RPC fork)
     runs-on:
       group: ubuntu-latest
     if: ${{ vars.RUN_CI == 'true' }}
