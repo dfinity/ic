@@ -5372,6 +5372,7 @@ dependencies = [
 name = "ic-backup"
 version = "0.9.0"
 dependencies = [
+ "anyhow",
  "chrono",
  "clap 3.2.25",
  "ic-config",
