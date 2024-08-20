@@ -426,7 +426,7 @@ async fn test_status() -> Result<(), Error> {
 
 #[tokio::test]
 async fn test_all_call_types() -> Result<(), Error> {
-    let (mut app, subnets) = setup_test_router(false, false, 10, 1, 1024);
+    let (mut app, subnets) = setup_test_router(false, false, 10, 1, 1024, None);
     let node = subnets[0].nodes[0].clone();
 
     let sender = Principal::from_text("sqjm4-qahae-aq").unwrap();

@@ -25,6 +25,7 @@ BASE_DEPENDENCIES = [
     "//rs/nns/handlers/lifeline/interface",
     "//rs/protobuf",
     "//rs/registry/canister",
+    "//rs/registry/canister/api",
     "//rs/registry/keys",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",

@@ -12,7 +12,6 @@ use ic_nns_constants::{
 pub mod call_canister;
 pub mod create_service_nervous_system;
 pub mod install_code;
-pub mod proposal_submission;
 pub mod stop_or_start_canister;
 pub mod update_canister_settings;
 

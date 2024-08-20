@@ -33,31 +33,34 @@ use ic_nns_common::{
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     decoder_config, encode_metrics,
-    governance::{
-        BitcoinNetwork, BitcoinSetConfigProposal, Environment, Governance, HeapGrowthPotential,
-        SubnetRentalProposalPayload, SubnetRentalRequest, TimeWarp,
-    },
+    governance::{Environment, Governance, HeapGrowthPotential, TimeWarp},
     neuron_data_validation::NeuronDataValidationSummary,
     pb::{v1 as gov_pb, v1::Governance as InternalGovernanceProto},
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
 };
-use ic_nns_governance_api::pb::v1::{
-    claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
-    governance::{GovernanceCachedMetrics, Migrations},
-    governance_error::ErrorType,
-    manage_neuron::{
-        claim_or_refresh::{By, MemoAndController},
-        ClaimOrRefresh, Command, NeuronIdOrSubaccount, RegisterVote,
+use ic_nns_governance_api::{
+    bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
+    pb::v1::{
+        claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
+        governance::{GovernanceCachedMetrics, Migrations},
+        governance_error::ErrorType,
+        manage_neuron::{
+            claim_or_refresh::{By, MemoAndController},
+            ClaimOrRefresh, NeuronIdOrSubaccount, RegisterVote,
+        },
+        manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
+        ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
+        GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
+        ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProviderRewardsRequest,
+        ListNodeProviderRewardsResponse, ListNodeProvidersResponse, ListProposalInfo,
+        ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
+        ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo,
+        NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent, RewardNodeProvider,
+        RewardNodeProviders, SettleCommunityFundParticipation,
+        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
+        UpdateNodeProvider, Vote,
     },
-    manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
-    ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
-    GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
-    ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProvidersResponse,
-    ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
-    MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo, NodeProvider, Proposal,
-    ProposalInfo, RestoreAgingSummary, RewardEvent, RewardNodeProvider, RewardNodeProviders,
-    SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
-    SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
+    subnet_rental::{SubnetRentalProposalPayload, SubnetRentalRequest},
 };
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
 use prost::Message;
@@ -405,9 +408,9 @@ fn vote() {
     over_async(
         candid,
         |(neuron_id, proposal_id, vote): (NeuronId, ProposalId, Vote)| async move {
-            manage_neuron_(ManageNeuron {
+            manage_neuron_(ManageNeuronRequest {
                 id: Some(NeuronIdProto::from(neuron_id)),
-                command: Some(Command::RegisterVote(RegisterVote {
+                command: Some(ManageNeuronCommandRequest::RegisterVote(RegisterVote {
                     proposal: Some(ProposalIdProto::from(proposal_id)),
                     vote: vote as i32,
                 })),
@@ -446,9 +449,9 @@ fn claim_or_refresh_neuron_from_account() {
 async fn claim_or_refresh_neuron_from_account_(
     claim_or_refresh: ClaimOrRefreshNeuronFromAccount,
 ) -> ClaimOrRefreshNeuronFromAccountResponse {
-    let manage_neuron_response = manage_neuron_(ManageNeuron {
+    let manage_neuron_response = manage_neuron_(ManageNeuronRequest {
         id: None,
-        command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+        command: Some(ManageNeuronCommandRequest::ClaimOrRefresh(ClaimOrRefresh {
             by: Some(By::MemoAndController(MemoAndController {
                 memo: claim_or_refresh.memo,
                 controller: claim_or_refresh.controller,
@@ -523,7 +526,7 @@ fn manage_neuron() {
 }
 
 #[candid_method(update, rename = "manage_neuron")]
-async fn manage_neuron_(manage_neuron: ManageNeuron) -> ManageNeuronResponse {
+async fn manage_neuron_(manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     let response = governance_mut()
         .manage_neuron(&caller(), &(gov_pb::ManageNeuron::from(manage_neuron)))
         .await;
@@ -555,7 +558,7 @@ fn simulate_manage_neuron() {
 }
 
 #[candid_method(update, rename = "simulate_manage_neuron")]
-fn simulate_manage_neuron_(manage_neuron: ManageNeuron) -> ManageNeuronResponse {
+fn simulate_manage_neuron_(manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     let response =
         governance().simulate_manage_neuron(&caller(), gov_pb::ManageNeuron::from(manage_neuron));
     ManageNeuronResponse::from(response)
@@ -732,6 +735,26 @@ async fn get_monthly_node_provider_rewards_() -> Result<RewardNodeProviders, Gov
         rewards,
         use_registry_derived_rewards: Some(true),
     })
+}
+
+#[export_name = "canister_query list_node_provider_rewards"]
+fn list_node_provider_rewards() {
+    debug_log("list_node_provider_rewards");
+    over(candid_one, list_node_provider_rewards_)
+}
+
+#[candid_method(query, rename = "list_node_provider_rewards")]
+fn list_node_provider_rewards_(
+    _req: ListNodeProviderRewardsRequest,
+) -> ListNodeProviderRewardsResponse {
+    let rewards = governance().list_node_provider_rewards(5);
+
+    ListNodeProviderRewardsResponse {
+        rewards: rewards
+            .into_iter()
+            .map(MonthlyNodeProviderRewards::from)
+            .collect(),
+    }
 }
 
 #[export_name = "canister_query list_known_neurons"]

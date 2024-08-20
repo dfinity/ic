@@ -1189,6 +1189,7 @@ impl PersistentHeightIndexedPool<ConsensusMessage> {
                     let type_key = match artifact_type {
                         PurgeableArtifactType::NotarizationShare => TypeKey::NotarizationShare,
                         PurgeableArtifactType::FinalizationShare => TypeKey::FinalizationShare,
+                        PurgeableArtifactType::EquivocationProof => TypeKey::EquivocationProof,
                     };
 
                     purged.extend(
