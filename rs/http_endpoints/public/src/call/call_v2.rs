@@ -27,7 +27,7 @@ const MAX_CERTIFICATION_WAIT_TIME: Duration = Duration::from_secs(30);
 
 #[derive(Clone)]
 pub struct CallServiceV2 {
-    ingress_watcher_handle: IngressWatcherHandle,
+    ingress_watcher_handle: Option<IngressWatcherHandle>,
     ingress_validator: IngressValidator,
 }
 
@@ -38,7 +38,7 @@ impl CallServiceV2 {
 
     pub(crate) fn new_router(
         ingress_validator: IngressValidator,
-        ingress_watcher_handle: IngressWatcherHandle,
+        ingress_watcher_handle: Option<IngressWatcherHandle>,
     ) -> Router {
         Router::new().route_service(
             Self::route(),
@@ -53,9 +53,8 @@ impl CallServiceV2 {
 
     pub fn new_service(
         call_handler: IngressValidator,
-        ingress_watcher_handle: IngressWatcherHandle,
     ) -> BoxCloneService<Request<Body>, Response, Infallible> {
-        let router = Self::new_router(call_handler, ingress_watcher_handle);
+        let router = Self::new_router(call_handler, None);
         BoxCloneService::new(router.into_service())
     }
 }
@@ -84,19 +83,21 @@ async fn call_v2(
     // We spawn a task to register the certification time of the message.
     // The subscriber in the spawned task records the certification time of the message
     // when `wait_for_certification` is called.
-    tokio::spawn(async move {
-        let Ok(certification_tracker) = ingress_watcher_handle
-            .subscribe_for_certification(message_id)
-            .await
-        else {
-            return;
-        };
+    if let Some(ingress_watcher_handle) = ingress_watcher_handle {
+        tokio::spawn(async move {
+            let Ok(certification_tracker) = ingress_watcher_handle
+                .subscribe_for_certification(message_id)
+                .await
+            else {
+                return;
+            };
 
-        let _ = certification_tracker
-            .wait_for_certification()
-            .timeout(MAX_CERTIFICATION_WAIT_TIME)
-            .await;
-    });
+            let _ = certification_tracker
+                .wait_for_certification()
+                .timeout(MAX_CERTIFICATION_WAIT_TIME)
+                .await;
+        });
+    }
 
     ingress_submitter
         .try_submit()
