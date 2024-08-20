@@ -267,8 +267,6 @@ type RerouteCanisterRangesPayload = record {
   destination_subnet : principal;
 };
 
-type RetireReplicaVersionPayload = record { replica_version_ids : vec text };
-
 type ReviseElectedGuestosVersionsPayload = record {
   release_package_urls : vec text;
   replica_versions_to_unelect : vec text;
@@ -292,6 +290,11 @@ type SubnetFeatures = record {
 type SubnetType = variant { application; verified_application; system };
 
 type UpdateApiBoundaryNodesVersionPayload = record {
+  version : text;
+  node_ids : vec principal;
+};
+
+type DeployGuestosToSomeApiBoundaryNodes = record {
   version : text;
   node_ids : vec principal;
 };
@@ -431,6 +434,7 @@ service : {
   deploy_guestos_to_all_unassigned_nodes : (
     DeployGuestosToAllUnassignedNodesPayload
   ) -> ();
+  deploy_guestos_to_some_api_boundary_nodes : (DeployGuestosToSomeApiBoundaryNodes) -> ();
   deploy_hostos_to_some_nodes : (DeployHostosToSomeNodes) -> ();
   get_build_metadata : () -> (text) query;
   get_node_operators_and_dcs_of_node_provider : (principal) -> (GetNodeOperatorsAndDcsOfNodeProviderResponse) query;
@@ -445,7 +449,6 @@ service : {
   remove_nodes : (RemoveNodesPayload) -> ();
   remove_nodes_from_subnet : (RemoveNodesPayload) -> ();
   reroute_canister_ranges : (RerouteCanisterRangesPayload) -> ();
-  retire_replica_version : (RetireReplicaVersionPayload) -> ();
   revise_elected_guestos_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   revise_elected_replica_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   set_firewall_config : (SetFirewallConfigPayload) -> ();

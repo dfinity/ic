@@ -70,6 +70,7 @@ pub enum ChangeAction {
 pub enum PurgeableArtifactType {
     NotarizationShare,
     FinalizationShare,
+    EquivocationProof,
 }
 
 impl From<ChangeAction> for ChangeSet {
