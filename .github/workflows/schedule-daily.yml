@@ -196,6 +196,7 @@ jobs:
             profile.json
   dependency-scan-nightly:
     name: Dependency Scan Nightly
+    if: github.ref == 'refs/heads/master'
     runs-on:
       group: zh1
       labels: dind-large
