@@ -225,6 +225,7 @@ fn write_to_disk<P: Into<ProposalTemplate>>(
     );
 
     if let Some(submit) = submit_with {
+        use std::os::unix::fs::OpenOptionsExt;
         let proposal_files = ProposalFiles {
             wasm: artifact,
             arg: bin_args_file_path,
@@ -232,7 +233,11 @@ fn write_to_disk<P: Into<ProposalTemplate>>(
         };
         let command = submit.render_command(&proposal, proposal_files);
         let submit_script = output_dir.join("submit.sh");
-        let mut submit_file = fs::File::create(&submit_script)
+        let mut submit_file = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .mode(0o740) //ensure script is executable
+            .open(submit_script.as_path())
             .unwrap_or_else(|_| panic!("failed to create {:?}", submit_script));
         submit_file.write_all(command.as_bytes()).unwrap();
         println!("Submit script written to '{}'", submit_script.display());
