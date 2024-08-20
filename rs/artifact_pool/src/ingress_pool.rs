@@ -13,8 +13,8 @@ use ic_interfaces::{
         UnvalidatedIngressArtifact, ValidatedIngressArtifact,
     },
     p2p::consensus::{
-        ArtifactWithOpt, ChangeResult, MutablePool, Priority, PriorityFn, PriorityFnFactory,
-        UnvalidatedArtifact, ValidatedPoolReader,
+        ArtifactMutation, ArtifactWithOpt, ChangeResult, MutablePool, Priority, PriorityFn,
+        PriorityFnFactory, UnvalidatedArtifact, ValidatedPoolReader,
     },
     time_source::TimeSource,
 };
@@ -294,8 +294,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
 
     /// Apply changeset to the Ingress Pool
     fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<SignedIngress> {
-        let mut artifacts_with_opt = Vec::new();
-        let mut purged = Vec::new();
+        let mut mutations = vec![];
         for change_action in change_set {
             match change_action {
                 ChangeAction::MoveToValidated((message_id, source_node_id)) => {
@@ -304,10 +303,10 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                     match self.remove_unvalidated(&message_id) {
                         Some((unvalidated_artifact, size)) => {
                             if source_node_id == self.node_id {
-                                artifacts_with_opt.push(ArtifactWithOpt {
+                                mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
                                     artifact: unvalidated_artifact.message.signed_ingress.clone(),
                                     is_latency_sensitive: false,
-                                });
+                                }));
                             }
                             self.validated.insert(
                                 message_id,
@@ -349,7 +348,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                 ChangeAction::RemoveFromValidated(message_id) => {
                     match self.validated.remove(&message_id) {
                         Some(artifact) => {
-                            purged.push(message_id);
+                            mutations.push(ArtifactMutation::Remove(message_id));
                             let size = artifact.msg.signed_ingress.count_bytes();
                             debug!(
                                 self.log,
@@ -366,18 +365,19 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                     }
                 }
                 ChangeAction::PurgeBelowExpiry(expiry) => {
-                    purged.extend(
+                    mutations.extend(
                         self.validated
                             .purge_below(expiry)
-                            .map(|i| (&i.msg.signed_ingress).into()),
+                            .map(|i| (&i.msg.signed_ingress).into())
+                            .map(ArtifactMutation::Remove),
                     );
                     let _unused = self.unvalidated.purge_below(expiry);
                 }
             }
         }
+
         ChangeResult {
-            purged,
-            artifacts_with_opt,
+            mutations,
             poll_immediately: false,
         }
     }
@@ -650,11 +650,11 @@ mod tests {
                 let result = ingress_pool.apply_changes(changeset);
 
                 // Check moved message is returned as an advert
-                assert!(result.purged.is_empty());
-                assert_eq!(result.artifacts_with_opt.len(), 1);
-                assert_eq!(
-                    IdentifiableArtifact::id(&result.artifacts_with_opt[0].artifact),
-                    message_id0
+                assert_eq!(result.mutations.len(), 1);
+                assert!(
+                    matches!(&result.mutations[0], ArtifactMutation::Insert(artifact) if
+                        IdentifiableArtifact::id(&artifact.artifact) == message_id0
+                    )
                 );
                 assert!(!result.poll_immediately);
                 // Check that message is indeed in the pool
@@ -714,17 +714,24 @@ mod tests {
                 }
                 assert_eq!(ingress_pool.unvalidated().size(), initial_count);
                 let result = ingress_pool.apply_changes(changeset);
-                assert!(result.purged.is_empty());
+                assert!(!result
+                    .mutations
+                    .iter()
+                    .any(|x| matches!(x, ArtifactMutation::Remove(_))));
+
                 // artifacts_with_opt are only created for own node id
-                assert_eq!(result.artifacts_with_opt.len(), initial_count / nodes);
+                assert_eq!(result.mutations.len(), initial_count / nodes);
                 assert!(!result.poll_immediately);
                 assert_eq!(ingress_pool.unvalidated().size(), 0);
                 assert_eq!(ingress_pool.validated().size(), initial_count);
 
                 let changeset = vec![ChangeAction::PurgeBelowExpiry(cutoff_time)];
                 let result = ingress_pool.apply_changes(changeset);
-                assert!(result.artifacts_with_opt.is_empty());
-                assert_eq!(result.purged.len(), initial_count - non_expired_count);
+                assert!(!result
+                    .mutations
+                    .iter()
+                    .any(|x| matches!(x, ArtifactMutation::Insert(_))));
+                assert_eq!(result.mutations.len(), initial_count - non_expired_count);
                 assert!(!result.poll_immediately);
                 assert_eq!(ingress_pool.validated().size(), non_expired_count);
             })

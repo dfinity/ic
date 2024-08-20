@@ -152,13 +152,19 @@ pub fn setup_consensus_and_p2p(
         max_certified_height_tx,
     );
 
-    // StateSync
+    // StateSync receive side => handler definition
     let (state_sync_router, state_sync_manager_rx) = ic_state_sync_manager::build_axum_router(
         state_sync_client.clone(),
         log.clone(),
         metrics_registry,
     );
 
+    // Consensus receive side => handler definition
+
+    // Merge all receive side handlers => router
+    let p2p_router = state_sync_router
+        .merge(p2p_consensus.router())
+        .layer(TraceLayer::new_for_http());
     // Quic transport
     let (_, topology_watcher) = ic_peer_manager::start_peer_manager(
         log.clone(),
@@ -174,9 +180,7 @@ pub fn setup_consensus_and_p2p(
         transport_config.listening_port,
     )
         .into();
-    let p2p_router = state_sync_router
-        .merge(p2p_consensus.router())
-        .layer(TraceLayer::new_for_http());
+
     let quic_transport = Arc::new(ic_quic_transport::QuicTransport::start(
         log,
         metrics_registry,
@@ -188,6 +192,8 @@ pub fn setup_consensus_and_p2p(
         Either::<_, DummyUdpSocket>::Left(transport_addr),
         p2p_router,
     ));
+
+    // Start the main event loops for StateSync and Consensus
 
     let _state_sync_manager = ic_state_sync_manager::start_state_sync_manager(
         log,

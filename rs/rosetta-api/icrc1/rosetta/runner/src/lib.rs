@@ -82,8 +82,7 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
         .arg(arguments.store_type)
         .arg("--port-file")
         .arg(port_file.clone())
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit());
+        .stderr(std::process::Stdio::piped());
 
     if arguments.network_url.is_some() {
         command = command
@@ -106,15 +105,14 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
     if arguments.exit_on_sync {
         command = command.arg("--exit-on-sync");
     }
-
-    let _proc = KillOnDrop(command.spawn().unwrap_or_else(|e| {
+    let child_process = command.spawn().unwrap_or_else(|e| {
         panic!(
             "Failed to execute ic-icrc-rosetta-bin (path = {}, exists? = {}): {}",
             rosetta_bin.display(),
             rosetta_bin.exists(),
             e
         )
-    }));
+    });
 
     let mut tries_left = 600; // 600*100ms = 60s
     let mut maybe_port: Option<u16> = None;
@@ -134,12 +132,19 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
         sleep(Duration::from_millis(100)).await;
         tries_left -= 1;
     }
-    let port = maybe_port.expect("Error reading port from port file");
+    match maybe_port {
+        None => {
+            let output = child_process
+                .wait_with_output()
+                .expect("Failed to wait for child process");
 
-    RosettaContext {
-        _proc,
-        _state: state,
-        port,
+            panic!("Failed to start rosetta: {:?}", output);
+        }
+        Some(port) => RosettaContext {
+            _proc: KillOnDrop(child_process),
+            _state: state,
+            port,
+        },
     }
 }
 
