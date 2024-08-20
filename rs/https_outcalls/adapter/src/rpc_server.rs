@@ -254,7 +254,7 @@ impl CanisterHttpService for CanisterHttp {
                             .inc();
                         Status::new(
                             tonic::Code::Unavailable,
-                            format!("Failed to fetch body {}", err),
+                            format!("Failed to fetch body: {}", err),
                         )
                     }
                 }
@@ -265,7 +265,7 @@ impl CanisterHttpService for CanisterHttp {
                         .inc();
                     Status::new(
                         tonic::Code::Unavailable,
-                        format!("Failed to fetch body {}", err),
+                        format!("Failed to fetch body: {}", err),
                     )
                 }
             }
