@@ -1599,7 +1599,10 @@ impl Operation for CallRequest {
                 });
 
                 let svc = match self.version {
-                    CallRequestVersion::V2 => CallServiceV2::new_service(ingress_validator),
+                    CallRequestVersion::V2 => CallServiceV2::new_service(
+                        ingress_validator,
+                        subnet.ingress_watcher_handle.clone(),
+                    ),
                     CallRequestVersion::V3 => {
                         let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
                         let metrics_registry = MetricsRegistry::new();
