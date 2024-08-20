@@ -43,7 +43,6 @@ zlib1g-dev
 libclang-10-dev
 protobuf-compiler
 llvm
-liblmdb-dev
 liblzma-dev
 
 # Haskell

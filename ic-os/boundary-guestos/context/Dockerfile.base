@@ -91,11 +91,11 @@ ENV SOURCE_DATE_EPOCH=0
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Preparation and install of packages for nginx
-RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install gnupg 
+RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install gnupg
 RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ABF5BD827BD9BF62
 
 RUN echo "deb http://nginx.org/packages/mainline/ubuntu/ focal nginx" >> /etc/apt/sources.list.d/nginx.list && \
-    echo "deb-src http://nginx.org/packages/mainline/ubuntu/ focal nginx" >> /etc/apt/sources.list.d/nginx.list 
+    echo "deb-src http://nginx.org/packages/mainline/ubuntu/ focal nginx" >> /etc/apt/sources.list.d/nginx.list
 
 RUN \
     apt-get update && \
@@ -119,7 +119,6 @@ RUN \
         isc-dhcp-client \
         less \
         libffi-dev \
-        liblmdb0 \
         libssl-dev \
         linux-image-virtual-hwe-20.04 \
         logrotate \
