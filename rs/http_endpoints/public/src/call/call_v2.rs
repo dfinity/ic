@@ -3,7 +3,6 @@
 use super::{IngressError, IngressValidator, IngressWatcherHandle};
 use crate::{
     common::{Cbor, CborUserError, WithTimeout},
-    metrics::HttpHandlerMetrics,
     HttpError,
 };
 use axum::{
@@ -18,8 +17,13 @@ use ic_types::{
     messages::{HttpCallContent, HttpRequestEnvelope},
     CanisterId,
 };
-use std::convert::Infallible;
+use std::{convert::Infallible, time::Duration};
+use tokio_util::time::FutureExt;
 use tower::{util::BoxCloneService, ServiceBuilder};
+
+/// The maximum time we wait for a message to be certified
+/// before recording its certification time.
+const MAX_CERTIFICATION_WAIT_TIME: Duration = Duration::from_secs(30);
 
 #[derive(Clone)]
 pub struct CallServiceV2 {
@@ -88,7 +92,10 @@ async fn call_v2(
             return;
         };
 
-        certification_tracker.wait_for_certification().await;
+        let _ = certification_tracker
+            .wait_for_certification()
+            .timeout(MAX_CERTIFICATION_WAIT_TIME)
+            .await;
     });
 
     ingress_submitter
