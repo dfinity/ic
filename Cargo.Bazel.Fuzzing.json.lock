@@ -1,5 +1,5 @@
 {
-  "checksum": "71942979764b5e6cb7f52cc7ead4c12e9a4bf198c893a13e3a87d3392dcb7c57",
+  "checksum": "5c29928279602c40a20a7aee3941aae16278d78c54d9b5c9284a7fa6bc5fc1f7",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17495,7 +17495,7 @@
               "target": "ic_cbor"
             },
             {
-              "id": "ic-cdk 0.13.2",
+              "id": "ic-cdk 0.13.5",
               "target": "ic_cdk"
             },
             {
@@ -28216,14 +28216,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk 0.13.2": {
+    "ic-cdk 0.13.5": {
       "name": "ic-cdk",
-      "version": "0.13.2",
+      "version": "0.13.5",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.13.2/download",
-          "sha256": "f8859bc2b863a77750acf199e1fb7e3fc403e1b475855ba13f59cb4e4036d238"
+          "url": "https://static.crates.io/crates/ic-cdk/0.13.5/download",
+          "sha256": "3b1da6a25b045f9da3c9459c0cb2b0700ac368ee16382975a17185a23b9c18ab"
         }
       },
       "targets": [
@@ -28276,7 +28276,7 @@
           ],
           "selects": {}
         },
-        "version": "0.13.2"
+        "version": "0.13.5"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -28656,7 +28656,7 @@
               "target": "futures"
             },
             {
-              "id": "ic-cdk 0.13.2",
+              "id": "ic-cdk 0.13.5",
               "target": "ic_cdk"
             },
             {
@@ -45695,7 +45695,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-cdk 0.13.2",
+              "id": "ic-cdk 0.13.5",
               "target": "ic_cdk"
             },
             {
@@ -78557,7 +78557,7 @@
     "ic-canister-log 0.2.0",
     "ic-canister-sig-creation 1.0.1",
     "ic-cbor 2.6.0",
-    "ic-cdk 0.13.2",
+    "ic-cdk 0.13.5",
     "ic-cdk-macros 0.9.0",
     "ic-cdk-timers 0.7.0",
     "ic-certification 2.6.0",
