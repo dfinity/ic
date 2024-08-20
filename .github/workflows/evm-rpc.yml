@@ -1,11 +1,6 @@
-name: Main CI
+name: EVM RPC CI
 
 on:
-  # Todo: re-enable once github runner resources have been set
-  # push:
-  merge_group:
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
   pull_request:
 
 jobs:
@@ -13,7 +8,6 @@ jobs:
     name: Build (EVM RPC fork)
     runs-on:
       group: ubuntu-latest
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
