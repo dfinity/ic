@@ -61,11 +61,11 @@ pub fn setup(bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_default_vm_resources(VmResources {
-                    vcpus: Some(NrOfVCPUs::new(64)),
-                    memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
+                    vcpus: Some(NrOfVCPUs::new(16)),
+                    memory_kibibytes: Some(AmountOfMemoryKiB::new(32_000_000)),
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
                 })
-                .add_nodes(1),
+                .add_nodes(13),
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
@@ -521,7 +521,8 @@ pub fn mainnet_update_call_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
     const DOMAIN_URL: &str = "https://testic0.app";
     // id of the counter-canister on the application subnet in mainnet
     const MAINNET_COUNTER_CANISTER_ID: &str = "3muos-6yaaa-aaaaa-qaaua-cai";
-    let rps = 2;
+    let rps = 100;
+
     let workload_per_step_duration = Duration::from_secs(60);
 
     // Reuse this runtime for all async executions.

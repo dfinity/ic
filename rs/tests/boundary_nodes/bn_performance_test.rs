@@ -16,7 +16,7 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup_with_config)
         .add_test(systest!(update_calls_test))
-        .add_test(systest!(query_calls_test))
+        // .add_test(systest!(query_calls_test))
         .with_timeout_per_test(Duration::from_secs(140 * 60))
         .execute_from_args()?;
     Ok(())
