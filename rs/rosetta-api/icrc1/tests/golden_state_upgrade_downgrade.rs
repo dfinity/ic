@@ -1,4 +1,4 @@
-use crate::common::{ledger_wasm, load_wasm_using_env_var};
+use crate::common::ledger_wasm;
 use candid::Encode;
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -110,7 +110,7 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     const YUKU: (&str, &str) = ("atbfz-diaaa-aaaaq-aacyq-cai", "Yuku");
 
     let ledger_wasm = Wasm::from_bytes(ledger_wasm());
-    let mainnet_ledger_wasm = Wasm::from_bytes(load_wasm_using_env_var(
+    let mainnet_ledger_wasm = Wasm::from_bytes(common::load_wasm_using_env_var(
         "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
     ));
 
