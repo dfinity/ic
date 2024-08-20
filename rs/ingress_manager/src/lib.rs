@@ -45,7 +45,7 @@ use std::{
 /// tuple (Height, HashOfBatchPayload) for two reasons:
 /// 1. We want to purge this cache by height, for those below certified height.
 /// 2. There could be more than one payloads at a given height due to blockchain
-/// branching.
+///    branching.
 type IngressPayloadCache =
     BTreeMap<(Height, CryptoHashOf<BlockPayload>), Arc<HashSet<IngressMessageId>>>;
 
@@ -83,21 +83,31 @@ impl IngressManagerMetrics {
     }
 }
 
-/// A custom RandomState we can use to control the randomness of a hashmap. By default
-/// random.
-#[derive(Clone)]
-pub enum CustomRandomState {
-    /// Seeds a HashMap with the default [`std::collections::hash_map::RandomState`].
-    Random(RandomState),
-    /// Makes a hash map deterministic, by seeding it with the non-random default hasher.
-    /// Use it for testing purposes, to create a repeatable element order.
+/// The kind of RandomState you want to generate.
+pub enum RandomStateKind {
+    /// Creates random states using the default [`std::collections::hash_map::RandomState`].
+    Random,
+    /// Creates a deterministic default random state. Use it for testing purposes,
+    /// to create a repeatable element order.
     Deterministic,
 }
 
-impl Default for CustomRandomState {
-    fn default() -> Self {
-        CustomRandomState::Random(RandomState::new())
+impl RandomStateKind {
+    /// Creates a custom random state of the given kind, which can be used
+    /// to seed data structures like hashmaps.
+    fn create_state(&self) -> CustomRandomState {
+        match self {
+            Self::Random => CustomRandomState::Random(RandomState::new()),
+            Self::Deterministic => CustomRandomState::Deterministic,
+        }
     }
+}
+
+/// A custom RandomState we can use to control the randomness of a hashmap.
+#[derive(Clone)]
+enum CustomRandomState {
+    Random(RandomState),
+    Deterministic,
 }
 
 impl BuildHasher for CustomRandomState {
@@ -134,8 +144,8 @@ pub struct IngressManager {
     cycles_account_manager: Arc<CyclesAccountManager>,
 
     /// A determinism flag for testing. Used for making hashmaps in the ingress selector
-    /// deterministic. Set to `false` in production.
-    random_state: CustomRandomState,
+    /// deterministic. Set to `RandomStateKind::Random` in production.
+    random_state: RandomStateKind,
 }
 
 impl IngressManager {
@@ -154,7 +164,7 @@ impl IngressManager {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         cycles_account_manager: Arc<CyclesAccountManager>,
         malicious_flags: MaliciousFlags,
-        random_state: CustomRandomState,
+        random_state: RandomStateKind,
     ) -> Self {
         let request_validator = if malicious_flags.maliciously_disable_ingress_validation {
             pub struct DisabledHttpRequestVerifier;
@@ -255,14 +265,12 @@ pub(crate) mod tests {
         artifact_pool_config::with_test_pool_config,
         crypto::temp_crypto_component_with_fake_registry,
         cycles_account_manager::CyclesAccountManagerBuilder,
-        history::MockIngressHistory,
-        mock_time,
-        state::ReplicatedStateBuilder,
-        types::ids::{node_test_id, subnet_test_id},
-        FastForwardTimeSource,
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::test_subnet_record;
+    use ic_test_utilities_state::{MockIngressHistory, ReplicatedStateBuilder};
+    use ic_test_utilities_time::FastForwardTimeSource;
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{ingress::IngressStatus, Height, RegistryVersion, SubnetId};
     use std::{ops::DerefMut, sync::Arc};
 
@@ -335,7 +343,7 @@ pub(crate) mod tests {
                     log.clone(),
                 )));
                 let time_source = FastForwardTimeSource::new();
-                time_source.set_time(mock_time()).unwrap();
+                time_source.set_time(UNIX_EPOCH).unwrap();
                 run(
                     IngressManager::new(
                         time_source,
@@ -350,7 +358,7 @@ pub(crate) mod tests {
                         Arc::new(state_manager),
                         cycles_account_manager,
                         MaliciousFlags::default(),
-                        CustomRandomState::default(),
+                        RandomStateKind::Random,
                     ),
                     ingress_pool,
                 )

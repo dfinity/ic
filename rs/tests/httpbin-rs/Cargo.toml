@@ -9,10 +9,13 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-axum = "0.6.18"
-axum-server = { version = "0.5.1", features = ["tls-rustls"] }
-clap = { version = "4.0", features = ["derive"] }
-rustls = "0.21.1"
-rustls-pemfile = "1.0.2"
+axum = { workspace = true }
+clap = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+rustls = { workspace = true }
+rustls-pemfile = "2.1.2"
 serde_json = { workspace = true }
 tokio = { workspace = true }
+tokio-rustls = { workspace = true }
+tower = { workspace = true }

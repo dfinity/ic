@@ -146,6 +146,8 @@ pub enum AlgorithmId {
     ThresholdEcdsaSecp256k1 = 15,
     MegaSecp256k1 = 16,
     ThresholdEcdsaSecp256r1 = 17,
+    ThresholdSchnorrBip340 = 18,
+    ThresholdEd25519 = 19,
 }
 
 impl AlgorithmId {
@@ -155,6 +157,14 @@ impl AlgorithmId {
 
     pub fn is_threshold_ecdsa(&self) -> bool {
         Self::all_threshold_ecdsa_algorithms().contains(self)
+    }
+
+    pub const fn all_threshold_schnorr_algorithms() -> [AlgorithmId; 2] {
+        [Self::ThresholdSchnorrBip340, Self::ThresholdEd25519]
+    }
+
+    pub fn is_threshold_schnorr(&self) -> bool {
+        Self::all_threshold_schnorr_algorithms().contains(self)
     }
 }
 
@@ -213,6 +223,8 @@ impl From<i32> for AlgorithmId {
             15 => AlgorithmId::ThresholdEcdsaSecp256k1,
             16 => AlgorithmId::MegaSecp256k1,
             17 => AlgorithmId::ThresholdEcdsaSecp256r1,
+            18 => AlgorithmId::ThresholdSchnorrBip340,
+            19 => AlgorithmId::ThresholdEd25519,
             _ => AlgorithmId::Placeholder,
         }
     }

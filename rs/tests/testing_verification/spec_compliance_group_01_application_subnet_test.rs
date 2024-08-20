@@ -14,10 +14,10 @@ end::catalog[] */
 use anyhow::Result;
 
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::driver::test_env::TestEnv;
-use ic_tests::spec_compliance::{config_impl, test_subnet};
-use ic_tests::systest;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::systest;
+use spec_compliance::{config_impl, test_subnet};
 
 pub fn config(env: TestEnv) {
     config_impl(env, true, true);
@@ -35,7 +35,7 @@ pub fn test(env: TestEnv) {
             "($0 ~ /canister history/)",
             "($0 ~ /canister version/)",
             "($0 ~ /canister global timer/)",
-            "($0 ~ /canister http calls/)",
+            "($0 ~ /canister http outcalls/)",
             "($0 ~ /WebAssembly module validation/)",
         ],
     );

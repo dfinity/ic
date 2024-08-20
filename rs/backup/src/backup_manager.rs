@@ -17,7 +17,7 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
-use slog::{error, info, Logger};
+use slog::{error, info, o, Logger};
 use tokio::runtime::Handle;
 
 use crate::{
@@ -37,19 +37,18 @@ const COLD_STORAGE_PERIOD: u64 = 60 * 60; // each hour
 const PERIODIC_METRICS_PUSH_PERIOD: u64 = 5 * 60; // each 5 min
 
 struct SubnetBackup {
-    pub nodes_syncing: usize,
-    pub sync_period: Duration,
-    pub replay_period: Duration,
-    pub backup_helper: BackupHelper,
+    nodes_syncing: usize,
+    sync_period: Duration,
+    replay_period: Duration,
+    backup_helper: BackupHelper,
 }
 
 pub struct BackupManager {
-    pub root_dir: PathBuf,
-    pub local_store: Arc<LocalStoreImpl>,
-    pub registry_client: Arc<RegistryClientImpl>,
-    pub registry_replicator: Arc<RegistryReplicator>,
+    _local_store: Arc<LocalStoreImpl>,
+    _registry_client: Arc<RegistryClientImpl>,
+    _registry_replicator: Arc<RegistryReplicator>,
     subnet_backups: Vec<SubnetBackup>,
-    pub log: Logger,
+    log: Logger,
 }
 
 impl BackupManager {
@@ -112,23 +111,24 @@ impl BackupManager {
         let downloads = Arc::new(Mutex::new(true));
         let blacklisted = Arc::new(config.blacklisted_nodes.unwrap_or_default());
 
-        for s in config.subnets {
+        for subnet_config in config.subnets {
+            let subnet_log =
+                log.new(o!("subnet" => subnet_config.subnet_id.to_string()[..5].to_string()));
             let notification_client = NotificationClient {
                 push_metrics: config.push_metrics,
                 metrics_urls: config.metrics_urls.clone(),
                 network_name: config.network_name.clone(),
                 backup_instance: config.backup_instance.clone(),
                 slack_token: config.slack_token.clone(),
-                subnet: s.subnet_id.to_string(),
-                log: log.clone(),
+                subnet: subnet_config.subnet_id.to_string(),
+                log: subnet_log.clone(),
             };
             let daily_replays: usize = SECONDS_IN_DAY
-                .checked_div(s.replay_period_secs)
+                .checked_div(subnet_config.replay_period_secs)
                 .unwrap_or(0) as usize;
-            let do_cold_storage = !s.disable_cold_storage;
             let backup_helper = BackupHelper {
-                subnet_id: s.subnet_id,
-                initial_replica_version: s.initial_replica_version,
+                subnet_id: subnet_config.subnet_id,
+                initial_replica_version: subnet_config.initial_replica_version,
                 root_dir: config.root_dir.clone(),
                 excluded_dirs: config.excluded_dirs.clone(),
                 ssh_private_key: ssh_credentials_file.clone(),
@@ -143,28 +143,25 @@ impl BackupManager {
                 versions_hot,
                 artifacts_guard: Mutex::new(true),
                 daily_replays,
-                do_cold_storage,
-                thread_id: s.thread_id,
+                do_cold_storage: !subnet_config.disable_cold_storage,
+                thread_id: subnet_config.thread_id,
                 blacklisted_nodes: blacklisted.clone(),
-                log: log.clone(),
+                log: subnet_log.clone(),
             };
-            let sync_period = std::time::Duration::from_secs(s.sync_period_secs);
-            let replay_period = std::time::Duration::from_secs(s.replay_period_secs);
-
             backup_helper.notification_client.push_metrics_version();
 
             backups.push(SubnetBackup {
-                nodes_syncing: s.nodes_syncing,
-                sync_period,
-                replay_period,
+                nodes_syncing: subnet_config.nodes_syncing,
+                sync_period: Duration::from_secs(subnet_config.sync_period_secs),
+                replay_period: Duration::from_secs(subnet_config.replay_period_secs),
                 backup_helper,
             });
         }
+
         BackupManager {
-            root_dir: config.root_dir,
-            local_store,
-            registry_client,
-            registry_replicator, // it will be used as a background task, so keep it
+            _local_store: local_store,
+            _registry_client: registry_client,
+            _registry_replicator: registry_replicator, // it will be used as a background task, so keep it
             subnet_backups: backups,
             log,
         }
@@ -346,7 +343,7 @@ impl BackupManager {
                     }
                     if !old_state_dir.join("checkpoints").exists() {
                         println!(
-                            "Error: directory {:?} doesn't have checkpints!",
+                            "Error: directory {:?} doesn't have checkpoints!",
                             old_state_dir
                         );
                         continue;
@@ -394,15 +391,20 @@ impl BackupManager {
 
         loop {
             let mut progress = Vec::new();
-            for i in 0..size {
-                let b = &self.subnet_backups[i].backup_helper;
-                let last_block = b.retrieve_spool_top_height();
-                let last_cp = b.last_state_checkpoint();
-                let subnet = &b.subnet_id.to_string()[..5];
+            for backup in &self.subnet_backups {
+                let backup_helper = &backup.backup_helper;
+                let last_block = backup_helper.retrieve_spool_top_height();
+                let last_cp = backup_helper.last_state_checkpoint();
+                let subnet = &backup_helper.subnet_id.to_string()[..5];
                 progress.push(format!("{}: {}/{}", subnet, last_cp, last_block));
 
-                b.notification_client.push_metrics_synced_height(last_block);
-                b.notification_client.push_metrics_restored_height(last_cp);
+                backup_helper
+                    .notification_client
+                    .push_metrics_synced_height(last_block);
+                backup_helper
+                    .notification_client
+                    .push_metrics_restored_height(last_cp);
+                let _ = backup_helper.log_disk_stats(false);
             }
             info!(self.log, "Replay/Sync - {}", progress.join(", "));
 

@@ -13,14 +13,13 @@ use criterion::{
 };
 use either::Either;
 use ic_base_types::NodeId;
-use ic_icos_sev::Sev;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::{
     create_registry_handle, temp_crypto_component_with_tls_keys, RegistryConsensusHandle,
 };
 use ic_quic_transport::{DummyUdpSocket, QuicTransport, SubnetTopology, Transport};
-use ic_types_test_utils::ids::{node_test_id, SUBNET_1};
+use ic_types_test_utils::ids::node_test_id;
 use tokio::{
     runtime::{Handle, Runtime},
     sync::watch,
@@ -48,12 +47,6 @@ fn spawn_transport(
     let node_addr: SocketAddr = (Ipv4Addr::LOCALHOST, 8000 + id as u16).into();
     let node_id = node_test_id(id);
     let tls = temp_crypto_component_with_tls_keys(&registry_handle, node_id);
-    let sev = Arc::new(Sev::new(
-        node_id,
-        SUBNET_1,
-        registry_handle.registry_client.clone(),
-        log.clone(),
-    ));
     registry_handle.registry_client.reload();
     registry_handle.registry_client.update_to_latest_version();
 
@@ -63,7 +56,6 @@ fn spawn_transport(
         &rt,
         tls,
         registry_handle.registry_client.clone(),
-        sev,
         node_id,
         watch_rx,
         Either::<_, DummyUdpSocket>::Left(node_addr),

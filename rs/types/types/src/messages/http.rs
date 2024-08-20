@@ -2,16 +2,14 @@
 #![cfg_attr(test, allow(clippy::unit_arg))]
 //! HTTP requests that the Internet Computer is prepared to handle.
 
-use super::Blob;
+use super::{query::QuerySource, Blob};
 use crate::{
     crypto::SignedBytesWithoutDomainSeparator,
     messages::{
-        message_id::hash_of_map, MessageId, ReadState, SignedIngressContent, UserQuery,
-        UserSignature,
+        message_id::hash_of_map, MessageId, Query, ReadState, SignedIngressContent, UserSignature,
     },
     Height, Time, UserId,
 };
-use derive_more::Display;
 use ic_base_types::{CanisterId, CanisterIdError, NodeId, PrincipalId};
 use ic_crypto_tree_hash::{MixedHashTree, Path};
 use maplit::btreemap;
@@ -24,6 +22,7 @@ use std::{
     error::Error,
     fmt,
 };
+use strum_macros::AsRefStr;
 
 #[cfg(test)]
 mod tests;
@@ -330,21 +329,30 @@ impl<C> HttpRequest<C> {
     }
 }
 
-impl HttpRequestContent for UserQuery {
+impl HttpRequestContent for Query {
     fn id(&self) -> MessageId {
         self.id()
     }
 
     fn sender(&self) -> UserId {
-        self.source
+        match self.source {
+            QuerySource::User { user_id, .. } => user_id,
+            QuerySource::Anonymous => UserId::from(PrincipalId::new_anonymous()),
+        }
     }
 
     fn ingress_expiry(&self) -> u64 {
-        self.ingress_expiry
+        match self.source {
+            QuerySource::User { ingress_expiry, .. } => ingress_expiry,
+            QuerySource::Anonymous => 0,
+        }
     }
 
     fn nonce(&self) -> Option<Vec<u8>> {
-        self.nonce.clone()
+        match &self.source {
+            QuerySource::User { nonce, .. } => nonce.clone(),
+            QuerySource::Anonymous => None,
+        }
     }
 }
 
@@ -366,14 +374,14 @@ impl HttpRequestContent for ReadState {
     }
 }
 
-impl TryFrom<HttpRequestEnvelope<HttpQueryContent>> for HttpRequest<UserQuery> {
+impl TryFrom<HttpRequestEnvelope<HttpQueryContent>> for HttpRequest<Query> {
     type Error = HttpRequestError;
 
     fn try_from(envelope: HttpRequestEnvelope<HttpQueryContent>) -> Result<Self, Self::Error> {
         let auth = to_authentication(&envelope)?;
         match envelope.content {
             HttpQueryContent::Query { query } => Ok(HttpRequest {
-                content: UserQuery::try_from(query)?,
+                content: Query::try_from(query)?,
                 auth,
             }),
         }
@@ -592,7 +600,7 @@ pub struct QueryResponseHash([u8; 32]);
 
 impl QueryResponseHash {
     /// Creates a [`QueryResponseHash`] from a given query response, request and timestamp.
-    pub fn new(response: &HttpQueryResponse, request: &UserQuery, timestamp: Time) -> Self {
+    pub fn new(response: &HttpQueryResponse, request: &Query, timestamp: Time) -> Self {
         use RawHttpRequestVal::*;
 
         let self_map_representation = match response {
@@ -714,7 +722,7 @@ pub struct CertificateDelegation {
 
 /// Different stages required for the full initialization of the HTTPS endpoint.
 /// The fields are listed in order of execution/transition.
-#[derive(Debug, Display, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, AsRefStr)]
 #[serde(rename_all = "snake_case")]
 pub enum ReplicaHealthStatus {
     /// Marks the start state of the HTTPS endpoint. Some requests will fail

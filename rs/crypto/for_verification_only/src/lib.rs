@@ -1,15 +1,14 @@
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
-use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces::crypto::Crypto;
 use ic_interfaces_registry::RegistryClient;
 use std::sync::Arc;
 
 /// A crypto component that should only be used for verification.
-pub trait CryptoComponentForVerificationOnly: Crypto + TlsHandshake + Send + Sync {}
+pub trait CryptoComponentForVerificationOnly: Crypto + Send + Sync {}
 
 // Blanket implementation of `CryptoComponentForVerificationOnly` for all types
 // that fulfill the requirements.
-impl<T> CryptoComponentForVerificationOnly for T where T: Crypto + TlsHandshake + Send + Sync {}
+impl<T> CryptoComponentForVerificationOnly for T where T: Crypto + Send + Sync {}
 
 /// Returns a crypto component that should only be used for verification.
 ///

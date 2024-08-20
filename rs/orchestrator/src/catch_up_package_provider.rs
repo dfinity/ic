@@ -30,25 +30,26 @@
 //! can be used to fetch newer CUPs. This way a node does not rely on the P2P protocol to catch up
 //! with its subnet and allows us to upgrade the protocol with breaking changes on any protocol layer.
 
-use crate::error::{OrchestratorError, OrchestratorResult};
-use crate::registry_helper::RegistryHelper;
-use ic_canister_client::Sender;
-use ic_canister_client::{Agent, HttpClient};
+use crate::{
+    error::{OrchestratorError, OrchestratorResult},
+    registry_helper::RegistryHelper,
+    utils::http_endpoint_to_url,
+};
+use ic_canister_client::{Agent, HttpClient, Sender};
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_logger::{info, warn, ReplicaLogger};
-use ic_protobuf::registry::node::v1::NodeRecord;
-use ic_protobuf::types::v1 as pb;
-use ic_types::NodeId;
+use ic_protobuf::{registry::node::v1::NodeRecord, types::v1 as pb};
+use ic_sys::fs::write_protobuf_using_tmp_file;
 use ic_types::{
-    consensus::catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
-    consensus::HasHeight,
+    consensus::{
+        catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
+        HasHeight,
+    },
     crypto::*,
-    RegistryVersion, SubnetId,
+    Height, NodeId, RegistryVersion, SubnetId,
 };
-use ic_utils::fs::write_protobuf_using_tmp_file;
-use std::convert::TryFrom;
-use std::sync::Arc;
-use std::{fs::File, path::PathBuf};
+use prost::Message;
+use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc};
 use url::Url;
 
 /// Fetches catch-up packages from peers and local storage.
@@ -173,15 +174,7 @@ impl CatchUpPackageProvider {
             );
             None
         })?;
-        let url_str = format!("http://[{}]:{}", http.ip_addr, http.port);
-        let url = Url::parse(&url_str)
-            .map_err(|err| {
-                warn!(
-                    self.logger,
-                    "Unable to parse the peer url {}: {:?}", url_str, err
-                );
-            })
-            .ok()?;
+        let url = http_endpoint_to_url(&http, &self.logger)?;
 
         let protobuf = self.fetch_catch_up_package(url.clone(), param).await?;
         let cup = CatchUpPackage::try_from(&protobuf)
@@ -281,10 +274,15 @@ impl CatchUpPackageProvider {
         let registry_version = self.registry.get_latest_version();
         let local_cup_height = local_cup
             .as_ref()
-            .map(CatchUpPackage::try_from)
-            .and_then(Result::ok)
-            .as_ref()
-            .map(HasHeight::height);
+            .map(|cup| {
+                get_cup_proto_height(cup).ok_or_else(|| {
+                    OrchestratorError::deserialize_cup_error(
+                        None,
+                        "Failed to get CUP proto height.",
+                    )
+                })
+            })
+            .transpose()?;
 
         let subnet_cup = self
             .get_peer_cup(subnet_id, registry_version, local_cup.as_ref())
@@ -296,20 +294,20 @@ impl CatchUpPackageProvider {
             .map(pb::CatchUpPackage::from)
             .ok();
 
+        // Select the latest CUP based on the height of the CUP *proto*. This is to avoid falling
+        // back to an outdated registry CUP if the local CUP can't be deserialized. If this is the
+        // case, we prefer to return an error and wait until a higher recovery CUP exists.
         let latest_cup_proto = vec![local_cup, registry_cup, subnet_cup]
             .into_iter()
             .flatten()
-            .max_by_key(|proto| {
-                CatchUpPackage::try_from(proto)
-                    .expect("deserializing CUP failed")
-                    .height()
-            })
+            .max_by_key(get_cup_proto_height)
             .ok_or(OrchestratorError::MakeRegistryCupError(
                 subnet_id,
                 registry_version,
             ))?;
-        let latest_cup =
-            CatchUpPackage::try_from(&latest_cup_proto).expect("Deserialzing CUP failed");
+        let latest_cup = CatchUpPackage::try_from(&latest_cup_proto).map_err(|err| {
+            OrchestratorError::deserialize_cup_error(get_cup_proto_height(&latest_cup_proto), err)
+        })?;
 
         let height = Some(latest_cup.height());
         // We recreate the local registry CUP everytime to avoid incompatibility issues. Without
@@ -357,4 +355,12 @@ impl CatchUpPackageProvider {
             }
         }
     }
+}
+
+// Returns the height of the CUP without converting the protobuf
+fn get_cup_proto_height(cup: &pb::CatchUpPackage) -> Option<Height> {
+    pb::CatchUpContent::decode(cup.content.as_slice())
+        .ok()
+        .and_then(|content| content.block)
+        .map(|block| Height::from(block.height))
 }

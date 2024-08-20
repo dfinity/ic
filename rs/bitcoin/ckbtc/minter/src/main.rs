@@ -1,4 +1,5 @@
 use candid::Principal;
+use ic_btc_interface::Utxo;
 use ic_canister_log::export as export_logs;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, query, update};
@@ -26,6 +27,7 @@ use ic_ckbtc_minter::{
     storage, {Log, LogEntry, Priority},
 };
 use icrc_ledger_types::icrc1::account::Account;
+use std::str::FromStr;
 
 #[init]
 fn init(args: MinterArg) {
@@ -169,6 +171,16 @@ fn retrieve_btc_status_v2_by_account(target: Option<Account>) -> Vec<BtcRetrieva
     read_state(|s| s.retrieve_btc_status_v2_by_account(target))
 }
 
+#[query]
+fn get_known_utxos(args: UpdateBalanceArgs) -> Vec<Utxo> {
+    read_state(|s| {
+        s.known_utxos_for_account(&Account {
+            owner: args.owner.unwrap_or(ic_cdk::caller()),
+            subaccount: args.subaccount,
+        })
+    })
+}
+
 #[update]
 async fn update_balance(args: UpdateBalanceArgs) -> Result<Vec<UtxoStatus>, UpdateBalanceError> {
     check_anonymous_caller();
@@ -234,14 +246,26 @@ fn http_request(req: HttpRequest) -> HttpResponse {
             }
         }
     } else if req.path() == "/dashboard" {
-        let dashboard: Vec<u8> = build_dashboard();
+        let account_to_utxos_start = match req.raw_query_param("account_to_utxos_start") {
+            Some(arg) => match u64::from_str(arg) {
+                Ok(value) => value,
+                Err(_) => {
+                    return HttpResponseBuilder::bad_request()
+                        .with_body_and_content_length(
+                            "failed to parse the 'account_to_utxos_start' parameter",
+                        )
+                        .build()
+                }
+            },
+            None => 0,
+        };
+        let dashboard: Vec<u8> = build_dashboard(account_to_utxos_start);
         HttpResponseBuilder::ok()
             .header("Content-Type", "text/html; charset=utf-8")
             .with_body_and_content_length(dashboard)
             .build()
     } else if req.path() == "/logs" {
         use serde_json;
-        use std::str::FromStr;
 
         let max_skip_timestamp = match req.raw_query_param("time") {
             Some(arg) => match u64::from_str(arg) {

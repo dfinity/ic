@@ -1,21 +1,18 @@
+use crate::scheduler::Task;
 use crate::state::mutate_state;
 
-//TODO re-use TimerGuard from ckETH.
 #[derive(Debug, PartialEq, Eq)]
-pub struct TimerGuard {}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum TimerGuardError {
-    AlreadyProcessing,
+pub struct TimerGuard {
+    task: Task,
 }
 
 impl TimerGuard {
-    pub fn new() -> Result<Self, TimerGuardError> {
+    pub fn new(task: Task) -> Option<Self> {
         mutate_state(|s| {
-            if !s.maybe_set_timer_guard() {
-                return Err(TimerGuardError::AlreadyProcessing);
+            if !s.active_tasks.insert(task.clone()) {
+                return None;
             }
-            Ok(Self {})
+            Some(Self { task })
         })
     }
 }
@@ -23,7 +20,7 @@ impl TimerGuard {
 impl Drop for TimerGuard {
     fn drop(&mut self) {
         mutate_state(|s| {
-            s.unset_timer_guard();
+            s.active_tasks.remove(&self.task);
         });
     }
 }

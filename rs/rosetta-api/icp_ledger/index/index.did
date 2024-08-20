@@ -58,6 +58,7 @@ type Transaction = record {
   icrc1_memo : opt vec nat8;
   operation : Operation;
   created_at_time : opt TimeStamp;
+  timestamp : opt TimeStamp;
 };
 type TransactionWithId = record { id : nat64; transaction : Transaction };
 service : (InitArg) -> {

@@ -1,10 +1,13 @@
-use crate::{ingress::WasmResult, CanisterId, CountBytes, Cycles, Funds, NumBytes, Time};
-use ic_error_types::{RejectCode, TryFromError, UserError};
+use crate::{
+    ingress::WasmResult, time::CoarseTime, CanisterId, CountBytes, Cycles, Funds, NumBytes, Time,
+};
+use ic_error_types::{RejectCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_ic00_types::{
-    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, Method, Payload as _, ProvisionalTopUpCanisterArgs, StoredChunksArgs,
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
+    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
+    Method, Payload as _, ProvisionalTopUpCanisterArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
     UpdateSettingsArgs, UploadChunkArgs,
 };
 use ic_protobuf::{
@@ -12,15 +15,26 @@ use ic_protobuf::{
     state::queues::v1 as pb_queues,
     types::v1 as pb_types,
 };
-use ic_utils::{byte_slice_fmt::truncate_and_format, str::StrEllipsize, str::StrTruncate};
+use ic_utils::{byte_slice_fmt::truncate_and_format, str::StrEllipsize};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
 use std::{
     convert::{From, TryFrom, TryInto},
+    hash::{Hash, Hasher},
     mem::size_of,
     str::FromStr,
     sync::Arc,
 };
+
+#[cfg(test)]
+mod tests;
+
+/// Special value for the `deadline` field of `Requests`, `Callbacks`,
+/// `CallOrigins` and `Responses` signifying "no deadline", i.e. a guaranteed
+/// response call.
+pub const NO_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(0);
 
 pub struct CallbackIdTag;
 /// A value used as an opaque nonce to couple outgoing calls with their
@@ -38,6 +52,7 @@ pub enum CallContextIdTag {}
 pub type CallContextId = Id<CallContextIdTag, u64>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RequestMetadata {
     /// Indicates how many steps down the call tree a request is, starting at 0.
     call_tree_depth: u64,
@@ -75,7 +90,8 @@ impl RequestMetadata {
 }
 
 /// Canister-to-canister request message.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ValidateEq)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Request {
     pub receiver: CanisterId,
     pub sender: CanisterId,
@@ -83,8 +99,11 @@ pub struct Request {
     pub payment: Cycles,
     pub method_name: String,
     #[serde(with = "serde_bytes")]
+    #[validate_eq(Ignore)]
     pub method_payload: Vec<u8>,
     pub metadata: Option<RequestMetadata>,
+    /// If non-zero, this is a best-effort call.
+    pub deadline: CoarseTime,
 }
 
 impl Request {
@@ -161,20 +180,42 @@ impl Request {
                 Ok(record) => Some(record.get_canister_id()),
                 Err(_) => None,
             },
-            Ok(Method::DeleteChunks)
-            | Ok(Method::TakeCanisterSnapshot)
-            | Ok(Method::LoadCanisterSnapshot)
-            | Ok(Method::ListCanisterSnapshots)
-            | Ok(Method::DeleteCanisterSnapshot) => None,
+            Ok(Method::TakeCanisterSnapshot) => {
+                match TakeCanisterSnapshotArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::LoadCanisterSnapshot) => {
+                match LoadCanisterSnapshotArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::ListCanisterSnapshots) => {
+                match ListCanisterSnapshotArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
+            Ok(Method::DeleteCanisterSnapshot) => {
+                match DeleteCanisterSnapshotArgs::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
             Ok(Method::CreateCanister)
             | Ok(Method::SetupInitialDKG)
             | Ok(Method::HttpRequest)
             | Ok(Method::RawRand)
             | Ok(Method::ECDSAPublicKey)
             | Ok(Method::SignWithECDSA)
-            | Ok(Method::ComputeInitialEcdsaDealings)
+            | Ok(Method::ComputeInitialIDkgDealings)
+            | Ok(Method::SchnorrPublicKey)
+            | Ok(Method::SignWithSchnorr)
             | Ok(Method::BitcoinGetBalance)
             | Ok(Method::BitcoinGetUtxos)
+            | Ok(Method::BitcoinGetBlockHeaders)
             | Ok(Method::BitcoinSendTransaction)
             | Ok(Method::BitcoinSendTransactionInternal)
             | Ok(Method::BitcoinGetSuccessors)
@@ -183,6 +224,10 @@ impl Request {
                 // No effective canister id.
                 None
             }
+            // `FetchCanisterLogs` method is only allowed for messages sent by
+            // end users in non-replicated mode, so we should never reach this point.
+            // If we do, we return `None` (which should be no-op) to avoid panicking.
+            Ok(Method::FetchCanisterLogs) => None,
             Err(_) => None,
         }
     }
@@ -190,30 +235,26 @@ impl Request {
 
 impl std::fmt::Debug for Request {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{{ receiver: {:?}, ", self.receiver)?;
-        write!(f, "sender: {:?}, ", self.sender)?;
-        write!(
-            f,
-            "sender_reply_callback: {:?}, ",
-            self.sender_reply_callback
-        )?;
-        write!(f, "payment: {:?}, ", self.payment)?;
-        if self.method_name.len() <= 103 {
-            write!(f, "method_name: {:?}, ", self.method_name)?;
-        } else {
-            write!(
-                f,
-                "method_name: {:?}..., ",
-                self.method_name.safe_truncate(100)
-            )?;
-        }
-        write!(
-            f,
-            "method_payload: [{}], ",
-            truncate_and_format(&self.method_payload, 1024)
-        )?;
-        write!(f, "metadata: {:?} }}", self.metadata)?;
-        Ok(())
+        let Request {
+            receiver,
+            sender,
+            sender_reply_callback,
+            payment,
+            method_name,
+            method_payload,
+            metadata,
+            deadline,
+        } = self;
+        f.debug_struct("Request")
+            .field("receiver", receiver)
+            .field("sender", sender)
+            .field("sender_reply_callback", sender_reply_callback)
+            .field("payment", payment)
+            .field("method_name", &method_name.ellipsize(100, 75))
+            .field("method_payload", &truncate_and_format(method_payload, 1024))
+            .field("metadata", metadata)
+            .field("deadline", deadline)
+            .finish()
     }
 }
 
@@ -318,14 +359,11 @@ impl std::fmt::Debug for Payload {
             }
             Self::Reject(context) => {
                 const KB: usize = 1024;
-                write!(f, "Reject({{ ")?;
-                write!(f, "code: {:?}, ", context.code)?;
-                if context.message.len() <= 8 * KB {
-                    write!(f, "message: {:?} ", context.message)?;
-                } else {
-                    write!(f, "message: {:?} ", context.message.ellipsize(8 * KB, 75))?;
-                }
-                write!(f, "}})")
+                let RejectContext { code, message } = context;
+                f.debug_struct("Reject")
+                    .field("code", code)
+                    .field("message", &message.ellipsize(8 * KB, 75))
+                    .finish()
             }
         }
     }
@@ -353,15 +391,38 @@ impl From<Result<Option<WasmResult>, UserError>> for Payload {
     }
 }
 
+impl From<&Payload> for pb_queues::response::ResponsePayload {
+    fn from(value: &Payload) -> Self {
+        match value {
+            Payload::Data(d) => pb_queues::response::ResponsePayload::Data(d.clone()),
+            Payload::Reject(r) => pb_queues::response::ResponsePayload::Reject(r.into()),
+        }
+    }
+}
+
+impl TryFrom<pb_queues::response::ResponsePayload> for Payload {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb_queues::response::ResponsePayload) -> Result<Self, Self::Error> {
+        match value {
+            pb_queues::response::ResponsePayload::Data(d) => Ok(Payload::Data(d)),
+            pb_queues::response::ResponsePayload::Reject(r) => Ok(Payload::Reject(r.try_into()?)),
+        }
+    }
+}
+
 /// Canister-to-canister response message.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Response {
     pub originator: CanisterId,
     pub respondent: CanisterId,
     pub originator_reply_callback: CallbackId,
     pub refund: Cycles,
+    #[validate_eq(Ignore)]
     pub response_payload: Payload,
+    /// If non-zero, this is a best-effort call.
+    pub deadline: CoarseTime,
 }
 
 impl Response {
@@ -371,14 +432,57 @@ impl Response {
     }
 }
 
+/// Custom hash implementation, ensuring consistency with previous version
+/// without a `deadline`.
+///
+/// This is a temporary workaround for Consensus integrity checks relying on
+/// hasning Rust structs. This can be dropped once those checks are removed.
+impl Hash for Response {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let Response {
+            originator,
+            respondent,
+            originator_reply_callback,
+            refund,
+            response_payload,
+            deadline,
+        } = self;
+
+        originator.hash(state);
+        respondent.hash(state);
+        originator_reply_callback.hash(state);
+        refund.hash(state);
+        response_payload.hash(state);
+
+        if *deadline != NO_DEADLINE {
+            deadline.hash(state);
+        }
+    }
+}
+
 /// Canister-to-canister message.
 ///
 /// The underlying request / response is wrapped within an `Arc`, for cheap
 /// cloning.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum RequestOrResponse {
     Request(Arc<Request>),
     Response(Arc<Response>),
+}
+
+impl ValidateEq for RequestOrResponse {
+    fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
+        match (self, rhs) {
+            (RequestOrResponse::Request(ref l), RequestOrResponse::Request(ref r)) => {
+                l.validate_eq(r)
+            }
+            (RequestOrResponse::Response(ref l), RequestOrResponse::Response(ref r)) => {
+                l.validate_eq(r)
+            }
+            _ => Err("RequestOrResponse enum mismatch".to_string()),
+        }
+    }
 }
 
 impl RequestOrResponse {
@@ -404,7 +508,7 @@ impl RequestOrResponse {
     pub fn payload_size_bytes(&self) -> NumBytes {
         match self {
             RequestOrResponse::Request(req) => req.payload_size_bytes(),
-            RequestOrResponse::Response(resp) => resp.response_payload.size_bytes(),
+            RequestOrResponse::Response(resp) => resp.payload_size_bytes(),
         }
     }
 
@@ -415,6 +519,20 @@ impl RequestOrResponse {
             RequestOrResponse::Response(resp) => resp.refund,
         }
     }
+
+    /// Returns the deadline of this message, `NO_DEADLINE` if not set.
+    pub fn deadline(&self) -> CoarseTime {
+        match self {
+            RequestOrResponse::Request(req) => req.deadline,
+            RequestOrResponse::Response(resp) => resp.deadline,
+        }
+    }
+
+    /// Returns `true` if this is the request or response of a best-effort call
+    /// (i.e. if it has a non-zero deadline).
+    pub fn is_best_effort(&self) -> bool {
+        self.deadline() != NO_DEADLINE
+    }
 }
 
 /// Convenience `CountBytes` implementation that returns the same value as
@@ -424,8 +542,7 @@ impl CountBytes for Request {
     fn count_bytes(&self) -> usize {
         size_of::<RequestOrResponse>()
             + size_of::<Request>()
-            + self.method_name.len()
-            + self.method_payload.len()
+            + self.payload_size_bytes().get() as usize
     }
 }
 
@@ -434,11 +551,9 @@ impl CountBytes for Request {
 /// `self` into a `RequestOrResponse` only to calculate its estimated byte size.
 impl CountBytes for Response {
     fn count_bytes(&self) -> usize {
-        let var_fields_size = match &self.response_payload {
-            Payload::Data(data) => data.len(),
-            Payload::Reject(context) => context.message.len(),
-        };
-        size_of::<RequestOrResponse>() + size_of::<Response>() + var_fields_size
+        size_of::<RequestOrResponse>()
+            + size_of::<Response>()
+            + self.payload_size_bytes().get() as usize
     }
 }
 
@@ -486,6 +601,7 @@ impl From<&Request> for pb_queues::Request {
             method_payload: req.method_payload.clone(),
             cycles_payment: Some((req.payment).into()),
             metadata: req.metadata.as_ref().map(From::from),
+            deadline_seconds: req.deadline.as_secs_since_unix_epoch(),
         }
     }
 }
@@ -521,6 +637,7 @@ impl TryFrom<pb_queues::Request> for Request {
             method_name: req.method_name,
             method_payload: req.method_payload,
             metadata: req.metadata.map(From::from),
+            deadline: CoarseTime::from_secs_since_unix_epoch(req.deadline_seconds),
         })
     }
 }
@@ -528,8 +645,8 @@ impl TryFrom<pb_queues::Request> for Request {
 impl From<&RejectContext> for pb_queues::RejectContext {
     fn from(rc: &RejectContext) -> Self {
         Self {
-            reject_code: rc.code as u64,
             reject_message: rc.message.clone(),
+            reject_code: pb_types::RejectCode::from(rc.code).into(),
         }
     }
 }
@@ -539,12 +656,12 @@ impl TryFrom<pb_queues::RejectContext> for RejectContext {
 
     fn try_from(rc: pb_queues::RejectContext) -> Result<Self, Self::Error> {
         Ok(RejectContext {
-            code: rc.reject_code.try_into().map_err(|err| match err {
-                TryFromError::ValueOutOfRange(code) => ProxyDecodeError::ValueOutOfRange {
+            code: RejectCode::try_from(pb_types::RejectCode::try_from(rc.reject_code).map_err(
+                |_| ProxyDecodeError::ValueOutOfRange {
                     typ: "RejectContext",
-                    err: code.to_string(),
+                    err: format!("Unexpected value for reject code {}", rc.reject_code),
                 },
-            })?,
+            )?)?,
             message: rc.reject_message,
         })
     }
@@ -552,17 +669,16 @@ impl TryFrom<pb_queues::RejectContext> for RejectContext {
 
 impl From<&Response> for pb_queues::Response {
     fn from(rep: &Response) -> Self {
-        let p = match &rep.response_payload {
-            Payload::Data(d) => pb_queues::response::ResponsePayload::Data(d.clone()),
-            Payload::Reject(r) => pb_queues::response::ResponsePayload::Reject(r.into()),
-        };
         Self {
             originator: Some(pb_types::CanisterId::from(rep.originator)),
             respondent: Some(pb_types::CanisterId::from(rep.respondent)),
             originator_reply_callback: rep.originator_reply_callback.get(),
             refund: Some((&Funds::new(rep.refund)).into()),
-            response_payload: Some(p),
+            response_payload: Some(pb_queues::response::ResponsePayload::from(
+                &rep.response_payload,
+            )),
             cycles_refund: Some((rep.refund).into()),
+            deadline_seconds: rep.deadline.as_secs_since_unix_epoch(),
         }
     }
 }
@@ -571,14 +687,6 @@ impl TryFrom<pb_queues::Response> for Response {
     type Error = ProxyDecodeError;
 
     fn try_from(rep: pb_queues::Response) -> Result<Self, Self::Error> {
-        let response_payload = match rep
-            .response_payload
-            .ok_or(ProxyDecodeError::MissingField("Response::response_payload"))?
-        {
-            pb_queues::response::ResponsePayload::Data(d) => Payload::Data(d),
-            pb_queues::response::ResponsePayload::Reject(r) => Payload::Reject(r.try_into()?),
-        };
-
         // To maintain backwards compatibility we fall back to reading from `refund` if
         // `cycles_refund` is not set.
         let refund = match try_from_option_field(rep.cycles_refund, "Response::cycles_refund") {
@@ -592,7 +700,11 @@ impl TryFrom<pb_queues::Response> for Response {
             respondent: try_from_option_field(rep.respondent, "Response::respondent")?,
             originator_reply_callback: rep.originator_reply_callback.into(),
             refund,
-            response_payload,
+            response_payload: try_from_option_field(
+                rep.response_payload,
+                "Response::response_payload",
+            )?,
+            deadline: CoarseTime::from_secs_since_unix_epoch(rep.deadline_seconds),
         })
     }
 }

@@ -71,7 +71,7 @@ impl TvlState {
 }
 
 thread_local! {
-    static __STATE: RefCell<Option<TvlState>> = RefCell::new(None);
+    static __STATE: RefCell<Option<TvlState>> = const { RefCell::new(None) };
 }
 
 /// Mutates (part of) the current state using `f`.

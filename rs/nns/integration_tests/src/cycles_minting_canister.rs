@@ -1,7 +1,7 @@
 use candid::{Decode, Encode};
 use canister_test::Canister;
 use cycles_minting_canister::{
-    ChangeSubnetTypeAssignmentArgs, CreateCanister, CreateCanisterError,
+    CanisterSettingsArgs, ChangeSubnetTypeAssignmentArgs, CreateCanister, CreateCanisterError,
     IcpXdrConversionRateCertifiedResponse, NotifyCreateCanister, NotifyError, NotifyMintCyclesArg,
     NotifyMintCyclesSuccess, SubnetListWithType, SubnetTypesToSubnetsResponse,
     UpdateSubnetTypeArgs, BAD_REQUEST_CYCLES_PENALTY, CYCLES_LEDGER_CANISTER_ID,
@@ -10,28 +10,29 @@ use cycles_minting_canister::{
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
-use ic_ic00_types::{
-    CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
-};
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
+// TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
+    CanisterSettingsArgsBuilder, CanisterStatusResultV2,
+};
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL,
-    TEST_USER3_PRINCIPAL,
+    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
+    TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_INDEX_IN_NNS_SUBNET,
 };
-use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
+use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{submit_external_update_proposal, wait_for_final_state},
-    ids::TEST_NEURON_1_ID,
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     neuron_helpers::get_neuron_1,
     state_test_helpers::{
         cmc_set_default_authorized_subnetworks, set_up_universal_canister, setup_cycles_ledger,
-        setup_nns_canisters, update_with_sender,
+        setup_nns_canisters, state_machine_builder_for_nns_tests, update_with_sender,
     },
 };
 use ic_state_machine_tests::{StateMachine, WasmResult};
@@ -49,7 +50,7 @@ use icrc_ledger_types::icrc1::account::Account;
 /// proposal.
 #[test]
 fn test_set_icp_xdr_conversion_rate() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_invariant_compliant_mutations()
             .with_test_neurons()
@@ -109,7 +110,7 @@ async fn set_icp_xdr_conversion_rate(
 /// a set exchange rate
 #[test]
 fn test_cmc_mints_cycles_when_cmc_has_exchange_rate() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let account = AccountIdentifier::new(*TEST_USER1_PRINCIPAL, None);
         let icpts = Tokens::new(100, 0).unwrap();
 
@@ -301,7 +302,7 @@ fn test_cmc_notify_create_with_settings() {
     let icpts = Tokens::new(100, 0).unwrap();
     let neuron = get_neuron_1();
 
-    let mut state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
         .with_test_neurons()
         .with_ledger_account(account, icpts)
@@ -310,7 +311,7 @@ fn test_cmc_notify_create_with_settings() {
 
     let subnet_id = state_machine.get_subnet_id();
     cmc_set_default_authorized_subnetworks(
-        &mut state_machine,
+        &state_machine,
         vec![subnet_id],
         neuron.principal_id,
         neuron.neuron_id,
@@ -426,7 +427,7 @@ fn test_cmc_cycles_create_with_settings() {
     let icpts = Tokens::new(100, 0).unwrap();
     let neuron = get_neuron_1();
 
-    let mut state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
         .with_test_neurons()
         .with_ledger_account(account, icpts)
@@ -435,7 +436,7 @@ fn test_cmc_cycles_create_with_settings() {
 
     let subnet_id = state_machine.get_subnet_id();
     cmc_set_default_authorized_subnetworks(
-        &mut state_machine,
+        &state_machine,
         vec![subnet_id],
         neuron.principal_id,
         neuron.neuron_id,
@@ -664,7 +665,7 @@ fn send_transfer(env: &StateMachine, arg: &TransferArgs) -> Result<BlockIndex, T
 /// subaccount of the CMC, which then tries to create a canister with the provided settings.
 fn notify_create_canister(
     state_machine: &StateMachine,
-    settings: Option<CanisterSettingsArgs>,
+    settings: Option<Ic00CanisterSettingsArgs>,
 ) -> CanisterId {
     let transfer_args = TransferArgs {
         memo: MEMO_CREATE_CANISTER,
@@ -686,7 +687,7 @@ fn notify_create_canister(
         controller: *TEST_USER1_PRINCIPAL,
         subnet_type: None,
         subnet_selection: None,
-        settings,
+        settings: settings.map(CanisterSettingsArgs::from),
     };
 
     if let WasmResult::Reply(res) = state_machine
@@ -767,13 +768,13 @@ fn cycles_ledger_balance_of(state_machine: &StateMachine, account: Account) -> u
 fn cmc_create_canister_with_cycles(
     state_machine: &StateMachine,
     universal_canister: CanisterId,
-    settings: Option<CanisterSettingsArgs>,
+    settings: Option<Ic00CanisterSettingsArgs>,
     subnet_type: Option<String>,
     cycles: u128,
 ) -> Result<CanisterId, CreateCanisterError> {
     #[allow(deprecated)]
     let create_args = Encode!(&CreateCanister {
-        settings,
+        settings: settings.map(CanisterSettingsArgs::from),
         subnet_type,
         subnet_selection: None,
     })
@@ -821,7 +822,7 @@ async fn update_subnet_type(nns: &NnsCanisters<'_>, payload: UpdateSubnetTypeArg
 
 #[test]
 fn test_update_subnet_type() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_invariant_compliant_mutations()
             .with_test_neurons()
@@ -874,7 +875,7 @@ async fn change_subnet_type_assignment(
 
 #[test]
 fn test_change_subnet_type_assignment() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_invariant_compliant_mutations()
             .with_test_neurons()
@@ -948,7 +949,7 @@ fn cmc_notify_mint_cycles() {
     };
     let icpts = Tokens::new(100, 0).unwrap();
 
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
         .with_test_neurons()
         .with_ledger_account(account, icpts)

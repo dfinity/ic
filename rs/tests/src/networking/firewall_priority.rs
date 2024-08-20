@@ -25,22 +25,26 @@ Success::
 
 end::catalog[] */
 
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationBuilder,
-    SshSession,
-};
-use crate::nns::{
-    await_proposal_execution, submit_external_proposal_with_test_id,
-    vote_execute_proposal_assert_executed,
-};
-use crate::util::{self, block_on};
 use candid::CandidType;
-use ic_nns_governance::pb::v1::NnsFunction;
+use ic_nns_governance_api::pb::v1::NnsFunction;
 use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection};
 use ic_registry_keys::FirewallRulesScope;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
+    driver::{
+        ic::{InternetComputer, Subnet},
+        test_env::TestEnv,
+        test_env_api::{
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+            NnsInstallationBuilder, SshSession,
+        },
+    },
+    nns::{
+        await_proposal_execution, submit_external_proposal_with_test_id,
+        vote_execute_proposal_assert_executed,
+    },
+    util::{self, block_on},
+};
 use registry_canister::mutations::firewall::{
     compute_firewall_ruleset_hash, AddFirewallRulesPayload, RemoveFirewallRulesPayload,
     UpdateFirewallRulesPayload,
@@ -364,7 +368,7 @@ async fn execute_proposal<T: Clone + CandidType>(
         Proposal::Update(payload, func) => (payload, func),
     };
     let nns = util::runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    let governance = crate::nns::get_governance_canister(&nns);
+    let governance = ic_system_test_driver::nns::get_governance_canister(&nns);
     let proposal_id =
         submit_external_proposal_with_test_id(&governance, function, proposal_payload.clone())
             .await;

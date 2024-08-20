@@ -1,14 +1,17 @@
-load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
 package(default_visibility = [
     "//rs/http_endpoints:__subpackages__",
+    "//rs/pocket_ic_server:__subpackages__",
     "//rs/replica:__subpackages__",
+    "//rs/state_machine_tests:__subpackages__",
 ])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/async_utils",
     "//rs/certification",
     "//rs/config",
@@ -22,24 +25,29 @@ DEPENDENCIES = [
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/monitoring/pprof",
+    "//rs/monitoring/tracing",
     "//rs/registry/helpers",
     "//rs/registry/provisional_whitelist",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
-    "//rs/phantom_newtype",
     "//rs/types/error_types",
     "//rs/types/types",
     "//rs/validator",
     "@crate_index//:askama",
-    "@crate_index//:bytes",
+    "@crate_index//:axum",
     "@crate_index//:byte-unit",
+    "@crate_index//:bytes",
     "@crate_index//:cfg-if",
     "@crate_index//:crossbeam",
     "@crate_index//:futures",
     "@crate_index//:futures-util",
     "@crate_index//:hex",
     "@crate_index//:http",
+    "@crate_index//:http-body",
+    "@crate_index//:http-body-util",
     "@crate_index//:hyper",
+    "@crate_index//:hyper-util",
+    "@crate_index//:inferno",
     "@crate_index//:mockall",
     "@crate_index//:prometheus",
     "@crate_index//:prost",
@@ -47,13 +55,16 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:slog",
-    "@crate_index//:strum",
     "@crate_index//:tempfile",
-    "@crate_index//:threadpool",
     "@crate_index//:tokio",
     "@crate_index//:tokio-io-timeout",
+    "@crate_index//:tokio-rustls",
+    "@crate_index//:tokio-util",
     "@crate_index//:tower",
-    "@crate_index//:url",
+    "@crate_index//:tower-http",
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-flame",
+    "@crate_index//:tracing-subscriber",
 ] + select({
     "@rules_rust//rust/platform:linux": [
         "//rs/monitoring/backtrace",
@@ -62,16 +73,19 @@ DEPENDENCIES = [
 })
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 
 BUILD_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canister_client",
     "//rs/canister_client/sender",
     "//rs/canonical_state",
     "//rs/certification/test-utils",
+    "//rs/crypto/temp_crypto",
     "//rs/crypto/tls_interfaces/mocks",
     "//rs/interfaces/mocks",
     "//rs/interfaces/registry/mocks",
@@ -80,10 +94,15 @@ DEV_DEPENDENCIES = [
     "//rs/registry/keys",
     "//rs/registry/routing_table",
     "//rs/test_utilities",
-    "@crate_index//:ic-agent",
+    "//rs/test_utilities/state",
+    "//rs/test_utilities/time",
+    "//rs/test_utilities/types",
     "@crate_index//:maplit",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
+    "@crate_index//:reqwest",
+    "@crate_index//:rstest",
+    "@crate_index//:rustls",
     "@crate_index//:serde_bytes",
     "@crate_index//:tower-test",
 ]

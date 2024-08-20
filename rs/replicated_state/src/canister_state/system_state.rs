@@ -10,32 +10,32 @@ use crate::page_map::PageAllocatorFileDescriptor;
 use crate::{CanisterQueues, CanisterState, InputQueueType, PageMap, StateError};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
-use ic_ic00_types::{CanisterChange, CanisterChangeDetails, CanisterChangeOrigin};
 use ic_logger::{error, ReplicaLogger};
-use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
-    state::canister_state_bits::v1 as pb,
+use ic_management_canister_types::{
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, LogVisibilityV2,
 };
-
+use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{
-    messages::{
-        CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, Ingress, RejectContext,
-        Request, RequestOrResponse, Response, StopCanisterContext,
-    },
-    nominal_cycles::NominalCycles,
-    CanisterId, CanisterTimer, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time,
+use ic_types::messages::{
+    CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, Ingress, RejectContext,
+    Request, RequestOrResponse, Response, StopCanisterContext,
 };
+use ic_types::nominal_cycles::NominalCycles;
+use ic_types::{
+    CanisterId, CanisterLog, CanisterTimer, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time,
+};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use lazy_static::lazy_static;
 use maplit::btreeset;
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::BTreeMap,
-    convert::{TryFrom, TryInto},
-};
-use std::{collections::BTreeSet, sync::Arc};
-use std::{collections::VecDeque, str::FromStr};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::convert::{TryFrom, TryInto};
+use std::str::FromStr;
+use std::sync::Arc;
+use strum_macros::EnumIter;
 
 lazy_static! {
     static ref DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS: PrincipalId =
@@ -48,20 +48,21 @@ lazy_static! {
 pub const MAX_CANISTER_HISTORY_CHANGES: u64 = 20;
 
 /// Enumerates use cases of consumed cycles.
-#[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, EnumIter)]
 pub enum CyclesUseCase {
-    Memory,
-    ComputeAllocation,
-    IngressInduction,
-    Instructions,
-    RequestAndResponseTransmission,
-    Uninstall,
-    CanisterCreation,
-    ECDSAOutcalls,
-    HTTPOutcalls,
-    DeletedCanisters,
-    NonConsumed,
-    BurnedCycles,
+    Memory = 1,
+    ComputeAllocation = 2,
+    IngressInduction = 3,
+    Instructions = 4,
+    RequestAndResponseTransmission = 5,
+    Uninstall = 6,
+    CanisterCreation = 7,
+    ECDSAOutcalls = 8,
+    HTTPOutcalls = 9,
+    DeletedCanisters = 10,
+    NonConsumed = 11,
+    BurnedCycles = 12,
+    SchnorrOutcalls = 13,
 }
 
 impl CyclesUseCase {
@@ -81,45 +82,56 @@ impl CyclesUseCase {
             Self::DeletedCanisters => "DeletedCanisters",
             Self::NonConsumed => "NonConsumed",
             Self::BurnedCycles => "BurnedCycles",
+            Self::SchnorrOutcalls => "SchnorrOutcalls",
         }
     }
 }
 
-impl From<CyclesUseCase> for i32 {
+impl From<CyclesUseCase> for pb::CyclesUseCase {
     fn from(item: CyclesUseCase) -> Self {
         match item {
-            CyclesUseCase::Memory => 1,
-            CyclesUseCase::ComputeAllocation => 2,
-            CyclesUseCase::IngressInduction => 3,
-            CyclesUseCase::Instructions => 4,
-            CyclesUseCase::RequestAndResponseTransmission => 5,
-            CyclesUseCase::Uninstall => 6,
-            CyclesUseCase::CanisterCreation => 7,
-            CyclesUseCase::ECDSAOutcalls => 8,
-            CyclesUseCase::HTTPOutcalls => 9,
-            CyclesUseCase::DeletedCanisters => 10,
-            CyclesUseCase::NonConsumed => 11,
-            CyclesUseCase::BurnedCycles => 12,
+            CyclesUseCase::Memory => pb::CyclesUseCase::Memory,
+            CyclesUseCase::ComputeAllocation => pb::CyclesUseCase::ComputeAllocation,
+            CyclesUseCase::IngressInduction => pb::CyclesUseCase::IngressInduction,
+            CyclesUseCase::Instructions => pb::CyclesUseCase::Instructions,
+            CyclesUseCase::RequestAndResponseTransmission => {
+                pb::CyclesUseCase::RequestAndResponseTransmission
+            }
+            CyclesUseCase::Uninstall => pb::CyclesUseCase::Uninstall,
+            CyclesUseCase::CanisterCreation => pb::CyclesUseCase::CanisterCreation,
+            CyclesUseCase::ECDSAOutcalls => pb::CyclesUseCase::EcdsaOutcalls,
+            CyclesUseCase::HTTPOutcalls => pb::CyclesUseCase::HttpOutcalls,
+            CyclesUseCase::DeletedCanisters => pb::CyclesUseCase::DeletedCanisters,
+            CyclesUseCase::NonConsumed => pb::CyclesUseCase::NonConsumed,
+            CyclesUseCase::BurnedCycles => pb::CyclesUseCase::BurnedCycles,
+            CyclesUseCase::SchnorrOutcalls => pb::CyclesUseCase::SchnorrOutcalls,
         }
     }
 }
 
-impl From<i32> for CyclesUseCase {
-    fn from(item: i32) -> Self {
+impl TryFrom<pb::CyclesUseCase> for CyclesUseCase {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb::CyclesUseCase) -> Result<Self, Self::Error> {
         match item {
-            1 => Self::Memory,
-            2 => Self::ComputeAllocation,
-            3 => Self::IngressInduction,
-            4 => Self::Instructions,
-            5 => Self::RequestAndResponseTransmission,
-            6 => Self::Uninstall,
-            7 => Self::CanisterCreation,
-            8 => Self::ECDSAOutcalls,
-            9 => Self::HTTPOutcalls,
-            10 => Self::DeletedCanisters,
-            11 => Self::NonConsumed,
-            12 => Self::BurnedCycles,
-            _ => panic!("Unsupported value"),
+            pb::CyclesUseCase::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "CyclesUseCase",
+                err: format!("Unexpected value of cycles use case: {:?}", item),
+            }),
+            pb::CyclesUseCase::Memory => Ok(Self::Memory),
+            pb::CyclesUseCase::ComputeAllocation => Ok(Self::ComputeAllocation),
+            pb::CyclesUseCase::IngressInduction => Ok(Self::IngressInduction),
+            pb::CyclesUseCase::Instructions => Ok(Self::Instructions),
+            pb::CyclesUseCase::RequestAndResponseTransmission => {
+                Ok(Self::RequestAndResponseTransmission)
+            }
+            pb::CyclesUseCase::Uninstall => Ok(Self::Uninstall),
+            pb::CyclesUseCase::CanisterCreation => Ok(Self::CanisterCreation),
+            pb::CyclesUseCase::EcdsaOutcalls => Ok(Self::ECDSAOutcalls),
+            pb::CyclesUseCase::HttpOutcalls => Ok(Self::HTTPOutcalls),
+            pb::CyclesUseCase::DeletedCanisters => Ok(Self::DeletedCanisters),
+            pb::CyclesUseCase::NonConsumed => Ok(Self::NonConsumed),
+            pb::CyclesUseCase::BurnedCycles => Ok(Self::BurnedCycles),
+            pb::CyclesUseCase::SchnorrOutcalls => Ok(Self::SchnorrOutcalls),
         }
     }
 }
@@ -139,8 +151,8 @@ pub struct CanisterMetrics {
     pub skipped_round_due_to_no_messages: u64,
     pub executed: u64,
     pub interrupted_during_execution: u64,
-    pub consumed_cycles_since_replica_started: NominalCycles,
-    consumed_cycles_since_replica_started_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+    pub consumed_cycles: NominalCycles,
+    consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
 }
 
 impl CanisterMetrics {
@@ -149,23 +161,21 @@ impl CanisterMetrics {
         skipped_round_due_to_no_messages: u64,
         executed: u64,
         interrupted_during_execution: u64,
-        consumed_cycles_since_replica_started: NominalCycles,
-        consumed_cycles_since_replica_started_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+        consumed_cycles: NominalCycles,
+        consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
     ) -> Self {
         Self {
             scheduled_as_first,
             skipped_round_due_to_no_messages,
             executed,
             interrupted_during_execution,
-            consumed_cycles_since_replica_started,
-            consumed_cycles_since_replica_started_by_use_cases,
+            consumed_cycles,
+            consumed_cycles_by_use_cases,
         }
     }
 
-    pub fn get_consumed_cycles_since_replica_started_by_use_cases(
-        &self,
-    ) -> &BTreeMap<CyclesUseCase, NominalCycles> {
-        &self.consumed_cycles_since_replica_started_by_use_cases
+    pub fn get_consumed_cycles_by_use_cases(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
+        &self.consumed_cycles_by_use_cases
     }
 }
 
@@ -179,9 +189,10 @@ pub fn compute_total_canister_change_size(changes: &VecDeque<Arc<CanisterChange>
 /// The system can drop the oldest canister changes from the list to keep its length bounded
 /// (with `20` latest canister changes to always remain in the list).
 /// The system also drops all canister changes if the canister runs out of cycles.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
 pub struct CanisterHistory {
     /// The canister changes stored in the order from the oldest to the most recent.
+    #[validate_eq(Ignore)]
     changes: Arc<VecDeque<Arc<CanisterChange>>>,
     /// The `total_num_changes` records the total number of canister changes
     /// that have ever been recorded. In particular, if the system drops some canister changes,
@@ -257,15 +268,18 @@ impl CanisterHistory {
 /// Contains structs needed for running and maintaining the canister on the IC.
 /// The state here cannot be directly modified by the Wasm module in the
 /// canister but can be indirectly via the SystemApi interface.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
 pub struct SystemState {
     pub controllers: BTreeSet<PrincipalId>,
     pub canister_id: CanisterId,
     // This must remain private, in order to properly enforce system states (running, stopping,
     // stopped) when enqueuing inputs; and to ensure message memory reservations are accurate.
+    #[validate_eq(CompareWithValidateEq)]
     queues: CanisterQueues,
     /// The canister's memory allocation.
     pub memory_allocation: MemoryAllocation,
+    /// Threshold used for activation of canister_on_low_wasm_memory hook.
+    pub wasm_memory_threshold: NumBytes,
     pub freeze_threshold: NumSeconds,
     /// The status of the canister: Running, Stopping, or Stopped.
     /// Different statuses allow for different behaviors on the SystemState.
@@ -279,7 +293,7 @@ pub struct SystemState {
     /// empty blob.
     ///
     /// See also:
-    ///   * https://sdk.dfinity.org/docs/interface-spec/index.html#system-api-certified-data
+    ///   * https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-certified-data
     pub certified_data: Vec<u8>,
     pub canister_metrics: CanisterMetrics,
 
@@ -327,14 +341,38 @@ pub struct SystemState {
     pub canister_version: u64,
 
     /// Canister history.
+    #[validate_eq(CompareWithValidateEq)]
     canister_history: CanisterHistory,
 
     /// Store of Wasm chunks to support installation of large Wasm modules.
+    #[validate_eq(CompareWithValidateEq)]
     pub wasm_chunk_store: WasmChunkStore,
+
+    /// Log visibility of the canister.
+    pub log_visibility: LogVisibilityV2,
+
+    /// Log records of the canister.
+    #[validate_eq(CompareWithValidateEq)]
+    pub canister_log: CanisterLog,
+
+    /// The Wasm memory limit. This is a field in developer-visible canister
+    /// settings that allows the developer to limit the usage of the Wasm memory
+    /// by the canister to leave some room in 4GiB for upgrade calls.
+    /// See the interface specification for more information.
+    pub wasm_memory_limit: Option<NumBytes>,
+
+    /// Next local snapshot id.
+    pub next_snapshot_id: u64,
+
+    /// Cumulative memory usage of all snapshots that belong to this canister.
+    ///
+    /// This amount contributes to the total `memory_usage` of the canister as
+    /// reported by `CanisterState::memory_usage`.
+    pub snapshots_memory_usage: NumBytes,
 }
 
 /// A wrapper around the different canister statuses.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CanisterStatus {
     Running {
         call_context_manager: CallContextManager,
@@ -422,46 +460,54 @@ pub struct PausedExecutionId(pub u64);
 /// inputs.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExecutionTask {
-    // A heartbeat task exists only within an execution round. It is never
-    // serialized.
+    /// A heartbeat task exists only within an execution round. It is never
+    /// serialized.
     Heartbeat,
 
     /// Canister global timer task.
     /// The task exists only within an execution round, it never gets serialized.
     GlobalTimer,
 
-    // A paused execution task exists only within an epoch (between
-    // checkpoints). It is never serialized, and it turns into `AbortedExecution`
-    // before the checkpoint or when there are too many long-running executions.
-    PausedExecution(PausedExecutionId),
+    /// On low Wasm memory hook.
+    /// The task exists only within an execution round, it never gets serialized.
+    OnLowWasmMemory,
 
-    // A paused `install_code` task exists only within an epoch (between
-    // checkpoints). It is never serialized and turns into `AbortedInstallCode`
-    // before the checkpoint.
+    /// A paused execution task exists only within an epoch (between
+    /// checkpoints). It is never serialized, and it turns into `AbortedExecution`
+    /// before the checkpoint or when there are too many long-running executions.
+    PausedExecution {
+        id: PausedExecutionId,
+        /// A copy of the message or task whose execution is being paused.
+        input: CanisterMessageOrTask,
+    },
+
+    /// A paused `install_code` task exists only within an epoch (between
+    /// checkpoints). It is never serialized and turns into `AbortedInstallCode`
+    /// before the checkpoint.
     PausedInstallCode(PausedExecutionId),
 
-    // Any paused execution that doesn't finish until the next checkpoint
-    // becomes an aborted execution that should be retried after the checkpoint.
-    // A paused execution can also be aborted to keep the memory usage low if
-    // there are too many long-running executions.
+    /// Any paused execution that doesn't finish until the next checkpoint
+    /// becomes an aborted execution that should be retried after the checkpoint.
+    /// A paused execution can also be aborted to keep the memory usage low if
+    /// there are too many long-running executions.
     AbortedExecution {
         input: CanisterMessageOrTask,
-        // The execution cost that has already been charged from the canister.
-        // Retried execution does not have to pay for it again.
+        /// The execution cost that has already been charged from the canister.
+        /// Retried execution does not have to pay for it again.
         prepaid_execution_cycles: Cycles,
     },
 
-    // Any paused `install_code` that doesn't finish until the next checkpoint
-    // becomes an aborted `install_code` that should be retried after the
-    // checkpoint. A paused execution can also be aborted to keep the memory
-    // usage low if there are too many long-running executions.
+    /// Any paused `install_code` that doesn't finish until the next checkpoint
+    /// becomes an aborted `install_code` that should be retried after the
+    /// checkpoint. A paused execution can also be aborted to keep the memory
+    /// usage low if there are too many long-running executions.
     AbortedInstallCode {
         message: CanisterCall,
-        // The call id used by the subnet to identify long running install
-        // code messages.
+        /// The call ID used by the subnet to identify long running install
+        /// code messages.
         call_id: InstallCodeCallId,
-        // The execution cost that has already been charged from the canister.
-        // Retried execution does not have to pay for it again.
+        /// The execution cost that has already been charged from the canister.
+        /// Retried execution does not have to pay for it again.
         prepaid_execution_cycles: Cycles,
     },
 }
@@ -471,7 +517,8 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
         match item {
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
-            | ExecutionTask::PausedExecution(_)
+            | ExecutionTask::OnLowWasmMemory
+            | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_) => {
                 panic!("Attempt to serialize ephemeral task: {:?}.", item);
             }
@@ -492,11 +539,8 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                     CanisterMessageOrTask::Message(CanisterMessage::Ingress(v)) => {
                         PbInput::Ingress(v.as_ref().into())
                     }
-                    CanisterMessageOrTask::Task(CanisterTask::Heartbeat) => {
-                        PbInput::Task(PbCanisterTask::Heartbeat as i32)
-                    }
-                    CanisterMessageOrTask::Task(CanisterTask::GlobalTimer) => {
-                        PbInput::Task(PbCanisterTask::Timer as i32)
+                    CanisterMessageOrTask::Task(task) => {
+                        PbInput::Task(PbCanisterTask::from(task).into())
                     }
                 };
                 Self {
@@ -558,22 +602,12 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                         CanisterMessage::Ingress(Arc::new(v.try_into()?)),
                     ),
                     PbInput::Task(val) => {
-                        let task = PbCanisterTask::try_from(val).map_err(|_| {
-                            ProxyDecodeError::ValueOutOfRange {
+                        let task = CanisterTask::try_from(PbCanisterTask::try_from(val).map_err(
+                            |_| ProxyDecodeError::ValueOutOfRange {
                                 typ: "CanisterTask",
                                 err: format!("Unexpected value of canister task: {}", val),
-                            }
-                        })?;
-                        let task = match task {
-                            PbCanisterTask::Unspecified => {
-                                return Err(ProxyDecodeError::ValueOutOfRange {
-                                    typ: "CanisterTask",
-                                    err: "Unexpected value: Unspecified".to_string(),
-                                });
-                            }
-                            PbCanisterTask::Heartbeat => CanisterTask::Heartbeat,
-                            PbCanisterTask::Timer => CanisterTask::GlobalTimer,
-                        };
+                            },
+                        )?)?;
                         CanisterMessageOrTask::Task(task)
                     }
                 };
@@ -691,6 +725,7 @@ impl SystemState {
             reserved_balance: Cycles::zero(),
             reserved_balance_limit: None,
             memory_allocation: MemoryAllocation::BestEffort,
+            wasm_memory_threshold: NumBytes::new(0),
             freeze_threshold,
             status,
             certified_data: Default::default(),
@@ -700,27 +735,12 @@ impl SystemState {
             canister_version: 0,
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
+            log_visibility: Default::default(),
+            canister_log: Default::default(),
+            wasm_memory_limit: None,
+            next_snapshot_id: 0,
+            snapshots_memory_usage: NumBytes::from(0),
         }
-    }
-
-    /// Create a SystemState only having a canister_id -- this is the
-    /// state that is expected when the "start" method of the wasm
-    /// module is run. There is nothing interesting in the system state
-    /// that can be accessed at that point in time, hence this
-    /// "slightly" fake system state.
-    pub fn new_for_start(
-        canister_id: CanisterId,
-        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-    ) -> Self {
-        let controller = *canister_id.get_ref();
-        Self::new_internal(
-            canister_id,
-            controller,
-            Cycles::zero(),
-            NumSeconds::from(0),
-            CanisterStatus::Stopped,
-            WasmChunkStore::new(fd_factory),
-        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -729,6 +749,7 @@ impl SystemState {
         canister_id: CanisterId,
         queues: CanisterQueues,
         memory_allocation: MemoryAllocation,
+        wasm_memory_threshold: NumBytes,
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
         certified_data: Vec<u8>,
@@ -743,12 +764,18 @@ impl SystemState {
         canister_history: CanisterHistory,
         wasm_chunk_store_data: PageMap,
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
+        log_visibility: LogVisibilityV2,
+        canister_log: CanisterLog,
+        wasm_memory_limit: Option<NumBytes>,
+        next_snapshot_id: u64,
+        snapshots_memory_usage: NumBytes,
     ) -> Self {
         Self {
             controllers,
             canister_id,
             queues,
             memory_allocation,
+            wasm_memory_threshold,
             freeze_threshold,
             status,
             certified_data,
@@ -765,6 +792,11 @@ impl SystemState {
                 wasm_chunk_store_data,
                 wasm_chunk_store_metadata,
             ),
+            log_visibility,
+            canister_log,
+            wasm_memory_limit,
+            next_snapshot_id,
+            snapshots_memory_usage,
         }
     }
 
@@ -829,7 +861,7 @@ impl SystemState {
             initial_cycles,
             freeze_threshold,
             status,
-            WasmChunkStore::new_for_testing(wasm_chunk_store::DEFAULT_MAX_SIZE),
+            WasmChunkStore::new_for_testing(),
         )
     }
 
@@ -869,17 +901,11 @@ impl SystemState {
         self.reserved_balance_limit = Some(limit);
     }
 
-    /// Initializes `reserved_balance_limit` to the given default value if it
-    /// was not already set.
-    pub fn initialize_reserved_balance_limit_if_empty(&mut self, default_limit: Cycles) {
-        if self.reserved_balance_limit.is_none() {
-            self.reserved_balance_limit = Some(default_limit);
-        }
-    }
-
-    /// Sets `reserved_balance_limit` to `None` for testing.
-    pub fn clear_reserved_balance_limit_for_testing(&mut self) {
-        self.reserved_balance_limit = None;
+    /// Get new local snapshot ID.
+    pub fn new_local_snapshot_id(&mut self) -> u64 {
+        let local_snapshot_id = self.next_snapshot_id;
+        self.next_snapshot_id += 1;
+        local_snapshot_id
     }
 
     /// Records the given amount as debit that will be charged from the balance
@@ -1066,16 +1092,15 @@ impl SystemState {
     ///
     /// On failure, returns the provided message along with a `StateError`:
     ///  * `QueueFull` if either the input queue or the matching output queue is
-    ///    full when pushing a `Request`; or when pushing a `Response` when none
-    ///    is expected.
+    ///    full when pushing a `Request`;
     ///  * `CanisterOutOfCycles` if the canister does not have enough cycles.
-    ///  * `OutOfMemory` if the necessary memory reservation is larger than subnet
-    ///     available memory.
+    ///  * `OutOfMemory` if the necessary guaranteed response memory reservation
+    ///    is larger than `subnet_available_memory`.
     ///  * `CanisterStopping` if the canister is stopping and inducting a
     ///    `Request` was attempted.
     ///  * `CanisterStopped` if the canister is stopped.
-    ///  * `NonMatchingResponse` if the callback is not found or the respondent
-    ///    does not match.
+    ///  * `NonMatchingResponse` if no response is expected, the callback is not
+    ///    found or the respondent does not match.
     pub(crate) fn push_input(
         &mut self,
         msg: RequestOrResponse,
@@ -1153,8 +1178,8 @@ impl SystemState {
     /// Returns an iterator that loops over the canister's output queues,
     /// popping one message at a time from each in a round robin fashion. The
     /// iterator consumes all popped messages.
-    pub fn output_into_iter(&mut self, owner: CanisterId) -> CanisterOutputQueuesIterator {
-        self.queues.output_into_iter(owner)
+    pub fn output_into_iter(&mut self) -> CanisterOutputQueuesIterator {
+        self.queues.output_into_iter()
     }
 
     /// Returns an immutable reference to the canister queues.
@@ -1194,10 +1219,10 @@ impl SystemState {
         self.queues.filter_ingress_messages(filter)
     }
 
-    /// Returns the memory currently in use by the `SystemState`
-    /// for canister messages.
-    pub fn message_memory_usage(&self) -> NumBytes {
-        (self.queues.memory_usage() as u64).into()
+    /// Returns the memory currently used by or reserved for guaranteed response
+    /// canister messages.
+    pub fn guaranteed_response_message_memory_usage(&self) -> NumBytes {
+        (self.queues.guaranteed_response_memory_usage() as u64).into()
     }
 
     /// Returns the memory currently in use by the `SystemState`
@@ -1232,10 +1257,11 @@ impl SystemState {
 
     /// Inducts messages from the output queue to `self` into the input queue
     /// from `self` while respecting queue capacity and the provided subnet
-    /// available memory.
+    /// available guaranteed response message memory.
     ///
-    /// `subnet_available_memory` is updated to reflect the change in
-    /// `self.queues` memory usage.
+    /// `subnet_available_memory` (the subnet's available guaranteed response
+    /// message memory) is updated to reflect the change in `self.queues` guaranteed
+    /// response message memory usage.
     ///
     /// Available memory is ignored (but updated) for system subnets, since we
     /// don't want to DoS system canisters due to lots of incoming requests.
@@ -1250,7 +1276,7 @@ impl SystemState {
             CanisterStatus::Stopped | CanisterStatus::Stopping { .. } => return,
         }
 
-        let mut memory_usage = self.queues.memory_usage() as i64;
+        let mut memory_usage = self.queues.guaranteed_response_memory_usage() as i64;
 
         while let Some(msg) = self.queues.peek_output(&self.canister_id) {
             // Ensure that enough memory is available for inducting `msg`.
@@ -1273,7 +1299,7 @@ impl SystemState {
             // Adjust `subnet_available_memory` by `memory_usage_before - memory_usage_after`.
             // Defer the accounting to `CanisterQueues`, to avoid duplication or divergence.
             *subnet_available_memory += memory_usage;
-            memory_usage = self.queues.memory_usage() as i64;
+            memory_usage = self.queues.guaranteed_response_memory_usage() as i64;
             *subnet_available_memory -= memory_usage;
         }
     }
@@ -1317,7 +1343,7 @@ impl SystemState {
     }
 
     /// Increments 'cycles_balance' and in case of refund for consumed cycles
-    /// decrements the metric `consumed_cycles_since_replica_started`.
+    /// decrements the metric `consumed_cycles`.
     pub fn add_cycles(&mut self, amount: Cycles, use_case: CyclesUseCase) {
         self.cycles_balance += amount;
         self.observe_consumed_cycles_with_use_case(amount, use_case, ConsumingCycles::No);
@@ -1338,6 +1364,7 @@ impl SystemState {
             | CyclesUseCase::RequestAndResponseTransmission
             | CyclesUseCase::CanisterCreation
             | CyclesUseCase::ECDSAOutcalls
+            | CyclesUseCase::SchnorrOutcalls
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
             | CyclesUseCase::NonConsumed
@@ -1397,9 +1424,8 @@ impl SystemState {
             return;
         }
 
-        let metric: &mut BTreeMap<CyclesUseCase, NominalCycles> = &mut self
-            .canister_metrics
-            .consumed_cycles_since_replica_started_by_use_cases;
+        let metric: &mut BTreeMap<CyclesUseCase, NominalCycles> =
+            &mut self.canister_metrics.consumed_cycles_by_use_cases;
 
         let use_case_consumption = metric
             .entry(use_case)
@@ -1410,11 +1436,11 @@ impl SystemState {
         match consuming_cycles {
             ConsumingCycles::Yes => {
                 *use_case_consumption += nominal_amount;
-                self.canister_metrics.consumed_cycles_since_replica_started += nominal_amount;
+                self.canister_metrics.consumed_cycles += nominal_amount;
             }
             ConsumingCycles::No => {
                 *use_case_consumption -= nominal_amount;
-                self.canister_metrics.consumed_cycles_since_replica_started -= nominal_amount;
+                self.canister_metrics.consumed_cycles -= nominal_amount;
             }
         }
     }
@@ -1446,6 +1472,80 @@ impl SystemState {
     pub fn get_canister_history(&self) -> &CanisterHistory {
         &self.canister_history
     }
+
+    /// Checks the invariants that should hold at the end of each consensus round.
+    pub fn check_invariants(&self) -> Result<(), String> {
+        // Callbacks still awaiting a (potentially already enqueued) response.
+        let pending_callbacks = self
+            .call_context_manager()
+            .map(|ccm| ccm.unresponded_callback_count(self.aborted_or_paused_response()))
+            .unwrap_or_default();
+
+        let input_queue_responses = self.queues.input_queues_response_count();
+        let input_queue_reserved_slots = self.queues.input_queues_reserved_slots();
+
+        if pending_callbacks != input_queue_reserved_slots + input_queue_responses {
+            return Err(format!(
+                "Invariant broken: Canister {}: Number of callbacks ({}) is different from the cumulative number of reservations and responses ({})",
+                self.canister_id(),
+                pending_callbacks,
+                input_queue_reserved_slots + input_queue_responses
+            ));
+        }
+
+        let unresponded_call_contexts = self
+            .call_context_manager()
+            .map(|ccm| {
+                ccm.unresponded_canister_update_call_contexts(self.aborted_or_paused_request())
+            })
+            .unwrap_or_default();
+
+        let input_queue_requests = self.queues.input_queues_request_count();
+        let output_queue_reserved_slots = self.queues.output_queues_reserved_slots();
+
+        if input_queue_requests + unresponded_call_contexts != output_queue_reserved_slots {
+            return Err(format!(
+                "Invariant broken: Canister {}: Number of output queue reserved slots ({}) is different from the cumulative number of input requests and unresponded call contexts ({})",
+                self.canister_id(),
+                output_queue_reserved_slots,
+                input_queue_requests + unresponded_call_contexts
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Returns the aborted or paused `Response` at the head of the task queue, if
+    /// any.
+    fn aborted_or_paused_response(&self) -> Option<&Response> {
+        match self.task_queue.front() {
+            Some(ExecutionTask::AbortedExecution {
+                input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
+                ..
+            })
+            | Some(ExecutionTask::PausedExecution {
+                input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
+                ..
+            }) => Some(response),
+            _ => None,
+        }
+    }
+
+    /// Returns the aborted or paused `Request` at the head of the task queue, if
+    /// any.
+    fn aborted_or_paused_request(&self) -> Option<&Request> {
+        match self.task_queue.front() {
+            Some(ExecutionTask::AbortedExecution {
+                input: CanisterMessageOrTask::Message(CanisterMessage::Request(request)),
+                ..
+            })
+            | Some(ExecutionTask::PausedExecution {
+                input: CanisterMessageOrTask::Message(CanisterMessage::Request(request)),
+                ..
+            }) => Some(request),
+            _ => None,
+        }
+    }
 }
 
 /// Implements memory limits verification for pushing a canister-to-canister
@@ -1454,8 +1554,9 @@ impl SystemState {
 /// Returns `StateError::OutOfMemory` if pushing the message would require more
 /// memory than `subnet_available_memory`.
 ///
-/// `subnet_available_memory` is updated to reflect the change in memory usage
-/// after a successful push; and left unmodified if the push failed.
+/// `subnet_available_memory` (the subnet's available guaranteed response
+/// message memory) is updated to reflect the change in memory usage after a
+/// successful push; and left unmodified if the push failed.
 ///
 /// See `CanisterQueues::push_input()` for further details.
 pub(crate) fn push_input(
@@ -1481,9 +1582,9 @@ pub(crate) fn push_input(
     // But always adjust `subnet_available_memory` by `memory_usage_before -
     // memory_usage_after`. Defer the accounting to `CanisterQueues`, to avoid
     // duplication (and the possibility of divergence).
-    *subnet_available_memory += queues.memory_usage() as i64;
+    *subnet_available_memory += queues.guaranteed_response_memory_usage() as i64;
     let res = queues.push_input(msg, input_queue_type);
-    *subnet_available_memory -= queues.memory_usage() as i64;
+    *subnet_available_memory -= queues.guaranteed_response_memory_usage() as i64;
     res
 }
 

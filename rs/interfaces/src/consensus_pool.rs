@@ -10,14 +10,16 @@ use ic_types::{
     artifact::ConsensusMessageId,
     consensus::{
         Block, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage, ContentEq,
-        Finalization, FinalizationShare, HasHeight, HashedBlock, Notarization, NotarizationShare,
-        RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
+        EquivocationProof, Finalization, FinalizationShare, HasHeight, HashedBlock, Notarization,
+        NotarizationShare, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
     },
+    crypto::CryptoHashOf,
     time::Time,
     Height,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::time::Instant;
 
 /// The height, at which we consider a replica to be behind
 pub const HEIGHT_CONSIDERED_BEHIND: Height = Height::new(20);
@@ -39,15 +41,28 @@ pub type ChangeSet = Vec<ChangeAction>;
 
 /// Change actions applicable to the consensus pool.
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ChangeAction {
+    /// Add the given artifact to the validated section of the pool.
     AddToValidated(ValidatedConsensusArtifact),
+    /// Remove the given artifact from the validated section of the pool.
+    RemoveFromValidated(ConsensusMessage),
+    /// Remove the given artifact from the unvalidated section of the pool and add it to
+    /// the validated section of the pool.
     MoveToValidated(ConsensusMessage),
+    /// Remove the given artifact from the unvalidated section of the pool.
     RemoveFromUnvalidated(ConsensusMessage),
+    /// Remove an invalid artifact from the unvalidated section of the pool.
     HandleInvalid(ConsensusMessage, String),
+    /// Purge all the artifacts _strictly_ below the provided height from the validated
+    /// section of the pool.
     PurgeValidatedBelow(Height),
+    /// Purge all the artifacts _strictly_ below the provided height from the unvalidated
+    /// section of the pool.
     PurgeUnvalidatedBelow(Height),
-    PurgeValidatedOfGivenTypeBelow(PurgeableArtifactType, Height),
+    /// Purge all the artifacts of the given type _strictly_ below the provided height
+    /// from the validated section of the pool.
+    PurgeValidatedOfTypeBelow(PurgeableArtifactType, Height),
 }
 
 /// A type of consensus artifact which can be selectively deleted from the consensus pool.
@@ -55,6 +70,7 @@ pub enum ChangeAction {
 pub enum PurgeableArtifactType {
     NotarizationShare,
     FinalizationShare,
+    EquivocationProof,
 }
 
 impl From<ChangeAction> for ChangeSet {
@@ -98,6 +114,9 @@ impl ContentEq for ChangeAction {
             (ChangeAction::AddToValidated(x), ChangeAction::AddToValidated(y)) => {
                 x.msg.content_eq(&y.msg)
             }
+            (ChangeAction::RemoveFromValidated(x), ChangeAction::RemoveFromValidated(y)) => {
+                x.content_eq(y)
+            }
             (ChangeAction::MoveToValidated(x), ChangeAction::MoveToValidated(y)) => x.content_eq(y),
             (ChangeAction::RemoveFromUnvalidated(x), ChangeAction::RemoveFromUnvalidated(y)) => {
                 x.content_eq(y)
@@ -114,8 +133,8 @@ impl ContentEq for ChangeAction {
             }
             (ChangeAction::PurgeValidatedBelow(x), ChangeAction::PurgeValidatedBelow(y)) => x == y,
             (
-                ChangeAction::PurgeValidatedOfGivenTypeBelow(type_1, x),
-                ChangeAction::PurgeValidatedOfGivenTypeBelow(type_2, y),
+                ChangeAction::PurgeValidatedOfTypeBelow(type_1, x),
+                ChangeAction::PurgeValidatedOfTypeBelow(type_2, y),
             ) => x == y && type_1 == type_2,
             // Default to false when comparing actions of different type
             _ => false,
@@ -148,7 +167,7 @@ impl TryFrom<pb::ValidatedConsensusArtifact> for ValidatedConsensusArtifact {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HeightRange {
     pub min: Height,
     pub max: Height,
@@ -184,38 +203,41 @@ pub trait PoolSection<T> {
     /// Lookup the timestamp of an artifact by its ConsensusMessageId.
     fn get_timestamp(&self, msg_id: &ConsensusMessageId) -> Option<Time>;
 
-    /// Return the HeightIndexedPool for RandomBeacon.
+    /// Return the HeightIndexedPool for [`RandomBeacon`].
     fn random_beacon(&self) -> &dyn HeightIndexedPool<RandomBeacon>;
 
-    /// Return the HeightIndexedPool for BlockProposal.
+    /// Return the HeightIndexedPool for [`BlockProposal`].
     fn block_proposal(&self) -> &dyn HeightIndexedPool<BlockProposal>;
 
-    /// Return the HeightIndexedPool for Notarization.
+    /// Return the HeightIndexedPool for [`Notarization`].
     fn notarization(&self) -> &dyn HeightIndexedPool<Notarization>;
 
-    /// Return the HeightIndexedPool for Finalization.
+    /// Return the HeightIndexedPool for [`Finalization`].
     fn finalization(&self) -> &dyn HeightIndexedPool<Finalization>;
 
-    /// Return the HeightIndexedPool for RandomBeaconShare.
+    /// Return the HeightIndexedPool for [`RandomBeaconShare`].
     fn random_beacon_share(&self) -> &dyn HeightIndexedPool<RandomBeaconShare>;
 
-    /// Return the HeightIndexedPool for NotarizationShare.
+    /// Return the HeightIndexedPool for [`NotarizationShare`].
     fn notarization_share(&self) -> &dyn HeightIndexedPool<NotarizationShare>;
 
-    /// Return the HeightIndexedPool for FinalizationShare.
+    /// Return the HeightIndexedPool for [`FinalizationShare`].
     fn finalization_share(&self) -> &dyn HeightIndexedPool<FinalizationShare>;
 
-    /// Return the HeightIndexedPool for RandomTape.
+    /// Return the HeightIndexedPool for [`RandomTape`].
     fn random_tape(&self) -> &dyn HeightIndexedPool<RandomTape>;
 
-    /// Return the HeightIndexedPool for RandomTapeShare.
+    /// Return the HeightIndexedPool for [`RandomTapeShare`].
     fn random_tape_share(&self) -> &dyn HeightIndexedPool<RandomTapeShare>;
 
-    /// Return the HeightIndexedPool for CatchUpPackage.
+    /// Return the HeightIndexedPool for [`CatchUpPackage`].
     fn catch_up_package(&self) -> &dyn HeightIndexedPool<CatchUpPackage>;
 
-    /// Return the HeightIndexedPool for CatchUpPackageShare.
+    /// Return the HeightIndexedPool for [`CatchUpPackageShare`].
     fn catch_up_package_share(&self) -> &dyn HeightIndexedPool<CatchUpPackageShare>;
+
+    /// Return the HeightIndexedPool for [`EquivocationProof`].
+    fn equivocation_proof(&self) -> &dyn HeightIndexedPool<EquivocationProof>;
 
     fn highest_catch_up_package(&self) -> CatchUpPackage {
         let proto = self.highest_catch_up_package_proto();
@@ -249,6 +271,9 @@ pub trait PoolSection<T> {
 /// - The unvalidated section contains artifacts that have been received but
 ///   haven't yet been validated. This section is in-memory only and thus
 ///   volatile.
+///
+/// It also stores monotonic timestamps ("instants") for block proposals
+/// and notarizations.
 pub trait ConsensusPool {
     /// Return a reference to the validated PoolSection.
     fn validated(&self) -> &dyn PoolSection<ValidatedConsensusArtifact>;
@@ -261,6 +286,19 @@ pub trait ConsensusPool {
 
     /// Return a reference to the consensus block cache (ConsensusBlockCache).
     fn as_block_cache(&self) -> &dyn ConsensusBlockCache;
+
+    /// Return the block chain between the given start/end.
+    fn build_block_chain(&self, start: &Block, end: &Block) -> Arc<dyn ConsensusBlockChain>;
+
+    /// Return the first instant at which a block with the given hash was inserted
+    /// into the validated pool. Returns None if no timestamp was found.
+    fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant>;
+
+    /// Return the first instant at which a consensus message with the given id
+    /// arrived in the unvalidated pool. Returns None if no timestamp was found
+    /// NOTE: We currently only record notarizations, CUPs and random beacons,
+    /// for the purposes of computing a round start instant.
+    fn message_instant(&self, id: &ConsensusMessageId) -> Option<Instant>;
 }
 
 /// HeightIndexedPool provides a set of interfaces for the Consensus component
@@ -270,15 +308,13 @@ pub trait HeightIndexedPool<T> {
     /// Returns the height range of artifacts of type T currently in the pool.
     fn height_range(&self) -> Option<HeightRange>;
 
-    /// Returns the max height across all artifacts of type T currently in the
-    /// pool.
+    /// Returns the max height across all artifacts of type T currently in the pool.
     fn max_height(&self) -> Option<Height>;
 
     /// Return an iterator over all of the artifacts of type T.
     fn get_all(&self) -> Box<dyn Iterator<Item = T>>;
 
-    /// Return an iterator over the artifacts of type T at height
-    /// 'h'.
+    /// Return an iterator over the artifacts of type T at height 'h'.
     fn get_by_height(&self, h: Height) -> Box<dyn Iterator<Item = T>>;
 
     /// Return an iterator over the artifacts of type T

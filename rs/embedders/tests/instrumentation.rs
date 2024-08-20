@@ -1,6 +1,7 @@
 use ic_config::embedders::{Config as EmbeddersConfig, MeteringType};
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
+use ic_embedders::wasm_utils;
 use ic_embedders::{
     wasm_utils::{validate_and_instrument_for_testing, validation::RESERVED_SYMBOLS, Segments},
     WasmtimeEmbedder,
@@ -12,12 +13,12 @@ use ic_wasm_types::BinaryEncodedWasm;
 use insta::assert_snapshot;
 use pretty_assertions::assert_eq;
 
-use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
+use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
 use ic_embedders::wasmtime_embedder::{system_api_complexity, WasmtimeInstance};
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_interfaces::execution_environment::SystemApi;
 use ic_replicated_state::Global;
-use ic_test_utilities::wasmtime_instance::WasmtimeInstanceBuilder;
+use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
     NumBytes, NumInstructions,
@@ -26,12 +27,20 @@ use ic_types::{
 /// Assert what the output of wasm instrumentation should be using the [`insta`]
 /// crate.
 ///
-/// When making changes that alter the expected output, changes can be easily reviewed and acked using the [`insta` cli](https://insta.rs/docs/cli/).
 /// Expected output is stored in `.snap` files in the `snapshots` folder.
-/// When tests fail, the new output will be stored in a `.snap.new` file.
-/// Instead of using the `insta` cli, you can review and make changes by
-/// directly diffing the `.snap` and `.snap.new` files and save changes by
-/// updating the `.snap` file.
+///
+/// When tests fail, you can get the new files with `bazel` as follows:
+/// - `mkdir /ic/insta`
+/// - modify `INSTA_WORKSPACE_ROOT` in BUILD.bazel to `/ic/insta`
+/// - `bazel test //rs/embedders:instrumentation --spawn_strategy=local`
+/// - the new files will be in `ic/insta`
+/// - `cd rs/embedders/tests/snapshots/`
+/// - `for x in *.snap; do cp /ic/insta/rs/embedders/tests/snapshots/$x.new $x; done`
+/// - the for-loop above overwrites the existing snap files with the new ones.
+/// - restore `INSTA_WORKSPACE_ROOT` to `.`
+/// - `bazel test //rs/embedders:instrumentation` should pass now.
+///
+/// If you find a simpler way to get the new snap files, please update the steps.
 fn inject_and_cmp(testname: &str) {
     let filename = format!(
         "{}/tests/instrumentation-test-data/{}.wat",
@@ -169,6 +178,47 @@ fn test_get_data() {
 }
 
 #[test]
+fn test_mixed_data_segments() {
+    let config = EmbeddersConfig::default();
+    let embedder = WasmtimeEmbedder::new(config, no_op_logger());
+    let output = validate_and_instrument_for_testing(
+        &embedder,
+        &BinaryEncodedWasm::new(
+            wat::parse_str(
+                r#"(module
+                (memory 1)
+                (data "passive 0")
+                (data (i32.const 0)  "active 1")
+                (data (i32.const 16) "active 2")
+                (data "passive 3")
+                (data (i32.const 32) "active 4")
+                (data "passive 5")
+                (data (i32.const 48) "active 6")
+                (data (i32.const 64) "active 7")
+            )"#,
+            )
+            .unwrap(),
+        ),
+    )
+    .unwrap()
+    .1;
+    let data = output.data.into_slice();
+    assert_eq!((0, b"active 1".to_vec()), data[0]);
+    assert_eq!((16, b"active 2".to_vec()), data[1]);
+    assert_eq!((32, b"active 4".to_vec()), data[2]);
+    assert_eq!((48, b"active 6".to_vec()), data[3]);
+    assert_eq!((64, b"active 7".to_vec()), data[4]);
+    let module = Module::parse(output.binary.as_slice(), false).unwrap();
+    assert_eq!(module.data.len(), 6);
+    assert_eq!(&module.data[0].data, &b"passive 0");
+    assert_eq!(module.data[1].data.len(), 0);
+    assert_eq!(module.data[2].data.len(), 0);
+    assert_eq!(&module.data[3].data, &b"passive 3");
+    assert_eq!(module.data[4].data.len(), 0);
+    assert_eq!(&module.data[5].data, &b"passive 5");
+}
+
+#[test]
 fn test_chunks_to_pages() {
     let segs: Segments = vec![
         (0, vec![1; PAGE_SIZE + 10]), // The segment is larger than a page.
@@ -230,7 +280,6 @@ fn instr_used(instance: &mut WasmtimeInstance) -> u64 {
 #[allow(clippy::field_reassign_with_default)]
 fn new_instance(wat: &str, instruction_limit: u64) -> WasmtimeInstance {
     let mut config = EmbeddersConfig::default();
-    config.metering_type = MeteringType::New;
     config.dirty_page_overhead = SchedulerConfig::application_subnet().dirty_page_overhead;
     WasmtimeInstanceBuilder::new()
         .with_config(config)
@@ -267,10 +316,10 @@ fn add_one() -> String {
 
 // cost of the addition group (get glob, do adds, set glob)
 fn cost_a(n: u64) -> u64 {
-    let ca = instruction_to_cost_new(&wasmparser::Operator::I64Add);
-    let cc = instruction_to_cost_new(&wasmparser::Operator::I64Const { value: 1 });
-    let cg = instruction_to_cost_new(&wasmparser::Operator::GlobalSet { global_index: 0 })
-        + instruction_to_cost_new(&wasmparser::Operator::GlobalGet { global_index: 0 });
+    let ca = instruction_to_cost(&wasmparser::Operator::I64Add);
+    let cc = instruction_to_cost(&wasmparser::Operator::I64Const { value: 1 });
+    let cg = instruction_to_cost(&wasmparser::Operator::GlobalSet { global_index: 0 })
+        + instruction_to_cost(&wasmparser::Operator::GlobalGet { global_index: 0 });
 
     (ca + cc) * n + cg
 }
@@ -302,7 +351,10 @@ fn metering_plain() {
     // Now run the same with insufficient instructions
     let mut instance = new_instance(&wat, instructions_used - 1);
     let err = instance.run(func_ref("test")).unwrap_err();
-    assert_eq!(err, HypervisorError::InstructionLimitExceeded);
+    assert_eq!(
+        err,
+        HypervisorError::InstructionLimitExceeded(NumInstructions::from(instructions_used - 1))
+    );
 
     // with early return
     let wat = format!(
@@ -329,14 +381,17 @@ fn metering_plain() {
     assert_eq!(g[0], Global::I64(10));
 
     let instructions_used = instr_used(&mut instance);
-    let cret = instruction_to_cost_new(&wasmparser::Operator::Return);
+    let cret = instruction_to_cost(&wasmparser::Operator::Return);
     // Function is 1 instruction.
     assert_eq!(instructions_used, 1 + cost_a(10) + cret);
 
     // Now run the same with insufficient instructions
     let mut instance = new_instance(&wat, instructions_used - 1);
     let err = instance.run(func_ref("test")).unwrap_err();
-    assert_eq!(err, HypervisorError::InstructionLimitExceeded);
+    assert_eq!(
+        err,
+        HypervisorError::InstructionLimitExceeded(NumInstructions::from(instructions_used - 1))
+    );
 
     // with early trap
     let wat = format!(
@@ -360,7 +415,7 @@ fn metering_plain() {
     instance.run(func_ref("test")).unwrap_err();
 
     let instructions_used = instr_used(&mut instance);
-    let ctrap = instruction_to_cost_new(&wasmparser::Operator::Unreachable);
+    let ctrap = instruction_to_cost(&wasmparser::Operator::Unreachable);
     // Function is 1 instruction.
     assert_eq!(instructions_used, 1 + cost_a(10) + ctrap);
 }
@@ -432,7 +487,7 @@ fn metering_block() {
     assert_eq!(g[0], Global::I64(120));
 
     let instructions_used = instr_used(&mut instance);
-    let cbr = instruction_to_cost_new(&wasmparser::Operator::Br { relative_depth: 1 });
+    let cbr = instruction_to_cost(&wasmparser::Operator::Br { relative_depth: 1 });
     // Function is 1 instruction.
     assert_eq!(instructions_used, 1 + cost_a(100) + cost_a(10) * 2 + cbr);
 
@@ -476,7 +531,7 @@ fn metering_block() {
     assert_eq!(g[0], Global::I64(110));
 
     let instructions_used = instr_used(&mut instance);
-    let cret = instruction_to_cost_new(&wasmparser::Operator::Return);
+    let cret = instruction_to_cost(&wasmparser::Operator::Return);
     // Function is 1 instruction.
     assert_eq!(instructions_used, 1 + cost_a(100) + cost_a(10) + cret);
 }
@@ -521,8 +576,8 @@ fn metering_if() {
     let g = &res.exported_globals;
     assert_eq!(g[0], Global::I64(55));
 
-    let cc = instruction_to_cost_new(&wasmparser::Operator::I64Const { value: 1 });
-    let cif = instruction_to_cost_new(&wasmparser::Operator::If {
+    let cc = instruction_to_cost(&wasmparser::Operator::I64Const { value: 1 });
+    let cif = instruction_to_cost(&wasmparser::Operator::If {
         blockty: wasmparser::BlockType::Empty,
     });
 
@@ -572,7 +627,7 @@ fn metering_if() {
     let g = &res.exported_globals;
     assert_eq!(g[0], Global::I64(15));
 
-    let cret = instruction_to_cost_new(&wasmparser::Operator::Return);
+    let cret = instruction_to_cost(&wasmparser::Operator::Return);
 
     let instructions_used = instr_used(&mut instance);
     // Function is 1 instruction.
@@ -629,13 +684,13 @@ fn metering_loop() {
     let g = &res.exported_globals;
     assert_eq!(g[0], Global::I64(105));
 
-    let cc = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
-    let cbrif = instruction_to_cost_new(&wasmparser::Operator::BrIf { relative_depth: 0 });
+    let cc = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
+    let cbrif = instruction_to_cost(&wasmparser::Operator::BrIf { relative_depth: 0 });
 
-    let ca = instruction_to_cost_new(&wasmparser::Operator::I32Add);
-    let clts = instruction_to_cost_new(&wasmparser::Operator::I32LtS);
-    let cset = instruction_to_cost_new(&wasmparser::Operator::LocalSet { local_index: 0 });
-    let cget = instruction_to_cost_new(&wasmparser::Operator::LocalGet { local_index: 0 });
+    let ca = instruction_to_cost(&wasmparser::Operator::I32Add);
+    let clts = instruction_to_cost(&wasmparser::Operator::I32LtS);
+    let cset = instruction_to_cost(&wasmparser::Operator::LocalSet { local_index: 0 });
+    let cget = instruction_to_cost(&wasmparser::Operator::LocalGet { local_index: 0 });
 
     let c_loop = cost_a(10) + cc * 2 + ca + cget + cset * 2 + clts + cbrif;
 
@@ -666,9 +721,9 @@ fn charge_for_dirty_heap() {
     let g = &res.exported_globals;
     assert_eq!(g[0], Global::I64(17));
 
-    let cc = instruction_to_cost_new(&wasmparser::Operator::I64Const { value: 1 });
-    let cg = instruction_to_cost_new(&wasmparser::Operator::GlobalSet { global_index: 0 });
-    let cs = instruction_to_cost_new(&wasmparser::Operator::I64Store {
+    let cc = instruction_to_cost(&wasmparser::Operator::I64Const { value: 1 });
+    let cg = instruction_to_cost(&wasmparser::Operator::GlobalSet { global_index: 0 });
+    let cs = instruction_to_cost(&wasmparser::Operator::I64Store {
         memarg: wasmparser::MemArg {
             align: 0,
             max_align: 0,
@@ -676,7 +731,7 @@ fn charge_for_dirty_heap() {
             memory: 0,
         },
     });
-    let cl = instruction_to_cost_new(&wasmparser::Operator::I64Load {
+    let cl = instruction_to_cost(&wasmparser::Operator::I64Load {
         memarg: wasmparser::MemArg {
             align: 0,
             max_align: 0,
@@ -728,12 +783,12 @@ fn run_charge_for_dirty_stable64_test(native_stable: FlagStatus) {
     let g = &res.exported_globals;
     assert_eq!(g[0], Global::I64(17));
 
-    let cc = instruction_to_cost_new(&wasmparser::Operator::I64Const { value: 1 });
-    let cg = instruction_to_cost_new(&wasmparser::Operator::GlobalSet { global_index: 0 });
-    let ccall = instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 });
-    let cdrop = instruction_to_cost_new(&wasmparser::Operator::Drop);
+    let cc = instruction_to_cost(&wasmparser::Operator::I64Const { value: 1 });
+    let cg = instruction_to_cost(&wasmparser::Operator::GlobalSet { global_index: 0 });
+    let ccall = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
+    let cdrop = instruction_to_cost(&wasmparser::Operator::Drop);
 
-    let cs = instruction_to_cost_new(&wasmparser::Operator::I64Store {
+    let cs = instruction_to_cost(&wasmparser::Operator::I64Store {
         memarg: wasmparser::MemArg {
             align: 0,
             max_align: 0,
@@ -741,7 +796,7 @@ fn run_charge_for_dirty_stable64_test(native_stable: FlagStatus) {
             memory: 0,
         },
     });
-    let cl = instruction_to_cost_new(&wasmparser::Operator::I64Load {
+    let cl = instruction_to_cost(&wasmparser::Operator::I64Load {
         memarg: wasmparser::MemArg {
             align: 0,
             max_align: 0,
@@ -761,23 +816,23 @@ fn run_charge_for_dirty_stable64_test(native_stable: FlagStatus) {
 
     match native_stable {
         FlagStatus::Enabled => {
-            csg = system_api_complexity::overhead_native::new::STABLE_GROW.get();
-            csw = system_api_complexity::overhead_native::new::STABLE64_WRITE.get()
+            csg = system_api_complexity::overhead_native::STABLE_GROW.get();
+            csw = system_api_complexity::overhead_native::STABLE64_WRITE.get()
                 + system_api
                     .get_num_instructions_from_bytes(NumBytes::from(1))
                     .get();
-            csr = system_api_complexity::overhead_native::new::STABLE64_READ.get()
+            csr = system_api_complexity::overhead_native::STABLE64_READ.get()
                 + system_api
                     .get_num_instructions_from_bytes(NumBytes::from(1))
                     .get();
         }
         FlagStatus::Disabled => {
-            csg = system_api_complexity::overhead::new::STABLE_GROW.get();
-            csw = system_api_complexity::overhead::new::STABLE64_WRITE.get()
+            csg = system_api_complexity::overhead::STABLE_GROW.get();
+            csw = system_api_complexity::overhead::STABLE64_WRITE.get()
                 + system_api
                     .get_num_instructions_from_bytes(NumBytes::from(1))
                     .get();
-            csr = system_api_complexity::overhead::new::STABLE64_READ.get()
+            csr = system_api_complexity::overhead::STABLE64_READ.get()
                 + system_api
                     .get_num_instructions_from_bytes(NumBytes::from(1))
                     .get();
@@ -839,12 +894,12 @@ fn run_charge_for_dirty_stable_test(native_stable: FlagStatus) {
     let g = &res.exported_globals;
     assert_eq!(g[0], Global::I32(17));
 
-    let cc = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
-    let cg = instruction_to_cost_new(&wasmparser::Operator::GlobalSet { global_index: 0 });
-    let ccall = instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 });
-    let cdrop = instruction_to_cost_new(&wasmparser::Operator::Drop);
+    let cc = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
+    let cg = instruction_to_cost(&wasmparser::Operator::GlobalSet { global_index: 0 });
+    let ccall = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
+    let cdrop = instruction_to_cost(&wasmparser::Operator::Drop);
 
-    let cs = instruction_to_cost_new(&wasmparser::Operator::I32Store {
+    let cs = instruction_to_cost(&wasmparser::Operator::I32Store {
         memarg: wasmparser::MemArg {
             align: 0,
             max_align: 0,
@@ -852,7 +907,7 @@ fn run_charge_for_dirty_stable_test(native_stable: FlagStatus) {
             memory: 0,
         },
     });
-    let cl = instruction_to_cost_new(&wasmparser::Operator::I32Load {
+    let cl = instruction_to_cost(&wasmparser::Operator::I32Load {
         memarg: wasmparser::MemArg {
             align: 0,
             max_align: 0,
@@ -872,23 +927,23 @@ fn run_charge_for_dirty_stable_test(native_stable: FlagStatus) {
 
     match native_stable {
         FlagStatus::Enabled => {
-            csg = system_api_complexity::overhead_native::new::STABLE_GROW.get();
-            csw = system_api_complexity::overhead_native::new::STABLE_WRITE.get()
+            csg = system_api_complexity::overhead_native::STABLE_GROW.get();
+            csw = system_api_complexity::overhead_native::STABLE_WRITE.get()
                 + system_api
                     .get_num_instructions_from_bytes(NumBytes::from(1))
                     .get();
-            csr = system_api_complexity::overhead_native::new::STABLE_READ.get()
+            csr = system_api_complexity::overhead_native::STABLE_READ.get()
                 + system_api
                     .get_num_instructions_from_bytes(NumBytes::from(1))
                     .get();
         }
         FlagStatus::Disabled => {
-            csg = system_api_complexity::overhead::new::STABLE_GROW.get();
-            csw = system_api_complexity::overhead::new::STABLE_WRITE.get()
+            csg = system_api_complexity::overhead::STABLE_GROW.get();
+            csw = system_api_complexity::overhead::STABLE_WRITE.get()
                 + system_api
                     .get_num_instructions_from_bytes(NumBytes::from(1))
                     .get();
-            csr = system_api_complexity::overhead::new::STABLE_READ.get()
+            csr = system_api_complexity::overhead::STABLE_READ.get()
                 + system_api
                     .get_num_instructions_from_bytes(NumBytes::from(1))
                     .get();
@@ -922,34 +977,36 @@ fn charge_for_dirty_stable() {
 }
 
 #[test]
-fn test_metering_for_table_fill() {
-    let wat = r#"
-    (module
-        (table $table 101 funcref)
-        (elem func 0)
-        (func $test (export "canister_update test")
-          (table.fill 0 (i32.const 0) (ref.func 0) (i32.const 50))
-        )
-      )"#;
+fn table_modifications_are_unsupported() {
+    fn test(code: &str) -> String {
+        let wat = format!(
+            r#"(module
+                (table $table 101 funcref)
+                (elem func 0)
+                (func $f {code})
+            )"#
+        );
+        let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger());
+        let wasm = wat::parse_str(wat).expect("Failed to convert wat to wasm");
 
-    let mut instance = new_instance(wat, 1000000);
-    let _res = instance.run(func_ref("test")).unwrap();
+        wasm_utils::compile(&embedder, &BinaryEncodedWasm::new(wasm))
+            .1
+            .unwrap_err()
+            .to_string()
+    }
 
-    let param1 = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 0 });
-    let param2 = instruction_to_cost_new(&wasmparser::Operator::RefFunc { function_index: 0 });
-    let param3 = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 50 });
-    let table_fill = instruction_to_cost_new(&wasmparser::Operator::TableFill { table: 0 });
-    // The third parameter of table.fill is the number of elements to fill
-    // and we charge dynamically 1 for each byte written.
-    let dynamic_cost_table_fill = 50;
+    let err = test("(drop (table.grow $table (ref.func 0) (i32.const 0)))");
+    assert!(err.contains("unsupported instruction table.grow"));
 
-    let instructions_used = instr_used(&mut instance);
-    assert_eq!(
-        instructions_used,
-        // Function is 1 instruction.
-        1 + param1 + param2 + param3 + table_fill + dynamic_cost_table_fill
-    );
+    let err = test("(table.set $table (i32.const 0) (ref.func 0))");
+    assert!(err.contains("unsupported instruction table.set"));
 
-    let mut instance = new_instance(wat, instructions_used);
-    instance.run(func_ref("test")).unwrap();
+    let err = test("(table.fill $table (i32.const 0) (ref.func 0) (i32.const 50))");
+    assert!(err.contains("unsupported instruction table.fill"));
+
+    let err = test("(table.copy (i32.const 0) (i32.const 0) (i32.const 0))");
+    assert!(err.contains("unsupported instruction table.copy"));
+
+    let err = test("(table.init 0 (i32.const 0) (i32.const 0) (i32.const 0))");
+    assert!(err.contains("unsupported instruction table.init"));
 }

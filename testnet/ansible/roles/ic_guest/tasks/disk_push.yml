@@ -1,35 +1,39 @@
 ---
-
-- name: remove existing disk-img.tar.zst
+- name: Remove existing disk-img.tar.zst
   file:
     state: absent
     path: "{{ ic_disk_path }}/disk-img.tar.zst"
   run_once: true
-  tags: [ "ic_guest" ]
+  tags: [ic_guest]
 
-- name: archive disk.img
+- name: Archive disk.img
   command:
-    cmd: "tar --directory={{ ic_disk_path }} --create --sparse --use-compress-program='zstd --threads=0 -10' --file='{{ ic_disk_path }}/disk-img.tar.zst' disk.img"
+    cmd: |
+        tar --directory={{ ic_disk_path }} --create \
+            --sparse \
+            --use-compress-program='zstd --threads=0 -10' \
+            --file='{{ ic_disk_path }}/disk-img.tar.zst' \
+            disk.img
     creates: "{{ ic_disk_path }}/disk-img.tar.zst"
   run_once: true
   delegate_to: localhost
   args:
     warn: false
-  tags: [ "ic_guest" ]
+  tags: [ic_guest]
 
-- name: synchronize disk-img.tar.zst
+- name: Synchronize disk-img.tar.zst
   synchronize:
     mode: push
     src: "{{ ic_disk_path }}/disk-img.tar.zst"
-    dest: "/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/disk-img.tar.zst"
-  tags: [ "ic_guest" ]
+    dest: /var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/disk-img.tar.zst
+  tags: [ic_guest]
 
-- name: unarchive file disk-img.tar.zst
+- name: Unarchive file disk-img.tar.zst
   unarchive:
-    src: "/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/disk-img.tar.zst"
-    dest: "/var/local/ic/disk"
-    owner: "root"
-    group: "root"
-    creates: "/var/local/ic/disk.img"
-    remote_src: yes
-  tags: [ "ic_guest" ]
+    src: /var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/disk-img.tar.zst
+    dest: /var/local/ic/disk
+    owner: root
+    group: root
+    creates: /var/local/ic/disk.img
+    remote_src: true
+  tags: [ic_guest]

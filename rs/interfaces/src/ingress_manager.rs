@@ -3,11 +3,11 @@ use crate::{
     execution_environment::{CanisterOutOfCyclesError, IngressHistoryError},
     validation::{ValidationError, ValidationResult},
 };
+use ic_interfaces_state_manager::StateManagerError;
 use ic_types::{
     artifact::IngressMessageId,
     batch::{IngressPayload, IngressPayloadError, ValidationContext},
     consensus::Payload,
-    crypto::CryptoError,
     ingress::IngressSets,
     messages::MessageId,
     time::{Time, UNIX_EPOCH},
@@ -49,17 +49,13 @@ impl IngressSetQuery for IngressSets {
     }
 }
 
-/// Permanent errors returned by the Ingress Selector.
-#[derive(Debug)]
-pub enum IngressPermanentError {
-    CryptoError(CryptoError),
+/// Reasons for why an ingress payload might be invalid.
+#[derive(Debug, Eq, PartialEq)]
+pub enum InvalidIngressPayloadReason {
     IngressValidationError(MessageId, String),
-    IngressBucketError(MessageId),
-    IngressHistoryError(IngressHistoryError),
     IngressPayloadError(IngressPayloadError),
     IngressExpired(MessageId, String),
     IngressMessageTooBig(usize, usize),
-    IngressPayloadTooBig(usize, usize),
     IngressPayloadTooManyMessages(usize, usize),
     DuplicatedIngressMessage(MessageId),
     InsufficientCycles(CanisterOutOfCyclesError),
@@ -67,40 +63,31 @@ pub enum IngressPermanentError {
     CanisterStopping(CanisterId),
     CanisterStopped(CanisterId),
     InvalidManagementMessage,
-    StateRemoved(Height),
 }
 
-/// Transient errors returned by the Ingress Selector.
-#[derive(Debug)]
-pub enum IngressTransientError {
-    CryptoError(CryptoError),
-    StateNotCommittedYet(Height),
+/// Reasons for validation failures.
+#[derive(Debug, Eq, PartialEq)]
+pub enum IngressPayloadValidationFailure {
+    StateManagerError(Height, StateManagerError),
+    IngressHistoryError(Height, IngressHistoryError),
 }
 
 pub type IngressPayloadValidationError =
-    ValidationError<IngressPermanentError, IngressTransientError>;
+    ValidationError<InvalidIngressPayloadReason, IngressPayloadValidationFailure>;
 
-impl From<CryptoError> for IngressTransientError {
-    fn from(err: CryptoError) -> IngressTransientError {
-        IngressTransientError::CryptoError(err)
+impl<T> From<InvalidIngressPayloadReason> for ValidationError<InvalidIngressPayloadReason, T> {
+    fn from(err: InvalidIngressPayloadReason) -> ValidationError<InvalidIngressPayloadReason, T> {
+        ValidationError::InvalidArtifact(err)
     }
 }
 
-impl From<CryptoError> for IngressPermanentError {
-    fn from(err: CryptoError) -> IngressPermanentError {
-        IngressPermanentError::CryptoError(err)
-    }
-}
-
-impl<T> From<IngressPermanentError> for ValidationError<IngressPermanentError, T> {
-    fn from(err: IngressPermanentError) -> ValidationError<IngressPermanentError, T> {
-        ValidationError::Permanent(err)
-    }
-}
-
-impl<P> From<IngressTransientError> for ValidationError<P, IngressTransientError> {
-    fn from(err: IngressTransientError) -> ValidationError<P, IngressTransientError> {
-        ValidationError::Transient(err)
+impl<P> From<IngressPayloadValidationFailure>
+    for ValidationError<P, IngressPayloadValidationFailure>
+{
+    fn from(
+        err: IngressPayloadValidationFailure,
+    ) -> ValidationError<P, IngressPayloadValidationFailure> {
+        ValidationError::ValidationFailed(err)
     }
 }
 
@@ -166,6 +153,10 @@ pub trait IngressSelector: Send + Sync {
     ///
     /// The actual purge is not required to happen immediately.
     fn request_purge_finalized_messages(&self, message_ids: Vec<IngressMessageId>);
+
+    /// Returns true if and only if the pool has an ingress message with the given id.
+    // TODO(CON-1312): Remove this when no longer necessary
+    fn has_message(&self, message_id: &IngressMessageId) -> bool;
 }
 
 /*

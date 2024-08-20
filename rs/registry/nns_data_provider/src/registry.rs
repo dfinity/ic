@@ -34,6 +34,13 @@ impl RegistryCanister {
         Self::new_with_agent_transformer(url, |a| a.with_query_timeout(t))
     }
 
+    pub fn new_with_agent(agent: Agent) -> Self {
+        RegistryCanister {
+            canister_id: ic_nns_constants::REGISTRY_CANISTER_ID,
+            agent: vec![agent],
+        }
+    }
+
     fn new_with_agent_transformer<F>(url: Vec<Url>, f: F) -> Self
     where
         F: FnMut(Agent) -> Agent,
@@ -164,9 +171,9 @@ impl RegistryCanister {
         }
     }
 
-    /// Obtains the value for 'key'. If 'version_opt' is Some, this will try to
-    /// obtain the value at that version, otherwise it will try to obtain
-    /// the value at the latest version.
+    /// Obtains the value for 'key' by a query call. If 'version_opt' is Some, this will try to
+    /// obtain the value at that version, otherwise it will try to obtain the value at the latest
+    /// version.
     pub async fn get_value(
         &self,
         key: Vec<u8>,
@@ -177,6 +184,43 @@ impl RegistryCanister {
 
         match agent
             .execute_query(&self.canister_id, "get_value", payload)
+            .await
+        {
+            Ok(result) => match result {
+                Some(response) => deserialize_get_value_response(response),
+                None => Err(ic_registry_transport::Error::UnknownError(
+                    "No response was received from registry_get_value.".to_string(),
+                )),
+            },
+            Err(error_string) => Err(ic_registry_transport::Error::UnknownError(format!(
+                "Error on registry_get_value_since: {} using agent {:?}",
+                error_string, &agent
+            ))),
+        }
+    }
+
+    /// Obtains the value for 'key' by an update call. If 'version_opt' is Some, this will try to
+    /// obtain the value at that version, otherwise it will try to obtain the value at the latest
+    /// version.
+    pub async fn get_value_with_update(
+        &self,
+        key: Vec<u8>,
+        version_opt: Option<u64>,
+    ) -> Result<(Vec<u8>, u64), Error> {
+        let payload = serialize_get_value_request(key, version_opt).unwrap();
+        let agent = self.choose_random_agent();
+        let nonce = format!("{}", chrono::Utc::now().timestamp_nanos_opt().unwrap())
+            .as_bytes()
+            .to_vec();
+
+        match agent
+            .execute_update(
+                &self.canister_id,
+                &self.canister_id,
+                "get_value",
+                payload,
+                nonce,
+            )
             .await
         {
             Ok(result) => match result {

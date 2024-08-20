@@ -1,10 +1,11 @@
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
-use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
-use ic_test_utilities::types::ids::{subnet_test_id, user_test_id};
+use ic_state_machine_tests::{
+    finalize_registry, StateMachine, StateMachineBuilder, StateMachineConfig,
+};
+use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     ingress::{IngressStatus, WasmResult},
     CanisterId, Cycles, SubnetId,
@@ -17,24 +18,16 @@ const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
 fn test_setup(
     subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
-    subnet_id: SubnetId,
+    subnet_seed: u8,
     subnet_type: SubnetType,
-    subnet_list: Vec<SubnetId>,
-    routing_table: RoutingTable,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
 ) -> Arc<StateMachine> {
     let config =
         StateMachineConfig::new(SubnetConfig::new(subnet_type), HypervisorConfig::default());
     StateMachineBuilder::new()
         .with_config(Some(config))
-        .with_subnet_id(subnet_id)
-        .with_subnet_list(subnet_list)
-        .with_routing_table(routing_table)
+        .with_subnet_seed([subnet_seed; 32])
         .with_registry_data_provider(registry_data_provider)
-        .with_ecdsa_keys(vec![EcdsaKeyId {
-            curve: EcdsaCurve::Secp256k1,
-            name: format!("master_ecdsa_public_key_{}", subnet_id),
-        }])
         .build_with_subnets(subnets)
 }
 
@@ -43,9 +36,27 @@ fn counter_canister_call_test() {
     const MAX_TICKS: usize = 100;
     let user_id = user_test_id(1).get();
 
+    // Set up registry data provider.
+    let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
+
+    // Set up the two state machines for the two (app) subnets.
+    let subnets = Arc::new(RwLock::new(BTreeMap::new()));
+    let env1 = test_setup(
+        subnets.clone(),
+        1,
+        SubnetType::Application,
+        registry_data_provider.clone(),
+    );
+    let env2 = test_setup(
+        subnets.clone(),
+        2,
+        SubnetType::Application,
+        registry_data_provider.clone(),
+    );
+
     // Set up routing table with two subnets.
-    let subnet_id1 = subnet_test_id(1);
-    let subnet_id2 = subnet_test_id(2);
+    let subnet_id1 = env1.get_subnet_id();
+    let subnet_id2 = env2.get_subnet_id();
     let range1 = CanisterIdRange {
         start: CanisterId::from_u64(0),
         end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1),
@@ -61,32 +72,16 @@ fn counter_canister_call_test() {
     // Set up subnet list for registry.
     let subnet_list = vec![subnet_id1, subnet_id2];
 
-    // Set up registry data provider.
-    let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
-
-    // Set up the two state machines for the two (app) subnets.
-    let subnets = Arc::new(RwLock::new(BTreeMap::new()));
-    let env1 = test_setup(
-        subnets.clone(),
+    // Add global registry records depending on the subnet IDs of the two state machines.
+    finalize_registry(
         subnet_id1,
-        SubnetType::Application,
-        subnet_list.clone(),
-        routing_table.clone(),
-        registry_data_provider.clone(),
-    );
-    let env2 = test_setup(
-        subnets.clone(),
-        subnet_id2,
-        SubnetType::Application,
-        subnet_list,
         routing_table,
-        registry_data_provider.clone(),
+        subnet_list,
+        registry_data_provider,
     );
 
-    // Reload registry on the two state machines to make sure
-    // the registry contains all subnet records
-    // added incrementally to the registry data provider
-    // when creating the individual state machines.
+    // Reload registry on the two state machines to make sure that
+    // both the state machines have a consistent view of the registry.
     env1.reload_registry();
     env2.reload_registry();
 
@@ -306,21 +301,19 @@ fn counter_canister_call_test() {
         .unwrap();
 
     // This time we need to execute multiple rounds on the 1st subnet
-    // to induct all ingress messages with large payloads. The ingress
-    // messages are *not* selected in a deterministic order, so we check
-    // that any two out of three messages are known.
+    // to induct all ingress messages with large payloads.
     env1.execute_round();
     assert!(matches!(
-        env1.ingress_status(&msg10_id),
-        IngressStatus::Unknown { .. }
-    ));
-    assert!(matches!(
-        env1.ingress_status(&msg11_id),
-        IngressStatus::Known { .. }
-    ));
-    assert!(matches!(
-        env1.ingress_status(&msg12_id),
-        IngressStatus::Known { .. }
+        (
+            env1.ingress_status(&msg10_id),
+            env1.ingress_status(&msg11_id),
+            env1.ingress_status(&msg12_id)
+        ),
+        (
+            IngressStatus::Known { .. },
+            IngressStatus::Known { .. },
+            IngressStatus::Unknown { .. }
+        )
     ));
 
     // The third ingress message is only inducted after a repeated

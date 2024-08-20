@@ -42,7 +42,7 @@ pub(crate) struct SnsConfigurationFile {
     logo: PathBuf,
     url: String,
 
-    #[serde(rename = "Principals")]
+    #[serde(rename = "Principals", default)]
     principals: Vec<PrincipalAlias>,
 
     fallback_controller_principals: Vec<String>, // Principal (alias)

@@ -15,18 +15,13 @@ Runbook::
 
 
 end::catalog[] */
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::{HasIcPrepDir, TestEnv};
-use crate::driver::test_env_api::{
-    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, NnsCanisterEnvVars,
+use axum::{
+    body::Body,
+    extract::{Request, State},
+    routing::any,
 };
-use crate::util::{block_on, runtime_from_url};
-use hyper::{
-    service::{make_service_fn, service_fn},
-    Body, Request, Response,
-};
+use ic_async_utils::axum::BodyDataStream;
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
-use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, set_up_universal_canister,
 };
@@ -37,10 +32,15 @@ use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_registry_transport::upsert;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env::{HasIcPrepDir, TestEnv};
+use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
+use ic_system_test_driver::util::{block_on, runtime_from_url};
 use ic_types::RegistryVersion;
+use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
+use reqwest::header::HeaderMap;
 use slog::info;
-use std::convert::Infallible;
 use std::net::SocketAddr;
 
 pub fn setup(env: TestEnv) {
@@ -51,9 +51,6 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    // setup the REGISTRY_CANISTER_WASM_PATH environment variable which is read by the installation
-    // procedure.
-    env.set_nns_canisters_env_vars().unwrap();
     let logger = env.logger();
     let root_node = env.get_first_healthy_nns_node_snapshot();
     let pk_bytes = env
@@ -65,57 +62,21 @@ pub fn test(env: TestEnv) {
     let pk = threshold_sig_public_key_from_der(&pk_bytes[..])
         .expect("failed to decode threshold sig PK");
 
-    // Describes a proxy server that replaces all occurrences of "Good" with "Evil".
-    let make_mitm = make_service_fn({
-        let root_url = root_node.get_public_url();
-        move |_conn| {
-            let root_url = root_url.clone();
-            async move {
-                Ok::<_, Infallible>(service_fn({
-                    let root_url = root_url.clone();
-                    move |mut req: Request<Body>| {
-                        let root_url = root_url.clone();
-                        async move {
-                            let client = hyper::client::Client::builder()
-                                .http2_only(true)
-                                .build_http();
-
-                            let mut target_url = root_url.clone();
-                            target_url.set_path(req.uri().path());
-                            *req.uri_mut() = target_url.to_string().parse::<hyper::Uri>().unwrap();
-                            let response = client.request(req).await?;
-                            let (parts, body) = response.into_parts();
-                            let mut bytes = hyper::body::to_bytes(body).await?.to_vec();
-
-                            if bytes.len() < 4 {
-                                return Ok::<_, hyper::Error>(Response::from_parts(
-                                    parts,
-                                    Body::from(bytes),
-                                ));
-                            }
-
-                            for i in 0..bytes.len() - 3 {
-                                if &bytes[i..i + 4] == b"Good" {
-                                    bytes[i..i + 4].copy_from_slice(b"Evil");
-                                }
-                            }
-                            Ok::<_, hyper::Error>(Response::from_parts(parts, Body::from(bytes)))
-                        }
-                    }
-                }))
-            }
-        }
-    });
+    let mitm = any(mitm_service)
+        .with_state(root_node.get_public_url())
+        .into_make_service();
 
     block_on(async {
-        let proxy_server =
-            hyper::server::Server::bind(&SocketAddr::from(([127, 0, 0, 1], 0))).serve(make_mitm);
-        info!(
-            logger,
-            "Started a MITM proxy on {}",
-            proxy_server.local_addr()
-        );
-        let proxy_url = url::Url::parse(&format!("http://{}", proxy_server.local_addr())).unwrap();
+        let socket_addr = SocketAddr::from(([127, 0, 0, 1], 0));
+        let listener = tokio::net::TcpListener::bind(socket_addr)
+            .await
+            .expect("failed to bind");
+        let socket_addr = listener.local_addr().unwrap();
+
+        let proxy_server = axum::serve(listener, mitm);
+        info!(logger, "Started a MITM proxy on {}", socket_addr);
+        let proxy_url =
+            url::Url::parse(&format!("http://{}", socket_addr)).expect("failed to parse url");
 
         tokio::runtime::Handle::current().spawn(async move {
             proxy_server.await.ok();
@@ -167,10 +128,11 @@ pub fn test(env: TestEnv) {
                 &fake_governance_canister,
                 &canister,
                 "atomic_mutate",
-                encode_or_panic(&RegistryAtomicMutateRequest {
+                RegistryAtomicMutateRequest {
                     mutations: vec![upsert("Proprietary Clouds", "Less Good")],
                     preconditions: vec![]
-                })
+                }
+                .encode_to_vec()
             )
             .await,
             "failed to apply registry mutation"
@@ -207,4 +169,47 @@ pub fn test(env: TestEnv) {
             result
         );
     });
+}
+
+// Describes a proxy server that replaces all occurrences of "Good" with "Evil".
+async fn mitm_service(
+    State(root_url): State<url::Url>,
+    req: Request<Body>,
+) -> Result<(HeaderMap, Body), String> {
+    let client = reqwest::Client::builder()
+        .http2_prior_knowledge()
+        .build()
+        .map_err(|err| err.to_string())?;
+
+    let mut target_url = root_url.clone();
+    target_url.set_path(req.uri().path());
+
+    let mut request = reqwest::Request::new(req.method().clone(), target_url);
+
+    let (parts, body) = req.into_parts();
+    *request.headers_mut() = parts.headers;
+    *request.body_mut() = Some(reqwest::Body::wrap_stream(BodyDataStream::new(body)));
+
+    let response = client
+        .execute(request)
+        .await
+        .map_err(|err| err.to_string())?;
+
+    let headers = response.headers().clone();
+    let mut bytes = response
+        .bytes()
+        .await
+        .map_err(|err| err.to_string())?
+        .to_vec();
+
+    if bytes.len() < 4 {
+        return Ok((headers, bytes.into()));
+    }
+
+    for i in 0..bytes.len() - 3 {
+        if &bytes[i..i + 4] == b"Good" {
+            bytes[i..i + 4].copy_from_slice(b"Evil");
+        }
+    }
+    Ok((headers, bytes.into()))
 }

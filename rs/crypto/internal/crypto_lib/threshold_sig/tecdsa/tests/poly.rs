@@ -3,7 +3,7 @@ use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
 
 #[test]
-fn poly_zero_times_zero_is_zero() -> ThresholdEcdsaResult<()> {
+fn poly_zero_times_zero_is_zero() -> CanisterThresholdResult<()> {
     for curve in EccCurveType::all() {
         let zero = EccScalar::zero(curve);
 
@@ -19,7 +19,7 @@ fn poly_zero_times_zero_is_zero() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn poly_a_constant_poly_is_constant() -> ThresholdEcdsaResult<()> {
+fn poly_a_constant_poly_is_constant() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -38,7 +38,7 @@ fn poly_a_constant_poly_is_constant() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn poly_simple_polynomial_x_1() -> ThresholdEcdsaResult<()> {
+fn poly_simple_polynomial_x_1() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     // Test the behavior of evaluating polynomial x+1
@@ -61,7 +61,7 @@ fn poly_simple_polynomial_x_1() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn poly_simple_polynomial_x2_x_1() -> ThresholdEcdsaResult<()> {
+fn poly_simple_polynomial_x2_x_1() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     // Test the behavior of evaluating polynomial x^2+x+1
@@ -86,7 +86,7 @@ fn poly_simple_polynomial_x2_x_1() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn poly_interpolate_works() -> ThresholdEcdsaResult<()> {
+fn poly_interpolate_works() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -110,7 +110,7 @@ fn poly_interpolate_works() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn poly_interpolate_fails_if_insufficient_points() -> ThresholdEcdsaResult<()> {
+fn poly_interpolate_fails_if_insufficient_points() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -125,7 +125,7 @@ fn poly_interpolate_fails_if_insufficient_points() -> ThresholdEcdsaResult<()> {
             }
 
             match Polynomial::interpolate(curve, &samples) {
-                Err(e) => assert_eq!(e, ThresholdEcdsaError::InterpolationError),
+                Err(e) => assert_eq!(e, CanisterThresholdError::InterpolationError),
                 Ok(p) => assert_ne!(p, poly),
             }
         }
@@ -135,7 +135,7 @@ fn poly_interpolate_fails_if_insufficient_points() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn poly_interpolate_errors_on_duplicate_inputs() -> ThresholdEcdsaResult<()> {
+fn poly_interpolate_errors_on_duplicate_inputs() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -166,7 +166,7 @@ fn poly_interpolate_errors_on_duplicate_inputs() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn poly_interpolate_is_resilient_to_low_x_points() -> ThresholdEcdsaResult<()> {
+fn poly_interpolate_is_resilient_to_low_x_points() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -194,7 +194,7 @@ fn poly_interpolate_is_resilient_to_low_x_points() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn poly_threshold_secret_sharing() -> ThresholdEcdsaResult<()> {
+fn poly_threshold_secret_sharing() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -221,7 +221,7 @@ fn poly_threshold_secret_sharing() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn poly_simple_commitments() -> ThresholdEcdsaResult<()> {
+fn poly_simple_commitments() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -235,7 +235,7 @@ fn poly_simple_commitments() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn poly_pedersen_commitments() -> ThresholdEcdsaResult<()> {
+fn poly_pedersen_commitments() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -296,7 +296,7 @@ fn poly_lagrange_coefficients_at_zero_are_correct() {
     assert_eq!(computed, observed);
 }
 
-fn interpolation_at_zero(x: &[NodeIndex], y: &[EccPoint]) -> ThresholdEcdsaResult<EccPoint> {
+fn interpolation_at_zero(x: &[NodeIndex], y: &[EccPoint]) -> CanisterThresholdResult<EccPoint> {
     let curve_type = y[0].curve_type();
     let coefficients = LagrangeCoefficients::at_zero(curve_type, x)?;
     coefficients.interpolate_point(y)
@@ -316,7 +316,7 @@ fn random_node_indexes(count: usize) -> Vec<NodeIndex> {
 }
 
 #[test]
-fn poly_point_interpolation_at_zero() -> ThresholdEcdsaResult<()> {
+fn poly_point_interpolation_at_zero() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -345,7 +345,7 @@ fn poly_point_interpolation_at_zero() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn poly_point_interpolation_at_value() -> ThresholdEcdsaResult<()> {
+fn poly_point_interpolation_at_value() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -377,7 +377,7 @@ fn poly_point_interpolation_at_value() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn poly_scalar_interpolation_at_value() -> ThresholdEcdsaResult<()> {
+fn poly_scalar_interpolation_at_value() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -407,7 +407,7 @@ fn poly_scalar_interpolation_at_value() -> ThresholdEcdsaResult<()> {
 }
 
 #[test]
-fn poly_point_interpolation_at_zero_rejects_duplicates() -> ThresholdEcdsaResult<()> {
+fn poly_point_interpolation_at_zero_rejects_duplicates() -> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -435,7 +435,8 @@ fn poly_point_interpolation_at_zero_rejects_duplicates() -> ThresholdEcdsaResult
 }
 
 #[test]
-fn poly_point_interpolation_at_zero_fails_with_insufficient_shares() -> ThresholdEcdsaResult<()> {
+fn poly_point_interpolation_at_zero_fails_with_insufficient_shares() -> CanisterThresholdResult<()>
+{
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -456,7 +457,7 @@ fn poly_point_interpolation_at_zero_fails_with_insufficient_shares() -> Threshol
 
             // Interpolation fails to recover the correct value with insufficient values
             match interpolation_at_zero(&x, &y) {
-                Err(e) => assert_eq!(e, ThresholdEcdsaError::InterpolationError),
+                Err(e) => assert_eq!(e, CanisterThresholdError::InterpolationError),
                 Ok(pt) => assert_ne!(pt, pk),
             }
         }
@@ -466,7 +467,7 @@ fn poly_point_interpolation_at_zero_fails_with_insufficient_shares() -> Threshol
 }
 
 #[test]
-fn polynomial_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
+fn polynomial_should_redact_logs() -> Result<(), CanisterThresholdError> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {
@@ -483,7 +484,7 @@ fn polynomial_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
 }
 
 #[test]
-fn commitment_opening_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
+fn commitment_opening_should_redact_logs() -> Result<(), CanisterThresholdError> {
     let rng = &mut reproducible_rng();
 
     for curve in EccCurveType::all() {

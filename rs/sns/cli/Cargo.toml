@@ -14,11 +14,11 @@ path = "src/main.rs"
 path = "src/lib.rs"
 
 [dependencies]
-anyhow = "1.0"
+anyhow = { workspace = true }
 base64 = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
-hex = "0.4.3"
+hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
@@ -28,20 +28,18 @@ ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance = { path = "../../nns/governance" }
-ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-sns-governance = { path = "../governance" }
 ic-sns-init = { path = "../init" }
 ic-sns-root = { path = "../root" }
 ic-sns-wasm = { path = "../../nns/sns-wasm" }
-icp-ledger = { path = "../../rosetta-api/icp_ledger" }
-pretty_assertions = { workspace = true }
-regex = "1.5.6"
-serde_json = { workspace = true }
-serde = { workspace = true }
-serde_yaml = { workspace = true }
+itertools = { workspace = true }
 json-patch = "0.2.6"
-tempfile = "3.1.0"
-url = "2.2.0"
+pretty_assertions = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
-lazy_static = "1.4.0"
+lazy_static = { workspace = true }

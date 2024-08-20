@@ -21,7 +21,7 @@ Runbook::
 
 end::catalog[] */
 
-use crate::{
+use ic_system_test_driver::{
     canister_api::{CallMode, GenericRequest},
     driver::{
         boundary_node::{BoundaryNode, BoundaryNodeVm},
@@ -29,7 +29,7 @@ use crate::{
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
-            retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer,
+            HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer,
             NnsInstallationBuilder, RetrieveIpv4Addr, SubnetSnapshot, READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
         },
@@ -132,15 +132,21 @@ pub fn config(
     if let Some(bn) = bn {
         info!(&logger, "Polling registry");
         let registry = RegistryCanister::new(bn.nns_node_urls);
-        let (latest, routes) = rt.block_on(retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-            let (bytes, latest) = registry.get_value(make_routing_table_record_key().into(), None).await
-                .context("Failed to `get_value` from registry")?;
-            let routes = PbRoutingTable::decode(bytes.as_slice())
-                .context("Failed to decode registry routes")?;
-            let routes = RoutingTable::try_from(routes)
-                .context("Failed to convert registry routes")?;
-            Ok((latest, routes))
-        }))
+        let (latest, routes) = rt.block_on(ic_system_test_driver::retry_with_msg_async!(
+            "checking registry",
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let (bytes, latest) = registry.get_value(make_routing_table_record_key().into(), None).await
+                    .context("Failed to `get_value` from registry")?;
+                let routes = PbRoutingTable::decode(bytes.as_slice())
+                    .context("Failed to decode registry routes")?;
+                let routes = RoutingTable::try_from(routes)
+                    .context("Failed to convert registry routes")?;
+                Ok((latest, routes))
+            }
+        ))
         .expect("Failed to poll registry. This is not a Boundary Node error. It is a test environment issue.");
         info!(&logger, "Latest registry {latest}: {routes:?}");
 
@@ -224,22 +230,34 @@ pub fn test(
     );
     block_on(async {
         for agent in nns_agents.iter() {
-            retry_async(&log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-                match agent_observes_canister_module(agent, &nns_canister).await {
-                    true => Ok(()),
-                    false => bail!("Canister module not available yet"),
+            ic_system_test_driver::retry_with_msg_async!(
+                format!("observing NNS canister module {}", nns_canister.to_string()),
+                &log,
+                READY_WAIT_TIMEOUT,
+                RETRY_BACKOFF,
+                || async {
+                    match agent_observes_canister_module(agent, &nns_canister).await {
+                        true => Ok(()),
+                        false => bail!("Canister module not available yet"),
+                    }
                 }
-            })
+            )
             .await
             .unwrap();
         }
         for agent in app_agents.iter() {
-            retry_async(&log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-                match agent_observes_canister_module(agent, &app_canister).await {
-                    true => Ok(()),
-                    false => bail!("Canister module not available yet"),
+            ic_system_test_driver::retry_with_msg_async!(
+                format!("observing app canister module {}", app_canister.to_string()),
+                &log,
+                READY_WAIT_TIMEOUT,
+                RETRY_BACKOFF,
+                || async {
+                    match agent_observes_canister_module(agent, &app_canister).await {
+                        true => Ok(()),
+                        false => bail!("Canister module not available yet"),
+                    }
                 }
-            })
+            )
             .await
             .unwrap();
         }

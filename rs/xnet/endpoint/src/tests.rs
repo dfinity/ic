@@ -1,20 +1,18 @@
 use super::*;
 use bytes::Bytes;
+use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_protobuf::{messaging::xnet::v1 as pb, proxy::ProtoProxy};
 use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState, Stream};
-use ic_test_utilities::{
-    crypto::fake_tls_handshake::FakeTlsHandshake,
-    state_manager::FakeStateManager,
-    types::{
-        ids::{canister_test_id, SUBNET_6, SUBNET_7},
-        messages::RequestBuilder,
-    },
-};
+use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_histogram_vec_count, metric_vec, HistogramStats, MetricVec,
+};
+use ic_test_utilities_types::{
+    ids::{canister_test_id, SUBNET_6, SUBNET_7},
+    messages::RequestBuilder,
 };
 use ic_types::{messages::CallbackId, xnet::StreamIndexedQueue, Height, SubnetId};
 use maplit::btreemap;
@@ -34,7 +32,7 @@ pub(crate) struct EndpointTestFixture {
     pub state_manager: Arc<FakeStateManager>,
     pub registry_client: Arc<MockRegistryClient>,
     pub metrics: MetricsRegistry,
-    pub tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
+    pub tls_handshake: Arc<dyn TlsConfig + Send + Sync>,
 }
 
 impl EndpointTestFixture {
@@ -68,7 +66,7 @@ impl Default for EndpointTestFixture {
             metrics: MetricsRegistry::new(),
             state_manager: Arc::new(FakeStateManager::new()),
             registry_client: Arc::new(MockRegistryClient::new()),
-            tls_handshake: Arc::new(FakeTlsHandshake::new()),
+            tls_handshake: Arc::new(MockTlsConfig::new()),
         }
     }
 }
@@ -407,7 +405,7 @@ async fn handle_stream_with_witness_begin() {
 
     let witness_begin = STREAM_BEGIN.increment();
     let msg_begin = witness_begin.increment();
-    let msg_limit = std::usize::MAX;
+    let msg_limit = usize::MAX;
     let url = Url::parse(&format!(
         "http://localhost/api/v1/stream/{}?witness_begin={}&msg_begin={}",
         DST_SUBNET, witness_begin, msg_begin
@@ -562,7 +560,7 @@ fn put_replicated_state_for_testing(
     let (_height, mut state) = state_manager.take_tip();
     let stream = get_stream_for_testing();
     state.with_streams(btreemap![DST_SUBNET => stream]);
-    state_manager.commit_and_certify(state, h, CertificationScope::Metadata);
+    state_manager.commit_and_certify(state, h, CertificationScope::Metadata, None);
 }
 
 /// Generates a stream containing `STREAM_COUNT` requests, beginning at

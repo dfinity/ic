@@ -1,28 +1,31 @@
-use crate::driver::test_env::TestEnv;
-use crate::rosetta_tests::ledger_client::LedgerClient;
-use crate::rosetta_tests::lib::to_public_key;
-use crate::rosetta_tests::lib::{
-    create_ledger_client, do_multiple_txn_external, make_user_ed25519, one_day_from_now_nanos,
-    NeuronDetails,
+use crate::rosetta_tests::{
+    ledger_client::LedgerClient,
+    lib::{
+        create_ledger_client, do_multiple_txn_external, make_user_ed25519, one_day_from_now_nanos,
+        to_public_key, NeuronDetails,
+    },
+    rosetta_client::RosettaApiClient,
+    setup::setup,
+    test_neurons::TestNeurons,
 };
-use crate::rosetta_tests::rosetta_client::RosettaApiClient;
-use crate::rosetta_tests::setup::setup;
-use crate::rosetta_tests::test_neurons::TestNeurons;
-use crate::util::{block_on, get_identity, IDENTITY_PEM};
 use ic_agent::Identity;
 use ic_ledger_core::Tokens;
-use ic_nns_governance::pb::v1::Neuron;
-use ic_rosetta_api::convert::neuron_subaccount_bytes_from_public_key;
-use ic_rosetta_api::ledger_client::list_neurons_response::ListNeuronsResponse;
-use ic_rosetta_api::request::Request;
-use ic_rosetta_api::request_types::ListNeurons;
+use ic_nns_governance_api::pb::v1::Neuron;
+use ic_rosetta_api::{
+    convert::neuron_subaccount_bytes_from_public_key,
+    ledger_client::list_neurons_response::ListNeuronsResponse, request::Request,
+    request_types::ListNeurons,
+};
 use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
+use ic_system_test_driver::{
+    driver::test_env::TestEnv,
+    util::{block_on, get_identity, IDENTITY_PEM},
+};
 use rosetta_core::objects::ObjectMap;
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 const PORT: u32 = 8107;
-const VM_NAME: &str = "rosetta-test-neuron-info";
+const VM_NAME: &str = "rosetta-neuron-info";
 
 pub fn test(env: TestEnv) {
     let _logger = env.logger();
@@ -34,7 +37,7 @@ pub fn test(env: TestEnv) {
     // A user can only fetch the list of their own neurons. This is why the principals of the caller and the neuron controller have to match.
     let identity = get_identity();
     let principal = identity.sender().unwrap();
-    let keypair = EdKeypair::from_pem(IDENTITY_PEM).unwrap();
+    let keypair = EdKeypair::deserialize_pkcs8_pem(IDENTITY_PEM).unwrap();
 
     let mut neurons = TestNeurons::new(2000, &mut ledger_balances);
     let neuron_setup = |neuron: &mut Neuron| {
@@ -92,7 +95,7 @@ async fn test_list_neurons(
                 .first()
                 .expect("Expected one list neuron operation."),
             ic_rosetta_api::models::Operation {
-                _type: _expected_type,
+                type_: _expected_type,
                 ..
             }
         ));

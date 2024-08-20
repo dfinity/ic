@@ -4,10 +4,10 @@
 //! including the secret key store and random number generator, and the
 //! stateless crypto lib.
 
-use crate::api::{CspPublicKeyStore, NiDkgCspClient};
+use crate::api::NiDkgCspClient;
 use crate::key_id::{KeyId, KeyIdInstantiationError};
 use crate::types::{CspPublicCoefficients, CspSecretKey};
-use crate::vault::api::CspPublicKeyStoreError;
+use crate::vault::api::{CspPublicKeyStoreError, PublicKeyStoreCspVault};
 use crate::Csp;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
@@ -28,7 +28,7 @@ use ic_logger::debug;
 use ic_types::crypto::error::{KeyNotFoundError, MalformedDataError};
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::AlgorithmId;
-use ic_types::{NodeId, NodeIndex, NumberOfNodes};
+use ic_types::{NodeIndex, NumberOfNodes};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[cfg(test)]
@@ -41,17 +41,6 @@ pub const NIDKG_FS_SCOPE: Scope = Scope::Const(ConstScope::NiDkgFsEncryptionKeys
 ///
 /// Please see the trait definition for full documentation.
 impl NiDkgCspClient for Csp {
-    /// Creates a key pair for encrypting threshold key shares in transmission
-    /// from dealers to receivers.
-    fn gen_dealing_encryption_key_pair(
-        &self,
-        node_id: NodeId,
-    ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), ni_dkg_errors::CspDkgCreateFsKeyError>
-    {
-        debug!(self.logger; crypto.method_name => "gen_dealing_encryption_key_pair");
-        self.csp_vault.gen_dealing_encryption_key_pair(node_id)
-    }
-
     /// Erases forward secure secret keys before a given epoch
     fn update_forward_secure_epoch(
         &self,
@@ -60,29 +49,30 @@ impl NiDkgCspClient for Csp {
     ) -> Result<(), ni_dkg_errors::CspDkgUpdateFsEpochError> {
         debug!(self.logger; crypto.method_name => "update_forward_secure_epoch", crypto.dkg_epoch => epoch.get());
 
-        let key_id = dkg_dealing_encryption_key_id(self).map_err(|error| match error {
-            DkgDealingEncryptionKeyIdRetrievalError::KeyNotFound => {
-                CspDkgUpdateFsEpochError::KeyNotFoundError(KeyNotFoundError {
-                    internal_error: String::from("Missing DKG dealing encryption key"),
-                    key_id: String::from(
-                        "Public key not found, therefore the key id could not be derived",
-                    ),
-                })
-            }
-            DkgDealingEncryptionKeyIdRetrievalError::MalformedPublicKey {
-                key_bytes,
-                details: description,
-            } => CspDkgUpdateFsEpochError::MalformedPublicKeyError(MalformedDataError {
-                algorithm: AlgorithmId::NiDkg_Groth20_Bls12_381,
-                internal_error: description,
-                data: Some(key_bytes),
-            }),
-            DkgDealingEncryptionKeyIdRetrievalError::TransientInternalError(details) => {
-                CspDkgUpdateFsEpochError::TransientInternalError(InternalError {
-                    internal_error: details,
-                })
-            }
-        })?;
+        let key_id =
+            dkg_dealing_encryption_key_id(&*self.csp_vault).map_err(|error| match error {
+                DkgDealingEncryptionKeyIdRetrievalError::KeyNotFound => {
+                    CspDkgUpdateFsEpochError::KeyNotFoundError(KeyNotFoundError {
+                        internal_error: String::from("Missing DKG dealing encryption key"),
+                        key_id: String::from(
+                            "Public key not found, therefore the key id could not be derived",
+                        ),
+                    })
+                }
+                DkgDealingEncryptionKeyIdRetrievalError::MalformedPublicKey {
+                    key_bytes,
+                    details: description,
+                } => CspDkgUpdateFsEpochError::MalformedPublicKeyError(MalformedDataError {
+                    algorithm: AlgorithmId::NiDkg_Groth20_Bls12_381,
+                    internal_error: description,
+                    data: Some(key_bytes),
+                }),
+                DkgDealingEncryptionKeyIdRetrievalError::TransientInternalError(details) => {
+                    CspDkgUpdateFsEpochError::TransientInternalError(InternalError {
+                        internal_error: details,
+                    })
+                }
+            })?;
         self.csp_vault
             .update_forward_secure_epoch(algorithm_id, key_id, epoch)
     }
@@ -230,29 +220,30 @@ impl NiDkgCspClient for Csp {
     ) -> Result<(), ni_dkg_errors::CspDkgLoadPrivateKeyError> {
         debug!(self.logger; crypto.method_name => "load_threshold_signing_key", crypto.dkg_epoch => epoch.get());
 
-        let fs_key_id = dkg_dealing_encryption_key_id(self).map_err(|error| match error {
-            DkgDealingEncryptionKeyIdRetrievalError::KeyNotFound => {
-                CspDkgLoadPrivateKeyError::KeyNotFoundError(KeyNotFoundError {
-                    internal_error: String::from("Missing DKG dealing encryption key"),
-                    key_id: String::from(
-                        "Public key not found, therefore the key id could not be derived",
-                    ),
-                })
-            }
-            DkgDealingEncryptionKeyIdRetrievalError::MalformedPublicKey {
-                key_bytes,
-                details: description,
-            } => CspDkgLoadPrivateKeyError::MalformedPublicKeyError(MalformedDataError {
-                algorithm: AlgorithmId::NiDkg_Groth20_Bls12_381,
-                internal_error: description,
-                data: Some(key_bytes),
-            }),
-            DkgDealingEncryptionKeyIdRetrievalError::TransientInternalError(details) => {
-                CspDkgLoadPrivateKeyError::TransientInternalError(InternalError {
-                    internal_error: details,
-                })
-            }
-        })?;
+        let fs_key_id =
+            dkg_dealing_encryption_key_id(&*self.csp_vault).map_err(|error| match error {
+                DkgDealingEncryptionKeyIdRetrievalError::KeyNotFound => {
+                    CspDkgLoadPrivateKeyError::KeyNotFoundError(KeyNotFoundError {
+                        internal_error: String::from("Missing DKG dealing encryption key"),
+                        key_id: String::from(
+                            "Public key not found, therefore the key id could not be derived",
+                        ),
+                    })
+                }
+                DkgDealingEncryptionKeyIdRetrievalError::MalformedPublicKey {
+                    key_bytes,
+                    details: description,
+                } => CspDkgLoadPrivateKeyError::MalformedPublicKeyError(MalformedDataError {
+                    algorithm: AlgorithmId::NiDkg_Groth20_Bls12_381,
+                    internal_error: description,
+                    data: Some(key_bytes),
+                }),
+                DkgDealingEncryptionKeyIdRetrievalError::TransientInternalError(details) => {
+                    CspDkgLoadPrivateKeyError::TransientInternalError(InternalError {
+                        internal_error: details,
+                    })
+                }
+            })?;
 
         self.csp_vault.load_threshold_signing_key(
             algorithm_id,
@@ -296,11 +287,12 @@ impl NiDkgCspClient for Csp {
     }
 }
 
-fn dkg_dealing_encryption_key_id<T: CspPublicKeyStore>(
-    csp: &T,
+fn dkg_dealing_encryption_key_id<T: PublicKeyStoreCspVault + ?Sized>(
+    vault: &T,
 ) -> Result<KeyId, DkgDealingEncryptionKeyIdRetrievalError> {
     let pk = CspFsEncryptionPublicKey::try_from(
-        csp.current_node_public_keys()
+        vault
+            .current_node_public_keys()
             .map_err(|error| match error {
                 CspPublicKeyStoreError::TransientInternalError(msg) => {
                     DkgDealingEncryptionKeyIdRetrievalError::TransientInternalError(msg)
@@ -525,12 +517,6 @@ pub mod specialise {
     //! type specialisations:
     use super::*;
     use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381 as g20_internal_types;
-
-    /// An error during specialisation
-    #[derive(Debug)]
-    pub struct SpecialisationError {
-        _unexpected_type_name: &'static str,
-    }
 
     /// Converts a secret key into a forward secure secret key set.
     ///

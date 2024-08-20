@@ -8,14 +8,14 @@ documentation.workspace = true
 
 [dependencies]
 arrayvec = { workspace = true }
-hex = "0.4.2"
+hex = { workspace = true }
 ic-protobuf = { path = "../../../../protobuf" }
 phantom_newtype = { path = "../../../../phantom_newtype" }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-thiserror = "1.0"
+thiserror = { workspace = true }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]

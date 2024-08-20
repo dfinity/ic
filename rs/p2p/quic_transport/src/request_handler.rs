@@ -14,14 +14,15 @@ use std::time::Duration;
 
 use axum::Router;
 use ic_base_types::NodeId;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{error, info, ReplicaLogger};
 use quinn::{Connection, RecvStream, SendStream};
 use tower::ServiceExt;
+use tracing::instrument;
 
 use crate::{
     metrics::{
         QuicTransportMetrics, ERROR_TYPE_ACCEPT, ERROR_TYPE_APP, ERROR_TYPE_FINISH,
-        ERROR_TYPE_READ, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI, STREAM_TYPE_UNI,
+        ERROR_TYPE_READ, ERROR_TYPE_STOPPED, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI, STREAM_TYPE_UNI,
     },
     utils::{read_request, write_response},
     ConnId,
@@ -44,17 +45,10 @@ pub(crate) async fn run_stream_acceptor(
     // A better approach will be to use a router implemented as a tower service and accept
     // streams iff the router is ready. Then the actual number of buffered messages is determined
     // by the handlers instead by the underlying implementation.
-    let mut bytes_sent = 0;
-    let mut bytes_received = 0;
     loop {
         tokio::select! {
              _ = quic_metrics_scrape.tick() => {
-                let cur_bytes_sent = connection.stats().udp_tx.bytes;
-                let cur_bytes_received = connection.stats().udp_rx.bytes;
-                metrics.collect_quic_connection_stats(&connection, &peer_id, cur_bytes_sent-bytes_sent, cur_bytes_received- bytes_received);
-                bytes_sent = cur_bytes_sent;
-                bytes_received= cur_bytes_received;
-
+                metrics.collect_quic_connection_stats(&connection, &peer_id);
             }
             uni = connection.accept_uni() => {
                 match uni {
@@ -131,6 +125,7 @@ pub(crate) async fn run_stream_acceptor(
     inflight_requests.shutdown().await;
 }
 
+#[instrument(skip(log, metrics, router, bi_tx, bi_rx))]
 async fn handle_bi_stream(
     log: ReplicaLogger,
     peer_id: NodeId,
@@ -140,10 +135,10 @@ async fn handle_bi_stream(
     mut bi_tx: SendStream,
     bi_rx: RecvStream,
 ) {
-    let mut request = match read_request(bi_rx, &metrics).await {
+    let mut request = match read_request(bi_rx).await {
         Ok(request) => request,
         Err(e) => {
-            info!(log, "Failed to read request from bidi stream: {}", e);
+            info!(every_n_seconds => 60, log, "Failed to read request from bidi stream: {}", e);
             metrics
                 .request_handle_errors_total
                 .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_READ])
@@ -175,22 +170,30 @@ async fn handle_bi_stream(
     // We can ignore the errors because if both peers follow the protocol an errors will only occur
     // if the other peer has closed the connection. In this case `accept_bi` in the peer event
     // loop will close this connection.
-    if let Err(e) = write_response(&mut bi_tx, response, &metrics).await {
-        info!(log, "Failed to write response to stream: {}", e);
+    if let Err(e) = write_response(&mut bi_tx, response).await {
+        info!(every_n_seconds => 60, log, "Failed to write response to stream: {}", e);
         metrics
             .request_handle_errors_total
             .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_WRITE])
             .inc();
     }
-    if let Err(e) = bi_tx.finish().await {
-        info!(log, "Failed to finish stream: {}", e.to_string());
+    if let Err(e) = bi_tx.finish() {
+        info!(every_n_seconds => 60, log, "Failed to finish stream: {}", e.to_string());
         metrics
             .request_handle_errors_total
             .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_FINISH])
             .inc();
     }
+    if let Err(e) = bi_tx.stopped().await {
+        info!(every_n_seconds => 60, log, "Failed to stop stream: {}", e.to_string());
+        metrics
+            .request_handle_errors_total
+            .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_STOPPED])
+            .inc();
+    }
 }
 
+#[instrument(skip(log, metrics, router, uni_rx))]
 async fn handle_uni_stream(
     log: ReplicaLogger,
     peer_id: NodeId,
@@ -199,10 +202,10 @@ async fn handle_uni_stream(
     router: Router,
     uni_rx: RecvStream,
 ) {
-    let mut request = match read_request(uni_rx, &metrics).await {
+    let mut request = match read_request(uni_rx).await {
         Ok(request) => request,
         Err(e) => {
-            info!(log, "Failed to read request from uni stream: {}", e);
+            info!(every_n_seconds => 60, log, "Failed to read request from uni stream: {}", e);
             metrics
                 .request_handle_errors_total
                 .with_label_values(&[STREAM_TYPE_UNI, ERROR_TYPE_READ])
@@ -214,14 +217,19 @@ async fn handle_uni_stream(
     request.extensions_mut().insert::<NodeId>(peer_id);
     request.extensions_mut().insert::<ConnId>(conn_id);
 
+    let response = router.oneshot(request).await.expect("Infallible");
     // Record application level errors.
-    if !router
-        .oneshot(request)
-        .await
-        .expect("Infallible")
-        .status()
-        .is_success()
-    {
+    if !response.status().is_success() {
+        let status = response.status();
+        let error = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .map(|b| String::from_utf8_lossy(&b).to_string())
+            .unwrap_or("Failed to get error string".to_string());
+
+        error!(
+            log,
+            "Application error for uni stream: status {} error {}", status, error
+        );
         metrics
             .request_handle_errors_total
             .with_label_values(&[STREAM_TYPE_UNI, ERROR_TYPE_APP])

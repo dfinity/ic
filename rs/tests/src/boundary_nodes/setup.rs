@@ -1,13 +1,12 @@
-use crate::{
+use ic_system_test_driver::{
     driver::{
         boundary_node::{BoundaryNode, BoundaryNodeVm},
         ic::{InternetComputer, Subnet},
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
-            retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            NnsInstallationBuilder, RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+            RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
     util::block_on,
@@ -75,7 +74,8 @@ pub fn setup_ic_with_bn(bn_name: &str, bn_https_config: BoundaryNodeHttpsConfig,
     }
     info!(log, "Polling registry ...");
     let registry = RegistryCanister::new(nns_node_urls);
-    let (latest, routes) = block_on(retry_async(
+    let (latest, routes) = block_on(ic_system_test_driver::retry_with_msg_async!(
+        "polling registry",
         &log,
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
@@ -89,7 +89,7 @@ pub fn setup_ic_with_bn(bn_name: &str, bn_https_config: BoundaryNodeHttpsConfig,
             let routes =
                 RoutingTable::try_from(routes).context("Failed to convert registry routes")?;
             Ok((latest, routes))
-        },
+        }
     ))
     .unwrap_or_else(|_| panic!("Failed to poll registry. This is not an Boundary Node error. It is a test environment issue."));
     info!(log, "Latest registry {latest}: {routes:?}");
@@ -126,7 +126,7 @@ pub fn setup_ic(env: TestEnv) {
         .with_node_provider(PrincipalId::from_str(TEST_PRINCIPAL).unwrap())
         .with_node_operator(PrincipalId::from_str(TEST_PRINCIPAL).unwrap())
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
-        .with_unassigned_nodes(2)
+        .with_unassigned_nodes(4)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
     let nns_node = env

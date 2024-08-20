@@ -1,7 +1,7 @@
-use crate::upgrade::ReplicaProcess;
 use crate::{
     catch_up_package_provider::CatchUpPackageProvider, process_manager::ProcessManager,
     registry_helper::RegistryHelper, ssh_access_manager::SshAccessParameters,
+    upgrade::ReplicaProcess,
 };
 use async_trait::async_trait;
 pub use ic_dashboard::Dashboard;
@@ -10,8 +10,10 @@ use ic_types::{
     consensus::HasHeight, hostos_version::HostosVersion, NodeId, RegistryVersion, ReplicaVersion,
     SubnetId,
 };
-use std::process::Command;
-use std::sync::{Arc, Mutex};
+use std::{
+    process::Command,
+    sync::{Arc, Mutex},
+};
 use tokio::sync::RwLock;
 
 const ORCHESTRATOR_DASHBOARD_PORT: u16 = 7070;
@@ -22,6 +24,7 @@ pub(crate) struct OrchestratorDashboard {
     node_id: NodeId,
     last_applied_ssh_parameters: Arc<RwLock<SshAccessParameters>>,
     last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
+    last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
     replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
     subnet_id: Arc<RwLock<Option<SubnetId>>>,
     replica_version: ReplicaVersion,
@@ -48,6 +51,7 @@ impl Dashboard for OrchestratorDashboard {
              scheduled upgrade: {}\n\
              {}\n\
              firewall config registry version: {}\n\
+             ipv4 config registry version: {}\n\
              {}\n\
              readonly keys: {}\n\
              backup keys: {}\n\
@@ -65,6 +69,7 @@ impl Dashboard for OrchestratorDashboard {
             self.get_scheduled_upgrade().await,
             self.get_local_cup_info(),
             *self.last_applied_firewall_version.read().await,
+            *self.last_applied_ipv4_config_version.read().await,
             self.display_last_applied_ssh_parameters().await,
             self.get_authorized_keys("readonly"),
             self.get_authorized_keys("backup"),
@@ -83,6 +88,7 @@ impl OrchestratorDashboard {
         node_id: NodeId,
         last_applied_ssh_parameters: Arc<RwLock<SshAccessParameters>>,
         last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
+        last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
         replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
         subnet_id: Arc<RwLock<Option<SubnetId>>>,
         replica_version: ReplicaVersion,
@@ -95,6 +101,7 @@ impl OrchestratorDashboard {
             node_id,
             last_applied_ssh_parameters,
             last_applied_firewall_version,
+            last_applied_ipv4_config_version,
             replica_process,
             subnet_id,
             replica_version,
@@ -158,16 +165,23 @@ impl OrchestratorDashboard {
     }
 
     fn get_local_cup_info(&self) -> String {
-        let (height, signed) = match self.cup_provider.get_local_cup() {
-            None => (String::from("None"), String::from("None")),
+        let (height, signed, hash) = match self.cup_provider.get_local_cup() {
+            None => (
+                String::from("None"),
+                String::from("None"),
+                String::from("None"),
+            ),
             Some(cup) => {
                 let height = cup.height().to_string();
                 let signed = cup.is_signed();
-                (height, signed.to_string())
+                let hash = cup.content.state_hash.get().0;
+                (height, signed.to_string(), hex::encode(hash))
             }
         };
-
-        format!("cup height: {}\ncup signed: {}", height, signed)
+        format!(
+            "cup height: {}\ncup signed: {}\ncup state hash: {}",
+            height, signed, hash
+        )
     }
 }
 

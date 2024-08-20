@@ -18,10 +18,21 @@ default:
   # https://docs.gitlab.com/ee/ci/yaml/#interruptible
   # Jobs can override this by setting `interruptible: false`.
   interruptible: true
+  artifacts:
+    expire_in: 3 days
+    when: always
+  image:
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:f3527253faea5555085c508e10e98ed276988b1b3cd6e63c249e03318cecb596"
+  tags:
+    - dfinity-ic
 
 variables:
   TEST_ES_HOSTNAMES: >-
     elasticsearch.testnet.dfinity.network:443
+  GIT_CLONE_PATH: $CI_BUILDS_DIR/clean/$CI_PROJECT_NAME
+  GET_SOURCES_ATTEMPTS: 5
+  GIT_DEPTH: 0  # Pull the complete repo initially
+  GIT_STRATEGY: "fetch"  # And then pull only new commits
 
 before_script:
   - |
@@ -57,6 +68,10 @@ before_script:
       docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
       docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
 
+      if [ "${NODE_NAME:-}" != "" ]; then
+          echo "NODE: $NODE_NAME"
+      fi
+
       # set ownership to ic-build container's user,
       # but ignore errors that happen due to git gc:
       #   `chown: changing ownership of '.git/shallow.lock': No such file or directory`
@@ -86,32 +101,6 @@ after_script:
     # Finish and collapse the after_script section
     echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
 
-.build-k8s:
-  extends:
-    - .ic-build-image
-  artifacts:
-    paths:
-      - "junit_data/*"
-      - "coredumps/*.txt"
-      - "coredumps/*.gz"
-    when: always
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0  # Pull the complete repo initially
-    GIT_STRATEGY: "fetch"  # And then pull only new commits
-
-# Container images used by jobs.
-
-.ic-build-image:
-  artifacts:
-    expire_in: 3 days
-  image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:faf4659295a243194eba5d02a551c0a703d9f0983febf53fe833672ffde5143d"
-  tags:
-    - dfinity-ic
-  variables:
-    GIT_CLONE_PATH: $CI_BUILDS_DIR/clean/$CI_PROJECT_NAME
-
 # 1. If on the RC branch and "hotfix" (case insensitive) is in the commit message,
 #    then allow manual execution of prod hourly and nightly tests.
 # 2. Otherwise, if on the RC branch then perform automatic execution of prod hourly and nightly
@@ -138,9 +127,34 @@ after_script:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
 
+.rules-master-pipeline-no-merge-train-rust-bazel-changed:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
+      changes:
+        - ".bazelrc"
+        - ".bazelversion"
+        - "**/*.bazel"
+        - "**/*.bzl"
+        - "**/*.lock"
+        - "**/*.rs"
+        - "**/*.toml"
+        - "gitlab-ci/container/Dockerfile"
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
+
 .rules-master-pipeline-and-merge-request:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
+
+.rules-master-pipeline-and-merge-request-rust-changed:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - "**/*.rs"
+        - "**/*.toml"
+        - "**/*.lock"
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
 

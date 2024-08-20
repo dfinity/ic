@@ -5,12 +5,15 @@ use dfn_core::{
     endpoint::{over, over_async},
     stable,
 };
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResult,
-    management_canister_client::{ManagementCanisterClient, ManagementCanisterClientImpl},
+    management_canister_client::{
+        LimitedOutstandingCallsManagementCanisterClient, ManagementCanisterClient,
+        ManagementCanisterClientImpl,
+    },
 };
 use ic_nervous_system_common::serve_metrics;
 use ic_nervous_system_root::{
@@ -21,8 +24,13 @@ use ic_nervous_system_root::{
     LOG_PREFIX,
 };
 use ic_nervous_system_runtime::DfnRuntime;
-use ic_nns_common::{access_control::check_caller_is_governance, types::CallCanisterProposal};
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_common::{
+    access_control::{check_caller_is_governance, check_caller_is_sns_w},
+    types::CallCanisterProposal,
+};
+use ic_nns_constants::{
+    ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID,
+};
 use ic_nns_handler_root::{
     canister_management, encode_metrics,
     root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot},
@@ -30,10 +38,34 @@ use ic_nns_handler_root::{
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
+    UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
 };
+use std::cell::RefCell;
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+
+thread_local! {
+    // How this value was chosen: queues become full at 500. This is 1/3 of that, which seems to be
+    // a reasonable balance.
+    static AVAILABLE_MANAGEMENT_CANISTER_CALL_SLOT_COUNT: RefCell<u64> = const { RefCell::new(167) };
+}
+
+fn new_management_canister_client() -> impl ManagementCanisterClient {
+    let client =
+        ManagementCanisterClientImpl::<DfnRuntime>::new(Some(&PROXIED_CANISTER_CALLS_TRACKER));
+
+    // Here, VIP = is an NNS canister
+    let is_caller_vip = CanisterId::try_from(caller())
+        .map(|caller| ALL_NNS_CANISTER_IDS.contains(&&caller))
+        .unwrap_or(false);
+
+    LimitedOutstandingCallsManagementCanisterClient::new(
+        client,
+        &AVAILABLE_MANAGEMENT_CANISTER_CALL_SLOT_COUNT,
+        is_caller_vip,
+    )
+}
 
 // canister_init and canister_post_upgrade are needed here
 // to ensure that printer hook is set up, otherwise error
@@ -69,8 +101,8 @@ fn canister_status() {
 
 #[candid_method(update, rename = "canister_status")]
 async fn canister_status_(canister_id_record: CanisterIdRecord) -> CanisterStatusResult {
-    let client =
-        ManagementCanisterClientImpl::<DfnRuntime>::new(Some(&PROXIED_CANISTER_CALLS_TRACKER));
+    let client = new_management_canister_client();
+
     let canister_status_response = client
         .canister_status(canister_id_record)
         .await
@@ -83,10 +115,13 @@ async fn canister_status_(canister_id_record: CanisterIdRecord) -> CanisterStatu
 fn submit_root_proposal_to_upgrade_governance_canister() {
     over_async(
         candid,
-        |(expected_governance_wasm_sha, proposal): (Vec<u8>, ChangeCanisterRequest)| {
+        |(expected_governance_wasm_sha, proposal): (
+            serde_bytes::ByteBuf,
+            ChangeCanisterRequest,
+        )| {
             ic_nns_handler_root::root_proposals::submit_root_proposal_to_upgrade_governance_canister(
                 caller(),
-                expected_governance_wasm_sha,
+                expected_governance_wasm_sha.to_vec(),
                 proposal,
             )
         },
@@ -97,11 +132,15 @@ fn submit_root_proposal_to_upgrade_governance_canister() {
 fn vote_on_root_proposal_to_upgrade_governance_canister() {
     over_async(
         candid,
-        |(proposer, wasm_sha256, ballot): (PrincipalId, Vec<u8>, RootProposalBallot)| {
+        |(proposer, wasm_sha256, ballot): (
+            PrincipalId,
+            serde_bytes::ByteBuf,
+            RootProposalBallot,
+        )| {
             ic_nns_handler_root::root_proposals::vote_on_root_proposal_to_upgrade_governance_canister(
                 caller(),
                 proposer,
-                wasm_sha256,
+                wasm_sha256.to_vec(),
                 ballot,
             )
         },
@@ -136,7 +175,17 @@ fn change_nns_canister_(request: ChangeCanisterRequest) {
 
     // Because change_canister is async, and because we can't directly use
     // `await`, we need to use the `spawn` trick.
-    let future = change_canister::<DfnRuntime>(request);
+    let future = async move {
+        let change_canister_result = change_canister::<DfnRuntime>(request).await;
+        match change_canister_result {
+            Ok(()) => {
+                println!("{LOG_PREFIX}change_canister: Canister change completed successfully.");
+            }
+            Err(err) => {
+                println!("{LOG_PREFIX}change_canister: Canister change failed: {err}");
+            }
+        };
+    };
 
     // Starts the proposal execution, which will continue after this function has
     // returned.
@@ -196,6 +245,7 @@ fn call_canister() {
 /// by SNS-W.
 #[export_name = "canister_update change_canister_controllers"]
 fn change_canister_controllers() {
+    check_caller_is_sns_w();
     over_async(candid_one, change_canister_controllers_)
 }
 
@@ -207,8 +257,26 @@ async fn change_canister_controllers_(
 ) -> ChangeCanisterControllersResponse {
     canister_management::change_canister_controllers(
         change_canister_controllers_request,
-        caller(),
-        &mut ManagementCanisterClientImpl::<DfnRuntime>::new(Some(&PROXIED_CANISTER_CALLS_TRACKER)),
+        &mut new_management_canister_client(),
+    )
+    .await
+}
+
+/// Updates the canister settings of a canister controlled by NNS Root. Only callable by NNS
+/// Governance.
+#[export_name = "canister_update update_canister_settings"]
+fn update_canister_settings() {
+    check_caller_is_governance();
+    over_async(candid_one, update_canister_settings_);
+}
+
+#[candid_method(update, rename = "update_canister_settings")]
+async fn update_canister_settings_(
+    update_settings: UpdateCanisterSettingsRequest,
+) -> UpdateCanisterSettingsResponse {
+    canister_management::update_canister_settings(
+        update_settings,
+        &mut new_management_canister_client(),
     )
     .await
 }
@@ -277,7 +345,7 @@ mod tests {
             *DECLARED_INTERFACE, *IMPLEMENTED_INTERFACE,
             "Generated candid definition does not match canister/root.did. \
              Run `bazel run :generate_did > canister/root.did` (no nix and/or direnv) in \
-             rs/sns/root to update canister/root.did."
+             rs/nns/handlers/root/impl/ to update canister/root.did."
         );
     }
 

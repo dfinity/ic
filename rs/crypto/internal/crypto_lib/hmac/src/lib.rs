@@ -1,6 +1,6 @@
-//! HMAC message authentication code
+//! HMAC message authentication code and HKDF
 //!
-//! This crate supports HMAC with SHA-224, SHA-256, and SHA-512
+//! This crate supports HMAC and HKDF with SHA-224, SHA-256, and SHA-512
 //! # Examples
 //!
 //! ```
@@ -22,6 +22,7 @@ const OPAD: u8 = 0x5C;
 /// Represents a hash function which can be used with HMAC
 pub trait HmacHashFunction {
     const BLOCK_SIZE: usize;
+    const OUTPUT_LENGTH: usize;
 
     fn new() -> Self;
     fn update(&mut self, data: &[u8]);
@@ -33,6 +34,7 @@ pub trait HmacHashFunction {
 
 impl HmacHashFunction for Sha224 {
     const BLOCK_SIZE: usize = 64;
+    const OUTPUT_LENGTH: usize = 28;
 
     fn new() -> Self {
         Sha224::new()
@@ -47,6 +49,7 @@ impl HmacHashFunction for Sha224 {
 
 impl HmacHashFunction for Sha256 {
     const BLOCK_SIZE: usize = 64;
+    const OUTPUT_LENGTH: usize = 32;
 
     fn new() -> Self {
         Sha256::new()
@@ -61,6 +64,7 @@ impl HmacHashFunction for Sha256 {
 
 impl HmacHashFunction for Sha512 {
     const BLOCK_SIZE: usize = 128;
+    const OUTPUT_LENGTH: usize = 64;
 
     fn new() -> Self {
         Sha512::new()
@@ -145,4 +149,61 @@ impl<H: HmacHashFunction> Hmac<H> {
         outer_hash.update(&inner_digest);
         outer_hash.finish()
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum HkdfError {
+    RequestedOutputTooLong,
+}
+
+/// HMAC-based Key Derivation Function (HKDF)
+///
+/// See [RFC 5869](https://datatracker.ietf.org/doc/html/rfc5869) for the specification
+pub fn hkdf<H: HmacHashFunction>(
+    output_len: usize,
+    key_material: &[u8],
+    salt: &[u8],
+    info: &[u8],
+) -> Result<Vec<u8>, HkdfError> {
+    if output_len == 0 {
+        // nothing to do
+        return Ok(vec![]);
+    }
+
+    if output_len > 255 * H::OUTPUT_LENGTH {
+        return Err(HkdfError::RequestedOutputTooLong);
+    }
+
+    // Step 1. HKDF-Extract
+    //
+    // PRK = HMAC-Hash(salt, IKM)
+    let prk = Hmac::<H>::hmac(salt, key_material);
+
+    // Step 2. HKDF-Expand(PRK, info, L) -> OKM
+
+    let blocks = (output_len + H::OUTPUT_LENGTH - 1) / H::OUTPUT_LENGTH;
+
+    let mut prev_t: Option<Vec<u8>> = None;
+
+    let mut output = vec![0u8; output_len];
+
+    for i in 0..blocks {
+        let mut hmac = Hmac::<H>::new(&prk);
+        if let Some(ref prev_t) = prev_t {
+            hmac.write(prev_t);
+        }
+        hmac.write(info);
+        hmac.write(&[(i + 1) as u8]);
+
+        let t = hmac.finish();
+
+        let remaining = std::cmp::min(H::OUTPUT_LENGTH, output_len - i * H::OUTPUT_LENGTH);
+
+        output[i * H::OUTPUT_LENGTH..i * H::OUTPUT_LENGTH + remaining]
+            .copy_from_slice(&t[..remaining]);
+
+        prev_t = Some(t);
+    }
+
+    Ok(output)
 }

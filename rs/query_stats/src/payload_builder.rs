@@ -1,9 +1,11 @@
-use crate::metrics::QueryStatsPayloadBuilderMetrics;
+use crate::{
+    metrics::QueryStatsPayloadBuilderMetrics, state_machine::get_stats_for_node_id_and_epoch,
+};
 use crossbeam_channel::{Receiver, TryRecvError};
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
-    consensus::{PayloadPermanentError, PayloadTransientError, PayloadValidationError},
-    query_stats::{QueryStatsPermanentValidationError, QueryStatsTransientValidationError},
+    consensus::{self, PayloadValidationError},
+    query_stats::{InvalidQueryStatsPayloadReason, QueryStatsPayloadValidationFailure},
     validation::ValidationError,
 };
 use ic_interfaces_state_manager::StateReader;
@@ -11,7 +13,7 @@ use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    batch::{LocalQueryStats, QueryStatsPayload, ValidationContext, ENABLE_QUERY_STATS},
+    batch::{LocalQueryStats, QueryStats, QueryStatsPayload, ValidationContext},
     epoch_from_height, CanisterId, Height, NodeId, NumBytes, QueryStatsEpoch,
 };
 use std::{
@@ -78,11 +80,24 @@ impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
             .start_timer();
 
         match self.receiver.try_recv() {
-            Ok(new_epoch) => {
-                let Ok(mut epoch) = self.current_stats.write() else {
+            Ok(new_stats) => {
+                let Ok(mut current_stats) = self.current_stats.write() else {
                     return vec![];
                 };
-                *epoch = Some(new_epoch);
+                *current_stats = Some(new_stats);
+
+                // Update the metrics about the received metrics
+                if let Some(current_stats) = current_stats.as_ref() {
+                    let mut report = QueryStats::default();
+                    current_stats
+                        .stats
+                        .iter()
+                        .for_each(|next_stats| report.saturating_accumulate(&next_stats.stats));
+
+                    self.metrics
+                        .query_stats_payload_builder_current
+                        .add(&report);
+                };
             }
             Err(TryRecvError::Empty) => (),
             Err(TryRecvError::Disconnected) => {
@@ -94,10 +109,10 @@ impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
             }
         }
 
-        match ENABLE_QUERY_STATS {
-            true => self.build_payload_impl(height, max_size, past_payloads, context),
-            false => vec![],
+        if !self.enabled {
+            return vec![];
         }
+        self.build_payload_impl(height, max_size, past_payloads, context)
     }
 
     fn validate_payload(
@@ -120,9 +135,9 @@ impl BatchPayloadBuilder for QueryStatsPayloadBuilderImpl {
 
         // Check whether feature is enabled and reject if it isn't.
         // NOTE: All payloads that are processed at this point are non-empty
-        if !ENABLE_QUERY_STATS {
-            return Err(transient_error(
-                QueryStatsTransientValidationError::Disabled,
+        if !self.enabled {
+            return Err(validation_failed(
+                QueryStatsPayloadValidationFailure::Disabled,
             ));
         }
 
@@ -138,10 +153,6 @@ impl QueryStatsPayloadBuilderImpl {
         past_payloads: &[PastPayload],
         context: &ValidationContext,
     ) -> Vec<u8> {
-        if !self.enabled {
-            return vec![];
-        }
-
         let Ok(current_stats) = self.current_stats.read() else {
             return vec![];
         };
@@ -182,7 +193,11 @@ impl QueryStatsPayloadBuilderImpl {
             .iter()
             .filter(|stats| !previous_ids.contains(&stats.canister_id))
             .cloned()
-            .collect();
+            .collect::<Vec<_>>();
+
+        if messages.is_empty() {
+            return vec![];
+        }
 
         self.metrics
             .query_stats_payload_builder_current_epoch
@@ -213,16 +228,16 @@ impl QueryStatsPayloadBuilderImpl {
             Ok(Some(payload)) => payload,
             Ok(None) => return Ok(()),
             Err(err) => {
-                return Err(permanent_error(
-                    QueryStatsPermanentValidationError::DeserializationFailed(err),
+                return Err(invalid_artifact(
+                    InvalidQueryStatsPayloadReason::DeserializationFailed(err),
                 ))
             }
         };
 
         // Check that nodeid is actually in subnet
         if proposal_context.proposer != payload.proposer {
-            return Err(permanent_error(
-                QueryStatsPermanentValidationError::InvalidNodeId {
+            return Err(invalid_artifact(
+                InvalidQueryStatsPayloadReason::InvalidNodeId {
                     expected: proposal_context.proposer,
                     reported: payload.proposer,
                 },
@@ -235,10 +250,10 @@ impl QueryStatsPayloadBuilderImpl {
             self.epoch_length,
         );
         if payload.epoch > max_valid_epoch {
-            return Err(permanent_error(
-                QueryStatsPermanentValidationError::EpochTooHigh {
-                    expected: max_valid_epoch,
-                    reported: payload.epoch,
+            return Err(invalid_artifact(
+                InvalidQueryStatsPayloadReason::EpochTooHigh {
+                    max_valid_epoch,
+                    payload_epoch: payload.epoch,
                 },
             ));
         }
@@ -247,8 +262,8 @@ impl QueryStatsPayloadBuilderImpl {
         let mut seen_ids = BTreeSet::new();
         for id in payload.stats.iter().map(|stat| stat.canister_id) {
             if seen_ids.contains(&id) {
-                return Err(permanent_error(
-                    QueryStatsPermanentValidationError::DuplicateCanisterId(id),
+                return Err(invalid_artifact(
+                    InvalidQueryStatsPayloadReason::DuplicateCanisterId(id),
                 ));
             } else {
                 seen_ids.insert(id);
@@ -275,8 +290,8 @@ impl QueryStatsPayloadBuilderImpl {
                 self.log,
                 "Found duplicate CanisterId {:?} in payload", canister_id
             );
-            return Err(permanent_error(
-                QueryStatsPermanentValidationError::DuplicateCanisterId(canister_id),
+            return Err(invalid_artifact(
+                InvalidQueryStatsPayloadReason::DuplicateCanisterId(canister_id),
             ));
         }
 
@@ -306,8 +321,8 @@ impl QueryStatsPayloadBuilderImpl {
                     "StateManager doesn't have state for height {}: {:?}", certified_height, err
                 );
 
-                return Err(transient_error(
-                    QueryStatsTransientValidationError::StateUnavailable(err),
+                return Err(validation_failed(
+                    QueryStatsPayloadValidationFailure::StateUnavailable(err),
                 ));
             }
         }
@@ -321,33 +336,36 @@ impl QueryStatsPayloadBuilderImpl {
         let mut previous_ids = BTreeSet::<CanisterId>::new();
 
         // Check that the epoch we are requesting has not been aggregated yet
-        if epoch < state_stats.epoch.unwrap_or(0.into()) {
+        // If there is no `highest_aggregated_epoch` in the state, we have not aggregated
+        // any epochs, therefore we unwrap to `false`
+        if state_stats
+            .highest_aggregated_epoch
+            .map(|highest_aggregated_epoch| epoch <= highest_aggregated_epoch)
+            .unwrap_or(false)
+        {
             warn!(
                 every_n_seconds => 5,
                 self.log,
                 "QueryStats: requesting previous_ids for epoch {:?} that is below aggregated epoch {:?}",
                 epoch,
-                state_stats.epoch
+                state_stats.highest_aggregated_epoch
             );
 
-            return Err(permanent_error(
-                QueryStatsPermanentValidationError::EpochAlreadyAggregated {
-                    expected: state_stats.epoch.unwrap_or(0.into()),
-                    reported: epoch,
+            return Err(invalid_artifact(
+                InvalidQueryStatsPayloadReason::EpochAlreadyAggregated {
+                    highest_aggregated_epoch: state_stats
+                        .highest_aggregated_epoch
+                        .unwrap_or(0.into()),
+                    payload_epoch: epoch,
                 },
             ));
         }
 
-        // Check the certified state for stats already sent
-        // Skip if certified state is not the same epoch
-        if state_stats.epoch == Some(epoch) {
-            previous_ids.extend(
-                state_stats
-                    .stats
-                    .iter()
-                    .filter(|(_, stat_map)| stat_map.contains_key(&node_id))
-                    .map(|(canister_id, _)| canister_id),
-            );
+        // Check the certified state for stats that we have already sent
+        if let Some(state_stats) = get_stats_for_node_id_and_epoch(state_stats, &node_id, &epoch)
+            .map(|record| record.iter().map(|(canister_id, _)| canister_id))
+        {
+            previous_ids.extend(state_stats);
         }
 
         // Check past payloads for stats already sent
@@ -383,22 +401,29 @@ impl QueryStatsPayloadBuilderImpl {
     }
 }
 
-fn transient_error(err: QueryStatsTransientValidationError) -> PayloadValidationError {
-    ValidationError::Transient(PayloadTransientError::QueryStatsPayloadValidationError(err))
+fn validation_failed(err: QueryStatsPayloadValidationFailure) -> PayloadValidationError {
+    ValidationError::ValidationFailed(
+        consensus::PayloadValidationFailure::QueryStatsPayloadValidationFailed(err),
+    )
 }
 
-fn permanent_error(err: QueryStatsPermanentValidationError) -> PayloadValidationError {
-    ValidationError::Permanent(PayloadPermanentError::QueryStatsPayloadValidationError(err))
+fn invalid_artifact(reason: InvalidQueryStatsPayloadReason) -> PayloadValidationError {
+    ValidationError::InvalidArtifact(consensus::InvalidPayloadReason::InvalidQueryStatsPayload(
+        reason,
+    ))
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_interfaces::consensus::InvalidPayloadReason;
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities::{mock_time, state::ReplicatedStateBuilder};
+    use ic_test_utilities_state::ReplicatedStateBuilder;
     use ic_types::{
         batch::{CanisterQueryStats, QueryStats, RawQueryStats},
         crypto::{CryptoHash, CryptoHashOf},
+        time::UNIX_EPOCH,
         RegistryVersion,
     };
     use ic_types_test_utils::ids::{canister_test_id, node_test_id};
@@ -408,7 +433,7 @@ mod tests {
 
     /// Test simple inclusion of a stat
     ///
-    /// - Put statistics of one canister into `current_stats`  
+    /// - Put statistics of one canister into `current_stats`
     /// - Build a payload
     /// - Check that the statistic is in the build payload
     #[test]
@@ -474,7 +499,12 @@ mod tests {
     #[test]
     fn past_payload_test() {
         let test_stats = test_epoch_stats(0, 500);
-        let state = test_state(epoch_stats_for_state(&test_stats, 0..200, node_test_id(1)));
+        let state = test_state(epoch_stats_for_state(
+            &test_stats,
+            0..200,
+            node_test_id(1),
+            None,
+        ));
         let payload_builder = setup_payload_builder_impl(state, test_stats.clone());
         let validation_context = test_validation_context();
         let proposal_context = test_proposal_context(&validation_context);
@@ -516,8 +546,8 @@ mod tests {
     fn node_id_check_test() {
         let test_stats = test_epoch_stats(0, 500);
 
-        let stats1 = epoch_stats_for_state(&test_stats, 0..100, node_test_id(1));
-        let stats2 = epoch_stats_for_state(&test_stats, 100..200, node_test_id(2));
+        let stats1 = epoch_stats_for_state(&test_stats, 0..100, node_test_id(1), None);
+        let stats2 = epoch_stats_for_state(&test_stats, 100..200, node_test_id(2), None);
         let stats = merge_raw_query_stats(stats1, stats2);
         let state = test_state(stats);
 
@@ -576,9 +606,9 @@ mod tests {
             payload_builder.validate_payload_impl(Height::new(1), &proposal_context, &payload, &[]);
 
         match validation_result {
-            Err(ValidationError::Permanent(
-                PayloadPermanentError::QueryStatsPayloadValidationError(
-                    QueryStatsPermanentValidationError::InvalidNodeId { expected, reported },
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidQueryStatsPayload(
+                    InvalidQueryStatsPayloadReason::InvalidNodeId { expected, reported },
                 ),
             )) if expected == node_test_id(1) && reported == node_test_id(2) => (),
             Err(err) => panic!(
@@ -593,7 +623,12 @@ mod tests {
     #[test]
     fn epoch_too_low_test() {
         let test_stats = test_epoch_stats(1234, 100);
-        let state = test_state(epoch_stats_for_state(&test_stats, 0..100, node_test_id(1)));
+        let state = test_state(epoch_stats_for_state(
+            &test_stats,
+            0..100,
+            node_test_id(1),
+            Some(1234),
+        ));
         let payload_builder = setup_payload_builder_impl(state, test_stats);
         let validation_context = test_validation_context();
         let proposal_context = test_proposal_context(&validation_context);
@@ -612,15 +647,15 @@ mod tests {
             payload_builder.validate_payload_impl(Height::new(1), &proposal_context, &payload, &[]);
 
         match validation_result {
-            Err(ValidationError::Permanent(
-                PayloadPermanentError::QueryStatsPayloadValidationError(
-                    QueryStatsPermanentValidationError::EpochAlreadyAggregated {
-                        expected,
-                        reported,
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidQueryStatsPayload(
+                    InvalidQueryStatsPayloadReason::EpochAlreadyAggregated {
+                        highest_aggregated_epoch,
+                        payload_epoch,
                     },
                 ),
-            )) if expected == QueryStatsEpoch::new(1234) && reported == QueryStatsEpoch::new(0) => {
-            }
+            )) if highest_aggregated_epoch == QueryStatsEpoch::new(1234)
+                && payload_epoch == QueryStatsEpoch::new(0) => {}
             Err(err) => panic!(
                 "QueryStatsPayload had epoch too low, yet instead got error {:?}",
                 err
@@ -652,9 +687,12 @@ mod tests {
             payload_builder.validate_payload_impl(Height::new(1), &proposal_context, &payload, &[]);
 
         match validation_result {
-            Err(ValidationError::Permanent(
-                PayloadPermanentError::QueryStatsPayloadValidationError(
-                    QueryStatsPermanentValidationError::EpochTooHigh { expected, reported },
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidQueryStatsPayload(
+                    InvalidQueryStatsPayloadReason::EpochTooHigh {
+                        max_valid_epoch: expected,
+                        payload_epoch: reported,
+                    },
                 ),
             )) if expected == QueryStatsEpoch::new(0) && reported == QueryStatsEpoch::new(1234) => {
             }
@@ -675,7 +713,12 @@ mod tests {
     #[test]
     fn duplicate_id_test() {
         let test_stats = test_epoch_stats(0, 4);
-        let state = test_state(epoch_stats_for_state(&test_stats, 0..1, node_test_id(1)));
+        let state = test_state(epoch_stats_for_state(
+            &test_stats,
+            0..1,
+            node_test_id(1),
+            None,
+        ));
         let payload_builder = setup_payload_builder_impl(state, test_stats.clone());
         let validation_context = test_validation_context();
         let proposal_context = test_proposal_context(&validation_context);
@@ -703,9 +746,9 @@ mod tests {
 
             match validation_result {
                 Ok(_) if id >= 3 => (),
-                Err(ValidationError::Permanent(
-                    PayloadPermanentError::QueryStatsPayloadValidationError(
-                        QueryStatsPermanentValidationError::DuplicateCanisterId(canister_id),
+                Err(ValidationError::InvalidArtifact(
+                    InvalidPayloadReason::InvalidQueryStatsPayload(
+                        InvalidQueryStatsPayloadReason::DuplicateCanisterId(canister_id),
                     ),
                 )) if canister_id == canister_test_id(id as u64) => (),
                 Err(err) => panic!(
@@ -724,7 +767,7 @@ mod tests {
         ValidationContext {
             registry_version: RegistryVersion::new(0),
             certified_height: Height::new(0),
-            time: mock_time(),
+            time: UNIX_EPOCH,
         }
     }
 
@@ -799,23 +842,34 @@ mod tests {
         query_stats: &LocalQueryStats,
         range: Range<usize>,
         node: NodeId,
+        highest_aggregated_epoch: Option<u64>,
     ) -> RawQueryStats {
+        let stats = vec![(
+            node,
+            vec![(
+                query_stats.epoch,
+                query_stats.stats[range]
+                    .iter()
+                    .map(|stat| (stat.canister_id, stat.stats.clone()))
+                    .collect(),
+            )]
+            .into_iter()
+            .collect(),
+        )]
+        .into_iter()
+        .collect();
+
         RawQueryStats {
-            epoch: Some(query_stats.epoch),
-            stats: query_stats.stats[range]
-                .iter()
-                .map(|stat| {
-                    (
-                        stat.canister_id,
-                        [(node, stat.stats.clone())].into_iter().collect(),
-                    )
-                })
-                .collect(),
+            highest_aggregated_epoch: highest_aggregated_epoch.map(QueryStatsEpoch::new),
+            stats,
         }
     }
 
     fn merge_raw_query_stats(mut stats1: RawQueryStats, stats2: RawQueryStats) -> RawQueryStats {
-        assert_eq!(stats1.epoch, stats2.epoch);
+        assert_eq!(
+            stats1.highest_aggregated_epoch,
+            stats2.highest_aggregated_epoch
+        );
 
         for (canister_id, stat2) in stats2.stats {
             stats1
@@ -845,7 +899,7 @@ mod tests {
     fn as_past_payload(payload: &[u8], height: u64) -> PastPayload {
         PastPayload {
             height: Height::from(height),
-            time: mock_time() + Duration::from_nanos(10 * height),
+            time: UNIX_EPOCH + Duration::from_nanos(10 * height),
             block_hash: CryptoHashOf::from(CryptoHash(vec![])),
             payload,
         }

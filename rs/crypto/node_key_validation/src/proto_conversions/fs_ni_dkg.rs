@@ -34,7 +34,6 @@ fn clib_fs_ni_dkg_pubkey_from_csp_pubkey_with_pop(
             CspFsEncryptionPublicKey::Groth20_Bls12_381(pubkey),
             CspFsEncryptionPop::Groth20WithPop_Bls12_381(pop),
         ) => ClibFsNiDkgPublicKey::deserialize(pubkey, pop),
-        _ => None,
     }
 }
 

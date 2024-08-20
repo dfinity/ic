@@ -1,14 +1,14 @@
 use crate::objects::{Object, ObjectMap};
 use anyhow::{anyhow, Context};
 use candid::Principal;
+use ic_types::{CanisterId, PrincipalId};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::str::FromStr;
 
 /// The network_identifier specifies which network a particular object is
 /// associated with.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct NetworkIdentifier {
     pub blockchain: String,
 
@@ -33,11 +33,21 @@ impl NetworkIdentifier {
     }
 }
 
+impl TryFrom<&NetworkIdentifier> for CanisterId {
+    type Error = anyhow::Error;
+    fn try_from(value: &NetworkIdentifier) -> Result<Self, Self::Error> {
+        let principal_bytes: Vec<u8> =
+            hex::decode(&value.network).context("Hex decoding of network string failed")?;
+        let principal_id =
+            PrincipalId::try_from(&principal_bytes).context("Invalid principal id")?;
+        CanisterId::try_from(principal_id).context("Invalid canister id")
+    }
+}
+
 /// In blockchains with sharded state, the SubNetworkIdentifier is required to
 /// query some object on a specific shard. This identifier is optional for all
 /// non-sharded blockchains.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct SubNetworkIdentifier {
     pub network: String,
 
@@ -56,7 +66,6 @@ impl SubNetworkIdentifier {
 
 /// The block_identifier uniquely identifies a block in a particular network.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct BlockIdentifier {
     /// This is also known as the block height.
     pub index: u64,
@@ -95,7 +104,6 @@ impl TryFrom<BlockIdentifier> for ByteBuf {
 /// the index or hash. If neither property is specified, it is assumed that the
 /// client is making a request at the current block.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct PartialBlockIdentifier {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub index: Option<u64>,
@@ -130,7 +138,6 @@ impl From<BlockIdentifier> for PartialBlockIdentifier {
 /// The transaction_identifier uniquely identifies a transaction in a particular
 /// network and block or in the mempool.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct TransactionIdentifier {
     /// Any transactions that are attributable only to a block (ex: a block event) should use the hash of the block as the identifier. This should be normalized according to the case specified in the transaction_hash_case in network options.
     pub hash: String,
@@ -161,8 +168,7 @@ impl TryFrom<TransactionIdentifier> for ByteBuf {
 
 /// The operation_identifier uniquely identifies an operation within a
 /// transaction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct OperationIdentifier {
     /// The operation index is used to ensure each operation has a unique
     /// identifier within a transaction. This index is only relative to the
@@ -193,7 +199,6 @@ impl OperationIdentifier {
 /// fields in the account_identifier are utilized to determine this uniqueness
 /// (including the metadata field, if populated).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct AccountIdentifier {
     /// The address may be a cryptographic public key (or some encoding of it)
     /// or a provided username.
@@ -210,20 +215,10 @@ pub struct AccountIdentifier {
     pub metadata: Option<ObjectMap>,
 }
 
-impl AccountIdentifier {
-    pub fn new(address: String, subaccount: Option<String>) -> AccountIdentifier {
-        AccountIdentifier {
-            address,
-            sub_account: subaccount.map(SubAccountIdentifier::new),
-            metadata: None,
-        }
-    }
-}
-
-impl TryInto<icrc_ledger_types::icrc1::account::Account> for AccountIdentifier {
+impl TryFrom<AccountIdentifier> for icrc_ledger_types::icrc1::account::Account {
     type Error = anyhow::Error;
-    fn try_into(self) -> Result<icrc_ledger_types::icrc1::account::Account, Self::Error> {
-        let subaccount: Option<[u8; 32]> = match self.sub_account.as_ref() {
+    fn try_from(value: AccountIdentifier) -> Result<Self, Self::Error> {
+        let subaccount: Option<[u8; 32]> = match value.sub_account.as_ref() {
             None => None,
             Some(sub_acc) => Some(hex::decode(&sub_acc.address)?.try_into().map_err(|_| {
                 anyhow!(
@@ -233,10 +228,10 @@ impl TryInto<icrc_ledger_types::icrc1::account::Account> for AccountIdentifier {
             })?),
         };
         Ok(icrc_ledger_types::icrc1::account::Account {
-            owner: Principal::from_str(&self.address).with_context(|| {
+            owner: Principal::from_str(&value.address).with_context(|| {
                 format!(
                     "Unable to convert accountidentifier.address {:?} to Principal",
-                    &self.address
+                    &value.address
                 )
             })?,
             subaccount,
@@ -248,8 +243,8 @@ impl From<icrc_ledger_types::icrc1::account::Account> for AccountIdentifier {
     fn from(value: icrc_ledger_types::icrc1::account::Account) -> Self {
         Self {
             address: value.owner.to_string(),
-            sub_account: value.subaccount.map(|s| SubAccountIdentifier {
-                address: hex::encode(s),
+            sub_account: Some(SubAccountIdentifier {
+                address: hex::encode(value.effective_subaccount()),
                 metadata: None,
             }),
             metadata: None,
@@ -261,7 +256,6 @@ impl From<icrc_ledger_types::icrc1::account::Account> for AccountIdentifier {
 /// and/or a stake (delegated balance). The sub_account_identifier should
 /// specify which state (if applicable) an account instantiation refers to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct SubAccountIdentifier {
     /// The SubAccount address may be a cryptographic value or some other
     /// identifier (ex: bonded) that uniquely specifies a SubAccount.
@@ -275,18 +269,8 @@ pub struct SubAccountIdentifier {
     pub metadata: Option<ObjectMap>,
 }
 
-impl SubAccountIdentifier {
-    pub fn new(address: String) -> SubAccountIdentifier {
-        SubAccountIdentifier {
-            address,
-            metadata: None,
-        }
-    }
-}
-
 /// CoinIdentifier uniquely identifies a Coin.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct CoinIdentifier {
     /// Identifier should be populated with a globally unique identifier of a
     /// Coin. In Bitcoin, this identifier would be transaction_hash:index.

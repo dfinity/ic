@@ -180,8 +180,8 @@ pub struct GetSuccessorsResponseComplete {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetSuccessorsReject {
-    #[prost(uint64, tag = "1")]
-    pub reject_code: u64,
+    #[prost(enumeration = "super::super::types::v1::RejectCode", tag = "3")]
+    pub reject_code: i32,
     #[prost(string, tag = "2")]
     pub message: ::prost::alloc::string::String,
 }
@@ -190,8 +190,8 @@ pub struct GetSuccessorsReject {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SendTransactionReject {
-    #[prost(uint64, tag = "1")]
-    pub reject_code: u64,
+    #[prost(enumeration = "super::super::types::v1::RejectCode", tag = "3")]
+    pub reject_code: i32,
     #[prost(string, tag = "2")]
     pub message: ::prost::alloc::string::String,
 }

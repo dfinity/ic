@@ -1,5 +1,6 @@
 //! Utilities for non-interactive Distributed Key Generation (NI-DKG), and
 //! for testing distributed key generation and threshold signing.
+use crate::{dummy_transcript_for_tests, dummy_transcript_for_tests_with_params};
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript::Groth20_Bls12_381;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
@@ -7,6 +8,7 @@ use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_temp_crypto::{CryptoComponentRng, TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_interfaces::crypto::NiDkgAlgorithm;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
+use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -163,6 +165,33 @@ pub fn initial_dkg_transcript_and_master_key<R: rand::Rng + rand::CryptoRng>(
     (transcript, master_secret_bytes)
 }
 
+/// Return a fake transcript and the master secret associated with it
+///
+/// The transcript is not valid and cannot be used by NIDKG
+pub fn dummy_initial_dkg_transcript_with_master_key<R: rand::Rng + rand::CryptoRng>(
+    rng: &mut R,
+) -> (NiDkgTranscript, SecretKeyBytes) {
+    let mut transcript = dummy_transcript_for_tests();
+
+    let master_secret = Scalar::random(rng);
+
+    let public_key_bytes = G2Affine::from(G2Affine::generator() * &master_secret).serialize();
+
+    let master_secret_bytes = SecretKeyBytes {
+        val: master_secret.serialize(),
+    };
+
+    transcript.internal_csp_transcript = match transcript.internal_csp_transcript {
+        Groth20_Bls12_381(transcript) => {
+            let mut mod_transcript = transcript.clone();
+            mod_transcript.public_coefficients.coefficients[0] = PublicKeyBytes(public_key_bytes);
+            Groth20_Bls12_381(mod_transcript)
+        }
+    };
+
+    (transcript, master_secret_bytes)
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct CombinedSignatureBytes {
     val: [u8; 48],
@@ -247,4 +276,23 @@ fn transcript_with_single_dealing<R: CryptoComponentRng>(
     dealer_crypto
         .create_transcript(dkg_config, &map_with(dealer_id, dealing))
         .expect("internal error: failed to create transcript")
+}
+
+pub fn dummy_initial_dkg_transcript(
+    committee: Vec<NodeId>,
+    tag: NiDkgTag,
+) -> InitialNiDkgTranscriptRecord {
+    let threshold = committee.len() as u32 / 3 + 1;
+    let transcript = dummy_transcript_for_tests_with_params(committee, tag, threshold, 0);
+    InitialNiDkgTranscriptRecord {
+        id: Some(transcript.dkg_id.into()),
+        threshold: transcript.threshold.get().get(),
+        committee: transcript
+            .committee
+            .iter()
+            .map(|(_, c)| c.get().to_vec())
+            .collect(),
+        registry_version: 1,
+        internal_csp_transcript: serde_cbor::to_vec(&transcript.internal_csp_transcript).unwrap(),
+    }
 }

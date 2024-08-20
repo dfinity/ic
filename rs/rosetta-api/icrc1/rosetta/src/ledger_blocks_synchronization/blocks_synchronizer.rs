@@ -1,13 +1,16 @@
-use crate::common::storage::{storage_client::StorageClient, types::RosettaBlock};
-use anyhow::Result;
+use crate::common::storage::types::RosettaBlock;
+use crate::common::{
+    storage::storage_client::StorageClient, utils::utils::create_progress_bar_if_needed,
+};
 use anyhow::{bail, Context};
 use candid::{Decode, Encode, Nat};
 use icrc_ledger_agent::Icrc1Agent;
+use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest, GetBlocksResponse};
-use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
-use std::{cmp, collections::HashMap, fmt::Write, ops::RangeInclusive, sync::Arc};
+use std::{cmp, collections::HashMap, ops::RangeInclusive, sync::Arc};
+use tokio::sync::Mutex as AsyncMutex;
 use tracing::info;
 
 // The Range of indices to be synchronized.
@@ -64,8 +67,8 @@ fn derive_synchronization_gaps(
             SyncRange::new(
                 a.index + 1,
                 b.index - 1,
-                b.parent_hash.unwrap(),
-                Some(a.block_hash),
+                b.get_parent_hash().unwrap(),
+                Some(a.clone().get_block_hash()),
             )
         })
         .collect::<Vec<SyncRange>>();
@@ -80,7 +83,7 @@ fn derive_synchronization_gaps(
             SyncRange::new(
                 0,
                 lowest_block.index - 1,
-                lowest_block.parent_hash.unwrap(),
+                lowest_block.get_parent_hash().unwrap(),
                 None,
             ),
         );
@@ -94,6 +97,7 @@ pub async fn start_synching_blocks(
     agent: Arc<Icrc1Agent>,
     storage_client: Arc<StorageClient>,
     maximum_blocks_per_request: u64,
+    archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
 ) -> anyhow::Result<()> {
     // Determine whether there are any synchronization gaps in the database that need to be filled.
     let sync_gaps = derive_synchronization_gaps(storage_client.clone())?;
@@ -104,13 +108,24 @@ pub async fn start_synching_blocks(
             agent.clone(),
             storage_client.clone(),
             maximum_blocks_per_request,
+            archive_canister_ids.clone(),
             gap,
         )
         .await?;
     }
 
     // After all the gaps have been filled continue with a synchronization from the top of the blockchain.
-    sync_from_the_tip(agent, storage_client, maximum_blocks_per_request).await?;
+    sync_from_the_tip(
+        agent,
+        storage_client.clone(),
+        maximum_blocks_per_request,
+        archive_canister_ids.clone(),
+    )
+    .await?;
+
+    // Update the account balances. When queried for its status, the ledger will return the
+    // highest block index for which the account balances have been processed.
+    storage_client.update_account_balances()?;
 
     Ok(())
 }
@@ -120,6 +135,7 @@ pub async fn sync_from_the_tip(
     agent: Arc<Icrc1Agent>,
     storage_client: Arc<StorageClient>,
     maximum_blocks_per_request: u64,
+    archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
 ) -> anyhow::Result<()> {
     let (tip_block_hash, tip_block_index) = match agent
         .get_certified_chain_tip()
@@ -148,7 +164,7 @@ pub async fn sync_from_the_tip(
                 block.index + 1,
                 tip_block_index,
                 ByteBuf::from(tip_block_hash),
-                Some(block.block_hash),
+                Some(block.clone().get_block_hash()),
             )
         },
     );
@@ -159,6 +175,7 @@ pub async fn sync_from_the_tip(
             agent.clone(),
             storage_client.clone(),
             maximum_blocks_per_request,
+            archive_canister_ids,
             sync_range,
         )
         .await?;
@@ -172,19 +189,13 @@ async fn sync_blocks_interval(
     agent: Arc<Icrc1Agent>,
     storage_client: Arc<StorageClient>,
     maximum_blocks_per_request: u64,
+    archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
     sync_range: SyncRange,
 ) -> anyhow::Result<()> {
     // Create a progress bar for visualization.
-    let pb = ProgressBar::new(*sync_range.index_range.end() - *sync_range.index_range.start() + 1);
-    pb.set_style(
-        ProgressStyle::with_template(
-            "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] ({eta}) {msg}",
-        )
-        .unwrap()
-        .with_key("eta", |state: &ProgressState, w: &mut dyn Write| {
-            write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap()
-        })
-        .progress_chars("#>-"),
+    let pb = create_progress_bar_if_needed(
+        *sync_range.index_range.start(),
+        *sync_range.index_range.end(),
     );
 
     // The leading index/hash is the highest block index/hash that is requested by the icrc ledger.
@@ -204,8 +215,12 @@ async fn sync_blocks_interval(
     // database.
     loop {
         // The fetch_blocks_interval function guarantees that all blocks that were asked for are fetched if they exist on the ledger.
-        let fetched_blocks =
-            fetch_blocks_interval(agent.clone(), next_index_interval.clone()).await?;
+        let fetched_blocks = fetch_blocks_interval(
+            agent.clone(),
+            next_index_interval.clone(),
+            archive_canister_ids.clone(),
+        )
+        .await?;
 
         // Verify that the fetched blocks are valid.
         // Leading block hash of a non empty fetched blocks can never be `None` -> Unwrap is safe.
@@ -221,9 +236,20 @@ async fn sync_blocks_interval(
             );
         }
 
-        leading_block_hash = fetched_blocks[0].parent_hash.clone();
+        // Verify that the indices that are returned by the replica match those that were requested (Block Indices are not part of the block hash)
+        if !blocks_verifier::indices_are_valid(&fetched_blocks, next_index_interval.clone()) {
+            bail!(
+                "The fetched blockchain is not a left bound subset of the requested indices in index range {} to {}",
+                next_index_interval.start(),
+                next_index_interval.end()
+            );
+        }
+
+        leading_block_hash.clone_from(&fetched_blocks[0].get_parent_hash());
         let number_of_blocks_fetched = fetched_blocks.len();
-        pb.inc(number_of_blocks_fetched as u64);
+        if let Some(ref pb) = pb {
+            pb.inc(number_of_blocks_fetched as u64);
+        }
 
         // Store the fetched blocks in the database.
         storage_client.store_blocks(fetched_blocks.clone())?;
@@ -257,10 +283,13 @@ async fn sync_blocks_interval(
         );
         next_index_interval = RangeInclusive::new(interval_start, interval_end);
     }
-    pb.finish_with_message(format!(
+    if let Some(pb) = pb {
+        pb.finish_with_message("Done");
+    }
+    info!(
         "Synced Up to block height: {}",
         *sync_range.index_range.end()
-    ));
+    );
     Ok(())
 }
 
@@ -269,6 +298,7 @@ async fn sync_blocks_interval(
 async fn fetch_blocks_interval(
     agent: Arc<Icrc1Agent>,
     index_range: RangeInclusive<u64>,
+    archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
 ) -> anyhow::Result<Vec<RosettaBlock>> {
     // Construct a hashmap which maps block indices to blocks. Blocks that have not been fetched are `None`.
     let mut fetched_blocks_result: HashMap<u64, Option<RosettaBlock>> = HashMap::new();
@@ -363,6 +393,25 @@ async fn fetch_blocks_interval(
                     start: archive_query.start.clone(),
                     length: archive_query.length,
                 })?;
+                // Check if the provided archive canister id is in the list of trusted canister ids
+                let mut trusted_archive_canisters = archive_canister_ids.lock().await;
+                if !trusted_archive_canisters.iter().any(|archive_info| {
+                    archive_info.canister_id == archive_query.callback.canister_id
+                }) {
+                    *trusted_archive_canisters =
+                        fetch_archive_canister_infos(agent.clone()).await?;
+
+                    // Check again after updating the list of archive canister ids whether the provided archive canister id is in the list
+                    if !trusted_archive_canisters.iter().any(|archive_info| {
+                        archive_info.canister_id == archive_query.callback.canister_id
+                    }) {
+                        bail!(
+                            "Archive canister id {} is not in the list of trusted canister ids",
+                            archive_query.callback.canister_id
+                        );
+                    }
+                }
+
                 let archive_response = agent
                     .agent
                     .query(
@@ -409,68 +458,145 @@ async fn fetch_blocks_interval(
     Ok(result)
 }
 
-pub mod blocks_verifier {
-    use crate::ledger_blocks_synchronization::blocks_synchronizer::RosettaBlock;
-    use serde_bytes::ByteBuf;
+pub async fn fetch_archive_canister_infos(
+    icrc1_agent: Arc<Icrc1Agent>,
+) -> anyhow::Result<Vec<ArchiveInfo>> {
+    Decode!(
+        &icrc1_agent
+            .agent
+            .update(&icrc1_agent.ledger_canister_id, "archives")
+            .with_arg(Encode!().context("Failed to encode empty argument")?)
+            .call_and_wait()
+            .await
+            .context("Failed to fetch list of archives from ledger")?,
+        Vec<ArchiveInfo>
+    )
+    .context("Failed to decode list of archives from ledger")
+}
 
-    pub fn is_valid_blockchain(
-        blockchain: &Vec<RosettaBlock>,
-        leading_block_hash: &ByteBuf,
-    ) -> bool {
+pub mod blocks_verifier {
+    use crate::common::storage::types::RosettaBlock;
+    use serde_bytes::ByteBuf;
+    use std::ops::RangeInclusive;
+
+    pub fn is_valid_blockchain(blockchain: &[RosettaBlock], leading_block_hash: &ByteBuf) -> bool {
         if blockchain.is_empty() {
             return true;
         }
 
         // Check that the leading block has the block hash that is provided.
         // Safe to call unwrap as the blockchain is guaranteed to have at least one element.
-        if blockchain.last().unwrap().block_hash.clone() != leading_block_hash {
+        if blockchain.last().unwrap().clone().get_block_hash().clone() != leading_block_hash {
             return false;
         }
 
-        let mut parent_hash = Some(blockchain[0].block_hash.clone());
+        let mut parent_hash = Some(blockchain[0].clone().get_block_hash().clone());
         // The blockchain has more than one element so it is save to skip the first one.
         // The first element cannot be verified so we start at element 2.
         for block in blockchain.iter().skip(1) {
-            if block.parent_hash != parent_hash {
+            if block.get_parent_hash() != parent_hash {
                 return false;
             }
-            parent_hash = Some(block.block_hash.clone());
+            parent_hash = Some(block.clone().get_block_hash());
         }
 
         // No invalid blocks were found return true.
         true
     }
+
+    /// Checks whether the blocks in the blockchain are a continous subset of the requested indices
+    pub fn indices_are_valid(
+        blockchain: &[RosettaBlock],
+        requested_indices: RangeInclusive<u64>,
+    ) -> bool {
+        if blockchain.is_empty() {
+            return true;
+        }
+
+        let mut current_index = *requested_indices.start();
+        for block in blockchain {
+            // The fetched blockchain should be continous with respect to the requested indices.
+            if block.index != current_index {
+                return false;
+            }
+            current_index += 1;
+        }
+
+        current_index - 1 == *requested_indices.end()
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::common::storage::types::Tokens;
-
     use super::*;
+    use ic_icrc1::blocks::encoded_block_to_generic_block;
     use ic_icrc1_test_utils::valid_blockchain_strategy;
+    use ic_icrc1_tokens_u256::U256;
+    use ic_ledger_core::block::BlockType;
     use proptest::prelude::*;
     use rand::seq::SliceRandom;
     use serde_bytes::ByteBuf;
 
     proptest! {
             #[test]
-        fn test_valid_blockchain(blockchain in valid_blockchain_strategy::<Tokens>(1000)){
-            let num_blocks = blockchain.len();
-            let mut rosetta_blocks = vec![];
-            for (index,block) in blockchain.into_iter().enumerate(){
-                rosetta_blocks.push(RosettaBlock::from_icrc_ledger_block(block,index as u64).unwrap());
-            }
-            // Blockchain is valid and should thus pass the verification.
-            assert!(blocks_verifier::is_valid_blockchain(&rosetta_blocks,&rosetta_blocks.last().map(|block|block.block_hash.clone()).unwrap_or_else(|| ByteBuf::from(r#"TestBytes"#))));
+            fn test_valid_blockchain(blockchain in valid_blockchain_strategy::<U256>(1000)){
+                let num_blocks = blockchain.len();
+                let mut rosetta_blocks = vec![];
+                for (index,block) in blockchain.into_iter().enumerate(){
+                    rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.encode()),index as u64).unwrap());
+                }
+                // Blockchain is valid and should thus pass the verification.
+                assert!(blocks_verifier::is_valid_blockchain(&rosetta_blocks,&rosetta_blocks.last().map(|block|block.clone().get_block_hash().clone()).unwrap_or_else(|| ByteBuf::from(r#"TestBytes"#))));
 
-            // There is no point in shuffling the blockchain if it has length zero.
-            if num_blocks > 0 {
-                // If shuffled, the blockchain is no longer in order and thus no longer valid.
-                rosetta_blocks.shuffle(&mut rand::thread_rng());
-                let shuffled_blocks = rosetta_blocks.to_vec();
-                assert!(!blocks_verifier::is_valid_blockchain(&shuffled_blocks,&rosetta_blocks.last().unwrap().block_hash.clone())|| num_blocks<=1||rosetta_blocks==shuffled_blocks);
+                // There is no point in shuffling the blockchain if it has length zero.
+                if num_blocks > 0 {
+                    // If shuffled, the blockchain is no longer in order and thus no longer valid.
+                    rosetta_blocks.shuffle(&mut rand::thread_rng());
+                    let shuffled_blocks = rosetta_blocks.to_vec();
+                    assert!(!blocks_verifier::is_valid_blockchain(&shuffled_blocks,&rosetta_blocks.last().unwrap().clone().get_block_hash().clone())|| num_blocks<=1||rosetta_blocks==shuffled_blocks);
+                }
+
             }
 
+            #[test]
+            fn test_indices_are_valid(blockchain in valid_blockchain_strategy::<U256>(1000)) {
+                let mut rosetta_blocks = vec![];
+                for (index,block) in blockchain.into_iter().enumerate(){
+                    rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.encode()),index as u64).unwrap());
+                }
+                if !rosetta_blocks.is_empty() {
+                let requested_indices = RangeInclusive::new(0, (rosetta_blocks.len()-1) as u64);
+                assert!(blocks_verifier::indices_are_valid(
+                    &rosetta_blocks,
+                    requested_indices
+                ));
+                let requested_indices = RangeInclusive::new(0, rosetta_blocks.len()as u64);
+                assert!(!blocks_verifier::indices_are_valid(
+                    &rosetta_blocks,
+                    requested_indices
+                ));
+                let requested_indices = RangeInclusive::new(1, (rosetta_blocks.len()-1) as u64);
+                assert!(!blocks_verifier::indices_are_valid(
+                    &rosetta_blocks,
+                    requested_indices
+                ));
+
+                // Simulate a replica that returns a block with an invalid index
+                let mid_index:usize = rosetta_blocks.len()/2;
+                rosetta_blocks[mid_index].index += 1;
+                let requested_indices = RangeInclusive::new(0, (rosetta_blocks.len()-1) as u64);
+                assert!(!blocks_verifier::indices_are_valid(
+                    &rosetta_blocks,
+                    requested_indices
+                ));
+            }
+        else{
+            let requested_indices = RangeInclusive::new(0,  rosetta_blocks.len() as u64);
+            assert!(blocks_verifier::indices_are_valid(
+                &rosetta_blocks,
+                requested_indices
+            ));
+        }
         }
     }
 }

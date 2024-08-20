@@ -14,10 +14,10 @@ end::catalog[] */
 use anyhow::Result;
 
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::driver::test_env::TestEnv;
-use ic_tests::spec_compliance::{config_impl, test_subnet};
-use ic_tests::systest;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::systest;
+use spec_compliance::{config_impl, test_subnet};
 
 pub fn config(env: TestEnv) {
     config_impl(env, false, false);
@@ -31,7 +31,7 @@ pub fn test(env: TestEnv) {
         None,
         Some(SubnetType::Application),
         vec![],
-        vec!["($0 ~ /NNS canisters/)", "($0 ~ /API availability/)"],
+        vec!["($0 ~ /NNS canisters/)"],
     );
 }
 

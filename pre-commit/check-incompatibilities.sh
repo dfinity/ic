@@ -7,12 +7,9 @@ if [[ -n "$(git rev-parse -q --verify MERGE_HEAD)" ]]; then
     exit 0
 fi
 
-if [[ "${CI:-}" == "true" ]]; then
-    echo "Fetch the master branch"
-    git fetch origin master:master
-fi
-
-MERGE_BASE="$(git merge-base HEAD master)"
+echo "Fetch the $MERGE_BRANCH branch"
+git fetch origin $MERGE_BRANCH:$MERGE_BRANCH
+MERGE_BASE=$(git merge-base HEAD $MERGE_BRANCH)
 
 buf build -o current.bin
 buf build ".git#ref=$MERGE_BASE" -o against.bin

@@ -12,8 +12,10 @@ use ic_state_machine_tests::{ErrorCode, PrincipalId, StateMachine, UserError};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, ArchiveOptions, ArchivedBlocksRange, Block, CandidBlock,
     CandidOperation, CandidTransaction, FeatureFlags, GetBlocksArgs, GetBlocksRes, GetBlocksResult,
-    InitArgs, LedgerCanisterInitPayload, LedgerCanisterPayload, Operation, QueryBlocksResponse,
+    GetEncodedBlocksResult, InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
+    LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse,
     QueryEncodedBlocksResponse, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
+    MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -25,7 +27,11 @@ use num_traits::cast::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
 use std::collections::{HashMap, HashSet};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
+
+fn system_time_to_nanos(t: SystemTime) -> u64 {
+    t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
+}
 
 fn ledger_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
@@ -53,6 +59,10 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerCanisterI
         .accounts_overflow_trim_quantity(args.accounts_overflow_trim_quantity)
         .build()
         .unwrap()
+}
+
+fn encode_upgrade_args() -> LedgerCanisterUpgradePayload {
+    LedgerCanisterUpgradePayload(LedgerCanisterPayload::Upgrade(None))
 }
 
 fn query_blocks(
@@ -124,6 +134,28 @@ fn get_blocks_pb(
         .expect("failed to query blocks")
         .bytes();
     let result: GetBlocksRes = ProtoBuf::from_bytes(bytes).map(|c| c.0).unwrap();
+    result
+}
+
+fn iter_blocks_pb(
+    env: &StateMachine,
+    caller: Principal,
+    ledger: CanisterId,
+    start: usize,
+    length: usize,
+) -> IterBlocksRes {
+    let bytes = env
+        .execute_ingress_as(
+            PrincipalId(caller),
+            ledger,
+            "iter_blocks_pb",
+            ProtoBuf(IterBlocksArgs { start, length })
+                .into_bytes()
+                .unwrap(),
+        )
+        .expect("failed to query blocks")
+        .bytes();
+    let result: IterBlocksRes = ProtoBuf::from_bytes(bytes).map(|c| c.0).unwrap();
     result
 }
 
@@ -286,8 +318,13 @@ fn check_memo() {
     }
 
     for memo_size_bytes in 33..40 {
-        assert_eq!(Err(UserError::new(ErrorCode::CanisterCalledTrap, "Canister rwlgt-iiaaa-aaaaa-aaaaa-cai trapped explicitly: the memo field is too large")),
-            mint_with_memo(memo_size_bytes));
+        mint_with_memo(memo_size_bytes)
+            .unwrap_err()
+            .assert_contains(
+                ErrorCode::CanisterCalledTrap,
+                "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called \
+                `ic0.trap` with message: the memo field is too large",
+            );
     }
 }
 
@@ -331,6 +368,7 @@ fn check_query_blocks_coherence() {
             node_max_memory_size_bytes: None,
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_anonymous(),
+            more_controller_ids: None,
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
         })
@@ -406,6 +444,439 @@ fn check_query_blocks_coherence() {
             .map(|x| Block::decode(x).unwrap())
             .collect::<Vec<Block>>(),
     );
+}
+
+#[test]
+fn check_block_endpoint_limits() {
+    let ledger_wasm_current = ledger_wasm();
+
+    let user_principal =
+        Principal::from_text("luwgt-ouvkc-k5rx5-xcqkq-jx5hm-r2rj2-ymqjc-pjvhb-kij4p-n4vms-gqe")
+            .unwrap();
+    let canister_principal = Principal::from_text("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap();
+
+    let env = StateMachine::new();
+    let mut initial_balances = HashMap::new();
+    for i in 0..MAX_BLOCKS_PER_REQUEST + 1 {
+        let p = PrincipalId::new_user_test_id(i as u64 + 1);
+        initial_balances.insert(Account::from(p.0).into(), Tokens::from_e8s(1));
+    }
+    let payload = LedgerCanisterInitPayload::builder()
+        .archive_options(ArchiveOptions {
+            trigger_threshold: 50000,
+            num_blocks_to_archive: 2,
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: PrincipalId::new_anonymous(),
+            more_controller_ids: None,
+            cycles_for_archive_creation: None,
+            max_transactions_per_response: None,
+        })
+        .minting_account(MINTER.into())
+        .icrc1_minting_account(MINTER)
+        .initial_values(initial_balances)
+        .transfer_fee(Tokens::from_e8s(10_000))
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(
+            ledger_wasm_current,
+            CandidOne(payload).into_bytes().unwrap(),
+            None,
+        )
+        .expect("Unable to install the Ledger canister with the new init");
+
+    let get_blocks_args = Encode!(&GetBlocksArgs {
+        start: 0,
+        length: MAX_BLOCKS_PER_REQUEST + 1
+    })
+    .unwrap();
+
+    // query_blocks
+    let ingress_update = query_blocks(&env, user_principal, canister_id, 0, u32::MAX.into());
+    let canister_update = query_blocks(&env, canister_principal, canister_id, 0, u32::MAX.into());
+    let query = Decode!(
+        &env.query_as(
+            PrincipalId(user_principal),
+            canister_id,
+            "query_blocks".to_string(),
+            get_blocks_args.clone(),
+        )
+        .expect("query failed")
+        .bytes(),
+        QueryBlocksResponse
+    )
+    .expect("failed to decode response");
+
+    assert_eq!(
+        ingress_update.blocks.len(),
+        MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST
+    );
+    assert_eq!(canister_update.blocks.len(), MAX_BLOCKS_PER_REQUEST);
+    assert_eq!(query.blocks.len(), MAX_BLOCKS_PER_REQUEST);
+
+    // query_encoded_blocks
+    let ingress_update =
+        query_encoded_blocks(&env, user_principal, canister_id, 0, u32::MAX.into());
+    let canister_update =
+        query_encoded_blocks(&env, canister_principal, canister_id, 0, u32::MAX.into());
+    let query = Decode!(
+        &env.query_as(
+            user_principal.into(),
+            canister_id,
+            "query_encoded_blocks".to_string(),
+            get_blocks_args.clone(),
+        )
+        .expect("query failed")
+        .bytes(),
+        QueryEncodedBlocksResponse
+    )
+    .expect("failed to decode response");
+
+    assert_eq!(
+        ingress_update.blocks.len(),
+        MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST
+    );
+    assert_eq!(canister_update.blocks.len(), MAX_BLOCKS_PER_REQUEST);
+    assert_eq!(query.blocks.len(), MAX_BLOCKS_PER_REQUEST);
+
+    // get_blocks_pb
+    let get_blocks_pb_args = ProtoBuf(GetBlocksArgs {
+        start: 0,
+        length: MAX_BLOCKS_PER_REQUEST + 1,
+    })
+    .into_bytes()
+    .unwrap();
+
+    let ingress_update = get_blocks_pb(
+        &env,
+        user_principal,
+        canister_id,
+        0,
+        MAX_BLOCKS_PER_REQUEST + 1,
+    );
+    let canister_update = get_blocks_pb(
+        &env,
+        canister_principal,
+        canister_id,
+        0,
+        MAX_BLOCKS_PER_REQUEST + 1,
+    );
+    let query: GetBlocksRes = ProtoBuf::from_bytes(
+        env.query_as(
+            user_principal.into(),
+            canister_id,
+            "get_blocks_pb".to_string(),
+            get_blocks_pb_args.clone(),
+        )
+        .expect("query failed")
+        .bytes(),
+    )
+    .map(|c| c.0)
+    .unwrap();
+
+    assert_eq!(
+        ingress_update.0.expect("failed to get blocks").len(),
+        MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST
+    );
+    assert_eq!(
+        canister_update.0.expect("failed to get blocks").len(),
+        MAX_BLOCKS_PER_REQUEST
+    );
+    assert_eq!(
+        query.0.expect("failed to get blocks").len(),
+        MAX_BLOCKS_PER_REQUEST
+    );
+
+    // iter_blocks_pb
+    let iter_blocks_pb_args = ProtoBuf(IterBlocksArgs {
+        start: 0,
+        length: MAX_BLOCKS_PER_REQUEST + 1,
+    })
+    .into_bytes()
+    .unwrap();
+
+    let ingress_update = iter_blocks_pb(
+        &env,
+        user_principal,
+        canister_id,
+        0,
+        MAX_BLOCKS_PER_REQUEST + 1,
+    );
+    let canister_update = iter_blocks_pb(
+        &env,
+        canister_principal,
+        canister_id,
+        0,
+        MAX_BLOCKS_PER_REQUEST + 1,
+    );
+    let query: IterBlocksRes = ProtoBuf::from_bytes(
+        env.query_as(
+            user_principal.into(),
+            canister_id,
+            "iter_blocks_pb".to_string(),
+            iter_blocks_pb_args.clone(),
+        )
+        .expect("query failed")
+        .bytes(),
+    )
+    .map(|c| c.0)
+    .unwrap();
+
+    assert_eq!(
+        ingress_update.0.len(),
+        MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST
+    );
+    assert_eq!(canister_update.0.len(), MAX_BLOCKS_PER_REQUEST);
+    assert_eq!(query.0.len(), MAX_BLOCKS_PER_REQUEST);
+}
+
+#[test]
+fn check_archive_block_endpoint_limits() {
+    let ledger_wasm_current = ledger_wasm();
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+
+    let user_principal =
+        Principal::from_text("luwgt-ouvkc-k5rx5-xcqkq-jx5hm-r2rj2-ymqjc-pjvhb-kij4p-n4vms-gqe")
+            .unwrap();
+    let canister_principal = Principal::from_text("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap();
+
+    let env = StateMachine::new();
+    let mut initial_balances = HashMap::new();
+    initial_balances.insert(Account::from(p1.0).into(), Tokens::from_e8s(1_000_000_000));
+
+    let payload = LedgerCanisterInitPayload::builder()
+        .archive_options(ArchiveOptions {
+            trigger_threshold: MAX_BLOCKS_PER_REQUEST + 1,
+            num_blocks_to_archive: MAX_BLOCKS_PER_REQUEST + 1,
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: PrincipalId::new_anonymous(),
+            more_controller_ids: None,
+            cycles_for_archive_creation: None,
+            max_transactions_per_response: None,
+        })
+        .minting_account(MINTER.into())
+        .icrc1_minting_account(MINTER)
+        .initial_values(initial_balances)
+        .transfer_fee(Tokens::from_e8s(10_000))
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(
+            ledger_wasm_current,
+            CandidOne(payload).into_bytes().unwrap(),
+            None,
+        )
+        .expect("Unable to install the Ledger canister with the new init");
+
+    for _ in 0..MAX_BLOCKS_PER_REQUEST {
+        transfer(&env, canister_id, p1.0, p2.0, 1).expect("transfer failed");
+    }
+
+    let res = query_blocks(
+        &env,
+        canister_principal,
+        canister_id,
+        0,
+        MAX_BLOCKS_PER_REQUEST as u64 + 1,
+    );
+    assert_eq!(res.chain_length, MAX_BLOCKS_PER_REQUEST as u64 + 1);
+    assert_eq!(res.first_block_index, MAX_BLOCKS_PER_REQUEST as u64 + 1);
+    assert_eq!(res.archived_blocks.len(), 1);
+    let ArchivedBlocksRange {
+        start,
+        length,
+        callback,
+    } = res.archived_blocks.first().unwrap();
+    assert_eq!(*start, 0);
+    assert_eq!(*length, MAX_BLOCKS_PER_REQUEST as u64 + 1);
+
+    let get_blocks_args = Encode!(&GetBlocksArgs {
+        start: 0,
+        length: MAX_BLOCKS_PER_REQUEST + 1
+    })
+    .unwrap();
+
+    // get_blocks
+    let query_blocks_len = Decode!(
+        &env.query(
+            CanisterId::unchecked_from_principal(callback.canister_id.into()),
+            "get_blocks",
+            get_blocks_args.clone()
+        )
+        .unwrap()
+        .bytes(),
+        GetBlocksResult
+    )
+    .unwrap()
+    .unwrap()
+    .blocks
+    .len();
+
+    let update_blocks_len = |caller: Principal| {
+        Decode!(
+            &env.execute_ingress_as(
+                PrincipalId(caller),
+                CanisterId::unchecked_from_principal(callback.canister_id.into()),
+                "get_blocks",
+                get_blocks_args.clone()
+            )
+            .unwrap()
+            .bytes(),
+            GetBlocksResult
+        )
+        .unwrap()
+        .unwrap()
+        .blocks
+        .len()
+    };
+
+    assert_eq!(
+        update_blocks_len(user_principal),
+        MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST
+    );
+    assert_eq!(
+        update_blocks_len(canister_principal),
+        MAX_BLOCKS_PER_REQUEST
+    );
+    assert_eq!(query_blocks_len, MAX_BLOCKS_PER_REQUEST);
+
+    // get_encoded_blocks
+    let query_blocks_len = Decode!(
+        &env.query(
+            CanisterId::unchecked_from_principal(callback.canister_id.into()),
+            "get_encoded_blocks",
+            get_blocks_args.clone()
+        )
+        .unwrap()
+        .bytes(),
+        GetEncodedBlocksResult
+    )
+    .unwrap()
+    .unwrap()
+    .len();
+
+    let update_blocks_len = |caller: Principal| {
+        Decode!(
+            &env.execute_ingress_as(
+                PrincipalId(caller),
+                CanisterId::unchecked_from_principal(callback.canister_id.into()),
+                "get_encoded_blocks",
+                get_blocks_args.clone()
+            )
+            .unwrap()
+            .bytes(),
+            GetEncodedBlocksResult
+        )
+        .unwrap()
+        .unwrap()
+        .len()
+    };
+
+    assert_eq!(
+        update_blocks_len(user_principal),
+        MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST
+    );
+    assert_eq!(
+        update_blocks_len(canister_principal),
+        MAX_BLOCKS_PER_REQUEST
+    );
+    assert_eq!(query_blocks_len, MAX_BLOCKS_PER_REQUEST);
+
+    // get_blocks_pb
+    let get_blocks_pb_args = ProtoBuf(GetBlocksArgs {
+        start: 0,
+        length: MAX_BLOCKS_PER_REQUEST + 1,
+    })
+    .into_bytes()
+    .unwrap();
+
+    let ingress_update = get_blocks_pb(
+        &env,
+        user_principal,
+        CanisterId::unchecked_from_principal(callback.canister_id.into()),
+        0,
+        MAX_BLOCKS_PER_REQUEST + 1,
+    );
+    let canister_update = get_blocks_pb(
+        &env,
+        canister_principal,
+        CanisterId::unchecked_from_principal(callback.canister_id.into()),
+        0,
+        MAX_BLOCKS_PER_REQUEST + 1,
+    );
+    let query: GetBlocksRes = ProtoBuf::from_bytes(
+        env.query_as(
+            user_principal.into(),
+            CanisterId::unchecked_from_principal(callback.canister_id.into()),
+            "get_blocks_pb".to_string(),
+            get_blocks_pb_args.clone(),
+        )
+        .expect("query failed")
+        .bytes(),
+    )
+    .map(|c| c.0)
+    .unwrap();
+
+    assert_eq!(
+        ingress_update.0.expect("failed to get blocks").len(),
+        MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST
+    );
+    assert_eq!(
+        canister_update.0.expect("failed to get blocks").len(),
+        MAX_BLOCKS_PER_REQUEST
+    );
+    assert_eq!(
+        query.0.expect("failed to get blocks").len(),
+        MAX_BLOCKS_PER_REQUEST
+    );
+
+    // iter_blocks_pb
+    let iter_blocks_pb_args = ProtoBuf(IterBlocksArgs {
+        start: 0,
+        length: MAX_BLOCKS_PER_REQUEST + 1,
+    })
+    .into_bytes()
+    .unwrap();
+
+    let ingress_update = iter_blocks_pb(
+        &env,
+        user_principal,
+        CanisterId::unchecked_from_principal(callback.canister_id.into()),
+        0,
+        MAX_BLOCKS_PER_REQUEST + 1,
+    );
+    let canister_update = iter_blocks_pb(
+        &env,
+        canister_principal,
+        CanisterId::unchecked_from_principal(callback.canister_id.into()),
+        0,
+        MAX_BLOCKS_PER_REQUEST + 1,
+    );
+    let query: IterBlocksRes = ProtoBuf::from_bytes(
+        env.query_as(
+            user_principal.into(),
+            CanisterId::unchecked_from_principal(callback.canister_id.into()),
+            "iter_blocks_pb".to_string(),
+            iter_blocks_pb_args.clone(),
+        )
+        .expect("query failed")
+        .bytes(),
+    )
+    .map(|c| c.0)
+    .unwrap();
+
+    assert_eq!(
+        ingress_update.0.len(),
+        MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST
+    );
+    assert_eq!(canister_update.0.len(), MAX_BLOCKS_PER_REQUEST);
+    assert_eq!(query.0.len(), MAX_BLOCKS_PER_REQUEST);
 }
 
 #[test]
@@ -498,6 +969,69 @@ fn test_block_transformation() {
 }
 
 #[test]
+fn test_approval_upgrade() {
+    let ledger_wasm_mainnet =
+        std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
+    let ledger_wasm_current = ledger_wasm();
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let p3 = PrincipalId::new_user_test_id(3);
+
+    let env = StateMachine::new();
+    let mut initial_balances = HashMap::new();
+    initial_balances.insert(Account::from(p1.0).into(), Tokens::from_e8s(10_000_000));
+
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .icrc1_minting_account(MINTER)
+        .initial_values(initial_balances)
+        .transfer_fee(Tokens::from_e8s(10_000))
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(
+            ledger_wasm_mainnet.clone(),
+            CandidOne(payload).into_bytes().unwrap(),
+            None,
+        )
+        .expect("Unable to install the Ledger canister with the new init");
+
+    let approve_args = default_approve_args(p2.0, 120_000);
+    send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");
+    let mut approve_args = default_approve_args(p3.0, 130_000);
+    let expiration =
+        system_time_to_nanos(env.time()) + Duration::from_secs(5 * 3600).as_nanos() as u64;
+    approve_args.expires_at = Some(expiration);
+    send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");
+
+    let test_upgrade = |ledger_wasm: Vec<u8>| {
+        env.upgrade_canister(
+            canister_id,
+            ledger_wasm,
+            Encode!(&LedgerCanisterPayload::Upgrade(None)).unwrap(),
+        )
+        .unwrap();
+
+        let allowance = get_allowance(&env, canister_id, p1.0, p2.0);
+        assert_eq!(allowance.allowance.0.to_u64().unwrap(), 120_000);
+        assert_eq!(allowance.expires_at, None);
+
+        let allowance = get_allowance(&env, canister_id, p1.0, p3.0);
+        assert_eq!(allowance.allowance.0.to_u64().unwrap(), 130_000);
+        assert_eq!(allowance.expires_at, Some(expiration));
+    };
+
+    // Test if the old serialized approvals are correctly deserialized
+    test_upgrade(ledger_wasm_current.clone());
+    // Test if new approvals serialization also works
+    test_upgrade(ledger_wasm_current);
+    // Test if downgrade works
+    test_upgrade(ledger_wasm_mainnet);
+}
+
+#[test]
 fn test_approve_smoke() {
     ic_icrc1_ledger_sm_tests::test_approve_smoke(ledger_wasm(), encode_init_args);
 }
@@ -585,7 +1119,6 @@ fn test_feature_flags() {
         canister_id,
         ledger_wasm.clone(),
         Encode!(&LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
-            maximum_number_of_accounts: None,
             icrc1_minting_account: None,
             feature_flags: Some(FeatureFlags { icrc2: false }),
         })))
@@ -606,7 +1139,6 @@ fn test_feature_flags() {
         canister_id,
         ledger_wasm,
         Encode!(&LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
-            maximum_number_of_accounts: None,
             icrc1_minting_account: None,
             feature_flags: Some(FeatureFlags { icrc2: true }),
         })))
@@ -619,7 +1151,7 @@ fn test_feature_flags() {
         standards.push(standard.name);
     }
     standards.sort();
-    assert_eq!(standards, vec!["ICRC-1", "ICRC-2"]);
+    assert_eq!(standards, vec!["ICRC-1", "ICRC-2", "ICRC-21"]);
 
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
@@ -733,6 +1265,7 @@ fn test_query_archived_blocks() {
             node_max_memory_size_bytes: None,
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_anonymous(),
+            more_controller_ids: None,
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
         })
@@ -747,12 +1280,16 @@ fn test_query_archived_blocks() {
     let user2 = Principal::from_slice(&[2]);
 
     // mint block
+    let mint_time = system_time_to_nanos(env.time_of_next_round());
     transfer(&env, ledger, MINTER, user1, 2_000_000_000).unwrap();
     // burn block
+    let burn_time = system_time_to_nanos(env.time_of_next_round());
     transfer(&env, ledger, user1, MINTER, 1_000_000_000).unwrap();
     // xfer block
+    let xfer_time = system_time_to_nanos(env.time_of_next_round());
     transfer(&env, ledger, user1, user2, 100_000_000).unwrap();
     // approve block
+    let approve_time = system_time_to_nanos(env.time_of_next_round());
     send_approval(
         &env,
         ledger,
@@ -796,11 +1333,6 @@ fn test_query_archived_blocks() {
     )
     .unwrap()
     .unwrap();
-    let time = env
-        .time()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos() as u64;
     assert_eq!(
         block_range
             .blocks
@@ -810,7 +1342,7 @@ fn test_query_archived_blocks() {
         vec![
             CandidTransaction {
                 memo: icp_ledger::Memo(0),
-                created_at_time: TimeStamp::from_nanos_since_unix_epoch(time),
+                created_at_time: TimeStamp::from_nanos_since_unix_epoch(mint_time),
                 icrc1_memo: None,
                 operation: Some(CandidOperation::Mint {
                     to: AccountIdentifier::from(user1).to_address(),
@@ -819,7 +1351,7 @@ fn test_query_archived_blocks() {
             },
             CandidTransaction {
                 memo: icp_ledger::Memo(0),
-                created_at_time: TimeStamp::from_nanos_since_unix_epoch(time),
+                created_at_time: TimeStamp::from_nanos_since_unix_epoch(burn_time),
                 icrc1_memo: None,
                 operation: Some(CandidOperation::Burn {
                     from: AccountIdentifier::from(user1).to_address(),
@@ -829,7 +1361,7 @@ fn test_query_archived_blocks() {
             },
             CandidTransaction {
                 memo: icp_ledger::Memo(0),
-                created_at_time: TimeStamp::from_nanos_since_unix_epoch(time),
+                created_at_time: TimeStamp::from_nanos_since_unix_epoch(xfer_time),
                 icrc1_memo: None,
                 operation: Some(CandidOperation::Transfer {
                     from: AccountIdentifier::from(user1).to_address(),
@@ -841,7 +1373,7 @@ fn test_query_archived_blocks() {
             },
             CandidTransaction {
                 memo: icp_ledger::Memo(0),
-                created_at_time: TimeStamp::from_nanos_since_unix_epoch(time),
+                created_at_time: TimeStamp::from_nanos_since_unix_epoch(approve_time),
                 icrc1_memo: None,
                 operation: Some(CandidOperation::Approve {
                     from: AccountIdentifier::from(user2).to_address(),
@@ -855,4 +1387,48 @@ fn test_query_archived_blocks() {
             },
         ]
     );
+}
+
+#[test]
+fn test_icrc21_standard() {
+    ic_icrc1_ledger_sm_tests::test_icrc21_standard(ledger_wasm(), encode_init_args);
+}
+
+mod metrics {
+    use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
+    use ic_icrc1_ledger_sm_tests::metrics::LedgerSuiteType;
+
+    #[test]
+    fn should_export_num_archives_metrics() {
+        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_ledger_num_archives_metric(
+            ledger_wasm(),
+            encode_init_args,
+        );
+    }
+
+    #[test]
+    fn should_export_total_memory_usage_metrics() {
+        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_ledger_total_memory_bytes_metric(
+            ledger_wasm(),
+            encode_init_args,
+        );
+    }
+
+    #[test]
+    fn should_export_ledger_total_blocks_metrics() {
+        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_ledger_total_transactions_metric(
+            ledger_wasm(),
+            encode_init_args,
+            LedgerSuiteType::ICP,
+        );
+    }
+
+    #[test]
+    fn should_set_ledger_upgrade_instructions_consumed_metric() {
+        ic_icrc1_ledger_sm_tests::metrics::assert_ledger_upgrade_instructions_consumed_metric_set(
+            ledger_wasm(),
+            encode_init_args,
+            encode_upgrade_args,
+        );
+    }
 }

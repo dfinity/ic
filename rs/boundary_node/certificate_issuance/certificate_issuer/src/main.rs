@@ -18,15 +18,13 @@ use axum::{
     middleware::{self, Next},
     response::IntoResponse,
     routing::{delete, get, post, put},
-    Extension, Router, Server,
+    Extension, Router,
 };
-use candid::Principal;
+use candid::{DecoderConfig, Principal};
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
 use clap::Parser;
-use futures::future::TryFutureExt;
 use ic_agent::{
-    agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport,
-    identity::Secp256k1Identity, Agent,
+    agent::http_transport::reqwest_transport::ReqwestTransport, identity::Secp256k1Identity, Agent,
 };
 use instant_acme::{Account, AccountCredentials, NewAccount};
 use opentelemetry::{
@@ -36,7 +34,7 @@ use opentelemetry::{
 };
 use opentelemetry_prometheus::exporter;
 use prometheus::{labels, Encoder as PrometheusEncoder, Registry, TextEncoder};
-use tokio::{sync::Semaphore, task, time::sleep};
+use tokio::{net::TcpListener, sync::Semaphore, task, time::sleep};
 use tower::ServiceBuilder;
 use tracing::info;
 use trust_dns_resolver::{
@@ -72,6 +70,7 @@ mod check;
 mod cloudflare;
 mod dns;
 mod encode;
+mod headers;
 mod metrics;
 mod registration;
 mod verification;
@@ -81,6 +80,17 @@ const SERVICE_NAME: &str = "certificate-issuer";
 
 pub(crate) static TASK_DELAY_SEC: AtomicU64 = AtomicU64::new(60);
 pub(crate) static TASK_ERROR_DELAY_SEC: AtomicU64 = AtomicU64::new(10 * 60);
+
+/// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
+/// The value of 10_000 follows the Candid recommendation.
+const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
+
+pub(crate) fn decoder_config() -> DecoderConfig {
+    let mut config = DecoderConfig::new();
+    config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
+    config.set_full_error_message(false);
+    config
+}
 
 #[derive(Parser)]
 #[command(name = SERVICE_NAME)]
@@ -188,10 +198,8 @@ async fn main() -> Result<(), Error> {
         static USER_AGENT: &str = "Ic-Certificate-Issuer";
         let client = reqwest::Client::builder().user_agent(USER_AGENT).build()?;
 
-        let transport = ReqwestHttpReplicaV2Transport::create_with_client(
-            cli.orchestrator_uri.to_string(),
-            client,
-        )?;
+        let transport =
+            ReqwestTransport::create_with_client(cli.orchestrator_uri.to_string(), client)?;
 
         let f = File::open(cli.identity_path).context("failed to open identity file")?;
         let identity = Secp256k1Identity::from_pem(f).context("failed to create basic identity")?;
@@ -253,7 +261,6 @@ async fn main() -> Result<(), Error> {
     let encoder = Arc::new(encoder);
 
     let decoder = Decoder::new(cipher.clone());
-    let decoder = WithMetrics(decoder, MetricParams::new(&meter, SERVICE_NAME, "decrypt"));
     let decoder = Arc::new(decoder);
 
     // Registration
@@ -405,7 +412,8 @@ async fn main() -> Result<(), Error> {
                     .with_description("Duration of requests")
                     .init(),
             }))
-            .layer(middleware::from_fn(metrics_mw)),
+            .layer(middleware::from_fn(metrics_mw))
+            .layer(middleware::from_fn(headers::middleware)),
     );
 
     // ACME
@@ -421,6 +429,7 @@ async fn main() -> Result<(), Error> {
         (Some(id), Some(path)) => {
             let key =
                 std::fs::read_to_string(path).context("failed to open acme account key file")?;
+
             let acme_credentials: AccountCredentials = serde_json::from_str(&format!(
                 r#"{{
                     "id": "{acme_provider_url}/acme/acct/{id}",
@@ -434,25 +443,31 @@ async fn main() -> Result<(), Error> {
             ))?;
 
             Account::from_credentials(acme_credentials)
-                .context("failed to create acme account from credentials")
+                .await
+                .context("failed to create acme account from credentials")?
         }
-        (Some(_), None) | (None, Some(_)) => Err(anyhow!(
-            "must provide both acme_account_id and acme_account_key"
-        )),
+        (Some(_), None) | (None, Some(_)) => {
+            return Err(anyhow!(
+                "must provide both acme_account_id and acme_account_key"
+            ))
+        }
 
         // Create new ACME cccount
-        _ => Account::create(
-            &NewAccount {
-                contact: &[],
-                terms_of_service_agreed: true,
-                only_return_existing: false,
-            },
-            &acme_provider_url,
-            None,
-        )
-        .await
-        .context("failed to create acme account"),
-    }?;
+        _ => {
+            Account::create(
+                &NewAccount {
+                    contact: &[],
+                    terms_of_service_agreed: true,
+                    only_return_existing: false,
+                },
+                &acme_provider_url,
+                None,
+            )
+            .await
+            .context("failed to create acme account")?
+            .0
+        }
+    };
 
     let acme_client = Acme::new(acme_account);
 
@@ -608,16 +623,32 @@ async fn main() -> Result<(), Error> {
                 });
             }
         }),
-        task::spawn(
-            Server::bind(&cli.api_addr)
-                .serve(api_router.into_make_service())
+        task::spawn(async move {
+            let listener = TcpListener::bind(&cli.api_addr).await;
+            if let Err(error) = listener {
+                return Err(anyhow!(
+                    "Failed to create the TcpListener for api_addr: {:?}",
+                    error
+                ));
+            }
+            let listener = listener.unwrap();
+            axum::serve(listener, api_router.into_make_service())
+                .await
                 .map_err(|err| anyhow!("server failed: {:?}", err))
-        ),
-        task::spawn(
-            Server::bind(&cli.metrics_addr)
-                .serve(metrics_router.into_make_service())
+        }),
+        task::spawn(async move {
+            let listener = TcpListener::bind(&cli.metrics_addr).await;
+            if let Err(error) = listener {
+                return Err(anyhow!(
+                    "Failed to create the TcpListener for metrics_addr: {:?}",
+                    error
+                ));
+            }
+            let listener = listener.unwrap();
+            axum::serve(listener, metrics_router.into_make_service())
+                .await
                 .map_err(|err| anyhow!("server failed: {:?}", err))
-        ),
+        }),
     )
     .context(format!("{SERVICE_NAME} failed to run"))?;
 
@@ -656,7 +687,7 @@ struct MetricsMiddlewareArgs {
     recorder: Histogram<f64>,
 }
 
-async fn metrics_mw<B>(req: Request<B>, next: Next<B>) -> impl IntoResponse {
+async fn metrics_mw(req: Request<Body>, next: Next) -> impl IntoResponse {
     let MetricsMiddlewareArgs { counter, recorder } = req
         .extensions()
         .get::<MetricsMiddlewareArgs>()

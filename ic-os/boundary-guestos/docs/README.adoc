@@ -10,4 +10,3 @@ Refer to detailed documentation on:
 * link:Build{outfilesuffix}[Disk image build]
 * link:Components{outfilesuffix}[Components of the Boundary Node]
 * link:Network{outfilesuffix}[Network settings]
-* link:SEV{outfilesuffix}[SEV Trusted Execution]

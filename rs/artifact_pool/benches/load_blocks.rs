@@ -7,12 +7,14 @@ use ic_interfaces::consensus_pool::{
     ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact,
 };
 use ic_interfaces::p2p::consensus::MutablePool;
+use ic_interfaces::time_source::SysTimeSource;
 use ic_logger::replica_logger::no_op_logger;
-use ic_test_utilities::{
-    consensus::{fake::*, make_genesis},
-    types::ids::{node_test_id, subnet_test_id},
-    types::messages::SignedIngressBuilder,
+use ic_test_utilities_consensus::{fake::*, make_genesis};
+use ic_test_utilities_types::{
+    ids::{node_test_id, subnet_test_id},
+    messages::SignedIngressBuilder,
 };
+use ic_types::consensus::{BlockPayload, DataPayload};
 use ic_types::{
     batch::{BatchPayload, IngressPayload},
     consensus::{dkg, Block, BlockProposal, ConsensusMessageHashable, HasHeight, Payload, Rank},
@@ -35,6 +37,7 @@ where
             pool_config,
             ic_metrics::MetricsRegistry::new(),
             no_op_logger(),
+            std::sync::Arc::new(SysTimeSource::new()),
         );
         test(&mut consensus_pool);
     })
@@ -57,15 +60,16 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
             .build()]);
         block.payload = Payload::new(
             ic_types::crypto::crypto_hash,
-            (
-                BatchPayload {
+            BlockPayload::Data(DataPayload {
+                batch: BatchPayload {
                     ingress,
                     ..BatchPayload::default()
                 },
-                dkg::Dealings::new_empty(parent.payload.as_ref().dkg_interval_start_height()),
-                None,
-            )
-                .into(),
+                dealings: dkg::Dealings::new_empty(
+                    parent.payload.as_ref().dkg_interval_start_height(),
+                ),
+                idkg: None,
+            }),
         );
         let proposal = BlockProposal::fake(block, node_test_id(i as u64));
         changeset.push(ChangeAction::AddToValidated(ValidatedConsensusArtifact {

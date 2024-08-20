@@ -9,8 +9,6 @@ use crate::types::CspSecretKey;
 use hex::{FromHex, ToHex};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::convert_keyset_to_keyset_with_pop;
-use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_logger::{debug, info, replica_logger::no_op_logger, warn, ReplicaLogger};
 use parking_lot::RwLock;
 use prost::Message;
@@ -175,7 +173,7 @@ impl ProtoSecretKeyStore {
             return Err(cleanup_errors);
         }
 
-        let are_same_file = ic_utils::fs::are_hard_links_to_the_same_inode(
+        let are_same_file = ic_sys::fs::are_hard_links_to_the_same_inode(
             &self.proto_file,
             &self.old_proto_file_to_zeroize,
         )
@@ -187,7 +185,7 @@ impl ProtoSecretKeyStore {
             }]
         })?;
         if are_same_file {
-            ic_utils::fs::remove_file(&self.old_proto_file_to_zeroize).map_err(|err| {
+            ic_sys::fs::remove_file(&self.old_proto_file_to_zeroize).map_err(|err| {
                 vec![CleanupError::OldFileRemoval {
                     old_sks_file: self.old_proto_file_to_zeroize.to_string_lossy().to_string(),
                     source: err,
@@ -246,7 +244,7 @@ impl ProtoSecretKeyStore {
                 if exists {
                     // Create a hard link to the existing keystore, so that we maintain a handle to
                     // it, which can later be used to zeroize and delete the old keystore.
-                    if let Err(err) = ic_utils::fs::create_hard_link_to_existing_file(
+                    if let Err(err) = ic_sys::fs::create_hard_link_to_existing_file(
                         &self.proto_file,
                         &self.old_proto_file_to_zeroize,
                     ) {
@@ -274,7 +272,7 @@ impl ProtoSecretKeyStore {
         secret_keys: &SecretKeys,
     ) -> Result<(), SecretKeyStoreWriteError> {
         let sks_proto = ProtoSecretKeyStore::secret_keys_to_sks_proto(secret_keys)?;
-        match ic_utils::fs::write_protobuf_using_tmp_file(&self.proto_file, &sks_proto) {
+        match ic_sys::fs::write_protobuf_using_tmp_file(&self.proto_file, &sks_proto) {
             Ok(()) => {
                 debug!(
                     self.logger,
@@ -290,7 +288,7 @@ impl ProtoSecretKeyStore {
     }
 
     fn check_proto_file_is_regular_file_or_panic(proto_file: &PathBuf) {
-        if !ic_utils::fs::is_regular_file(&proto_file)
+        if !ic_sys::fs::is_regular_file(&proto_file)
             .expect("error checking if secret key store is a regular file")
         {
             panic!(
@@ -317,10 +315,7 @@ impl ProtoSecretKeyStore {
                 }
             }
         };
-        match proto_file {
-            Some(sks_proto) => sks_proto,
-            None => SecretKeys::new(),
-        }
+        proto_file.unwrap_or_default()
     }
 
     fn migrate_to_current_version(sks_proto: pb::SecretKeyStore) -> SecretKeys {
@@ -330,12 +325,6 @@ impl ProtoSecretKeyStore {
                 let secret_keys_from_disk =
                     ProtoSecretKeyStore::sks_proto_to_secret_keys(&sks_proto);
                 Self::migrate_sks_from_v2_to_v3(secret_keys_from_disk)
-            }
-            1 => {
-                let secret_keys_from_disk =
-                    ProtoSecretKeyStore::sks_proto_to_secret_keys(&sks_proto);
-                let sks_v2 = Self::migrate_sks_from_v1_to_v2(secret_keys_from_disk);
-                Self::migrate_sks_from_v2_to_v3(sks_v2)
             }
             _ => panic!(
                 "Unsupported SecretKeyStore-proto version: {}",
@@ -352,23 +341,6 @@ impl ProtoSecretKeyStore {
                 _ => scope,
             };
             migrated_secret_keys.insert(key_id, (csp_key, migrated_scope));
-        }
-        migrated_secret_keys
-    }
-
-    fn migrate_sks_from_v1_to_v2(existing_secret_keys: SecretKeys) -> SecretKeys {
-        let mut migrated_secret_keys = SecretKeys::new();
-        for (key_id, (csp_key, scope)) in existing_secret_keys.into_iter() {
-            let migrated_secret_key = match &csp_key {
-                CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20_Bls12_381(key_set)) => {
-                    let key_set_with_pop = convert_keyset_to_keyset_with_pop(key_set.clone());
-                    CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(
-                        key_set_with_pop,
-                    ))
-                }
-                _ => csp_key,
-            };
-            migrated_secret_keys.insert(key_id, (migrated_secret_key, scope));
         }
         migrated_secret_keys
     }
@@ -552,7 +524,7 @@ fn overwrite_file_with_zeroes_and_delete_if_it_exists<P: AsRef<Path>>(
     file: P,
 ) -> Result<(), Vec<CleanupError>> {
     let mut old_file_exists = true;
-    let mut result = match ic_utils::fs::open_existing_file_for_write(&file) {
+    let mut result = match ic_sys::fs::open_existing_file_for_write(&file) {
         Ok(mut f) => match f.metadata() {
             Ok(metadata) => {
                 let len = metadata.len() as usize;
@@ -575,7 +547,7 @@ fn overwrite_file_with_zeroes_and_delete_if_it_exists<P: AsRef<Path>>(
     if old_file_exists {
         result = combine_cleanup_results(
             result,
-            ic_utils::fs::remove_file(&file).map_err(|e| {
+            ic_sys::fs::remove_file(&file).map_err(|e| {
                 vec![CleanupError::OldFileRemoval {
                     old_sks_file: file.as_ref().to_string_lossy().to_string(),
                     source: e,

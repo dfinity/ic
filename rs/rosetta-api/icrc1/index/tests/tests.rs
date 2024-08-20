@@ -93,6 +93,7 @@ fn default_archive_options() -> ArchiveOptions {
         node_max_memory_size_bytes: None,
         max_message_size_bytes: None,
         controller_id: PrincipalId::new_user_test_id(100),
+        more_controller_ids: None,
         cycles_for_archive_creation: None,
         max_transactions_per_response: None,
     }
@@ -652,4 +653,25 @@ fn test_index_archived_txs_paging() {
     let actual_txids: Vec<u64> = txs.iter().map(|tx| tx.id.0.to_u64().unwrap()).collect();
     let expected_txids: Vec<u64> = (0..ARCHIVE_TRIGGER_THRESHOLD).rev().collect();
     assert_eq!(expected_txids, actual_txids);
+}
+
+mod metrics {
+    use crate::index_wasm;
+    use candid::Principal;
+    use ic_base_types::{CanisterId, PrincipalId};
+    use ic_icrc1_index::InitArgs;
+
+    #[test]
+    fn should_export_total_memory_usage_bytes_metrics() {
+        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_index_total_memory_bytes_metric(
+            index_wasm(),
+            encode_init_args,
+        );
+    }
+
+    fn encode_init_args(ledger_id: Principal) -> InitArgs {
+        InitArgs {
+            ledger_id: CanisterId::unchecked_from_principal(PrincipalId(ledger_id)),
+        }
+    }
 }

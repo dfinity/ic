@@ -56,7 +56,7 @@ enum AddHeaderResult {
     /// This variant is used when the input header is added to the header_cache.
     HeaderAdded(BlockHash),
     /// This variant is used when the input header already exists in the header_cache.
-    HeaderAlreadyExists(BlockHash),
+    HeaderAlreadyExists,
 }
 
 #[derive(Debug, Error)]
@@ -153,7 +153,7 @@ impl BlockchainState {
                     block_hashes_of_added_headers.push(block_hash);
                     Ok(())
                 }
-                Ok(AddHeaderResult::HeaderAlreadyExists(_)) => Ok(()),
+                Ok(AddHeaderResult::HeaderAlreadyExists) => Ok(()),
                 Err(err) => Err(err),
             })
             .err();
@@ -176,7 +176,7 @@ impl BlockchainState {
         // If the header already exists in the cache,
         // then don't insert the header again, and return HeaderAlreadyExistsError
         if self.get_cached_header(&block_hash).is_some() {
-            return Ok(AddHeaderResult::HeaderAlreadyExists(block_hash));
+            return Ok(AddHeaderResult::HeaderAlreadyExists);
         }
 
         if let Err(err) = validate_header(&self.network, self, &header) {

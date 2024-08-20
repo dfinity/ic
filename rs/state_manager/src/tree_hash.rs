@@ -64,6 +64,9 @@ mod tests {
     use ic_canonical_state::CertificationVersion;
     use ic_crypto_tree_hash::Digest;
     use ic_error_types::{ErrorCode, UserError};
+    use ic_management_canister_types::{
+        EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    };
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
@@ -73,29 +76,31 @@ mod tests {
             },
             system_state::CyclesUseCase,
         },
-        metadata_state::{Stream, SubnetMetrics},
+        metadata_state::{ApiBoundaryNodeEntry, Stream, SubnetMetrics},
         page_map::{PageIndex, PAGE_SIZE},
         testing::ReplicatedStateTesting,
         ExecutionState, ExportedFunctions, Global, Memory, NumWasmPages, PageMap, ReplicatedState,
     };
-    use ic_test_utilities::{
-        state::new_canister_state,
-        types::ids::{
-            canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id,
-        },
-        types::messages::{RequestBuilder, ResponseBuilder},
+    use ic_test_utilities_state::new_canister_state;
+    use ic_test_utilities_types::ids::{
+        canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id,
     };
+    use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
     use ic_types::{
         crypto::CryptoHash,
         ingress::{IngressState, IngressStatus},
-        messages::RequestMetadata,
+        messages::{RequestMetadata, NO_DEADLINE},
         nominal_cycles::NominalCycles,
-        xnet::{StreamIndex, StreamIndexedQueue},
+        time::CoarseTime,
+        xnet::{RejectReason, StreamFlags, StreamIndex, StreamIndexedQueue},
         CryptoHashOfPartialState, Cycles, ExecutionRound, Time,
     };
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
-    use std::{collections::BTreeSet, sync::Arc};
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        sync::Arc,
+    };
     use strum::{EnumCount, IntoEnumIterator};
 
     const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
@@ -202,8 +207,20 @@ mod tests {
                 StreamIndexedQueue::with_begin(StreamIndex::from(4)),
                 StreamIndex::new(10),
             );
-            for _ in 1..6 {
-                stream.push(ResponseBuilder::new().build().into());
+            let maybe_deadline = |i: u64| {
+                if certification_version >= CertificationVersion::V18 && i % 2 != 0 {
+                    CoarseTime::from_secs_since_unix_epoch(i as u32)
+                } else {
+                    NO_DEADLINE
+                }
+            };
+            for i in 1..6 {
+                stream.push(
+                    ResponseBuilder::new()
+                        .deadline(maybe_deadline(i))
+                        .build()
+                        .into(),
+                );
             }
             for i in 1..6 {
                 stream.push(
@@ -215,13 +232,26 @@ mod tests {
                                     Time::from_nanos_since_unix_epoch(i % 2),
                                 )),
                         )
+                        .deadline(maybe_deadline(i))
                         .build()
                         .into(),
                 );
             }
             if certification_version >= CertificationVersion::V8 {
-                stream.push_reject_signal(10.into());
-                stream.increment_signals_end();
+                stream.push_reject_signal(RejectReason::CanisterMigrating);
+            }
+            if certification_version >= CertificationVersion::V17 {
+                stream.set_reverse_stream_flags(StreamFlags {
+                    deprecated_responses_only: true,
+                });
+            }
+            if certification_version >= CertificationVersion::V19 {
+                stream.push_reject_signal(RejectReason::CanisterNotFound);
+                stream.push_reject_signal(RejectReason::QueueFull);
+                stream.push_reject_signal(RejectReason::CanisterStopped);
+                stream.push_reject_signal(RejectReason::OutOfMemory);
+                stream.push_reject_signal(RejectReason::Unknown);
+                stream.push_reject_signal(RejectReason::CanisterStopping);
             }
             state.modify_streams(|streams| {
                 streams.insert(subnet_test_id(5), stream);
@@ -256,6 +286,21 @@ mod tests {
                 node_test_id(2) => vec![2; 44],
             };
 
+            state.metadata.api_boundary_nodes = btreemap! {
+                node_test_id(11) => ApiBoundaryNodeEntry {
+                    domain: "api-bn11-example.com".to_string(),
+                    ipv4_address: Some("127.0.0.1".to_string()),
+                    ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+                    pubkey: None,
+                },
+                node_test_id(12) => ApiBoundaryNodeEntry {
+                    domain: "api-bn12-example.com".to_string(),
+                    ipv4_address: None,
+                    ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
+                    pubkey: None,
+                },
+            };
+
             let mut routing_table = RoutingTable::new();
             routing_table
                 .insert(
@@ -280,7 +325,6 @@ mod tests {
             subnet_metrics.consumed_cycles_by_deleted_canisters = NominalCycles::from(0);
             subnet_metrics.consumed_cycles_http_outcalls = NominalCycles::from(50_000_000_000);
             subnet_metrics.consumed_cycles_ecdsa_outcalls = NominalCycles::from(100_000_000_000);
-            subnet_metrics.ecdsa_signature_agreements = 2;
             subnet_metrics.num_canisters = 5;
             subnet_metrics.canister_state_bytes = NumBytes::from(5 * 1024 * 1024);
             subnet_metrics.update_transactions_total = 4200;
@@ -292,6 +336,16 @@ mod tests {
                 CyclesUseCase::RequestAndResponseTransmission,
                 NominalCycles::from(20_000_000_000),
             );
+            let schnorr_key_id = MasterPublicKeyId::Schnorr(SchnorrKeyId {
+                algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+                name: "schnorr_key_id".into(),
+            });
+            let ecdsa_key_id = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: "ecdsa_key_id".into(),
+            });
+            subnet_metrics.threshold_signature_agreements =
+                BTreeMap::from([(schnorr_key_id, 15), (ecdsa_key_id, 16)]);
 
             state.metadata.subnet_metrics = subnet_metrics;
 
@@ -335,6 +389,10 @@ mod tests {
             "80D4B528CC9E09C775273994261DD544D45EFFF90B655D90FC3A6E3F633ED718",
             "970BC5155AEB4B4F81E470CBF6748EFA7D8805B936998A54AE70B7DD21F5DDCC",
             "EA3B53B72150E3982CB0E6773F86634685EE7B153DCFE10D86D9927778409D97",
+            "D13F75C42D3E2BDA2F742510029088A9ADB119E30241AC969DE24936489168B5",
+            "D13F75C42D3E2BDA2F742510029088A9ADB119E30241AC969DE24936489168B5",
+            "E739B8EA1585E9BB97988C80ED0C0CDFDF064D4BC5A2B6B06EB414BFF6139CCE",
+            "31F4593CC82CDB0B858F190E00112AF4599B5333F7AED9403EEAE88B656738D5",
         ];
 
         for certification_version in CertificationVersion::iter() {

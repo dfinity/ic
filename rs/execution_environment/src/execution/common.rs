@@ -1,21 +1,17 @@
 // This module defines common helper functions.
 // TODO(RUN-60): Move helper functions here.
 
-use ic_registry_subnet_type::SubnetType;
-use lazy_static::lazy_static;
-use prometheus::IntCounter;
-use std::sync::atomic::{AtomicU64, Ordering};
-
 use crate::execution_environment::ExecutionResponse;
 use crate::{as_round_instructions, metrics::CallTreeMetrics, ExecuteMessageResult, RoundLimits};
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_embedders::wasm_executor::{CanisterStateChanges, SliceExecutionOutput};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
 };
 use ic_logger::{error, fatal, warn, ReplicaLogger};
+use ic_management_canister_types::CanisterStatusType;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
     SystemState,
@@ -27,7 +23,12 @@ use ic_types::messages::{
     Response,
 };
 use ic_types::methods::{Callback, WasmMethod};
+use ic_types::time::CoarseTime;
 use ic_types::{Cycles, NumInstructions, Time, UserId};
+use lazy_static::lazy_static;
+use prometheus::IntCounter;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 lazy_static! {
     /// Track how many system task errors have been encountered
@@ -72,8 +73,8 @@ pub(crate) fn action_to_response(
             log,
             ingress_with_cycles_error,
         ),
-        CallOrigin::CanisterUpdate(caller_canister_id, callback_id) => {
-            action_to_request_response(canister, action, caller_canister_id, callback_id)
+        CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline) => {
+            action_to_request_response(canister, action, caller_canister_id, callback_id, deadline)
         }
         CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => fatal!(
             log,
@@ -94,41 +95,42 @@ pub(crate) fn action_to_request_response(
     action: CallContextAction,
     originator: CanisterId,
     reply_callback_id: CallbackId,
+    deadline: CoarseTime,
 ) -> ExecutionResponse {
-    let response_payload_and_refund = match action {
-        CallContextAction::NotYetResponded | CallContextAction::AlreadyResponded => None,
-        CallContextAction::NoResponse { refund } => Some((
+    let (response_payload, refund) = match action {
+        CallContextAction::NotYetResponded | CallContextAction::AlreadyResponded => {
+            return ExecutionResponse::Empty
+        }
+
+        CallContextAction::NoResponse { refund } => (
             Payload::Reject(RejectContext::new(RejectCode::CanisterError, "No response")),
             refund,
-        )),
+        ),
 
-        CallContextAction::Reject { payload, refund } => Some((
+        CallContextAction::Reject { payload, refund } => (
             Payload::Reject(RejectContext::new(RejectCode::CanisterReject, payload)),
             refund,
-        )),
+        ),
 
-        CallContextAction::Reply { payload, refund } => Some((Payload::Data(payload), refund)),
+        CallContextAction::Reply { payload, refund } => (Payload::Data(payload), refund),
 
         CallContextAction::Fail { error, refund } => {
             let user_error = error.into_user_error(&canister.canister_id());
-            Some((
+            (
                 Payload::Reject(RejectContext::new(user_error.reject_code(), user_error)),
                 refund,
-            ))
+            )
         }
     };
 
-    if let Some((response_payload, refund)) = response_payload_and_refund {
-        ExecutionResponse::Request(Response {
-            originator,
-            respondent: canister.canister_id(),
-            originator_reply_callback: reply_callback_id,
-            refund,
-            response_payload,
-        })
-    } else {
-        ExecutionResponse::Empty
-    }
+    ExecutionResponse::Request(Response {
+        originator,
+        respondent: canister.canister_id(),
+        originator_reply_callback: reply_callback_id,
+        refund,
+        response_payload,
+        deadline,
+    })
 }
 
 pub(crate) fn action_to_ingress_response(
@@ -238,13 +240,14 @@ pub(crate) fn wasm_result_to_query_response(
         CallOrigin::Ingress(user_id, message_id) => {
             wasm_result_to_ingress_response(result, canister, user_id, message_id, time)
         }
-        CallOrigin::CanisterUpdate(caller_canister_id, callback_id) => {
+        CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline) => {
             let response = Response {
                 originator: caller_canister_id,
                 respondent: canister.canister_id(),
                 originator_reply_callback: callback_id,
                 refund,
                 response_payload: Payload::from(result),
+                deadline,
             };
             ExecutionResponse::Request(response)
         }
@@ -527,6 +530,7 @@ pub(crate) fn finish_call_with_error(
                 originator_reply_callback: request.sender_reply_callback,
                 refund: request.payment,
                 response_payload: Payload::from(Err(user_error)),
+                deadline: request.deadline,
             };
             ExecutionResponse::Request(response)
         }
@@ -566,6 +570,7 @@ pub(crate) fn finish_call_with_error(
         response,
         instructions_used,
         heap_delta: NumBytes::from(0),
+        call_duration: Some(Duration::from_secs(0)),
     }
 }
 
@@ -579,6 +584,7 @@ mod test {
     use ic_logger::ReplicaLogger;
     use ic_replicated_state::{CanisterState, SchedulerState, SystemState};
     use ic_types::messages::CallbackId;
+    use ic_types::messages::NO_DEADLINE;
     use ic_types::Cycles;
     use ic_types::Time;
 
@@ -605,6 +611,7 @@ mod test {
             ic_replicated_state::CallOrigin::CanisterUpdate(
                 CanisterId::from(123u64),
                 CallbackId::new(2),
+                NO_DEADLINE,
             ),
             &log,
             Cycles::from(1000u128),

@@ -1,3 +1,4 @@
+use crate::errors::ApiError;
 use crate::models::{self};
 use ic_types::PrincipalId;
 use rosetta_core::objects::ObjectMap;
@@ -17,11 +18,13 @@ pub struct NeuronResponse {
     pub(crate) staked_maturity_e8s: Option<u64>,
 }
 
-impl From<NeuronResponse> for ObjectMap {
-    fn from(r: NeuronResponse) -> Self {
-        match serde_json::to_value(r) {
-            Ok(Value::Object(o)) => o,
-            _ => ObjectMap::default(),
+impl TryFrom<NeuronResponse> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: NeuronResponse) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert NeuronResponse to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert NeuronResponse to ObjectMap: {:?}",err))),
         }
     }
 }

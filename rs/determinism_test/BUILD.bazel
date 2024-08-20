@@ -4,6 +4,7 @@ load("//bazel:defs.bzl", "rust_ic_test_suite")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
@@ -18,14 +19,12 @@ DEPENDENCIES = [
     "//rs/registry/provisional_whitelist",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
-    "//rs/replicated_state",
     "//rs/state_manager",
-    "//rs/test_utilities",
+    "//rs/test_utilities/consensus",
     "//rs/test_utilities/registry",
-    "//rs/types/ic00_types",
+    "//rs/test_utilities/types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
-    "@crate_index//:clap",
-    "@crate_index//:hex",
     "@crate_index//:slog",
     "@crate_index//:tokio",
     "@crate_index//:wat",
@@ -33,6 +32,7 @@ DEPENDENCIES = [
 
 rust_library(
     name = "determinism_test",
+    testonly = True,
     srcs = glob(["src/**"]),
     aliases = {},
     crate_name = "ic_determinism_test",

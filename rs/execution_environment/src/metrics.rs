@@ -11,7 +11,7 @@ use prometheus::{Histogram, IntCounter, IntCounterVec};
 use std::{cell::RefCell, rc::Rc, time::Instant};
 
 pub(crate) const QUERY_HANDLER_CRITICAL_ERROR: &str = "query_handler_critical_error";
-pub(crate) const SYSTEM_API_CALL_PERFORM: &str = "call_perform";
+pub(crate) const SYSTEM_API_DATA_CERTIFICATE_COPY: &str = "data_certificate_copy";
 pub(crate) const SYSTEM_API_CANISTER_CYCLE_BALANCE: &str = "canister_cycle_balance";
 pub(crate) const SYSTEM_API_CANISTER_CYCLE_BALANCE128: &str = "canister_cycle_balance128";
 pub(crate) const SYSTEM_API_TIME: &str = "time";
@@ -117,7 +117,7 @@ impl CallTreeMetrics for CallTreeMetricsImpl {
                 self.request_call_tree_depth
                     .observe(*metadata.call_tree_depth() as f64);
             }
-            let duration = time.saturating_sub(*metadata.call_tree_start_time());
+            let duration = time.saturating_duration_since(*metadata.call_tree_start_time());
             for _ in 0..request_stats.count {
                 self.request_call_tree_age_seconds
                     .observe(duration.as_secs_f64());
@@ -127,7 +127,7 @@ impl CallTreeMetrics for CallTreeMetricsImpl {
         // Observe new requests vs. original context.
         for _ in 0..request_stats.count {
             self.request_call_context_age_seconds.observe(
-                time.saturating_sub(call_context_creation_time)
+                time.saturating_duration_since(call_context_creation_time)
                     .as_secs_f64(),
             );
         }
@@ -142,6 +142,11 @@ pub(crate) struct QueryHandlerMetrics {
     pub query_critical_error: IntCounter,
     /// The total number of tracked System API calls invoked during the query execution.
     pub query_system_api_calls: IntCounterVec,
+    /// The number of canisters evaluated and executed at least once
+    /// during the call graph evaluation.
+    pub evaluated_canisters: Histogram,
+    /// The number of transient errors.
+    pub transient_errors: IntCounter,
 }
 
 impl QueryHandlerMetrics {
@@ -252,6 +257,17 @@ impl QueryHandlerMetrics {
                         during the query execution",
                 &["system_api_call_counter"],
             ),
+            evaluated_canisters: metrics_registry.histogram(
+                "execution_query_evaluated_canisters",
+                "The number of canisters evaluated and executed at least once \
+                        during the call graph evaluation",
+                vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0],
+            ),
+            transient_errors: metrics_registry.int_counter(
+                "execution_query_transient_errors_total",
+                "The total number of transient errors accumulated \
+                        during the query execution",
+            ),
         }
     }
 }
@@ -263,6 +279,7 @@ impl QueryHandlerMetrics {
 /// - the number of instructions executed in the phase,
 /// - the number of slices executed in the phase,
 /// - the number of messages executed in the phase.
+///
 /// Use `MeasurementScope` instead of observing the metrics manually.
 #[derive(Debug)]
 pub(crate) struct ScopedMetrics {
@@ -286,6 +303,7 @@ pub(crate) struct ScopedMetrics {
 /// 2) Add `let scope = MeasurementScope::root(...)` in the top-most phase.
 /// 3) Add `let scope = MeasurementScope::nested(...)` in a sub-phase.
 /// 4) Tell the scopes about executed instructions using `scope.add()`.
+///
 /// See the `example_usage()` test below for details.
 #[must_use = "Keep the scope in a local variable"]
 #[derive(Debug)]
@@ -386,12 +404,16 @@ fn instructions_buckets() -> Vec<f64> {
         buckets.push(NumInstructions::from(value));
     }
 
-    buckets.push(NumInstructions::from(1_000_000_000_000));
+    // Add buckets for counting install_code messages
+    for value in (100_000_000_000..=1_000_000_000_000).step_by(100_000_000_000) {
+        buckets.push(NumInstructions::from(value));
+    }
 
     // Ensure that all buckets are unique.
     buckets.sort_unstable();
     buckets.dedup();
-    // Buckets are [0, 10, 1K, 10K, 20K, ..., 100B, 200B, 500B, 1T] + [1B, 2B, 3B, ..., 9B]
+    // Buckets are [0, 10, 1K, 10K, 20K, ..., 100B, 200B, 500B, 1T] + [1B, 2B, 3B, ..., 9B] + [100B,
+    // 200B, 300B, ..., 900B].
     buckets.into_iter().map(|x| x.get() as f64).collect()
 }
 
@@ -424,7 +446,7 @@ pub fn cycles_histogram<S: Into<String>>(
     metrics_registry.histogram(name, help, decimal_buckets_with_zero(6, 15))
 }
 
-/// Returns buckets appropriate for WASM and Stable memories
+/// Returns buckets appropriate for Wasm and Stable memories
 fn memory_buckets() -> Vec<f64> {
     const K: u64 = 1024;
     const M: u64 = K * 1024;
@@ -759,7 +781,21 @@ mod tests {
             .map(|x| x as u64)
             .collect();
         assert!(!buckets.is_empty());
-        let limits = [10, 1_000, 1_000_000_000, 200_000_000_000, 500_000_000_000];
+        let limits = [
+            10,
+            1_000,
+            1_000_000_000,
+            2_000_000_000,
+            3_000_000_000,
+            5_000_000_000,
+            7_000_000_000,
+            100_000_000_000,
+            200_000_000_000,
+            300_000_000_000,
+            500_000_000_000,
+            700_000_000_000,
+            1_000_000_000_000,
+        ];
         for l in limits {
             assert!(buckets.contains(&l));
         }

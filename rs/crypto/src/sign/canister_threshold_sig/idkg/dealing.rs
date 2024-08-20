@@ -2,14 +2,16 @@
 
 use crate::sign::basic_sig::{BasicSigVerifierInternal, BasicSignerInternal};
 use crate::sign::canister_threshold_sig::idkg::utils::{
-    fetch_idkg_dealing_encryption_public_key_from_registry, retrieve_mega_public_key_from_registry,
-    MegaKeyFromRegistryError,
+    fetch_idkg_dealing_encryption_public_key_from_registry, key_id_from_mega_public_key_or_panic,
+    retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError,
 };
 use ic_base_types::RegistryVersion;
-use ic_crypto_internal_csp::api::{CspIDkgProtocol, CspSigner};
-use ic_crypto_internal_csp::vault::api::{IDkgCreateDealingVaultError, IDkgDealingInternalBytes};
+use ic_crypto_internal_csp::api::CspSigner;
+use ic_crypto_internal_csp::vault::api::{
+    CspVault, IDkgCreateDealingVaultError, IDkgDealingInternalBytes,
+};
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    IDkgDealingInternal, IDkgTranscriptOperationInternal,
+    publicly_verify_dealing, IDkgDealingInternal, IDkgTranscriptOperationInternal,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_types::crypto::canister_threshold_sig::error::{
@@ -22,12 +24,14 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 use ic_types::signature::BasicSignature;
 use ic_types::NodeId;
 use std::convert::TryFrom;
+use std::sync::Arc;
 
 #[cfg(test)]
 mod tests;
 
-pub fn create_dealing<C: CspIDkgProtocol + CspSigner>(
+pub fn create_dealing<C: CspSigner>(
     csp_client: &C,
+    vault: &Arc<dyn CspVault>,
     self_node_id: &NodeId,
     registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
@@ -51,7 +55,7 @@ pub fn create_dealing<C: CspIDkgProtocol + CspSigner>(
         })
         .collect::<Result<Vec<_>, MegaKeyFromRegistryError>>()?;
 
-    let internal_dealing = csp_client
+    let internal_dealing = vault
         .idkg_create_dealing(
             params.algorithm_id(),
             params.context_data(),
@@ -95,8 +99,8 @@ fn sign_dealing<S: CspSigner>(
         })
 }
 
-pub fn verify_dealing_private<C: CspIDkgProtocol>(
-    csp_client: &C,
+pub fn verify_dealing_private(
+    vault: &Arc<dyn CspVault>,
     self_node_id: &NodeId,
     registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
@@ -123,12 +127,12 @@ pub fn verify_dealing_private<C: CspIDkgProtocol>(
     let self_mega_pubkey =
         retrieve_mega_public_key_from_registry(self_node_id, registry, params.registry_version())?;
 
-    csp_client.idkg_verify_dealing_private(
+    vault.idkg_verify_dealing_private(
         params.algorithm_id(),
         IDkgDealingInternalBytes::from(signed_dealing.idkg_dealing().dealing_to_bytes()),
         dealer_index,
         self_receiver_index,
-        self_mega_pubkey,
+        key_id_from_mega_public_key_or_panic(&self_mega_pubkey),
         params.context_data(),
     )
 }
@@ -156,7 +160,7 @@ impl From<MegaKeyFromRegistryError> for IDkgVerifyDealingPrivateError {
     }
 }
 
-pub fn verify_dealing_public<C: CspIDkgProtocol + CspSigner>(
+pub fn verify_dealing_public<C: CspSigner>(
     csp_client: &C,
     registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
@@ -208,7 +212,7 @@ pub fn verify_dealing_public<C: CspIDkgProtocol + CspSigner>(
 
     let number_of_receivers = params.receivers().count();
 
-    csp_client.idkg_verify_dealing_public(
+    publicly_verify_dealing(
         params.algorithm_id(),
         &internal_dealing,
         &internal_operation,
@@ -217,9 +221,12 @@ pub fn verify_dealing_public<C: CspIDkgProtocol + CspSigner>(
         number_of_receivers,
         &params.context_data(),
     )
+    .map_err(|e| IDkgVerifyDealingPublicError::InvalidDealing {
+        reason: format!("{:?}", e),
+    })
 }
 
-pub fn verify_initial_dealings<C: CspIDkgProtocol + CspSigner>(
+pub fn verify_initial_dealings<C: CspSigner>(
     csp_client: &C,
     registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,

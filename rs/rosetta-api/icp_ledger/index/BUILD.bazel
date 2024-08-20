@@ -1,48 +1,51 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/rosetta-api/icrc1",
-    "//rs/rosetta-api/ledger_core",
     "//rs/rosetta-api/icp_ledger",
-    "//rs/rust_canisters/http_types",
-    "//rs/rust_canisters/canister_log",
     "//rs/rosetta-api/icrc1/index-ng",
+    "//rs/rosetta-api/ledger_canister_core",
+    "//rs/rosetta-api/ledger_core",
+    "//rs/rust_canisters/canister_log",
+    "//rs/rust_canisters/dfn_core",
+    "//rs/rust_canisters/http_types",
+    "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
+    "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:ic-stable-structures",
     "@crate_index//:num-traits",
     "@crate_index//:scopeguard",
     "@crate_index//:serde",
-    "@crate_index//:ic-stable-structures",
-    "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:serde_bytes",
     "@crate_index//:serde_json",
 ]
 
 DEV_DEPENDENCIES = [
-    ":ic-icp-index",
-    "//rs/rosetta-api/ledger_canister_core",
+    # Keep sorted.
+    "//rs/rosetta-api/icp_ledger/test_utils",
+    "//rs/rosetta-api/icrc1/ledger/sm-tests",
     "//rs/state_machine_tests",
     "//rs/test_utilities/load_wasm",
-    "//rs/types/base_types",
-    "@crate_index//:assert_matches",
     "@crate_index//:candid_parser",
-    "@crate_index//:proptest",
-    "@crate_index//:serde_bytes",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:ic-cdk-macros",
 ]
 
 rust_library(
     name = "ic-icp-index",
     srcs = glob(
-        ["src/**"],
+        ["src/**/*.rs"],
         exclude = ["src/main.rs"],
     ),
     crate_name = "ic_icp_index",
@@ -63,6 +66,7 @@ rust_canister(
     },
     service_file = ":index.did",
     deps = [
+        # Keep sorted.
         ":ic-icp-index",
     ] + DEPENDENCIES,
 )
@@ -83,7 +87,7 @@ rust_test(
     deps = DEV_DEPENDENCIES,
 )
 
-rust_test(
+rust_ic_test(
     name = "ic_icp_index_test",
     srcs = ["tests/tests.rs"],
     data = [
@@ -95,8 +99,8 @@ rust_test(
     env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icp_ledger/index",
         "IC_ICP_INDEX_WASM_PATH": "$(rootpath :ic-icp-index-canister.wasm)",
-        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm)",
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm)",
     },
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [":ic-icp-index"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

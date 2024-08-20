@@ -45,13 +45,12 @@ Arguments:
        --denylist=                      a deny list of canisters
        --prober-identity=               specify an identity file for the prober
        --geolite2-country-db=           specify path to GeoLite2 Country Database
-       --geolite2-city-db=              specify path to GeoLite2 City Database
        --cert-issuer-creds              specify a credentials file for certificate-issuer
        --cert-issuer-identity           specify an identity file for certificate-issuer
        --cert-issuer-enc-key            specify an encryption key for certificate-issuer
-       --cert-syncer-raw-domains-file   specify a path to a file containing a list of custom domains that should bypass the service worker
+       --ic-boundary-config             specify a path to the ic-boundary config file
+       --ic-boundary-ratelimits         specify a path to the ic-boundary ratelimits file
        --pre-isolation-canisters        specify a set of pre-domain-isolation canisters
-       --ip-hash-salt                   specify a salt for hashing ip values
        --logging-url                    specify an endpoint for our logging backend
        --logging-user                   specify a user for our logging backend
        --logging-password               specify a password for our logging backend
@@ -109,9 +108,6 @@ for argument in "${@}"; do
         --geolite2-country-db=*)
             GEOLITE2_COUNTRY_DB="${argument#*=}"
             ;;
-        --geolite2-city-db=*)
-            GEOLITE2_CITY_DB="${argument#*=}"
-            ;;
         --cert-issuer-creds=*)
             CERTIFICATE_ISSUER_CREDENTIALS="${argument#*=}"
             ;;
@@ -121,14 +117,14 @@ for argument in "${@}"; do
         --cert-issuer-enc-key=*)
             CERTIFICATE_ISSUER_ENCRYPTION_KEY="${argument#*=}"
             ;;
-        --cert-syncer-raw-domains-file=*)
-            CERTIFICATE_SYNCER_RAW_DOMAINS_FILE="${argument#*=}"
+        --ic-boundary-config=*)
+            IC_BOUNDARY_CONFIG="${argument#*=}"
+            ;;
+        --ic-boundary-ratelimits=*)
+            IC_BOUNDARY_RATELIMITS="${argument#*=}"
             ;;
         --pre-isolation-canisters=*)
             PRE_ISOLATION_CANISTERS="${argument#*=}"
-            ;;
-        --ip-hash-salt=*)
-            IP_HASH_SALT="${argument#*=}"
             ;;
         --logging-url=*)
             LOGGING_URL="${argument#*=}"
@@ -158,7 +154,6 @@ OUTPUT="${OUTPUT:=${BASE_DIR}/build-out}"
 SSH="${SSH:=${BASE_DIR}/../../testnet/config/ssh_authorized_keys}"
 CERT_DIR="${CERT_DIR:-}"
 CERTIFICATE_ISSUER_CREDENTIALS="${CERTIFICATE_ISSUER_CREDENTIALS:-}"
-CERTIFICATE_SYNCER_RAW_DOMAINS_FILE="${CERTIFICATE_SYNCER_RAW_DOMAINS_FILE:-}"
 if [ -z ${NNS_PUBLIC_KEY+x} ]; then
     err "--nns_public_key not set"
     exit 1
@@ -429,11 +424,10 @@ function copy_deny_list() {
 
             NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
             if [[ -f "${DENY_LIST:-}" ]]; then
-                echo "Using deny list ${DENY_LIST}"
-                cp "${DENY_LIST}" "${CONFIG_DIR}/${NODE_PREFIX}/denylist.map"
+                echo "Using denylist ${DENY_LIST}"
+                cp "${DENY_LIST}" "${CONFIG_DIR}/${NODE_PREFIX}/denylist.json"
             else
-                echo "Using empty denylist"
-                touch "${CONFIG_DIR}/${NODE_PREFIX}/denylist.map"
+                echo "No denylist provided"
             fi
         fi
     done
@@ -461,8 +455,8 @@ function copy_certs() {
 }
 
 function copy_geolite2_dbs() {
-    if [[ -z "${GEOLITE2_COUNTRY_DB:-}" || -z "${GEOLITE2_CITY_DB:-}" ]]; then
-        err "geolite2 dbs have not been provided, therefore geolocation capabilities will be disabled"
+    if [[ -z "${GEOLITE2_COUNTRY_DB:-}" ]]; then
+        err "geolite2 db has not been provided, therefore geolocation capabilities will be disabled"
         return
     fi
 
@@ -478,7 +472,6 @@ function copy_geolite2_dbs() {
 
         mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}/geolite2_dbs"
         cp "${GEOLITE2_COUNTRY_DB}" "${CONFIG_DIR}/${NODE_PREFIX}/geolite2_dbs/"
-        cp "${GEOLITE2_CITY_DB}" "${CONFIG_DIR}/${NODE_PREFIX}/geolite2_dbs/"
     done
 }
 
@@ -534,20 +527,46 @@ EOF
     done
 }
 
-function generate_certificate_syncer_config() {
-    if [ ! -z "${CERTIFICATE_SYNCER_RAW_DOMAINS_FILE}" ]; then
-        for n in $NODES; do
-            declare -n NODE=$n
-            if [[ "${NODE["type"]}" != "boundary" ]]; then
-                continue
-            fi
-
-            local SUBNET_IDX="${NODE["subnet_idx"]}"
-            local NODE_IDX="${NODE["node_idx"]}"
-            local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
-            cp "${CERTIFICATE_SYNCER_RAW_DOMAINS_FILE}" "${CONFIG_DIR}/${NODE_PREFIX}/raw_domains.txt"
-        done
+function copy_ic_boundary_config() {
+    if [[ -z "${IC_BOUNDARY_CONFIG:-}" ]]; then
+        err "ic-boundary config file has not been provided, proceeding without copying it"
+        return
     fi
+
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" != "boundary" ]]; then
+            continue
+        fi
+
+        local SUBNET_IDX="${NODE["subnet_idx"]}"
+        local NODE_IDX="${NODE["node_idx"]}"
+        local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
+
+        mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}"
+        cp "${IC_BOUNDARY_CONFIG}" "${CONFIG_DIR}/${NODE_PREFIX}/ic_boundary.conf"
+    done
+}
+
+function copy_ic_boundary_ratelimits() {
+    if [[ -z "${IC_BOUNDARY_RATELIMITS:-}" ]]; then
+        err "ratelimits file has not been provided, proceeding without copying it"
+        return
+    fi
+
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" != "boundary" ]]; then
+            continue
+        fi
+
+        local SUBNET_IDX="${NODE["subnet_idx"]}"
+        local NODE_IDX="${NODE["node_idx"]}"
+        local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
+
+        mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}"
+        cp "${IC_BOUNDARY_RATELIMITS}" "${CONFIG_DIR}/${NODE_PREFIX}/canister-ratelimit.yml"
+    done
 }
 
 function copy_pre_isolation_canisters() {
@@ -568,26 +587,6 @@ function copy_pre_isolation_canisters() {
 
         mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}"
         cp "${PRE_ISOLATION_CANISTERS}" "${CONFIG_DIR}/${NODE_PREFIX}/pre_isolation_canisters.txt"
-    done
-}
-
-function copy_ip_hash_salt() {
-    if [[ -z "${IP_HASH_SALT:-}" ]]; then
-        err "ip hashing salt has not been provided, proceeding without copying it"
-        return
-    fi
-
-    for n in $NODES; do
-        declare -n NODE=$n
-        if [[ "${NODE["type"]}" != "boundary" ]]; then
-            continue
-        fi
-
-        local SUBNET_IDX="${NODE["subnet_idx"]}"
-        local NODE_IDX="${NODE["node_idx"]}"
-        local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
-
-        echo "ip_hash_salt=${IP_HASH_SALT}" >>"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
     done
 }
 
@@ -684,10 +683,10 @@ function main() {
     copy_certs
     copy_deny_list
     copy_geolite2_dbs
+    copy_ic_boundary_config
+    copy_ic_boundary_ratelimits
     generate_certificate_issuer_config
-    generate_certificate_syncer_config
     copy_pre_isolation_canisters
-    copy_ip_hash_salt
     copy_logging_credentials
     copy_crowdsec_credentials
     build_tarball

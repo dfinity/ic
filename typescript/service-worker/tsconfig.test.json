@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "allowJs": true,
-    "module": "commonjs",
-    "types": ["jest", "node"]
-  },
-  "include": ["src/**/*.ts", "src/**/*.test.ts", "src/mocks/*"]
-}

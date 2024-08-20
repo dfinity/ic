@@ -1,6 +1,9 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_ledger_core::block::EncodedBlock;
-use icp_ledger::{AccountIdentifier, BlockIndex, Transaction};
+use ic_ledger_core::timestamp::TimeStamp;
+use icp_ledger::{AccountIdentifier, Block, BlockIndex, Memo, Operation};
+use serde_bytes::ByteBuf;
+
 pub mod logs;
 
 #[derive(CandidType, Debug, Deserialize)]
@@ -29,15 +32,39 @@ pub struct GetAccountIdentifierTransactionsArgs {
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
-pub struct TransactionWithId {
+pub struct SettledTransaction {
+    pub operation: Operation,
+    pub memo: Memo,
+    /// The time this transaction was created on the client side.
+    pub created_at_time: Option<TimeStamp>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icrc1_memo: Option<ByteBuf>,
+    /// The time the block with this transaction was created.
+    pub timestamp: Option<TimeStamp>,
+}
+
+impl From<Block> for SettledTransaction {
+    fn from(block: Block) -> Self {
+        SettledTransaction {
+            operation: block.transaction.operation,
+            memo: block.transaction.memo,
+            created_at_time: block.transaction.created_at_time,
+            icrc1_memo: block.transaction.icrc1_memo,
+            timestamp: Some(block.timestamp),
+        }
+    }
+}
+
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
+pub struct SettledTransactionWithId {
     pub id: BlockIndex,
-    pub transaction: Transaction,
+    pub transaction: SettledTransaction,
 }
 
 #[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
 pub struct GetAccountIdentifierTransactionsResponse {
     pub balance: u64,
-    pub transactions: Vec<TransactionWithId>,
+    pub transactions: Vec<SettledTransactionWithId>,
     // The txid of the oldest transaction the account_identifier has
     pub oldest_tx_id: Option<BlockIndex>,
 }

@@ -38,7 +38,7 @@ impl CompilationCache {
             .lock()
             .unwrap()
             .get(&WasmHash::from(canister_module))
-            .map(|o| o.as_ref().map(Arc::clone).map_err(|e| e.clone()))
+            .map(|o| o.clone().map_err(|e| e.clone()))
     }
 
     #[doc(hidden)]

@@ -2,7 +2,7 @@ use candid::Decode;
 use dfn_core::{api, CanisterId};
 use dfn_macro::update;
 use futures::future::join_all;
-use ic_ic00_types::{CanisterIdRecord, CanisterInstallMode, Payload};
+use ic_management_canister_types::{CanisterIdRecord, CanisterInstallMode, Payload};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 
@@ -37,9 +37,9 @@ async fn create_canisters_in_batch(
         let result = api::call_bytes(
             CanisterId::ic_00(),
             "create_canister",
-            &ic_ic00_types::CreateCanisterArgs {
+            &ic_management_canister_types::CreateCanisterArgs {
                 settings: Some(
-                    ic_ic00_types::CanisterSettingsArgsBuilder::new()
+                    ic_management_canister_types::CanisterSettingsArgsBuilder::new()
                         .with_controllers(vec![api::id().get()])
                         .build(),
                 ),
@@ -91,12 +91,11 @@ async fn install_code(wasm_module: Vec<u8>, arg: Vec<u8>) {
             let result = api::call_bytes(
                 CanisterId::ic_00(),
                 "install_code",
-                &ic_ic00_types::InstallCodeArgs::new(
+                &ic_management_canister_types::InstallCodeArgs::new(
                     CanisterInstallMode::Install,
                     *canister_id,
                     wasm_module.clone(),
                     arg.clone(),
-                    None,
                     None,
                     None,
                 )

@@ -4,9 +4,9 @@ use ic_base_types::PrincipalId;
 use ic_base_types::SubnetId;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto;
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
 use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, EccPoint, EccScalar};
-use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
@@ -25,7 +25,6 @@ use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::KeyPurpose;
 use ic_types::registry::RegistryClientError;
 use ic_types::Height;
-use mockall::predicate;
 use rand::{CryptoRng, Rng};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -36,8 +35,10 @@ mod retain_keys_for_transcripts {
     use super::*;
     use crate::sign::canister_threshold_sig::idkg::retain_active_keys::retain_keys_for_transcripts;
     use crate::sign::canister_threshold_sig::idkg::retain_active_keys::IDkgTranscriptInternal;
+    use ic_crypto_internal_csp::key_id::KeyId;
     use ic_crypto_internal_test_vectors::unhex::hex_to_byte_vec;
-    use ic_crypto_test_utils::set_of;
+    use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
+    use maplit::btreeset;
 
     #[test]
     fn should_succeed_when_key_in_registry_and_node_in_receivers() {
@@ -45,6 +46,7 @@ mod retain_keys_for_transcripts {
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
         let registry_client = FakeRegistryClient::new(data_provider.clone());
         let registry_version = RegistryVersion::new(2);
+        let metrics = Arc::new(CryptoMetrics::none());
 
         let transcript = idkg_transcript_with_internal_transcript_and_registry_version(
             node_id(),
@@ -82,24 +84,31 @@ mod retain_keys_for_transcripts {
             data_provider,
         );
         registry_client.update_to_latest_version();
-        let expected_internal_transcripts =
-            set_of(&[IDkgTranscriptInternal::try_from(&transcript)
-                .expect("converting valid random transcript to internal script should succeed")]);
-        let mut mock_csp = MockAllCryptoServiceProvider::new();
-        mock_csp
-            .expect_idkg_observe_minimum_registry_version_in_active_idkg_transcripts()
-            .return_const(());
-        mock_csp
+        let internal_transcript = IDkgTranscriptInternal::try_from(&transcript)
+            .expect("converting valid random transcript to internal script should succeed");
+
+        let expected_key_ids = btreeset! {
+            KeyId::from(internal_transcript.combined_commitment.commitment())
+        };
+
+        let mut mock_vault = MockLocalCspVault::new();
+        mock_vault
             .expect_idkg_retain_active_keys()
-            .withf(move |internal_transcripts, oldest_public_key| {
-                *internal_transcripts == expected_internal_transcripts
-                    && *oldest_public_key == idkg_public_key
+            .withf(move |key_ids, oldest_public_key| {
+                key_ids == &expected_key_ids && oldest_public_key == &idkg_public_key
             })
             .times(1)
             .return_const(Ok(()));
+        let mock_vault = Arc::new(mock_vault);
 
         assert_eq!(
-            retain_keys_for_transcripts(&mock_csp, &node_id(), &registry_client, &transcripts),
+            retain_keys_for_transcripts(
+                &(mock_vault as _),
+                &node_id(),
+                &registry_client,
+                &metrics,
+                &transcripts
+            ),
             Ok(())
         );
     }
@@ -116,10 +125,17 @@ mod retain_keys_for_transcripts {
             rng,
         );
         transcripts.insert(transcript);
-        let mock_csp = MockAllCryptoServiceProvider::new();
+        let metrics = Arc::new(CryptoMetrics::none());
+        let mock_vault = Arc::new(MockLocalCspVault::new());
 
         assert_eq!(
-            retain_keys_for_transcripts(&mock_csp, &node_id(), &registry_client, &transcripts),
+            retain_keys_for_transcripts(
+                &(mock_vault as _),
+                &node_id(),
+                &registry_client,
+                &metrics,
+                &transcripts
+            ),
             Ok(())
         );
     }
@@ -145,10 +161,16 @@ mod retain_keys_for_transcripts {
             data_provider,
         );
         registry_client.update_to_latest_version();
-        let mock_csp = MockAllCryptoServiceProvider::new();
+        let metrics = Arc::new(CryptoMetrics::none());
+        let mock_vault = Arc::new(MockLocalCspVault::new());
 
-        let result =
-            retain_keys_for_transcripts(&mock_csp, &node_id(), &registry_client, &transcripts);
+        let result = retain_keys_for_transcripts(
+            &(mock_vault as _),
+            &node_id(),
+            &registry_client,
+            &metrics,
+            &transcripts,
+        );
 
         assert_matches!(
             result,
@@ -178,6 +200,9 @@ mod retain_keys_for_transcripts {
 }
 
 mod oldest_public_key {
+    use ic_crypto_test_utils_metrics::assertions::MetricsObservationsAssert;
+    use ic_metrics::MetricsRegistry;
+
     use super::*;
 
     #[test]
@@ -200,9 +225,9 @@ mod oldest_public_key {
             data_provider,
         );
         registry_client.update_to_latest_version();
-        let mock_csp = MockAllCryptoServiceProvider::new();
+        let metrics = Arc::new(CryptoMetrics::none());
 
-        let result = oldest_public_key(&mock_csp, &node_id(), &registry_client, &transcripts);
+        let result = oldest_public_key(&node_id(), &registry_client, &metrics, &transcripts);
 
         assert_matches!(
             result,
@@ -225,9 +250,9 @@ mod oldest_public_key {
                 rng,
             ));
         }
-        let mock_csp = MockAllCryptoServiceProvider::new();
+        let metrics = Arc::new(CryptoMetrics::none());
 
-        let result = oldest_public_key(&mock_csp, &node_id(), &registry_client, &transcripts);
+        let result = oldest_public_key(&node_id(), &registry_client, &metrics, &transcripts);
 
         assert_eq!(result, None);
     }
@@ -260,13 +285,10 @@ mod oldest_public_key {
             rng,
         );
         registry_client.update_to_latest_version();
-        let mut mock_csp = MockAllCryptoServiceProvider::new();
-        mock_csp
-            .expect_idkg_observe_minimum_registry_version_in_active_idkg_transcripts()
-            .return_const(());
+        let metrics = Arc::new(CryptoMetrics::none());
 
         assert_matches!(
-            oldest_public_key(&mock_csp, &node_id(), &registry_client, &transcripts),
+            oldest_public_key(&node_id(), &registry_client, &metrics, &transcripts),
             Some(Ok(idkg_public_key)) if idkg_public_key == old_idkg_public_key
         );
     }
@@ -274,8 +296,8 @@ mod oldest_public_key {
     #[test]
     fn should_be_none_when_no_transcripts_and_should_not_query_registry() {
         let registry = registry_returning_transient_error();
-        let mock_csp = MockAllCryptoServiceProvider::new();
-        let result = oldest_public_key(&mock_csp, &node_id(), &registry, &HashSet::new());
+        let metrics = Arc::new(CryptoMetrics::none());
+        let result = oldest_public_key(&node_id(), &registry, &metrics, &HashSet::new());
         assert_eq!(result, None);
     }
 
@@ -289,9 +311,9 @@ mod oldest_public_key {
             rng,
         ));
         let registry = registry_returning_transient_error();
-        let mock_csp = MockAllCryptoServiceProvider::new();
+        let metrics = Arc::new(CryptoMetrics::none());
 
-        let result = oldest_public_key(&mock_csp, &node_id(), &registry, &transcripts);
+        let result = oldest_public_key(&node_id(), &registry, &metrics, &transcripts);
 
         assert_matches!(
             result,
@@ -310,9 +332,9 @@ mod oldest_public_key {
             rng,
         ));
         let registry = registry_returning_reproducible_error();
-        let mock_csp = MockAllCryptoServiceProvider::new();
+        let metrics = Arc::new(CryptoMetrics::none());
 
-        let result = oldest_public_key(&mock_csp, &node_id(), &registry, &transcripts);
+        let result = oldest_public_key(&node_id(), &registry, &metrics, &transcripts);
 
         assert_matches!(
             result,
@@ -341,9 +363,9 @@ mod oldest_public_key {
             data_provider,
         );
         registry_client.update_to_latest_version();
-        let mock_csp = MockAllCryptoServiceProvider::new();
+        let metrics = Arc::new(CryptoMetrics::none());
 
-        let result = oldest_public_key(&mock_csp, &node_id(), &registry_client, &transcripts);
+        let result = oldest_public_key(&node_id(), &registry_client, &metrics, &transcripts);
 
         assert_matches!(
             result,
@@ -377,12 +399,9 @@ mod oldest_public_key {
             );
         }
         registry_client.update_to_latest_version();
-        let mut mock_csp = MockAllCryptoServiceProvider::new();
-        mock_csp
-            .expect_idkg_observe_minimum_registry_version_in_active_idkg_transcripts()
-            .return_const(());
+        let metrics = Arc::new(CryptoMetrics::none());
 
-        let result = oldest_public_key(&mock_csp, &node_id(), &registry_client, &transcripts)
+        let result = oldest_public_key(&node_id(), &registry_client, &metrics, &transcripts)
             .expect("missing result")
             .expect("missing IDKG public key");
 
@@ -419,16 +438,18 @@ mod oldest_public_key {
             );
         }
         registry_client.update_to_latest_version();
-        let mut mock_csp = MockAllCryptoServiceProvider::new();
-        mock_csp
-            .expect_idkg_observe_minimum_registry_version_in_active_idkg_transcripts()
-            .with(predicate::eq(oldest_registry_version))
-            .times(1)
-            .return_const(());
 
-        let _result = oldest_public_key(&mock_csp, &node_id(), &registry_client, &transcripts)
+        let metrics_registry = MetricsRegistry::new();
+        let metrics = Arc::new(CryptoMetrics::new(Some(&metrics_registry)));
+
+        let _result = oldest_public_key(&node_id(), &registry_client, &metrics, &transcripts)
             .expect("missing result")
             .expect("missing IDKG public key");
+
+        MetricsObservationsAssert::assert_that(metrics_registry)
+            .contains_minimum_registry_version_in_active_idkg_transcripts(
+                oldest_registry_version.get(),
+            );
     }
 }
 

@@ -162,9 +162,8 @@ async fn test_cannot_submit_motion_in_degraded_mode() {
             })),
             ..Default::default()
         },
-    ).await,
-    Err(e) if e.error_type == ErrorType::ResourceExhausted as i32
-    );
+    ),
+    Err(e) if e.error_type == ErrorType::ResourceExhausted as i32);
 }
 
 #[tokio::test]
@@ -186,8 +185,7 @@ async fn test_can_submit_nns_canister_upgrade_in_degraded_mode() {
                 })),
                 ..Default::default()
             },
-        )
-        .await,
+        ),
         Ok(_)
     );
 }

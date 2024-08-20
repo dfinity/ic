@@ -23,10 +23,9 @@ use either::Either;
 use futures::{io::Read, StreamExt};
 use ic_crypto_test_utils_tls::x509_certificates::CertWithPrivateKey;
 use ic_crypto_tls_interfaces::TlsConfig;
-use ic_icos_sev::{ValidateAttestationError, ValidateAttestedStream};
 use ic_interfaces::p2p::{
     artifact_manager::ArtifactProcessorEvent,
-    consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader},
+    consensus::{PriorityFn, PriorityFnAndFilterProducer, ValidatedPoolReader},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, new_replica_logger_from_config, ReplicaLogger};
@@ -34,7 +33,10 @@ use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_pprof::{Pprof, PprofCollector};
 use ic_quic_transport::{DummyUdpSocket, SubnetTopology};
 use ic_types::{
-    artifact::{Advert, ArtifactKind, ArtifactTag, Priority, UnvalidatedArtifactMutation},
+    artifact::{
+        Advert, ArtifactKind, ArtifactTag, IdentifiableArtifact, PbArtifact, Priority,
+        UnvalidatedArtifactMutation,
+    },
     crypto::CryptoHash,
     NodeId, RegistryVersion,
 };
@@ -62,53 +64,48 @@ use tokio_util::time::DelayQueue;
 // use tokio_util::time::DelayQueue;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
-pub struct TestArtifact;
+pub struct TestArtifact(Vec<u8>);
 
 type NodeIdAttribute = ();
 // 24 bytes
 // [message_id: [0..8], artifact_producer_node_id: [8..16], time_stamp: [16..24]]
 type MessageId = Vec<u8>;
 
-impl ArtifactKind for TestArtifact {
-    // Does not matter
-    const TAG: ArtifactTag = ArtifactTag::ConsensusArtifact;
-    type PbMessage = Vec<u8>;
-    type PbIdError = Infallible;
-    type PbMessageError = Infallible;
-    type PbAttributeError = Infallible;
-    type PbFilterError = Infallible;
-
-    type PbAttribute = NodeIdAttribute;
-    type Attribute = NodeIdAttribute;
-
-    type PbId = MessageId;
+impl IdentifiableArtifact for TestArtifact {
+    const NAME: &'static str = "consensus";
     type Id = MessageId;
-
-    type Message = Vec<u8>;
-    type PbFilter = ();
-    type Filter = ();
-
-    /// The function converts a TestArtifactMessage to an advert for a
-    /// TestArtifact.
-    fn message_to_advert(msg: &Self::Message) -> Advert<TestArtifact> {
-        let id = msg[..24].into();
-        // let id = msg[..16].into();
-        let attribute = ();
-
-        Advert {
-            attribute,
-            size: 1024 * 1024,
-            id,
-            integrity_hash: CryptoHash(vec![]),
-        }
+    type Attribute = NodeIdAttribute;
+    fn id(&self) -> Self::Id {
+        self.0[..24].into()
+    }
+    fn attribute(&self) -> Self::Attribute {
+        ()
     }
 }
 
-impl ValidatedPoolReader<TestArtifact> for TestConsensus {
-    fn contains(&self, _id: &<TestArtifact as ArtifactKind>::Id) -> bool {
-        unimplemented!("Contains is not needed.")
+impl From<Vec<u8>> for TestArtifact {
+    fn from(value: Vec<u8>) -> Self {
+        Self(value)
     }
-    fn get_validated_by_identifier(
+}
+
+impl From<TestArtifact> for Vec<u8> {
+    fn from(value: TestArtifact) -> Self {
+        value.0
+    }
+}
+
+impl PbArtifact for TestArtifact {
+    type PbId = Vec<u8>;
+    type PbIdError = Infallible;
+    type PbMessage = Vec<u8>;
+    type PbMessageError = Infallible;
+    type PbAttribute = ();
+    type PbAttributeError = Infallible;
+}
+
+impl ValidatedPoolReader<TestArtifact> for TestConsensus {
+    fn get(
         &self,
         id: &<TestArtifact as ArtifactKind>::Id,
     ) -> Option<<TestArtifact as ArtifactKind>::Message> {
@@ -117,9 +114,8 @@ impl ValidatedPoolReader<TestArtifact> for TestConsensus {
 
         Some(id)
     }
-    fn get_all_validated_by_filter(
+    fn get_all_validated(
         &self,
-        _filter: &<TestArtifact as ArtifactKind>::Filter,
     ) -> Box<dyn Iterator<Item = <TestArtifact as ArtifactKind>::Message> + '_> {
         Box::new(std::iter::empty())
     }
@@ -130,10 +126,8 @@ impl PriorityFnAndFilterProducer<TestArtifact, TestConsensus> for TestConsensus 
     fn get_priority_function(
         &self,
         _pool: &TestConsensus,
-    ) -> ic_types::artifact::PriorityFn<
-        <TestArtifact as ArtifactKind>::Id,
-        <TestArtifact as ArtifactKind>::Attribute,
-    > {
+    ) -> PriorityFn<<TestArtifact as ArtifactKind>::Id, <TestArtifact as ArtifactKind>::Attribute>
+    {
         let node_id = self.node_id;
         let log = self.log.clone();
         Box::new(move |id, _attribute| {
@@ -217,7 +211,9 @@ async fn load_generator(
     node_id: u64,
     log: ReplicaLogger,
     artifact_processor_rx: tokio::sync::mpsc::Sender<ArtifactProcessorEvent<TestArtifact>>,
-    received_artifacts: crossbeam_channel::Receiver<UnvalidatedArtifactMutation<TestArtifact>>,
+    received_artifacts: tokio::sync::mpsc::UnboundedReceiver<
+        UnvalidatedArtifactMutation<TestArtifact>,
+    >,
     message_rate: usize,
     relaying: bool,
     metrics: Arc<Metrics>,
@@ -229,7 +225,7 @@ async fn load_generator(
         let log = log.clone();
 
         std::thread::spawn(move || {
-            while let Ok(message) = received_artifacts.recv() {
+            while let Some(message) = received_artifacts.blocking_recv() {
                 tx.blocking_send(message).unwrap();
             }
             error!(log, "Workload thread exited");
@@ -268,22 +264,22 @@ async fn load_generator(
                     UnvalidatedArtifactMutation::<TestArtifact>::Insert((message, _peer)) => {
 
                         received_artifact_count += 1;
-                        received_bytes += message.len();
+                        received_bytes += message.0.len();
                         metrics
                             .received_bytes
-                            .inc_by(message.len() as u64);
+                            .inc_by(message.0.len() as u64);
                         metrics.received_artifact_count.inc();
 
                         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-                        let latency = now - Duration::from_secs_f64(f64::from_le_bytes(message[16..24].try_into().unwrap()));
+                        let latency = now - Duration::from_secs_f64(f64::from_le_bytes(message.0[16..24].try_into().unwrap()));
                         metrics.message_latency.observe(latency.as_secs_f64());
-                        let id = TestArtifact::message_to_advert(&message).id;
+                        let id = message.id();
                         let message_id = u64::from_le_bytes(id[..8].try_into().unwrap());
 
                         if relaying && message_id % 51== 0 {
                         // if relaying {
                             // purge_queue.insert(TestArtifact::message_to_advert(&message), Duration::from_secs(60));
-                            match artifact_processor_rx.send(ArtifactProcessorEvent::Advert((TestArtifact::message_to_advert(&message),false))).await {
+                            match artifact_processor_rx.send(ArtifactProcessorEvent::Advert((message.id(),false))).await {
                                 Ok(_) => {},
                                 Err(e) => {
                                     error!(log, "Artifact processor failed to send relay: {:?}", e);
@@ -321,7 +317,7 @@ async fn load_generator(
                 // purge_queue.insert(TestArtifact::message_to_advert(&id), Duration::from_secs(60));
 
                 match artifact_processor_rx
-                    .send(ArtifactProcessorEvent::Advert((TestArtifact::message_to_advert(&id),true)))
+                    .send(ArtifactProcessorEvent::Advert((message.id(),true)))
                     .await {
                         Ok(_) => {},
                         Err(e) => {
@@ -439,7 +435,7 @@ async fn main() {
         new_replica_logger_from_config(&ic_config::logger::Config::default());
 
     let (artifact_processor_tx, artifact_processor_rx) = tokio::sync::mpsc::channel(100000);
-    let (cb_tx, cb_rx) = crossbeam_channel::unbounded();
+    let (cb_tx, cb_rx) = tokio::sync::mpsc::unbounded_channel();
 
     let test_consensus = TestConsensus {
         log: log.clone(),
@@ -527,7 +523,7 @@ fn start_cm(
     peers_addrs: Vec<SocketAddr>,
     transport_addr: SocketAddr,
     test_consensus: TestConsensus,
-    cb_tx: crossbeam_channel::Sender<UnvalidatedArtifactMutation<TestArtifact>>,
+    cb_tx: tokio::sync::mpsc::UnboundedSender<UnvalidatedArtifactMutation<TestArtifact>>,
     mut ap_rx: tokio::sync::mpsc::Receiver<ArtifactProcessorEvent<TestArtifact>>,
     metrics: MetricsRegistry,
 ) {
@@ -573,7 +569,6 @@ fn start_cm(
         &rt_handle,
         Arc::new(tls) as Arc<_>,
         Arc::new(MockReg) as Arc<_>,
-        Arc::new(SevImpl) as Arc<_>,
         node_id,
         watcher.clone(),
         Either::<_, DummyUdpSocket>::Left(transport_addr),
@@ -593,7 +588,7 @@ fn start_libp2p(
     peers_addrs: Vec<SocketAddr>,
     transport_addr: SocketAddr,
     pool: TestConsensus,
-    cb_tx: crossbeam_channel::Sender<UnvalidatedArtifactMutation<TestArtifact>>,
+    cb_tx: tokio::sync::mpsc::UnboundedSender<UnvalidatedArtifactMutation<TestArtifact>>,
     mut ap_rx: tokio::sync::mpsc::Receiver<ArtifactProcessorEvent<TestArtifact>>,
     metrics_registry: Arc<Mutex<prometheus_client::registry::Registry>>,
 ) {
@@ -695,7 +690,7 @@ fn start_libp2p(
             swarm: &mut Swarm<MainBehaviour>,
             topology: &Vec<(NodeId, PeerId, SocketAddr)>,
             event: SwarmEvent<MainBehaviourEvent>,
-            cb_tx: &crossbeam_channel::Sender<UnvalidatedArtifactMutation<TestArtifact>>,
+            cb_tx: &tokio::sync::mpsc::UnboundedSender<UnvalidatedArtifactMutation<TestArtifact>>,
         ) {
             if !matches!(event, SwarmEvent::Behaviour(_)) {
                 info!(log, "libp2p event {:?}", event);
@@ -748,7 +743,7 @@ fn start_libp2p(
                     let id = advert.id.clone();
                     let pool = pool.clone();
                     let artifact =
-                        tokio::task::spawn_blocking(move || pool.get_validated_by_identifier(&id))
+                        tokio::task::spawn_blocking(move || pool.get(&id))
                             .await;
 
                     let a = match artifact {
@@ -759,7 +754,7 @@ fn start_libp2p(
                     if let Err(e) = swarm
                         .behaviour_mut()
                         .gossip_sub
-                        .publish(IdentTopic::new("exp"), a)
+                        .publish(IdentTopic::new("exp"), a.0)
                     {
                         info!(log, "Publish err {e:?}");
                     }
@@ -809,23 +804,6 @@ fn start_libp2p(
 #[derive(libp2p::swarm::NetworkBehaviour)]
 struct MainBehaviour {
     gossip_sub: libp2p::gossipsub::Behaviour,
-}
-
-struct SevImpl;
-
-#[async_trait::async_trait]
-impl<S> ValidateAttestedStream<S> for SevImpl
-where
-    S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-{
-    async fn perform_attestation_validation(
-        &self,
-        stream: S,
-        _peer: NodeId,
-        _registry_version: RegistryVersion,
-    ) -> Result<S, ValidateAttestationError> {
-        Ok(stream)
-    }
 }
 
 struct TlsConfigImpl {

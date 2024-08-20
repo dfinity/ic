@@ -29,12 +29,12 @@ pub enum IDkgTranscriptIdError {
 impl_display_using_debug!(IDkgTranscriptIdError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PresignatureQuadrupleCreationError {
+pub enum EcdsaPresignatureQuadrupleCreationError {
     InconsistentAlgorithmIds,
     InconsistentReceivers,
     InvalidTranscriptOrigin(String),
 }
-impl_display_using_debug!(PresignatureQuadrupleCreationError);
+impl_display_using_debug!(EcdsaPresignatureQuadrupleCreationError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaSigInputsCreationError {
@@ -80,11 +80,11 @@ impl From<InitialIDkgDealingsValidationError> for ProxyDecodeError {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ThresholdEcdsaGetPublicKeyError {
+pub enum CanisterThresholdGetPublicKeyError {
     InvalidArgument(String),
     InternalError(String),
 }
-impl_display_using_debug!(ThresholdEcdsaGetPublicKeyError);
+impl_display_using_debug!(CanisterThresholdGetPublicKeyError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgCreateTranscriptError {
@@ -333,14 +333,14 @@ pub enum ThresholdEcdsaVerifySigShareError {
 impl_display_using_debug!(ThresholdEcdsaVerifySigShareError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ThresholdEcdsaSignShareError {
+pub enum ThresholdEcdsaCreateSigShareError {
     InternalError { internal_error: String },
     NotAReceiver,
     SerializationError { internal_error: String },
     SecretSharesNotFound { commitment_string: String },
     TransientInternalError { internal_error: String },
 }
-impl_display_using_debug!(ThresholdEcdsaSignShareError);
+impl_display_using_debug!(ThresholdEcdsaCreateSigShareError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaVerifyCombinedSignatureError {
@@ -359,3 +359,59 @@ pub enum ThresholdEcdsaCombineSigSharesError {
     SignerNotAllowed { node_id: NodeId },
 }
 impl_display_using_debug!(ThresholdEcdsaCombineSigSharesError);
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ThresholdSchnorrVerifySigShareError {
+    InternalError(String),
+    SerializationError(String),
+    InvalidSignatureShare,
+    InvalidArgumentMissingSignerInTranscript { signer_id: NodeId },
+    InvalidArguments(String),
+}
+impl_display_using_debug!(ThresholdSchnorrVerifySigShareError);
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ThresholdSchnorrCreateSigShareError {
+    InternalError(String),
+    NotAReceiver,
+    SerializationError(String),
+    SecretSharesNotFound { commitment_string: String },
+    TransientInternalError(String),
+    InvalidArguments(String),
+}
+impl_display_using_debug!(ThresholdSchnorrCreateSigShareError);
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ThresholdSchnorrVerifyCombinedSigError {
+    InternalError(String),
+    InvalidSignature,
+    SerializationError(String),
+    InvalidArguments(String),
+}
+impl_display_using_debug!(ThresholdSchnorrVerifyCombinedSigError);
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ThresholdSchnorrCombineSigSharesError {
+    InternalError(String),
+    UnsatisfiedReconstructionThreshold { threshold: u32, share_count: usize },
+    SerializationError(String),
+    SignerNotAllowed { node_id: NodeId },
+    InvalidArguments(String),
+}
+impl_display_using_debug!(ThresholdSchnorrCombineSigSharesError);
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ThresholdSchnorrSigInputsCreationError {
+    InconsistentAlgorithmIds(String, String),
+    InconsistentReceivers,
+    InvalidPreSignatureOrigin(String),
+    UnsupportedAlgorithm(String),
+}
+impl_display_using_debug!(ThresholdSchnorrSigInputsCreationError);
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ThresholdSchnorrPresignatureTranscriptCreationError {
+    InvalidTranscriptOrigin(String),
+    UnsupportedAlgorithm(String),
+}
+impl_display_using_debug!(ThresholdSchnorrPresignatureTranscriptCreationError);

@@ -10,5 +10,8 @@
   },
   "minter": {
     "ic": "sv3dd-oaaaa-aaaar-qacoa-cai"
+  },
+  "orchestrator": {
+    "ic": "vxkom-oyaaa-aaaar-qafda-cai"
   }
 }

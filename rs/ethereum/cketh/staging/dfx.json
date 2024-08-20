@@ -1,6 +1,5 @@
 {
   "version": 1,
-  "dfx": "0.14.3",
   "canisters": {
     "minter": {
       "type": "custom",
@@ -18,6 +17,15 @@
       ],
       "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister_u256.wasm",
       "candid": "../../../rosetta-api/icrc1/ledger/ledger.did",
+      "shrink": false
+    },
+    "orchestrator": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz"
+      ],
+      "wasm": "../../../../bazel-bin/rs/ethereum/ledger-suite-orchestrator/ledger_suite_orchestrator_canister.wasm.gz",
+      "candid": "../../ledger-suite-orchestrator/ledger_suite_orchestrator.did",
       "shrink": false
     }
   },

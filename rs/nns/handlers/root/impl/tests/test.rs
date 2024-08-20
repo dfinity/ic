@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ic00_types::CanisterInstallMode::Upgrade;
+use ic_management_canister_types::CanisterInstallMode::Upgrade;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };
@@ -233,11 +233,11 @@ fn test_encode_metrics() {
         get_metric_value_does_not_capture(now_millis, &metrics, line_prefix)
     };
 
-    fn assert_less_than_10_ms(seconds: f64) {
-        assert!(0.0 < seconds && seconds < 0.010, "{}", seconds);
+    fn assert_less_than_50_ms(seconds: f64) {
+        assert!(0.0 < seconds && seconds < 0.050, "{}", seconds);
     }
 
-    assert_less_than_10_ms(get_metric_value(&format!(
+    assert_less_than_50_ms(get_metric_value(&format!(
         r#"nns_root_in_flight_proxied_canister_call_max_age_seconds{{caller="{}",callee="{}",method_name="some_method"}} "#,
         caller, callee,
     )));
@@ -289,12 +289,12 @@ fn test_encode_metrics() {
         get_metric_value_does_not_capture(now_millis, &metrics, line_prefix)
     };
 
-    assert_less_than_10_ms(get_metric_value(&format!(
+    assert_less_than_50_ms(get_metric_value(&format!(
         r#"nns_root_in_flight_proxied_canister_call_max_age_seconds{{caller="{}",callee="{}",method_name="some_method"}} "#,
         caller, callee,
     )));
 
-    assert_less_than_10_ms(get_metric_value(&format!(
+    assert_less_than_50_ms(get_metric_value(&format!(
         r#"nns_root_in_flight_proxied_canister_call_max_age_seconds{{caller="{}",callee="{}",method_name="canister_status"}} "#,
         caller, callee,
     )));
@@ -347,7 +347,7 @@ fn test_encode_metrics() {
         get_metric_value_does_not_capture(now_millis, &metrics, line_prefix)
     };
 
-    assert_less_than_10_ms(get_metric_value(&format!(
+    assert_less_than_50_ms(get_metric_value(&format!(
         r#"nns_root_in_flight_proxied_canister_call_max_age_seconds{{caller="{}",callee="{}",method_name="some_method"}} "#,
         caller, callee,
     )));

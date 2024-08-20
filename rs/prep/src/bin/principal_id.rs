@@ -17,22 +17,16 @@ enum PemOrDer {
     Der,
 }
 
-#[derive(Debug)]
-struct PemOrDerParseError(());
-
-impl ToString for PemOrDerParseError {
-    fn to_string(&self) -> String {
-        "Can't parse string. Not 'pem' nor 'der'".to_string()
-    }
-}
-
-impl ToString for PemOrDer {
-    fn to_string(&self) -> String {
-        match self {
-            PemOrDer::Pem => "pem",
-            PemOrDer::Der => "der",
-        }
-        .to_string()
+impl std::fmt::Display for PemOrDer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                PemOrDer::Pem => "pem",
+                PemOrDer::Der => "der",
+            }
+        )
     }
 }
 

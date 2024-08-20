@@ -8,12 +8,14 @@ use crate::consensus::{
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::consensus_pool::{ChangeAction, ChangeSet, HeightRange};
 use ic_logger::{info, trace, ReplicaLogger};
-use ic_types::consensus::{
-    hashed, Block, BlockProposal, ConsensusMessage, ConsensusMessageHashable, FinalizationContent,
-    FinalizationShare, NotarizationShare, Rank,
+use ic_types::{
+    consensus::{
+        hashed, Block, BlockMetadata, BlockProposal, ConsensusMessage, ConsensusMessageHashable,
+        FinalizationContent, FinalizationShare, HasHeight, HashedBlock, NotarizationShare, Rank,
+    },
+    malicious_flags::MaliciousFlags,
+    Time,
 };
-use ic_types::malicious_flags::MaliciousFlags;
-use ic_types::Time;
 use std::time::Duration;
 
 /// Return a `ChangeSet` that moves all block proposals in the range to the
@@ -112,8 +114,12 @@ fn maliciously_propose_blocks(
                             new_block.context.time += Duration::from_nanos(i);
                             let hashed_block =
                                 hashed::Hashed::new(ic_types::crypto::crypto_hash, new_block);
-                            if let Ok(signature) = block_maker.crypto.sign(
+                            let metadata = BlockMetadata::from_block(
                                 &hashed_block,
+                                &block_maker.replica_config,
+                            );
+                            if let Ok(signature) = block_maker.crypto.sign(
+                                &metadata,
                                 block_maker.replica_config.node_id,
                                 registry_version,
                             ) {
@@ -156,19 +162,18 @@ fn maliciously_propose_empty_block(
     block_maker: &BlockMaker,
     pool: &PoolReader<'_>,
     rank: Rank,
-    parent: Block,
+    parent: HashedBlock,
 ) -> Option<BlockProposal> {
-    let parent_hash = ic_types::crypto::crypto_hash(&parent);
-    let height = parent.height.increment();
+    let height = parent.height().increment();
     let certified_height = block_maker.state_manager.latest_certified_height();
-    let context = parent.context.clone();
+    let context = parent.as_ref().context.clone();
 
     // Note that we will skip blockmaking if registry versions or replica_versions
     // are missing or temporarily not retrievable.
     let registry_version = pool.registry_version(height)?;
 
     // Get the subnet records that are relevant to making a block
-    let stable_registry_version = block_maker.get_stable_registry_version(&parent)?;
+    let stable_registry_version = block_maker.get_stable_registry_version(parent.as_ref())?;
     let subnet_records = block_maker::subnet_records_for_registry_version(
         block_maker,
         registry_version,
@@ -179,7 +184,6 @@ fn maliciously_propose_empty_block(
         pool,
         context,
         parent,
-        parent_hash,
         height,
         certified_height,
         rank,

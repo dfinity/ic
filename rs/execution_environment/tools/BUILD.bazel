@@ -1,0 +1,19 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_binary(
+    name = "icp_config",
+    srcs = ["src/icp_config.rs"],
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/embedders",
+        "//rs/replicated_state",
+        "//rs/system_api",
+        "//rs/types/types",
+        "@crate_index//:clap_3_2_25",
+        "@crate_index//:eyre",
+        "@crate_index//:serde_json",
+    ],
+)

@@ -33,6 +33,9 @@ pub mod call_context {
         pub canister_id: ::core::option::Option<super::super::super::super::types::v1::CanisterId>,
         #[prost(uint64, tag = "2")]
         pub callback_id: u64,
+        /// If non-zero, this originates from a best-effort canister update call.
+        #[prost(uint32, tag = "3")]
+        pub deadline_seconds: u32,
     }
     /// System task is either a Heartbeat or a GlobalTimer.
     #[allow(clippy::derive_partial_eq_without_eq)]
@@ -64,10 +67,11 @@ pub struct CallContextEntry {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WasmClosure {
+    /// The number of functions will never exceed 2^32.
     #[prost(uint32, tag = "1")]
     pub func_idx: u32,
-    #[prost(uint32, tag = "2")]
-    pub env: u32,
+    #[prost(uint64, tag = "2")]
+    pub env: u64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -91,6 +95,9 @@ pub struct Callback {
     #[prost(message, optional, tag = "9")]
     pub prepayment_for_response_transmission:
         ::core::option::Option<super::super::queues::v1::Cycles>,
+    /// If non-zero, this is a best-effort call.
+    #[prost(uint32, tag = "10")]
+    pub deadline_seconds: u32,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -122,7 +129,7 @@ pub struct CyclesAccount {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Global {
-    #[prost(oneof = "global::Global", tags = "1, 2, 3, 4")]
+    #[prost(oneof = "global::Global", tags = "1, 2, 3, 4, 5")]
     pub global: ::core::option::Option<global::Global>,
 }
 /// Nested message and enum types in `Global`.
@@ -138,6 +145,8 @@ pub mod global {
         F32(f32),
         #[prost(double, tag = "4")]
         F64(f64),
+        #[prost(bytes, tag = "5")]
+        V128(::prost::alloc::vec::Vec<u8>),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -158,8 +167,8 @@ pub mod wasm_method {
         CanisterPostUpgrade = 4,
         CanisterInspectMessage = 5,
         CanisterHeartbeat = 6,
-        Empty = 7,
         CanisterGlobalTimer = 8,
+        CanisterOnLowWasmMemory = 9,
     }
     impl SystemMethod {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -175,8 +184,10 @@ pub mod wasm_method {
                 SystemMethod::CanisterPostUpgrade => "SYSTEM_METHOD_CANISTER_POST_UPGRADE",
                 SystemMethod::CanisterInspectMessage => "SYSTEM_METHOD_CANISTER_INSPECT_MESSAGE",
                 SystemMethod::CanisterHeartbeat => "SYSTEM_METHOD_CANISTER_HEARTBEAT",
-                SystemMethod::Empty => "SYSTEM_METHOD_EMPTY",
                 SystemMethod::CanisterGlobalTimer => "SYSTEM_METHOD_CANISTER_GLOBAL_TIMER",
+                SystemMethod::CanisterOnLowWasmMemory => {
+                    "SYSTEM_METHOD_CANISTER_ON_LOW_WASM_MEMORY"
+                }
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -189,8 +200,8 @@ pub mod wasm_method {
                 "SYSTEM_METHOD_CANISTER_POST_UPGRADE" => Some(Self::CanisterPostUpgrade),
                 "SYSTEM_METHOD_CANISTER_INSPECT_MESSAGE" => Some(Self::CanisterInspectMessage),
                 "SYSTEM_METHOD_CANISTER_HEARTBEAT" => Some(Self::CanisterHeartbeat),
-                "SYSTEM_METHOD_EMPTY" => Some(Self::Empty),
                 "SYSTEM_METHOD_CANISTER_GLOBAL_TIMER" => Some(Self::CanisterGlobalTimer),
+                "SYSTEM_METHOD_CANISTER_ON_LOW_WASM_MEMORY" => Some(Self::CanisterOnLowWasmMemory),
                 _ => None,
             }
         }
@@ -274,6 +285,9 @@ pub mod stop_canister_context {
         pub cycles: ::core::option::Option<super::super::super::queues::v1::Cycles>,
         #[prost(uint64, optional, tag = "5")]
         pub call_id: ::core::option::Option<u64>,
+        /// If non-zero, this is a best-effort canister update call.
+        #[prost(uint32, tag = "6")]
+        pub deadline_seconds: u32,
     }
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
@@ -365,6 +379,7 @@ pub mod execution_task {
         Unspecified = 0,
         Heartbeat = 1,
         Timer = 2,
+        OnLowWasmMemory = 3,
     }
     impl CanisterTask {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -376,6 +391,7 @@ pub mod execution_task {
                 CanisterTask::Unspecified => "CANISTER_TASK_UNSPECIFIED",
                 CanisterTask::Heartbeat => "CANISTER_TASK_HEARTBEAT",
                 CanisterTask::Timer => "CANISTER_TASK_TIMER",
+                CanisterTask::OnLowWasmMemory => "CANISTER_TASK_ON_LOW_WASM_MEMORY",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -384,6 +400,7 @@ pub mod execution_task {
                 "CANISTER_TASK_UNSPECIFIED" => Some(Self::Unspecified),
                 "CANISTER_TASK_HEARTBEAT" => Some(Self::Heartbeat),
                 "CANISTER_TASK_TIMER" => Some(Self::Timer),
+                "CANISTER_TASK_ON_LOW_WASM_MEMORY" => Some(Self::OnLowWasmMemory),
                 _ => None,
             }
         }
@@ -447,6 +464,16 @@ pub struct CanisterControllersChange {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterLoadSnapshot {
+    #[prost(uint64, tag = "1")]
+    pub canister_version: u64,
+    #[prost(uint64, tag = "2")]
+    pub taken_at_timestamp: u64,
+    #[prost(bytes = "vec", tag = "3")]
+    pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterChange {
     #[prost(uint64, tag = "1")]
     pub timestamp_nanos: u64,
@@ -454,7 +481,7 @@ pub struct CanisterChange {
     pub canister_version: u64,
     #[prost(oneof = "canister_change::ChangeOrigin", tags = "3, 4")]
     pub change_origin: ::core::option::Option<canister_change::ChangeOrigin>,
-    #[prost(oneof = "canister_change::ChangeDetails", tags = "5, 6, 7, 8")]
+    #[prost(oneof = "canister_change::ChangeDetails", tags = "5, 6, 7, 8, 9")]
     pub change_details: ::core::option::Option<canister_change::ChangeDetails>,
 }
 /// Nested message and enum types in `CanisterChange`.
@@ -478,6 +505,8 @@ pub mod canister_change {
         CanisterCodeDeployment(super::CanisterCodeDeployment),
         #[prost(message, tag = "8")]
         CanisterControllersChange(super::CanisterControllersChange),
+        #[prost(message, tag = "9")]
+        CanisterLoadSnapshot(super::CanisterLoadSnapshot),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -526,6 +555,47 @@ pub struct WasmChunkStoreMetadata {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct LogVisibilityAllowedViewers {
+    #[prost(message, repeated, tag = "1")]
+    pub principals: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct LogVisibilityV2 {
+    #[prost(oneof = "log_visibility_v2::LogVisibilityV2", tags = "1, 2, 3")]
+    pub log_visibility_v2: ::core::option::Option<log_visibility_v2::LogVisibilityV2>,
+}
+/// Nested message and enum types in `LogVisibilityV2`.
+pub mod log_visibility_v2 {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum LogVisibilityV2 {
+        #[prost(int32, tag = "1")]
+        Controllers(i32),
+        #[prost(int32, tag = "2")]
+        Public(i32),
+        #[prost(message, tag = "3")]
+        AllowedViewers(super::LogVisibilityAllowedViewers),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterLogRecord {
+    #[prost(uint64, tag = "1")]
+    pub idx: u64,
+    #[prost(uint64, tag = "2")]
+    pub timestamp_nanos: u64,
+    #[prost(bytes = "vec", tag = "3")]
+    pub content: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SnapshotId {
+    #[prost(bytes = "vec", tag = "1")]
+    pub content: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
     pub last_full_execution_round: u64,
@@ -551,8 +621,7 @@ pub struct CanisterStateBits {
     #[prost(uint64, tag = "21")]
     pub interrupted_during_execution: u64,
     #[prost(message, optional, tag = "22")]
-    pub consumed_cycles_since_replica_started:
-        ::core::option::Option<super::super::super::types::v1::NominalCycles>,
+    pub consumed_cycles: ::core::option::Option<super::super::super::types::v1::NominalCycles>,
     #[prost(uint64, tag = "23")]
     pub freeze_threshold: u64,
     #[prost(message, repeated, tag = "25")]
@@ -587,8 +656,7 @@ pub struct CanisterStateBits {
     #[prost(uint64, tag = "34")]
     pub canister_version: u64,
     #[prost(message, repeated, tag = "36")]
-    pub consumed_cycles_since_replica_started_by_use_cases:
-        ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
+    pub consumed_cycles_by_use_cases: ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
     #[prost(message, optional, tag = "37")]
     pub canister_history: ::core::option::Option<CanisterHistory>,
     /// Resource reservation cycles.
@@ -603,6 +671,38 @@ pub struct CanisterStateBits {
     /// Statistics on query execution for entire lifetime of canister.
     #[prost(message, optional, tag = "41")]
     pub total_query_stats: ::core::option::Option<TotalQueryStats>,
+    /// Log visibility for the canister.
+    ///
+    /// TODO(EXC-1670): remove this field.
+    #[prost(enumeration = "LogVisibility", tag = "42")]
+    pub log_visibility: i32,
+    /// Log visibility for the canister.
+    #[prost(message, optional, tag = "51")]
+    pub log_visibility_v2: ::core::option::Option<LogVisibilityV2>,
+    /// Log records of the canister.
+    #[prost(message, repeated, tag = "43")]
+    pub canister_log_records: ::prost::alloc::vec::Vec<CanisterLogRecord>,
+    /// The index of the next log record to be created.
+    #[prost(uint64, tag = "44")]
+    pub next_canister_log_record_idx: u64,
+    /// The Wasm memory limit. This is a field in developer-visible canister
+    /// settings that allows the developer to limit the usage of the Wasm memory
+    /// by the canister to leave some room in 4GiB for upgrade calls.
+    /// See the interface specification for more information.
+    #[prost(uint64, optional, tag = "45")]
+    pub wasm_memory_limit: ::core::option::Option<u64>,
+    /// The next local snapshot ID.
+    #[prost(uint64, tag = "46")]
+    pub next_snapshot_id: u64,
+    /// Captures the memory usage of all snapshots associated with a canister.
+    #[prost(uint64, tag = "52")]
+    pub snapshots_memory_usage: u64,
+    #[prost(int64, tag = "48")]
+    pub priority_credit: i64,
+    #[prost(enumeration = "LongExecutionMode", tag = "49")]
+    pub long_execution_mode: i32,
+    #[prost(uint64, optional, tag = "50")]
+    pub wasm_memory_threshold: ::core::option::Option<u64>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }
@@ -696,6 +796,7 @@ pub enum CyclesUseCase {
     DeletedCanisters = 10,
     NonConsumed = 11,
     BurnedCycles = 12,
+    SchnorrOutcalls = 13,
 }
 impl CyclesUseCase {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -719,6 +820,7 @@ impl CyclesUseCase {
             CyclesUseCase::DeletedCanisters => "CYCLES_USE_CASE_DELETED_CANISTERS",
             CyclesUseCase::NonConsumed => "CYCLES_USE_CASE_NON_CONSUMED",
             CyclesUseCase::BurnedCycles => "CYCLES_USE_CASE_BURNED_CYCLES",
+            CyclesUseCase::SchnorrOutcalls => "CYCLES_USE_CASE_SCHNORR_OUTCALLS",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -739,6 +841,69 @@ impl CyclesUseCase {
             "CYCLES_USE_CASE_DELETED_CANISTERS" => Some(Self::DeletedCanisters),
             "CYCLES_USE_CASE_NON_CONSUMED" => Some(Self::NonConsumed),
             "CYCLES_USE_CASE_BURNED_CYCLES" => Some(Self::BurnedCycles),
+            "CYCLES_USE_CASE_SCHNORR_OUTCALLS" => Some(Self::SchnorrOutcalls),
+            _ => None,
+        }
+    }
+}
+/// TODO(EXC-1670): Migrate to pb_canister_state_bits::LogVisibilityV2.
+/// The current enum only supports i32 values, which limits the
+/// storage of allowed_viewers principals. LogVisibilityV2 will
+/// support both enum values and a list of principals.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum LogVisibility {
+    Unspecified = 0,
+    Controllers = 1,
+    Public = 2,
+}
+impl LogVisibility {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            LogVisibility::Unspecified => "LOG_VISIBILITY_UNSPECIFIED",
+            LogVisibility::Controllers => "LOG_VISIBILITY_CONTROLLERS",
+            LogVisibility::Public => "LOG_VISIBILITY_PUBLIC",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "LOG_VISIBILITY_UNSPECIFIED" => Some(Self::Unspecified),
+            "LOG_VISIBILITY_CONTROLLERS" => Some(Self::Controllers),
+            "LOG_VISIBILITY_PUBLIC" => Some(Self::Public),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum LongExecutionMode {
+    Unspecified = 0,
+    Opportunistic = 1,
+    Prioritized = 2,
+}
+impl LongExecutionMode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            LongExecutionMode::Unspecified => "LONG_EXECUTION_MODE_UNSPECIFIED",
+            LongExecutionMode::Opportunistic => "LONG_EXECUTION_MODE_OPPORTUNISTIC",
+            LongExecutionMode::Prioritized => "LONG_EXECUTION_MODE_PRIORITIZED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "LONG_EXECUTION_MODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "LONG_EXECUTION_MODE_OPPORTUNISTIC" => Some(Self::Opportunistic),
+            "LONG_EXECUTION_MODE_PRIORITIZED" => Some(Self::Prioritized),
             _ => None,
         }
     }

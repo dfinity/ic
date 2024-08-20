@@ -9,16 +9,23 @@ type CanisterStatusResultV2 = record {
   cycles : nat;
   settings : DefiniteCanisterSettingsArgs;
   idle_cycles_burned_per_day : nat;
-  module_hash : opt vec nat8;
+  module_hash : opt blob;
 };
 type CanisterStatusType = variant { stopped; stopping; running };
-type CfInvestment = record { hotkey_principal : text; nns_neuron_id : nat64 };
+type CfInvestment = record {
+  controller : opt principal;
+  hotkey_principal : text;
+  hotkeys : opt Principals;
+  nns_neuron_id : nat64;
+};
 type CfNeuron = record {
   has_created_neuron_recipes : opt bool;
+  hotkeys : opt Principals;
   nns_neuron_id : nat64;
   amount_icp_e8s : nat64;
 };
 type CfParticipant = record {
+  controller : opt principal;
   hotkey_principal : text;
   cf_neurons : vec CfNeuron;
 };
@@ -91,7 +98,7 @@ type GetOpenTicketResponse = record { result : opt Result_1 };
 type GetSaleParametersResponse = record { params : opt Params };
 type GetStateResponse = record { swap : opt Swap; derived : opt DerivedState };
 type GovernanceError = record { error_message : text; error_type : int32 };
-type Icrc1Account = record { owner : opt principal; subaccount : opt vec nat8 };
+type Icrc1Account = record { owner : opt principal; subaccount : opt blob };
 type IdealMatchedParticipationFunction = record {
   serialized_representation : opt text;
 };
@@ -114,7 +121,6 @@ type Init = record {
   icp_ledger_canister_id : text;
   sns_ledger_canister_id : text;
   neurons_fund_participation_constraints : opt NeuronsFundParticipationConstraints;
-  neurons_fund_participants : opt NeuronsFundParticipants;
   should_auto_finalize : opt bool;
   max_participant_icp_e8s : opt nat64;
   sns_governance_canister_id : text;
@@ -142,6 +148,9 @@ type ListCommunityFundParticipantsRequest = record {
   offset : opt nat64;
   limit : opt nat32;
 };
+type ListCommunityFundParticipantsResponse = record {
+  cf_participants : vec CfParticipant;
+};
 type ListDirectParticipantsRequest = record {
   offset : opt nat32;
   limit : opt nat32;
@@ -163,8 +172,7 @@ type NeuronBasketConstructionParameters = record {
   dissolve_delay_interval_seconds : nat64;
   count : nat64;
 };
-type NeuronId = record { id : vec nat8 };
-type NeuronsFundParticipants = record { cf_participants : vec CfParticipant };
+type NeuronId = record { id : blob };
 type NeuronsFundParticipationConstraints = record {
   coefficient_intervals : vec LinearScalingCoefficient;
   max_neurons_fund_participation_icp_e8s : opt nat64;
@@ -172,7 +180,7 @@ type NeuronsFundParticipationConstraints = record {
   ideal_matched_participation_function : opt IdealMatchedParticipationFunction;
 };
 type NewSaleTicketRequest = record {
-  subaccount : opt vec nat8;
+  subaccount : opt blob;
   amount_icp_e8s : nat64;
 };
 type NewSaleTicketResponse = record { result : opt Result_2 };
@@ -182,11 +190,6 @@ type Ok_1 = record {
   neurons_fund_neurons_count : opt nat64;
 };
 type Ok_2 = record { ticket : opt Ticket };
-type OpenRequest = record {
-  cf_participants : vec CfParticipant;
-  params : opt Params;
-  open_sns_token_swap_proposal_id : opt nat64;
-};
 type Params = record {
   min_participant_icp_e8s : nat64;
   neuron_basket_construction_parameters : opt NeuronBasketConstructionParameters;
@@ -211,6 +214,7 @@ type Possibility = variant {
 type Possibility_1 = variant { Ok : Response; Err : CanisterCallError };
 type Possibility_2 = variant { Ok : Ok_1; Err : Error };
 type Possibility_3 = variant { Ok : record {}; Err : CanisterCallError };
+type Principals = record { principals : vec principal };
 type RefreshBuyerTokensRequest = record {
   confirmation_text : opt text;
   buyer : text;
@@ -251,7 +255,7 @@ type Swap = record {
   purge_old_tickets_last_completion_timestamp_nanoseconds : opt nat64;
   direct_participation_icp_e8s : opt nat64;
   lifecycle : int32;
-  purge_old_tickets_next_principal : opt vec nat8;
+  purge_old_tickets_next_principal : opt blob;
   decentralization_swap_termination_timestamp_seconds : opt nat64;
   buyers : vec record { text; BuyerState };
   params : opt Params;
@@ -293,7 +297,7 @@ service : (Init) -> {
   get_sale_parameters : (record {}) -> (GetSaleParametersResponse) query;
   get_state : (record {}) -> (GetStateResponse) query;
   list_community_fund_participants : (ListCommunityFundParticipantsRequest) -> (
-      NeuronsFundParticipants,
+      ListCommunityFundParticipantsResponse,
     ) query;
   list_direct_participants : (ListDirectParticipantsRequest) -> (
       ListDirectParticipantsResponse,
@@ -303,9 +307,7 @@ service : (Init) -> {
     ) query;
   new_sale_ticket : (NewSaleTicketRequest) -> (NewSaleTicketResponse);
   notify_payment_failure : (record {}) -> (Ok_2);
-  open : (OpenRequest) -> (record {});
   refresh_buyer_tokens : (RefreshBuyerTokensRequest) -> (
       RefreshBuyerTokensResponse,
     );
-  restore_dapp_controllers : (record {}) -> (SetDappControllersCallResult);
 }

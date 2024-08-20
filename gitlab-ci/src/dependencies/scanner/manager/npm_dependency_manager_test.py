@@ -1,15 +1,16 @@
 import pathlib
 import typing
-from unittest.mock import call, patch
+from unittest.mock import call, mock_open, patch
 
 import pytest
 from model.dependency import Dependency
 from model.finding import Finding
+from model.ic import __test_get_ic_path
 from model.project import Project
 from model.vulnerability import Vulnerability
 from scanner.manager.npm_dependency_manager import NPMDependencyManager
 
-DEFAULT_NODE_VERSION = 19
+DEFAULT_NODE_VERSION = "19"
 
 
 @pytest.fixture
@@ -25,6 +26,36 @@ def test_clone_repository_from_url(process_executor_mock, npm_test):
     npm_test._NPMDependencyManager__clone_repository_from_url(url, path)
     process_executor_mock.assert_called_once_with("git clone --depth=1 https://localhost", resolved_path, {})
 
+def test_npm_check_engine_no_package_json(npm_test):
+    path = pathlib.Path()
+    assert npm_test._NPMDependencyManager__npm_check_engine("ic", DEFAULT_NODE_VERSION, path) is False
+
+@patch("pathlib.Path.exists", return_value=True)
+@patch("builtins.open", new_callable=mock_open, read_data='{"engines":"{}"}')
+def test_npm_check_engine_no_engine_version(_fopen_mock, _path_patch, npm_test):
+    path = pathlib.Path()
+    assert npm_test._NPMDependencyManager__npm_check_engine("ic", DEFAULT_NODE_VERSION, path) is True
+
+@patch("pathlib.Path.exists", return_value=True)
+@patch("builtins.open", new_callable=mock_open, read_data='{"engines":{"node":"<19"}}')
+def test_npm_check_engine_not_compatible(_fopen_mock, _path_patch, npm_test):
+    path = pathlib.Path()
+    assert npm_test._NPMDependencyManager__npm_check_engine("ic", DEFAULT_NODE_VERSION, path) is False
+
+@patch("pathlib.Path.exists", return_value=True)
+@patch("builtins.open", new_callable=mock_open, read_data='{"engines":{"node":">=19"}}')
+def test_npm_check_engine_compatible(_fopen_mock, _path_patch, npm_test):
+    path = pathlib.Path()
+    assert npm_test._NPMDependencyManager__npm_check_engine("ic", DEFAULT_NODE_VERSION, path) is True
+
+@patch("pathlib.Path.exists", return_value=True)
+@patch("builtins.open", new_callable=mock_open, read_data='{"engines":{"node":"<19"}}')
+def test_npm_check_engine_not_compatible_throws_runtime_error(_fopen_mock, _path_patch, npm_test):
+    with pytest.raises(RuntimeError) as e:
+        path = pathlib.Path()
+        assert npm_test._NPMDependencyManager__npm_check_engine("ic", DEFAULT_NODE_VERSION, path) is False
+        _ = npm_test.get_findings("ic", Project("ic", __test_get_ic_path()), DEFAULT_NODE_VERSION)
+        assert "Dependency scan for ic can't be executed due to engine version mismatch" in str(e.value)
 
 @patch("scanner.process_executor.ProcessExecutor.execute_command", return_value="{'key':'value'}")
 @patch("json.loads")
@@ -242,6 +273,35 @@ def test_get_first_level_dependencies_from_npm_list_version_mismatch(npm_test):
     assert first_level_dependency[0].version == "0.10.2"
 
 
+def test_get_first_level_dependencies_from_npm_list_default_version_if_missing(npm_test):
+    first_level_dependency_tree = {
+        "version": "0.1.0",
+        "name": "wallet-ui",
+        "dependencies": {
+            "@dfinity/agent": {
+                "resolved": "../../../",
+                "overridden": False,
+                "dependencies": {
+                    "@dfinity/candid": {"version": "0.10.2"},
+                    "bignumber.js": {
+                        "version": "9.0.1",
+                        "resolved": "https://registry.npmjs.org/bignumber.js/-/bignumber.js-9.0.1.tgz",
+                        "overridden": False,
+                    },
+                },
+            },
+        },
+    }
+    first_level_dependency = npm_test._NPMDependencyManager__get_first_level_dependencies_from_npm_list(
+        first_level_dependency_tree, "bignumber.js", ["<10.0.0"]
+    )
+    assert len(first_level_dependency) == 1
+    assert isinstance(first_level_dependency[0], Dependency)
+    assert first_level_dependency[0].id == "https://www.npmjs.com/package/@dfinity/agent/v/0.0.0"
+    assert first_level_dependency[0].name == "@dfinity/agent"
+    assert first_level_dependency[0].version == "0.0.0"
+
+
 def test_get_vulnerable_dependency_from_npm_list(npm_test):
     first_level_dependency_tree = {
         "version": "0.1.0",
@@ -411,6 +471,9 @@ class FakeNPM:
     def __init__(self, fake_audit_type: int):
         self.fake_audit_type = fake_audit_type
 
+    def npm_check_engine(self, repository_name: str, engine_version: int, path: pathlib.Path) -> bool:
+        return True
+
     def npm_audit_output(self, engine_version: int, path: pathlib.Path) -> typing.Dict:
         if self.fake_audit_type == 1:
             return {}
@@ -527,8 +590,9 @@ def test_findings_helper_no_vulnerabilities(npm_test):
     repository = "ic"
     project = Project("ic", "ic")
     fake_npm = FakeNPM(1)
-    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output.__get__(npm_test, NPMDependencyManager)
-    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output.__get__(npm_test, NPMDependencyManager)
+    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output
+    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output
+    npm_test._NPMDependencyManager__npm_check_engine = fake_npm.npm_check_engine
 
     findings = npm_test.get_findings(repository, project, DEFAULT_NODE_VERSION)
     assert not findings
@@ -538,8 +602,9 @@ def test_findings_helper_one_finding(npm_test):
     repository = "ic"
     project = Project("ic", "ic")
     fake_npm = FakeNPM(2)
-    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output.__get__(npm_test, NPMDependencyManager)
-    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output.__get__(npm_test, NPMDependencyManager)
+    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output
+    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output
+    npm_test._NPMDependencyManager__npm_check_engine = fake_npm.npm_check_engine
 
     findings = npm_test.get_findings(repository, project, DEFAULT_NODE_VERSION)
     assert len(findings) == 1
@@ -588,8 +653,9 @@ def test_findings_helper_vulnerable_dependency_not_in_range(npm_test):
     repository = "ic"
     project = Project("ic", "ic")
     fake_npm = FakeNPM(3)
-    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output.__get__(npm_test, NPMDependencyManager)
-    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output.__get__(npm_test, NPMDependencyManager)
+    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output
+    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output
+    npm_test._NPMDependencyManager__npm_check_engine = fake_npm.npm_check_engine
 
     findings = npm_test.get_findings(repository, project, DEFAULT_NODE_VERSION)
     assert not findings
@@ -599,8 +665,9 @@ def test_findings_helper_transitive_vulnerability(npm_test):
     repository = "ic"
     project = Project("ic", "ic")
     fake_npm = FakeNPM(4)
-    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output.__get__(npm_test, NPMDependencyManager)
-    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output.__get__(npm_test, NPMDependencyManager)
+    npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output
+    npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output
+    npm_test._NPMDependencyManager__npm_check_engine = fake_npm.npm_check_engine
 
     findings = npm_test.get_findings(repository, project, DEFAULT_NODE_VERSION)
     assert not findings

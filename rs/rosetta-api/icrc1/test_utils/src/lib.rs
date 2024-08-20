@@ -1,7 +1,9 @@
 use candid::{Nat, Principal};
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
-use ic_canister_client_sender::Ed25519KeyPair;
+use ic_crypto_ecdsa_secp256k1::PrivateKey as Secp256k1PrivateKey;
+use ic_crypto_ed25519::{PrivateKey as Ed25519SecretKey, PrivateKeyFormat};
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_icrc1::{Block, Operation, Transaction};
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::TokensType;
@@ -14,9 +16,15 @@ use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use num_traits::cast::ToPrimitive;
 use proptest::prelude::*;
 use proptest::sample::select;
+use rand::Rng;
+use rand::RngCore;
 use rand::SeedableRng;
-use rand_chacha::ChaCha20Rng;
+use rosetta_core::models::Secp256k1KeyPair;
+use rosetta_core::models::{Ed25519KeyPair, RosettaSupportedKeyPair};
+use rosetta_core::objects::Currency;
+use rosetta_core::objects::ObjectMap;
 use serde_bytes::ByteBuf;
+use serde_json::json;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
@@ -26,17 +34,10 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub const E8: u64 = 100_000_000;
 pub const DEFAULT_TRANSFER_FEE: u64 = 10_000;
-pub const IDENTITY_PEM:&str = "-----BEGIN PRIVATE KEY-----\nMFMCAQEwBQYDK2VwBCIEILhMGpmYuJ0JEhDwocj6pxxOmIpGAXZd40AjkNhuae6q\noSMDIQBeXC6ae2dkJ8QC50bBjlyLqsFQFsMsIThWB21H6t6JRA==\n-----END PRIVATE KEY-----";
 
 pub fn minter_identity() -> BasicIdentity {
-    let rng = ring::rand::SystemRandom::new();
-    let key_pair = ring::signature::Ed25519KeyPair::generate_pkcs8(&rng)
-        .expect("Could not generate a key pair.");
-
-    BasicIdentity::from_key_pair(
-        ring::signature::Ed25519KeyPair::from_pkcs8(key_pair.as_ref())
-            .expect("Could not read the key pair."),
-    )
+    let keypair = Ed25519KeyPair::generate(reproducible_rng().next_u64());
+    BasicIdentity::from_pem(keypair.to_pem().as_bytes()).unwrap()
 }
 
 pub fn principal_strategy() -> impl Strategy<Value = Principal> {
@@ -334,21 +335,24 @@ impl ArgWithCaller {
         };
         fee.as_ref().map(|fee| fee.0.to_u64().unwrap())
     }
-    pub fn to_transaction(&self, minter: Account) -> Transaction<Tokens> {
+    pub fn to_transaction<T>(&self, minter: Account) -> Transaction<T>
+    where
+        T: TokensType,
+    {
         let from = self.from();
         let (operation, created_at_time, memo) = match self.arg.clone() {
             LedgerEndpointArg::ApproveArg(approve_arg) => {
-                let operation = Operation::<Tokens>::Approve {
-                    amount: Tokens::try_from(approve_arg.amount.clone()).unwrap(),
+                let operation = Operation::<T>::Approve {
+                    amount: T::try_from(approve_arg.amount.clone()).unwrap(),
                     expires_at: approve_arg.expires_at,
                     fee: approve_arg
                         .fee
                         .clone()
-                        .map(|f| Tokens::try_from(f.clone()).unwrap()),
+                        .map(|f| T::try_from(f.clone()).unwrap()),
                     expected_allowance: approve_arg
                         .expected_allowance
                         .clone()
-                        .map(|a| Tokens::try_from(a.clone()).unwrap()),
+                        .map(|a| T::try_from(a.clone()).unwrap()),
                     spender: approve_arg.spender,
                     from,
                 };
@@ -359,32 +363,29 @@ impl ArgWithCaller {
                 let mint_operation = from == minter;
                 let operation = if mint_operation {
                     Operation::Mint {
-                        amount: Tokens::try_from(transfer_arg.amount.clone()).unwrap(),
+                        amount: T::try_from(transfer_arg.amount.clone()).unwrap(),
                         to: transfer_arg.to,
                     }
                 } else if burn_operation {
                     Operation::Burn {
-                        amount: Tokens::try_from(transfer_arg.amount.clone()).unwrap(),
+                        amount: T::try_from(transfer_arg.amount.clone()).unwrap(),
                         from,
                         spender: None,
                     }
                 } else {
                     Operation::Transfer {
-                        amount: Tokens::try_from(transfer_arg.amount.clone()).unwrap(),
+                        amount: T::try_from(transfer_arg.amount.clone()).unwrap(),
                         to: transfer_arg.to,
                         from,
                         spender: None,
-                        fee: transfer_arg
-                            .fee
-                            .clone()
-                            .map(|f| Tokens::try_from(f).unwrap()),
+                        fee: transfer_arg.fee.clone().map(|f| T::try_from(f).unwrap()),
                     }
                 };
 
                 (operation, transfer_arg.created_at_time, transfer_arg.memo)
             }
         };
-        Transaction::<Tokens> {
+        Transaction::<T> {
             operation,
             created_at_time,
             memo,
@@ -510,13 +511,8 @@ fn amount_strategy() -> impl Strategy<Value = u64> {
 }
 
 fn basic_identity_strategy() -> impl Strategy<Value = BasicIdentity> {
-    prop::array::uniform32(0u8..).prop_map(|ran| {
-        let rng = ChaCha20Rng::from_seed(ran);
-        let signing_key = ed25519_consensus::SigningKey::new(rng);
-        let keypair = Ed25519KeyPair {
-            secret_key: signing_key.to_bytes(),
-            public_key: signing_key.verification_key().to_bytes(),
-        };
+    prop::num::u64::ANY.prop_map(|ran| {
+        let keypair = Ed25519KeyPair::generate(ran);
         BasicIdentity::from_pem(keypair.to_pem().as_bytes()).unwrap()
     })
 }
@@ -553,7 +549,7 @@ fn basic_identity_and_account_strategy() -> impl Strategy<Value = SigningAccount
 ///       e.g. exponential distribution
 /// TODO: allow to pass the account distribution
 pub fn valid_transactions_strategy(
-    minter_identity: BasicIdentity,
+    minter_identity: Arc<BasicIdentity>,
     default_fee: u64,
     length: usize,
     now: SystemTime,
@@ -885,7 +881,7 @@ pub fn valid_transactions_strategy(
 
     generate_strategy(
         TransactionsAndBalances::default(),
-        Arc::new(minter_identity),
+        minter_identity.clone(),
         default_fee,
         length,
         now,
@@ -1059,23 +1055,171 @@ where
         )
 }
 
+pub fn currency_strategy() -> impl Strategy<Value = Currency> {
+    (decimals_strategy(), symbol_strategy()).prop_map(|(decimals, symbol)| Currency {
+        symbol,
+        decimals: decimals.into(),
+        metadata: None,
+    })
+}
+
+pub fn construction_payloads_request_metadata() -> impl Strategy<Value = ObjectMap> {
+    let memo_strategy = arb_memo();
+    let now = SystemTime::now();
+    // We select the last and next 48 hours as an interval in which the ingress boundaries are set
+    // They do not have to be valid
+    let ingress_interval_start =
+        now.duration_since(UNIX_EPOCH).unwrap() - Duration::from_secs(60 * 60 * 48);
+    let ingress_interval_end =
+        now.duration_since(UNIX_EPOCH).unwrap() + Duration::from_secs(60 * 60 * 48);
+    let ingress_start_strategy =
+        prop::option::of(ingress_interval_start.as_nanos()..ingress_interval_end.as_nanos());
+    let ingress_end_strategy =
+        prop::option::of(ingress_interval_start.as_nanos()..ingress_interval_end.as_nanos());
+    let created_at_time =
+        prop::option::of(ingress_interval_start.as_nanos()..ingress_interval_end.as_nanos());
+
+    (
+        memo_strategy,
+        ingress_start_strategy,
+        ingress_end_strategy,
+        created_at_time,
+    )
+        .prop_map(|(memo, ingress_start, ingress_end, created_at_time)| {
+            let mut map = ObjectMap::new();
+            map.insert(
+                "memo".to_string(),
+                memo.map(|m| m.0.as_slice().to_vec()).into(),
+            );
+            map.insert("ingress_start".to_string(), json!(ingress_start));
+            map.insert("ingress_end".to_string(), json!(ingress_end));
+            map.insert("created_at_time".to_string(), json!(created_at_time));
+            map
+        })
+}
+
+pub trait KeyPairGenerator<K: RosettaSupportedKeyPair> {
+    fn generate(seed: u64) -> K;
+}
+
+impl KeyPairGenerator<Ed25519KeyPair> for Ed25519KeyPair {
+    fn generate(seed: u64) -> Ed25519KeyPair {
+        let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
+        let secret_key = Ed25519SecretKey::generate_using_rng(&mut rng);
+        Ed25519KeyPair::deserialize_raw(&secret_key.serialize_raw())
+            .expect("failed to deserialize secret_key")
+    }
+}
+
+impl KeyPairGenerator<Secp256k1KeyPair> for Secp256k1KeyPair {
+    fn generate(seed: u64) -> Secp256k1KeyPair {
+        let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
+        let secret_key = Secp256k1PrivateKey::generate_using_rng(&mut rng);
+        Secp256k1KeyPair::deserialize_sec1(&secret_key.serialize_sec1())
+            .expect("failed to deserialize secret_key")
+    }
+}
+
+impl KeyPairGenerator<Arc<BasicIdentity>> for Arc<BasicIdentity> {
+    fn generate(seed: u64) -> Arc<BasicIdentity> {
+        let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
+        let secret_key = Ed25519SecretKey::generate_using_rng(&mut rng);
+        Arc::new(
+            BasicIdentity::from_pem(std::io::Cursor::new(
+                secret_key
+                    .serialize_pkcs8_pem(PrivateKeyFormat::Pkcs8v2)
+                    .into_bytes(),
+            ))
+            .unwrap(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::KeyPairGenerator;
     use crate::{minter_identity, valid_transactions_strategy};
+    use ic_agent::identity::BasicIdentity;
+    use ic_types::PrincipalId;
     use proptest::{
         strategy::{Strategy, ValueTree},
         test_runner::TestRunner,
     };
+    use rand::RngCore;
+    use rosetta_core::models::Ed25519KeyPair;
+    use rosetta_core::models::RosettaSupportedKeyPair;
+    use rosetta_core::objects::PublicKey;
+    use std::sync::Arc;
     use std::time::SystemTime;
 
     #[test]
     fn test_valid_transactions_strategy_generates_transaction() {
         let size = 10;
-        let strategy =
-            valid_transactions_strategy(minter_identity(), 10_000, size, SystemTime::now());
+        let strategy = valid_transactions_strategy(
+            Arc::new(minter_identity()),
+            10_000,
+            size,
+            SystemTime::now(),
+        );
         let tree = strategy
             .new_tree(&mut TestRunner::default())
             .expect("Unable to run valid_transactions_strategy");
         assert_eq!(tree.current().len(), size)
+    }
+
+    #[test]
+    fn test_basic_identity_to_edwards() {
+        let seed = ic_crypto_test_utils_reproducible_rng::reproducible_rng().next_u64();
+        let edw = Arc::new(Ed25519KeyPair::generate(seed));
+        let bi = Arc::<BasicIdentity>::generate(seed);
+
+        assert_eq!(edw.get_curve_type(), bi.get_curve_type());
+
+        assert_eq!(
+            edw.generate_principal_id().unwrap(),
+            bi.generate_principal_id().unwrap()
+        );
+
+        assert_eq!(edw.get_pb_key(), bi.get_pb_key());
+
+        let bytes = b"Hello, World!";
+        assert_eq!(edw.sign(bytes), bi.sign(bytes));
+
+        assert_eq!(edw.hex_encode_pk(), bi.hex_encode_pk());
+
+        assert_eq!(
+            Arc::<Ed25519KeyPair>::der_encode_pk(edw.get_pb_key()).unwrap(),
+            Arc::<BasicIdentity>::der_encode_pk(bi.get_pb_key()).unwrap()
+        );
+
+        assert_eq!(edw.hex_encode_pk(), bi.hex_encode_pk());
+
+        assert_eq!(
+            Arc::<Ed25519KeyPair>::get_principal_id(&edw.hex_encode_pk()).unwrap(),
+            Arc::<BasicIdentity>::get_principal_id(&bi.hex_encode_pk()).unwrap()
+        );
+
+        assert_eq!(
+            edw.generate_principal_id().unwrap(),
+            PrincipalId::new_self_authenticating(
+                &Arc::<Ed25519KeyPair>::der_encode_pk(edw.get_pb_key()).unwrap()
+            )
+        );
+        assert_eq!(
+            bi.generate_principal_id().unwrap(),
+            PrincipalId::new_self_authenticating(
+                &Arc::<Ed25519KeyPair>::der_encode_pk(bi.get_pb_key()).unwrap()
+            )
+        );
+
+        let pk: PublicKey = (&edw).into();
+        assert_eq!(
+            pk.get_der_encoding().unwrap(),
+            Arc::<Ed25519KeyPair>::der_encode_pk(edw.get_pb_key()).unwrap()
+        );
+        assert_eq!(
+            pk.get_principal().unwrap(),
+            edw.generate_principal_id().unwrap().0
+        );
     }
 }

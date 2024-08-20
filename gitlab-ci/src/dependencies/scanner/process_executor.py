@@ -21,8 +21,8 @@ class ProcessExecutor:
         if result.returncode > 1 and not (ignore_return_code_if_stdout_is_set and len(result.stdout) > 0):
             if log_error_on_fail:
                 logging.error("Process Executor failed for " + str(command))
-                logging.error(result.stderr)
-                logging.error(result.stdout)
+                logging.debug(result.stderr)
+                logging.debug(result.stdout)
             raise subprocess.CalledProcessError(result.returncode, command, result.args, result.stderr)
         else:
             return result.stdout.strip()

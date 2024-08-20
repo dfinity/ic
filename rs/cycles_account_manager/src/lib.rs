@@ -15,9 +15,9 @@
 
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
-use ic_ic00_types::Method;
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_logger::{error, info, ReplicaLogger};
+use ic_management_canister_types::Method;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -38,13 +38,11 @@ pub const CRITICAL_ERROR_RESPONSE_CYCLES_REFUND: &str =
 pub const CRITICAL_ERROR_EXECUTION_CYCLES_REFUND: &str =
     "cycles_account_manager_execution_cycles_refund_error";
 
-/// [EXC-1168] Flag to turn on cost scaling according to a subnet replication factor.
-const USE_COST_SCALING_FLAG: bool = true;
 const SECONDS_PER_DAY: u128 = 24 * 60 * 60;
 
 /// Maximum payload size of a management call to update_settings
 /// overriding the canister's freezing threshold.
-const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 200;
+const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 267;
 
 /// Errors returned by the [`CyclesAccountManager`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -76,7 +74,7 @@ impl std::fmt::Display for CyclesAccountManagerError {
 /// This struct maintains an invariant that `usage <= capacity` and
 /// `threshold <= capacity`.  There are no constraints between `usage` and
 /// `threshold`.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 pub struct ResourceSaturation {
     usage: u64,
     threshold: u64,
@@ -174,9 +172,6 @@ pub struct CyclesAccountManager {
     /// The configuration of this [`CyclesAccountManager`] controlling the fees
     /// that are charged for various operations.
     config: CyclesAccountManagerConfig,
-
-    /// [EXC-1168] Temporary development flag to enable cost scaling according to subnet size.
-    use_cost_scaling_flag: bool,
 }
 
 impl CyclesAccountManager {
@@ -193,18 +188,7 @@ impl CyclesAccountManager {
             own_subnet_type,
             own_subnet_id,
             config,
-            use_cost_scaling_flag: USE_COST_SCALING_FLAG,
         }
-    }
-
-    /// [EXC-1168] Helper function to set the flag to enable cost scaling according to subnet size.
-    pub fn set_using_cost_scaling(&mut self, use_cost_scaling_flag: bool) {
-        self.use_cost_scaling_flag = use_cost_scaling_flag;
-    }
-
-    /// [EXC-1168] Helper function to read the flag to enable cost scaling according to subnet size.
-    pub fn use_cost_scaling(&self) -> bool {
-        self.use_cost_scaling_flag
     }
 
     /// Returns the subnet type of this [`CyclesAccountManager`].
@@ -219,10 +203,7 @@ impl CyclesAccountManager {
 
     // Scale cycles cost according to a subnet size.
     fn scale_cost(&self, cycles: Cycles, subnet_size: usize) -> Cycles {
-        match self.use_cost_scaling_flag {
-            false => cycles,
-            true => (cycles * subnet_size) / self.config.reference_subnet_size,
-        }
+        (cycles * subnet_size) / self.config.reference_subnet_size
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -374,6 +355,7 @@ impl CyclesAccountManager {
         cycles: Cycles,
         subnet_size: usize,
         reserved_balance: Cycles,
+        reveal_top_up: bool,
     ) -> Result<(), CanisterOutOfCyclesError> {
         self.withdraw_with_threshold(
             canister_id,
@@ -388,6 +370,7 @@ impl CyclesAccountManager {
                 subnet_size,
                 reserved_balance,
             ),
+            reveal_top_up,
         )
     }
 
@@ -408,6 +391,7 @@ impl CyclesAccountManager {
         canister_compute_allocation: ComputeAllocation,
         cycles: Cycles,
         subnet_size: usize,
+        reveal_top_up: bool,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let threshold = self.freeze_threshold_cycles(
             canister.system_state.freeze_threshold,
@@ -425,6 +409,7 @@ impl CyclesAccountManager {
                     available: canister.system_state.debited_balance(),
                     requested: cycles,
                     threshold,
+                    reveal_top_up,
                 });
             }
             canister
@@ -437,6 +422,7 @@ impl CyclesAccountManager {
                 cycles,
                 threshold,
                 CyclesUseCase::IngressInduction,
+                reveal_top_up,
             )
         }
     }
@@ -460,6 +446,7 @@ impl CyclesAccountManager {
         cycles: Cycles,
         subnet_size: usize,
         use_case: CyclesUseCase,
+        reveal_top_up: bool,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let threshold = self.freeze_threshold_cycles(
             system_state.freeze_threshold,
@@ -470,7 +457,7 @@ impl CyclesAccountManager {
             subnet_size,
             system_state.reserved_balance(),
         );
-        self.consume_with_threshold(system_state, cycles, threshold, use_case)
+        self.consume_with_threshold(system_state, cycles, threshold, use_case, reveal_top_up)
     }
 
     /// Prepays the cost of executing a message with the given number of
@@ -491,6 +478,7 @@ impl CyclesAccountManager {
         canister_compute_allocation: ComputeAllocation,
         num_instructions: NumInstructions,
         subnet_size: usize,
+        reveal_top_up: bool,
     ) -> Result<Cycles, CanisterOutOfCyclesError> {
         let cost = self.execution_cost(num_instructions, subnet_size);
         self.consume_with_threshold(
@@ -506,6 +494,7 @@ impl CyclesAccountManager {
                 system_state.reserved_balance(),
             ),
             CyclesUseCase::Instructions,
+            reveal_top_up,
         )
         .map(|_| cost)
     }
@@ -626,6 +615,11 @@ impl CyclesAccountManager {
         self.scale_cost(self.config.ecdsa_signature_fee, subnet_size)
     }
 
+    /// Amount to charge for a Schnorr signature.
+    pub fn schnorr_signature_fee(&self, subnet_size: usize) -> Cycles {
+        self.scale_cost(self.config.schnorr_signature_fee, subnet_size)
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     //
     // Storage
@@ -724,6 +718,7 @@ impl CyclesAccountManager {
         prepayment_for_response_transmission: Cycles,
         subnet_size: usize,
         reserved_balance: Cycles,
+        reveal_top_up: bool,
     ) -> Result<Vec<(CyclesUseCase, Cycles)>, CanisterOutOfCyclesError> {
         // The total amount charged consists of:
         //   - the fee to do the xnet call (request + response)
@@ -751,6 +746,7 @@ impl CyclesAccountManager {
                 subnet_size,
                 reserved_balance,
             ),
+            reveal_top_up,
         )?;
 
         Ok(Vec::from([
@@ -830,6 +826,7 @@ impl CyclesAccountManager {
         canister_current_message_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
         subnet_size: usize,
+        reveal_top_up: bool,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let threshold = self.freeze_threshold_cycles(
             system_state.freeze_threshold,
@@ -847,6 +844,7 @@ impl CyclesAccountManager {
                 available: system_state.balance(),
                 requested,
                 threshold,
+                reveal_top_up,
             })
         } else {
             Ok(())
@@ -861,6 +859,7 @@ impl CyclesAccountManager {
         cycles: Cycles,
         threshold: Cycles,
         use_case: CyclesUseCase,
+        reveal_top_up: bool,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let effective_cycles_balance = match use_case {
             CyclesUseCase::Memory | CyclesUseCase::ComputeAllocation | CyclesUseCase::Uninstall => {
@@ -873,6 +872,7 @@ impl CyclesAccountManager {
             | CyclesUseCase::RequestAndResponseTransmission
             | CyclesUseCase::CanisterCreation
             | CyclesUseCase::ECDSAOutcalls
+            | CyclesUseCase::SchnorrOutcalls
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
             | CyclesUseCase::NonConsumed
@@ -884,6 +884,7 @@ impl CyclesAccountManager {
             effective_cycles_balance,
             cycles,
             threshold,
+            reveal_top_up,
         )?;
 
         debug_assert_ne!(use_case, CyclesUseCase::NonConsumed);
@@ -897,6 +898,7 @@ impl CyclesAccountManager {
         cycles_balance: Cycles,
         cycles: Cycles,
         threshold: Cycles,
+        reveal_top_up: bool,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let cycles_available = if cycles_balance > threshold {
             cycles_balance - threshold
@@ -910,6 +912,7 @@ impl CyclesAccountManager {
                 available: cycles_balance,
                 requested: cycles,
                 threshold,
+                reveal_top_up,
             });
         }
         Ok(())
@@ -930,8 +933,15 @@ impl CyclesAccountManager {
         cycles_balance: &mut Cycles,
         cycles: Cycles,
         threshold: Cycles,
+        reveal_top_up: bool,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        self.verify_cycles_balance_with_threshold(canister_id, *cycles_balance, cycles, threshold)?;
+        self.verify_cycles_balance_with_threshold(
+            canister_id,
+            *cycles_balance,
+            cycles,
+            threshold,
+            reveal_top_up,
+        )?;
 
         *cycles_balance -= cycles;
         Ok(())
@@ -965,7 +975,7 @@ impl CyclesAccountManager {
     /// 1. It burns no more cycles than the `amount_to_burn`.
     ///
     /// 2. It burns no more cycles than `balance` - `freezing_limit`, where `freezing_limit`
-    /// is the amount of idle cycles burned by the canister during its `freezing_threshold`.
+    ///    is the amount of idle cycles burned by the canister during its `freezing_threshold`.
     ///
     /// Returns the number of cycles that were burned.
     pub fn cycles_burn(
@@ -1052,6 +1062,7 @@ impl CyclesAccountManager {
                 cycles,
                 Cycles::zero(),
                 use_case,
+                false, // caller is system => no need to reveal top up balance
             ) {
                 info!(
                     log,
@@ -1127,8 +1138,8 @@ pub enum IngressInductionCostError {
 mod tests {
     use super::*;
     use candid::Encode;
-    use ic_ic00_types::{CanisterSettingsArgs, UpdateSettingsArgs};
-    use ic_test_utilities::types::ids::subnet_test_id;
+    use ic_management_canister_types::{CanisterSettingsArgsBuilder, UpdateSettingsArgs};
+    use ic_test_utilities_types::ids::subnet_test_id;
 
     fn create_cycles_account_manager(reference_subnet_size: usize) -> CyclesAccountManager {
         let mut config = CyclesAccountManagerConfig::application_subnet();
@@ -1139,7 +1150,6 @@ mod tests {
             own_subnet_type: SubnetType::Application,
             own_subnet_id: subnet_test_id(0),
             config,
-            use_cost_scaling_flag: true,
         }
     }
 
@@ -1148,16 +1158,20 @@ mod tests {
         let default_freezing_limit = 30 * 24 * 3600; // 30 days
         let payload = UpdateSettingsArgs {
             canister_id: CanisterId::from_u64(0).into(),
-            settings: CanisterSettingsArgs::new(
-                None,
-                None,
-                None,
-                Some(default_freezing_limit),
-                None,
-            ),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_freezing_threshold(default_freezing_limit)
+                .build(),
             sender_canister_version: None, // ingress messages are not supposed to set this field
         };
-        assert!(2 * Encode!(&payload).unwrap().len() <= MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE);
+
+        let payload_size = 2 * Encode!(&payload).unwrap().len();
+
+        assert!(
+            payload_size <= MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE,
+            "Payload size: {}, is greater than MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: {}.",
+            payload_size,
+            MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE
+        );
     }
 
     #[test]
@@ -1174,8 +1188,8 @@ mod tests {
 
         // Check overflow case.
         assert_eq!(
-            cam.scale_cost(Cycles::new(std::u128::MAX), 1_000_000),
-            Cycles::new(std::u128::MAX) / reference_subnet_size
+            cam.scale_cost(Cycles::new(u128::MAX), 1_000_000),
+            Cycles::new(u128::MAX) / reference_subnet_size
         );
     }
 

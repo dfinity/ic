@@ -8,11 +8,7 @@ use cloudflare::{
         },
         zone::{ListZones, ListZonesParams, Zone},
     },
-    framework::{
-        async_api::{ApiClient, Client},
-        auth::Credentials,
-        Environment, HttpApiClientConfig,
-    },
+    framework::{async_api::Client, auth::Credentials, Environment, HttpApiClientConfig},
 };
 
 use crate::dns::{Create, Delete, Record};

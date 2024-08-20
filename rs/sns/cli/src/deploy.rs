@@ -1,7 +1,5 @@
 //! Contains the logic for deploying SNS canisters
 
-#[cfg(test)]
-use std::io::BufReader;
 use std::{
     fs::{create_dir_all, OpenOptions},
     io::{BufWriter, Read, Seek, SeekFrom, Write},
@@ -9,22 +7,15 @@ use std::{
     str::FromStr,
 };
 
-use anyhow::anyhow;
-use candid::{types::value::IDLValue, Decode, Encode};
+use candid::Decode;
 use serde_json::{json, Value as JsonValue};
-use tempfile::NamedTempFile;
 
-use crate::{
-    call_dfx, call_dfx_or_panic, get_identity, hex_encode_candid, DeployArgs, DeployTestflightArgs,
-};
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_nns_constants::{ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use crate::{call_dfx, call_dfx_or_panic, get_identity, hex_encode_candid, DeployTestflightArgs};
+use ic_base_types::PrincipalId;
+use ic_nns_constants::ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID;
 use ic_sns_governance::pb::v1::ListNeuronsResponse;
 use ic_sns_init::{pb::v1::SnsInitPayload, SnsCanisterIds, SnsCanisterInitPayloads};
 use ic_sns_root::pb::v1::ListSnsCanistersResponse;
-use ic_sns_wasm::pb::v1::{
-    DeployNewSnsRequest, DeployNewSnsResponse, SnsCanisterIds as SnsWSnsCanisterIds,
-};
 
 /// If SNS canisters have already been created, return their canister IDs, else create the
 /// SNS canisters and return their canister IDs.
@@ -126,6 +117,7 @@ where
         .read(true)
         .write(true)
         .create(true)
+        .truncate(false)
         .open(path)?;
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
@@ -151,251 +143,6 @@ where
     Ok(())
 }
 
-fn parse_deploy_new_sns_response(buffer: &[u8]) -> anyhow::Result<SnsWSnsCanisterIds> {
-    let mut hex = buffer.to_vec();
-    while hex
-        .last()
-        .map(|&c| !c.is_ascii_hexdigit())
-        .unwrap_or_default()
-    {
-        hex.pop().unwrap();
-    }
-    let decoded = Decode!(
-        &hex::decode(hex).expect("cannot parse dfx output as hex"),
-        DeployNewSnsResponse
-    )
-    .expect("cannot parse dfx output as DeployNewSnsResponse");
-
-    let DeployNewSnsResponse {
-        canisters, error, ..
-    } = decoded;
-
-    if error.is_some() {
-        Err(anyhow!(error.unwrap().message))
-    } else {
-        canisters.ok_or_else(|| anyhow!("DeployNewSnsResponse should contain SNS canister IDs"))
-    }
-}
-
-fn dfx_canister_ids_json(
-    network_name: &str,
-    sns_canister_ids: SnsWSnsCanisterIds,
-) -> anyhow::Result<JsonValue> {
-    // this is what dfx does to make the network name "OS-friendly"
-    let network_name = &network_name.replace(|c: char| !c.is_ascii_alphanumeric(), "_");
-    Ok(json!({
-        "sns_governance": json!({network_name: sns_canister_ids.governance.expect("SNS root does not return governance canister ID")}),
-        "sns_index": json!({network_name: sns_canister_ids.index.expect("SNS root does not return index canister ID")}),
-        "sns_ledger": json!({network_name: sns_canister_ids.ledger.expect("SNS root does not return ledger canister ID")}),
-        "sns_root": json!({network_name: sns_canister_ids.root.expect("SNS root does not return root canister ID")}),
-        "sns_swap": json!({network_name: sns_canister_ids.swap.expect("SNS root does not return swap canister ID")}),
-    }))
-}
-
-fn sns_quill_canister_ids_json(sns_canister_ids: SnsWSnsCanisterIds) -> anyhow::Result<JsonValue> {
-    Ok(json!({
-        "governance_canister_id": sns_canister_ids.governance.expect("SNS root does not return governance canister ID"),
-        "index_canister_id": sns_canister_ids.index.expect("SNS root does not return index canister ID"),
-        "ledger_canister_id": sns_canister_ids.ledger.expect("SNS root does not return ledger canister ID"),
-        "root_canister_id": sns_canister_ids.root.expect("SNS root does not return root canister ID"),
-        "swap_canister_id": sns_canister_ids.swap.expect("SNS root does not return swap canister ID"),
-    }))
-}
-
-/// Responsible for deploying using SNS-WASM canister (for protected SNS subnet)
-pub struct SnsWasmSnsDeployer {
-    pub args: DeployArgs,
-    pub sns_init_payload: SnsInitPayload,
-    pub sns_wasms_canister: String,
-    pub wallet_canister: CanisterId,
-}
-
-impl SnsWasmSnsDeployer {
-    pub fn new(args: DeployArgs, sns_init_payload: SnsInitPayload) -> Self {
-        let sns_wasms_canister = args
-            .override_sns_wasm_canister_id_for_tests
-            .as_ref()
-            .map(|id_or_name| id_or_name.to_string())
-            .unwrap_or_else(|| SNS_WASM_CANISTER_ID.get().to_string());
-
-        let wallet_canister = args
-            .wallet_canister_override
-            .as_ref()
-            .map(|id| CanisterId::unchecked_from_principal(*id))
-            .unwrap_or_else(|| {
-                CanisterId::unchecked_from_principal(get_identity("get-wallet", &args.network))
-            });
-
-        Self {
-            args,
-            sns_init_payload,
-            sns_wasms_canister,
-            wallet_canister,
-        }
-    }
-
-    /// Deploy this to the specified network using the SNS-WASM canister
-    pub fn deploy(&self) {
-        let request = DeployNewSnsRequest {
-            sns_init_payload: Some(self.sns_init_payload.clone()),
-        };
-
-        // Get a string representing the IDL of a DeployNewSnsRequest by
-        // encoding it to bytes and decoding it to an IDLValue. The decoded
-        // IDLValue does not know the field names, but that's ok.
-        let request_idl = format!(
-            "({},)",
-            Decode!(
-                &Encode!(&request).expect("Couldn't encode DeployNewSnsRequest"),
-                IDLValue
-            )
-            .expect("Couldn't decode DeployNewSnsRequest")
-        );
-
-        let mut temp_file = NamedTempFile::new().expect("Failed to create temp file");
-        writeln!(temp_file, "{}", request_idl).expect("Failed to write to temp file");
-
-        let output = {
-            let wallet_canister = format!("{}", self.wallet_canister);
-            let sns_creation_fee = self.args.with_cycles.to_string();
-            let mut args = vec![
-                "canister",
-                "--network",
-                &self.args.network,
-                "--wallet",
-                &wallet_canister,
-                "call",
-                "--with-cycles",
-                &sns_creation_fee,
-                &self.sns_wasms_canister,
-                "deploy_new_sns",
-                "--output",
-                "raw",
-                "--argument-file",
-                temp_file
-                    .path()
-                    .to_str()
-                    .expect("Expected temp file's path to exist"),
-            ];
-            if let Some(path) = self.args.candid.as_ref() {
-                args.push("--candid");
-                args.push(path);
-            }
-            call_dfx(&args)
-        };
-
-        if !output.status.success() {
-            panic!("Failed to create SNS");
-        }
-        self.save_canister_ids(&output.stdout)
-            .expect("Failed to save to SNS canister IDs");
-    }
-
-    /// Records the created canister IDs in canister_ids.json and sns_canister_ids.json
-    pub fn save_canister_ids(&self, buffer: &[u8]) -> anyhow::Result<()> {
-        let sns_canister_ids = parse_deploy_new_sns_response(buffer)?;
-
-        let canisters_file = {
-            let path = &self.args.save_to;
-            if let Some(dir) = path.parent() {
-                create_dir_all(dir)
-                    .map_err(|err| {
-                        format!(
-                            "Failed to create directory for {}: {err}",
-                            path.to_string_lossy()
-                        )
-                    })
-                    .unwrap();
-            }
-            path
-        };
-        merge_into_json_file(
-            canisters_file,
-            &dfx_canister_ids_json(&self.args.network, sns_canister_ids)?,
-        )
-        .expect("cannot write SNS canister IDs to file");
-
-        let sns_canisters_file = {
-            let path = &self.args.sns_canister_ids_save_to;
-            if let Some(dir) = path.parent() {
-                create_dir_all(dir)
-                    .map_err(|err| {
-                        format!(
-                            "Failed to create directory for {}: {err}",
-                            path.to_string_lossy()
-                        )
-                    })
-                    .unwrap();
-            }
-            path
-        };
-        merge_into_json_file(
-            sns_canisters_file,
-            &sns_quill_canister_ids_json(sns_canister_ids)?,
-        )
-        .expect("cannot write SNS canister IDs to file");
-
-        Ok(())
-    }
-}
-
-#[test]
-fn should_save_canister_ids() {
-    let sample_response = r#"4449444c046c03bd869d8b0401c897a799077fec80e5e909026e686e036c05a2dcbbdd040193d5f8e20401a9cbadc3090192b6d2f00b01a2d2bea80c01010001011d0f3453137346b2a448ef6b0f0ee389ca465f237da654397fd7216ba1020101010a000000000000000f010101010a0000000000000012010101010a0000000000000011010101010a000000000000000e010101010a00000000000000100101
-    "#;
-    let network_name = "foo";
-    let expected_dfx_json_str = r#"
-      { "sns_root": { "foo": "q3fc5-haaaa-aaaaa-aaahq-cai" }
-      , "sns_swap": { "foo": "si2b5-pyaaa-aaaaa-aaaja-cai" }
-      , "sns_ledger": { "foo": "sbzkb-zqaaa-aaaaa-aaaiq-cai" }
-      , "sns_governance": { "foo": "sgymv-uiaaa-aaaaa-aaaia-cai" }
-      , "sns_index": { "foo": "q4eej-kyaaa-aaaaa-aaaha-cai" }
-      }
-    "#;
-    let expected_sns_quill_json_str = r#"
-      { "root_canister_id": "q3fc5-haaaa-aaaaa-aaahq-cai"
-      , "swap_canister_id": "si2b5-pyaaa-aaaaa-aaaja-cai"
-      , "ledger_canister_id": "sbzkb-zqaaa-aaaaa-aaaiq-cai"
-      , "governance_canister_id": "sgymv-uiaaa-aaaaa-aaaia-cai"
-      , "index_canister_id": "q4eej-kyaaa-aaaaa-aaaha-cai"
-      }
-    "#;
-    let expected_dfx_json = serde_json::from_str(expected_dfx_json_str).unwrap();
-    let expected_sns_quill_json = serde_json::from_str(expected_sns_quill_json_str).unwrap();
-
-    fn assert_same_json(expected: &JsonValue, actual: &JsonValue, message: &str) {
-        let diff = json_patch::diff(expected, actual);
-        assert_eq!(json_patch::Patch(Vec::new()), diff, "{}", message);
-    }
-
-    // Test the individual steps:
-    // .. First parse the response and prepare the JSON representation:
-    let sns_canister_ids = parse_deploy_new_sns_response(sample_response.as_bytes()).unwrap();
-    let actual_dfx_json = dfx_canister_ids_json(network_name, sns_canister_ids).unwrap();
-    let actual_sns_quill_json = sns_quill_canister_ids_json(sns_canister_ids).unwrap();
-    // ... verify that the representation has no semantic differences
-    assert_same_json(
-        &expected_dfx_json,
-        &actual_dfx_json,
-        "The jsonification is wrong",
-    );
-    assert_same_json(
-        &expected_sns_quill_json,
-        &actual_sns_quill_json,
-        "The jsonification is wrong",
-    );
-    // ... verify that writing to an empty file dumps the data without modification
-    let file = NamedTempFile::new().unwrap();
-    merge_into_json_file(file.path(), &actual_dfx_json).expect("Failed to save changes to file");
-    let file_content =
-        serde_json::from_reader(&mut BufReader::new(file.reopen().unwrap())).unwrap();
-    assert_same_json(
-        &expected_dfx_json,
-        &file_content,
-        "Save to file doesn't work",
-    );
-}
-
 /// Responsible for deploying SNS canisters
 pub struct DirectSnsDeployerForTests {
     pub network: String,
@@ -409,41 +156,13 @@ pub struct DirectSnsDeployerForTests {
 }
 
 impl DirectSnsDeployerForTests {
-    pub fn new(args: DeployArgs, sns_init_payload: SnsInitPayload) -> Self {
-        let sns_canisters = lookup_or_else_create_canisters(
-            args.verbose,
-            &args.network,
-            args.initial_cycles_per_canister,
-        );
-        // TODO - add version hash to test upgrade path locally?  Where would we find that?
-        // TODO[NNS1-2592]: set neurons_fund_participation_constraints to a non-trivial value.
-        let sns_canister_payloads =
-            match sns_init_payload.build_canister_payloads(&sns_canisters, None, false) {
-                Ok(payload) => payload,
-                Err(e) => panic!("Could not build canister init payloads: {}", e),
-            };
-
-        let wallet_canister = get_identity("get-wallet", &args.network);
-        let dfx_identity = get_identity("get-principal", &args.network);
-
-        Self {
-            network: args.network,
-            sns_canister_ids_save_to: args.sns_canister_ids_save_to,
-            wasms_dir: args.wasms_dir,
-            sns_canister_payloads,
-            sns_canisters,
-            wallet_canister,
-            dfx_identity,
-            testflight: false,
-        }
-    }
-
     pub fn new_testflight(args: DeployTestflightArgs, sns_init_payload: SnsInitPayload) -> Self {
         let sns_canisters = lookup_or_else_create_canisters(
             args.verbose,
             &args.network,
             Some(args.initial_cycles_per_canister),
         );
+
         // TODO - add version hash to test upgrade path locally?  Where would we find that?
         // TODO[NNS1-2592]: set neurons_fund_participation_constraints to a non-trivial value.
         let sns_canister_payloads =
@@ -731,8 +450,8 @@ impl DirectSnsDeployerForTests {
 
     /// Install and initialize Index
     fn install_index(&self) {
-        let init_args = hex_encode_candid(&self.sns_canister_payloads.index);
-        self.install_canister("sns_index", "ic-icrc1-index", &init_args);
+        let init_args = hex_encode_candid(&self.sns_canister_payloads.index_ng);
+        self.install_canister("sns_index", "ic-icrc1-index-ng", &init_args);
     }
 
     /// Install the given canister

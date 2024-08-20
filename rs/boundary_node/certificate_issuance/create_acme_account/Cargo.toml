@@ -7,8 +7,8 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-anyhow = "1.0.66"
-clap = { version = "4.0.18", features = ["derive"] }
+anyhow = { workspace = true }
+clap = { workspace = true }
 instant-acme = "0.1.0"
 serde = { workspace = true }
 serde_json = { workspace = true }

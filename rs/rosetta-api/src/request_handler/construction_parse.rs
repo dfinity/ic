@@ -1,23 +1,26 @@
-use crate::convert::{self, from_arg, to_model_account_identifier};
-use crate::errors::ApiError;
-use crate::models::{ConstructionParseRequest, ConstructionParseResponse, ParsedTransaction};
-use crate::request_handler::{verify_network_id, RosettaRequestHandler};
-use crate::request_types::{
-    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity, NeuronInfo,
-    PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType, SetDissolveTimestamp, Spawn,
-    Stake, StakeMaturity, StartDissolve, StopDissolve,
+use crate::{
+    convert::{self, from_arg, to_model_account_identifier},
+    errors::ApiError,
+    models::{ConstructionParseRequest, ConstructionParseResponse, ParsedTransaction},
+    request_handler::{verify_network_id, RosettaRequestHandler},
+    request_types::{
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity,
+        NeuronInfo, PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType,
+        SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
+    },
 };
 use rosetta_core::objects::ObjectMap;
 
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     manage_neuron::{self, Command, NeuronIdOrSubaccount},
     ClaimOrRefreshNeuronFromAccount, ManageNeuron,
 };
 
-use crate::models::seconds::Seconds;
-use crate::request::Request;
-use ic_types::messages::{Blob, HttpCallContent, HttpCanisterUpdate};
-use ic_types::PrincipalId;
+use crate::{models::seconds::Seconds, request::Request};
+use ic_types::{
+    messages::{Blob, HttpCallContent, HttpCanisterUpdate},
+    PrincipalId,
+};
 use icp_ledger::{AccountIdentifier, Operation, SendArgs};
 use std::convert::TryFrom;
 
@@ -28,13 +31,11 @@ impl RosettaRequestHandler {
         &self,
         msg: ConstructionParseRequest,
     ) -> Result<ConstructionParseResponse, ApiError> {
-        verify_network_id(
-            self.ledger.ledger_canister_id(),
-            &msg.network_identifier.clone().into(),
-        )?;
+        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
 
         let updates: Vec<_> = match ParsedTransaction::try_from(msg.clone())? {
-            ParsedTransaction::Signed(envelopes) => envelopes
+            ParsedTransaction::Signed(signed_transaction) => signed_transaction
+                .requests
                 .iter()
                 .map(
                     |(request_type, updates)| match updates[0].update.content.clone() {
@@ -596,30 +597,29 @@ fn follow(
 
 #[cfg(test)]
 mod tests {
-    use ed25519_consensus::SigningKey;
     use ic_base_types::CanisterId;
-    use proptest::prop_assert;
-    use proptest::test_runner::TestCaseError;
-    use proptest::{prop_assert_eq, proptest, strategy::Strategy};
+    use proptest::{
+        prop_assert, prop_assert_eq, proptest, strategy::Strategy, test_runner::TestCaseError,
+    };
     use rand_chacha::rand_core::OsRng;
-    use std::str::FromStr;
-    use std::time::SystemTime;
+    use std::{str::FromStr, time::SystemTime};
     use url::Url;
 
-    use crate::ledger_client::LedgerClient;
-    use crate::models::operation::OperationType;
-    use crate::models::Amount;
-    use crate::models::{
-        ConstructionCombineRequest, ConstructionDeriveRequest, ConstructionParseRequest,
-        ConstructionPayloadsRequest, ConstructionPayloadsRequestMetadata, Currency, CurveType,
-        Operation, OperationIdentifier, PublicKey, Signature, SignatureType,
+    use crate::{
+        ledger_client::LedgerClient,
+        models::{
+            operation::OperationType, Amount, ConstructionCombineRequest,
+            ConstructionDeriveRequest, ConstructionParseRequest, ConstructionPayloadsRequest,
+            ConstructionPayloadsRequestMetadata, Currency, CurveType, Operation,
+            OperationIdentifier, PublicKey, Signature, SignatureType,
+        },
+        request_handler::RosettaRequestHandler,
     };
-    use crate::request_handler::RosettaRequestHandler;
     use rosetta_core::objects::ObjectMap;
 
     #[test]
     fn test_payloads_parse_identity() {
-        let key = SigningKey::new(OsRng);
+        let key = ic_crypto_ed25519::PrivateKey::generate_using_rng(&mut OsRng);
         let ledger_client = futures::executor::block_on(LedgerClient::new(
             Url::from_str("http://localhost:1234").unwrap(),
             CanisterId::from_u64(1),
@@ -629,6 +629,7 @@ mod tests {
             None,
             true,
             None,
+            false,
         ))
         .unwrap();
         let handler = RosettaRequestHandler::new("Internet Computer".into(), ledger_client.into());
@@ -643,12 +644,12 @@ mod tests {
 
         // get the account from the public key
         let pub_key = crate::models::PublicKey {
-            hex_bytes: hex::encode(key.as_bytes()),
+            hex_bytes: hex::encode(key.public_key().serialize_raw()),
             curve_type: CurveType::Edwards25519,
         };
         let account = handler
             .construction_derive(ConstructionDeriveRequest {
-                network_identifier: network_identifier.clone().into(),
+                network_identifier: network_identifier.clone(),
                 public_key: pub_key.clone(),
                 metadata: None,
             })
@@ -663,7 +664,7 @@ mod tests {
                     network_index: None,
                 },
                 related_operations: None,
-                _type: OperationType::Transaction.to_string(),
+                type_: OperationType::Transaction.to_string(),
                 status: None,
                 account: account.clone(),
                 amount: Some(Amount {
@@ -680,7 +681,7 @@ mod tests {
                     network_index: None,
                 },
                 related_operations: None,
-                _type: OperationType::Transaction.to_string(),
+                type_: OperationType::Transaction.to_string(),
                 status: None,
                 account: account.clone(),
                 amount: Some(Amount {
@@ -697,7 +698,7 @@ mod tests {
                     network_index: None,
                 },
                 related_operations: None,
-                _type: OperationType::Fee.to_string(),
+                type_: OperationType::Fee.to_string(),
                 status: None,
                 account,
                 amount: Some(Amount {
@@ -780,16 +781,16 @@ mod tests {
         proptest!(|(metadata in gen_metadata.clone())| {
             let handler = handler.clone();
             let construction_payloads_result = handler.construction_payloads(ConstructionPayloadsRequest {
-                network_identifier: network_identifier.clone().into(),
+                network_identifier: network_identifier.clone(),
                 operations: operations.clone(),
-                metadata: metadata.clone().map(|m|m.into()),
+                metadata: metadata.clone().map(|m|m.try_into().unwrap()),
                 public_keys: Some(vec![pub_key.clone()]),
             }).unwrap();
             let unsigned_transaction = construction_payloads_result.unsigned_transaction;
 
             // parse the unsigned transaction and check the result
             let parsed = handler.construction_parse(ConstructionParseRequest {
-                network_identifier: network_identifier.clone().into(),
+                network_identifier: network_identifier.clone(),
                 signed: false,
                 transaction: unsigned_transaction,
             }).unwrap();
@@ -810,9 +811,9 @@ mod tests {
         };
         proptest!(conf, |(metadata in gen_metadata.clone())| {
             let construction_payloads_result = handler.construction_payloads(ConstructionPayloadsRequest {
-                network_identifier: network_identifier.clone().into(),
+                network_identifier: network_identifier.clone(),
                 operations: operations.clone(),
-                metadata: metadata.clone().map(|m|m.into()),
+                metadata: metadata.clone().map(|m|m.try_into().unwrap()),
                 public_keys: Some(vec![pub_key.clone()]),
             }).unwrap();
             let unsigned_transaction = construction_payloads_result.unsigned_transaction;
@@ -821,25 +822,25 @@ mod tests {
             let mut signatures = vec![];
             for payload in construction_payloads_result.payloads {
                 let bytes = hex::decode(payload.clone().hex_bytes).unwrap();
-                let signature = key.sign(&bytes);
+                let signature = key.sign_message(&bytes);
                 let signature = Signature {
                     signing_payload: payload,
-                    public_key: PublicKey::new(hex::encode(key.as_bytes()), CurveType::Edwards25519),
+                    public_key: PublicKey::new(hex::encode(key.public_key().serialize_raw()), CurveType::Edwards25519),
                     signature_type: SignatureType::Ed25519,
-                    hex_bytes: hex::encode(signature.to_bytes()),
+                    hex_bytes: hex::encode(signature),
                 };
                 signatures.push(signature);
             }
 
             let signed_transaction = handler.construction_combine(ConstructionCombineRequest {
-                network_identifier: network_identifier.clone(),
+                network_identifier:network_identifier.clone(),
                 unsigned_transaction,
                 signatures,
             }).unwrap().signed_transaction;
 
             // parse the signed transaction and check the result
             let parsed = handler.construction_parse(ConstructionParseRequest {
-                network_identifier: network_identifier.clone().into(),
+                network_identifier:network_identifier.clone(),
                 signed: true,
                 transaction: signed_transaction,
             }).unwrap();

@@ -24,9 +24,9 @@ To build a SetupOS image, refer to the link:../README.adoc[IC-OS README]
 
 The SetupOS installation is initiated by the systemd service unit file `setupos.service`. This service is of type idle, which means the installation is triggered only after every other unit has either completed or started.
 
-The installation process consists of multiple Shell and Python scripts, which can be found in the following directory:
+The installation process consists of multiple Shell and Python scripts, which are placed in the following directory:
 
-  ic-os/setupos/rootfs/opt/ic/bin
+  `/opt/ic/bin`
 
 The sequence of the scripts is defined in the main installation script, `setupos.sh`. The order of execution is as follows:
 

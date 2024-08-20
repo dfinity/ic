@@ -22,6 +22,7 @@ impl IcpLedgerCanister {
 }
 
 /// A trait defining common patterns for accessing the ICRC1 Ledger canister.
+#[automock]
 #[async_trait]
 pub trait ICRC1Ledger: Send + Sync {
     /// Transfers funds from one of this canister's subaccount to

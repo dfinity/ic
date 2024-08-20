@@ -1,6 +1,6 @@
 [package]
 name = "icrc-ledger-types"
-version = "0.1.4"
+version = "0.1.6"
 description = "Types for interacting with DFINITY's implementation of the ICRC-1 fungible token standard."
 license = "Apache-2.0"
 readme = "README.md"
@@ -14,14 +14,17 @@ documentation.workspace = true
 base32 = "0.4.0"
 candid = { workspace = true }
 crc32fast = "1.2.0"
-hex = "0.4.2"
-num-bigint = "0.4"
-num-traits = "0.2.12"
-serde_bytes = { workspace = true }
+hex = { workspace = true }
+itertools = { workspace = true }
+num-bigint = { workspace = true }
+num-traits = { workspace = true }
 serde = { workspace = true }
-sha2 = "0.10"
+serde_bytes = { workspace = true }
+sha2 = { workspace = true }
+strum = { workspace = true}
+time = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.5.0"
-hex = "0.4"
+assert_matches = { workspace = true }
+hex = { workspace = true }
 proptest = "1.0.0"

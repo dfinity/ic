@@ -1,16 +1,45 @@
-use candid::{CandidType, Deserialize, Int, Nat};
+use candid::{CandidType, Deserialize, Int, Nat, Principal};
+use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
+use crate::icrc1::account::Account;
+
 /// The number of bytes required to represent a 128-bit integer using LEB128 encoding.
 /// NOTE: ⌈ 128 / 7 ⌉ = 19
 const INT128_BUF_SIZE: usize = 19;
 pub type Map = BTreeMap<String, Value>;
+pub type ICRC3Map = BTreeMap<String, ICRC3Value>;
 pub type Hash = [u8; 32];
 
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ICRC3Value {
+    Blob(ByteBuf),
+    Text(String),
+    Nat(Nat),
+    Int(Int),
+    Array(Vec<ICRC3Value>),
+    Map(ICRC3Map),
+}
+
+impl std::fmt::Display for ICRC3Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // TODO(FI-1263): copy the Value fmt function to avoid cloning self
+        write!(f, "{}", Value::from(self.to_owned()))
+    }
+}
+
+impl ICRC3Value {
+    pub fn hash(self) -> Hash {
+        // TODO(FI-1263): copy the value hash function to avoid cloning self
+        Value::from(self).hash()
+    }
+}
+
+/// Deprecated, use `ICRC3Value` instead
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Value {
     Blob(ByteBuf),
@@ -22,7 +51,48 @@ pub enum Value {
     Map(Map),
 }
 
+impl From<Value> for ICRC3Value {
+    fn from(value: Value) -> Self {
+        match value {
+            Value::Blob(b) => Self::Blob(b),
+            Value::Text(t) => Self::Text(t),
+            Value::Nat(n) => Self::Nat(n),
+            Value::Nat64(n) => Self::Nat(Nat::from(n)),
+            Value::Int(i) => Self::Int(i),
+            Value::Array(a) => Self::Array(a.into_iter().map(Self::from).collect()),
+            Value::Map(m) => Self::Map(m.into_iter().map(|(k, v)| (k, Self::from(v))).collect()),
+        }
+    }
+}
+
+impl From<ICRC3Value> for Value {
+    fn from(value: ICRC3Value) -> Self {
+        match value {
+            ICRC3Value::Blob(b) => Self::Blob(b),
+            ICRC3Value::Text(t) => Self::Text(t),
+            ICRC3Value::Nat(n) => Self::Nat(n),
+            ICRC3Value::Int(i) => Self::Int(i),
+            ICRC3Value::Array(a) => Self::Array(a.into_iter().map(Value::from).collect()),
+            ICRC3Value::Map(m) => {
+                Self::Map(m.into_iter().map(|(k, v)| (k, Self::from(v))).collect())
+            }
+        }
+    }
+}
+
 impl Value {
+    pub fn variant_name(&self) -> String {
+        match self {
+            Self::Blob(_) => "Blob".to_string(),
+            Self::Text(_) => "Text".to_string(),
+            Self::Nat(_) => "Nat".to_string(),
+            Self::Nat64(_) => "Nat64".to_string(),
+            Self::Int(_) => "Int".to_string(),
+            Self::Array(_) => "Array".to_string(),
+            Self::Map(_) => "Map".to_string(),
+        }
+    }
+
     pub fn text(t: impl ToString) -> Self {
         Self::Text(t.to_string())
     }
@@ -59,7 +129,7 @@ impl Value {
                     .expect("BUG: blocks cannot contain integers that do not fit into the 128-bit representation");
                 let mut buf = [0u8; INT128_BUF_SIZE];
                 //TODO: Int should only use sleb128. Due to CiboriumValue only using Integer this is however not possible right now
-                //      Unsigned Integers should be represented through Nat or Nat65: https://dfinity.atlassian.net/browse/FI-764
+                //      Unsigned Integers should be represented through Nat or Nat64: https://dfinity.atlassian.net/browse/FI-764
                 let offset = match v >= 0 {
                     true => leb128(&mut buf, v as u128),
                     false => sleb128(&mut buf, v),
@@ -92,6 +162,170 @@ impl Value {
                 hasher.finalize().into()
             }
         }
+    }
+
+    pub fn as_blob(self) -> Result<ByteBuf, String> {
+        match self {
+            Self::Blob(b) => Ok(b),
+            _ => Err(self.variant_name()),
+        }
+    }
+
+    pub fn as_text(self) -> Result<String, String> {
+        match self {
+            Self::Text(s) => Ok(s),
+            _ => Err(self.variant_name()),
+        }
+    }
+
+    pub fn as_nat(self) -> Result<Nat, String> {
+        match self {
+            Self::Nat(n) => Ok(n),
+            Self::Nat64(n) => Ok(Nat::from(n)),
+            Self::Int(i) => match BigUint::try_from(i.0) {
+                Ok(n) => Ok(Nat(n)),
+                Err(e) => Err(format!("Failed to convert Int to Nat: {:?}", e)),
+            },
+            _ => Err(self.variant_name()),
+        }
+    }
+
+    pub fn as_int(self) -> Result<Int, String> {
+        match self {
+            Self::Int(i) => Ok(i),
+            _ => Err(self.variant_name()),
+        }
+    }
+
+    pub fn as_array(self) -> Result<Vec<Value>, String> {
+        match self {
+            Self::Array(v) => Ok(v),
+            _ => Err(self.variant_name()),
+        }
+    }
+
+    pub fn as_map(self) -> Result<Map, String> {
+        match self {
+            Self::Map(m) => Ok(m),
+            _ => Err(self.variant_name()),
+        }
+    }
+}
+
+impl TryFrom<Value> for ByteBuf {
+    type Error = String;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        value
+            .as_blob()
+            .map_err(|found_variant| format!("Expecting variant Blob but found {found_variant}"))
+    }
+}
+
+impl TryFrom<Value> for Vec<u8> {
+    type Error = String;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        Ok(ByteBuf::try_from(value)?.to_vec())
+    }
+}
+
+impl TryFrom<Value> for String {
+    type Error = String;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        value
+            .as_text()
+            .map_err(|found_variant| format!("Expecting variant Text but found {found_variant}"))
+    }
+}
+
+impl TryFrom<Value> for Nat {
+    type Error = String;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        value
+            .as_nat()
+            .map_err(|found_variant| format!("Expecting variant Nat but found {found_variant}"))
+    }
+}
+
+impl TryFrom<Value> for u64 {
+    type Error = String;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        Nat::try_from(value)?
+            .0
+            .to_u64()
+            .ok_or_else(|| "Unable to convert nat {nat} to u64".to_string())
+    }
+}
+
+impl TryFrom<Value> for Int {
+    type Error = String;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        value
+            .as_int()
+            .map_err(|found_variant| format!("Expecting variant Int but found {found_variant}"))
+    }
+}
+
+impl TryFrom<Value> for Vec<Value> {
+    type Error = String;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        value
+            .as_array()
+            .map_err(|found_variant| format!("Expecting variant Array but found {found_variant}"))
+    }
+}
+
+impl TryFrom<Value> for Map {
+    type Error = String;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        value
+            .as_map()
+            .map_err(|found_variant| format!("Expecting variant Map but found {found_variant}"))
+    }
+}
+
+impl TryFrom<Value> for Account {
+    type Error = String;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        let mut array = value.as_array()?;
+        if array.len() > 2 {
+            return Err(format!("Account should be an array of either one or two elements but found an array of {} elements", array.len()));
+        }
+        let owner = Principal::try_from_slice(array.remove(0).as_blob()?.as_slice())
+            .map_err(|err| format!("Unable to decode the owner of the account, error {err}"))?;
+        if let Some(subaccount) = array.pop() {
+            let subaccount = subaccount.as_blob()?.as_slice().try_into().map_err(|err| {
+                format!("Unable to decode the subaccount of the account, error {err}")
+            })?;
+            Ok(Account {
+                owner,
+                subaccount: Some(subaccount),
+            })
+        } else {
+            Ok(Account {
+                owner,
+                subaccount: None,
+            })
+        }
+    }
+}
+
+impl From<Account> for Value {
+    fn from(Account { owner, subaccount }: Account) -> Self {
+        let mut parts = vec![];
+        parts.push(Self::blob(owner.as_slice()));
+        if let Some(subaccount) = subaccount {
+            parts.push(Self::blob(subaccount.as_slice()));
+        }
+        Self::Array(parts)
     }
 }
 
@@ -282,4 +516,54 @@ fn test_test_vectors() {
             input
         );
     }
+}
+
+#[cfg(test)]
+pub fn arb_value() -> impl proptest::prelude::Strategy<Value = Value> {
+    use num_bigint::{BigInt, Sign};
+    use proptest::prelude::{any, prop_oneof, Just};
+    use proptest::strategy::Strategy;
+
+    // https://altsysrq.github.io/proptest-book/proptest/tutorial/recursive.html
+
+    let any_blob = any::<Vec<u8>>().prop_map(|bytes| Value::Blob(ByteBuf::from(bytes)));
+    let any_text = any::<String>().prop_map(Value::Text);
+    let any_nat =
+        any::<Vec<u32>>().prop_map(|digits| Value::Nat(candid::Nat(BigUint::new(digits))));
+    let any_nat64 = any::<u64>().prop_map(Value::Nat64);
+    let any_sign = prop_oneof![Just(Sign::Minus), Just(Sign::NoSign), Just(Sign::Plus)];
+    let any_int = (any_sign, any::<Vec<u32>>())
+        .prop_map(|(sign, digits)| Value::Int(candid::Int(BigInt::new(sign, digits))));
+
+    let leaf = prop_oneof![any_blob, any_text, any_nat, any_nat64, any_int];
+    leaf.prop_recursive(
+        3,  // 3 levels deep
+        16, // Shoot for maximum size of 16 nodes
+        10, // We put up to 10 items per collection
+        |inner| {
+            prop_oneof![
+                // Take the inner strategy and make the two recursive cases.
+                proptest::collection::vec(inner.clone(), 0..10).prop_map(Value::Array),
+                proptest::collection::btree_map(".*", inner, 0..10).prop_map(Value::Map),
+            ]
+        },
+    )
+}
+
+#[test]
+fn test_value_to_icrc3value_roundtrip() {
+    use proptest::{prop_assert_eq, proptest};
+    fn remove_nat64(value: Value) -> Value {
+        match value {
+            Value::Nat64(n) => Value::Nat(candid::Nat::from(n)),
+            Value::Array(a) => Value::Array(a.into_iter().map(remove_nat64).collect()),
+            Value::Map(m) => Value::Map(m.into_iter().map(|(k, v)| (k, remove_nat64(v))).collect()),
+            v => v,
+        }
+    }
+
+    proptest!(|(value in arb_value())| {
+        let icrc3_value = ICRC3Value::from(value.clone());
+        prop_assert_eq!(Value::from(icrc3_value), remove_nat64(value));
+    })
 }

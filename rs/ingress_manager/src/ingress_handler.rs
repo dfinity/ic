@@ -108,14 +108,7 @@ impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
                 "ingress_message_insert_validated";
                 ingress_message.message_id => format!("{}", ingress_object.message_id),
             );
-            let integrity_hash = ic_types::crypto::crypto_hash(ingress_message.binary()).get();
-            MoveToValidated((
-                IngressMessageId::from(ingress_object),
-                artifact.peer_id,
-                size,
-                (),
-                integrity_hash,
-            ))
+            MoveToValidated((IngressMessageId::from(ingress_object), artifact.peer_id))
         }));
 
         // Check validated messages and remove if they are not required anymore (i.e.
@@ -160,21 +153,21 @@ mod tests {
     };
     use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
     use ic_interfaces_state_manager::StateManager;
-    use ic_test_utilities::{
-        history::MockIngressHistory,
-        mock_time,
-        state_manager::FakeStateManager,
-        types::ids::{canister_test_id, node_test_id, user_test_id},
-        types::messages::SignedIngressBuilder,
-        FastForwardTimeSource,
+    use ic_test_utilities::state_manager::FakeStateManager;
+    use ic_test_utilities_state::MockIngressHistory;
+    use ic_test_utilities_time::FastForwardTimeSource;
+    use ic_test_utilities_types::{
+        ids::{canister_test_id, node_test_id, user_test_id},
+        messages::SignedIngressBuilder,
     };
     use ic_types::ingress::{IngressState, IngressStatus};
+    use ic_types::time::UNIX_EPOCH;
     use std::sync::Arc;
     use std::time::Duration;
 
     #[tokio::test]
     async fn test_ingress_on_state_change_valid() {
-        let time = mock_time();
+        let time = UNIX_EPOCH;
         let mut consensus_time = MockConsensusTime::new();
         consensus_time
             .expect_consensus_time()
@@ -196,7 +189,6 @@ mod tests {
                     .sign_for_randomly_generated_sender()
                     .build();
                 let message_id = IngressMessageId::from(&ingress_message);
-                let integrity_hash = ic_types::crypto::crypto_hash(ingress_message.binary()).get();
 
                 let change_set = access_ingress_pool(&ingress_pool, |ingress_pool| {
                     ingress_pool.insert(UnvalidatedArtifact {
@@ -207,14 +199,8 @@ mod tests {
                     ingress_manager.on_state_change(ingress_pool)
                 });
 
-                let size = ingress_message.count_bytes();
-                let expected_change_action = ChangeAction::MoveToValidated((
-                    message_id,
-                    node_test_id(0),
-                    size,
-                    (),
-                    integrity_hash,
-                ));
+                let expected_change_action =
+                    ChangeAction::MoveToValidated((message_id, node_test_id(0)));
                 assert!(change_set.contains(&expected_change_action));
             },
         )
@@ -222,7 +208,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ingress_on_state_change_invalid() {
-        let time = mock_time();
+        let time = UNIX_EPOCH;
         let mut consensus_time = MockConsensusTime::new();
         consensus_time
             .expect_consensus_time()
@@ -235,7 +221,7 @@ mod tests {
                 Box::new(|_| IngressStatus::Known {
                     receiver: canister_test_id(0).get(),
                     user_id: user_test_id(0),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                     state: IngressState::Received,
                 })
             });
@@ -330,12 +316,12 @@ mod tests {
                 Box::new(|_| IngressStatus::Known {
                     receiver: canister_test_id(0).get(),
                     user_id: user_test_id(0),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                     state: IngressState::Received,
                 })
             });
 
-        let time = mock_time();
+        let time = UNIX_EPOCH;
 
         let mut consensus_time = MockConsensusTime::new();
         consensus_time
@@ -383,7 +369,7 @@ mod tests {
         // we can select an appropriate expiry time for the message.
         // Furthermore, the time of choosing needs to be set to the current
         // time so that conversion to SignedIngress does not fail.
-        let current_time = mock_time();
+        let current_time = UNIX_EPOCH;
         let batch_time = current_time + Duration::from_secs(1);
 
         let mut consensus_time = MockConsensusTime::new();
@@ -401,8 +387,6 @@ mod tests {
                     .expiry_time(current_time + MAX_INGRESS_TTL / 2)
                     .sign_for_randomly_generated_sender()
                     .build();
-                let good_msg_integrity_hash =
-                    ic_types::crypto::crypto_hash(good_msg.binary()).get();
                 let bad_msg = SignedIngressBuilder::new()
                     .expiry_time(current_time + MAX_INGRESS_TTL)
                     .sign_for_randomly_generated_sender()
@@ -413,12 +397,12 @@ mod tests {
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: good_msg.clone(),
                         peer_id: node_test_id(0),
-                        timestamp: mock_time(),
+                        timestamp: UNIX_EPOCH,
                     });
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: bad_msg.clone(),
                         peer_id: node_test_id(0),
-                        timestamp: mock_time(),
+                        timestamp: UNIX_EPOCH,
                     });
                     ingress_manager.on_state_change(ingress_pool)
                 });
@@ -426,13 +410,8 @@ mod tests {
                 let good_id = IngressMessageId::from(&good_msg);
                 let bad_id = IngressMessageId::from(&bad_msg);
                 let expected_change_action0 = PurgeBelowExpiry(batch_time);
-                let expected_change_action1 = ChangeAction::MoveToValidated((
-                    good_id,
-                    node_test_id(0),
-                    good_msg.count_bytes(),
-                    (),
-                    good_msg_integrity_hash,
-                ));
+                let expected_change_action1 =
+                    ChangeAction::MoveToValidated((good_id, node_test_id(0)));
                 let expected_change_action2 = ChangeAction::RemoveFromUnvalidated(bad_id);
                 assert_eq!(change_set.len(), 3);
                 assert!(change_set.contains(&expected_change_action0));

@@ -1,0 +1,21 @@
+[package]
+name = "ic-query-stats-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+ic-agent = { workspace = true }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-system-test-driver = { path = "../../driver" }
+ic-types = { path = "../../../types/types" }
+ic-universal-canister = { path = "../../universal_canister/lib" }
+ic-utils = { workspace = true }
+ic_consensus_system_test_utils = { path = "../../consensu/utils" }
+itertools = { workspace = true }
+serde = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }

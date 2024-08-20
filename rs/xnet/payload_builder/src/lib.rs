@@ -17,11 +17,11 @@ use async_trait::async_trait;
 use hyper::{client::Client, Body, Request, StatusCode, Uri};
 use ic_async_utils::{receive_body_without_timeout, BodyReceiveError};
 use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
-use ic_crypto_tls_interfaces::TlsHandshake;
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
     messaging::{
         InvalidXNetPayload, XNetPayloadBuilder, XNetPayloadValidationError,
-        XNetTransientValidationError,
+        XNetPayloadValidationFailure,
     },
     validation::ValidationError,
 };
@@ -41,7 +41,7 @@ use ic_replicated_state::{replicated_state::ReplicatedStateMessageRouting, Repli
 use ic_types::{
     batch::{ValidationContext, XNetPayload},
     registry::RegistryClientError,
-    xnet::{CertifiedStreamSlice, StreamIndex},
+    xnet::{CertifiedStreamSlice, RejectSignal, StreamIndex},
     Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
 use ic_xnet_hyper::{ExecuteOnRuntime, TlsConnector};
@@ -308,7 +308,7 @@ impl XNetPayloadBuilderImpl {
     pub fn new(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
+        tls_handshake: Arc<dyn TlsConfig + Send + Sync>,
         registry: Arc<dyn RegistryClient>,
         runtime_handle: runtime::Handle,
         node_id: NodeId,
@@ -330,7 +330,10 @@ impl XNetPayloadBuilderImpl {
         ));
 
         let deterministic_rng_for_testing = Arc::new(None);
-        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(metrics_registry)));
+        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+            Arc::clone(&certified_stream_store),
+            metrics_registry,
+        )));
         let slice_pool = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(metrics_registry));
         let endpoint_resolver = XNetEndpointResolver::new(
@@ -432,10 +435,10 @@ impl XNetPayloadBuilderImpl {
                     return ExpectedIndices {
                         message_index: messages.end(),
                         signal_index: most_recent_signal_index
-                            .unwrap_or_else(|| slice.header().signals_end),
+                            .unwrap_or_else(|| slice.header().signals_end()),
                     };
                 }
-                most_recent_signal_index.get_or_insert_with(|| slice.header().signals_end);
+                most_recent_signal_index.get_or_insert_with(|| slice.header().signals_end());
             }
         }
 
@@ -482,20 +485,20 @@ impl XNetPayloadBuilderImpl {
     /// In particular:
     ///
     ///  1. `signals_end` must be monotonically increasing, i.e. `expected <=
-    /// signals_end`;
+    ///     signals_end`;
     ///
     ///  2. signals must only refer to past and current messages, i.e.
-    /// `signals_end <= stream.messages_end()`;
+    ///     `signals_end <= stream.messages_end()`;
     ///
     ///  3. `signals_end - reject_signals[0] <= MAX_STREAM_MESSAGES`; and
     ///
     ///  4. `concat(reject_signals, [signals_end])` must be strictly increasing.
-    /// and
+    ///     and
     fn validate_signals(
         &self,
         subnet_id: SubnetId,
         signals_end: StreamIndex,
-        reject_signals: &VecDeque<StreamIndex>,
+        reject_signals: &VecDeque<RejectSignal>,
         expected: StreamIndex,
         state: &ReplicatedState,
     ) -> SignalsValidationResult {
@@ -543,20 +546,20 @@ impl XNetPayloadBuilderImpl {
             // messages have been GC-ed). Meaning we can never have signals going back
             // farther than the maximum number of messages in a stream.
             let signals_begin = reject_signals.front().unwrap();
-            if signals_end.get() - signals_begin.get() > MAX_STREAM_MESSAGES {
+            if signals_end.get() - signals_begin.index.get() > MAX_STREAM_MESSAGES {
                 warn!(
                     self.log,
                     "Too old reject signal in stream from {}: signals_begin {}, signals_end {}",
                     subnet_id,
-                    signals_begin,
+                    signals_begin.index,
                     signals_end
                 );
                 return SignalsValidationResult::Invalid;
             }
 
             let mut next = signals_end;
-            for index in reject_signals.iter().rev() {
-                if index >= &next {
+            for signal in reject_signals.iter().rev() {
+                if signal.index >= next {
                     warn!(
                         self.log,
                         "Invalid signals in stream from {}: reject_signals {:?}, signals_end {}",
@@ -566,7 +569,7 @@ impl XNetPayloadBuilderImpl {
                     );
                     return SignalsValidationResult::Invalid;
                 }
-                next = *index;
+                next = signal.index;
             }
         }
 
@@ -619,13 +622,13 @@ impl XNetPayloadBuilderImpl {
         };
 
         // Valid stream message bounds.
-        if slice.header().begin > slice.header().end {
+        if slice.header().begin() > slice.header().end() {
             warn!(
                 self.log,
                 "Stream from {}: begin index ({}) after end index ({})",
                 subnet_id,
-                slice.header().begin,
-                slice.header().end
+                slice.header().begin(),
+                slice.header().end()
             );
             return SliceValidationResult::Invalid(format!(
                 "Invalid stream bounds in stream from {}",
@@ -635,16 +638,16 @@ impl XNetPayloadBuilderImpl {
 
         // Expected message index within stream message bounds (always present in the
         // header, even for empty slices).
-        if expected.message_index < slice.header().begin
-            || slice.header().end < expected.message_index
+        if expected.message_index < slice.header().begin()
+            || slice.header().end() < expected.message_index
         {
             warn!(
                 self.log,
                 "Stream from {}: expecting message {}, outside of stream bounds [{}, {})",
                 subnet_id,
                 expected.message_index,
-                slice.header().begin,
-                slice.header().end
+                slice.header().begin(),
+                slice.header().end()
             );
             return SliceValidationResult::Invalid(format!(
                 "Unexpected messages in stream from {}",
@@ -652,7 +655,7 @@ impl XNetPayloadBuilderImpl {
             ));
         }
 
-        if slice.messages().is_none() && slice.header().signals_end == expected.signal_index {
+        if slice.messages().is_none() && slice.header().signals_end() == expected.signal_index {
             // Empty slice: no messages and no additional signals (in addition to what we
             // have in state and any intervening payloads). Not actually invalid, but
             // we don't want it in a payload.
@@ -661,15 +664,15 @@ impl XNetPayloadBuilderImpl {
 
         if let Some(messages) = slice.messages() {
             // Messages in slice within stream message bounds.
-            if messages.begin() < slice.header().begin || messages.end() > slice.header().end {
+            if messages.begin() < slice.header().begin() || messages.end() > slice.header().end() {
                 warn!(
                     self.log,
                     "Stream from {}: slice bounds [{}, {}) outside of stream bounds [{}, {})",
                     subnet_id,
                     messages.begin(),
                     messages.end(),
-                    slice.header().begin,
-                    slice.header().end
+                    slice.header().begin(),
+                    slice.header().end()
                 );
                 return SliceValidationResult::Invalid(format!(
                     "Invalid slice bounds in stream from {}",
@@ -733,8 +736,8 @@ impl XNetPayloadBuilderImpl {
         // message).
         match self.validate_signals(
             subnet_id,
-            slice.header().signals_end,
-            &slice.header().reject_signals,
+            slice.header().signals_end(),
+            slice.header().reject_signals(),
             expected.signal_index,
             state,
         ) {
@@ -751,7 +754,7 @@ impl XNetPayloadBuilderImpl {
                         .messages()
                         .map(|messages| messages.end())
                         .unwrap_or(expected.message_index),
-                    signals_end: slice.header().signals_end,
+                    signals_end: slice.header().signals_end(),
                     byte_size,
                 }
             }
@@ -1037,7 +1040,8 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
 
         // We don't care if the send succeeded or not. If it didn't, the refill task is
         // just behind.
-        self.refill_task_handle.trigger_refill();
+        self.refill_task_handle
+            .trigger_refill(validation_context.registry_version);
 
         payload
     }
@@ -1076,14 +1080,14 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                 SliceValidationResult::Invalid(reason) => {
                     self.metrics
                         .observe_validate_duration(VALIDATION_STATUS_INVALID, since);
-                    return Err(ValidationError::Permanent(
+                    return Err(ValidationError::InvalidArtifact(
                         InvalidXNetPayload::InvalidSlice(reason),
                     ));
                 }
                 SliceValidationResult::Empty => {
                     self.metrics
                         .observe_validate_duration(VALIDATION_STATUS_EMPTY_SLICE, since);
-                    return Err(ValidationError::Permanent(
+                    return Err(ValidationError::InvalidArtifact(
                         InvalidXNetPayload::InvalidSlice("Empty slice".to_string()),
                     ));
                 }
@@ -1113,7 +1117,8 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
             }
         }
         // And trigger a pool refill.
-        self.refill_task_handle.trigger_refill();
+        self.refill_task_handle
+            .trigger_refill(validation_context.registry_version);
 
         self.metrics
             .observe_validate_duration(VALIDATION_STATUS_VALID, since);
@@ -1147,11 +1152,11 @@ fn get_node_operator_id(
 fn from_state_manager_error(e: StateManagerError) -> XNetPayloadValidationError {
     match e {
         StateManagerError::StateRemoved(height) => {
-            ValidationError::Permanent(InvalidXNetPayload::StateRemoved(height))
+            ValidationError::ValidationFailed(XNetPayloadValidationFailure::StateRemoved(height))
         }
-        StateManagerError::StateNotCommittedYet(height) => {
-            ValidationError::Transient(XNetTransientValidationError::StateNotCommittedYet(height))
-        }
+        StateManagerError::StateNotCommittedYet(height) => ValidationError::ValidationFailed(
+            XNetPayloadValidationFailure::StateNotCommittedYet(height),
+        ),
     }
 }
 
@@ -1207,17 +1212,27 @@ impl PoolRefillTask {
         };
 
         runtime_handle.spawn(async move {
-            while refill_receiver.recv().await.is_some() {
-                task.refill_pool(POOL_BYTE_SIZE_SOFT_CAP, POOL_SLICE_BYTE_SIZE_MAX)
-                    .await;
+            while let Some(registry_version) = refill_receiver.recv().await {
+                task.refill_pool(
+                    POOL_BYTE_SIZE_SOFT_CAP,
+                    POOL_SLICE_BYTE_SIZE_MAX,
+                    registry_version,
+                )
+                .await;
             }
         });
 
         RefillTaskHandle(Mutex::new(refill_trigger))
     }
 
-    /// Queries all subnets for new slices and puts / appends them to the pool.
-    async fn refill_pool(&self, pool_byte_size_soft_cap: usize, slice_byte_size_max: usize) {
+    /// Queries all subnets for new slices and puts / appends them to the pool after
+    /// validation against the given registry version.
+    async fn refill_pool(
+        &self,
+        pool_byte_size_soft_cap: usize,
+        slice_byte_size_max: usize,
+        registry_version: RegistryVersion,
+    ) {
         let pool_slice_stats = {
             let pool = self.pool.lock().unwrap();
 
@@ -1299,10 +1314,14 @@ impl PoolRefillTask {
                     Ok(slice) => {
                         let res = if witness_begin != msg_begin {
                             // Pulled a stream suffix, append to pooled slice.
-                            pool.lock().unwrap().append(subnet_id, slice)
+                            pool.lock()
+                                .unwrap()
+                                .append(subnet_id, slice, registry_version, log)
                         } else {
-                            // Pulled a complete stream, replace polled slice (if any).
-                            pool.lock().unwrap().put(subnet_id, slice)
+                            // Pulled a complete stream, replace pooled slice (if any).
+                            pool.lock()
+                                .unwrap()
+                                .put(subnet_id, slice, registry_version, log)
                         };
                         let status = match res {
                             Ok(()) => STATUS_SUCCESS,
@@ -1344,14 +1363,15 @@ impl PoolRefillTask {
 
 /// A handle for a `PoolRefillTask`to be used for triggering pool refills and
 /// terminating the task (by dropping the handle).
-pub struct RefillTaskHandle(pub Mutex<mpsc::Sender<()>>);
+pub struct RefillTaskHandle(pub Mutex<mpsc::Sender<RegistryVersion>>);
 
 impl RefillTaskHandle {
-    /// Triggers a slice pool refill.
-    pub fn trigger_refill(&self) {
+    /// Triggers a slice pool refill, validating slices against the given registry
+    /// version.
+    pub fn trigger_refill(&self, registry_version: RegistryVersion) {
         // We don't care if the send succeeded or not. If it didn't, the refill task is
         // just behind.
-        self.0.lock().unwrap().try_send(()).ok();
+        self.0.lock().unwrap().try_send(registry_version).ok();
     }
 }
 
@@ -1540,7 +1560,7 @@ impl XNetClientImpl {
     fn new(
         metrics_registry: &MetricsRegistry,
         runtime_handle: runtime::Handle,
-        tls: Arc<dyn TlsHandshake + Send + Sync>,
+        tls: Arc<dyn TlsConfig + Send + Sync>,
         proximity_map: Arc<ProximityMap>,
     ) -> XNetClientImpl {
         // TODO(MR-28) Make timeout configurable.

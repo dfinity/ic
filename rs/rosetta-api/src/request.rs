@@ -1,10 +1,9 @@
-use crate::convert::principal_id_from_public_key_or_principal;
-use crate::errors::ApiError;
-use crate::models::seconds::Seconds;
-use crate::request_types::*;
-use crate::{convert, models};
+use crate::{
+    convert, convert::principal_id_from_public_key_or_principal, errors::ApiError, models,
+    models::seconds::Seconds, request_types::*,
+};
 use dfn_candid::CandidOne;
-use ic_nns_governance::pb::v1::manage_neuron::{self, configure, Command, Configure};
+use ic_nns_governance_api::pb::v1::manage_neuron::{self, configure, Command, Configure};
 use ic_types::PrincipalId;
 use icp_ledger::Tokens;
 use on_wire::FromWire;
@@ -166,7 +165,7 @@ impl Request {
         let mut builder = TransactionBuilder::default();
         for request in requests {
             match request {
-                Request::Transfer(o) => builder.transfer(o, token_name)?,
+                Request::Transfer(o) => builder.transfer(o, token_name),
                 Request::Stake(o) => builder.stake(o),
                 Request::SetDissolveTimestamp(o) => builder.set_dissolve_timestamp(o),
                 Request::ChangeAutoStakeMaturity(o) => builder.change_auto_stake_maturity(o),
@@ -182,7 +181,7 @@ impl Request {
                 Request::NeuronInfo(o) => builder.neuron_info(o),
                 Request::ListNeurons(o) => builder.list_neurons(o),
                 Request::Follow(o) => builder.follow(o),
-            };
+            }?;
         }
         Ok(builder.build())
     }
@@ -235,7 +234,7 @@ impl TryFrom<&models::Request> for Request {
 
         let manage_neuron = || {
             {
-                CandidOne::<ic_nns_governance::pb::v1::ManageNeuron>::from_bytes(
+                CandidOne::<ic_nns_governance_api::pb::v1::ManageNeuron>::from_bytes(
                     payload.update_content().arg.0.clone(),
                 )
                 .map_err(|e| {

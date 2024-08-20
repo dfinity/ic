@@ -1,14 +1,16 @@
 use axum::{http::Request, Router};
 use bytes::Bytes;
+use consensus::{TestConsensus, U64Artifact};
 use either::Either;
 use futures::{
     future::{join_all, BoxFuture},
     FutureExt,
 };
+use ic_artifact_downloader::FetchArtifact;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tls_interfaces::TlsConfig;
-use ic_icos_sev::Sev;
+use ic_interfaces::p2p::artifact_manager::JoinGuard;
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -23,9 +25,8 @@ use ic_registry_keys::make_node_record_key;
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_test_utilities::types::ids::subnet_test_id;
 use ic_test_utilities_registry::add_subnet_record;
-use ic_types_test_utils::ids::SUBNET_1;
+use ic_test_utilities_types::ids::subnet_test_id;
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
@@ -42,6 +43,7 @@ use tokio::{
     sync::watch::{self, Receiver},
     task::JoinHandle,
 };
+use turmoil::start_test_processor;
 
 pub mod consensus;
 pub mod mocks;
@@ -79,7 +81,7 @@ impl RegistryConsensusHandle {
 
         let mut membership = self.membership.lock().unwrap();
         membership.push(node_id.get().to_vec());
-        subnet_record.membership = membership.clone();
+        subnet_record.membership.clone_from(&membership);
 
         add_subnet_record(
             &self.data_provider,
@@ -110,7 +112,7 @@ impl RegistryConsensusHandle {
             .unwrap();
         membership.remove(index);
 
-        subnet_record.membership = membership.clone();
+        subnet_record.membership.clone_from(&membership);
         add_subnet_record(
             &self.data_provider,
             version.get(),
@@ -196,12 +198,6 @@ pub fn fully_connected_localhost_subnet(
         create_peer_manager_and_registry_handle(rt, log.clone());
     for (i, (node, router)) in router.into_iter().enumerate() {
         let node_crypto = temp_crypto_component_with_tls_keys(&registry_handler, node);
-        let sev_handshake = Arc::new(Sev::new(
-            node,
-            SUBNET_1,
-            registry_handler.registry_client.clone(),
-            log.clone(),
-        ));
         registry_handler.registry_client.update_to_latest_version();
         registry_handler.registry_client.reload();
 
@@ -213,7 +209,6 @@ pub fn fully_connected_localhost_subnet(
             rt,
             node_crypto,
             registry_handler.registry_client.clone(),
-            sev_handshake,
             node,
             topology_watcher.clone(),
             Either::Left::<_, DummyUdpSocket>(socket),
@@ -445,4 +440,33 @@ impl ConnectivityChecker {
 
         !connected_peer_1.contains_key(peer_2)
     }
+}
+
+pub fn start_consensus_manager(
+    log: ReplicaLogger,
+    rt_handle: Handle,
+    processor: TestConsensus<U64Artifact>,
+) -> (
+    Box<dyn JoinGuard>,
+    ic_consensus_manager::ConsensusManagerBuilder,
+) {
+    let _enter = rt_handle.enter();
+    let pool = Arc::new(RwLock::new(processor));
+    let (artifact_processor_jh, artifact_manager_event_rx, artifact_sender) =
+        start_test_processor(pool.clone(), pool.clone().read().unwrap().clone());
+    let pfn_producer = Arc::new(pool.clone().read().unwrap().clone());
+    let mut cm1 = ic_consensus_manager::ConsensusManagerBuilder::new(
+        log.clone(),
+        rt_handle.clone(),
+        MetricsRegistry::default(),
+    );
+    let downloader = FetchArtifact::new(
+        log,
+        rt_handle,
+        pool,
+        pfn_producer,
+        MetricsRegistry::default(),
+    );
+    cm1.add_client(artifact_manager_event_rx, artifact_sender, downloader);
+    (artifact_processor_jh, cm1)
 }

@@ -23,7 +23,6 @@ use ic_prep_lib::{
     subnet_configuration::{SubnetConfig, SubnetIndex, SubnetRunningState},
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, PrincipalId, ReplicaVersion};
 
@@ -141,15 +140,15 @@ struct CliArgs {
     #[clap(long, allow_hyphen_values = true)]
     pub max_ingress_bytes_per_message: Option<i64>,
 
+    /// Maximum size of a block payload in bytes.
+    #[clap(long)]
+    pub max_block_payload_size: Option<u64>,
+
     /// if release-package-download-url is not specified and this option is
     /// specified, the corresponding update image field in the blessed replica
     /// version record is left empty.
     #[clap(long)]
     pub allow_empty_update_image: bool,
-
-    /// The hex-formatted SHA-256 hash measurement of the SEV guest launch context.
-    #[clap(long)]
-    pub guest_launch_measurement_sha256_hex: Option<String>,
 
     /// Whether or not to assign canister ID allocation range for specified IDs to subnet.
     /// Used only for local and testnet replicas.
@@ -165,10 +164,6 @@ struct CliArgs {
     /// commas. Port 8080 is always included.
     #[clap(long)]
     whitelisted_ports: Option<String>,
-
-    /// The indices of subnets that should have the SEV feature enabled, if any.
-    #[clap(long, use_value_delimiter = true)]
-    pub sev_subnet_indices: Vec<u64>,
 }
 
 fn main() -> Result<()> {
@@ -196,35 +191,29 @@ fn main() -> Result<()> {
         } else {
             SubnetType::Application
         };
-        let features = valid_args
-            .sev_subnet_indices
-            .contains(&(i as u64))
-            .then_some(SubnetFeatures {
-                sev_enabled: true,
-                ..Default::default()
-            });
 
         let subnet_configuration = SubnetConfig::new(
             *subnet_id,
             nodes.to_owned(),
             replica_version.clone(),
             valid_args.max_ingress_bytes_per_message,
-            None,
-            None,
-            None,
-            None,
+            /*max_ingress_messages_per_block=*/ None,
+            valid_args.max_block_payload_size,
+            /*unit_delay=*/ None,
+            /*initial_notary_delay=*/ None,
             valid_args.dkg_interval_length,
-            None,
+            /*dkg_dealings_per_block=*/ None,
             subnet_type,
-            None,
-            None,
-            None,
-            features,
-            None,
-            None,
+            /*max_instructions_per_message=*/ None,
+            /*max_instructions_per_round=*/ None,
+            /*max_instructions_per_install_code=*/ None,
+            /*features=*/ None,
+            /*chain_key_config=*/ None,
+            /*max_number_of_canisters=*/ None,
             valid_args.ssh_readonly_access.clone(),
             valid_args.ssh_backup_access.clone(),
             SubnetRunningState::Active,
+            None,
         );
         topology_config.insert_subnet(*subnet_id, subnet_configuration);
     }
@@ -243,7 +232,6 @@ fn main() -> Result<()> {
         valid_args.initial_node_operator,
         valid_args.initial_node_provider,
         valid_args.ssh_readonly_access,
-        valid_args.guest_launch_measurement_sha256_hex,
     );
 
     ic_config0
@@ -282,12 +270,11 @@ struct ValidatedArgs {
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
     pub max_ingress_bytes_per_message: Option<u64>,
+    pub max_block_payload_size: Option<u64>,
     pub allow_empty_update_image: bool,
-    pub guest_launch_measurement_sha256_hex: Option<String>,
     pub use_specified_ids_allocation_range: bool,
     pub whitelisted_prefixes: Option<String>,
     pub whitelisted_ports: Option<String>,
-    pub sev_subnet_indices: Vec<u64>,
 }
 
 impl CliArgs {
@@ -341,16 +328,6 @@ impl CliArgs {
                 self.nns_subnet_index.unwrap(),
                 subnets.keys().collect::<Vec<_>>()
             );
-        }
-
-        for index in &self.sev_subnet_indices {
-            if !subnets.contains_key(index) {
-                bail!(
-                    "SEV subnet index {} does not match any of subnet indices {:?}",
-                    index,
-                    subnets.keys().collect::<Vec<_>>()
-                );
-            }
         }
 
         let dc_pk_path = match self.dc_pk_path {
@@ -437,12 +414,11 @@ impl CliArgs {
                     None
                 }
             }),
+            max_block_payload_size: self.max_block_payload_size,
             allow_empty_update_image: self.allow_empty_update_image,
-            guest_launch_measurement_sha256_hex: self.guest_launch_measurement_sha256_hex,
             use_specified_ids_allocation_range: self.use_specified_ids_allocation_range,
             whitelisted_prefixes: self.whitelisted_prefixes,
             whitelisted_ports: self.whitelisted_ports,
-            sev_subnet_indices: self.sev_subnet_indices,
         })
     }
 }
@@ -533,7 +509,6 @@ mod test_flag_node_parser {
                 public_api: "3.4.5.6:82".parse().unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
-                chip_id: None,
             },
         };
 

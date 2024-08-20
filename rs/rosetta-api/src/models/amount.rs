@@ -2,23 +2,22 @@ use crate::errors::ApiError;
 use crate::models::{Amount, Currency};
 use ic_ledger_core::tokens::DECIMAL_PLACES;
 use icp_ledger::Tokens;
+use num_bigint::BigInt;
 use std::convert::TryFrom;
 
 pub fn tokens_to_amount(tokens: Tokens, token_name: &str) -> Result<Amount, ApiError> {
     let amount = tokens.get_e8s();
-    Ok(Amount {
-        value: format!("{}", amount),
-        currency: Currency::new(token_name.into(), DECIMAL_PLACES),
-        metadata: None,
-    })
+    Ok(Amount::new(
+        BigInt::from(amount),
+        Currency::new(token_name.into(), DECIMAL_PLACES),
+    ))
 }
 
 pub fn signed_amount(amount: i128, token_name: &str) -> Amount {
-    Amount {
-        value: format!("{}", amount),
-        currency: Currency::new(token_name.into(), DECIMAL_PLACES),
-        metadata: None,
-    }
+    Amount::new(
+        BigInt::from(amount),
+        Currency::new(token_name.into(), DECIMAL_PLACES),
+    )
 }
 
 pub fn from_amount(amount: &Amount, token_name: &str) -> Result<i128, String> {

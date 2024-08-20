@@ -1,32 +1,36 @@
-use crate::driver::test_env::TestEnv;
-use crate::rosetta_tests::ledger_client::LedgerClient;
-use crate::rosetta_tests::lib::{
-    check_balance, create_ledger_client, do_multiple_txn, make_user_ed25519,
-    one_day_from_now_nanos, sign_txn, to_public_key, NeuronDetails,
+use crate::rosetta_tests::{
+    ledger_client::LedgerClient,
+    lib::{
+        check_balance, create_ledger_client, do_multiple_txn, make_user_ed25519,
+        one_day_from_now_nanos, sign_txn, to_public_key, NeuronDetails,
+    },
+    rosetta_client::RosettaApiClient,
+    setup::setup,
+    test_neurons::TestNeurons,
 };
-use crate::rosetta_tests::rosetta_client::RosettaApiClient;
-use crate::rosetta_tests::setup::setup;
-use crate::rosetta_tests::test_neurons::TestNeurons;
-use crate::util::block_on;
-use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
-use ic_ledger_core::Tokens;
-use ic_nns_governance::pb::v1::neuron::DissolveState;
-use ic_nns_governance::pb::v1::Neuron;
-use ic_rosetta_api::models::ConstructionPayloadsResponse;
-use ic_rosetta_api::request::request_result::RequestResult;
-use ic_rosetta_api::request::Request;
-use ic_rosetta_api::request_types::{Disburse, Status};
+use ic_ledger_core::{
+    tokens::{CheckedAdd, CheckedSub},
+    Tokens,
+};
+use ic_nns_governance_api::pb::v1::{neuron::DissolveState, Neuron};
+use ic_rosetta_api::{
+    models::{ConstructionPayloadsResponse, SignedTransaction},
+    request::{
+        request_result::RequestResult, transaction_operation_results::TransactionOperationResults,
+        Request,
+    },
+    request_types::{Disburse, Status},
+};
 use ic_rosetta_test_utils::RequestInfo;
+use ic_system_test_driver::{driver::test_env::TestEnv, util::block_on};
 use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE};
 use rosetta_core::objects::ObjectMap;
 use serde_json::json;
 use slog::Logger;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::UNIX_EPOCH;
+use std::{collections::HashMap, str::FromStr, sync::Arc, time::UNIX_EPOCH};
 
 const PORT: u32 = 8104;
-const VM_NAME: &str = "rosetta-test-neuron-disburse";
+const VM_NAME: &str = "rosetta-neuron-disburse";
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
@@ -128,7 +132,7 @@ async fn test_disburse(
 ) -> Result<(), ic_rosetta_api::models::Error> {
     let neuron = &neuron_info.neuron;
     let acc = neuron_info.account_id;
-    let key_pair = Arc::new(neuron_info.key_pair);
+    let key_pair = Arc::new(neuron_info.key_pair.clone());
     let neuron_index = neuron_info.neuron_subaccount_identifier;
 
     let pre_disburse = ledger_client.get_account_balance(acc).await;
@@ -199,7 +203,7 @@ async fn test_disburse_raw(
 ) -> Result<(), ic_rosetta_api::models::Error> {
     let neuron = &neuron_info.neuron;
     let acc = neuron_info.account_id;
-    let key_pair = Arc::new(neuron_info.key_pair);
+    let key_pair = Arc::new(neuron_info.key_pair.clone());
     let neuron_index = neuron_info.neuron_subaccount_identifier;
 
     let pre_disburse = ledger_client.get_account_balance(acc).await;
@@ -254,7 +258,7 @@ async fn test_disburse_raw(
         .unwrap()?;
 
     let submit_res = ros
-        .construction_submit(signed.signed_transaction().unwrap())
+        .construction_submit(SignedTransaction::from_str(&signed.signed_transaction).unwrap())
         .await
         .unwrap()?;
 
@@ -263,7 +267,11 @@ async fn test_disburse_raw(
         submit_res.transaction_identifier
     );
 
-    for op in submit_res.metadata.operations.iter() {
+    for op in TransactionOperationResults::try_from(submit_res.metadata)
+        .unwrap()
+        .operations
+        .iter()
+    {
         assert_eq!(
             op.status.as_ref().expect("Expecting status to be set."),
             "COMPLETED",

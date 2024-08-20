@@ -468,8 +468,7 @@ You need to have `genhtml` tool installed to see the report. The tool comes with
 the `lcov` package. You need to run `genhtml` in the repository root directory.
 
 ```bash
-genhtml --ignore-errors source --output genhtml "$(bazel info
-output_path)/_coverage/_coverage_report.dat"
+genhtml --ignore-errors source --output genhtml "$(bazel info output_path)/_coverage/_coverage_report.dat"
 ```
 
 Open the `genhtml/index.html` file in a browser and navigate to the file of

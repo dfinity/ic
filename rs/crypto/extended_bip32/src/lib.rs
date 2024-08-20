@@ -1,5 +1,5 @@
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    DerivationPath as DerivationPathImpl, EccCurveType, EccPoint, EccScalar, ThresholdEcdsaError,
+    CanisterThresholdError, DerivationPath as DerivationPathImpl, EccCurveType, EccPoint, EccScalar,
 };
 
 #[derive(Debug, Clone)]
@@ -7,7 +7,7 @@ pub enum ExtendedBip32DerivationError {
     InvalidChainCodeLength,
     InvalidDerivationPath,
     InvalidPublicKeyEncoding,
-    InternalError(ThresholdEcdsaError),
+    InternalError(CanisterThresholdError),
 }
 
 const CURVE_TYPE: EccCurveType = EccCurveType::K256;
@@ -16,10 +16,10 @@ pub type ExtendedBip32DerivationResult<T> = std::result::Result<T, ExtendedBip32
 
 pub use ic_crypto_internal_threshold_sig_ecdsa::DerivationIndex;
 
-impl From<ThresholdEcdsaError> for ExtendedBip32DerivationError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ExtendedBip32DerivationError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::InvalidPoint => Self::InvalidPublicKeyEncoding,
+            CanisterThresholdError::InvalidPoint => Self::InvalidPublicKeyEncoding,
             e => Self::InternalError(e),
         }
     }

@@ -3,22 +3,32 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/icrc-ledger-client:icrc_ledger_client",
+    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/nervous_system/common",
     "//rs/nervous_system/proxied_canister_calls_tracker",
     "//rs/nervous_system/runtime",
+    "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",
-    "//rs/types/ic00_types",
+    "//rs/types/error_types",
+    "//rs/types/management_canister_types",
+    "//rs/utils",
     "@crate_index//:candid",
     "@crate_index//:num-traits",
     "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
 ]
 
 DEV_DEPENDENCIES = DEPENDENCIES + [
+    "@crate_index//:futures",
+    "@crate_index//:rand",
+    "@crate_index//:tokio",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 
@@ -33,7 +43,6 @@ rust_library(
 
 rust_test(
     name = "clients_test",
-    srcs = glob(["src/**"]),
     crate = ":clients",
     deps = DEV_DEPENDENCIES,
 )

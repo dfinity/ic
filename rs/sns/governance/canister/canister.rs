@@ -21,6 +21,7 @@ use ic_canister_log::log;
 use ic_canister_profiler::{measure_span, measure_span_async};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_clients::canister_status::CanisterStatusResultV2;
+use ic_nervous_system_clients::ledger_client::LedgerCanister;
 use ic_nervous_system_common::{
     cmc::CMCCanister,
     dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
@@ -38,7 +39,6 @@ use ic_sns_governance::{
     governance::{
         log_prefix, Governance, TimeWarp, ValidGovernanceProto, MATURITY_DISBURSEMENT_DELAY_SECONDS,
     },
-    ledger::LedgerCanister,
     logs::{ERROR, INFO},
     pb::v1::{
         ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
@@ -353,7 +353,7 @@ fn get_sns_initialization_parameters_(
 /// Performs a command on a neuron if the caller is authorized to do so.
 /// The possible neuron commands are (for details, see the SNS's governance.proto):
 /// - configuring the neuron (increasing or setting its dissolve delay or changing the
-/// dissolve state),
+///   dissolve state),
 /// - disbursing the neuron's stake to a ledger account
 /// - following a set of neurons for proposals of a certain action
 /// - make a proposal in the name of the neuron
@@ -468,7 +468,7 @@ fn list_proposals() {
 /// Internal method for calling list_proposals.
 #[candid_method(query, rename = "list_proposals")]
 fn list_proposals_(list_proposals: ListProposals) -> ListProposalsResponse {
-    governance().list_proposals(&list_proposals)
+    governance().list_proposals(&list_proposals, &caller())
 }
 
 /// Returns the current list of available NervousSystemFunctions.

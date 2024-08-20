@@ -1,6 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "gzip_compress")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -12,8 +11,8 @@ LIB_DEPENDENCIES = [
 ]
 
 DEPENDENCIES = [
-    ":lib",
     # Keep sorted.
+    ":lib",
     "@crate_index//:lazy_static",
     "@crate_index//:wee_alloc",
 ]
@@ -41,11 +40,6 @@ rust_canister(
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":interface.did",
     deps = LIB_DEPENDENCIES + DEPENDENCIES,
-)
-
-gzip_compress(
-    name = "universal_canister.wasm.gz",
-    srcs = [":universal_canister"],
 )
 
 rust_test(

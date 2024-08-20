@@ -1,22 +1,26 @@
-use candid::{Decode, Encode, Nat};
+use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
-    GetAccountIdentifierTransactionsResult, Status, TransactionWithId,
+    GetAccountIdentifierTransactionsResult, SettledTransaction, SettledTransactionWithId,
 };
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::Tokens;
+use ic_ledger_test_utils::state_machine_helpers::index::wait_until_sync_is_completed;
+use ic_ledger_test_utils::state_machine_helpers::ledger::{icp_get_blocks, icp_query_blocks};
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
-    AccountIdentifier, GetBlocksArgs, QueryEncodedBlocksResponse, MAX_BLOCKS_PER_REQUEST,
+    AccountIdentifier, Transaction, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST,
+    MAX_BLOCKS_PER_REQUEST,
 };
-use icp_ledger::{FeatureFlags, LedgerCanisterInitPayload, Memo, Operation, Transaction};
+use icp_ledger::{FeatureFlags, LedgerCanisterInitPayload, Memo, Operation};
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
+use icrc_ledger_types::icrc1::transfer::{BlockIndex, NumTokens, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use num_traits::cast::ToPrimitive;
 use serde_bytes::ByteBuf;
@@ -99,6 +103,7 @@ fn default_archive_options() -> ArchiveOptions {
         node_max_memory_size_bytes: None,
         max_message_size_bytes: None,
         controller_id: PrincipalId::new_user_test_id(100),
+        more_controller_ids: None,
         cycles_for_archive_creation: None,
         max_transactions_per_response: None,
     }
@@ -141,7 +146,7 @@ fn account(owner: u64, subaccount: u128) -> Account {
 
 fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Account) -> u64 {
     let res = env
-        .execute_ingress(canister_id, "icrc1_balance_of", Encode!(&account).unwrap())
+        .query(canister_id, "icrc1_balance_of", Encode!(&account).unwrap())
         .expect("Failed to send icrc1_balance_of")
         .bytes();
     Decode!(&res, Nat)
@@ -153,13 +158,13 @@ fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Accoun
 
 fn index_balance_of(env: &StateMachine, canister_id: CanisterId, account: Account) -> u64 {
     let res = env
-        .execute_ingress(canister_id, "icrc1_balance_of", Encode!(&account).unwrap())
+        .query(canister_id, "icrc1_balance_of", Encode!(&account).unwrap())
         .expect("Failed to send icrc1_balance_of")
         .bytes();
     let account_balance =
         Decode!(&res, u64).expect("Failed to decode get_account_balance response");
     let res = env
-        .execute_ingress(
+        .query(
             canister_id,
             "get_account_identifier_balance",
             Encode!(&AccountIdentifier::from(account)).unwrap(),
@@ -172,65 +177,35 @@ fn index_balance_of(env: &StateMachine, canister_id: CanisterId, account: Accoun
     accountidentifier_balance
 }
 
-fn status(env: &StateMachine, index_id: CanisterId) -> Status {
-    let res = env
-        .query(index_id, "status", Encode!(&()).unwrap())
-        .expect("Failed to send status")
-        .bytes();
-    Decode!(&res, Status).expect("Failed to decode status response")
-}
-
-fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::Block> {
-    let req = GetBlocksArgs {
-        start: 0u64,
-        length: MAX_BLOCKS_PER_REQUEST,
-    };
-    let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
-    let res = env
-        .execute_ingress(ledger_id, "query_encoded_blocks", req)
-        .expect("Failed to send get_blocks request")
-        .bytes();
-    let res =
-        Decode!(&res, QueryEncodedBlocksResponse).expect("Failed to decode GetBlocksResponse");
-    let mut blocks = vec![];
-    for archived in res.archived_blocks {
-        let req = GetBlocksArgs {
-            start: archived.start,
-            length: archived.length as usize,
-        };
-        let req = Encode!(&req).expect("Failed to encode GetBlocksArgs for archive node");
-        let canister_id = archived.callback.canister_id;
-        let res = env
-            .execute_ingress(
-                CanisterId::unchecked_from_principal(PrincipalId(canister_id)),
-                archived.callback.method,
-                req,
-            )
-            .expect("Failed to send get_blocks request to archive")
-            .bytes();
-        let res = Decode!(&res, icp_ledger::GetEncodedBlocksResult)
-            .unwrap()
-            .unwrap();
-        blocks.extend(res);
-    }
-    blocks.extend(res.blocks);
-    blocks
-        .into_iter()
-        .map(icp_ledger::Block::decode)
-        .collect::<Result<Vec<icp_ledger::Block>, String>>()
-        .unwrap()
-}
-
 fn index_get_blocks(env: &StateMachine, index_id: CanisterId) -> Vec<icp_ledger::Block> {
+    let query = |req: Vec<u8>| {
+        env.query(index_id, "get_blocks", req)
+            .expect("Failed to send get_blocks request")
+            .bytes()
+    };
+    call_index_get_blocks(&query)
+}
+
+fn index_get_blocks_update(
+    env: &StateMachine,
+    index_id: CanisterId,
+    caller: Principal,
+) -> Vec<icp_ledger::Block> {
+    let update = |req: Vec<u8>| {
+        env.execute_ingress_as(PrincipalId(caller), index_id, "get_blocks", req)
+            .expect("Failed to send get_blocks request")
+            .bytes()
+    };
+    call_index_get_blocks(&update)
+}
+
+fn call_index_get_blocks(query_or_update: &dyn Fn(Vec<u8>) -> Vec<u8>) -> Vec<icp_ledger::Block> {
     let req = GetBlocksRequest {
         start: 0u8.into(),
         length: u64::MAX.into(),
     };
     let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
-    let res = env
-        .execute_ingress(index_id, "get_blocks", req)
-        .expect("Failed to send get_blocks request")
-        .bytes();
+    let res = query_or_update(req);
     Decode!(&res, ic_icp_index::GetBlocksResponse)
         .expect("Failed to decode ic_icp_index::GetBlocksResponse")
         .blocks
@@ -240,6 +215,106 @@ fn index_get_blocks(env: &StateMachine, index_id: CanisterId) -> Vec<icp_ledger:
         .unwrap()
 }
 
+fn get_account_id_transactions_len(
+    env: &StateMachine,
+    index_id: CanisterId,
+    account: &Account,
+) -> usize {
+    let query = |req: Vec<u8>| {
+        env.query(index_id, "get_account_identifier_transactions", req)
+            .expect("Failed to send get_account_identifier_transactions request")
+            .bytes()
+    };
+    call_get_account_id_transactions(&query, account)
+}
+
+fn get_account_id_transactions_update_len(
+    env: &StateMachine,
+    index_id: CanisterId,
+    caller: Principal,
+    account: &Account,
+) -> usize {
+    let update = |req: Vec<u8>| {
+        env.execute_ingress_as(
+            PrincipalId(caller),
+            index_id,
+            "get_account_identifier_transactions",
+            req,
+        )
+        .expect("Failed to send get_account_identifier_transactions request")
+        .bytes()
+    };
+    call_get_account_id_transactions(&update, account)
+}
+
+fn call_get_account_id_transactions(
+    query_or_update: &dyn Fn(Vec<u8>) -> Vec<u8>,
+    account: &Account,
+) -> usize {
+    let req = GetAccountIdentifierTransactionsArgs {
+        start: None,
+        max_results: u64::MAX,
+        account_identifier: (*account).into(),
+    };
+    let req = Encode!(&req).expect("Failed to encode GetAccountIdentifierTransactionsArgs");
+    let res = query_or_update(req);
+    Decode!(&res, ic_icp_index::GetAccountIdentifierTransactionsResult)
+        .expect("Failed to decode ic_icp_index::GetAccountIdentifierTransactionsResult")
+        .unwrap()
+        .transactions
+        .len()
+}
+
+fn get_account_transactions_len(
+    env: &StateMachine,
+    index_id: CanisterId,
+    account: &Account,
+) -> usize {
+    let query = |req: Vec<u8>| {
+        env.query(index_id, "get_account_transactions", req)
+            .expect("Failed to send get_account_transactions request")
+            .bytes()
+    };
+    call_get_account_transactions(&query, account)
+}
+
+fn get_account_transactions_update_len(
+    env: &StateMachine,
+    index_id: CanisterId,
+    caller: Principal,
+    account: &Account,
+) -> usize {
+    let update = |req: Vec<u8>| {
+        env.execute_ingress_as(
+            PrincipalId(caller),
+            index_id,
+            "get_account_transactions",
+            req,
+        )
+        .expect("Failed to send get_account_transactions request")
+        .bytes()
+    };
+    call_get_account_transactions(&update, account)
+}
+
+fn call_get_account_transactions(
+    query_or_update: &dyn Fn(Vec<u8>) -> Vec<u8>,
+    account: &Account,
+) -> usize {
+    let req = GetAccountTransactionsArgs {
+        start: None,
+        max_results: u64::MAX.into(),
+        account: *account,
+    };
+    let req = Encode!(&req).expect("Failed to encode GetAccountTransactionsArgs");
+    let res = query_or_update(req);
+    Decode!(&res, ic_icp_index::GetAccountTransactionsResult)
+        .expect("Failed to decode ic_icp_index::GetAccountTransactionsResult")
+        .unwrap()
+        .transactions
+        .len()
+}
+
 fn transfer(
     env: &StateMachine,
     ledger_id: CanisterId,
@@ -247,14 +322,27 @@ fn transfer(
     to: Account,
     amount: u64,
 ) -> BlockIndex {
+    icrc1_transfer(env, ledger_id, from, to, amount, None, None, None)
+}
+
+fn icrc1_transfer(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    from: Account,
+    to: Account,
+    amount: u64,
+    created_at_time: Option<TimeStamp>,
+    fee: Option<u64>,
+    memo: Option<Vec<u8>>,
+) -> BlockIndex {
     let Account { owner, subaccount } = from;
     let req = TransferArg {
         from_subaccount: subaccount,
         to,
-        amount: amount.into(),
-        created_at_time: None,
-        fee: None,
-        memo: None,
+        amount: NumTokens::from(amount),
+        created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
+        fee: fee.map(NumTokens::from),
+        memo: memo.map(icrc_ledger_types::icrc1::transfer::Memo::from),
     };
     let req = Encode!(&req).expect("Failed to encode TransferArg");
     let res = env
@@ -263,6 +351,41 @@ fn transfer(
         .bytes();
     Decode!(&res, Result<BlockIndex, TransferError>)
         .expect("Failed to decode Result<BlockIndex, TransferError>")
+        .expect("Failed to transfer tokens")
+}
+
+fn icrc2_transfer_from(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    spender: Account,
+    from: Account,
+    to: Account,
+    amount: u64,
+    created_at_time: Option<TimeStamp>,
+    fee: Option<u64>,
+    memo: Option<Vec<u8>>,
+) -> Nat {
+    let req = TransferFromArgs {
+        spender_subaccount: spender.subaccount,
+        from,
+        to,
+        amount: Nat::from(amount),
+        created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
+        fee: fee.map(Nat::from),
+        memo: memo.map(icrc_ledger_types::icrc1::transfer::Memo::from),
+    };
+    let req = Encode!(&req).expect("Failed to encode TransferFromArgs");
+    let res = env
+        .execute_ingress_as(
+            ic_base_types::PrincipalId::from(spender.owner),
+            ledger_id,
+            "icrc2_transfer_from",
+            req,
+        )
+        .expect("Failed to transfer tokens")
+        .bytes();
+    Decode!(&res, Result<Nat, TransferFromError>)
+        .expect("Failed to decode Result<Nat, TransferFromError>")
         .expect("Failed to transfer tokens")
 }
 
@@ -296,7 +419,7 @@ fn get_account_identifier_transactions(
     };
     let req = Encode!(&req).expect("Failed to encode GetAccountTransactionsArgs");
     let res = env
-        .execute_ingress(index_id, "get_account_transactions", req)
+        .query(index_id, "get_account_transactions", req)
         .expect("Failed to get_account_transactions")
         .bytes();
     let account_txs = Decode!(&res, GetAccountIdentifierTransactionsResult)
@@ -310,7 +433,7 @@ fn get_account_identifier_transactions(
     };
     let req = Encode!(&req).expect("Failed to encode GetAccountIdentifierTransactionsArgs");
     let res = env
-        .execute_ingress(index_id, "get_account_identifier_transactions", req)
+        .query(index_id, "get_account_identifier_transactions", req)
         .expect("Failed to get_account_identifier_transactions")
         .bytes();
     let accountidentifier_txs = Decode!(&res, GetAccountIdentifierTransactionsResult)
@@ -322,43 +445,25 @@ fn get_account_identifier_transactions(
     accountidentifier_txs
 }
 
-// Helper function that calls tick on env until either
-// the index canister has synced all the blocks up to the
-// last one in the ledger or enough attempts passed and therefore
-// it fails
-fn wait_until_sync_is_completed(env: &StateMachine, index_id: CanisterId, ledger_id: CanisterId) {
-    const MAX_ATTEMPTS: u8 = 100; // no reason for this number
-    let mut num_blocks_synced = u64::MAX;
-    let mut chain_length = u64::MAX;
-    for _i in 0..MAX_ATTEMPTS {
-        env.advance_time(Duration::from_secs(60));
-        env.tick();
-        num_blocks_synced = status(env, index_id).num_blocks_synced;
-        chain_length = icp_get_blocks(env, ledger_id).len() as u64;
-        if num_blocks_synced == chain_length {
-            return;
-        }
-    }
-    panic!("The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}", num_blocks_synced, chain_length);
-}
+const SYNC_STEP_SECONDS: Duration = Duration::from_secs(60);
 
 #[track_caller]
-fn assert_tx_eq(tx1: &Transaction, tx2: &Transaction) {
+fn assert_tx_eq(tx1: &SettledTransaction, tx2: &SettledTransaction) {
     assert_eq!(tx1.operation, tx2.operation);
     assert_eq!(tx1.memo, tx2.memo);
-    assert_eq!(tx1.operation, tx2.operation);
-    assert_eq!(tx1.operation, tx2.operation);
+    assert_eq!(tx1.icrc1_memo, tx2.icrc1_memo);
+    assert_eq!(tx1.timestamp, tx2.timestamp);
 }
 
 // checks that two txs are equal minus the fields set by the ledger (e.g. timestamp)
 #[track_caller]
-fn assert_tx_with_id_eq(tx1: &TransactionWithId, tx2: &TransactionWithId) {
+fn assert_tx_with_id_eq(tx1: &SettledTransactionWithId, tx2: &SettledTransactionWithId) {
     assert_eq!(tx1.id, tx2.id, "id");
     assert_tx_eq(&tx1.transaction, &tx2.transaction);
 }
 
 #[track_caller]
-fn assert_txs_with_id_eq(txs1: Vec<TransactionWithId>, txs2: Vec<TransactionWithId>) {
+fn assert_txs_with_id_eq(txs1: Vec<SettledTransactionWithId>, txs2: Vec<SettledTransactionWithId>) {
     assert_eq!(
         txs1.len(),
         txs2.len(),
@@ -372,10 +477,67 @@ fn assert_txs_with_id_eq(txs1: Vec<TransactionWithId>, txs2: Vec<TransactionWith
 }
 
 // Assert that the index canister contains the same blocks as the ledger
-fn assert_ledger_index_parity(env: &StateMachine, ledger_id: CanisterId, index_id: CanisterId) {
+fn assert_ledger_index_parity(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    index_id: CanisterId,
+) -> usize {
     let ledger_blocks = icp_get_blocks(env, ledger_id);
     let index_blocks = index_get_blocks(env, index_id);
     assert_eq!(ledger_blocks, index_blocks);
+    ledger_blocks.len()
+}
+
+/// Assert that the index canister contains the same blocks as the ledger, by querying both the
+/// `query_blocks` and `query_encoded_blocks` endpoints of the ledger.
+fn assert_ledger_index_parity_query_blocks_and_query_encoded_blocks(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    index_id: CanisterId,
+) {
+    let ledger_blocks = icp_get_blocks(env, ledger_id);
+    let index_blocks = index_get_blocks(env, index_id);
+    let ledger_unencoded_blocks = icp_query_blocks(env, ledger_id);
+    assert_eq!(ledger_blocks, index_blocks);
+    assert_eq!(ledger_blocks.len(), ledger_unencoded_blocks.len());
+    if ledger_blocks != ledger_unencoded_blocks {
+        // If the ledger blocks are not equal, we need some special handling to compare them.
+        // If the client did not specify the `created_at_time` field when creating a transaction,
+        // the ledger populates the `created_at_time` field with the value of the `timestamp` field
+        // of the block, for blocks returned from the `query_blocks` endpoint. Blocks returned from
+        // the `query_encoded_blocks` endpoint do not have the `created_at_time` field set.
+        // Therefore, if the blocks do not match, verify that:
+        //  - the `created_at_time` field of the encoded block is set `None`
+        //  - the `created_at_time` field of the unencoded block is set to the `timestamp` field
+        //    of the block
+        //  - all the other fields of the blocks match
+        for (ledger_block, unencoded_ledger_block) in ledger_blocks
+            .into_iter()
+            .zip(ledger_unencoded_blocks.into_iter())
+        {
+            if ledger_block != unencoded_ledger_block {
+                if ledger_block.transaction.created_at_time.is_none() {
+                    assert_eq!(
+                        Some(unencoded_ledger_block.timestamp),
+                        unencoded_ledger_block.transaction.created_at_time
+                    );
+                    let unencoded_ledger_block_without_created_at_time_in_tx = icp_ledger::Block {
+                        transaction: Transaction {
+                            created_at_time: None,
+                            ..unencoded_ledger_block.transaction
+                        },
+                        ..unencoded_ledger_block
+                    };
+                    assert_eq!(
+                        unencoded_ledger_block_without_created_at_time_in_tx,
+                        ledger_block
+                    )
+                } else {
+                    assert_eq!(ledger_block, unencoded_ledger_block);
+                }
+            }
+        }
+    }
 }
 
 #[test]
@@ -422,23 +584,403 @@ fn test_ledger_growing() {
 }
 
 #[test]
+fn test_ledger_index_icrc1_mint_parity() {
+    // Set up an environment with a ledger, and index, and a single mint transaction
+    let setup = ParitySetup::new();
+    // Create an ICRC1 Mint transaction with all fields set
+    let minter_account = Account::from(MINTER_PRINCIPAL.0);
+    let recipient_account = account(4, 0);
+    let recipient_account_identifier = AccountIdentifier::from(recipient_account);
+    let created_at_time = TimeStamp::from(setup.env.time_of_next_round());
+    let mint_block_index = icrc1_transfer(
+        &setup.env,
+        setup.ledger_id,
+        minter_account,
+        recipient_account,
+        setup.mint_amount,
+        Some(created_at_time),
+        None,
+        Some(setup.memo.clone()),
+    );
+    assert_eq!(mint_block_index, Nat::from(1u8));
+    // Create the expected ledger block for the ICRC1 Mint transaction
+    let expected_ledger_block = icp_ledger::Block {
+        parent_hash: None,
+        transaction: Transaction {
+            operation: Operation::Mint {
+                to: recipient_account_identifier,
+                amount: Tokens::from_e8s(setup.mint_amount),
+            },
+            memo: Memo(0),
+            created_at_time: Some(created_at_time),
+            icrc1_memo: Some(ByteBuf::from(setup.memo.clone())),
+        },
+        timestamp: created_at_time,
+    };
+
+    // Verify that the ledger and index return the same blocks for the ICRC1 Mint
+    // transaction, and that the corresponding Transaction retrieved from the Index also matches.
+    assert_ledger_index_block_transaction_parity(
+        &setup,
+        expected_ledger_block,
+        1,
+        recipient_account,
+    );
+}
+
+#[test]
+fn test_ledger_index_icrc1_transfer_parity() {
+    // Set up an environment with a ledger, and index, and a single mint transaction
+    let setup = ParitySetup::new();
+    // Create an ICRC1 Transfer transaction with all fields set
+    let tx_timestamp = TimeStamp::from(setup.env.time_of_next_round());
+    let tx_block_index = icrc1_transfer(
+        &setup.env,
+        setup.ledger_id,
+        setup.from_account,
+        setup.to_account,
+        setup.transfer_amount,
+        Some(tx_timestamp),
+        None,
+        Some(setup.memo.clone()),
+    );
+    assert_eq!(tx_block_index, Nat::from(1u8));
+    // Create the expected ledger block for the ICRC1 Transfer transaction
+    let expected_ledger_block = icp_ledger::Block {
+        parent_hash: None,
+        transaction: Transaction {
+            operation: Operation::Transfer {
+                from: setup.from_account_identifier,
+                to: setup.to_account_identifier,
+                amount: Tokens::from_e8s(setup.transfer_amount),
+                fee: Tokens::from_e8s(setup.fee),
+                spender: None,
+            },
+            memo: Memo(0),
+            created_at_time: Some(tx_timestamp),
+            icrc1_memo: Some(ByteBuf::from(setup.memo.clone())),
+        },
+        timestamp: tx_timestamp,
+    };
+
+    // Verify that the ledger and index return the same blocks for the ICRC2 TransferFrom
+    // transaction, and that the corresponding Transaction retrieved from the Index also matches.
+    assert_ledger_index_block_transaction_parity(
+        &setup,
+        expected_ledger_block,
+        1,
+        setup.to_account,
+    );
+}
+
+#[test]
+fn test_ledger_index_icrc1_transfer_without_created_at_time_parity() {
+    // Set up an environment with a ledger, and index, and a single mint transaction
+    let setup = ParitySetup::new();
+    // Create an ICRC1 Transfer transaction with all fields set
+    let tx_timestamp = TimeStamp::from(setup.env.time_of_next_round());
+    let tx_block_index = icrc1_transfer(
+        &setup.env,
+        setup.ledger_id,
+        setup.from_account,
+        setup.to_account,
+        setup.transfer_amount,
+        None,
+        None,
+        Some(setup.memo.clone()),
+    );
+    assert_eq!(tx_block_index, Nat::from(1u8));
+    // Create the expected ledger block for the ICRC1 Transfer transaction
+    let expected_ledger_block = icp_ledger::Block {
+        parent_hash: None,
+        transaction: Transaction {
+            operation: Operation::Transfer {
+                from: setup.from_account_identifier,
+                to: setup.to_account_identifier,
+                amount: Tokens::from_e8s(setup.transfer_amount),
+                fee: Tokens::from_e8s(setup.fee),
+                spender: None,
+            },
+            memo: Memo(0),
+            created_at_time: None,
+            icrc1_memo: Some(ByteBuf::from(setup.memo.clone())),
+        },
+        timestamp: tx_timestamp,
+    };
+
+    // Verify that the ledger and index return the same blocks for the ICRC2 TransferFrom
+    // transaction, and that the corresponding Transaction retrieved from the Index also matches.
+    assert_ledger_index_block_transaction_parity(
+        &setup,
+        expected_ledger_block,
+        1,
+        setup.to_account,
+    );
+}
+
+#[test]
+fn test_ledger_index_icrc1_approve_parity() {
+    // Set up an environment with a ledger, and index, and a single mint transaction
+    let setup = ParitySetup::new();
+    // Create an ICRC1 Approve transaction with all fields set
+    let tx_timestamp = TimeStamp::from(setup.env.time_of_next_round());
+    let expires_at = tx_timestamp.as_nanos_since_unix_epoch() + 3600 * 1_000_000_000;
+    let tx_block_index = approve(
+        &setup.env,
+        setup.ledger_id,
+        setup.from_account,
+        ApproveTestArgs::new(
+            setup.from_account,
+            setup.spender_account,
+            setup.approve_amount,
+        )
+        .created_at_time(Some(tx_timestamp.as_nanos_since_unix_epoch()))
+        .fee(Some(Nat::from(10_000u16)))
+        .memo(Some(setup.memo.clone()))
+        .expected_allowance(Some(Nat::from(0u8)))
+        .expires_at(Some(expires_at)),
+    );
+    assert_eq!(tx_block_index, Nat::from(1u8));
+    // Create the expected ledger block for the ICRC1 Approve transaction
+    let expected_ledger_block = icp_ledger::Block {
+        parent_hash: None,
+        transaction: Transaction {
+            operation: Operation::Approve {
+                from: setup.from_account_identifier,
+                spender: setup.spender_account_identifier,
+                allowance: Tokens::from_e8s(setup.approve_amount),
+                expected_allowance: Some(Tokens::from_e8s(0)),
+                expires_at: Some(TimeStamp::from_nanos_since_unix_epoch(expires_at)),
+                fee: Tokens::from_e8s(setup.fee),
+            },
+            memo: Memo(0),
+            created_at_time: Some(tx_timestamp),
+            icrc1_memo: Some(ByteBuf::from(setup.memo.clone())),
+        },
+        timestamp: tx_timestamp,
+    };
+
+    // Verify that the ledger and index return the same blocks for the ICRC1 Approve
+    // transaction, and that the corresponding Transaction retrieved from the Index also matches.
+    assert_ledger_index_block_transaction_parity(
+        &setup,
+        expected_ledger_block,
+        1,
+        setup.spender_account,
+    );
+}
+
+#[test]
+fn test_ledger_index_icrc1_transfer_from_parity() {
+    // Set up an environment with a ledger, and index, and a single mint transaction
+    let setup = ParitySetup::new();
+    // Create an ICRC1 Approve transaction with all fields set
+    let tx_timestamp = TimeStamp::from(setup.env.time_of_next_round());
+    let expires_at = tx_timestamp.as_nanos_since_unix_epoch() + 3600 * 1_000_000_000;
+    let tx_block_index = approve(
+        &setup.env,
+        setup.ledger_id,
+        setup.from_account,
+        ApproveTestArgs::new(
+            setup.from_account,
+            setup.spender_account,
+            setup.approve_amount,
+        )
+        .created_at_time(Some(tx_timestamp.as_nanos_since_unix_epoch()))
+        .fee(Some(Nat::from(10_000u16)))
+        .memo(Some(setup.memo.clone()))
+        .expected_allowance(Some(Nat::from(0u8)))
+        .expires_at(Some(expires_at)),
+    );
+    assert_eq!(tx_block_index, Nat::from(1u8));
+    // Create an ICRC2 TransferFrom transaction with all fields set, based on the previously
+    // executed ICRC1 Approve transaction
+    let tx_timestamp = TimeStamp::from(setup.env.time_of_next_round());
+    let tx_block_index = icrc2_transfer_from(
+        &setup.env,
+        setup.ledger_id,
+        setup.spender_account,
+        setup.from_account,
+        setup.to_account,
+        setup.transfer_amount,
+        Some(tx_timestamp),
+        Some(setup.fee),
+        Some(setup.memo.clone()),
+    );
+    assert_eq!(tx_block_index, Nat::from(2u8));
+    // Create the expected ledger block for the ICRC2 TransferFrom transaction
+    let expected_ledger_block = icp_ledger::Block {
+        parent_hash: None,
+        transaction: Transaction {
+            operation: Operation::Transfer {
+                from: setup.from_account_identifier,
+                to: setup.to_account_identifier,
+                spender: Some(setup.spender_account_identifier),
+                fee: Tokens::from_e8s(setup.fee),
+                amount: Tokens::from_e8s(setup.transfer_amount),
+            },
+            memo: Memo(0),
+            created_at_time: Some(tx_timestamp),
+            icrc1_memo: Some(ByteBuf::from(setup.memo.clone())),
+        },
+        timestamp: tx_timestamp,
+    };
+
+    // Verify that the ledger and index return the same blocks for the ICRC2 TransferFrom
+    // transaction, and that the corresponding Transaction retrieved from the Index also matches.
+    assert_ledger_index_block_transaction_parity(
+        &setup,
+        expected_ledger_block,
+        2,
+        setup.to_account,
+    );
+}
+
+struct ParitySetup {
+    to_account: Account,
+    to_account_identifier: AccountIdentifier,
+    from_account: Account,
+    from_account_identifier: AccountIdentifier,
+    spender_account: Account,
+    spender_account_identifier: AccountIdentifier,
+    ledger_id: CanisterId,
+    index_id: CanisterId,
+    env: StateMachine,
+    memo: Vec<u8>,
+    mint_amount: u64,
+    approve_amount: u64,
+    transfer_amount: u64,
+    fee: u64,
+}
+
+impl ParitySetup {
+    fn new() -> Self {
+        let to_account = account(1, 0);
+        let from_account = account(2, 0);
+        let from_account_identifier = AccountIdentifier::from(from_account);
+        let spender_account = account(3, 0);
+        let mut initial_balances = HashMap::new();
+        let mint_amount = 1_000_000_000;
+        initial_balances.insert(from_account_identifier, Tokens::from_e8s(mint_amount));
+        let env = StateMachine::new();
+        let ledger_id = install_ledger(&env, initial_balances, default_archive_options());
+        let index_id = install_index(&env, ledger_id);
+        wait_until_sync_is_completed(&env, index_id, ledger_id);
+        Self {
+            ledger_id,
+            index_id,
+            env,
+            to_account,
+            to_account_identifier: AccountIdentifier::from(to_account),
+            from_account,
+            from_account_identifier,
+            spender_account,
+            spender_account_identifier: AccountIdentifier::from(spender_account),
+            memo: vec![1u8, 1u8, 1u8],
+            mint_amount,
+            approve_amount: 1_000_000,
+            transfer_amount: 1_000,
+            fee: 10_000,
+        }
+    }
+}
+
+fn assert_ledger_index_block_transaction_parity(
+    setup: &ParitySetup,
+    expected_ledger_block: icp_ledger::Block,
+    expected_ledger_block_index: usize,
+    index_account: Account,
+) {
+    wait_until_sync_is_completed(&setup.env, setup.index_id, setup.ledger_id);
+
+    // verify that the blocks on the ledger and the index are the same
+    assert_ledger_index_parity_query_blocks_and_query_encoded_blocks(
+        &setup.env,
+        setup.ledger_id,
+        setup.index_id,
+    );
+
+    // verify that the ledger block is as expected
+    let ledger_blocks = icp_get_blocks(&setup.env, setup.ledger_id);
+    assert_eq!(ledger_blocks.len(), expected_ledger_block_index + 1);
+    let ledger_parent_block = ledger_blocks
+        .get(expected_ledger_block_index - 1)
+        .expect("should contain a block")
+        .clone();
+    let expected_block_with_parent_hash = icp_ledger::Block {
+        parent_hash: Some(icp_ledger::Block::block_hash(&ledger_parent_block.encode())),
+        ..expected_ledger_block
+    };
+    let ledger_transfer_block = ledger_blocks
+        .get(expected_ledger_block_index)
+        .unwrap_or_else(|| panic!("should contain {} blocks", expected_ledger_block_index + 1));
+    assert_eq!(ledger_transfer_block, &expected_block_with_parent_hash);
+
+    // verify that the transaction retrieved from the index is the same as in the block
+    let index_transactions =
+        get_account_identifier_transactions(&setup.env, setup.index_id, index_account, None, 1)
+            .transactions;
+    assert_eq!(index_transactions.len(), 1);
+    let transfer_transaction = index_transactions
+        .first()
+        .expect("should contain a transaction");
+    let expected_settled_transfer_transaction =
+        SettledTransaction::from(expected_block_with_parent_hash);
+    assert_eq!(
+        transfer_transaction.transaction,
+        expected_settled_transfer_transaction
+    );
+}
+
+#[test]
 fn test_archive_indexing() {
     // test that the index canister can fetch the blocks from archive correctly.
-    // To avoid having a slow test, we create the blocks as mints at ledger init time.
     // We need a number of blocks equal to threshold + 2 * max num blocks in archive response.
+    const MAX_TRANSACTIONS_PER_ARCHIVE_RESPONSE: u64 = 10;
     let mut initial_balances = HashMap::new();
-    for i in 0..(ARCHIVE_TRIGGER_THRESHOLD + 4000) {
-        initial_balances.insert(
-            AccountIdentifier::from(account(i, 0)),
-            Tokens::from_e8s(1_000_000_000_000),
-        );
-    }
+    initial_balances.insert(
+        AccountIdentifier::from(account(0, 0)),
+        Tokens::from_e8s(1_000_000_000_000),
+    );
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options());
+    let ledger_id = install_ledger(
+        env,
+        initial_balances,
+        ArchiveOptions {
+            trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
+            num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE,
+            max_transactions_per_response: Some(MAX_TRANSACTIONS_PER_ARCHIVE_RESPONSE),
+            ..default_archive_options()
+        },
+    );
     let index_id = install_index(env, ledger_id);
+    // To trigger archiving, we need transactions and not only initial balances
+    for i in 1..(ARCHIVE_TRIGGER_THRESHOLD + 2 * MAX_TRANSACTIONS_PER_ARCHIVE_RESPONSE) {
+        transfer(env, ledger_id, account(0, 0), account(i, 0), 1);
+    }
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
-    assert_ledger_index_parity(env, ledger_id, index_id);
+    let num_blocks = assert_ledger_index_parity(env, ledger_id, index_id);
+    assert_eq!(
+        (ARCHIVE_TRIGGER_THRESHOLD + 2 * MAX_TRANSACTIONS_PER_ARCHIVE_RESPONSE) as usize,
+        num_blocks
+    );
+}
+
+fn expected_block_timestamp(rounds: u32, phase: u32, start_time: SystemTime) -> Option<TimeStamp> {
+    Some(TimeStamp::from(
+        start_time
+            .checked_add(Duration::from_nanos(rounds.into())) // timestamp increases by 1ns every round
+            .expect("checked_add should not overflow")
+            .checked_add(
+                SYNC_STEP_SECONDS
+                    .checked_add(Duration::from_nanos(1)) // timestamp increases by 1ns every phase
+                    .expect("checked_mul should not overflow")
+                    .checked_mul(phase)
+                    .expect("checked_mul should not overflow"),
+            )
+            .expect("checked_add should not overflow"),
+    ))
 }
 
 #[test]
@@ -449,14 +991,18 @@ fn test_get_account_identifier_transactions() {
         Tokens::from_e8s(1_000_000_000_000),
     );
     let env = &StateMachine::new();
+    let time = env.time();
     let ledger_id = install_ledger(env, initial_balances, default_archive_options());
     let index_id = install_index(env, ledger_id);
 
     // List of the transactions that the test is going to add. This exists to make
-    // the test easier to read
-    let tx0 = TransactionWithId {
+    // the test easier to read. The transactions are executed in separate phases, where the block
+    // timestamp is a function of the phase.
+    let mut rounds = 2u32; // ledger is created in 1st round and initialized in 2nd round
+    let mut phase = 0u32;
+    let tx0 = SettledTransactionWithId {
         id: 0u64,
-        transaction: Transaction {
+        transaction: SettledTransaction {
             operation: Operation::Mint {
                 to: account(1, 0).into(),
                 amount: Tokens::from_e8s(1_000_000_000_000_u64),
@@ -464,11 +1010,14 @@ fn test_get_account_identifier_transactions() {
             memo: Memo(0),
             created_at_time: None,
             icrc1_memo: None,
+            timestamp: expected_block_timestamp(rounds, phase, time),
         },
     };
-    let tx1 = TransactionWithId {
+    rounds += 3; // it takes two more rounds to create and initialize index and one more round for the transfer
+    phase = 1;
+    let tx1 = SettledTransactionWithId {
         id: 1u64,
-        transaction: Transaction {
+        transaction: SettledTransaction {
             operation: Operation::Transfer {
                 to: account(2, 0).into(),
                 from: account(1, 0).into(),
@@ -479,11 +1028,14 @@ fn test_get_account_identifier_transactions() {
             memo: Memo(0),
             created_at_time: None,
             icrc1_memo: None,
+            timestamp: expected_block_timestamp(rounds, phase, time),
         },
     };
-    let tx2 = TransactionWithId {
+    rounds += 1; // it takes one more round for the transfer
+    phase = 2;
+    let tx2 = SettledTransactionWithId {
         id: 2u64,
-        transaction: Transaction {
+        transaction: SettledTransaction {
             operation: Operation::Transfer {
                 to: account(2, 0).into(),
                 from: account(1, 0).into(),
@@ -494,11 +1046,13 @@ fn test_get_account_identifier_transactions() {
             memo: Memo(0),
             created_at_time: None,
             icrc1_memo: None,
+            timestamp: expected_block_timestamp(rounds, phase, time),
         },
     };
-    let tx3 = TransactionWithId {
+    rounds += 1; // it takes one more round for the transfer
+    let tx3 = SettledTransactionWithId {
         id: 3u64,
-        transaction: Transaction {
+        transaction: SettledTransaction {
             operation: Operation::Transfer {
                 to: account(1, 1).into(),
                 from: account(2, 0).into(),
@@ -509,17 +1063,19 @@ fn test_get_account_identifier_transactions() {
             memo: Memo(0),
             created_at_time: None,
             icrc1_memo: None,
+            timestamp: expected_block_timestamp(rounds, phase, time),
         },
     };
-    let expires_at = env
-        .time()
+    rounds += 1; // it takes one more round for the transfer
+    phase = 3;
+    let expires_at = time
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_nanos() as u64
         + Duration::from_secs(3600).as_nanos() as u64;
-    let tx4 = TransactionWithId {
+    let tx4 = SettledTransactionWithId {
         id: 4u64,
-        transaction: Transaction {
+        transaction: SettledTransaction {
             operation: Operation::Approve {
                 from: account(1, 0).into(),
                 spender: account(4, 4).into(),
@@ -531,6 +1087,7 @@ fn test_get_account_identifier_transactions() {
             memo: Memo(0),
             created_at_time: None,
             icrc1_memo: None,
+            timestamp: expected_block_timestamp(rounds, phase, time),
         },
     };
 
@@ -629,6 +1186,7 @@ fn test_get_account_transactions_start_length() {
     let env = &StateMachine::new();
     let ledger_id = install_ledger(env, initial_balances, default_archive_options());
     let index_id = install_index(env, ledger_id);
+    let time = env.time_of_next_round();
     for i in 0..10 {
         transfer(
             env,
@@ -642,9 +1200,9 @@ fn test_get_account_transactions_start_length() {
         );
     }
     let expected_txs: Vec<_> = (0..10)
-        .map(|i| TransactionWithId {
+        .map(|i| SettledTransactionWithId {
             id: i,
-            transaction: Transaction {
+            transaction: SettledTransaction {
                 operation: Operation::Mint {
                     to: account(1, 0).into(),
                     amount: Tokens::from_e8s(i * 10_000),
@@ -652,6 +1210,10 @@ fn test_get_account_transactions_start_length() {
                 memo: Memo(0),
                 created_at_time: None,
                 icrc1_memo: None,
+                timestamp: Some(TimeStamp::from(
+                    time.checked_add(Duration::from_nanos(i))
+                        .expect("checked_add should not overflow"),
+                )),
             },
         })
         .collect();
@@ -693,6 +1255,7 @@ fn test_get_account_identifier_transactions_pagination() {
     let env = &StateMachine::new();
     let ledger_id = install_ledger(env, initial_balances, default_archive_options());
     let index_id = install_index(env, ledger_id);
+    let time = env.time_of_next_round();
     for i in 0..10 {
         transfer(
             env,
@@ -730,16 +1293,19 @@ fn test_get_account_identifier_transactions_pagination() {
         }
 
         let mut last_seen_txid = start;
-        for TransactionWithId { id, transaction } in &res.transactions {
+        for (i, SettledTransactionWithId { id, transaction }) in res.transactions.iter().enumerate()
+        {
             // transactions ids must be unique and in descending order
             if let Some(last_seen_txid) = last_seen_txid {
                 assert!(*id < last_seen_txid);
             }
             last_seen_txid = Some(*id);
 
+            let j = res.transactions.len() - 1 - i; // transactions are in descending order
+
             // check the transaction itself
             assert_tx_eq(
-                &Transaction {
+                &SettledTransaction {
                     operation: Operation::Mint {
                         to: account(1, 0).into(),
                         amount: Tokens::from_e8s(*id * 10_000),
@@ -747,6 +1313,10 @@ fn test_get_account_identifier_transactions_pagination() {
                     memo: Memo(0),
                     created_at_time: None,
                     icrc1_memo: None,
+                    timestamp: Some(TimeStamp::from(
+                        time.checked_add(Duration::from_nanos(j as u64))
+                            .expect("checked_add should not overflow"),
+                    )),
                 },
                 transaction,
             );
@@ -1012,4 +1582,91 @@ fn test_post_upgrade_start_timer() {
     // if the new block is not synced).
     transfer(env, ledger_id, account(1, 0), account(2, 0), 2_000_000);
     wait_until_sync_is_completed(env, index_id, ledger_id);
+}
+
+#[test]
+fn check_block_endpoint_limits() {
+    // check that the index canister can incrementally get the blocks from the ledger.
+
+    let mut initial_balances = HashMap::new();
+    initial_balances.insert(
+        AccountIdentifier::from(account(1, 0)),
+        Tokens::from_e8s(1_000_000_000_000),
+    );
+    let env = &StateMachine::new();
+    let ledger_id = install_ledger(env, initial_balances, default_archive_options());
+    let index_id = install_index(env, ledger_id);
+
+    for _ in 0..MAX_BLOCKS_PER_REQUEST {
+        transfer(env, ledger_id, account(1, 0), account(2, 0), 1);
+    }
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    let user_principal =
+        Principal::from_text("luwgt-ouvkc-k5rx5-xcqkq-jx5hm-r2rj2-ymqjc-pjvhb-kij4p-n4vms-gqe")
+            .unwrap();
+    let canister_principal = Principal::from_text("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap();
+
+    // get_blocks
+    let blocks = index_get_blocks(env, index_id);
+    assert_eq!(blocks.len(), MAX_BLOCKS_PER_REQUEST);
+
+    let blocks = index_get_blocks_update(env, index_id, canister_principal);
+    assert_eq!(blocks.len(), MAX_BLOCKS_PER_REQUEST);
+
+    let blocks = index_get_blocks_update(env, index_id, user_principal);
+    assert_eq!(
+        blocks.len(),
+        MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST
+    );
+
+    // get_account_identifier_transactions
+    assert_eq!(
+        get_account_id_transactions_len(env, index_id, &account(2, 0)),
+        MAX_BLOCKS_PER_REQUEST
+    );
+
+    assert_eq!(
+        get_account_id_transactions_update_len(env, index_id, canister_principal, &account(2, 0)),
+        MAX_BLOCKS_PER_REQUEST
+    );
+
+    assert_eq!(
+        get_account_id_transactions_update_len(env, index_id, user_principal, &account(2, 0)),
+        MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST
+    );
+
+    // get_account_transactions
+    assert_eq!(
+        get_account_transactions_len(env, index_id, &account(2, 0)),
+        MAX_BLOCKS_PER_REQUEST
+    );
+
+    assert_eq!(
+        get_account_transactions_update_len(env, index_id, canister_principal, &account(2, 0)),
+        MAX_BLOCKS_PER_REQUEST
+    );
+
+    assert_eq!(
+        get_account_transactions_update_len(env, index_id, user_principal, &account(2, 0)),
+        MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST
+    );
+}
+
+mod metrics {
+    use crate::index_wasm;
+    use candid::Principal;
+    use ic_icp_index::InitArg;
+
+    #[test]
+    fn should_export_total_memory_usage_bytes_metrics() {
+        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_index_total_memory_bytes_metric(
+            index_wasm(),
+            encode_init_args,
+        );
+    }
+
+    fn encode_init_args(ledger_id: Principal) -> InitArg {
+        InitArg { ledger_id }
+    }
 }

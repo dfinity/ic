@@ -3,8 +3,7 @@
 #![deny(clippy::unwrap_used)]
 
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
-use simple_asn1::{ASN1Block, ASN1Class, BigInt, BigUint, OID};
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use simple_asn1::{ASN1Block, OID};
 
 #[cfg(test)]
 mod tests;
@@ -82,31 +81,6 @@ pub struct KeyDerParsingError {
     pub internal_error: String,
 }
 
-/// Parses a DER-wrapped COSE public key, and returns the public key.
-///
-/// See [the Interface Spec](https://sdk.dfinity.org/docs/interface-spec/index.html#signatures)
-/// and [RFC 8410](https://tools.ietf.org/html/rfc8410#section-4).
-///
-/// # Returns
-/// COSE-encoded public key bytes
-///
-/// # Errors:
-/// * `KeyDerParsingError` if:
-///   - `pk_der` is malformed ASN.1
-///   - `pk_der` is *not* the expected ASN.1 structure
-///   - The OID specified in `pk_der` is *not* 1.3.6.1.4.1.56387.1.1
-pub fn public_key_bytes_from_der_wrapped_cose(
-    pk_der: &[u8],
-) -> Result<Vec<u8>, KeyDerParsingError> {
-    let (algo_id, pk_bytes) = algo_id_and_public_key_bytes_from_der(pk_der)?;
-    if algo_id.oid != simple_asn1::oid!(1, 3, 6, 1, 4, 1, 56387, 1, 1) {
-        return Err(KeyDerParsingError {
-            internal_error: format!("Wrong OID: {:?}", algo_id.oid),
-        });
-    }
-    Ok(pk_bytes)
-}
-
 /// Parses a DER-wrapped public key, and returns the
 /// PkixAlgorithmIdentifier and the public key.
 ///
@@ -124,30 +98,6 @@ pub fn algo_id_and_public_key_bytes_from_der(
 ) -> Result<(PkixAlgorithmIdentifier, Vec<u8>), KeyDerParsingError> {
     let kp = KeyDerParser::new(der);
     kp.get_algo_id_and_public_key_bytes()
-}
-
-/// The secret and public keys as bytes, as well as the OID.
-
-#[derive(Zeroize, ZeroizeOnDrop)]
-pub struct SecretKeyData {
-    #[zeroize(skip)]
-    pub oid: OID,
-    pub sk_bytes: Vec<u8>,
-    #[zeroize(skip)]
-    pub pk_bytes: Option<Vec<u8>>,
-}
-
-/// Parses a DER-wrapped secret key, and returns the OID and the keypair.
-///
-/// See [RFC 8410](see https://tools.ietf.org/html/rfc8410#section-7).
-///
-/// # Errors:
-/// * `KeyDerParsingError` if:
-///   - `sk_der` is malformed ASN.1
-///   - `sk_der` is *not* the expected ASN.1 structure
-pub fn oid_and_key_pair_bytes_from_der(sk_der: &[u8]) -> Result<SecretKeyData, KeyDerParsingError> {
-    let der_parser = KeyDerParser::new(sk_der);
-    der_parser.get_oid_and_key_pair_bytes()
 }
 
 /// Parse a public key and verify if it is of the expected type and size
@@ -225,39 +175,6 @@ impl KeyDerParser {
         Ok((algo_id, pk_bytes))
     }
 
-    /// Parses the DER key of this parser as a secret key with a corresponding
-    /// public key, and returns the resulting components.
-    pub fn get_oid_and_key_pair_bytes(&self) -> Result<SecretKeyData, KeyDerParsingError> {
-        let asn1_parts = self.parse_pk()?;
-        let key_seq = Self::ensure_single_asn1_sequence(asn1_parts)?;
-        if key_seq.len() != 4 {
-            return Err(Self::parsing_error("Expected exactly four ASN.1 blocks."));
-        }
-        if let ASN1Block::Integer(_offset, version) = &key_seq[0] {
-            if *version != BigInt::from(1) {
-                return Err(Self::parsing_error("Version must be equal 1"));
-            }
-        } else {
-            return Err(Self::parsing_error("Expected version part"));
-        }
-        let algo_id = Self::algorithm_identifier(&key_seq[1])?;
-        let sk_bytes = Self::secret_key_bytes(&key_seq[2])?;
-
-        let (pk_part, tag) = Self::unwrap_explicitly_tagged_block(&key_seq[3])?;
-        if tag != BigUint::from_bytes_le(&[1]) {
-            return Err(Self::parsing_error(&format!(
-                "Expected tag [1], got {:?}",
-                tag
-            )));
-        }
-        let pk_bytes = Self::public_key_bytes(&pk_part)?;
-        Ok(SecretKeyData {
-            oid: algo_id.oid,
-            sk_bytes,
-            pk_bytes: Some(pk_bytes),
-        })
-    }
-
     /// Retrieves PkixAlgorithmIdentifier from the given ASN1Block.
     fn algorithm_identifier(
         oid_seq: &ASN1Block,
@@ -301,20 +218,6 @@ impl KeyDerParser {
         }
     }
 
-    /// Attempts to parse the given ASN1Block as an explicitly tagged type
-    fn unwrap_explicitly_tagged_block(
-        wrapped: &ASN1Block,
-    ) -> Result<(ASN1Block, BigUint), KeyDerParsingError> {
-        if let ASN1Block::Explicit(ASN1Class::ContextSpecific, _offset, tag, unwrapped) = wrapped {
-            Ok(((**unwrapped).clone(), (*tag).clone()))
-        } else {
-            Err(Self::parsing_error(&format!(
-                "Expected Explicit-block, got {:?}",
-                wrapped
-            )))
-        }
-    }
-
     /// Retrieves raw public key bytes from the given ASN1Block.
     fn public_key_bytes(key_part: &ASN1Block) -> Result<Vec<u8>, KeyDerParsingError> {
         if let ASN1Block::BitString(_offset, bits_count, key_bytes) = key_part {
@@ -328,21 +231,6 @@ impl KeyDerParser {
                 key_part
             )))
         }
-    }
-
-    /// Retrieves raw secret key bytes from the given ASN1Block.
-    fn secret_key_bytes(key_part: &ASN1Block) -> Result<Vec<u8>, KeyDerParsingError> {
-        if let ASN1Block::OctetString(_offset, key_bytes_string) = key_part {
-            let key_bytes_block = simple_asn1::from_der(key_bytes_string)
-                .map_err(|e| Self::parsing_error(&format!("Error in DER encoding: {}", e)))?;
-            if key_bytes_block.len() != 1 {
-                return Err(Self::parsing_error("Expected single block"));
-            }
-            if let ASN1Block::OctetString(_offset, key_bytes) = &key_bytes_block[0] {
-                return Ok(key_bytes.clone());
-            }
-        }
-        Err(Self::parsing_error("Expected octet string."))
     }
 
     /// Converts `msg` into a `KeyDerParsingError`.

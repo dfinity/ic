@@ -1,5 +1,4 @@
 use std::{
-    cmp::{max, min},
     collections::HashMap,
     fs::{self, File},
     net::SocketAddr,
@@ -11,8 +10,7 @@ use std::{
 
 use candid::{CandidType, Principal};
 use ic_agent::{
-    agent::{http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, Agent},
-    identity::BasicIdentity,
+    agent::http_transport::reqwest_transport::ReqwestTransport, identity::BasicIdentity, Agent,
 };
 use ic_utils::{
     canister::Argument,
@@ -28,18 +26,19 @@ use ic_utils::{
 
 use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
-use axum::{handler::Handler, routing::get, Extension, Router};
+use axum::{body::Body, handler::Handler, routing::get, Extension, Router};
 use clap::Parser;
-use futures::{future::TryFutureExt, stream::FuturesUnordered};
+use futures::stream::FuturesUnordered;
 use glob::glob;
-use hyper::{Body, Request, Response, StatusCode};
+use hyper::{Request, Response, StatusCode};
 use mockall::automock;
 use opentelemetry::baggage::BaggageExt;
-use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider, KeyValue};
+use opentelemetry::{metrics::MeterProvider, KeyValue};
 use opentelemetry_prometheus::exporter;
+use opentelemetry_sdk::metrics::MeterProviderBuilder;
 use prometheus::{labels, Encoder as PrometheusEncoder, Registry, TextEncoder};
 use serde::Deserialize;
-use tokio::{task, time::Instant};
+use tokio::{net::TcpListener, task, time::Instant};
 use tracing::info;
 
 mod metrics;
@@ -103,7 +102,9 @@ async fn main() -> Result<(), Error> {
     )
     .unwrap();
     let exporter = exporter().with_registry(registry.clone()).build()?;
-    let provider = MeterProvider::builder().with_reader(exporter).build();
+    let provider = MeterProviderBuilder::default()
+        .with_reader(exporter)
+        .build();
     let meter = provider.meter(SERVICE_NAME);
 
     let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { registry }));
@@ -201,11 +202,12 @@ async fn main() -> Result<(), Error> {
         }));
     }
 
-    futs.push(task::spawn(
-        axum::Server::bind(&cli.metrics_addr)
-            .serve(metrics_router.into_make_service())
-            .map_err(|err| anyhow!("server failed: {:?}", err)),
-    ));
+    futs.push(task::spawn(async move {
+        let listener = TcpListener::bind(&cli.metrics_addr).await.unwrap();
+        axum::serve(listener, metrics_router.into_make_service())
+            .await
+            .map_err(|err| anyhow!("server failed: {:?}", err))
+    }));
 
     for fut in futs {
         let _ = fut.await?;
@@ -324,10 +326,10 @@ where
                 .with_context(_ctx.clone())
                 .await;
 
-            tokio::time::sleep(max(
-                Duration::ZERO,
-                min(self.probe_interval, end_time - Instant::now()),
-            ))
+            tokio::time::sleep(
+                self.probe_interval
+                    .clamp(Duration::ZERO, end_time - Instant::now()),
+            )
             .await;
 
             if Instant::now() > end_time {
@@ -366,7 +368,7 @@ fn create_agent_fn(identity: Arc<BasicIdentity>, root_key: Option<Vec<u8>>) -> i
             socket_addr,
         } = node_route;
 
-        let transport = ReqwestHttpReplicaV2Transport::create(format!("http://{}", socket_addr))
+        let transport = ReqwestTransport::create(format!("http://{}", socket_addr))
             .context("failed to create transport")?;
 
         let identity = Arc::clone(&identity);
@@ -906,8 +908,8 @@ mod tests {
             assert_eq!(route.node_id, "node-1");
             assert_eq!(route.socket_addr, "socket-1");
 
-            let transport = ReqwestHttpReplicaV2Transport::create("http://test")
-                .context("failed to create transport")?;
+            let transport =
+                ReqwestTransport::create("http://test").context("failed to create transport")?;
 
             let agent = Agent::builder().with_transport(transport).build()?;
 

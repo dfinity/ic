@@ -11,17 +11,15 @@ rust_library(
         "//rs/validator/http_request_test_utils:__subpackages__",
     ],
     deps = [
+        # Keep sorted.
         "//rs/types/types",
         "@crate_index//:hex",
         "@crate_index//:simple_asn1",
-        "@crate_index//:zeroize",
     ],
 )
 
 rust_test(
     name = "der_utils_test",
     crate = ":der_utils",
-    deps = [
-        "//rs/crypto/internal/test_vectors",
-    ],
+    deps = [],
 )

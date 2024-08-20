@@ -101,10 +101,17 @@ const QUERY_SCHEDULING_TIME_SLICE_PER_CANISTER: Duration = Duration::from_millis
 const QUERY_CACHE_CAPACITY: NumBytes = NumBytes::new(200 * MIB);
 
 /// The upper limit on how long the cache entry stays valid in the query cache.
-const QUERY_CACHE_MAX_EXPIRY_TIME: Duration = Duration::from_secs(300);
+const QUERY_CACHE_MAX_EXPIRY_TIME: Duration = Duration::from_secs(600);
+/// The upper limit on how long the data certificate stays valid in the query cache.
+///
+/// The [HTTP Gateway Protocol Specification](https://internetcomputer.org/docs/current/references/http-gateway-protocol-spec#certificate-validation)
+/// states that the certified timestamp must be recent, e.g. 5 minutes.
+/// So queries using the `ic0.data_certificate_copy()` System API call
+/// should not be cached for more than 5 minutes.
+const QUERY_CACHE_DATA_CERTIFICATE_EXPIRY_TIME: Duration = Duration::from_secs(60);
 
 /// Length of an epoch of query statistics in blocks
-pub const QUERY_STATS_EPOCH_LENGTH: u64 = 2000;
+pub const QUERY_STATS_EPOCH_LENGTH: u64 = 600;
 
 // The ID of the Bitcoin testnet canister.
 pub const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
@@ -124,6 +131,14 @@ pub const MAX_COMPILATION_CACHE_SIZE: NumBytes = NumBytes::new(10 * GIB);
 
 /// Maximum number of controllers allowed in a request (specified in the interface spec).
 pub const MAX_ALLOWED_CONTROLLERS_COUNT: usize = 10;
+
+/// Maximum number of canister snapshots that can be stored for a single canister.
+pub const MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER: usize = 1;
+
+/// Maximum number of http outcall requests in-flight on a subnet.
+/// To support 100 req/s with a worst case request latency of 30s the queue size needs buffer 100 req/s * 30s = 3000 req.
+/// The worst case request latency used here should be equivalent to the request timeout in the adapter.
+pub const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 3000;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default)]
@@ -233,6 +248,9 @@ pub struct Config {
     /// The upper limit on how long the cache entry stays valid in the query cache.
     pub query_cache_max_expiry_time: Duration,
 
+    /// The upper limit on how long the data certificate stays valid in the query cache.
+    pub query_cache_data_certificate_expiry_time: Duration,
+
     /// The capacity of the Wasm compilation cache.
     pub max_compilation_cache_size: NumBytes,
 
@@ -242,14 +260,28 @@ pub struct Config {
     /// Length of an epoch for query stats collection.
     pub query_stats_epoch_length: u64,
 
-    /// Indicates whether the Wasm chunk store feature has been enabled or not.
-    pub wasm_chunk_store: FlagStatus,
-
     /// The duration a stop_canister has to stop the canister before timing out.
     pub stop_canister_timeout_duration: Duration,
 
     /// Indicates whether canister backup and restore feature is enabled or not.
     pub canister_snapshots: FlagStatus,
+
+    /// Indicates whether dirty page logging is enabled or not.
+    pub dirty_page_logging: FlagStatus,
+
+    // TODO(EXC-1633): remove this flag once the feature is enabled by default.
+    /// Indicates whether `Ic00Method::ComputeInitialIDkgDealings` is enabled.
+    pub ic00_compute_initial_i_dkg_dealings: FlagStatus,
+
+    // TODO(EXC-1633): remove this flag once the feature is enabled by default.
+    /// Indicates whether `Ic00Method::SchnorrPublicKey` is enabled.
+    pub ic00_schnorr_public_key: FlagStatus,
+
+    // TODO(EXC-1633): remove this flag once the feature is enabled by default.
+    /// Indicates whether `Ic00Method::SignWithSchnorr` is enabled.
+    pub ic00_sign_with_schnorr: FlagStatus,
+
+    pub max_canister_http_requests_in_flight: usize,
 }
 
 impl Default for Config {
@@ -313,12 +345,17 @@ impl Default for Config {
             query_caching: FlagStatus::Enabled,
             query_cache_capacity: QUERY_CACHE_CAPACITY,
             query_cache_max_expiry_time: QUERY_CACHE_MAX_EXPIRY_TIME,
+            query_cache_data_certificate_expiry_time: QUERY_CACHE_DATA_CERTIFICATE_EXPIRY_TIME,
             max_compilation_cache_size: MAX_COMPILATION_CACHE_SIZE,
-            query_stats_aggregation: FlagStatus::Disabled,
+            query_stats_aggregation: FlagStatus::Enabled,
             query_stats_epoch_length: QUERY_STATS_EPOCH_LENGTH,
-            wasm_chunk_store: FlagStatus::Disabled,
             stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
             canister_snapshots: FlagStatus::Disabled,
+            dirty_page_logging: FlagStatus::Disabled,
+            ic00_compute_initial_i_dkg_dealings: FlagStatus::Enabled,
+            ic00_schnorr_public_key: FlagStatus::Enabled,
+            ic00_sign_with_schnorr: FlagStatus::Enabled,
+            max_canister_http_requests_in_flight: MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
         }
     }
 }

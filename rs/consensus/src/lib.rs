@@ -8,4 +8,4 @@
 pub mod certification;
 pub mod consensus;
 pub mod dkg;
-pub mod ecdsa;
+pub mod idkg;

@@ -7,24 +7,26 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-anyhow = "1.0.66"
-async-trait = "0.1.59"
-axum = { version = "0.6.1", features = ["json"] }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
 candid = { workspace = true }
-clap = { version = "4.0.29", features = ["derive"] }
+clap = { workspace = true }
 futures = { workspace = true }
-hyper = { version = "0.14.23", features = ["full"] }
-hyper-rustls = "0.24.0"
-mockall = "0.11.3"
+mockall = { workspace = true }
 nix = { workspace = true }
-opentelemetry = { version = "0.20", features = ["metrics"] }
-opentelemetry-prometheus = "0.13.0"
+opentelemetry = { workspace = true }
+opentelemetry-prometheus = { workspace = true }
+opentelemetry_sdk = { workspace = true }
 prometheus = { workspace = true }
+reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tempfile = "3.3.0"
-thiserror = "1.0.37"
+thiserror = { workspace = true }
 tokio = { workspace = true }
-tracing = "0.1.37"
-tracing-subscriber = { version = "0.3.16", features = ["json"] }
-x509-parser = "0.15.1"
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+x509-parser = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

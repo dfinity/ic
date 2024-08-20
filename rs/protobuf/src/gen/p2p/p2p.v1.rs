@@ -1,4 +1,3 @@
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StateSyncId {
@@ -7,7 +6,6 @@ pub struct StateSyncId {
     #[prost(bytes = "vec", tag = "2")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StateSyncChunkRequest {
@@ -16,27 +14,24 @@ pub struct StateSyncChunkRequest {
     #[prost(uint32, tag = "2")]
     pub chunk_id: u32,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StateSyncChunkResponse {
     #[prost(bytes = "vec", tag = "1")]
     pub data: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct AdvertUpdate {
+pub struct SlotUpdate {
     #[prost(uint64, tag = "1")]
     pub commit_id: u64,
     #[prost(uint64, tag = "2")]
     pub slot_id: u64,
-    #[prost(oneof = "advert_update::Update", tags = "3, 4")]
-    pub update: ::core::option::Option<advert_update::Update>,
+    #[prost(oneof = "slot_update::Update", tags = "3, 4")]
+    pub update: ::core::option::Option<slot_update::Update>,
 }
-/// Nested message and enum types in `AdvertUpdate`.
-pub mod advert_update {
-    #[derive(serde::Serialize, serde::Deserialize)]
+/// Nested message and enum types in `SlotUpdate`.
+pub mod slot_update {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Update {
@@ -46,7 +41,6 @@ pub mod advert_update {
         Advert(super::Advert),
     }
 }
-#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Advert {

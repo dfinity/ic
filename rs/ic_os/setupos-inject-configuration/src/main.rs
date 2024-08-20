@@ -1,13 +1,14 @@
 use std::os::unix::fs::PermissionsExt;
 use std::{
+    assert,
     fs::{self, File, Permissions},
     io::Write,
+    net::{Ipv4Addr, Ipv6Addr},
     path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Error};
 use clap::{Args, Parser};
-use ipnet::Ipv6Net;
 use tempfile::NamedTempFile;
 use url::Url;
 
@@ -23,7 +24,7 @@ struct Cli {
     image_path: PathBuf,
 
     #[command(flatten)]
-    network: NetworkConfig,
+    config_ini: ConfigIni,
 
     #[arg(long)]
     private_key_path: Option<PathBuf>,
@@ -36,12 +37,27 @@ struct Cli {
 }
 
 #[derive(Args)]
-struct NetworkConfig {
+struct ConfigIni {
     #[arg(long)]
-    ipv6_prefix: Option<Ipv6Net>,
+    ipv6_prefix: Option<String>,
 
     #[arg(long)]
-    ipv6_gateway: Option<Ipv6Net>,
+    ipv6_gateway: Option<Ipv6Addr>,
+
+    #[arg(long)]
+    ipv4_address: Option<Ipv4Addr>,
+
+    #[arg(long)]
+    ipv4_gateway: Option<Ipv4Addr>,
+
+    #[arg(long)]
+    ipv4_prefix_length: Option<u8>,
+
+    #[arg(long)]
+    domain: Option<String>,
+
+    #[arg(long)]
+    verbose: Option<String>,
 
     #[arg(long)]
     mgmt_mac: Option<String>,
@@ -67,7 +83,7 @@ async fn main() -> Result<(), Error> {
     let cli = Cli::parse();
 
     // Open config partition
-    let mut config = FatPartition::open(cli.image_path.clone(), 3).await?;
+    let mut config = FatPartition::open(cli.image_path.clone(), Some(3)).await?;
 
     // Print previous config.ini
     println!("Previous config.ini:\n---");
@@ -79,7 +95,7 @@ async fn main() -> Result<(), Error> {
 
     // Update config.ini
     let config_ini = NamedTempFile::new()?;
-    write_config(config_ini.path(), &cli.network)
+    write_config(config_ini.path(), &cli.config_ini)
         .await
         .context("failed to write config file")?;
     config
@@ -123,7 +139,7 @@ async fn main() -> Result<(), Error> {
     config.close().await?;
 
     // Open data partition
-    let mut data = ExtPartition::open(cli.image_path.clone(), 4).await?;
+    let mut data = ExtPartition::open(cli.image_path.clone(), Some(4)).await?;
 
     // Print previous deployment.json
     println!("Previous deployment.json:\n---");
@@ -161,30 +177,42 @@ async fn main() -> Result<(), Error> {
     Ok(())
 }
 
-async fn write_config(path: &Path, cfg: &NetworkConfig) -> Result<(), Error> {
+async fn write_config(path: &Path, cfg: &ConfigIni) -> Result<(), Error> {
     let mut f = File::create(path).context("failed to create config file")?;
 
-    let NetworkConfig {
+    let ConfigIni {
         ipv6_prefix,
         ipv6_gateway,
         mgmt_mac,
+        ipv4_address,
+        ipv4_gateway,
+        ipv4_prefix_length,
+        domain,
+        verbose,
     } = cfg;
 
     if let (Some(ipv6_prefix), Some(ipv6_gateway)) = (ipv6_prefix, ipv6_gateway) {
         // Always write 4 segments, even if our prefix is less.
-        let segments = ipv6_prefix.trunc().addr().segments();
-        writeln!(
-            &mut f,
-            "ipv6_prefix={:04x}:{:04x}:{:04x}:{:04x}",
-            segments[0], segments[1], segments[2], segments[3],
-        )?;
+        assert!(format!("{ipv6_prefix}::").parse::<Ipv6Addr>().is_ok());
+        writeln!(&mut f, "ipv6_prefix={}", ipv6_prefix)?;
+        writeln!(&mut f, "ipv6_gateway={}", ipv6_gateway)?;
+    }
 
-        writeln!(&mut f, "ipv6_subnet=/{}", ipv6_prefix.prefix_len())?;
-        writeln!(&mut f, "ipv6_gateway={}", ipv6_gateway.addr())?;
+    if let (Some(ipv4_address), Some(ipv4_gateway), Some(ipv4_prefix_length), Some(domain)) =
+        (ipv4_address, ipv4_gateway, ipv4_prefix_length, domain)
+    {
+        writeln!(&mut f, "ipv4_address={}", ipv4_address)?;
+        writeln!(&mut f, "ipv4_gateway={}", ipv4_gateway)?;
+        writeln!(&mut f, "ipv4_prefix_length={}", ipv4_prefix_length)?;
+        writeln!(&mut f, "domain={}", domain)?;
     }
 
     if let Some(mgmt_mac) = mgmt_mac {
         writeln!(&mut f, "mgmt_mac={}", mgmt_mac)?;
+    }
+
+    if let Some(verbose) = verbose {
+        writeln!(&mut f, "verbose={}", verbose)?;
     }
 
     Ok(())
@@ -209,7 +237,7 @@ async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Er
     };
 
     if let Some(nns_url) = &cfg.nns_url {
-        deployment_json.nns.url = nns_url.clone();
+        deployment_json.nns.url = vec![nns_url.clone()];
     }
 
     if let Some(memory) = cfg.memory_gb {

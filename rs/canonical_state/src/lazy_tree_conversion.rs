@@ -15,7 +15,8 @@ use ic_registry_routing_table::RoutingTable;
 use ic_replicated_state::{
     canister_state::CanisterState,
     metadata_state::{
-        IngressHistoryState, StreamMap, SubnetMetrics, SubnetTopology, SystemMetadata,
+        ApiBoundaryNodeEntry, IngressHistoryState, StreamMap, SubnetMetrics, SubnetTopology,
+        SystemMetadata,
     },
     replicated_state::ReplicatedStateMessageRouting,
     ExecutionState, ReplicatedState,
@@ -77,6 +78,25 @@ impl<'a> FiniteMap<'a> {
     ) -> Self {
         if condition {
             self.0.insert(Label::from(label), Lazy::Value(tree));
+        }
+        self
+    }
+
+    /// If the optional field is `Some` value, adds a new subtree to this map.
+    /// Otherwise does nothing.
+    /// The subtree is constructed by applying `func` to the value extracted from the optional field.
+    pub fn with_optional_tree<B, T, F>(
+        mut self,
+        optional_field: Option<T>,
+        label: B,
+        func: F,
+    ) -> Self
+    where
+        B: AsRef<[u8]>,
+        F: Fn(T) -> LazyTree<'a>,
+    {
+        if let Some(field) = optional_field {
+            self.0.insert(Label::from(label), Lazy::Value(func(field)));
         }
         self
     }
@@ -273,6 +293,16 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
 
     fork(
         FiniteMap::default()
+            .with_if(
+                certification_version >= CertificationVersion::V16,
+                "api_boundary_nodes",
+                move || {
+                    api_boundary_nodes_as_tree(
+                        &state.metadata.api_boundary_nodes,
+                        certification_version,
+                    )
+                },
+            )
             .with("metadata", move || {
                 system_metadata_as_tree(&state.metadata, certification_version)
             })
@@ -654,6 +684,28 @@ impl<'a> LazyFork<'a> for CanisterFork<'a> {
                 .count()
         }
     }
+}
+
+fn api_boundary_nodes_as_tree(
+    api_boundary_nodes: &BTreeMap<NodeId, ApiBoundaryNodeEntry>,
+    certification_version: CertificationVersion,
+) -> LazyTree<'_> {
+    fork(MapTransformFork {
+        map: api_boundary_nodes,
+        certification_version,
+        mk_tree: |_api_boundary_node_id, api_boundary_node, _certification_version| {
+            fork(
+                FiniteMap::default()
+                    .with_tree("domain", string(&api_boundary_node.domain))
+                    .with_optional_tree(
+                        api_boundary_node.ipv4_address.as_ref(),
+                        "ipv4_address",
+                        |ipv4_address| string(ipv4_address),
+                    )
+                    .with_tree("ipv6_address", string(&api_boundary_node.ipv6_address)),
+            )
+        },
+    })
 }
 
 fn canisters_as_tree(

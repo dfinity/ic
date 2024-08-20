@@ -1,0 +1,14 @@
+[Unit]
+Description=SetupOS config process
+Before=generate-network-config.service
+Before=setupos.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/output-wrapper.sh /dev/ttyS0 /opt/ic/bin/config.sh
+StandardOutput=tty
+StandardError=tty
+
+[Install]
+WantedBy=multi-user.target

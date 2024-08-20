@@ -20,16 +20,14 @@ Not Covered:: Ledger archives, Timestamps, Mint & Burn, Subaccounts
 
 end::catalog[] */
 
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCanisterEnvVars,
-    NnsInstallationBuilder,
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
 };
-use crate::util::{block_on, runtime_from_url};
+use ic_system_test_driver::util::{block_on, runtime_from_url};
 use rand_chacha::ChaCha8Rng;
 use slog::info;
 
-use crate::driver::ic::InternetComputer;
 use async_recursion::async_recursion;
 use canister_test::{Canister, Runtime};
 use dfn_candid::{candid, candid_one};
@@ -42,6 +40,7 @@ use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::InternetComputer;
 use ic_types::{CanisterId, PrincipalId};
 use icp_ledger::{
     AccountIdentifier, BinaryAccountBalanceArgs, Block, BlockArg, BlockIndex, BlockRes, Memo,
@@ -78,7 +77,6 @@ pub fn config(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    env.set_nns_canisters_env_vars().unwrap();
     let logger = env.logger();
     let topology = env.topology_snapshot();
     let nns_node = topology.root_subnet().nodes().next().unwrap();

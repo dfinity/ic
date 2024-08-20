@@ -6,7 +6,6 @@ use crate::{
 use ic_interfaces::consensus_pool::{
     HeightIndexedPool, HeightRange, OnlyError, PoolSection, PurgeableArtifactType,
 };
-use ic_logger::{warn, ReplicaLogger};
 use ic_types::{
     artifact::ConsensusMessageId,
     consensus::*,
@@ -18,15 +17,13 @@ use std::collections::BTreeMap;
 pub struct InMemoryPoolSection<T: IntoInner<ConsensusMessage>> {
     indexes: Indexes,
     artifacts: BTreeMap<CryptoHash, T>,
-    log: ReplicaLogger,
 }
 
 impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<T> {
-    pub fn new(log: ReplicaLogger) -> InMemoryPoolSection<T> {
+    pub fn new() -> InMemoryPoolSection<T> {
         InMemoryPoolSection {
             artifacts: BTreeMap::new(),
             indexes: Indexes::new(),
-            log,
         }
     }
 
@@ -79,6 +76,9 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
                 PurgeableArtifactType::FinalizationShare => {
                     purge!(finalization_share, FinalizationShare);
                 }
+                PurgeableArtifactType::EquivocationProof => {
+                    purge!(equivocation_proof, EquivocationProof);
+                }
             }
         } else {
             purge!(random_beacon, RandomBeacon);
@@ -92,6 +92,7 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
             purge!(random_tape_share, RandomTapeShare);
             purge!(catch_up_package, CatchUpPackage);
             purge!(catch_up_package_share, CatchUpPackageShare);
+            purge!(equivocation_proof, EquivocationProof);
         }
 
         purged
@@ -218,7 +219,7 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> PoolSection<T>
     for InMemoryPoolSection<T>
 {
     fn contains(&self, msg_id: &ConsensusMessageId) -> bool {
-        self.artifacts.get(msg_id.hash.digest()).is_some()
+        self.artifacts.contains_key(msg_id.hash.digest())
     }
 
     fn get(&self, msg_id: &ConsensusMessageId) -> Option<ConsensusMessage> {
@@ -268,6 +269,9 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> PoolSection<T>
     fn catch_up_package_share(&self) -> &dyn HeightIndexedPool<CatchUpPackageShare> {
         self
     }
+    fn equivocation_proof(&self) -> &dyn HeightIndexedPool<EquivocationProof> {
+        self
+    }
 }
 
 impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> MutablePoolSection<T>
@@ -279,9 +283,7 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> MutablePoolSection<T
             match op {
                 PoolSectionOp::Insert(artifact) => self.insert(artifact),
                 PoolSectionOp::Remove(msg_id) => {
-                    if self.remove(&msg_id).is_none() {
-                        warn!(self.log, "Error removing artifact {:?}", &msg_id)
-                    } else {
+                    if self.remove(&msg_id).is_some() {
                         purged.push(msg_id)
                     }
                 }
@@ -307,7 +309,7 @@ pub mod test {
 
     use super::*;
     use ic_interfaces::consensus_pool::ValidatedArtifact;
-    use ic_test_utilities::consensus::{fake::*, make_genesis};
+    use ic_test_utilities_consensus::{fake::*, make_genesis};
 
     fn make_summary(genesis_height: Height) -> ic_types::consensus::dkg::Summary {
         let mut summary = ic_types::consensus::dkg::Summary::fake();
@@ -331,12 +333,12 @@ pub mod test {
 
     #[test]
     fn test_iterate_with_large_range() {
-        assert!(ic_test_utilities::with_timeout(
+        assert!(ic_test_utilities_time::with_timeout(
             std::time::Duration::new(12, 0),
             || {
-                let mut pool = InMemoryPoolSection::new(ic_logger::replica_logger::no_op_logger());
+                let mut pool = InMemoryPoolSection::new();
                 let min = Height::from(1);
-                let max = Height::from(std::u64::MAX);
+                let max = Height::from(u64::MAX);
                 pool.insert(make_artifact(fake_random_beacon(min)));
                 pool.insert(make_artifact(fake_random_beacon(max)));
 
@@ -350,7 +352,7 @@ pub mod test {
 
     #[test]
     fn test_purging() {
-        assert!(ic_test_utilities::with_timeout(
+        assert!(ic_test_utilities_time::with_timeout(
             std::time::Duration::new(12, 0),
             || {
                 let beacons = (1..=10)
@@ -358,7 +360,7 @@ pub mod test {
                     .collect::<Vec<_>>();
                 let ids = beacons.iter().map(|b| b.get_id()).collect::<HashSet<_>>();
 
-                let mut pool = InMemoryPoolSection::new(ic_logger::replica_logger::no_op_logger());
+                let mut pool = InMemoryPoolSection::new();
                 beacons
                     .into_iter()
                     .for_each(|b| pool.insert(make_artifact(b)));

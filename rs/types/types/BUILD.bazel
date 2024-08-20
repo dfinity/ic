@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/bitcoin/types/internal",
+    "//rs/bitcoin/replica_types",
     "//rs/constants",
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/sha2",
@@ -14,8 +14,9 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/types/base_types",
     "//rs/types/error_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/utils",
+    "//rs/utils/validate_eq",
     "@crate_index//:base64",
     "@crate_index//:bincode",
     "@crate_index//:candid",
@@ -37,6 +38,7 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/test_utils/canister_threshold_sigs",
     "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
     "@crate_index//:hex-literal",
     "@crate_index//:pretty_assertions",
@@ -47,6 +49,7 @@ DEV_DEPENDENCIES = [
 ]
 
 MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/types/exhaustive_derive",
     "@crate_index//:proptest-derive",
 ]
@@ -56,7 +59,8 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_types",
     proc_macro_deps = [
-        "@crate_index//:derive_more",
+        # Keep sorted.
+        "//rs/utils/validate_eq_derive",
         "@crate_index//:strum_macros",
     ],
     rustc_flags = select({

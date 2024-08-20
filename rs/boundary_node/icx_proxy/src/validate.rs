@@ -20,7 +20,7 @@ pub trait Validate: Sync + Send {
     ) -> Result<Option<VerificationInfo>, Cow<'static, str>>;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Validator {}
 
 impl Validator {
@@ -80,12 +80,10 @@ fn get_current_time_in_ns() -> u128 {
 mod tests {
     use crate::http::request::HttpRequest;
     use crate::http::response::HttpResponse;
+    use axum::body::Body;
     use candid::Principal;
     use hyper::Uri;
-    use ic_agent::{
-        agent::http_transport::hyper_transport::{hyper::Body, HyperReplicaV2Transport},
-        Agent,
-    };
+    use ic_agent::{agent::http_transport::hyper_transport::HyperTransport, Agent};
 
     use crate::validate::{Validate, Validator};
 
@@ -93,7 +91,7 @@ mod tests {
     fn validate_nop() {
         let canister_id = Principal::from_text("wwc2m-2qaaa-aaaac-qaaaa-cai").unwrap();
         let url = "http://www.example.com";
-        let transport = HyperReplicaV2Transport::<Body>::create(url).unwrap();
+        let transport = HyperTransport::<Body>::create(url).unwrap();
         let agent = Agent::builder().with_transport(transport).build().unwrap();
         let validator = Validator::new();
 

@@ -1,16 +1,16 @@
 use crate::InternalHttpQueryHandler;
 use ic_base_types::{CanisterId, NumSeconds};
-use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, Payload};
 use ic_registry_subnet_type::SubnetType;
-use ic_test_utilities::{
-    types::ids::user_test_id,
-    universal_canister::{call_args, wasm},
-};
+use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
-use ic_types::{ingress::WasmResult, messages::UserQuery, Cycles, NumInstructions};
+use ic_test_utilities_types::ids::user_test_id;
+use ic_types::{
+    ingress::WasmResult,
+    messages::{Query, QuerySource},
+    Cycles, NumInstructions,
+};
 use std::sync::Arc;
 
 const CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
@@ -49,8 +49,12 @@ fn query_metrics_are_reported() {
     let canister_b = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
 
     let output = test.query(
-        UserQuery {
-            source: user_test_id(2),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(2),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister_a,
             method_name: "query".to_string(),
             method_payload: wasm()
@@ -59,8 +63,6 @@ fn query_metrics_are_reported() {
                     call_args().other_side(wasm().reply_data(b"pong".as_ref())),
                 )
                 .build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -204,8 +206,12 @@ fn query_call_with_side_effects() {
     let canister_b = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
 
     let output = test.query(
-        UserQuery {
-            source: user_test_id(2),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(2),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister_a,
             method_name: "query".to_string(),
             method_payload: wasm()
@@ -217,8 +223,6 @@ fn query_call_with_side_effects() {
                         .on_reply(wasm().stable_size().reply_int()),
                 )
                 .build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -238,8 +242,12 @@ fn query_calls_disabled_for_application_subnet() {
     let canister_b = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
 
     let output = test.query(
-        UserQuery {
-            source: user_test_id(2),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(2),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister_a,
             method_name: "query".to_string(),
             method_payload: wasm()
@@ -251,8 +259,6 @@ fn query_calls_disabled_for_application_subnet() {
                         .on_reply(wasm().stable_size().reply_int()),
                 )
                 .build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -307,13 +313,15 @@ fn query_callgraph_depth_is_enforced() {
         num_calls: usize,
     ) -> Result<WasmResult, UserError> {
         test.query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canisters[0],
                 method_name: "query".to_string(),
                 method_payload: generate_call_to(canisters, num_calls).build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -389,13 +397,15 @@ fn query_callgraph_max_instructions_is_enforced() {
     // Those should succeed
     for num_calls in 1..NUM_SUCCESSFUL_QUERIES {
         let test = test.query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canisters[0],
                 method_name: "query".to_string(),
                 method_payload: generate_call_to(&canisters, num_calls as usize).build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -410,13 +420,15 @@ fn query_callgraph_max_instructions_is_enforced() {
     }
     for num_calls in NUM_SUCCESSFUL_QUERIES..NUM_CANISTERS {
         let test = test.query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canisters[0],
                 method_name: "query".to_string(),
                 method_payload: generate_call_to(&canisters, num_calls as usize).build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -473,13 +485,15 @@ fn composite_query_callgraph_depth_is_enforced() {
         num_calls: usize,
     ) -> Result<WasmResult, UserError> {
         test.query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
                 method_payload: generate_composite_call_to(canisters, num_calls).build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -543,13 +557,15 @@ fn composite_query_recursive_calls() {
     }
 
     test.query(
-        UserQuery {
-            source: user_test_id(2),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(2),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister,
             method_name: "composite_query".to_string(),
             method_payload: generate_composite_call_to(canister, NUM_CALLS).build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -601,13 +617,15 @@ fn composite_query_callgraph_max_instructions_is_enforced() {
     // Those should succeed
     for num_calls in 1..NUM_SUCCESSFUL_QUERIES {
         let test = test.query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
                 method_payload: generate_call_to(&canisters, num_calls as usize).build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -622,13 +640,15 @@ fn composite_query_callgraph_max_instructions_is_enforced() {
     }
     for num_calls in NUM_SUCCESSFUL_QUERIES..NUM_CANISTERS {
         let test = test.query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
                 method_payload: generate_call_to(&canisters, num_calls as usize).build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -672,13 +692,15 @@ fn query_compiled_once() {
         .clear_compilation_cache_for_testing();
 
     let result = test.query(
-        UserQuery {
-            source: user_test_id(2),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(2),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister_id,
             method_name: "query".to_string(),
             method_payload: wasm().reply().build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -692,13 +714,15 @@ fn query_compiled_once() {
     assert_eq!(2, query_handler.hypervisor.compile_count());
 
     let result = test.query(
-        UserQuery {
-            source: user_test_id(2),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(2),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister_id,
             method_name: "query".to_string(),
             method_payload: wasm().reply().build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -723,29 +747,31 @@ fn queries_to_frozen_canisters_are_rejected() {
     // to be installed (the canister is created with the provisional
     // create canister api that doesn't require additional cycles).
     //
-    // 80_000_000 cycles are needed as prepayment for max install_code instructions
+    // 80_002_460 cycles are needed as prepayment for max install_code instructions
     //    590_000 cycles are needed for update call execution
     //     41_070 cycles are needed to cover freeze_threshold_cycles
     //                   of the canister history memory usage (134 bytes)
-    let low_cycles = Cycles::new(80_000_631_070);
+    let low_cycles = Cycles::new(80_000_633_630);
     let canister_a = test.universal_canister_with_cycles(low_cycles).unwrap();
     test.update_freezing_threshold(canister_a, freezing_threshold)
         .unwrap();
 
-    let high_cycles = Cycles::new(1_000_000_000_000);
+    let high_cycles = Cycles::new(1_000_000_000_000_000);
     let canister_b = test.universal_canister_with_cycles(high_cycles).unwrap();
     test.update_freezing_threshold(canister_b, freezing_threshold)
         .unwrap();
 
     // Canister A is below its freezing threshold, so queries will be rejected.
     let result = test.query(
-        UserQuery {
-            source: user_test_id(0),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(0),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister_a,
             method_name: "query".to_string(),
             method_payload: wasm().reply().build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -764,13 +790,15 @@ fn queries_to_frozen_canisters_are_rejected() {
     // Canister B has a high cycles balance that's above its freezing
     // threshold and so it can still process queries.
     let result = test.query(
-        UserQuery {
-            source: user_test_id(1),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(1),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canister_b,
             method_name: "query".to_string(),
             method_payload: wasm().reply().build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -800,13 +828,15 @@ fn composite_query_works_in_non_replicated_mode() {
 
     let result = test
         .query(
-            UserQuery {
-                source: user_test_id(0),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(0),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canister,
                 method_name: "query".to_string(),
                 method_payload: vec![],
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -824,13 +854,15 @@ fn composite_query_fails_if_disabled() {
 
     let result = test
         .query(
-            UserQuery {
-                source: user_test_id(0),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(0),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canister,
                 method_name: "query".to_string(),
                 method_payload: vec![],
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -889,13 +921,15 @@ fn composite_query_single_user_response() {
 
     let result = test
         .query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
                 method_payload: canister_0.build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -934,13 +968,15 @@ fn composite_query_single_canister_response() {
 
     let result = test
         .query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
                 method_payload: canister_0.build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -978,13 +1014,15 @@ fn composite_query_no_user_response() {
 
     let err = test
         .query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
                 method_payload: canister_0.build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -1035,13 +1073,15 @@ fn composite_query_no_canister_response() {
 
     let result = test
         .query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canisters[0],
                 method_name: "composite_query".to_string(),
                 method_payload: canister_0.build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -1074,13 +1114,15 @@ fn composite_query_chained_calls() {
 
     let result = test
         .query(
-            UserQuery {
-                source: user_test_id(2),
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(2),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
                 receiver: canister_a,
                 method_name: "composite_query".to_string(),
                 method_payload: a.build(),
-                ingress_expiry: 0,
-                nonce: None,
             },
             Arc::new(test.state().clone()),
             vec![],
@@ -1142,13 +1184,15 @@ fn composite_query_syscalls_from_reply_reject_callback() {
             );
 
             let output = test.query(
-                UserQuery {
-                    source: user_test_id(2),
+                Query {
+                    source: QuerySource::User {
+                        user_id: user_test_id(2),
+                        ingress_expiry: 0,
+                        nonce: None,
+                    },
                     receiver: canisters[0],
                     method_name: "composite_query".to_string(),
                     method_payload: canister_0.build(),
-                    ingress_expiry: 0,
-                    nonce: None,
                 },
                 Arc::new(test.state().clone()),
                 vec![],
@@ -1210,13 +1254,15 @@ fn composite_query_state_preserved_across_sequential_calls() {
     );
 
     let output = test.query(
-        UserQuery {
-            source: user_test_id(2),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(2),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canisters[0],
             method_name: "composite_query".to_string(),
             method_payload: payload.build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -1278,13 +1324,15 @@ fn composite_query_state_preserved_across_parallel_calls() {
     );
 
     let output = test.query(
-        UserQuery {
-            source: user_test_id(2),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(2),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canisters[0],
             method_name: "composite_query".to_string(),
             method_payload: payload.build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -1350,13 +1398,15 @@ fn query_stats_are_collected() {
 
     // Run query
     let _ = test.query(
-        UserQuery {
-            source: user_test_id(2),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(2),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: canisters[0],
             method_name: "composite_query".to_string(),
             method_payload: payload.build(),
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -1399,13 +1449,15 @@ fn test_incorrect_query_name() {
     let test = ExecutionTestBuilder::new().build();
     let method = "unknown method".to_string();
     let Err(err) = test.query(
-        UserQuery {
-            source: user_test_id(2),
+        Query {
+            source: QuerySource::User {
+                user_id: user_test_id(2),
+                ingress_expiry: 0,
+                nonce: None,
+            },
             receiver: CanisterId::ic_00(),
             method_name: method.clone(),
             method_payload: vec![],
-            ingress_expiry: 0,
-            nonce: None,
         },
         Arc::new(test.state().clone()),
         vec![],
@@ -1417,204 +1469,6 @@ fn test_incorrect_query_name() {
         err.description(),
         format!("Query method {} not found.", method)
     );
-}
-
-#[test]
-fn test_bitcoin_query_bitcoin_canister_not_set() {
-    let test = ExecutionTestBuilder::new()
-        .with_bitcoin_mainnet_canister_id(None)
-        .with_bitcoin_testnet_canister_id(None)
-        .build();
-
-    for network in [
-        BitcoinNetwork::Mainnet,
-        BitcoinNetwork::mainnet,
-        BitcoinNetwork::Testnet,
-        BitcoinNetwork::testnet,
-        BitcoinNetwork::Regtest,
-        BitcoinNetwork::regtest,
-    ] {
-        let tests = [
-            (
-                "bitcoin_get_balance_query",
-                BitcoinGetBalanceArgs {
-                    network,
-                    address: String::from(""),
-                    min_confirmations: None,
-                }
-                .encode(),
-            ),
-            (
-                "bitcoin_get_utxos_query",
-                BitcoinGetUtxosArgs {
-                    network,
-                    address: String::from(""),
-                    filter: None,
-                }
-                .encode(),
-            ),
-        ];
-
-        for (method, payload) in tests {
-            match test.query(
-                UserQuery {
-                    source: user_test_id(2),
-                    receiver: CanisterId::ic_00(),
-                    method_name: method.to_string(),
-                    method_payload: payload,
-                    ingress_expiry: 0,
-                    nonce: None,
-                },
-                Arc::new(test.state().clone()),
-                vec![],
-            ) {
-                Err(e) => {
-                    if network == BitcoinNetwork::Mainnet || network == BitcoinNetwork::mainnet {
-                        assert_eq!(e.code(), ErrorCode::CanisterNotHostedBySubnet);
-                        assert_eq!(
-                            e.description(),
-                            "Bitcoin mainnet canister is not installed."
-                        );
-                    } else {
-                        assert_eq!(e.code(), ErrorCode::CanisterNotHostedBySubnet);
-                        assert_eq!(
-                            e.description(),
-                            "Bitcoin testnet canister is not installed."
-                        );
-                    }
-                }
-                _ => panic!("Unexpected result."),
-            }
-        }
-    }
-}
-
-fn mock_bitcoin_canister_wat(network: BitcoinNetwork) -> String {
-    format!(
-        r#"(module
-              (import "ic0" "msg_reply" (func $msg_reply))
-              (import "ic0" "msg_reply_data_append"
-                (func $msg_reply_data_append (param i32 i32)))
-
-              (func $ping
-                (call $msg_reply_data_append
-                  (i32.const 0)
-                  (i32.const 19))
-                (call $msg_reply))
-
-              (memory $memory 1)
-              (export "memory" (memory $memory))
-              (data (i32.const 0) "Hello from {}!")
-              (export "canister_update bitcoin_get_balance" (func $ping))
-              (export "canister_update bitcoin_get_utxos" (func $ping))
-              (export "canister_update bitcoin_send_transaction" (func $ping))
-              (export "canister_update bitcoin_get_current_fee_percentiles" (func $ping))
-              (export "canister_query bitcoin_get_balance_query" (func $ping))
-              (export "canister_query bitcoin_get_utxos_query" (func $ping))
-            )"#,
-        network
-    )
-}
-
-fn test_canister_routing(test: ExecutionTest, networks: Vec<BitcoinNetwork>) {
-    for network in networks {
-        let tests = [
-            (
-                "bitcoin_get_balance_query",
-                BitcoinGetBalanceArgs {
-                    network,
-                    address: String::from(""),
-                    min_confirmations: None,
-                }
-                .encode(),
-            ),
-            (
-                "bitcoin_get_utxos_query",
-                BitcoinGetUtxosArgs {
-                    network,
-                    address: String::from(""),
-                    filter: None,
-                }
-                .encode(),
-            ),
-        ];
-        for (method, payload) in tests {
-            match test.query(
-                UserQuery {
-                    source: user_test_id(2),
-                    receiver: CanisterId::ic_00(),
-                    method_name: method.to_string(),
-                    method_payload: payload,
-                    ingress_expiry: 0,
-                    nonce: None,
-                },
-                Arc::new(test.state().clone()),
-                vec![],
-            ) {
-                Ok(WasmResult::Reply(r)) => {
-                    assert_eq!(r, format!("Hello from {}!", network).as_bytes())
-                }
-                _ => panic!("Unexpected result"),
-            };
-        }
-    }
-}
-
-#[test]
-fn bitcoin_test_routing_mainnet_canister_exists() {
-    let mainnet_id = CanisterId::from(0);
-
-    let mut test = ExecutionTestBuilder::new()
-        .with_bitcoin_mainnet_canister_id(Some(mainnet_id))
-        .build();
-
-    assert_eq!(
-        test.canister_from_cycles_and_wat(
-            Cycles::new(1_000_000_000_000u128),
-            mock_bitcoin_canister_wat(BitcoinNetwork::Mainnet),
-        ),
-        Ok(mainnet_id)
-    );
-
-    test_canister_routing(test, vec![BitcoinNetwork::Mainnet, BitcoinNetwork::mainnet]);
-}
-
-#[test]
-fn bitcoin_test_routing_testnet_canister_exists() {
-    let testnet_id = CanisterId::from(0);
-
-    let mut test = ExecutionTestBuilder::new()
-        .with_bitcoin_testnet_canister_id(Some(testnet_id))
-        .build();
-
-    assert_eq!(
-        test.canister_from_cycles_and_wat(
-            Cycles::new(1_000_000_000_000u128),
-            mock_bitcoin_canister_wat(BitcoinNetwork::Testnet),
-        ),
-        Ok(testnet_id)
-    );
-
-    test_canister_routing(test, vec![BitcoinNetwork::Testnet, BitcoinNetwork::testnet]);
-}
-
-#[test]
-fn bitcoin_test_routing_regtest_canister_exists() {
-    let testnet_id = CanisterId::from(0);
-
-    let mut test = ExecutionTestBuilder::new()
-        .with_bitcoin_testnet_canister_id(Some(testnet_id))
-        .build();
-
-    assert_eq!(
-        test.canister_from_cycles_and_wat(
-            Cycles::new(1_000_000_000_000u128),
-            mock_bitcoin_canister_wat(BitcoinNetwork::Regtest),
-        ),
-        Ok(testnet_id)
-    );
-
-    test_canister_routing(test, vec![BitcoinNetwork::Regtest, BitcoinNetwork::regtest]);
 }
 
 #[test]
@@ -1719,4 +1573,39 @@ fn test_call_context_performance_counter_correctly_reported_on_composite_query()
     assert!(counters[0] < counters[1]);
     assert!(counters[1] < counters[2]);
     assert!(counters[2] < counters[3]);
+}
+
+#[test]
+fn query_call_exceeds_instructions_limit() {
+    let instructions_limit = 4;
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit_without_dts(instructions_limit)
+        .build();
+
+    let canister = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let output = test
+        .query(
+            Query {
+                source: QuerySource::User {
+                    user_id: user_test_id(1),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
+                receiver: canister,
+                method_name: "query".to_string(),
+                method_payload: wasm().stable_grow(10).build(),
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        )
+        .unwrap_err();
+    output.assert_contains(
+            ErrorCode::CanisterInstructionLimitExceeded,
+            &format!(
+                "Error from Canister {}: Canister exceeded the limit of {} instructions for single message execution.",
+                canister,
+                instructions_limit
+            )
+    );
 }

@@ -1,16 +1,18 @@
-load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/tree_hash",
+    "//rs/nervous_system/common",
     "//rs/nervous_system/governance",
     "//rs/nns/common",
     "//rs/nns/constants",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/protobuf",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_core",
@@ -20,7 +22,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:base64",
     "@crate_index//:build-info",
@@ -38,11 +40,13 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
     "@crate_index//:async-trait",
 ]
 
 BUILD_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:build-info-build",
 ]
 
@@ -93,6 +97,7 @@ rust_test(
         "CARGO_MANIFEST_DIR": "rs/nns/cmc",
     },
     deps = [
+        # Keep sorted.
         "//rs/types/types_test_utils",
         "@crate_index//:candid_parser",
         "@crate_index//:futures",

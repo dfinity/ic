@@ -1,7 +1,7 @@
 use candid::{CandidType, Deserialize};
 use dfn_core::api::{call, now, CanisterId};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
-use ic_ic00_types::CanisterInstallMode;
+use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResultFromManagementCanister,
@@ -85,10 +85,12 @@ pub struct GovernanceUpgradeRootProposal {
     /// The expected sha256 hash of the governance canister
     /// wasm. This must match the sha of the currently running
     /// governance canister.
+    #[serde(with = "serde_bytes")]
     pub current_wasm_sha: Vec<u8>,
     /// The proposal payload to upgrade the governance canister.
     pub payload: ChangeCanisterRequest,
     /// The sha of the binary the proposer wants to upgrade to.
+    #[serde(with = "serde_bytes")]
     pub proposed_wasm_sha: Vec<u8>,
     /// The principal id of the proposer (must be one of the node
     /// operators of the NNS subnet according to the registry at
@@ -140,7 +142,7 @@ impl GovernanceUpgradeRootProposal {
 }
 
 thread_local! {
-  static PROPOSALS: RefCell<BTreeMap<PrincipalId, GovernanceUpgradeRootProposal>> = RefCell::new(BTreeMap::new());
+  static PROPOSALS: RefCell<BTreeMap<PrincipalId, GovernanceUpgradeRootProposal>> = const { RefCell::new(BTreeMap::new()) };
 }
 
 async fn get_current_governance_canister_wasm() -> Vec<u8> {
@@ -440,7 +442,7 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
             println!("{}", message);
             return Err(message);
         }
-        change_canister::<DfnRuntime>(payload).await;
+        let _ = change_canister::<DfnRuntime>(payload).await;
         Ok(())
     } else if proposal.is_byzantine_majority_no() {
         PROPOSALS.with(|proposals| proposals.borrow_mut().remove(&proposer));

@@ -10,4 +10,4 @@ documentation.workspace = true
 ic-crypto-internal-threshold-sig-ecdsa = { path = "../internal/crypto_lib/threshold_sig/tecdsa" }
 
 [dev-dependencies]
-hex = "0.4"
+hex = { workspace = true }

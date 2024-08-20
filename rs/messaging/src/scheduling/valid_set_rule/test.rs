@@ -2,31 +2,30 @@ use super::*;
 
 use assert_matches::assert_matches;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_ic00_types::{CanisterSettingsArgsBuilder, Payload, UpdateSettingsArgs, IC_00};
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types::{
+    CanisterSettingsArgsBuilder, Payload, UpdateSettingsArgs, IC_00,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::CanisterQueuesTesting;
-use ic_test_utilities::{
-    cycles_account_manager::CyclesAccountManagerBuilder,
-    history::MockIngressHistory,
-    mock_time,
-    state::{
-        get_running_canister, get_stopped_canister, get_stopping_canister, CanisterStateBuilder,
-        ReplicatedStateBuilder,
-    },
-    types::{
-        ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
-        messages::SignedIngressBuilder,
-    },
-};
+use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_int_counter_vec, metric_vec, nonzero_values, HistogramStats,
     MetricVec,
 };
+use ic_test_utilities_state::{
+    get_running_canister, get_stopped_canister, get_stopping_canister, CanisterStateBuilder,
+    MockIngressHistory, ReplicatedStateBuilder,
+};
+use ic_test_utilities_types::{
+    ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
+    messages::SignedIngressBuilder,
+};
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{MessageId, SignedIngressContent},
+    time::UNIX_EPOCH,
     CanisterId,
 };
 use mockall::predicate::{always, eq};
@@ -113,7 +112,7 @@ fn induct_message_with_successful_history_update() {
                     IngressStatus::Known {
                         receiver: canister_id.get(),
                         user_id: user_test_id(0),
-                        time: mock_time(),
+                        time: UNIX_EPOCH,
                         state: IngressState::Received,
                     },
                     NumBytes::from(u64::MAX),
@@ -174,7 +173,7 @@ fn induct_message_fails_for_stopping_canister() {
                 eq(IngressStatus::Known {
                     receiver: canister_id.get(),
                     user_id: user_test_id(2),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                     state: IngressState::Failed(UserError::new(
                         ErrorCode::CanisterStopping,
                         format!("Canister {} is stopping", canister_id),
@@ -230,7 +229,7 @@ fn induct_message_fails_for_stopped_canister() {
                 eq(IngressStatus::Known {
                     receiver: canister_id.get(),
                     user_id: user_test_id(2),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                     state: IngressState::Failed(UserError::new(
                         ErrorCode::CanisterStopped,
                         format!("Canister {} is stopped", canister_id),
@@ -300,7 +299,7 @@ fn try_to_induct_a_message_marked_as_already_inducted() {
         let status = IngressStatus::Known {
             receiver: canister_id.get(),
             user_id: user_test_id(0),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Received,
         };
         state.set_ingress_status(msg.id(), status, NumBytes::from(u64::MAX));
@@ -323,7 +322,7 @@ fn update_history_if_induction_failed() {
         let status = IngressStatus::Known {
             receiver: canister_id.get(),
             user_id: user_test_id(0),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Failed(UserError::new(
                 ErrorCode::CanisterNotFound,
                 format!("Canister {} not found", canister_id),
@@ -402,7 +401,7 @@ fn dont_induct_duplicate_messages() {
                     IngressStatus::Known {
                         receiver: canister_test_id(0).get(),
                         user_id: user_test_id(0),
-                        time: mock_time(),
+                        time: UNIX_EPOCH,
                         state: IngressState::Received,
                     },
                     NumBytes::from(u64::MAX),
@@ -424,7 +423,7 @@ fn dont_induct_duplicate_messages() {
             IngressStatus::Known {
                 receiver: canister_id1.get(),
                 user_id: user_test_id(0),
-                time: mock_time(),
+                time: UNIX_EPOCH,
                 state: IngressState::Received,
             },
             NumBytes::from(u64::MAX),
@@ -434,7 +433,7 @@ fn dont_induct_duplicate_messages() {
             IngressStatus::Known {
                 receiver: canister_id1.get(),
                 user_id: user_test_id(0),
-                time: mock_time(),
+                time: UNIX_EPOCH,
                 state: IngressState::Received,
             },
             NumBytes::from(u64::MAX),
@@ -465,6 +464,11 @@ fn canister_on_application_subnet_charges_for_ingress() {
     let own_subnet_type = SubnetType::Application;
     let own_subnet_id = subnet_test_id(0);
     let mut state = ReplicatedStateBuilder::new()
+        .with_node_ids(
+            (1..=SMALL_APP_SUBNET_MAX_SIZE as u64)
+                .map(node_test_id)
+                .collect(),
+        )
         .with_subnet_type(own_subnet_type)
         .with_canister(
             CanisterStateBuilder::new()
@@ -598,7 +602,7 @@ fn ingress_to_stopping_canister_is_rejected() {
                 .into(),
             SMALL_APP_SUBNET_MAX_SIZE
         ),
-        Err(StateError::CanisterStopping(canister_test_id(0)))
+        Err(IngressInductionError::CanisterStopping(canister_test_id(0)))
     );
 }
 
@@ -632,7 +636,7 @@ fn ingress_to_stopped_canister_is_rejected() {
                 .into(),
             SMALL_APP_SUBNET_MAX_SIZE
         ),
-        Err(StateError::CanisterStopped(canister_test_id(0)))
+        Err(IngressInductionError::CanisterStopped(canister_test_id(0)))
     );
 }
 
@@ -743,7 +747,9 @@ fn management_message_with_unknown_method_is_not_inducted() {
         .into();
     assert_eq!(
         valid_set_rule.enqueue(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE),
-        Err(StateError::UnknownSubnetMethod(String::from("test")))
+        Err(IngressInductionError::CanisterMethodNotFound(String::from(
+            "test"
+        )))
     );
 }
 
@@ -773,7 +779,7 @@ fn management_message_with_invalid_payload_is_not_inducted() {
         .into();
     assert_eq!(
         valid_set_rule.enqueue(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE),
-        Err(StateError::InvalidSubnetPayload)
+        Err(IngressInductionError::InvalidManagementPayload)
     );
 }
 

@@ -17,19 +17,20 @@ mod keygen;
 mod sign;
 mod tls;
 
+use ic_crypto_internal_csp::vault::api::CspVault;
 pub use sign::{
-    get_tecdsa_master_public_key, retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError,
+    get_master_public_key_from_transcript, retrieve_mega_public_key_from_registry,
+    MegaKeyFromRegistryError,
 };
 
 use crate::sign::ThresholdSigDataStoreImpl;
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_internal_csp::api::CspPublicKeyStore;
+use ic_crypto_internal_csp::vault::vault_from_config;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
-use ic_crypto_utils_time::CurrentSystemTimeSource;
 use ic_interfaces::crypto::KeyManager;
-use ic_interfaces::time_source::TimeSource;
+use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{new_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -41,8 +42,9 @@ use std::fmt;
 use std::sync::Arc;
 
 /// Defines the maximum number of entries contained in the
-/// `ThresholdSigDataStore`.
-pub const THRESHOLD_SIG_DATA_STORE_CAPACITY: usize = ThresholdSigDataStoreImpl::CAPACITY;
+/// `ThresholdSigDataStore` per tag, where tag is of type `NiDkgTag`.
+pub const THRESHOLD_SIG_DATA_STORE_CAPACITY_PER_TAG: usize =
+    ThresholdSigDataStoreImpl::CAPACITY_PER_TAG;
 
 /// A type alias for `CryptoComponentImpl<Csp>`.
 /// See the Rust documentation of `CryptoComponentImpl`.
@@ -53,6 +55,7 @@ pub type CryptoComponent = CryptoComponentImpl<Csp>;
 /// handshakes.
 pub struct CryptoComponentImpl<C: CryptoServiceProvider> {
     lockable_threshold_sig_data_store: LockableThresholdSigDataStore,
+    vault: Arc<dyn CspVault>,
     csp: C,
     registry_client: Arc<dyn RegistryClient>,
     // The node id of the node that instantiated this crypto component.
@@ -90,10 +93,13 @@ impl LockableThresholdSigDataStore {
     }
 }
 
+/// Methods required for testing. Ideally, this block would be `#[test]` code,
+/// but this is not possible as the methods are required outside of the crate.
 impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
     /// Creates a crypto component using the given `csp` and fake `node_id`.
-    pub fn new_with_csp_and_fake_node_id(
+    pub fn new_for_test(
         csp: C,
+        vault: Arc<dyn CspVault>,
         logger: ReplicaLogger,
         registry_client: Arc<dyn RegistryClient>,
         node_id: NodeId,
@@ -103,12 +109,12 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
         CryptoComponentImpl {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
+            vault,
             registry_client,
             node_id,
-            logger: new_logger!(&logger),
+            logger,
             metrics,
-            time_source: time_source
-                .unwrap_or_else(|| Arc::new(CurrentSystemTimeSource::new(logger))),
+            time_source: time_source.unwrap_or_else(|| Arc::new(SysTimeSource::new())),
         }
     }
 }
@@ -184,13 +190,18 @@ impl CryptoComponentImpl<Csp> {
         metrics_registry: Option<&MetricsRegistry>,
     ) -> Self {
         let metrics = Arc::new(CryptoMetrics::new(metrics_registry));
-        let csp = Csp::new(
+        let vault = vault_from_config(
             config,
             tokio_runtime_handle,
-            Some(new_logger!(&logger)),
+            new_logger!(&logger),
             Arc::clone(&metrics),
         );
-        let node_pks = csp
+        let csp = Csp::new_from_vault(
+            Arc::clone(&vault),
+            new_logger!(&logger),
+            Arc::clone(&metrics),
+        );
+        let node_pks = vault
             .current_node_public_keys()
             .expect("Failed to retrieve node public keys");
         let node_signing_pk = node_pks
@@ -203,44 +214,15 @@ impl CryptoComponentImpl<Csp> {
         let crypto_component = CryptoComponentImpl {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
+            vault,
             registry_client,
             node_id,
-            logger: new_logger!(&logger),
+            time_source: Arc::new(SysTimeSource::new()),
+            logger,
             metrics,
-            time_source: Arc::new(CurrentSystemTimeSource::new(logger)),
         };
         crypto_component.collect_and_store_key_count_metrics(latest_registry_version);
         crypto_component
-    }
-
-    /// Creates a crypto component using a fake `node_id`.
-    ///
-    /// # Panics
-    /// Panics if the `config`'s vault type is `UnixSocket` and
-    /// `tokio_runtime_handle` is `None`.
-    pub fn new_with_fake_node_id(
-        config: &CryptoConfig,
-        tokio_runtime_handle: Option<tokio::runtime::Handle>,
-        registry_client: Arc<dyn RegistryClient>,
-        node_id: NodeId,
-        logger: ReplicaLogger,
-        time_source: Arc<dyn TimeSource>,
-    ) -> Self {
-        let metrics = Arc::new(CryptoMetrics::none());
-        CryptoComponentImpl {
-            lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
-            csp: Csp::new(
-                config,
-                tokio_runtime_handle,
-                Some(logger.clone()),
-                Arc::clone(&metrics),
-            ),
-            registry_client,
-            node_id,
-            logger,
-            metrics,
-            time_source,
-        }
     }
 
     /// Returns the `NodeId` of this crypto component.
@@ -283,8 +265,8 @@ fn key_from_registry(
 ///  * Should not have too many collisions within a short time span (e.g., 5 minutes)
 ///  * The generation of the identifier should not block or panic
 ///  * The generation of the identifier should not require synchronization between threads
-fn get_log_id(logger: &ReplicaLogger, module_path: &'static str) -> u64 {
-    if logger.is_enabled_at(slog::Level::Debug, module_path) {
+fn get_log_id(logger: &ReplicaLogger) -> u64 {
+    if logger.is_enabled_at(slog::Level::Debug) {
         ic_types::time::current_time().as_nanos_since_unix_epoch()
     } else {
         0

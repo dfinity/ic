@@ -1,5 +1,5 @@
 use ic_protobuf::state::{queues::v1 as pb_queues, system_metadata::v1 as pb_metadata};
-use ic_test_utilities::state::{arb_stream, arb_subnet_metrics};
+use ic_test_utilities_state::{arb_stream, arb_subnet_metrics};
 use proptest::prelude::*;
 use std::convert::TryInto;
 

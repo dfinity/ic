@@ -21,19 +21,12 @@ pub mod systemd;
 pub fn generate_network_config(
     network_info: &NetworkInfo,
     deployment_name: Option<&str>,
-    dns_nameservers: Option<&str>,
     node_type: NodeType,
     output_directory: &Path,
 ) -> Result<()> {
     if let Some(address) = network_info.ipv6_address {
         eprintln!("Found ipv6 address in config");
-        return generate_systemd_config_files(
-            output_directory,
-            dns_nameservers,
-            network_info,
-            None,
-            &address,
-        );
+        return generate_systemd_config_files(output_directory, network_info, None, &address);
     };
 
     let deployment_name = deployment_name
@@ -52,7 +45,6 @@ pub fn generate_network_config(
     let formatted_mac = FormattedMacAddress::from(&mac);
     generate_systemd_config_files(
         output_directory,
-        dns_nameservers,
         network_info,
         Some(&formatted_mac),
         &ipv6_address,

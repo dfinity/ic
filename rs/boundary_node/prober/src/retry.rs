@@ -50,7 +50,10 @@ impl<C: Create> Create for WithRetry<C> {
             };
             match err {
                 Some(InvalidCborData(..) | CandidError(..) | RequestStatusDoneNoReply(..)) => false,
-                Some(ReplicaError(RejectResponse { reject_code, .. })) => {
+                Some(UncertifiedReject(RejectResponse { reject_code, .. })) => {
+                    *reject_code != RejectCode::CanisterError
+                }
+                Some(CertifiedReject(RejectResponse { reject_code, .. })) => {
                     *reject_code != RejectCode::CanisterError
                 }
                 _ => true,
@@ -77,7 +80,10 @@ impl<T: Install> Install for WithRetry<T> {
             };
             match err {
                 Some(RequestStatusDoneNoReply(..)) => false,
-                Some(ReplicaError(RejectResponse { reject_code, .. })) => {
+                Some(UncertifiedReject(RejectResponse { reject_code, .. })) => {
+                    *reject_code != RejectCode::CanisterError
+                }
+                Some(CertifiedReject(RejectResponse { reject_code, .. })) => {
                     *reject_code != RejectCode::CanisterError
                 }
                 _ => true,
@@ -104,7 +110,10 @@ impl<T: Stop> Stop for WithRetry<T> {
             };
             match err {
                 Some(RequestStatusDoneNoReply(..)) => false,
-                Some(ReplicaError(RejectResponse { reject_code, .. })) => {
+                Some(UncertifiedReject(RejectResponse { reject_code, .. })) => {
+                    *reject_code != RejectCode::CanisterError
+                }
+                Some(CertifiedReject(RejectResponse { reject_code, .. })) => {
                     *reject_code != RejectCode::CanisterError
                 }
                 _ => true,
@@ -131,7 +140,10 @@ impl<T: Delete> Delete for WithRetry<T> {
             };
             match err {
                 Some(RequestStatusDoneNoReply(..)) => false,
-                Some(ReplicaError(RejectResponse { reject_code, .. })) => {
+                Some(UncertifiedReject(RejectResponse { reject_code, .. })) => {
+                    *reject_code != RejectCode::CanisterError
+                }
+                Some(CertifiedReject(RejectResponse { reject_code, .. })) => {
                     *reject_code != RejectCode::CanisterError
                 }
                 _ => true,

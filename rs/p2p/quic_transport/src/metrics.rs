@@ -19,6 +19,7 @@ pub(crate) const ERROR_TYPE_ACCEPT: &str = "accept";
 pub(crate) const ERROR_TYPE_OPEN: &str = "open";
 pub(crate) const ERROR_TYPE_APP: &str = "app";
 pub(crate) const ERROR_TYPE_FINISH: &str = "finish";
+pub(crate) const ERROR_TYPE_STOPPED: &str = "stopped";
 pub(crate) const ERROR_TYPE_READ: &str = "read";
 pub(crate) const ERROR_TYPE_WRITE: &str = "write";
 pub(crate) const STREAM_TYPE_BIDI: &str = "bidi";
@@ -56,8 +57,6 @@ pub struct QuicTransportMetrics {
     quinn_path_congestion_window: IntGaugeVec,
     quinn_path_sent_packets: IntGaugeVec,
     quinn_path_lost_packets: IntGaugeVec,
-    pub quinn_path_sent_bytes: IntCounter,
-    pub quinn_path_received_bytes: IntCounter,
 }
 
 impl QuicTransportMetrics {
@@ -179,27 +178,11 @@ impl QuicTransportMetrics {
                 "The amount of packets lost on this path.",
                 &[PEER_ID_LABEL],
             ),
-            quinn_path_sent_bytes: metrics_registry.int_counter(
-                "quic_transport_quinn_sent_bytes",
-                "The amount of packets lost on this path.",
-            ),
-            quinn_path_received_bytes: metrics_registry.int_counter(
-                "quic_transport_quinn_received_bytes",
-                "The amount of packets lost on this path.",
-            ),
         }
     }
 
-    pub(crate) fn collect_quic_connection_stats(
-        &self,
-        conn: &Connection,
-        peer_id: &NodeId,
-        sent: u64,
-        recv: u64,
-    ) {
-        let stats = conn.stats();
-        let path_stats = stats.path;
-
+    pub(crate) fn collect_quic_connection_stats(&self, conn: &Connection, peer_id: &NodeId) {
+        let path_stats = conn.stats().path;
         let peer_id_label: [&str; 1] = [&peer_id.to_string()];
 
         self.quinn_path_rtt_seconds
@@ -217,7 +200,5 @@ impl QuicTransportMetrics {
         self.quinn_path_lost_packets
             .with_label_values(&peer_id_label)
             .set(path_stats.lost_packets as i64);
-        // self.quinn_path_sent_bytes.inc_by(sent);
-        // self.quinn_path_received_bytes.inc_by(recv);
     }
 }

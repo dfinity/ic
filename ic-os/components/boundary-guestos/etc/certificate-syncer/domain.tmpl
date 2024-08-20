@@ -1,0 +1,77 @@
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+
+    server_name {name};
+
+    ssl_certificate     {ssl_certificate_path};
+    ssl_certificate_key {ssl_certificate_key_path};
+
+    include "includes/error_pages.conf";
+
+    location / {
+        try_files /dev/null @raw;
+    }
+
+    location /_/raw/ {
+        try_files /dev/null @raw;
+    }
+
+    location = /api/v2/status {
+        # Observability
+        include "includes/request_id.conf";
+
+        include "includes/method_get.conf";
+        return 307 $scheme://$primary_application_domain$request_uri;
+    }
+
+    location ~ /api/v2/canister/[0-9a-zA-Z\-]+/query {
+        # Observability
+        include "includes/request_id.conf";
+
+        include "includes/method_post.conf";
+        return 307 $scheme://$primary_application_domain$request_uri;
+    }
+
+    location ~ /api/v2/canister/[0-9a-zA-Z\-]+/call {
+        # Observability
+        include "includes/request_id.conf";
+
+        include "includes/method_post.conf";
+        return 307 $scheme://$primary_application_domain$request_uri;
+    }
+
+    location ~ /api/v2/(canister|subnet)/[0-9a-zA-Z\-]+/read_state {
+        # Observability
+        include "includes/request_id.conf";
+
+        include "includes/method_post.conf";
+        return 307 $scheme://$primary_application_domain$request_uri;
+    }
+
+    location @raw {
+        # Observability
+        include "includes/request_id.conf";
+
+        # CORS
+        set $cors_allow_methods "HEAD, GET, OPTIONS";
+        include "includes/response_headers.conf";
+        include "includes/options.conf";
+
+        # Update the Host header so that icx-proxy is able to process the request
+        proxy_set_header Host "{canister_id}.$primary_application_domain";
+
+        # Cache
+        include "includes/cache.conf";
+
+        proxy_pass http://icx_proxy;
+        include "includes/proxy_headers.conf";
+
+        # Required for clients that have a service worker, which hasn't been uninstalled yet
+        add_header "X-Ic-Gateway" "$primary_api_domain" always;
+
+        proxy_set_header x-icx-require-certification "1";
+
+        add_header "X-Cache-Status" $upstream_cache_status;
+    }
+}

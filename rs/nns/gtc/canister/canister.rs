@@ -11,7 +11,7 @@ use ic_nns_gtc::{
 };
 use ic_nns_gtc_accounts::FORWARD_WHITELIST;
 use prost::Message;
-use std::time::SystemTime;
+use std::{ptr::addr_of_mut, time::SystemTime};
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
@@ -24,7 +24,7 @@ fn gtc() -> &'static Gtc {
 
 fn gtc_mut() -> &'static mut Gtc {
     unsafe {
-        if let Some(gtc) = &mut GTC {
+        if let Some(gtc) = &mut *addr_of_mut!(GTC) {
             gtc
         } else {
             GTC = Some(Gtc::default());
@@ -179,7 +179,6 @@ fn forward_whitelisted_unclaimed_accounts() {
 }
 
 #[candid_method(update, rename = "forward_whitelisted_unclaimed_accounts")]
-#[allow(clippy::let_unit_value)] // clippy false positive
 async fn forward_whitelisted_unclaimed_accounts_(_: ()) -> Result<(), String> {
     gtc_mut().forward_whitelisted_unclaimed_accounts().await
 }

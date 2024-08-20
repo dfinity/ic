@@ -1,24 +1,8 @@
-use crate::{
-    pb::v1::{audit_event::reset_aging::NeuronDissolveState, neuron::DissolveState, AuditEvent},
-    storage::with_audit_events_log,
-};
+use crate::{pb::v1::AuditEvent, storage::with_audit_events_log};
 
-use ic_stable_structures::Storable;
+use ic_stable_structures::{storable::Bound, Storable};
 use prost::Message;
 use std::borrow::Cow;
-
-impl From<DissolveState> for NeuronDissolveState {
-    fn from(dissolve_state: DissolveState) -> Self {
-        match dissolve_state {
-            DissolveState::WhenDissolvedTimestampSeconds(timestamp) => {
-                NeuronDissolveState::WhenDissolvedTimestampSeconds(timestamp)
-            }
-            DissolveState::DissolveDelaySeconds(delay) => {
-                NeuronDissolveState::DissolveDelaySeconds(delay)
-            }
-        }
-    }
-}
 
 impl Storable for AuditEvent {
     fn to_bytes(&self) -> Cow<[u8]> {
@@ -28,6 +12,8 @@ impl Storable for AuditEvent {
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
         Self::decode(&bytes[..]).expect("Cannot decode audit event")
     }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 #[allow(dead_code)]

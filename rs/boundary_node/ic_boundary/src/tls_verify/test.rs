@@ -7,13 +7,12 @@ use std::{
 
 use anyhow::Error;
 
-use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
 use ic_types::{NodeId, PrincipalId};
 use rustls::{Certificate, CertificateError, Error as RustlsError, ServerName};
 
 use crate::{
     snapshot::{Snapshot, Snapshotter},
-    test_utils::create_fake_registry_client,
+    test_utils::{create_fake_registry_client, valid_tls_certificate_and_validation_time},
 };
 
 // CN = s52il-lowsg-eip4y-pt5lv-sbdpb-vg4gg-4iasu-egajp-yluji-znfz3-2qe
@@ -63,8 +62,10 @@ async fn test_verify_tls_certificate() -> Result<(), Error> {
 
     let (reg, _, _) = create_fake_registry_client(1, 1, Some(node_id));
     let reg = Arc::new(reg);
-    let mut snapshotter = Snapshotter::new(Arc::clone(&snapshot), reg, Duration::ZERO);
-    let verifier = TlsVerifier::new(Arc::clone(&snapshot));
+    let (channel_send, _) = tokio::sync::watch::channel(None);
+    let mut snapshotter =
+        Snapshotter::new(Arc::clone(&snapshot), channel_send, reg, Duration::ZERO);
+    let verifier = TlsVerifier::new(Arc::clone(&snapshot), false);
     snapshotter.snapshot()?;
 
     let snapshot = snapshot.load_full().unwrap();

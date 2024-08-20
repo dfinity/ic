@@ -3,11 +3,6 @@ mod secp256k1_conversions;
 mod tests;
 
 use ic_base_types::PrincipalId;
-use ic_crypto_internal_types::sign::eddsa::ed25519::{
-    PublicKey as Ed25519PublicKey, SecretKey as Ed25519SecretKey,
-};
-use ic_crypto_utils_basic_sig::conversions::Ed25519PemParseError;
-use ic_crypto_utils_basic_sig::conversions::Ed25519SecretKeyConversions;
 use ic_types::crypto::DOMAIN_IC_REQUEST;
 use ic_types::messages::MessageId;
 use rand::{CryptoRng, Rng, SeedableRng};
@@ -37,30 +32,31 @@ pub struct Ed25519KeyPair {
 
 impl Ed25519KeyPair {
     pub fn generate<R: Rng + CryptoRng>(rng: &mut R) -> Self {
-        let rng = ChaCha20Rng::from_seed(rng.gen());
-        let signing_key = ed25519_consensus::SigningKey::new(rng);
+        let mut rng = ChaCha20Rng::from_seed(rng.gen());
+        let key = ic_crypto_ed25519::PrivateKey::generate_using_rng(&mut rng);
         Self {
-            secret_key: signing_key.to_bytes(),
-            public_key: signing_key.verification_key().to_bytes(),
+            secret_key: key.serialize_raw(),
+            public_key: key.public_key().serialize_raw(),
         }
     }
 
     /// Parses an Ed25519KeyPair from a PEM string.
-    pub fn from_pem(pem: &str) -> Result<Self, Ed25519PemParseError> {
-        let (secret_key, public_key) = Ed25519SecretKey::from_pem(pem)?;
+    pub fn from_pem(pem: &str) -> Result<Self, ic_crypto_ed25519::PrivateKeyDecodingError> {
+        let key = ic_crypto_ed25519::PrivateKey::deserialize_pkcs8_pem(pem)?;
         Ok(Ed25519KeyPair {
-            secret_key: secret_key.0,
-            public_key: public_key.0,
+            secret_key: key.serialize_raw(),
+            public_key: key.public_key().serialize_raw(),
         })
     }
 
     pub fn to_pem(&self) -> String {
-        Ed25519SecretKey(self.secret_key).to_pem(&Ed25519PublicKey(self.public_key))
+        let key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&self.secret_key);
+        key.serialize_pkcs8_pem(ic_crypto_ed25519::PrivateKeyFormat::Pkcs8v2WithRingBug)
     }
 
     pub fn sign(&self, msg: &[u8]) -> [u8; 64] {
-        let signing_key = ed25519_consensus::SigningKey::from(self.secret_key);
-        signing_key.sign(msg).to_bytes()
+        let key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&self.secret_key);
+        key.sign_message(msg)
     }
 }
 

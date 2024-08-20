@@ -25,7 +25,7 @@ impl ProdLocalCspVault {
             node_secret_key_store: Box::new(|| node_secret_key_store),
             canister_secret_key_store: Box::new(|| canister_secret_key_store),
             public_key_store: Box::new(|| public_key_store),
-            time_source: Arc::new(CurrentSystemTimeSource::new(new_logger!(&logger))),
+            time_source: Arc::new(SysTimeSource::new()),
             metrics,
             logger,
         }
@@ -181,7 +181,7 @@ mod test_utils {
     use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities::FastForwardTimeSource;
+    use ic_test_utilities_time::FastForwardTimeSource;
 
     impl Default
         for LocalCspVaultBuilder<

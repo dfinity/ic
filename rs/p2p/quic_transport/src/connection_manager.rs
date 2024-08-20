@@ -15,8 +15,6 @@
 //!     - The endpoints tls configuration gets updated (periodically) to match
 //!       the subnet topology. -> Only accept connections from peers in topology.
 //!     - When dialing a peer TLS is configured to only accept a specific peer.
-//!     - After the connection is established (with TLS) we do the SEV attestation
-//!       handshake.
 //!     - Since currently the attestation handshake is a noop we also do a small "gruezi"
 //!       handshake to verify that the connection is active from both sides. This adds
 //!       latency during the setup but we are not worried about this since connections are
@@ -31,7 +29,6 @@
 use std::{
     collections::{BTreeSet, HashMap},
     net::SocketAddr,
-    pin::Pin,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -40,43 +37,51 @@ use axum::{middleware::from_fn_with_state, Router};
 use either::Either;
 use futures::StreamExt;
 use ic_async_utils::JoinMap;
-use ic_base_types::{NodeId, RegistryVersion};
+use ic_base_types::NodeId;
 use ic_crypto_tls_interfaces::{
-    MalformedPeerCertificateError, SomeOrAllNodes, TlsConfig, TlsConfigError, TlsStream,
+    MalformedPeerCertificateError, SomeOrAllNodes, TlsConfig, TlsConfigError,
 };
-use ic_crypto_utils_tls::{
-    node_id_from_cert_subject_common_name, tls_pubkey_cert_from_rustls_certs,
-};
-use ic_icos_sev::ValidateAttestedStream;
+use ic_crypto_utils_tls::node_id_from_certificate_der;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use quinn::{
-    AsyncUdpSocket, ConnectError, Connecting, Connection, ConnectionError, Endpoint,
-    EndpointConfig, RecvStream, SendStream, VarInt,
+    crypto::rustls::{QuicClientConfig, QuicServerConfig},
+    AsyncUdpSocket, ConnectError, Connection, ConnectionError, Endpoint, EndpointConfig, Incoming,
+    VarInt,
 };
+use rustls::pki_types::CertificateDer;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    runtime::Handle,
-    select,
-    task::JoinSet,
-};
-use tokio_util::{sync::CancellationToken, task::task_tracker::TaskTracker, time::DelayQueue};
+use tokio::{runtime::Handle, select, task::JoinSet};
+use tokio_util::{sync::CancellationToken, time::DelayQueue};
 
 use crate::{
     connection_handle::ConnectionHandle,
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
     utils::collect_metrics,
-    ConnId, SubnetTopology,
+    ConnId, Shutdown, SubnetTopology,
 };
 use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor};
+
+/// The value of 25MB is chosen from experiments and the BDP product shown below to support
+/// around 2Gb/s.
+/// Bandwidth-Delay Product
+/// 2Gb/s * 100ms ≈ 200M bits = 25MB
+/// To this only on to avoid unnecessary error in dfx on MacOS
+#[cfg(target_os = "linux")]
+const UDP_BUFFER_SIZE: usize = 25_000_000; // 25MB
+
+const RECEIVE_WINDOW: VarInt = VarInt::from_u32(200_000_000);
+const SEND_WINDOW: u64 = 100_000_000;
+const STREAM_RECEIVE_WINDOW: VarInt = VarInt::from_u32(4_000_000);
+const MAX_CONCURRENT_BIDI_STREAMS: VarInt = VarInt::from_u32(1_000);
+const MAX_CONCURRENT_UNI_STREAMS: VarInt = VarInt::from_u32(1_000);
 
 /// Interval of quic heartbeats. They are only sent if the connection is idle for more than 200ms.
 const KEEP_ALIVE_INTERVAL: Duration = Duration::from_millis(200);
 /// Timeout after which quic marks connections as broken. This timeout is used to detect connections
 /// that were not explicitly closed. I.e replica crash
-const IDLE_TIMEOUT: Duration = Duration::from_secs(1000);
+const IDLE_TIMEOUT: Duration = Duration::from_secs(5);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const CONNECT_RETRY_BACKOFF: Duration = Duration::from_secs(3);
 const GRUEZI_HANDSHAKE: &str = "gruezi";
@@ -106,11 +111,9 @@ struct ConnectionManager {
 
     // Authentication
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
-    sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
 
     // Shared state
     watcher: tokio::sync::watch::Receiver<SubnetTopology>,
-    cancellation: CancellationToken,
     peer_map: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
     conn_id_counter: ConnId,
 
@@ -132,7 +135,6 @@ struct ConnectionManager {
 #[derive(Debug)]
 enum ConnectionEstablishError {
     Timeout,
-    SevAttestation(String),
     Gruezi(String),
     TlsClientConfigError {
         peer_id: NodeId,
@@ -163,7 +165,6 @@ impl std::fmt::Display for ConnectionEstablishError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Timeout => write!(f, "Timeout during connection establishment."),
-            Self::SevAttestation(e) => write!(f, "Sev attestation handshake failed. {e}"),
             Self::Gruezi(e) => write!(f, "Gruezi handshake failed. {e}"),
             Self::TlsClientConfigError { peer_id, cause } => {
                 write!(
@@ -189,22 +190,18 @@ impl std::fmt::Display for ConnectionEstablishError {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn start_connection_manager(
     log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
     rt: &Handle,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
-    sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
     node_id: NodeId,
     peer_map: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
     watcher: tokio::sync::watch::Receiver<SubnetTopology>,
-    cancellation: CancellationToken,
-    task_tracker: TaskTracker,
     socket: Either<SocketAddr, impl AsyncUdpSocket>,
     router: Router,
-) {
+) -> Shutdown {
     let topology = watcher.borrow().clone();
 
     let metrics = QuicTransportMetrics::new(metrics_registry);
@@ -225,24 +222,23 @@ pub(crate) fn start_connection_manager(
             SomeOrAllNodes::Some(BTreeSet::new()),
             registry_client.get_latest_version(),
         )
-        .unwrap();
+        .expect("Failed to get rustls server config, so transport can't start.");
 
     let mut transport_config = quinn::TransportConfig::default();
 
-    transport_config.keep_alive_interval(Some(KEEP_ALIVE_INTERVAL));
-    transport_config.max_idle_timeout(Some(IDLE_TIMEOUT.try_into().unwrap()));
-    // defaults:
-    // STREAM_RWN 1_250_000
-    // stream_receive_window: STREAM_RWND.into(),
-    // send_window: (8 * STREAM_RWND).into()
-    transport_config.send_window(1_000_000_000);
-    // Upper bound on receive memory consumption.
-    transport_config.receive_window(VarInt::from_u32(3_000_000_000));
-    transport_config.stream_receive_window(VarInt::from_u32(20_000_000));
-    transport_config.max_concurrent_bidi_streams(VarInt::from_u32(10000));
-    transport_config.max_concurrent_uni_streams(VarInt::from_u32(10000));
+    transport_config
+        .max_idle_timeout(Some(IDLE_TIMEOUT.try_into().unwrap()))
+        .keep_alive_interval(Some(KEEP_ALIVE_INTERVAL))
+        .send_window(SEND_WINDOW)
+        .receive_window(RECEIVE_WINDOW)
+        .stream_receive_window(STREAM_RECEIVE_WINDOW)
+        .max_concurrent_bidi_streams(MAX_CONCURRENT_BIDI_STREAMS)
+        .max_concurrent_uni_streams(MAX_CONCURRENT_UNI_STREAMS);
+
     let transport_config = Arc::new(transport_config);
-    let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(rustls_server_config));
+    let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(
+        QuicServerConfig::try_from(rustls_server_config).unwrap(),
+    ));
     server_config.transport_config(transport_config.clone());
 
     // Start endpoint
@@ -252,18 +248,13 @@ pub(crate) fn start_connection_manager(
                 .expect("Failed to create udp socket");
 
             // Set socket send/recv buffer size. Setting these explicitly makes sure that a
-            // sufficiently large value is used. Increasing these buffers can help with high packetloss.
-            // The value of 25MB isch chosen from experiments and the BDP product shown below to support
-            // around 2Gb/s.
-            // Bandwidth-Delay Product
-            // 2Gb/s * 100ms ~ 200M bits = 25MB
-            // To this only on to avoid unecessary error in dfx on MacOS
+            // sufficiently large value is used. Increasing these buffers can help with high packet loss.
             #[cfg(target_os = "linux")]
-            if let Err(e) = socket2.set_recv_buffer_size(525_000_000) {
+            if let Err(e) = socket2.set_recv_buffer_size(UDP_BUFFER_SIZE) {
                 info!(log, "Failed to set receive udp buffer. {}", e)
             }
             #[cfg(target_os = "linux")]
-            if let Err(e) = socket2.set_send_buffer_size(525_000_000) {
+            if let Err(e) = socket2.set_send_buffer_size(UDP_BUFFER_SIZE) {
                 info!(log, "Failed to set send udp buffer. {}", e)
             }
             info!(
@@ -292,25 +283,22 @@ pub(crate) fn start_connection_manager(
         Either::Right(async_udp_socket) => Endpoint::new_with_abstract_socket(
             endpoint_config,
             Some(server_config),
-            async_udp_socket,
+            Arc::new(async_udp_socket),
             Arc::new(quinn::TokioRuntime),
         )
         .expect("Failed to create endpoint"),
     };
-
     let manager = ConnectionManager {
         log: log.clone(),
         rt: rt.clone(),
         tls_config,
         metrics,
-        sev_handshake,
         node_id,
         topology,
         connect_queue: DelayQueue::new(),
         peer_map,
         conn_id_counter: ConnId::default(),
         watcher,
-        cancellation,
         endpoint,
         transport_config,
         outbound_connecting: JoinMap::new(),
@@ -318,7 +306,10 @@ pub(crate) fn start_connection_manager(
         active_connections: JoinMap::new(),
         router,
     };
-    task_tracker.spawn_on(manager.run(), rt);
+    Shutdown::spawn_on_with_cancellation(
+        |cancellation: CancellationToken| manager.run(cancellation),
+        rt,
+    )
 }
 
 impl ConnectionManager {
@@ -326,10 +317,10 @@ impl ConnectionManager {
         self.node_id < *dst
     }
 
-    pub async fn run(mut self) {
+    pub async fn run(mut self, cancellation: CancellationToken) {
         loop {
             select! {
-                () = self.cancellation.cancelled() => {
+                () = cancellation.cancelled() => {
                     break;
                 },
                 Some(reconnect) = self.connect_queue.next() => {
@@ -340,9 +331,9 @@ impl ConnectionManager {
                 Ok(()) = self.watcher.changed() => {
                     self.handle_topology_change();
                 },
-                connecting = self.endpoint.accept() => {
-                    if let Some(connecting) = connecting {
-                        self.handle_inbound(connecting);
+                incoming = self.endpoint.accept() => {
+                    if let Some(incoming) = incoming {
+                        self.handle_inbound(incoming);
                     } else {
                         error!(self.log, "Quic endpoint closed. Stopping transport.");
                         // Endpoint is closed. This indicates NOT graceful shutdown.
@@ -431,8 +422,9 @@ impl ConnectionManager {
             .server_config(subnet_nodes, self.topology.latest_registry_version())
         {
             Ok(rustls_server_config) => {
+                let quic_server_config = QuicServerConfig::try_from(rustls_server_config).unwrap();
                 let mut server_config =
-                    quinn::ServerConfig::with_crypto(Arc::new(rustls_server_config));
+                    quinn::ServerConfig::with_crypto(Arc::new(quic_server_config));
                 server_config.transport_config(self.transport_config.clone());
                 self.endpoint.set_server_config(Some(server_config));
             }
@@ -507,18 +499,18 @@ impl ConnectionManager {
             .topology
             .get_addr(&peer_id)
             .expect("Just checked this conditions");
-        let handshaker = self.sev_handshake.clone();
         let endpoint = self.endpoint.clone();
-        let client_config = self
+        let rustls_client_config = self
             .tls_config
             .client_config(peer_id, self.topology.latest_registry_version())
-            .map_err(|cause| ConnectionEstablishError::TlsClientConfigError { peer_id, cause });
+            .map_err(|cause| ConnectionEstablishError::TlsClientConfigError { peer_id, cause })
+            .unwrap();
         let transport_config = self.transport_config.clone();
-        let latest_registry_version = self.topology.latest_registry_version();
         let conn_fut = async move {
-            let mut quinn_client_config = quinn::ClientConfig::new(Arc::new(client_config?));
-            quinn_client_config.transport_config(transport_config);
-            let connecting = endpoint.connect_with(quinn_client_config, addr, "irrelevant");
+            let quinn_client_config = QuicClientConfig::try_from(rustls_client_config).unwrap();
+            let mut client_config = quinn::ClientConfig::new(Arc::new(quinn_client_config));
+            client_config.transport_config(transport_config);
+            let connecting = endpoint.connect_with(client_config, addr, "irrelevant");
             let established = connecting
                 .map_err(|cause| ConnectionEstablishError::ConnectError { peer_id, cause })?
                 .await
@@ -528,15 +520,7 @@ impl ConnectionManager {
                 })?;
 
             // Authentication handshakes
-            let connection = Self::attestation_handshake(
-                handshaker,
-                peer_id,
-                latest_registry_version,
-                established,
-                Direction::Outbound,
-            )
-            .await?;
-            let connection = Self::gruezi(connection, Direction::Outbound).await?;
+            let connection = Self::gruezi(established, Direction::Outbound).await?;
 
             Ok::<_, ConnectionEstablishError>(ConnectionWithPeerId {
                 peer_id,
@@ -592,7 +576,7 @@ impl ConnectionManager {
                         .close(VarInt::from_u32(0), b"using newer connection");
                     info!(
                         self.log,
-                        "Replacing old connection to {}  with newer", peer_id
+                        "Replacing old connection to {} with newer", peer_id
                     );
                 } else {
                     self.metrics.peer_map_size.inc();
@@ -629,34 +613,36 @@ impl ConnectionManager {
         };
     }
 
-    fn handle_inbound(&mut self, connecting: Connecting) {
+    fn handle_inbound(&mut self, incoming: Incoming) {
         self.metrics.inbound_connection_total.inc();
-        let handshaker = self.sev_handshake.clone();
         let node_id = self.node_id;
-        let last_registry_version = self.topology.latest_registry_version();
         let conn_fut = async move {
             let established =
-                connecting
+                incoming
                     .await
                     .map_err(|cause| ConnectionEstablishError::ConnectionError {
                         peer_id: None,
                         cause,
                     })?;
 
-            let tls_pub_key = tls_pubkey_cert_from_rustls_certs(
-                &established
-                    .peer_identity()
-                    .ok_or(ConnectionEstablishError::MissingPeerIdentity)?
-                    .downcast::<Vec<tokio_rustls::rustls::Certificate>>()
-                    .unwrap(),
-            )
-            .map_err(|e| {
+            let rustls_certs = established
+                .peer_identity()
+                .ok_or(ConnectionEstablishError::MissingPeerIdentity)?
+                .downcast::<Vec<CertificateDer>>()
+                .unwrap();
+            let rustls_cert =
+                rustls_certs
+                    .first()
+                    .ok_or(ConnectionEstablishError::MalformedPeerIdentity(
+                        MalformedPeerCertificateError {
+                            internal_error: "a single cert must be present".to_string(),
+                        },
+                    ))?;
+            let peer_id = node_id_from_certificate_der(rustls_cert.as_ref()).map_err(|err| {
                 ConnectionEstablishError::MalformedPeerIdentity(MalformedPeerCertificateError {
-                    internal_error: e.to_string(),
+                    internal_error: format!("{:?}", err),
                 })
             })?;
-            let peer_id = node_id_from_cert_subject_common_name(&tls_pub_key)
-                .map_err(ConnectionEstablishError::MalformedPeerIdentity)?;
 
             // Lower ID is dialer. So we reject if this nodes id is higher.
             if peer_id > node_id {
@@ -666,16 +652,7 @@ impl ConnectionManager {
                 });
             }
 
-            // Authentication handshakes
-            let connection = Self::attestation_handshake(
-                handshaker,
-                peer_id,
-                last_registry_version,
-                established,
-                Direction::Inbound,
-            )
-            .await?;
-            let connection = Self::gruezi(connection, Direction::Inbound).await?;
+            let connection = Self::gruezi(established, Direction::Inbound).await?;
 
             Ok::<_, ConnectionEstablishError>(ConnectionWithPeerId {
                 peer_id,
@@ -691,33 +668,6 @@ impl ConnectionManager {
         };
 
         self.inbound_connecting.spawn(timeout_conn_fut);
-    }
-
-    async fn attestation_handshake(
-        sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
-        peer_id: NodeId,
-        registry_version: RegistryVersion,
-        conn: Connection,
-        direction: Direction,
-    ) -> Result<Connection, ConnectionEstablishError> {
-        let read_write = match direction {
-            Direction::Inbound => HandshakeReadWrite::new(
-                conn.open_bi()
-                    .await
-                    .map_err(|e| ConnectionEstablishError::SevAttestation(e.to_string()))?,
-            ),
-            Direction::Outbound => HandshakeReadWrite::new(
-                conn.accept_bi()
-                    .await
-                    .map_err(|e| ConnectionEstablishError::SevAttestation(e.to_string()))?,
-            ),
-        };
-
-        sev_handshake
-            .perform_attestation_validation(Box::new(read_write), peer_id, registry_version)
-            .await
-            .map_err(|e| ConnectionEstablishError::SevAttestation(e.to_string()))?;
-        Ok(conn)
     }
 
     // To authenticate peers we do mutual TLS. Both peers therefore know the identity
@@ -738,6 +688,8 @@ impl ConnectionManager {
                     .await
                     .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
                 send.finish()
+                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
+                send.stopped()
                     .await
                     .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
                 let data = recv
@@ -770,58 +722,12 @@ impl ConnectionManager {
                     .await
                     .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
                 send.finish()
+                    .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
+                send.stopped()
                     .await
                     .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
             }
         };
         Ok(conn)
-    }
-}
-
-struct HandshakeReadWrite {
-    recv: RecvStream,
-    send: SendStream,
-}
-
-impl HandshakeReadWrite {
-    pub fn new(read_write: (SendStream, RecvStream)) -> Self {
-        Self {
-            recv: read_write.1,
-            send: read_write.0,
-        }
-    }
-}
-
-impl TlsStream for HandshakeReadWrite {}
-
-impl AsyncRead for HandshakeReadWrite {
-    fn poll_read(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        AsyncRead::poll_read(Pin::new(&mut self.recv), cx, buf)
-    }
-}
-
-impl AsyncWrite for HandshakeReadWrite {
-    fn poll_write(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        AsyncWrite::poll_write(Pin::new(&mut self.send), cx, buf)
-    }
-    fn poll_flush(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        AsyncWrite::poll_flush(Pin::new(&mut self.send), cx)
-    }
-    fn poll_shutdown(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        AsyncWrite::poll_shutdown(Pin::new(&mut self.send), cx)
     }
 }

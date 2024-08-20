@@ -4,11 +4,11 @@ use crate::fixtures::{
 };
 use assert_matches::assert_matches;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
-use ic_nervous_system_proto::pb::v1::Percentage;
+use ic_nervous_system_proto::pb::v1::{Percentage, Principals};
 use ic_sns_governance::{
     governance::MATURITY_DISBURSEMENT_DELAY_SECONDS,
     neuron::NeuronState,
@@ -18,7 +18,10 @@ use ic_sns_governance::{
             SetDappControllersResponse,
         },
         v1::{
-            claim_swap_neurons_request::NeuronParameters,
+            claim_swap_neurons_request::{
+                neuron_recipe::{self, Participant},
+                NeuronRecipe, NeuronRecipes,
+            },
             claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
             governance_error::ErrorType,
             manage_neuron::{
@@ -30,20 +33,17 @@ use ic_sns_governance::{
                 Command as CommandResponse, DisburseMaturityResponse, MergeMaturityResponse,
                 RegisterVoteResponse, StakeMaturityResponse,
             },
-            neuron,
-            neuron::{DissolveState, Followees},
+            neuron::{self, DissolveState, Followees},
             proposal::Action,
-            transfer_sns_treasury_funds::TransferFrom,
             Account as AccountProto, AddMaturityRequest, Ballot, ClaimSwapNeuronsError,
             ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
-            DeregisterDappCanisters, Empty, GovernanceError, ManageNeuronResponse, MintSnsTokens,
+            DeregisterDappCanisters, Empty, GovernanceError, ManageNeuronResponse,
             MintTokensRequest, MintTokensResponse, Motion, NervousSystemParameters, Neuron,
-            NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal,
-            ProposalData, ProposalId, RegisterDappCanisters, TransferSnsTreasuryFunds, Vote,
-            WaitForQuietState,
+            NeuronId, NeuronIds, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
+            Proposal, ProposalData, ProposalId, RegisterDappCanisters, Vote, WaitForQuietState,
         },
     },
-    types::{native_action_ids, ONE_DAY_SECONDS, ONE_MONTH_SECONDS},
+    types::native_action_ids,
 };
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
@@ -330,6 +330,7 @@ fn test_disburse_maturity_succeeds_to_other() {
     let mut env =
         setup_test_environment_with_one_neuron_with_maturity(earned_maturity_e8s, vec![receiver]);
     assert_ne!(env.controller, receiver);
+
     let controller_account = icrc_ledger_types::icrc1::account::Account {
         owner: env.controller.0,
         subaccount: None,
@@ -1438,104 +1439,6 @@ fn test_list_nervous_system_function_contain_all_proposal_actions() {
 }
 
 #[test]
-fn test_make_critical_proposal() {
-    // Step 1: Prepare the world: Construct governance, and populate it with one neuron.
-    let (mut canister_fixture, user_principal, neuron_id) =
-        GovernanceCanisterFixtureBuilder::new().create_with_test_neuron();
-
-    // Step 2a: Call the code under test: make a "critical" proposal.
-    let proposal = TransferSnsTreasuryFunds {
-        from_treasury: TransferFrom::IcpTreasury as i32,
-        amount_e8s: 42 * E8,
-        memo: None,
-        to_principal: Some(PrincipalId::new_user_test_id(42)),
-        to_subaccount: None,
-    };
-    let (_proposal_id, proposal_data) = canister_fixture
-        .make_default_proposal(&neuron_id, proposal, user_principal)
-        .unwrap();
-
-    // Step 3a: Inspect results. Critical proposals differ in their voting power thresholds, and
-    // duration parameters.
-
-    // Selects the fields that need to be inspected.
-    fn select_interesting_fields(proposal_data: &ProposalData) -> ProposalData {
-        let ProposalData {
-            minimum_yes_proportion_of_total,
-            minimum_yes_proportion_of_exercised,
-            initial_voting_period_seconds,
-            wait_for_quiet_deadline_increase_seconds,
-            ..
-        } = proposal_data.clone();
-
-        ProposalData {
-            minimum_yes_proportion_of_total,
-            minimum_yes_proportion_of_exercised,
-            initial_voting_period_seconds,
-            wait_for_quiet_deadline_increase_seconds,
-            ..Default::default()
-        }
-    }
-
-    assert_eq!(
-        select_interesting_fields(&proposal_data),
-        ProposalData {
-            minimum_yes_proportion_of_total: Some(
-                // 20%
-                Percentage {
-                    basis_points: Some(2000)
-                },
-            ),
-            minimum_yes_proportion_of_exercised: Some(
-                // 67%
-                Percentage {
-                    basis_points: Some(6700)
-                },
-            ),
-            initial_voting_period_seconds: 5 * SECONDS_PER_DAY,
-            wait_for_quiet_deadline_increase_seconds: 5 * SECONDS_PER_DAY / 2, // 2.5 days
-            ..Default::default()
-        },
-        "{:#?}",
-        proposal_data,
-    );
-
-    // Step 2b: Call the code under test: make a normal (non-critical) proposal.
-    let proposal = Motion {
-        motion_text: "Nothing to see here.".to_string(),
-    };
-    let (_proposal_id, proposal_data) = canister_fixture
-        .make_default_proposal(&neuron_id, proposal, user_principal)
-        .unwrap();
-
-    // Step 3b: Inspect results. Look at the same fields as in 3b, but this time, the values are for
-    // normal proposals.
-
-    assert_eq!(
-        select_interesting_fields(&proposal_data),
-        ProposalData {
-            minimum_yes_proportion_of_total: Some(
-                // 3%
-                Percentage {
-                    basis_points: Some(300)
-                },
-            ),
-            minimum_yes_proportion_of_exercised: Some(
-                // 50%
-                Percentage {
-                    basis_points: Some(5000)
-                },
-            ),
-            initial_voting_period_seconds: 4 * SECONDS_PER_DAY,
-            wait_for_quiet_deadline_increase_seconds: SECONDS_PER_DAY,
-            ..Default::default()
-        },
-        "{:#?}",
-        proposal_data,
-    );
-}
-
-#[test]
 fn test_validate_and_execute_register_dapp_proposal() {
     // Set up the test environment with a single neuron
     let (mut canister_fixture, user_principal, neuron_id) =
@@ -1810,8 +1713,10 @@ fn test_claim_swap_neurons_rejects_unauthorized_access() {
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // Build the request, but leave it empty as it is not relevant to the test
+    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
         neuron_parameters: vec![],
+        neuron_recipes: None,
     };
 
     // Generate a principal id that should not be authorized to call claim_swap_neurons
@@ -1858,11 +1763,13 @@ fn test_claim_swap_neurons_reports_invalid_neuron_parameters() {
     let test_neuron_id = NeuronId::new_test_neuron_id(1);
 
     // Create a request with an invalid NeuronParameter
+    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![NeuronParameters {
+        neuron_parameters: vec![],
+        neuron_recipes: Some(NeuronRecipes::from(vec![NeuronRecipe {
             neuron_id: Some(test_neuron_id.clone()),
             ..Default::default() // The rest of the fields are unset and will fail validation
-        }],
+        }])),
     };
 
     // Call the method
@@ -1902,14 +1809,17 @@ fn test_claim_swap_neurons_reports_already_existing_neurons() {
 
     // Create a request with a neuron id that should collide with the neuron already inserted into
     // Governance
+    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![NeuronParameters {
+        neuron_parameters: vec![],
+        neuron_recipes: Some(NeuronRecipes::from(vec![NeuronRecipe {
             neuron_id: Some(neuron_id.clone()),
             controller: Some(user_principal),
+            participant: Some(Participant::Direct(neuron_recipe::Direct {})),
             stake_e8s: Some(E8),
             dissolve_delay_seconds: Some(0),
-            ..Default::default() // The rest of the parameters are not required for this test
-        }],
+            followees: Some(NeuronIds::from(vec![])),
+        }])),
     };
 
     let authorized_sale_principal = canister_fixture.get_sale_canister_id();
@@ -1949,23 +1859,27 @@ fn test_claim_swap_neurons_reports_failure_if_neuron_cannot_be_added() {
     let test_neuron_id_failure = NeuronId::new_test_neuron_id(2);
 
     // Create a request with a NeuronParameter should succeed
+    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![
-            NeuronParameters {
+        neuron_parameters: vec![],
+        neuron_recipes: Some(NeuronRecipes::from(vec![
+            NeuronRecipe {
                 neuron_id: Some(test_neuron_id_success.clone()),
                 controller: Some(PrincipalId::new_user_test_id(1000)),
+                participant: Some(Participant::Direct(neuron_recipe::Direct {})),
                 stake_e8s: Some(E8),
                 dissolve_delay_seconds: Some(0),
-                ..Default::default() // The rest of the parameters are not required for this test
+                followees: Some(NeuronIds::from(vec![])),
             },
-            NeuronParameters {
+            NeuronRecipe {
                 neuron_id: Some(test_neuron_id_failure.clone()),
                 controller: Some(PrincipalId::new_user_test_id(1000)),
+                participant: Some(Participant::Direct(neuron_recipe::Direct {})),
                 stake_e8s: Some(E8),
                 dissolve_delay_seconds: Some(0),
-                ..Default::default() // The rest of the parameters are not required for this test
+                followees: Some(NeuronIds::from(vec![])),
             },
-        ],
+        ])),
     };
 
     // Call the method
@@ -1999,31 +1913,37 @@ fn test_claim_swap_neurons_succeeds() {
     // Set up the test environment with default sale canister id.
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
-    let direct_participant_neuron_params = NeuronParameters {
+    let direct_participant_neuron_recipe = NeuronRecipe {
         neuron_id: Some(NeuronId::new_test_neuron_id(1)),
         controller: Some(PrincipalId::new_user_test_id(1000)),
-        hotkey: None,
+        participant: Some(Participant::Direct(neuron_recipe::Direct {})),
         stake_e8s: Some(E8),
         dissolve_delay_seconds: Some(0),
-        source_nns_neuron_id: None,
-        followees: vec![NeuronId::new_test_neuron_id(10)],
+        followees: Some(NeuronIds::from(vec![NeuronId::new_test_neuron_id(10)])),
     };
 
-    let cf_participant_neuron_params = NeuronParameters {
+    let nf_participant_nns_neuron_id = 2;
+    let nf_participant_nns_neuron_controller = PrincipalId::new_user_test_id(1002);
+    let nf_participant_neuron_recipe = NeuronRecipe {
         neuron_id: Some(NeuronId::new_test_neuron_id(2)),
         controller: Some(PrincipalId::new_user_test_id(1001)),
-        hotkey: Some(PrincipalId::new_user_test_id(1002)),
+        participant: Some(Participant::NeuronsFund(neuron_recipe::NeuronsFund {
+            nns_neuron_controller: Some(nf_participant_nns_neuron_controller),
+            nns_neuron_id: Some(nf_participant_nns_neuron_id),
+            nns_neuron_hotkeys: Some(Principals::from(vec![PrincipalId::new_user_test_id(1003)])),
+        })),
         stake_e8s: Some(2 * E8),
         dissolve_delay_seconds: Some(ONE_MONTH_SECONDS),
-        source_nns_neuron_id: Some(2),
-        followees: vec![NeuronId::new_test_neuron_id(20)],
+        followees: Some(NeuronIds::from(vec![NeuronId::new_test_neuron_id(20)])),
     };
 
+    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![
-            direct_participant_neuron_params.clone(),
-            cf_participant_neuron_params.clone(),
-        ],
+        neuron_parameters: vec![],
+        neuron_recipes: Some(NeuronRecipes::from(vec![
+            direct_participant_neuron_recipe.clone(),
+            nf_participant_neuron_recipe.clone(),
+        ])),
     };
 
     // Call the method
@@ -2044,7 +1964,7 @@ fn test_claim_swap_neurons_succeeds() {
     // Assert that each NeuronParameter has a response and that it has the correct status
     let direct_participant_swap_neuron = swap_neurons
         .iter()
-        .find(|s| s.id == direct_participant_neuron_params.neuron_id)
+        .find(|s| s.id == direct_participant_neuron_recipe.neuron_id)
         .unwrap();
     assert_eq!(
         direct_participant_swap_neuron.status,
@@ -2053,7 +1973,7 @@ fn test_claim_swap_neurons_succeeds() {
 
     let cf_participant_swap_neuron = swap_neurons
         .iter()
-        .find(|s| s.id == cf_participant_neuron_params.neuron_id)
+        .find(|s| s.id == nf_participant_neuron_recipe.neuron_id)
         .unwrap();
     assert_eq!(
         cf_participant_swap_neuron.status,
@@ -2062,19 +1982,19 @@ fn test_claim_swap_neurons_succeeds() {
 
     // Asserts on Direct Participant
     let direct_participant_neuron =
-        canister_fixture.get_neuron(direct_participant_neuron_params.neuron_id.as_ref().unwrap());
+        canister_fixture.get_neuron(direct_participant_neuron_recipe.neuron_id.as_ref().unwrap());
     assert_eq!(
         direct_participant_neuron.id,
-        direct_participant_neuron_params.neuron_id
+        direct_participant_neuron_recipe.neuron_id
     );
     assert_eq!(
         direct_participant_neuron.cached_neuron_stake_e8s,
-        direct_participant_neuron_params.stake_e8s()
+        direct_participant_neuron_recipe.stake_e8s()
     );
     assert_eq!(
         direct_participant_neuron.dissolve_state,
         Some(DissolveState::DissolveDelaySeconds(
-            direct_participant_neuron_params.dissolve_delay_seconds()
+            direct_participant_neuron_recipe.dissolve_delay_seconds()
         ))
     );
     assert_eq!(direct_participant_neuron.source_nns_neuron_id, None);
@@ -2083,37 +2003,40 @@ fn test_claim_swap_neurons_succeeds() {
     assert_eq!(direct_participant_neuron.auto_stake_maturity, None);
     for followees in direct_participant_neuron.followees.values() {
         assert_eq!(
-            followees.followees,
-            direct_participant_neuron_params.followees
+            Some(NeuronIds::from(followees.followees.clone())),
+            direct_participant_neuron_recipe.followees
         );
     }
 
     // Asserts on CF Participant
     let cf_participant_neuron =
-        canister_fixture.get_neuron(cf_participant_neuron_params.neuron_id.as_ref().unwrap());
+        canister_fixture.get_neuron(nf_participant_neuron_recipe.neuron_id.as_ref().unwrap());
     assert_eq!(
         cf_participant_neuron.id,
-        cf_participant_neuron_params.neuron_id
+        nf_participant_neuron_recipe.neuron_id
     );
     assert_eq!(
         cf_participant_neuron.cached_neuron_stake_e8s,
-        cf_participant_neuron_params.stake_e8s()
+        nf_participant_neuron_recipe.stake_e8s()
     );
     assert_eq!(
         cf_participant_neuron.dissolve_state,
         Some(DissolveState::DissolveDelaySeconds(
-            cf_participant_neuron_params.dissolve_delay_seconds()
+            nf_participant_neuron_recipe.dissolve_delay_seconds()
         ))
     );
     assert_eq!(
         cf_participant_neuron.source_nns_neuron_id,
-        cf_participant_neuron_params.source_nns_neuron_id
+        Some(nf_participant_nns_neuron_id)
     );
     assert_eq!(cf_participant_neuron.maturity_e8s_equivalent, 0);
     assert_eq!(cf_participant_neuron.neuron_fees_e8s, 0);
     assert_eq!(cf_participant_neuron.auto_stake_maturity, Some(true));
     for followees in cf_participant_neuron.followees.values() {
-        assert_eq!(followees.followees, cf_participant_neuron_params.followees);
+        assert_eq!(
+            Some(NeuronIds::from(followees.followees.clone())),
+            nf_participant_neuron_recipe.followees
+        );
     }
 }
 
@@ -2753,7 +2676,7 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
     let neuron = canister_fixture.get_neuron(&neuron_id);
     assert_eq!(neuron.maturity_e8s_equivalent, 0);
 
-    canister_fixture.advance_time_by(7 * SECONDS_PER_DAY + 1);
+    canister_fixture.advance_time_by(7 * ONE_DAY_SECONDS + 1);
     canister_fixture.heartbeat();
 
     // Assert that the Neuron owner's account balance has increased the expected amount
@@ -2860,7 +2783,7 @@ async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
         .unwrap() = time_of_disbursement_maturity_modulation_basis_points;
 
     // Advancing time and triggering a heartbeat should force a query of the new modulation
-    canister_fixture.advance_time_by(2 * SECONDS_PER_DAY);
+    canister_fixture.advance_time_by(2 * ONE_DAY_SECONDS);
     canister_fixture.heartbeat();
     let current_basis_points = canister_fixture
         .get_maturity_modulation()
@@ -2880,7 +2803,7 @@ async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
     assert_eq!(account_balance_before_disbursal, 0);
 
     // Advancing time and triggering a heartbeat should trigger the final disbursal
-    canister_fixture.advance_time_by(5 * SECONDS_PER_DAY + 1);
+    canister_fixture.advance_time_by(5 * ONE_DAY_SECONDS + 1);
     canister_fixture.heartbeat();
 
     // Assert that the Neuron owner's account balance has increased the expected amount
@@ -3073,111 +2996,6 @@ fn test_deregister_dapp_has_higher_voting_thresholds() {
     let proposal = DeregisterDappCanisters {
         canister_ids: vec![user_principal],
         new_controllers: vec![user_principal],
-    };
-
-    // Create the proposal with neuron_id so it doesn't instantly pass
-    let (_, proposal_data) = canister_fixture
-        .make_default_proposal(&neuron_id, proposal, user_principal)
-        .unwrap();
-
-    assert_eq!(
-        proposal_data.decided_timestamp_seconds, 0,
-        "proposal should not have been decided yet. ballots: {:?}",
-        proposal_data.ballots
-    );
-    assert!(
-        proposal_data.minimum_yes_proportion_of_exercised.unwrap()
-            > NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER
-    );
-    assert_eq!(
-        proposal_data.minimum_yes_proportion_of_exercised.unwrap(),
-        Percentage::from_basis_points(6700)
-    );
-    assert!(
-        proposal_data.minimum_yes_proportion_of_total.unwrap()
-            > NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER
-    );
-    assert_eq!(
-        proposal_data.minimum_yes_proportion_of_total.unwrap(),
-        Percentage::from_basis_points(2000)
-    );
-}
-
-#[test]
-fn test_transfer_treasury_funds_has_higher_voting_thresholds() {
-    let user_principal = PrincipalId::new_user_test_id(1001);
-    let neuron_id_2 = neuron_id(user_principal, /*memo*/ 42);
-
-    let (mut canister_fixture, user_principal, neuron_id) = GovernanceCanisterFixtureBuilder::new()
-        .add_neuron(
-            NeuronBuilder::new(
-                neuron_id_2.clone(),
-                E8 * 1000,
-                NeuronPermission::new(&user_principal, vec![]),
-            )
-            .set_dissolve_delay(15778801),
-        )
-        // Create with a test neuron so that the proposal doesn't instantly pass
-        .create_with_test_neuron();
-
-    let proposal = TransferSnsTreasuryFunds {
-        from_treasury: TransferFrom::SnsTokenTreasury as i32,
-        amount_e8s: 10_000,
-        memo: None,
-        to_principal: Some(user_principal),
-        to_subaccount: None,
-    };
-
-    // Create the proposal with neuron_id so it doesn't instantly pass
-    let (_, proposal_data) = canister_fixture
-        .make_default_proposal(&neuron_id, proposal, user_principal)
-        .unwrap();
-
-    assert_eq!(
-        proposal_data.decided_timestamp_seconds, 0,
-        "proposal should not have been decided yet. ballots: {:?}",
-        proposal_data.ballots
-    );
-    assert!(
-        proposal_data.minimum_yes_proportion_of_exercised.unwrap()
-            > NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_EXERCISED_VOTING_POWER
-    );
-    assert_eq!(
-        proposal_data.minimum_yes_proportion_of_exercised.unwrap(),
-        Percentage::from_basis_points(6700)
-    );
-    assert!(
-        proposal_data.minimum_yes_proportion_of_total.unwrap()
-            > NervousSystemParameters::DEFAULT_MINIMUM_YES_PROPORTION_OF_TOTAL_VOTING_POWER
-    );
-    assert_eq!(
-        proposal_data.minimum_yes_proportion_of_total.unwrap(),
-        Percentage::from_basis_points(2000)
-    );
-}
-
-#[test]
-fn test_mint_sns_tokens_has_higher_voting_thresholds() {
-    let user_principal = PrincipalId::new_user_test_id(1000);
-    let neuron_id_2 = neuron_id(user_principal, /*memo*/ 1);
-
-    let (mut canister_fixture, user_principal, neuron_id) = GovernanceCanisterFixtureBuilder::new()
-        .add_neuron(
-            NeuronBuilder::new(
-                neuron_id_2.clone(),
-                E8 * 1000,
-                NeuronPermission::all(&user_principal),
-            )
-            .set_dissolve_delay(15778801),
-        )
-        // Create with a test neuron so that the proposal doesn't instantly pass
-        .create_with_test_neuron();
-
-    let proposal = MintSnsTokens {
-        amount_e8s: Some(10_000),
-        memo: None,
-        to_principal: Some(user_principal),
-        to_subaccount: None,
     };
 
     // Create the proposal with neuron_id so it doesn't instantly pass

@@ -1,7 +1,6 @@
 //! Various helper methods enabling execution and piping of system commands.
 use crate::error::{RecoveryError, RecoveryResult};
-use std::process::Command;
-use std::process::Stdio;
+use std::process::{Command, Stdio};
 
 /// Execute ALL given commands in a blocking manner by creating pipes between
 /// them. Execution will fail if ANY [Command] fails. Optionally return the

@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use super::{system_api, StoreData, INSTRUCTIONS_COUNTER_GLOBAL_NAME};
 use crate::{wasm_utils::validate_and_instrument_for_testing, WasmtimeEmbedder};
+use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::ResourceSaturation;
@@ -15,16 +16,16 @@ use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
     ExecutionParameters, InstructionLimits, SystemApiImpl,
 };
-use ic_test_utilities::{
-    cycles_account_manager::CyclesAccountManagerBuilder, mock_time, types::ids::canister_test_id,
-};
+use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
+use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
-    messages::RequestMetadata, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
+    messages::RequestMetadata, time::UNIX_EPOCH, ComputeAllocation, Cycles, MemoryAllocation,
+    NumBytes, NumInstructions,
 };
 use ic_wasm_types::BinaryEncodedWasm;
 
 use lazy_static::lazy_static;
-use wasmtime::{Engine, Module, Store, Val};
+use wasmtime::{Engine, Module, Store, StoreLimits, Val};
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 
@@ -44,21 +45,29 @@ fn test_wasmtime_system_api() {
     ))
     .expect("Failed to initialize Wasmtime engine");
     let canister_id = canister_test_id(53);
-    let system_state =
-        SystemState::new_for_start(canister_id, Arc::new(TestPageAllocatorFileDescriptorImpl));
+    let system_state = SystemState::new_running(
+        canister_id,
+        canister_id.get(),
+        Cycles::zero(),
+        NumSeconds::from(0),
+        Arc::new(TestPageAllocatorFileDescriptorImpl),
+    );
+    let api_type = ApiType::start(UNIX_EPOCH);
     let sandbox_safe_system_state = SandboxSafeSystemState::new(
         &system_state,
         CyclesAccountManagerBuilder::new().build(),
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
+        api_type.caller(),
+        api_type.call_context_id(),
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
     let canister_current_message_memory_usage = NumBytes::from(0);
     let system_api = SystemApiImpl::new(
-        ApiType::start(mock_time()),
+        api_type,
         sandbox_safe_system_state,
         canister_current_memory_usage,
         canister_current_message_memory_usage,
@@ -69,6 +78,7 @@ fn test_wasmtime_system_api() {
                 MAX_NUM_INSTRUCTIONS,
             ),
             canister_memory_limit,
+            wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
@@ -81,7 +91,7 @@ fn test_wasmtime_system_api() {
             .wasm_native_stable_memory,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
-        Rc::new(DefaultOutOfInstructionsHandler {}),
+        Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     );
     let mut store = Store::new(
@@ -90,7 +100,8 @@ fn test_wasmtime_system_api() {
             system_api: Some(system_api),
             num_instructions_global: None,
             log: no_op_logger(),
-            num_stable_dirty_pages_from_non_native_writes: ic_types::NumPages::from(0),
+            num_stable_dirty_pages_from_non_native_writes: ic_types::NumOsPages::from(0),
+            limits: StoreLimits::default(),
         },
     );
 
@@ -120,12 +131,12 @@ fn test_wasmtime_system_api() {
 
     let mut linker: wasmtime::Linker<StoreData> = wasmtime::Linker::new(&engine);
 
-    system_api::syscalls(
+    system_api::syscalls::<u32>(
         &mut linker,
         config.feature_flags,
         config.stable_memory_dirty_page_limit,
         config.stable_memory_accessed_page_limit,
-        config.metering_type,
+        crate::wasmtime_embedder::WasmMemoryType::Wasm32,
     );
     let instance = linker
         .instantiate(&mut store, &module)
@@ -161,10 +172,10 @@ fn test_initial_wasmtime_config() {
             "tail calls support is not enabled",
         ),
         (
-            "simd",
+            "relaxed_simd",
             "https://github.com/WebAssembly/relaxed-simd/",
-            "(module (func $f (drop (v128.const i64x2 0 0))))",
-            "SIMD support is not enabled",
+            "(module (func $f (param v128) (drop (f64x2.relaxed_madd (local.get 0) (local.get 0) (local.get 0)))))",
+            "relaxed SIMD support is not enabled",
         ),
         (
             "threads",
@@ -206,10 +217,9 @@ fn test_initial_wasmtime_config() {
         // Memory control
         // GC
     ] {
-        let wasm_binary = BinaryEncodedWasm::new(
-            wat::parse_str(wat)
-                .unwrap_or_else(|_| panic!("Error parsing proposal `{proposal}` code snippet")),
-        );
+        let wasm_binary = BinaryEncodedWasm::new(wat::parse_str(wat).unwrap_or_else(|err| {
+            panic!("Error parsing proposal `{proposal}` code snippet: {err}")
+        }));
         let err = validate_and_instrument_for_testing(
             &WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger()),
             &wasm_binary,

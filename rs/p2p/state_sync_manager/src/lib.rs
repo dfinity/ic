@@ -21,25 +21,20 @@ use std::{
 };
 
 use axum::{routing::any, Router};
-use ic_interfaces::p2p::state_sync::StateSyncClient;
+use futures::future::join_all;
+use ic_base_types::NodeId;
+use ic_interfaces::p2p::state_sync::{StateSyncArtifactId, StateSyncClient};
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_quic_transport::Transport;
-use ic_types::{artifact::StateSyncArtifactId, NodeId};
+use ic_quic_transport::{Shutdown, Transport};
 use metrics::{StateSyncManagerHandlerMetrics, StateSyncManagerMetrics};
-use ongoing::OngoingStateSyncHandle;
+use ongoing::{start_ongoing_state_sync, OngoingStateSyncHandle};
 use routes::{
     build_advert_handler_request, state_sync_advert_handler, state_sync_chunk_handler,
     StateSyncAdvertHandler, StateSyncChunkHandler, STATE_SYNC_ADVERT_PATH, STATE_SYNC_CHUNK_PATH,
 };
-use tokio::{
-    runtime::Handle,
-    select,
-    task::{JoinHandle, JoinSet},
-};
+use tokio::{runtime::Handle, select, task::JoinSet, time::MissedTickBehavior};
 use tokio_util::sync::CancellationToken;
-
-use crate::ongoing::start_ongoing_state_sync;
 
 mod metrics;
 mod ongoing;
@@ -89,20 +84,21 @@ pub fn start_state_sync_manager<T: Send + 'static>(
     transport: Arc<dyn Transport>,
     state_sync: Arc<dyn StateSyncClient<Message = T>>,
     advert_receiver: tokio::sync::mpsc::Receiver<(StateSyncArtifactId, NodeId)>,
-) -> JoinHandle<()> {
-    let cancellation = CancellationToken::new();
+) -> Shutdown {
     let state_sync_manager_metrics = StateSyncManagerMetrics::new(metrics);
     let manager = StateSyncManager {
         log: log.clone(),
         rt: rt.clone(),
         metrics: state_sync_manager_metrics,
         transport,
-        cancellation,
         state_sync,
         advert_receiver,
         ongoing_state_sync: None,
     };
-    rt.spawn(manager.run())
+    Shutdown::spawn_on_with_cancellation(
+        |cancellation: CancellationToken| manager.run(cancellation),
+        rt,
+    )
 }
 
 struct StateSyncManager<T> {
@@ -110,19 +106,19 @@ struct StateSyncManager<T> {
     rt: Handle,
     metrics: StateSyncManagerMetrics,
     transport: Arc<dyn Transport>,
-    cancellation: CancellationToken,
     state_sync: Arc<dyn StateSyncClient<Message = T>>,
     advert_receiver: tokio::sync::mpsc::Receiver<(StateSyncArtifactId, NodeId)>,
     ongoing_state_sync: Option<OngoingStateSyncHandle>,
 }
 
 impl<T: 'static + Send> StateSyncManager<T> {
-    async fn run(mut self) {
+    async fn run(mut self, cancellation: CancellationToken) {
         let mut interval = tokio::time::interval(ADVERT_BROADCAST_INTERVAL);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
         let mut advertise_task = JoinSet::new();
         loop {
             select! {
-                () = self.cancellation.cancelled() => {
+                () = cancellation.cancelled() => {
                     break;
                 }
                 // Make sure we only have one active advertise task.
@@ -133,6 +129,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
                             self.state_sync.clone(),
                             self.transport.clone(),
                             self.metrics.clone(),
+                            cancellation.clone(),
                         ),
                         &self.rt
                     );
@@ -143,7 +140,10 @@ impl<T: 'static + Send> StateSyncManager<T> {
                 Some(_) = advertise_task.join_next() => {}
             }
         }
-        advertise_task.shutdown().await;
+        while advertise_task.join_next().await.is_some() {}
+        if let Some(ongoing_state_sync) = self.ongoing_state_sync.take() {
+            ongoing_state_sync.shutdown.shutdown().await;
+        }
     }
 
     async fn handle_advert(&mut self, artifact_id: StateSyncArtifactId, peer_id: NodeId) {
@@ -156,36 +156,35 @@ impl<T: 'static + Send> StateSyncManager<T> {
                 // to drop adverts since peers will readvertise anyway.
                 let _ = ongoing.sender.try_send(peer_id);
             }
-            if ongoing.jh.is_finished() {
+            if ongoing.shutdown.completed() {
                 info!(self.log, "Cleaning up state sync {}", artifact_id.height);
                 self.ongoing_state_sync = None;
+            } else {
+                if self.state_sync.cancel_if_running(&ongoing.artifact_id) {
+                    ongoing.shutdown.cancel();
+                }
+                return;
             }
         }
-
-        // `start_state_sync` should not be called if we have ongoing state sync!
-        if self.ongoing_state_sync.is_some() {
-            return;
-        }
-
-        if let Some(chunkable) = self.state_sync.start_state_sync(&artifact_id) {
+        // `maybe_start_state_sync` should not be called if we have ongoing state sync!
+        debug_assert!(self.ongoing_state_sync.is_none());
+        if let Some(chunkable) = self.state_sync.maybe_start_state_sync(&artifact_id) {
             info!(
                 self.log,
                 "Starting state sync for height {}", artifact_id.height
             );
             self.metrics.state_syncs_total.inc();
 
-            // This will spawn a task that downloads the chunk according to the tracker.
-            // If it is done/timeout it will finish and drop the tracker. Until the state is dropped
-            // the priority function guarantees to never return FETCH again.
+            // This spawns an event loop that downloads chunks for the specified Id.
+            // When the state sync is done or cancelled it will drop the Chunkable object.
+            // Until the Chunkable object is dropped 'maybe_start_state_sync' will always return None.
             let ongoing = start_ongoing_state_sync(
                 self.log.clone(),
                 &self.rt,
                 self.metrics.ongoing_state_sync_metrics.clone(),
                 Arc::new(Mutex::new(chunkable)),
                 artifact_id.clone(),
-                self.state_sync.clone(),
                 self.transport.clone(),
-                self.cancellation.child_token(),
             );
             // Add peer that initiated this state sync to ongoing state sync.
             ongoing
@@ -197,15 +196,22 @@ impl<T: 'static + Send> StateSyncManager<T> {
         }
     }
 
+    // The future should be cancelled and awaited instead of aborted in order to guarantee a graceful shutdown.
     async fn send_state_adverts(
         rt: Handle,
         state_sync: Arc<dyn StateSyncClient<Message = T>>,
         transport: Arc<dyn Transport>,
         metrics: StateSyncManagerMetrics,
+        cancellation: CancellationToken,
     ) {
-        let available_states = tokio::task::spawn_blocking(move || state_sync.available_states())
+        let available_states = match rt
+            .spawn_blocking(move || state_sync.available_states())
             .await
-            .expect("Will not be cancelled");
+        {
+            Ok(states) => states,
+            Err(_) => return,
+        };
+
         metrics.lowest_state_broadcasted.set(
             available_states
                 .iter()
@@ -221,35 +227,36 @@ impl<T: 'static + Send> StateSyncManager<T> {
                 .unwrap_or_default() as i64,
         );
 
+        let mut futures = vec![];
         for state_id in available_states {
             // Unreliable broadcast of adverts to all current peers.
             for (peer_id, _) in transport.peers() {
                 let request = build_advert_handler_request(state_id.clone());
                 let transport_c = transport.clone();
-
-                rt.spawn(async move {
-                    tokio::time::timeout(
-                        ADVERT_BROADCAST_TIMEOUT,
-                        transport_c.push(&peer_id, request),
-                    )
-                    .await
+                let cancellation_c = cancellation.clone();
+                futures.push(async move {
+                    select! {
+                        _ = tokio::time::timeout(
+                            ADVERT_BROADCAST_TIMEOUT,
+                            transport_c.push(&peer_id, request)) => {}
+                        () = cancellation_c.cancelled() => {}
+                    }
                 });
             }
         }
+        let _ = join_all(futures).await;
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::backtrace::Backtrace;
-
     use axum::{http::StatusCode, response::Response};
     use bytes::{Bytes, BytesMut};
     use ic_interfaces::p2p::state_sync::ChunkId;
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync, MockTransport};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::{crypto::CryptoHash, CryptoHashOfState, Height};
+    use ic_types::{crypto::CryptoHash, Height};
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use mockall::Sequence;
     use prost::Message;
@@ -271,26 +278,15 @@ mod tests {
     /// Don't add peers that advertise a state that differs from the current sync.
     #[test]
     fn test_reject_peer_with_different_state() {
-        // Abort process if a thread panics. This catches detached tokio tasks that panic.
-        // https://github.com/tokio-rs/tokio/issues/4516
-        std::panic::set_hook(Box::new(|info| {
-            let stacktrace = Backtrace::force_capture();
-            println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
-            std::process::abort();
-        }));
         with_test_replica_logger(|log| {
             let finished = Arc::new(Notify::new());
             let finished_c = finished.clone();
             let mut s = MockStateSync::<TestMessage>::default();
             let mut seq = Sequence::new();
-            let mut seq2 = Sequence::new();
-            s.expect_should_cancel().returning(move |_| false);
-            s.expect_deliver_state_sync().return_once(move |_| {
-                finished_c.notify_waiters();
-            });
+            s.expect_cancel_if_running().returning(move |_| false);
             s.expect_available_states().return_const(vec![]);
             let mut t = MockTransport::default();
-            t.expect_rpc().returning(|p, _| {
+            t.expect_rpc().times(50).returning(|p, _| {
                 if p == &NODE_2 {
                     panic!("NODE 2 should not be added to the state sync")
                 }
@@ -307,34 +303,30 @@ mod tests {
                 .returning(|| Box::new((0..50).map(ChunkId::from)));
             c.expect_chunks_to_download()
                 .returning(|| Box::new(std::iter::empty()));
+
             c.expect_add_chunk()
                 .times(49)
                 .return_const(Ok(()))
                 .in_sequence(&mut seq);
             c.expect_add_chunk()
                 .once()
-                .return_once(|_, _| Ok(()))
+                .return_once(move |_, _| {
+                    finished_c.notify_waiters();
+                    Ok(())
+                })
                 .in_sequence(&mut seq);
-            c.expect_completed()
-                .times(49)
-                .return_const(None)
-                .in_sequence(&mut seq2);
-            c.expect_completed()
-                .once()
-                .return_once(|| Some(TestMessage))
-                .in_sequence(&mut seq2);
-            s.expect_start_state_sync()
+            s.expect_maybe_start_state_sync()
                 .once()
                 .return_once(|_| Some(Box::new(c)));
 
             let rt = Runtime::new().unwrap();
             let old_id = StateSyncArtifactId {
                 height: Height::from(0),
-                hash: CryptoHashOfState::new(CryptoHash(vec![])),
+                hash: CryptoHash(vec![]),
             };
             let id = StateSyncArtifactId {
                 height: Height::from(1),
-                hash: CryptoHashOfState::new(CryptoHash(vec![])),
+                hash: CryptoHash(vec![]),
             };
 
             let (handler_tx, handler_rx) = tokio::sync::mpsc::channel(100);

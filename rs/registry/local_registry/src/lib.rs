@@ -2,12 +2,6 @@
 //! complexities of syncing the local store with the NNS registry behind a
 //! simple function call. Control over when the synchronization happens is left
 //! to the user of `LocalRegistry`.
-//!
-//! # (Minor) Limitations
-//!
-//! Concurrently calling `sync_with_nns` might result in reordered updates to
-//! the certified time stored in the local store. However, the certified time is
-//! not exposed through the interface of `LocalRegistry`.
 
 use std::{net::IpAddr, path::Path, str::FromStr, sync::Arc, time::Duration};
 
@@ -85,16 +79,13 @@ impl LocalRegistry {
 
     /// Synchronizes the local store with the NNS registry. The URLs and the
     /// public key of the NNS are read from the in-memory cache.
-    ///
-    /// *Note*: If called concurrently, updates to the certified time might be
-    /// stored out of order.
     pub async fn sync_with_nns(&self) -> Result<(), LocalRegistryError> {
         // The changelog entry for a given registry version never changes. As
         // the local store overwrites existing versions atomically, it follows
         // that even if multiple threads call this function concurrently,
         // invariants are retained.
         let latest_cached_version = self.registry_cache.get_latest_version();
-        let (mut raw_changelog, certified_time) = {
+        let (mut raw_changelog, _certified_time) = {
             let guard = self.cached_registry_canister.read().await;
             let (raw_changelog, _, t) = guard
                 .1
@@ -130,10 +121,6 @@ impl LocalRegistry {
             })
             .expect("Writing to the FS failed: Stop.");
 
-        // update certified time
-        self.local_store_writer
-            .update_certified_time(certified_time.as_nanos_since_unix_epoch())
-            .expect("Could not store certified time");
         self.sync_with_local_store().await
     }
 

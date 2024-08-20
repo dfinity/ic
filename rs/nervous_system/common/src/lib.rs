@@ -5,11 +5,14 @@ use core::{
     ops::{Add, AddAssign, Div, Mul, Sub},
 };
 use dfn_core::api::time_nanos;
+use ic_base_types::CanisterId;
 use ic_canister_log::{export, GlobalBuffer, LogBuffer, LogEntry};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_ledger_core::Tokens;
+use lazy_static::lazy_static;
 use maplit::hashmap;
+use num_traits::ops::inv::Inv;
 use priority_queue::priority_queue::PriorityQueue;
 use rust_decimal::Decimal;
 use std::{
@@ -24,12 +27,43 @@ pub mod binary_search;
 pub mod cmc;
 pub mod dfn_core_stable_mem_utils;
 pub mod ledger;
+pub mod ledger_validation;
 pub mod memory_manager_upgrade_storage;
+
+lazy_static! {
+    // 10^-4. There is one ten-thousandth of a unit in one permyriad.
+    pub static ref UNITS_PER_PERMYRIAD: Decimal = Decimal::from(10_000_u64).inv();
+
+    // Includes 0, all powers of 2 (including 1), and u64::MAX, plus values around the
+    // aforementioned numbers. This is useful for tests.
+    pub static ref WIDE_RANGE_OF_U64_VALUES: Vec<u64> = (0..=64)
+        .flat_map(|i| {
+            let pow_of_two: i128 = 2_i128.pow(i);
+            let perturbations = vec![-42, -7, -3, -2, -1, 0, 1, 2, 3, 7, 42];
+
+            perturbations
+                .into_iter()
+                .map(|perturbation| {
+                    pow_of_two
+                        .saturating_add(perturbation)
+                        .clamp(0, u64::MAX as i128) as u64
+                })
+                .collect::<Vec<u64>>()
+        })
+        .collect();
+
+    pub static ref NNS_DAPP_BACKEND_CANISTER_ID: CanisterId =
+        CanisterId::from_str("qoctq-giaaa-aaaaa-aaaea-cai").unwrap();
+}
 
 // 10^8
 pub const E8: u64 = 100_000_000;
 
-pub const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
+pub const DEFAULT_TRANSFER_FEE: Tokens = Tokens::from_e8s(10_000);
+
+pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
+pub const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
+pub const ONE_MONTH_SECONDS: u64 = ONE_YEAR_SECONDS / 12;
 
 // Useful as a piece of realistic test data.
 pub const START_OF_2022_TIMESTAMP_SECONDS: u64 = 1641016800;
@@ -73,6 +107,22 @@ macro_rules! assert_is_err {
             r
         );
     };
+}
+
+/// Besides dividing, this also converts to Decimal (from u64).
+///
+/// The only way this can fail is if denominations_per_token is 0. Therefore, if you pass a positive
+/// constant (e.g. E8) for denominations_per_token, you do not have to implement clean up/recovery
+/// in case of None. E.g. you can use unwrap_or_default.
+pub fn denominations_to_tokens(
+    denominations: u64,
+    denominations_per_token: u64,
+) -> Option<Decimal> {
+    let denominations = Decimal::from(denominations);
+    let denominations_per_token = Decimal::from(denominations_per_token);
+
+    // denominations * tokens_per_denomination
+    denominations.checked_div(denominations_per_token)
 }
 
 pub fn i2d(i: u64) -> Decimal {
@@ -771,3 +821,6 @@ fn checked_div_mod(dividend: usize, divisor: usize) -> (usize, usize) {
 
 #[cfg(test)]
 mod serve_logs_tests;
+
+#[cfg(test)]
+mod tests;

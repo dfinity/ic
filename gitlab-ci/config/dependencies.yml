@@ -7,42 +7,36 @@ dependencies-check:
     # commit in the master branch. This would cause the job to
     # fail even if it has successfully passed.
   extends:
-    - .build-k8s
-  rules :
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
+    - .rules-master-pipeline-no-merge-train-rust-bazel-changed
   needs: []  # don't wait on other jobs
   variables:
     PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
-    CARGO_AUDIT_VERSION : "0.16.0"
     SHELL_WRAPPER: "/usr/bin/time"
   script:
     - |
       set -euo pipefail
-      pip3 install --ignore-installed -r requirements.txt
-      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
+      PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies/
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
   allow_failure: false
 
 dependency-scan-nightly:
-  extends:
-    - .build-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "dependency-scan-nightly"'
   needs: []  # don't wait on other jobs
   variables:
     PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
-    CARGO_AUDIT_VERSION : "0.16.0"
-    NVM_VERSION : "19"
+    CARGO_WASMPACK_VERSION: "0.12.1"
+    DEFAULT_NODE_VERSION : "20"
     SHELL_WRAPPER: "/usr/bin/time"
   script:
     - |
       set -euo pipefail
-      pip3 install --ignore-installed -r requirements.txt
-      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
+      PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
+      $SHELL_WRAPPER cargo install wasm-pack --version "${CARGO_WASMPACK_VERSION}"
       # shellcheck disable=SC1090
       source "${NVM_DIR}/nvm.sh"
-      nvm use ${NVM_VERSION}
+      nvm use ${DEFAULT_NODE_VERSION}
       node --version
       npm --version
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies
@@ -54,20 +48,16 @@ dependency-scan-nightly:
   allow_failure: true
 
 dependency-scan-release-cut:
-  extends:
-    - .build-k8s
   needs: []
   rules :
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
   variables:
     PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
-    CARGO_AUDIT_VERSION : "0.16.0"
     SHELL_WRAPPER: "/usr/bin/time"
   script:
     - |
       set -euo pipefail
-      pip3 install --ignore-installed -r requirements.txt
-      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
+      PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_release_job.py
   allow_failure: false

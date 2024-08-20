@@ -314,7 +314,7 @@ thread_local! {
     static RETRIES: RefCell<PriorityQueue<Id, Reverse<u64>>> = RefCell::new(PriorityQueue::new());
 
     // Rate limiting for CREATOR
-    static AVAILABLE_TOKENS: RefCell<BTreeMap<String, u32>> = RefCell::new(BTreeMap::new());
+    static AVAILABLE_TOKENS: RefCell<BTreeMap<String, u32>> = const { RefCell::new(BTreeMap::new()) };
 
     static CREATOR: RefCell<Box<dyn Create>> = RefCell::new({
         let c = Creator::new(&ID_GENERATOR, &REGISTRATIONS, &NAMES, &EXPIRATIONS);

@@ -5,7 +5,7 @@ use ic_crypto_sha2::Sha256;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
 use ic_ledger_core::{
-    approvals::Approvals,
+    approvals::{AllowanceTable, HeapAllowancesData},
     balances::Balances,
     block::{BlockType, EncodedBlock, FeeCollector},
     tokens::CheckedAdd,
@@ -43,10 +43,12 @@ pub use validate_endpoints::{tokens_from_proto, tokens_into_proto};
 pub const DEFAULT_TRANSFER_FEE: Tokens = Tokens::from_e8s(10_000);
 
 pub const MAX_BLOCKS_PER_REQUEST: usize = 2000;
+pub const MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST: usize = 50;
 
 pub const MEMO_SIZE_BYTES: usize = 32;
 
 pub type LedgerBalances = Balances<BTreeMap<AccountIdentifier, Tokens>>;
+pub type LedgerAllowances = AllowanceTable<HeapAllowancesData<AccountIdentifier, Tokens>>;
 
 #[derive(
     Serialize,
@@ -328,21 +330,6 @@ impl Transaction {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct ApprovalKey(AccountIdentifier, AccountIdentifier);
-
-impl From<(&AccountIdentifier, &AccountIdentifier)> for ApprovalKey {
-    fn from((account, spender): (&AccountIdentifier, &AccountIdentifier)) -> Self {
-        Self(*account, *spender)
-    }
-}
-
-impl From<ApprovalKey> for (AccountIdentifier, AccountIdentifier) {
-    fn from(key: ApprovalKey) -> Self {
-        (key.0, key.1)
-    }
-}
-
 /// A transaction with the metadata the canister generated attached to it
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Block {
@@ -466,9 +453,6 @@ pub struct LedgerCanisterUpgradePayload(pub LedgerCanisterPayload);
 
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct UpgradeArgs {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub maximum_number_of_accounts: Option<usize>,
-
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icrc1_minting_account: Option<Account>,
 
@@ -629,7 +613,7 @@ impl LedgerCanisterInitPayloadBuilder {
         }
 
         // Don't allow self-transfers of the minting canister
-        if self.initial_values.get(&minting_account).is_some() {
+        if self.initial_values.contains_key(&minting_account) {
             return Err(
                 "initial_values cannot contain transfers to the minting_account".to_string(),
             );
@@ -656,7 +640,6 @@ impl LedgerCanisterInitPayloadBuilder {
 }
 
 pub struct LedgerCanisterUpgradePayloadBuilder {
-    maximum_number_of_accounts: Option<usize>,
     icrc1_minting_account: Option<Account>,
     feature_flags: Option<FeatureFlags>,
 }
@@ -664,15 +647,9 @@ pub struct LedgerCanisterUpgradePayloadBuilder {
 impl LedgerCanisterUpgradePayloadBuilder {
     fn new() -> Self {
         Self {
-            maximum_number_of_accounts: None,
             icrc1_minting_account: None,
             feature_flags: None,
         }
-    }
-
-    pub fn maximum_number_of_accounts(mut self, maximum_number_of_accounts: usize) -> Self {
-        self.maximum_number_of_accounts = Some(maximum_number_of_accounts);
-        self
     }
 
     pub fn icrc1_minting_account(mut self, minting_account: Account) -> Self {
@@ -683,7 +660,6 @@ impl LedgerCanisterUpgradePayloadBuilder {
     pub fn build(self) -> Result<LedgerCanisterUpgradePayload, String> {
         Ok(LedgerCanisterUpgradePayload(
             LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
-                maximum_number_of_accounts: self.maximum_number_of_accounts,
                 icrc1_minting_account: self.icrc1_minting_account,
                 feature_flags: self.feature_flags,
             })),
@@ -1250,6 +1226,13 @@ impl Default for FeatureFlags {
     fn default() -> Self {
         Self::const_default()
     }
+}
+
+pub fn max_blocks_per_request(principal_id: &PrincipalId) -> usize {
+    if ic_cdk::api::data_certificate().is_none() && principal_id.is_self_authenticating() {
+        return MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST;
+    }
+    MAX_BLOCKS_PER_REQUEST
 }
 
 #[cfg(test)]

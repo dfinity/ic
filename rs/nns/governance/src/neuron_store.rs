@@ -2,10 +2,16 @@ use crate::{
     governance::{
         Environment, TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     },
-    neuron::neuron_id_range_to_u64_range,
-    pb::v1::{governance_error::ErrorType, GovernanceError, Neuron, NeuronState, Topic},
+    neuron::{neuron_id_range_to_u64_range, types::Neuron},
+    neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
+    pb::v1::{
+        governance::{followers_map::Followers, FollowersMap},
+        governance_error::ErrorType,
+        GovernanceError, Neuron as NeuronProto, NeuronState, Topic,
+    },
     storage::{
         neuron_indexes::{CorruptedNeuronIndexes, NeuronIndex},
+        neurons::NeuronSections,
         with_stable_neuron_indexes, with_stable_neuron_indexes_mut, with_stable_neuron_store,
         with_stable_neuron_store_mut,
     },
@@ -23,10 +29,13 @@ use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::{AccountIdentifier, Subaccount};
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     fmt::{Debug, Display, Formatter},
     ops::{Deref, RangeBounds},
 };
+
+pub mod metrics;
+pub(crate) use metrics::NeuronMetrics;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum NeuronStoreError {
@@ -50,6 +59,10 @@ pub enum NeuronStoreError {
     NeuronAlreadyExists(NeuronId),
     InvalidData {
         reason: String,
+    },
+    NotAuthorizedToGetFullNeuron {
+        principal_id: PrincipalId,
+        neuron_id: NeuronId,
     },
 }
 
@@ -78,11 +91,16 @@ impl NeuronStoreError {
             new_subaccount,
         }
     }
-}
 
-#[derive(Debug, Eq, PartialEq)]
-pub struct NeuronNotFound {
-    neuron_id: NeuronId,
+    pub fn not_authorized_to_get_full_neuron(
+        principal_id: PrincipalId,
+        neuron_id: NeuronId,
+    ) -> Self {
+        NeuronStoreError::NotAuthorizedToGetFullNeuron {
+            principal_id,
+            neuron_id,
+        }
+    }
 }
 
 impl Display for NeuronStoreError {
@@ -133,6 +151,16 @@ impl Display for NeuronStoreError {
             NeuronStoreError::InvalidData { reason } => {
                 write!(f, "Failed to store neuron with invalid data: {:?}", reason)
             }
+            NeuronStoreError::NotAuthorizedToGetFullNeuron {
+                principal_id,
+                neuron_id,
+            } => {
+                write!(
+                    f,
+                    "Principal {:?} is not authorized to get full neuron information for neuron {:?}",
+                    principal_id, neuron_id
+                )
+            }
         }
     }
 }
@@ -148,6 +176,7 @@ impl From<NeuronStoreError> for GovernanceError {
             NeuronStoreError::SubaccountModified { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::NeuronAlreadyExists(_) => ErrorType::PreconditionFailed,
             NeuronStoreError::InvalidData { .. } => ErrorType::PreconditionFailed,
+            NeuronStoreError::NotAuthorizedToGetFullNeuron { .. } => ErrorType::NotAuthorized,
         };
         GovernanceError::new_with_message(error_type, value.to_string())
     }
@@ -164,11 +193,61 @@ pub struct NeuronsFundNeuron {
     pub id: NeuronId,
     pub maturity_equivalent_icp_e8s: u64,
     pub controller: PrincipalId,
+    pub hotkeys: Vec<PrincipalId>,
 }
 
 enum StorageLocation {
     Heap,
     Stable,
+}
+
+pub type NeuronStoreState = (BTreeMap<u64, NeuronProto>, HashMap<i32, FollowersMap>);
+
+fn proto_to_heap_topic_followee_index(
+    proto: HashMap<i32, FollowersMap>,
+) -> HeapNeuronFollowingIndex<NeuronId, Topic> {
+    let map = proto
+        .into_iter()
+        .map(|(topic_i32, followers_map)| {
+            // The potential panic is OK to be called in post_upgrade.
+            let topic = Topic::try_from(topic_i32).expect("Invalid topic");
+
+            let followers_map = followers_map
+                .followers_map
+                .into_iter()
+                .map(|(neuron_id, followers)| {
+                    let followers = followers.followers.into_iter().collect();
+                    (NeuronId { id: neuron_id }, followers)
+                })
+                .collect();
+            (topic, followers_map)
+        })
+        .collect();
+    HeapNeuronFollowingIndex::new(map)
+}
+
+fn heap_topic_followee_index_to_proto(
+    heap: HeapNeuronFollowingIndex<NeuronId, Topic>,
+) -> HashMap<i32, FollowersMap> {
+    heap.into_inner()
+        .into_iter()
+        .map(|(topic, followers_map)| {
+            let topic_i32 = topic as i32;
+            let followers_map = followers_map
+                .into_iter()
+                .map(|(followee, followers)| {
+                    let followers = Followers {
+                        followers: followers.into_iter().collect(),
+                    };
+                    (followee.id, followers)
+                })
+                .collect();
+
+            let followers_map = FollowersMap { followers_map };
+
+            (topic_i32, followers_map)
+        })
+        .collect()
 }
 
 /// This struct stores and provides access to all neurons within NNS Governance, which can live
@@ -196,8 +275,7 @@ pub struct NeuronStore {
     /// - `Governance::validate`: soon to be deprecated since we have subaccount index.
     /// - `voting_eligible_neurons()`: inactive neurons have been dissolved for 14 days, so it
     ///   cannot be voting eligible.
-    /// - `list_community_fund_neuron_ids` and `list_active_neurons_fund_neurons`: inactive neurons
-    ///   must not be NF.
+    /// - `list_active_neurons_fund_neurons`: inactive neurons must not be NF.
     /// - `list_neurons_ready_to_unstake_maturity`: inactive neurons have 0 stake (which also means
     ///   0 staked maturity), so no inactive neurons need to unstake maturity.
     /// - `list_ready_to_spawn_neuron_ids`: inactive neurons must have 0 maturity, and spawning
@@ -234,6 +312,16 @@ impl PartialEq for NeuronStore {
     }
 }
 
+impl Default for NeuronStore {
+    fn default() -> Self {
+        Self {
+            heap_neurons: BTreeMap::new(),
+            topic_followee_index: HeapNeuronFollowingIndex::new(BTreeMap::new()),
+            clock: Box::new(IcClock::new()),
+        }
+    }
+}
+
 impl NeuronStore {
     // Initializes NeuronStore for the first time assuming no persisted data has been prepared (e.g.
     // data in stable storage and those persisted through serialization/deserialization like
@@ -263,29 +351,29 @@ impl NeuronStore {
     // Restores NeuronStore after an upgrade, assuming data are already in the stable storage (e.g.
     // neuron indexes and inactive neurons) and persisted data are already calculated (e.g.
     // topic_followee_index).
-    pub fn new_restored(
-        heap_neurons: BTreeMap<u64, Neuron>,
-        topic_followee_index: HeapNeuronFollowingIndex<NeuronId, Topic>,
-    ) -> Self {
+    pub fn new_restored(state: NeuronStoreState) -> Self {
         let clock = Box::new(IcClock::new());
+        let (neurons, topic_followee_index) = state;
 
         Self {
-            heap_neurons,
-            topic_followee_index,
+            heap_neurons: neurons
+                .into_iter()
+                .map(|(id, proto)| (id, Neuron::try_from(proto).unwrap()))
+                .collect(),
+            topic_followee_index: proto_to_heap_topic_followee_index(topic_followee_index),
             clock,
         }
     }
 
-    /// Takes the heap neurons for serialization. The `self.heap_neurons` will become empty, so
-    /// it should only be called once at pre_upgrade.
-    pub fn take_heap_neurons(&mut self) -> BTreeMap<u64, Neuron> {
-        std::mem::take(&mut self.heap_neurons)
-    }
-
-    /// Takes the HeapNeuronFollowingIndex.  The `self.topic_followee_index` will become empty, so
-    /// it should only be called once at pre_upgrade.
-    pub fn take_heap_topic_followee_index(&mut self) -> HeapNeuronFollowingIndex<NeuronId, Topic> {
-        std::mem::take(&mut self.topic_followee_index)
+    /// Takes the neuron store state which should be persisted through upgrades.
+    pub fn take(self) -> NeuronStoreState {
+        (
+            self.heap_neurons
+                .into_iter()
+                .map(|(id, neuron)| (id, neuron.into()))
+                .collect(),
+            heap_topic_followee_index_to_proto(self.topic_followee_index),
+        )
     }
 
     /// If there is a bug (related to lock acquisition), this could return u64::MAX.
@@ -324,12 +412,15 @@ impl NeuronStore {
 
     /// Clones all the neurons. This is only used for testing.
     /// TODO(NNS-2474) clean it up after NNSState stop using GovernanceProto.
-    pub fn clone_neurons(&self) -> BTreeMap<u64, Neuron> {
-        self.heap_neurons.clone()
+    pub fn clone_neurons(&self) -> BTreeMap<u64, NeuronProto> {
+        self.heap_neurons
+            .iter()
+            .map(|(id, neuron)| (*id, neuron.clone().into()))
+            .collect()
     }
 
-    pub fn clone_topic_followee_index(&self) -> HeapNeuronFollowingIndex<NeuronId, Topic> {
-        self.topic_followee_index.clone()
+    pub fn clone_topic_followee_index(&self) -> HashMap<i32, FollowersMap> {
+        heap_topic_followee_index_to_proto(self.topic_followee_index.clone())
     }
 
     /// Returns if store contains a Neuron by id
@@ -349,7 +440,7 @@ impl NeuronStore {
 
     /// Add a new neuron
     pub fn add_neuron(&mut self, neuron: Neuron) -> Result<NeuronId, NeuronStoreError> {
-        let neuron_id = neuron.id.expect("Neuron must have an id");
+        let neuron_id = neuron.id();
 
         if self.contains(neuron_id) {
             return Err(NeuronStoreError::NeuronAlreadyExists(neuron_id));
@@ -387,7 +478,7 @@ impl NeuronStore {
                  neuron indexes are out-of-sync with neurons: {}",
                 LOG_PREFIX,
                 NeuronStoreError::CorruptedNeuronIndexes(CorruptedNeuronIndexes {
-                    neuron_id: neuron.id.unwrap(),
+                    neuron_id: neuron.id(),
                     indexes: vec![defects],
                 })
             );
@@ -396,7 +487,7 @@ impl NeuronStore {
 
     /// Remove a Neuron by id
     pub fn remove_neuron(&mut self, neuron_id: &NeuronId) {
-        let load_neuron_result = self.load_neuron(*neuron_id);
+        let load_neuron_result = self.load_neuron_all_sections(*neuron_id);
         let (neuron_to_remove, primary_location) = match load_neuron_result {
             Ok(load_neuron_result) => load_neuron_result,
             Err(error) => {
@@ -426,7 +517,7 @@ impl NeuronStore {
     }
 
     fn remove_neuron_from_indexes(&mut self, neuron: &Neuron) {
-        let neuron_id = neuron.id.expect("Neuron must have id");
+        let neuron_id = neuron.id();
         if let Err(error) = with_stable_neuron_indexes_mut(|indexes| indexes.remove_neuron(neuron))
         {
             println!(
@@ -449,11 +540,13 @@ impl NeuronStore {
         };
     }
 
-    // Loads a neuron from either heap or stable storage and returns its primary storage location.
-    // Note that all neuron reads go through this method.
-    fn load_neuron(
+    // Loads a neuron from either heap or stable storage and returns its primary storage location,
+    // given a list of sections. Note that all neuron reads go through this method. Use
+    // `load_neuron_all_sections` if the read is later used for modification.
+    fn load_neuron_with_sections(
         &self,
         neuron_id: NeuronId,
+        sections: NeuronSections,
     ) -> Result<(Cow<Neuron>, StorageLocation), NeuronStoreError> {
         let heap_neuron = self.heap_neurons.get(&neuron_id.id).map(Cow::Borrowed);
 
@@ -467,21 +560,40 @@ impl NeuronStore {
         }
 
         let stable_neuron = with_stable_neuron_store(|stable_neuron_store| {
-            stable_neuron_store.read(neuron_id).ok().map(Cow::Owned)
+            stable_neuron_store
+                .read(neuron_id, sections)
+                .ok()
+                .map(Cow::Owned)
         });
+
         match (stable_neuron, heap_neuron) {
+            // 1 copy cases.
+            (Some(stable), None) => Ok((stable, StorageLocation::Stable)),
+            (None, Some(heap)) => Ok((heap, StorageLocation::Heap)),
+
+            // 2 copies case.
             (Some(stable), Some(_)) => {
                 println!(
                     "{}WARNING: neuron {:?} is in both stable memory and heap memory, \
-                        we are at risk of having stale copies",
+                     we are at risk of having stale copies",
                     LOG_PREFIX, neuron_id
                 );
                 Ok((stable, StorageLocation::Stable))
             }
-            (Some(stable), None) => Ok((stable, StorageLocation::Stable)),
-            (None, Some(heap)) => Ok((heap, StorageLocation::Heap)),
+
+            // 0 copies case.
             (None, None) => Err(NeuronStoreError::not_found(neuron_id)),
         }
+    }
+
+    // Loads the entire neuron from either heap or stable storage and returns its primary storage.
+    // All neuron reads that can later be used for modification (`with_neuron_mut` and
+    // `remove_neuron`) needs to use this method.
+    fn load_neuron_all_sections(
+        &self,
+        neuron_id: NeuronId,
+    ) -> Result<(Cow<Neuron>, StorageLocation), NeuronStoreError> {
+        self.load_neuron_with_sections(neuron_id, NeuronSections::all())
     }
 
     fn update_neuron(
@@ -604,20 +716,7 @@ impl NeuronStore {
             .collect()
     }
 
-    /// List all neuron ids that are in the community fund.
-    pub fn list_community_fund_neuron_ids(&self) -> Vec<NeuronId> {
-        let filter = |n: &Neuron| {
-            n.joined_community_fund_timestamp_seconds
-                .unwrap_or_default()
-                > 0
-        };
-        self.map_heap_neurons_filtered(filter, |n| n.id)
-            .into_iter()
-            .flatten()
-            .collect()
-    }
-
-    /// List all neuron ids that are in the community fund.
+    /// List all neuron ids that are in the Neurons' Fund.
     pub fn list_active_neurons_fund_neurons(&self) -> Vec<NeuronsFundNeuron> {
         let now = self.now();
         let filter = |n: &Neuron| {
@@ -627,8 +726,9 @@ impl NeuronStore {
                     > 0
         };
         self.map_heap_neurons_filtered(filter, |n| NeuronsFundNeuron {
-            id: n.id.unwrap(),
-            controller: n.controller.unwrap(),
+            id: n.id(),
+            controller: n.controller(),
+            hotkeys: pick_most_important_hotkeys(&n.hot_keys),
             maturity_equivalent_icp_e8s: n.maturity_e8s_equivalent,
         })
         .into_iter()
@@ -638,10 +738,7 @@ impl NeuronStore {
     /// List all neuron ids whose neurons have staked maturity greater than 0.
     pub fn list_neurons_ready_to_unstake_maturity(&self, now_seconds: u64) -> Vec<NeuronId> {
         let filter = |neuron: &Neuron| neuron.ready_to_unstake_maturity(now_seconds);
-        self.map_heap_neurons_filtered(filter, |neuron| neuron.id)
-            .into_iter()
-            .flatten()
-            .collect()
+        self.map_heap_neurons_filtered(filter, |neuron| neuron.id())
     }
 
     /// List all neuron ids of known neurons
@@ -660,10 +757,7 @@ impl NeuronStore {
             // so it would be quite surprising if it is missing here (impossible in fact)
             now_seconds >= n.spawn_at_timestamp_seconds.unwrap_or(u64::MAX)
         };
-        self.map_heap_neurons_filtered(filter, |n| n.id)
-            .into_iter()
-            .flatten()
-            .collect()
+        self.map_heap_neurons_filtered(filter, |n| n.id())
     }
 
     /// Returns an iterator of all voting-eligible neurons
@@ -676,6 +770,61 @@ impl NeuronStore {
         })
     }
 
+    /// Returns the full neuron if the given principal is authorized - either it can vote for the
+    /// given neuron or any of its neuron managers.
+    pub fn get_full_neuron(
+        &self,
+        neuron_id: NeuronId,
+        principal_id: PrincipalId,
+    ) -> Result<Neuron, NeuronStoreError> {
+        // There is a trade-off between (1) the current approach - read the whole neuron and use it
+        // to determine access, then return the previously fetched neuron (2) alternative - only
+        // read the information needed the determine access, and then read the full neuron if it
+        // does have access. When most of the calls do have access, the current approach is more
+        // efficient since it avoids reading the same data twice. However, if most of the calls do
+        // not have access, the current approach is less efficient since it always reads the whole
+        // neuron first. This current approach is chosen based on the assumption that most of the
+        // calls come from list_neurons with `include_neurons_readable_by_caller` set to true, where
+        // get_full_neuron is only called for the neurons that the caller has access to.
+        let neuron_clone = self.with_neuron(&neuron_id, |neuron| neuron.clone())?;
+
+        if neuron_clone.is_authorized_to_vote(&principal_id) {
+            return Ok(neuron_clone);
+        }
+
+        if self.can_principal_vote_on_proposals_that_target_neuron(principal_id, &neuron_clone) {
+            Ok(neuron_clone)
+        } else {
+            Err(NeuronStoreError::not_authorized_to_get_full_neuron(
+                principal_id,
+                neuron_id,
+            ))
+        }
+    }
+
+    fn is_authorized_to_vote(&self, principal_id: PrincipalId, neuron_id: NeuronId) -> bool {
+        self.with_neuron_sections(
+            &neuron_id,
+            NeuronSections {
+                hot_keys: true,
+                ..Default::default()
+            },
+            |neuron| neuron.is_authorized_to_vote(&principal_id),
+        )
+        .unwrap_or(false)
+    }
+
+    pub fn can_principal_vote_on_proposals_that_target_neuron(
+        &self,
+        principal_id: PrincipalId,
+        neuron: &Neuron,
+    ) -> bool {
+        neuron
+            .neuron_managers()
+            .into_iter()
+            .any(|manager_neuron_id| self.is_authorized_to_vote(principal_id, manager_neuron_id))
+    }
+
     /// Execute a function with a mutable reference to a neuron, returning the result of the function,
     /// unless the neuron is not found
     pub fn with_neuron_mut<R>(
@@ -683,7 +832,7 @@ impl NeuronStore {
         neuron_id: &NeuronId,
         f: impl FnOnce(&mut Neuron) -> R,
     ) -> Result<R, NeuronStoreError> {
-        let (neuron, location) = self.load_neuron(*neuron_id)?;
+        let (neuron, location) = self.load_neuron_all_sections(*neuron_id)?;
         let old_neuron = neuron.deref().clone();
         let mut new_neuron = old_neuron.clone();
         let result = f(&mut new_neuron);
@@ -717,7 +866,7 @@ impl NeuronStore {
                  neuron indexes are out-of-sync with neurons: {}",
                 LOG_PREFIX,
                 NeuronStoreError::CorruptedNeuronIndexes(CorruptedNeuronIndexes {
-                    neuron_id: old_neuron.id.unwrap(),
+                    neuron_id: old_neuron.id(),
                     indexes: defects,
                 })
             );
@@ -731,7 +880,18 @@ impl NeuronStore {
         neuron_id: &NeuronId,
         f: impl FnOnce(&Neuron) -> R,
     ) -> Result<R, NeuronStoreError> {
-        let (neuron, _) = self.load_neuron(*neuron_id)?;
+        let (neuron, _) = self.load_neuron_all_sections(*neuron_id)?;
+        Ok(f(neuron.deref()))
+    }
+
+    /// Reads a neuron with specific sections.
+    fn with_neuron_sections<R>(
+        &self,
+        neuron_id: &NeuronId,
+        sections: NeuronSections,
+        f: impl FnOnce(&Neuron) -> R,
+    ) -> Result<R, NeuronStoreError> {
+        let (neuron, _) = self.load_neuron_with_sections(*neuron_id, sections)?;
         Ok(f(neuron.deref()))
     }
 
@@ -765,6 +925,26 @@ impl NeuronStore {
         })
     }
 
+    /// Returns non-empty neuron ids readable by the caller. The definition of "empty" is that the
+    /// neuron doesn't have any stake, maturity, or staked maturity.
+    pub fn get_non_empty_neuron_ids_readable_by_caller(
+        &self,
+        caller: PrincipalId,
+    ) -> Vec<NeuronId> {
+        let is_non_empty = |neuron_id: &NeuronId| {
+            // If the neuron does not exist on the heap, then it must be inactive and empty.
+            self.heap_neurons
+                .get(&neuron_id.id)
+                .map(|neuron| neuron.is_funded())
+                .unwrap_or(false)
+        };
+
+        self.get_neuron_ids_readable_by_caller(caller)
+            .into_iter()
+            .filter(is_non_empty)
+            .collect()
+    }
+
     // Returns whether the known neuron name already exists.
     pub fn contains_known_neuron_name(&self, known_neuron_name: &str) -> bool {
         with_stable_neuron_indexes(|indexes| {
@@ -792,7 +972,7 @@ impl NeuronStore {
                 .range_neurons(next_neuron_id..)
                 .take(batch_size)
                 .flat_map(|neuron| {
-                    let current_neuron_id = neuron.id.unwrap();
+                    let current_neuron_id = neuron.id();
                     neuron_id_for_next_batch = current_neuron_id.next();
 
                     let is_neuron_inactive = neuron.is_inactive(self.now());
@@ -838,3 +1018,6 @@ pub struct NeuronIndexesLens {
 
 #[cfg(test)]
 mod neuron_store_tests;
+
+#[cfg(feature = "canbench-rs")]
+mod benches;

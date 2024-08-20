@@ -4,39 +4,41 @@ load("@io_bazel_rules_docker//contrib:passwd.bzl", "passwd_entry", "passwd_file"
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_mkdirs")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/canister_client",
-    "//rs/canister_client/sender",
-    "//rs/constants",
+    # Keep sorted.
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
+    "//rs/canister_client",
+    "//rs/constants",
+    "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
-    "//rs/types/types",
     "//rs/nns/common",
     "//rs/nns/constants",
-    "//rs/nns/governance",
+    "//rs/nns/governance/api",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_canister_blocks_synchronizer:ledger_canister_blocks_synchronizer_lib",
     "//rs/rosetta-api/ledger_canister_core",
-    "//rs/crypto/ecdsa_secp256k1",
     "//rs/rosetta-api/ledger_core",
+    "//rs/rosetta-api/rosetta_core:rosetta-core",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
-    "//rs/rosetta-api/rosetta_core:rosetta-core",
-    "@crate_index//:anyhow",
+    "//rs/types/types",
     "@crate_index//:actix-rt",
     "@crate_index//:actix-web",
+    "@crate_index//:anyhow",
     "@crate_index//:base64",
     "@crate_index//:candid",
-    "@crate_index//:clap",
+    "@crate_index//:clap_3_2_25",
     "@crate_index//:hex",
     "@crate_index//:ic-agent",
     "@crate_index//:lazy_static",
+    "@crate_index//:num-bigint",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:reqwest",
@@ -53,17 +55,18 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/dfn_macro",
     "@crate_index//:async-trait",
     "@crate_index//:strum_macros",
-    "@crate_index//:serde_derive",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/ed25519",
     "//rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
     "//rs/rosetta-api/test_utils",
     "//rs/types/base_types",
-    "@crate_index//:ed25519-consensus",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:proptest",
@@ -75,7 +78,7 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {
 }
 
-ROSETTA_VERSION = "1.9.0"
+ROSETTA_VERSION = "2.0.0"
 
 rust_library(
     name = "rosetta-api",
@@ -96,6 +99,16 @@ rust_binary(
     deps = DEPENDENCIES + [":rosetta-api"],
 )
 
+rust_binary(
+    name = "ic-rosetta-api-rosetta-blocks",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_features = ["rosetta-blocks"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = ROSETTA_VERSION,
+    deps = DEPENDENCIES + [":rosetta-api"],
+)
+
 rust_test(
     name = "rosetta-api_test",
     aliases = ALIASES,
@@ -104,21 +117,21 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_test(
+rust_test_suite_with_extra_srcs(
     name = "rosetta-api-tests",
-    srcs = glob(["test/**/*.rs"]),
+    srcs = glob(["tests/*.rs"]),
     aliases = ALIASES,
-    crate_root = "test/test_utils.rs",
     data = glob([
-        "test/*.json",
-        "test/*.ros",
+        "tests/*.json",
+        "tests/*.ros",
     ]) + [
         "@rosetta-cli//:rosetta-cli",
     ],
     env = {
-        "ROSETTA_CLI": "$(rootpath @rosetta-cli//:rosetta-cli)",
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/",
+        "ROSETTA_CLI": "$(rootpath @rosetta-cli//:rosetta-cli)",
     },
+    extra_srcs = ["tests/test_utils/mod.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     version = ROSETTA_VERSION,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":rosetta-api"],
@@ -192,6 +205,9 @@ container_image(
     name = "rosetta_image_base",
     base = "@rust_base//image",
     tags = ["manual"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     tars = [
         ":passwd_tar",
         ":data_tar",
@@ -206,14 +222,15 @@ container_image(
     directory = "/home/rosetta",
     entrypoint = [
         "/home/rosetta/ic-rosetta-api",
-        "--store-location",
-        "/data",
     ],
     files = [
         ":ic-rosetta-api",
     ],
     ports = ["8080"],
     tags = ["manual"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     user = "rosetta",
     workdir = "/home/rosetta",
 )

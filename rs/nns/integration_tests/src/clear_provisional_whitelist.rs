@@ -2,28 +2,25 @@ use dfn_candid::candid;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR,
+    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR,
 };
-use ic_nns_common::{
-    registry::encode_or_panic,
-    types::{NeuronId, ProposalId},
-};
-use ic_nns_governance::pb::v1::{ManageNeuronResponse, NnsFunction, ProposalStatus, Vote};
+use ic_nns_common::types::{NeuronId, ProposalId};
+use ic_nns_governance_api::pb::v1::{ManageNeuronResponse, NnsFunction, ProposalStatus, Vote};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},
-    ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     registry::get_value_or_panic,
 };
 use ic_protobuf::registry::provisional_whitelist::v1::ProvisionalWhitelist;
 use ic_registry_keys::make_provisional_whitelist_record_key;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
+use prost::Message;
 use std::str::FromStr;
 
 #[test]
 fn test_submit_and_accept_clear_provisional_whitelist_proposal() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let principal_id = PrincipalId::from_str(
             "5o66h-77qch-43oup-7aaui-kz5ty-tww4j-t2wmx-e3lym-cbtct-l3gpw-wae",
         )
@@ -40,7 +37,7 @@ fn test_submit_and_accept_clear_provisional_whitelist_proposal() {
             .with_initial_mutations(vec![RegistryAtomicMutateRequest {
                 mutations: vec![insert(
                     key.as_bytes(),
-                    encode_or_panic(&initial_provisional_whitelist),
+                    initial_provisional_whitelist.encode_to_vec(),
                 )],
                 preconditions: vec![],
             }])

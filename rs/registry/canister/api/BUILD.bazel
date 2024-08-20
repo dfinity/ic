@@ -1,0 +1,24 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/types/base_types",
+    "@crate_index//:candid",
+    "@crate_index//:serde",
+    "@crate_index//:thiserror",
+]
+
+rust_library(
+    name = "api",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_registry_canister_api",
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "api_test",
+    crate = ":api",
+)

@@ -90,10 +90,6 @@ fn point_multiexp_vartime_total(c: &mut Criterion) {
                                     p.precompute(window_size).unwrap();
                                 }
                                 // create refs of pairs
-
-                                // False positive `map_identity` warning.
-                                // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
-                                #[allow(clippy::map_identity)]
                                 let refs_of_pairs: Vec<_> =
                                     terms.iter().map(|(p, s)| (p, s)).collect();
 
@@ -170,10 +166,6 @@ fn point_multiexp_vartime_online(c: &mut Criterion) {
                             },
                             |terms| {
                                 // create refs of pairs
-
-                                // False positive `map_identity` warning.
-                                // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
-                                #[allow(clippy::map_identity)]
                                 let refs_of_pairs: Vec<_> =
                                     terms.iter().map(|(p, s)| (p, s)).collect();
                                 EccPoint::mul_n_points_vartime(&refs_of_pairs)
@@ -265,10 +257,6 @@ fn point_multiexp_constant_time(c: &mut Criterion) {
                         || gen_mul_n_instance(*size, curve_type, rng),
                         |terms| {
                             // create refs of pairs
-
-                            // False positive `map_identity` warning.
-                            // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
-                            #[allow(clippy::map_identity)]
                             let refs_of_pairs: Vec<_> = terms.iter().map(|(p, s)| (p, s)).collect();
                             EccPoint::mul_n_points_pippenger(&refs_of_pairs)
                         },
@@ -431,23 +419,9 @@ fn point_serialize(c: &mut Criterion) {
             b.iter_with_setup(|| random_point(curve_type, rng), |p| p.serialize())
         });
 
-        group.bench_function(BenchmarkId::new("serialize_uncompressed", 0), |b| {
-            b.iter_with_setup(
-                || random_point(curve_type, rng),
-                |p| p.serialize_uncompressed(),
-            )
-        });
-
         group.bench_function(BenchmarkId::new("deserialize_compressed", 0), |b| {
             b.iter_with_setup(
                 || random_point(curve_type, rng).serialize(),
-                |p| EccPoint::deserialize(curve_type, &p),
-            );
-        });
-
-        group.bench_function(BenchmarkId::new("deserialize_uncompressed", 0), |b| {
-            b.iter_with_setup(
-                || random_point(curve_type, rng).serialize_uncompressed(),
                 |p| EccPoint::deserialize(curve_type, &p),
             );
         });

@@ -5,31 +5,30 @@ use crate::metadata_state::subnet_call_context_manager::{
 use assert_matches::assert_matches;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{EcdsaCurve, IC_00};
+use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, IC_00};
 use ic_registry_routing_table::CanisterIdRange;
-use ic_test_utilities::{
-    mock_time,
-    types::{
-        ids::{
-            canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id,
-            SUBNET_0, SUBNET_1, SUBNET_2,
-        },
-        messages::{RequestBuilder, ResponseBuilder},
-        xnet::{StreamHeaderBuilder, StreamSliceBuilder},
+use ic_test_utilities_types::{
+    ids::{
+        canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id, SUBNET_0,
+        SUBNET_1, SUBNET_2,
     },
+    messages::{RequestBuilder, ResponseBuilder},
+    xnet::{StreamHeaderBuilder, StreamSliceBuilder},
 };
 use ic_types::{
     batch::BlockmakerMetrics,
     canister_http::{CanisterHttpMethod, CanisterHttpRequestContext},
     ingress::WasmResult,
-    messages::{CallbackId, CanisterCall, Payload},
-    ExecutionRound,
+    messages::{CallbackId, CanisterCall, Payload, Request, RequestMetadata},
+    time::CoarseTime,
+    Cycles, ExecutionRound,
 };
 use ic_types::{canister_http::Transform, time::current_time};
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::{ops::Range, sync::Arc, time::Duration};
+use strum::IntoEnumIterator;
 
 struct DummyMetrics;
 impl CheckpointLoadingMetrics for DummyMetrics {
@@ -58,13 +57,13 @@ fn can_prune_old_ingress_history_entries() {
     let message_id2 = MessageId::from([2_u8; 32]);
     let message_id3 = MessageId::from([3_u8; 32]);
 
-    let time = mock_time();
+    let time = UNIX_EPOCH;
     ingress_history.insert(
         message_id1.clone(),
         IngressStatus::Known {
             receiver: canister_test_id(1).get(),
             user_id: user_test_id(1),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Completed(WasmResult::Reply(vec![])),
         },
         time,
@@ -75,7 +74,7 @@ fn can_prune_old_ingress_history_entries() {
         IngressStatus::Known {
             receiver: canister_test_id(2).get(),
             user_id: user_test_id(2),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Completed(WasmResult::Reply(vec![])),
         },
         time,
@@ -86,7 +85,7 @@ fn can_prune_old_ingress_history_entries() {
         IngressStatus::Known {
             receiver: canister_test_id(1).get(),
             user_id: user_test_id(1),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Completed(WasmResult::Reply(vec![])),
         },
         time + MAX_INGRESS_TTL / 2,
@@ -105,7 +104,7 @@ fn can_prune_old_ingress_history_entries() {
 #[test]
 fn entries_sorted_lexicographically() {
     let mut ingress_history = IngressHistoryState::new();
-    let time = mock_time();
+    let time = UNIX_EPOCH;
 
     for i in (0..10u64).rev() {
         ingress_history.insert(
@@ -407,7 +406,7 @@ fn generate_new_canister_id() {
 }
 
 #[test]
-fn roundtrip_encoding() {
+fn system_metadata_roundtrip_encoding() {
     use ic_protobuf::state::system_metadata::v1 as pb;
 
     fn range(start: u64, end: u64) -> CanisterIdRange {
@@ -449,12 +448,22 @@ fn roundtrip_encoding() {
     };
     system_metadata.network_topology = network_topology;
 
-    use ic_crypto_internal_basic_sig_ed25519::{public_key_to_der, types::PublicKeyBytes};
     use ic_crypto_test_utils_keys::public_keys::valid_node_signing_public_key;
     let pk_der =
-        public_key_to_der(PublicKeyBytes::try_from(&valid_node_signing_public_key()).unwrap());
+        ic_crypto_ed25519::PublicKey::deserialize_raw(&valid_node_signing_public_key().key_value)
+            .unwrap()
+            .serialize_rfc8410_der();
+
     system_metadata.node_public_keys = btreemap! {
         node_test_id(1) => pk_der,
+    };
+    system_metadata.api_boundary_nodes = btreemap! {
+        node_test_id(1) => ApiBoundaryNodeEntry {
+            domain: "api-example.com".to_string(),
+            ipv4_address: Some("127.0.0.1".to_string()),
+            ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+            pubkey: None,
+        },
     };
     system_metadata.bitcoin_get_successors_follow_up_responses =
         btreemap! { 10.into() => vec![vec![1], vec![2]] };
@@ -525,7 +534,7 @@ fn system_metadata_split() {
     // Ingress history with 4 Received messages, addressed to canisters 1 and 2;
     // `IC_00`; and respectively `SUBNET_A`.
     let mut ingress_history = IngressHistoryState::new();
-    let time = mock_time();
+    let time = UNIX_EPOCH;
     let receivers = [
         CANISTER_1.get(),
         CANISTER_2.get(),
@@ -695,7 +704,7 @@ fn subnet_call_contexts_deserialization() {
         body: None,
         http_method: CanisterHttpMethod::GET,
         transform: Some(transform.clone()),
-        time: mock_time(),
+        time: UNIX_EPOCH,
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,
@@ -709,7 +718,7 @@ fn subnet_call_contexts_deserialization() {
     let install_code_call = InstallCodeCall {
         call: CanisterCall::Request(Arc::new(request)),
         effective_canister_id: canister_test_id(3),
-        time: mock_time(),
+        time: UNIX_EPOCH,
     };
     let call_id = subnet_call_context_manager.push_install_code_call(install_code_call.clone());
 
@@ -721,7 +730,7 @@ fn subnet_call_contexts_deserialization() {
     let stop_canister_call = StopCanisterCall {
         call: CanisterCall::Request(Arc::new(request)),
         effective_canister_id: canister_test_id(3),
-        time: mock_time(),
+        time: UNIX_EPOCH,
     };
     let stop_canister_call_id =
         subnet_call_context_manager.push_stop_canister_call(stop_canister_call.clone());
@@ -734,13 +743,13 @@ fn subnet_call_contexts_deserialization() {
     subnet_call_context_manager.push_raw_rand_request(
         raw_rand_request.clone(),
         ExecutionRound::new(5),
-        mock_time(),
+        UNIX_EPOCH,
     );
 
     // Encode and decode.
     let subnet_call_context_manager_proto: ic_protobuf::state::system_metadata::v1::SubnetCallContextManager = (&subnet_call_context_manager).into();
     let mut deserialized_subnet_call_context_manager: SubnetCallContextManager =
-        SubnetCallContextManager::try_from((mock_time(), subnet_call_context_manager_proto))
+        SubnetCallContextManager::try_from((UNIX_EPOCH, subnet_call_context_manager_proto))
             .unwrap();
 
     // Check HTTP request deserialization.
@@ -788,7 +797,7 @@ fn subnet_call_contexts_deserialization() {
         vec![RawRandContext {
             request: raw_rand_request,
             execution_round_id: ExecutionRound::new(5),
-            time: mock_time(),
+            time: UNIX_EPOCH,
         }]
     )
 }
@@ -804,27 +813,27 @@ fn empty_network_topology() {
     };
 
     assert_eq!(
-        network_topology.ecdsa_signing_subnets(&make_key_id()),
+        network_topology.idkg_signing_subnets(&MasterPublicKeyId::Ecdsa(make_key_id())),
         vec![]
     );
 }
 
 #[test]
 fn network_topology_ecdsa_subnets() {
-    let key = make_key_id();
+    let key = MasterPublicKeyId::Ecdsa(make_key_id());
     let network_topology = NetworkTopology {
         subnets: Default::default(),
         routing_table: Arc::new(RoutingTable::default()),
         canister_migrations: Arc::new(CanisterMigrations::default()),
         nns_subnet_id: subnet_test_id(42),
-        ecdsa_signing_subnets: btreemap! {
+        idkg_signing_subnets: btreemap! {
             key.clone() => vec![subnet_test_id(1)],
         },
         ..Default::default()
     };
 
     assert_eq!(
-        network_topology.ecdsa_signing_subnets(&key),
+        network_topology.idkg_signing_subnets(&key),
         &[subnet_test_id(1)]
     );
 }
@@ -1363,15 +1372,16 @@ struct MessageConfig {
 }
 
 fn generate_stream(msg_config: MessageConfig, signal_config: SignalConfig) -> Stream {
-    let stream_header_builder = StreamHeaderBuilder::new()
+    let stream_header = StreamHeaderBuilder::new()
         .begin(StreamIndex::from(msg_config.begin))
         .end(StreamIndex::from(msg_config.begin + msg_config.count))
-        .signals_end(StreamIndex::from(signal_config.end));
+        .signals_end(StreamIndex::from(signal_config.end))
+        .build();
 
     let msg_begin = StreamIndex::from(msg_config.begin);
 
     let slice = StreamSliceBuilder::new()
-        .header(stream_header_builder.build())
+        .header(stream_header)
         .generate_messages(
             msg_begin,
             msg_config.count,
@@ -1385,12 +1395,12 @@ fn generate_stream(msg_config: MessageConfig, signal_config: SignalConfig) -> St
             .messages()
             .cloned()
             .unwrap_or_else(|| StreamIndexedQueue::with_begin(msg_begin)),
-        slice.header().signals_end,
+        slice.header().signals_end(),
     )
 }
 
 #[test]
-fn stream_discard_messages_before() {
+fn stream_discard_messages_before_returns_no_rejected_messages() {
     let mut stream = generate_stream(
         MessageConfig {
             begin: 30,
@@ -1399,6 +1409,33 @@ fn stream_discard_messages_before() {
         SignalConfig { end: 43 },
     );
 
+    // Check that `discard_messages_before()` returns no messages for an empty `reject_signals`.
+    let slice_signals_end = 40.into();
+    let slice_reject_signals = VecDeque::new();
+
+    let rejected_messages =
+        stream.discard_messages_before(slice_signals_end, &slice_reject_signals);
+    assert!(rejected_messages.is_empty());
+}
+
+#[test]
+fn stream_discard_messages_before_returns_expected_messages() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 20,
+        },
+        SignalConfig { end: 43 },
+    );
+    let slice_signals_end = 40.into();
+    let slice_reject_signals: VecDeque<RejectSignal> = vec![
+        RejectSignal::new(RejectReason::CanisterMigrating, 28.into()), // before the stream
+        RejectSignal::new(RejectReason::CanisterNotFound, 29.into()),  // before the stream
+        RejectSignal::new(RejectReason::QueueFull, 32.into()),
+        RejectSignal::new(RejectReason::Unknown, 35.into()),
+    ]
+    .into();
+
     let expected_stream = generate_stream(
         MessageConfig {
             begin: 40,
@@ -1406,15 +1443,16 @@ fn stream_discard_messages_before() {
         },
         SignalConfig { end: 43 },
     );
-
     let expected_rejected_messages = vec![
-        stream.messages().get(32.into()).unwrap().clone(),
-        stream.messages().get(35.into()).unwrap().clone(),
+        (
+            RejectReason::QueueFull,
+            stream.messages().get(32.into()).unwrap().clone(),
+        ),
+        (
+            RejectReason::Unknown,
+            stream.messages().get(35.into()).unwrap().clone(),
+        ),
     ];
-
-    let slice_signals_end = 40.into();
-    let slice_reject_signals: VecDeque<StreamIndex> =
-        vec![28.into(), 29.into(), 32.into(), 35.into()].into();
 
     // Note that the `generate_stream` testing fixture only generates requests
     // while in the normal case reject signals are not expected to be generated for requests.
@@ -1422,12 +1460,61 @@ fn stream_discard_messages_before() {
     let rejected_messages =
         stream.discard_messages_before(slice_signals_end, &slice_reject_signals);
 
-    assert_eq!(rejected_messages, expected_rejected_messages);
     assert_eq!(expected_stream, stream);
+    assert_eq!(rejected_messages, expected_rejected_messages);
 }
 
 #[test]
-fn stream_discard_signals_before() {
+fn stream_discard_messages_before_removes_no_messages() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 20,
+        },
+        SignalConfig { end: 43 },
+    );
+    let expected_stream = stream.clone();
+    let slice_reject_signals = vec![
+        RejectSignal::new(RejectReason::CanisterStopped, 28.into()), // before the stream
+        RejectSignal::new(RejectReason::OutOfMemory, 29.into()),     // before the stream
+    ]
+    .into();
+    let slice_signals_end = stream.messages_begin();
+
+    let rejected_messages =
+        stream.discard_messages_before(slice_signals_end, &slice_reject_signals);
+
+    assert_eq!(expected_stream, stream);
+    assert!(rejected_messages.is_empty());
+}
+
+#[test]
+fn stream_discard_messages_before_removes_all_messages() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 20,
+        },
+        SignalConfig { end: 43 },
+    );
+    let slice_reject_signals = VecDeque::new();
+    let slice_signals_end = stream.messages_end();
+    let expected_stream = generate_stream(
+        MessageConfig {
+            begin: 50,
+            count: 0,
+        },
+        SignalConfig { end: 43 },
+    );
+    let rejected_messages =
+        stream.discard_messages_before(slice_signals_end, &slice_reject_signals);
+
+    assert_eq!(expected_stream, stream);
+    assert!(rejected_messages.is_empty());
+}
+
+#[test]
+fn stream_discard_signals_before_drops_no_reject_signals() {
     let mut stream = generate_stream(
         MessageConfig {
             begin: 30,
@@ -1435,18 +1522,312 @@ fn stream_discard_signals_before() {
         },
         SignalConfig { end: 153 },
     );
+    stream.reject_signals = vec![
+        RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
+        RejectSignal::new(RejectReason::CanisterStopped, 139.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 142.into()),
+        RejectSignal::new(RejectReason::Unknown, 145.into()),
+    ]
+    .into();
 
-    stream.reject_signals = vec![138.into(), 139.into(), 142.into(), 145.into()].into();
+    // Check that `discard_signals_before()` drops no reject signals for
+    // `new_signals_begin` == first reject signal.
+    let new_signals_begin = stream.reject_signals().front().unwrap().index;
+    let expected_reject_signals = stream.reject_signals().clone();
+    stream.discard_signals_before(new_signals_begin);
+    assert_eq!(stream.reject_signals(), &expected_reject_signals);
+}
 
+#[test]
+fn stream_discard_signals_before_drops_expected_signals() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 5,
+        },
+        SignalConfig { end: 153 },
+    );
+    stream.reject_signals = vec![
+        RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
+        RejectSignal::new(RejectReason::QueueFull, 139.into()),
+        RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 145.into()),
+    ]
+    .into();
+
+    // Check that `discard_signals_before()` drops the expected reject signals
+    // for an in-between reject signals `new_signals_begin`.
     let new_signals_begin = 140.into();
+    let expected_reject_signals: VecDeque<RejectSignal> = [
+        RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 145.into()),
+    ]
+    .into();
     stream.discard_signals_before(new_signals_begin);
-    let expected_reject_signals: VecDeque<StreamIndex> = vec![142.into(), 145.into()].into();
-    assert_eq!(stream.reject_signals, expected_reject_signals);
+    assert_eq!(stream.reject_signals(), &expected_reject_signals);
+}
 
+#[test]
+fn stream_discard_signals_before_drops_expected_signals_for_existing_reject_signal() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 5,
+        },
+        SignalConfig { end: 153 },
+    );
+    stream.reject_signals = vec![
+        RejectSignal::new(RejectReason::QueueFull, 138.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 139.into()),
+        RejectSignal::new(RejectReason::Unknown, 142.into()),
+        RejectSignal::new(RejectReason::OutOfMemory, 145.into()),
+    ]
+    .into();
+
+    // Check that `discard_signals_before()` drops the expected reject signals
+    // for an existing reject signal `new_signals_begin`.
     let new_signals_begin = 145.into();
+    let expected_reject_signals: VecDeque<RejectSignal> =
+        [RejectSignal::new(RejectReason::OutOfMemory, 145.into())].into();
+
     stream.discard_signals_before(new_signals_begin);
-    let expected_reject_signals: VecDeque<StreamIndex> = vec![145.into()].into();
-    assert_eq!(stream.reject_signals, expected_reject_signals);
+    assert_eq!(stream.reject_signals(), &expected_reject_signals);
+}
+
+#[test]
+fn stream_discard_signals_before_drops_all_signals() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 5,
+        },
+        SignalConfig { end: 153 },
+    );
+    stream.reject_signals = vec![
+        RejectSignal::new(RejectReason::QueueFull, 138.into()),
+        RejectSignal::new(RejectReason::CanisterMigrating, 139.into()),
+        RejectSignal::new(RejectReason::CanisterStopped, 142.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 145.into()),
+    ]
+    .into();
+
+    // Check that `discard_signals_before()` drops all reject signals for a
+    // `new_signals_begin` past all the signals.
+    let new_signals_begin = 150.into();
+    stream.discard_signals_before(new_signals_begin);
+    assert_eq!(stream.reject_signals(), &VecDeque::new());
+}
+
+#[test]
+fn stream_pushing_signals_increments_signals_end() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 0,
+        },
+        SignalConfig { end: 30 },
+    );
+    assert!(stream.reject_signals().is_empty());
+
+    stream.push_accept_signal();
+    assert_eq!(StreamIndex::new(31), stream.signals_end());
+    stream.push_reject_signal(RejectReason::CanisterMigrating);
+    assert_eq!(
+        &VecDeque::from([RejectSignal::new(
+            RejectReason::CanisterMigrating,
+            31.into()
+        )]),
+        stream.reject_signals()
+    );
+    assert_eq!(StreamIndex::new(32), stream.signals_end());
+}
+
+#[test]
+fn stream_handle_pushing_signals_increments_signals_end() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 0,
+        },
+        SignalConfig { end: 30 },
+    );
+    assert!(stream.reject_signals().is_empty());
+
+    let mut responses_size_bytes = BTreeMap::default();
+    let mut handle = StreamHandle::new(&mut stream, &mut responses_size_bytes);
+
+    handle.push_accept_signal();
+    assert_eq!(StreamIndex::new(31), handle.signals_end());
+    handle.push_reject_signal(RejectReason::CanisterNotFound);
+    assert_eq!(
+        &VecDeque::from([RejectSignal::new(RejectReason::CanisterNotFound, 31.into()),]),
+        handle.reject_signals()
+    );
+    assert_eq!(StreamIndex::new(32), handle.signals_end());
+}
+
+#[test]
+fn stream_roundtrip_encoding() {
+    let mut messages = StreamIndexedQueue::with_begin(30.into());
+    // Push a fully specified `Request`.
+    messages.push(
+        Request {
+            sender: *LOCAL_CANISTER,
+            receiver: *REMOTE_CANISTER,
+            sender_reply_callback: CallbackId::from(1),
+            payment: Cycles::from(123_456_789_u128),
+            method_name: "method_1".into(),
+            method_payload: [2_u8, 17_u8, 29_u8, 113_u8].into(),
+            metadata: Some(RequestMetadata::new(
+                17,
+                Time::from_nanos_since_unix_epoch(123),
+            )),
+            deadline: CoarseTime::from_secs_since_unix_epoch(456),
+        }
+        .into(),
+    );
+
+    // Push a fully specified `Response`.
+    messages.push(
+        Response {
+            originator: *LOCAL_CANISTER,
+            respondent: *REMOTE_CANISTER,
+            originator_reply_callback: CallbackId::from(2),
+            refund: Cycles::from(234_567_u128),
+            response_payload: Payload::Data([13_u8, 44_u8, 1_u8].into()),
+            deadline: CoarseTime::from_secs_since_unix_epoch(7428),
+        }
+        .into(),
+    );
+
+    let mut stream = Stream::with_signals(
+        messages,
+        153.into(),
+        [RejectSignal::new(
+            RejectReason::CanisterMigrating,
+            138.into(),
+        )]
+        .into(),
+    );
+    stream.set_reverse_stream_flags(StreamFlags {
+        deprecated_responses_only: true,
+    });
+
+    let proto_stream: pb_queues::Stream = (&stream).into();
+    let deserialized_stream: Stream = proto_stream.try_into().expect("bad conversion");
+    assert_eq!(stream, deserialized_stream);
+}
+
+#[test]
+fn deserializing_stream_fails_for_bad_reject_signals() {
+    let stream = pb_queues::Stream {
+        messages_begin: 0,
+        messages: Vec::new(),
+        signals_end: 153,
+        deprecated_reject_signals: Vec::new(),
+        reject_signals: Vec::new(),
+        reverse_stream_flags: None,
+    };
+
+    // TODO: [MR-577] remove this once all replicas have updated.
+    // Deserializing a stream with duplicate deprecated reject signals should fail.
+    let bad_stream = pb_queues::Stream {
+        deprecated_reject_signals: vec![1, 1],
+        ..stream.clone()
+    };
+    let deserialized_result: Result<Stream, _> = bad_stream.try_into();
+    assert_matches!(
+        deserialized_result,
+        Err(ProxyDecodeError::Other(err_msg)) if err_msg == "reject signals not strictly sorted, received [1, 1]"
+    );
+
+    // TODO: [MR-577] remove this once all replicas have updated.
+    // Deserializing a stream with descending deprecated reject signals should fail.
+    let bad_stream = pb_queues::Stream {
+        deprecated_reject_signals: vec![1, 0],
+        ..stream.clone()
+    };
+    let deserialized_result: Result<Stream, _> = bad_stream.try_into();
+    assert_matches!(
+        deserialized_result,
+        Err(ProxyDecodeError::Other(err_msg)) if err_msg == "reject signals not strictly sorted, received [1, 0]"
+    );
+
+    // TODO: [MR-577] remove this once all replicas have updated.
+    // Deserializing a stream with both deprecated and contemporary reject signals should fail.
+    let bad_stream = pb_queues::Stream {
+        deprecated_reject_signals: vec![0],
+        reject_signals: vec![pb_queues::RejectSignal {
+            reason: 1,
+            index: 0,
+        }],
+        ..stream.clone()
+    };
+    let deserialized_result: Result<Stream, _> = bad_stream.try_into();
+    assert_matches!(
+        deserialized_result,
+        Err(ProxyDecodeError::Other(err_msg)) if err_msg == "both contemporary and deprecated signals are populated got `reject_signals` [RejectSignal { reason: CanisterMigrating, index: 0 }], `deprecated_reject_signals` [0]"
+    );
+
+    // Deserializing a stream with duplicate reject signals (by index) should fail.
+    let bad_stream = pb_queues::Stream {
+        reject_signals: vec![
+            pb_queues::RejectSignal {
+                reason: 1,
+                index: 1,
+            },
+            pb_queues::RejectSignal {
+                reason: 1,
+                index: 1,
+            },
+        ],
+        ..stream.clone()
+    };
+    let deserialized_result: Result<Stream, _> = bad_stream.try_into();
+    assert_matches!(
+        deserialized_result,
+        Err(ProxyDecodeError::Other(err_msg)) if err_msg == "reject signals not strictly sorted, received [1, 1]"
+    );
+
+    // Deserializing a stream with descending reject signals (by index) should fail.
+    let bad_stream = pb_queues::Stream {
+        reject_signals: vec![
+            pb_queues::RejectSignal {
+                reason: 1,
+                index: 1,
+            },
+            pb_queues::RejectSignal {
+                reason: 1,
+                index: 0,
+            },
+        ],
+        ..stream
+    };
+    let deserialized_result: Result<Stream, _> = bad_stream.try_into();
+    assert_matches!(
+        deserialized_result,
+        Err(ProxyDecodeError::Other(err_msg)) if err_msg == "reject signals not strictly sorted, received [1, 0]"
+    );
+}
+
+#[test]
+fn reject_reason_proto_roundtrip() {
+    for initial in RejectReason::iter() {
+        let encoded = pb_queues::RejectReason::from(initial);
+        let round_trip = RejectReason::try_from(encoded).unwrap();
+
+        assert_eq!(initial, round_trip);
+    }
+}
+
+#[test]
+fn compatibility_for_reject_reason() {
+    assert_eq!(
+        RejectReason::iter()
+            .map(|reason| reason as i32)
+            .collect::<Vec<i32>>(),
+        [1, 2, 3, 4, 5, 6, 7]
+    );
 }
 
 #[test]
@@ -1884,6 +2265,30 @@ fn blockmaker_metrics_soft_invariant_size_limit_bumps_critical_error_counter() {
     let metrics = BlockmakerMetricsFixture::new_with_too_many_observations();
     assert_matches!(metrics.check_soft_invariants(), Err(err) if err.contains("exceeds limit"));
     do_roundtrip_and_check_error(&metrics, "exceeds limit");
+}
+
+#[test]
+fn canister_state_bits_cycles_use_case_round_trip() {
+    use ic_protobuf::state::canister_state_bits::v1 as pb;
+
+    for initial in CyclesUseCase::iter() {
+        let encoded = pb::CyclesUseCase::from(initial);
+        let round_trip = CyclesUseCase::try_from(encoded).unwrap();
+
+        assert_eq!(initial, round_trip);
+    }
+}
+
+#[test]
+fn compatibility_for_cycles_use_case() {
+    // If this fails, you are making a potentially incompatible change to `CyclesUseCase`.
+    // See note [Handling changes to Enums in Replicated State] for how to proceed.
+    assert_eq!(
+        CyclesUseCase::iter()
+            .map(|x| x as i32)
+            .collect::<Vec<i32>>(),
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+    );
 }
 
 const MAX_NUM_DAYS: usize = BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS + 10;

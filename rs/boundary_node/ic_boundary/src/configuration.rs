@@ -1,19 +1,17 @@
-use anyhow::Error;
-use async_trait::async_trait;
-use std::time::Instant;
-use tracing::info;
+use std::{sync::Arc, time::Instant};
 
 use {
-    anyhow::Context,
+    anyhow::{anyhow, Context, Error},
     arc_swap::ArcSwapOption,
+    async_trait::async_trait,
     axum_server::tls_rustls::{RustlsAcceptor, RustlsConfig},
-    std::sync::Arc,
+    tracing::{debug, error},
 };
 
 use crate::{
     core::Run,
     metrics::{MetricParams, WithMetrics},
-    tls::{self, Provision, ProvisionResult, TLSCert},
+    tls::{self, generate_rustls_config, load_pem, Provision, ProvisionResult, TLSCert},
 };
 
 #[non_exhaustive]
@@ -55,7 +53,11 @@ impl<T: Configure> Configure for WithMetrics<T> {
         counter.with_label_values(&[status]).inc();
         recorder.with_label_values(&[status]).observe(duration);
 
-        info!(action, status, duration, error = ?out.as_ref().err());
+        if out.is_err() {
+            error!(action, status, duration, error = ?out.as_ref().err());
+        } else {
+            debug!(action, status, duration, error = ?out.as_ref().err());
+        }
 
         out
     }
@@ -91,14 +93,14 @@ impl TlsConfigurator {
     }
 
     async fn apply(&self, tls_cert: TLSCert) -> Result<(), ConfigureError> {
-        let cfg = RustlsConfig::from_pem(tls_cert.0.into_bytes(), tls_cert.1.into_bytes())
-            .await
-            .context("failed to parse certificate")?;
+        let (certs, key) = load_pem(tls_cert.0.into_bytes(), tls_cert.1.into_bytes())
+            .map_err(|e| anyhow!("unable to load PEM: {e:?}"))?;
+
+        let cfg = generate_rustls_config(certs, key)?;
+        let cfg = RustlsConfig::from_config(Arc::new(cfg));
 
         // Construct new acceptor
-        let acceptor = RustlsAcceptor::new(cfg);
-        let acceptor = Arc::new(acceptor);
-        let acceptor = Some(acceptor);
+        let acceptor = Some(Arc::new(RustlsAcceptor::new(cfg)));
 
         // Replace current acceptor
         self.acceptor.store(acceptor);

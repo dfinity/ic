@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -9,6 +10,7 @@ rust_library(
     crate_name = "ic_bitcoin_canister_mock",
     proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     deps = [
+        # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:serde",
@@ -23,6 +25,7 @@ rust_canister(
     service_file = "bitcoin_mock.did",
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         ":mock",
         "//rs/bitcoin/ckbtc/minter",
         "@crate_index//:bech32",
@@ -44,7 +47,7 @@ rust_test(
     },
 )
 
-rust_test(
+rust_ic_test(
     name = "bitcoin_canister_mock_tests",
     srcs = ["tests/tests.rs"],
     data = [
@@ -56,6 +59,7 @@ rust_test(
     },
     proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     deps = [
+        # Keep sorted.
         ":mock",
         "//rs/config",
         "//rs/rust_canisters/canister_test",

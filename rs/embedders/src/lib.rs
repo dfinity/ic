@@ -18,6 +18,14 @@ use serde::{Deserialize, Serialize};
 pub use serialized_module::{SerializedModule, SerializedModuleBytes};
 pub use wasmtime_embedder::{WasmtimeEmbedder, WasmtimeMemoryCreator};
 
+/// The minimal required guard region for correctness is 2GiB. We use 8GiB as a
+/// safety measure since the allocation happens in the virtual memory and its
+/// overhead is negligible.
+pub(crate) const MIN_GUARD_REGION_SIZE: usize = 8 * 1024 * 1024 * 1024;
+
+/// The maximum Wasm stack size as configured by Wasmtime.
+pub(crate) const MAX_WASM_STACK_SIZE: usize = 5 * 1024 * 1024;
+
 pub struct WasmExecutionInput {
     pub api_type: ApiType,
     pub sandbox_safe_system_state: SandboxSafeSystemState,
@@ -31,18 +39,14 @@ pub struct WasmExecutionInput {
 
 #[derive(Debug, Clone)]
 pub struct InstanceRunResult {
-    pub dirty_pages: Vec<PageIndex>,
+    pub wasm_dirty_pages: Vec<PageIndex>,
     pub stable_memory_dirty_pages: Vec<PageIndex>,
     pub exported_globals: Vec<Global>,
 }
 
-pub trait LinearMemory {
-    fn as_ptr(&self) -> *mut libc::c_void;
-}
-
 /// The results of compiling a Canister which need to be passed back to the main
 /// replica process.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct CompilationResult {
     /// The number of instructions in the canister's largest function.
     pub largest_function_instruction_count: NumInstructions,

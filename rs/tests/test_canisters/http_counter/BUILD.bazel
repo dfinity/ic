@@ -1,8 +1,9 @@
 load("//bazel:canisters.bzl", "rust_canister")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-certified-map",
@@ -10,6 +11,7 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:ic-cdk-macros",
 ]
 

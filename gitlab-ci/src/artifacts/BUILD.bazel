@@ -14,7 +14,7 @@ string_flag(
 )
 
 bool_flag(
-    name = "rc",
+    name = "s3_upload",
     build_setting_default = False,
 )
 

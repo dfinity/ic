@@ -10,6 +10,7 @@ use assert_matches::assert_matches;
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
 use ic_crypto_internal_multi_sig_bls12381::types::SecretKeyBytes;
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_crypto_internal_threshold_sig_ecdsa::{
     EccCurveType, MEGaKeySetK256Bytes, MEGaPrivateKey, MEGaPrivateKeyK256Bytes, MEGaPublicKey,
     MEGaPublicKeyK256Bytes,
@@ -68,6 +69,7 @@ fn should_not_leak_any_data_on_protobuf_deserialization_error_when_opening_key_s
     let file = std::fs::OpenOptions::new()
         .write(true)
         .create(true)
+        .truncate(false)
         .open(temp_dir.path().join(sks_file_name))
         .unwrap();
     use std::os::unix::fs::FileExt;
@@ -844,7 +846,7 @@ mod zeroize_old_secret_key_store {
     fn should_overwrite_old_secret_key_store_with_zeroes() {
         let rng = &mut reproducible_rng();
         let mut setup = Setup::new();
-        ic_utils::fs::create_hard_link_to_existing_file(
+        ic_sys::fs::create_hard_link_to_existing_file(
             &setup.secret_key_store.proto_file,
             &setup.hard_link_to_test_zeroization,
         )
@@ -864,7 +866,7 @@ mod zeroize_old_secret_key_store {
     fn should_not_overwrite_new_keystore_with_zeroes() {
         let rng = &mut reproducible_rng();
         let mut setup = Setup::new();
-        ic_utils::fs::create_hard_link_to_existing_file(
+        ic_sys::fs::create_hard_link_to_existing_file(
             &setup.secret_key_store.proto_file,
             &setup.hard_link_to_test_zeroization,
         )
@@ -889,7 +891,7 @@ mod zeroize_old_secret_key_store {
             &setup.secret_key_store.old_proto_file_to_zeroize,
         )
         .expect("error copying sks");
-        ic_utils::fs::create_hard_link_to_existing_file(
+        ic_sys::fs::create_hard_link_to_existing_file(
             &setup.secret_key_store.old_proto_file_to_zeroize,
             &setup.hard_link_to_test_zeroization,
         )
@@ -939,7 +941,7 @@ mod zeroize_old_secret_key_store {
         .expect("error copying sks");
         fs::remove_file(&setup.secret_key_store.proto_file)
             .expect("error removing original sks file");
-        ic_utils::fs::create_hard_link_to_existing_file(
+        ic_sys::fs::create_hard_link_to_existing_file(
             &setup.secret_key_store.old_proto_file_to_zeroize,
             &setup.hard_link_to_test_zeroization,
         )
@@ -960,7 +962,7 @@ mod zeroize_old_secret_key_store {
     #[test]
     fn should_only_remove_leftover_hard_linked_duplicate_file_when_opening_secret_key_store() {
         let setup = Setup::new();
-        ic_utils::fs::create_hard_link_to_existing_file(
+        ic_sys::fs::create_hard_link_to_existing_file(
             &setup.secret_key_store.proto_file,
             &setup.secret_key_store.old_proto_file_to_zeroize,
         )
@@ -1002,7 +1004,7 @@ mod zeroize_old_secret_key_store {
             &setup.secret_key_store.old_proto_file_to_zeroize,
         )
         .expect("error copying sks");
-        ic_utils::fs::create_hard_link_to_existing_file(
+        ic_sys::fs::create_hard_link_to_existing_file(
             &setup.secret_key_store.old_proto_file_to_zeroize,
             &setup.hard_link_to_test_zeroization,
         )
@@ -1094,7 +1096,7 @@ mod zeroize_old_secret_key_store {
             // `[ProtoSecretKeyStore::write_secret_keys_to_disk]` is called. It is therefore treated
             // internally as an error, and the cleanup error metric counter is expected to be
             // incremented.
-            ic_utils::fs::create_hard_link_to_existing_file(
+            ic_sys::fs::create_hard_link_to_existing_file(
                 &setup.secret_key_store.proto_file,
                 &setup.secret_key_store.old_proto_file_to_zeroize,
             )
@@ -1129,7 +1131,7 @@ mod zeroize_old_secret_key_store {
             // particular, it is not expected to be the current state when
             // `[ProtoSecretKeyStore::write_secret_keys_to_disk]` is called. It is therefore treated
             // internally as an error, and a cleanup error log warning is expected to be written.
-            ic_utils::fs::create_hard_link_to_existing_file(
+            ic_sys::fs::create_hard_link_to_existing_file(
                 &setup.secret_key_store.proto_file,
                 &setup.secret_key_store.old_proto_file_to_zeroize,
             )

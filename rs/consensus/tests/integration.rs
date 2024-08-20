@@ -1,17 +1,17 @@
+#[cfg(test)]
 mod framework;
 
 use crate::framework::{
     malicious, setup_subnet, ComponentModifier, ConsensusDependencies, ConsensusInstance,
     ConsensusRunner, ConsensusRunnerConfig, StopPredicate,
 };
+use framework::test_threshold_key_ids;
 use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::consensus_pool::ConsensusPool;
 use ic_interfaces::messaging::MessageRouting;
 use ic_interfaces_registry::RegistryClient;
-use ic_test_utilities::{
-    types::ids::{node_test_id, subnet_test_id},
-    FastForwardTimeSource,
-};
+use ic_test_utilities_time::FastForwardTimeSource;
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::{crypto::CryptoHash, replica_config::ReplicaConfig, Height};
 use rand::Rng;
@@ -41,7 +41,7 @@ fn single_node_is_live() {
 }
 
 #[test]
-fn ecdsa_pubkey_is_produced() -> Result<(), String> {
+fn master_pubkeys_are_produced() -> Result<(), String> {
     ConsensusRunnerConfig::new_from_env(4, 0)
         .and_then(|config| config.parse_extra_config())
         .map(|mut config| {
@@ -49,7 +49,7 @@ fn ecdsa_pubkey_is_produced() -> Result<(), String> {
             if config.num_rounds < 60 {
                 config.num_rounds = 60;
             }
-            assert!(run_n_rounds_and_check_pubkey(config, Vec::new(), true));
+            assert!(run_n_rounds_and_check_pubkeys(config, Vec::new(), true));
         })
 }
 
@@ -193,7 +193,7 @@ fn majority_maliciouly_finalize_all_would_diverge() -> Result<(), String> {
 }
 
 #[test]
-fn minority_maliciouly_ecdsa_dealers_would_pass() -> Result<(), String> {
+fn minority_maliciouly_idkg_dealers_would_pass() -> Result<(), String> {
     ConsensusRunnerConfig::new_from_env(4, 0)
         .and_then(|config| config.parse_extra_config())
         .map(|mut config| {
@@ -207,12 +207,28 @@ fn minority_maliciouly_ecdsa_dealers_would_pass() -> Result<(), String> {
             let mut malicious: Vec<ComponentModifier> = Vec::new();
             for _ in 0..rng.gen_range(1..=f) {
                 let malicious_flags = MaliciousFlags {
-                    maliciously_corrupt_ecdsa_dealings: true,
+                    maliciously_corrupt_idkg_dealings: true,
                     ..MaliciousFlags::default()
                 };
                 malicious.push(malicious::with_malicious_flags(malicious_flags));
             }
-            assert!(run_n_rounds_and_check_pubkey(config, malicious, true))
+            assert!(run_n_rounds_and_check_pubkeys(config, malicious, true))
+        })
+}
+
+#[test]
+fn stalled_clocks_with_f_malicious_would_pass() -> Result<(), String> {
+    ConsensusRunnerConfig::new_from_env(4, 0)
+        .and_then(|config| config.parse_extra_config())
+        .map(|mut config| {
+            config.stall_clocks = true;
+            let f = (config.num_nodes - 1) / 3;
+            assert!(f > 0, "This test requires NUM_NODES >= 4");
+            let mut malicious: Vec<ComponentModifier> = Vec::new();
+            for _ in 0..f {
+                malicious.push(malicious::absent_notary_share())
+            }
+            run_n_rounds_and_collect_hashes(config, malicious, true);
         })
 }
 
@@ -249,6 +265,7 @@ fn run_test(
                     pool_config.clone(),
                     Arc::clone(&registry_client) as Arc<dyn RegistryClient>,
                     cup.clone(),
+                    time_source.clone(),
                 )
             })
             .collect();
@@ -304,7 +321,7 @@ fn run_n_rounds_and_collect_hashes(
     hashes.as_ref().take()
 }
 
-fn run_n_rounds_and_check_pubkey(
+fn run_n_rounds_and_check_pubkeys(
     config: ConsensusRunnerConfig,
     modifiers: Vec<ComponentModifier>,
     finish: bool,
@@ -317,7 +334,14 @@ fn run_n_rounds_and_check_pubkey(
         let Some(batch) = batches.last() else {
             return false;
         };
-        if !batch.ecdsa_subnet_public_keys.is_empty() {
+
+        let mut found_keys = 0;
+        for key_id in test_threshold_key_ids() {
+            if batch.idkg_subnet_public_keys.contains_key(&key_id) {
+                found_keys += 1
+            }
+        }
+        if found_keys == test_threshold_key_ids().len() {
             *pubkey_exists_clone.borrow_mut() = true;
         }
         *pubkey_exists_clone.borrow()

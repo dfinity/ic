@@ -2,9 +2,8 @@
 
 use crate::commands::utils;
 use ic_state_layout::{CheckpointLayout, RwPolicy};
-use ic_sys::fs::clone_file;
+use ic_sys::fs::{clone_file, copy_file_sparse};
 use ic_types::Height;
-use ic_utils::fs::copy_file_sparse;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::string::ToString;
@@ -76,7 +75,7 @@ pub fn do_import(state_path: PathBuf, config_path: PathBuf, height: u64) -> Resu
     let state_layout = utils::locate_state_root(config_path)?;
     let height = Height::new(height);
 
-    if let Ok(cp_layout) = state_layout.checkpoint(height) {
+    if let Ok(cp_layout) = state_layout.checkpoint_verified(height) {
         return Err(format!(
             "Checkpoint {} already exists at {}",
             height,

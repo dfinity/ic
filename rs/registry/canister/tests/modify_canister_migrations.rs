@@ -10,7 +10,7 @@ use ic_nns_test_utils::{
 use ic_protobuf::registry::routing_table::v1 as pb;
 use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_test_utilities::types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::CanisterId;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,

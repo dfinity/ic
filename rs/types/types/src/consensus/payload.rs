@@ -1,7 +1,7 @@
 //! Defines consensus payload types.
 use crate::{
     batch::BatchPayload,
-    consensus::{dkg, ecdsa, hashed::Hashed, thunk::Thunk},
+    consensus::{dkg, hashed::Hashed, idkg, thunk::Thunk},
     crypto::CryptoHashOf,
     *,
 };
@@ -18,7 +18,7 @@ use std::sync::Arc;
 pub struct DataPayload {
     pub batch: BatchPayload,
     pub dealings: dkg::Dealings,
-    pub ecdsa: ecdsa::Payload,
+    pub idkg: idkg::Payload,
 }
 
 /// The payload of a summary block.
@@ -26,7 +26,7 @@ pub struct DataPayload {
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct SummaryPayload {
     pub dkg: dkg::Summary,
-    pub ecdsa: ecdsa::Summary,
+    pub idkg: idkg::Summary,
 }
 
 impl SummaryPayload {
@@ -40,12 +40,12 @@ impl SummaryPayload {
     /// Note that this function should generally be called on the CUP instead.
     pub(crate) fn get_oldest_registry_version_in_use(&self) -> RegistryVersion {
         let dkg_version = self.dkg.get_oldest_registry_version_in_use();
-        if let Some(ecdsa_version) = self
-            .ecdsa
+        if let Some(idkg_version) = self
+            .idkg
             .as_ref()
             .and_then(|payload| payload.get_oldest_registry_version_in_use())
         {
-            dkg_version.min(ecdsa_version)
+            dkg_version.min(idkg_version)
         } else {
             dkg_version
         }
@@ -68,7 +68,7 @@ impl BlockPayload {
     pub fn is_empty(&self) -> bool {
         match self {
             BlockPayload::Data(data) => {
-                data.batch.is_empty() && data.dealings.messages.is_empty() && data.ecdsa.is_none()
+                data.batch.is_empty() && data.dealings.messages.is_empty() && data.idkg.is_none()
             }
             _ => false,
         }
@@ -113,11 +113,11 @@ impl BlockPayload {
         }
     }
 
-    /// Returns a reference to EcdsaPayload if it exists.
-    pub fn as_ecdsa(&self) -> Option<&ecdsa::EcdsaPayload> {
+    /// Returns a reference to IDkgPayload if it exists.
+    pub fn as_idkg(&self) -> Option<&idkg::IDkgPayload> {
         match self {
-            BlockPayload::Data(data) => data.ecdsa.as_ref(),
-            BlockPayload::Summary(data) => data.ecdsa.as_ref(),
+            BlockPayload::Data(data) => data.idkg.as_ref(),
+            BlockPayload::Summary(data) => data.idkg.as_ref(),
         }
     }
 
@@ -237,32 +237,17 @@ impl AsRef<BlockPayload> for Payload {
     }
 }
 
-impl From<(dkg::Summary, ecdsa::Summary)> for BlockPayload {
-    fn from((dkg, ecdsa): (dkg::Summary, ecdsa::Summary)) -> BlockPayload {
-        BlockPayload::Summary(SummaryPayload { dkg, ecdsa })
-    }
-}
-
-impl From<(BatchPayload, dkg::Dealings, ecdsa::Payload)> for BlockPayload {
-    fn from(
-        (batch, dealings, ecdsa): (BatchPayload, dkg::Dealings, ecdsa::Payload),
-    ) -> BlockPayload {
-        BlockPayload::Data(DataPayload {
-            batch,
-            dealings,
-            ecdsa,
-        })
-    }
-}
-
 impl From<dkg::Payload> for BlockPayload {
     fn from(payload: dkg::Payload) -> BlockPayload {
         match payload {
-            dkg::Payload::Summary(summary) => (summary, None).into(),
+            dkg::Payload::Summary(summary) => BlockPayload::Summary(SummaryPayload {
+                dkg: summary,
+                idkg: None,
+            }),
             dkg::Payload::Dealings(dealings) => BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
                 dealings,
-                ecdsa: ecdsa::Payload::default(),
+                idkg: idkg::Payload::default(),
             }),
         }
     }

@@ -1,30 +1,31 @@
-use crate::driver::test_env::TestEnv;
-use crate::rosetta_tests::ledger_client::LedgerClient;
-use crate::rosetta_tests::lib::{
-    create_ledger_client, do_multiple_txn, do_multiple_txn_external, make_user_ed25519,
-    one_day_from_now_nanos, raw_construction, sign, to_public_key, NeuronDetails,
+use crate::rosetta_tests::{
+    ledger_client::LedgerClient,
+    lib::{
+        create_ledger_client, do_multiple_txn, do_multiple_txn_external, make_user_ed25519,
+        one_day_from_now_nanos, raw_construction, sign, to_public_key, NeuronDetails,
+    },
+    rosetta_client::RosettaApiClient,
+    setup::setup,
+    test_neurons::TestNeurons,
 };
-use crate::rosetta_tests::rosetta_client::RosettaApiClient;
-use crate::rosetta_tests::setup::setup;
-use crate::rosetta_tests::test_neurons::TestNeurons;
-use crate::util::block_on;
 use assert_json_diff::assert_json_eq;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance::pb::v1::neuron::{DissolveState, Followees};
-use ic_rosetta_api::models::operation::OperationType;
-use ic_rosetta_api::request::request_result::RequestResult;
-use ic_rosetta_api::request::Request;
-use ic_rosetta_api::request_types::{AddHotKey, NeuronInfo, PublicKeyOrPrincipal};
+use ic_nns_governance_api::pb::v1::neuron::{DissolveState, Followees};
+use ic_rosetta_api::{
+    models::operation::OperationType,
+    request::{request_result::RequestResult, Request},
+    request_types::{AddHotKey, NeuronInfo, PublicKeyOrPrincipal},
+};
 use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
+use ic_system_test_driver::{driver::test_env::TestEnv, util::block_on};
 use rosetta_core::objects::ObjectMap;
 use serde_json::{json, Value};
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 const PORT: u32 = 8107;
-const VM_NAME: &str = "rosetta-test-neuron-info";
+const VM_NAME: &str = "rosetta-neuron-info";
 
 pub fn test(env: TestEnv) {
     let _logger = env.logger();
@@ -35,9 +36,14 @@ pub fn test(env: TestEnv) {
 
     // Create neurons.
     let mut neurons = TestNeurons::new(2000, &mut ledger_balances);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
 
     let neuron1 = neurons.create(|neuron| {
         neuron.dissolve_state = Some(DissolveState::DissolveDelaySeconds(2 * 365 * 24 * 60 * 60));
+        neuron.aging_since_timestamp_seconds = now;
         neuron.maturity_e8s_equivalent = 345_000_000;
         neuron.kyc_verified = true;
         neuron.followees = HashMap::from([
@@ -61,10 +67,11 @@ pub fn test(env: TestEnv) {
     });
     let neuron2 = neurons.create(|neuron| {
         neuron.dissolve_state = Some(
-            ic_nns_governance::pb::v1::neuron::DissolveState::DissolveDelaySeconds(
+            ic_nns_governance_api::pb::v1::neuron::DissolveState::DissolveDelaySeconds(
                 3 * 365 * 24 * 60 * 60,
             ),
         );
+        neuron.aging_since_timestamp_seconds = now;
         neuron.maturity_e8s_equivalent = 678_000_000;
         neuron.kyc_verified = true;
         neuron.followees = HashMap::from([
@@ -88,10 +95,11 @@ pub fn test(env: TestEnv) {
     });
     let neuron3 = neurons.create(|neuron| {
         neuron.dissolve_state = Some(
-            ic_nns_governance::pb::v1::neuron::DissolveState::DissolveDelaySeconds(
+            ic_nns_governance_api::pb::v1::neuron::DissolveState::DissolveDelaySeconds(
                 3 * 365 * 24 * 60 * 60,
             ),
         );
+        neuron.aging_since_timestamp_seconds = now;
         neuron.maturity_e8s_equivalent = 679_000_000;
         neuron.kyc_verified = true;
         neuron.followees = HashMap::from([
@@ -129,7 +137,7 @@ async fn test_neuron_info(
 ) {
     let acc = neuron_info.account_id;
     let neuron_index = neuron_info.neuron_subaccount_identifier;
-    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.clone().into();
     let _expected_type = "NEURON_INFO".to_string();
     let res = do_multiple_txn_external(
         ros,
@@ -154,7 +162,7 @@ async fn test_neuron_info(
                 .first()
                 .expect("Expected one neuron info operation."),
             ic_rosetta_api::models::Operation {
-                _type: _expected_type,
+                type_: _expected_type,
                 ..
             }
         ));
@@ -203,7 +211,7 @@ async fn test_neuron_info_with_hotkey(
     _ledger: &LedgerClient,
     neuron_info: &NeuronDetails,
 ) {
-    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.clone().into();
     let acc = neuron_info.account_id;
     let neuron_index = neuron_info.neuron_subaccount_identifier;
     let neuron_controller = neuron_info.principal_id;
@@ -265,7 +273,7 @@ async fn test_neuron_info_with_hotkey(
         assert_eq!(
             ic_rosetta_api::models::operation::OperationType::NeuronInfo,
             results.operations[0]
-                ._type
+                .type_
                 .parse::<OperationType>()
                 .unwrap(),
             "Expecting one neuron info operation."
@@ -315,7 +323,7 @@ async fn test_neuron_info_with_hotkey_raw(
     _ledger: &LedgerClient,
     neuron_info: &NeuronDetails,
 ) {
-    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.clone().into();
     let acc = neuron_info.account_id;
     let neuron_index = neuron_info.neuron_subaccount_identifier;
     let neuron_controller = neuron_info.principal_id;

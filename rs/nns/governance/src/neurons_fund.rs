@@ -2,17 +2,19 @@
 
 use ic_base_types::PrincipalId;
 use ic_nervous_system_governance::maturity_modulation::BASIS_POINTS_PER_UNITY;
+use ic_nervous_system_proto::pb::v1::{Decimal as DecimalPb, Percentage as PercentagePb};
 use ic_neurons_fund::{
     dec_to_u64, rescale_to_icp, u64_to_dec, DeserializableFunction, HalfOpenInterval,
-    IdealMatchingFunction, PolynomialMatchingFunction,
-    MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S,
+    IdealMatchingFunction, NeuronsFundParticipationLimits, PolynomialMatchingFunction,
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_sns_swap::pb::v1::{
     IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionSwapPb,
     LinearScalingCoefficient, NeuronsFundParticipationConstraints,
 };
+use num_traits::ops::inv::Inv;
 use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
 use std::{
     cmp::Ordering,
     collections::{BTreeMap, BTreeSet},
@@ -26,10 +28,13 @@ use crate::{
         create_service_nervous_system::SwapParameters, governance_error,
         neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
         GovernanceError, IdealMatchedParticipationFunction,
+        NeuronsFundEconomics as NeuronsFundEconomicsPb,
+        NeuronsFundMatchedFundingCurveCoefficients as NeuronsFundMatchedFundingCurveCoefficientsPb,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
         NeuronsFundSnapshot as NeuronsFundSnapshotPb,
         SwapParticipationLimits as SwapParticipationLimitsPb,
     },
+    Governance,
 };
 
 /// The Neurons' Fund should not participate in any SNS swap with more than this portion of its
@@ -45,6 +50,282 @@ pub fn take_percentile_of(x: u64, percentile: u16) -> u64 {
 
 pub fn take_max_initial_neurons_fund_participation_percentage(x: u64) -> u64 {
     take_percentile_of(x, MAX_NEURONS_FUND_PARTICIPATION_BASIS_POINTS)
+}
+
+// -------------------------------------------------------------------------------------------------
+// ------------------- NeuronsFundEconomics --------------------------------------------------------
+// -------------------------------------------------------------------------------------------------
+
+impl NeuronsFundEconomicsPb {
+    /// The default values for network economics (until we initialize it).
+    /// Can't implement Default since it conflicts with Prost's.
+    /// The values here are computed under the assumption that 1 XDR = 0.75 USD. See also:
+    /// https://dashboard.internetcomputer.org/proposal/124822
+    pub fn with_default_values() -> Self {
+        Self {
+            max_theoretical_neurons_fund_participation_amount_xdr: Some(DecimalPb {
+                human_readable: Some("750_000.0".to_string()),
+            }),
+            neurons_fund_matched_funding_curve_coefficients: Some(
+                NeuronsFundMatchedFundingCurveCoefficientsPb {
+                    contribution_threshold_xdr: Some(DecimalPb {
+                        human_readable: Some("75_000.0".to_string()),
+                    }),
+                    one_third_participation_milestone_xdr: Some(DecimalPb {
+                        human_readable: Some("225_000.0".to_string()),
+                    }),
+                    full_participation_milestone_xdr: Some(DecimalPb {
+                        human_readable: Some("375_000.0".to_string()),
+                    }),
+                },
+            ),
+            minimum_icp_xdr_rate: Some(PercentagePb {
+                basis_points: Some(10_000), // 1:1
+            }),
+            maximum_icp_xdr_rate: Some(PercentagePb {
+                basis_points: Some(1_000_000), // 1:100
+            }),
+        }
+    }
+}
+
+pub struct NeuronsFundEconomics {
+    pub max_theoretical_neurons_fund_participation_amount_xdr: Decimal,
+    pub contribution_threshold_xdr: Decimal,
+    pub one_third_participation_milestone_xdr: Decimal,
+    pub full_participation_milestone_xdr: Decimal,
+    pub minimum_icp_xdr_rate: Decimal,
+    pub maximum_icp_xdr_rate: Decimal,
+}
+
+impl NeuronsFundEconomics {
+    fn missing_field(field_name: &str) -> String {
+        format!("NeuronsFundEconomics.{} must be specified.", field_name)
+    }
+
+    fn convert_to_rust_decimal_or_err(
+        field_name: &str,
+        field_value_pb: DecimalPb,
+    ) -> Result<Decimal, String> {
+        Decimal::try_from(field_value_pb).map_err(|err| {
+            format!(
+                "NeuronsFundEconomics.{} must be parsed as Decimal: {}",
+                field_name, err,
+            )
+        })
+    }
+}
+
+impl TryFrom<&NeuronsFundEconomicsPb> for NeuronsFundEconomics {
+    type Error = String;
+
+    fn try_from(src: &NeuronsFundEconomicsPb) -> Result<Self, Self::Error> {
+        // First, deconstruct the protobuf.
+
+        let NeuronsFundEconomicsPb {
+            minimum_icp_xdr_rate,
+            maximum_icp_xdr_rate,
+            max_theoretical_neurons_fund_participation_amount_xdr,
+            neurons_fund_matched_funding_curve_coefficients,
+        } = src;
+
+        let minimum_icp_xdr_rate = Decimal::from(
+            minimum_icp_xdr_rate
+                .ok_or_else(|| Self::missing_field("minimum_icp_xdr_rate"))?
+                .basis_points
+                .ok_or_else(|| Self::missing_field("minimum_icp_xdr_rate.basis_points"))?,
+        ) / dec!(10_000);
+
+        let maximum_icp_xdr_rate = Decimal::from(
+            maximum_icp_xdr_rate
+                .ok_or_else(|| Self::missing_field("maximum_icp_xdr_rate"))?
+                .basis_points
+                .ok_or_else(|| Self::missing_field("maximum_icp_xdr_rate.basis_points"))?,
+        ) / dec!(10_000);
+
+        let max_theoretical_neurons_fund_participation_amount_xdr =
+            max_theoretical_neurons_fund_participation_amount_xdr
+                .clone()
+                .ok_or_else(|| {
+                    Self::missing_field("max_theoretical_neurons_fund_participation_amount_xdr")
+                })?;
+
+        let neurons_fund_matched_funding_curve_coefficients =
+            neurons_fund_matched_funding_curve_coefficients
+                .clone()
+                .ok_or_else(|| {
+                    Self::missing_field("neurons_fund_matched_funding_curve_coefficients")
+                })?;
+
+        let NeuronsFundMatchedFundingCurveCoefficientsPb {
+            contribution_threshold_xdr,
+            one_third_participation_milestone_xdr,
+            full_participation_milestone_xdr,
+        } = neurons_fund_matched_funding_curve_coefficients;
+
+        let contribution_threshold_xdr = contribution_threshold_xdr
+            .clone()
+            .ok_or_else(|| Self::missing_field("contribution_threshold_xdr"))?;
+
+        let one_third_participation_milestone_xdr =
+            one_third_participation_milestone_xdr
+                .clone()
+                .ok_or_else(|| Self::missing_field("one_third_participation_milestone_xdr"))?;
+
+        let full_participation_milestone_xdr = full_participation_milestone_xdr
+            .clone()
+            .ok_or_else(|| Self::missing_field("full_participation_milestone_xdr"))?;
+
+        // Second, convert all serialized Decimals into internal Rust types.
+
+        let max_theoretical_neurons_fund_participation_amount_xdr =
+            Self::convert_to_rust_decimal_or_err(
+                "max_theoretical_neurons_fund_participation_amount_xdr",
+                max_theoretical_neurons_fund_participation_amount_xdr,
+            )?;
+
+        let contribution_threshold_xdr = Self::convert_to_rust_decimal_or_err(
+            "contribution_threshold_xdr",
+            contribution_threshold_xdr,
+        )?;
+
+        let one_third_participation_milestone_xdr = Self::convert_to_rust_decimal_or_err(
+            "one_third_participation_milestone_xdr",
+            one_third_participation_milestone_xdr,
+        )?;
+
+        let full_participation_milestone_xdr = Self::convert_to_rust_decimal_or_err(
+            "full_participation_milestone_xdr",
+            full_participation_milestone_xdr,
+        )?;
+
+        Ok(Self {
+            max_theoretical_neurons_fund_participation_amount_xdr,
+            contribution_threshold_xdr,
+            one_third_participation_milestone_xdr,
+            full_participation_milestone_xdr,
+            minimum_icp_xdr_rate,
+            maximum_icp_xdr_rate,
+        })
+    }
+}
+
+#[cfg(test)]
+mod test_neurons_fund_economics_pb {
+    use super::*;
+    use rust_decimal_macros::dec;
+
+    #[test]
+    fn threasholds_can_be_parsed() {
+        let default_neurons_fund_network_economics = NeuronsFundEconomicsPb::with_default_values();
+
+        let NeuronsFundEconomics {
+            max_theoretical_neurons_fund_participation_amount_xdr,
+            contribution_threshold_xdr,
+            one_third_participation_milestone_xdr,
+            full_participation_milestone_xdr,
+            minimum_icp_xdr_rate,
+            maximum_icp_xdr_rate,
+        } = NeuronsFundEconomics::try_from(&default_neurons_fund_network_economics).unwrap();
+
+        assert_eq!(
+            max_theoretical_neurons_fund_participation_amount_xdr,
+            dec!(750_000)
+        );
+        assert_eq!(contribution_threshold_xdr, dec!(75_000));
+        assert_eq!(one_third_participation_milestone_xdr, dec!(225_000));
+        assert_eq!(full_participation_milestone_xdr, dec!(375_000));
+
+        assert_eq!(minimum_icp_xdr_rate, dec!(1.0));
+        assert_eq!(maximum_icp_xdr_rate, dec!(100.0));
+    }
+}
+
+impl Governance {
+    fn try_derive_neurons_fund_participation_limits_impl(
+        neurons_fund_economics: &NeuronsFundEconomicsPb,
+        icp_xdr_rate: Decimal,
+    ) -> Result<NeuronsFundParticipationLimits, String> {
+        let NeuronsFundEconomics {
+            max_theoretical_neurons_fund_participation_amount_xdr,
+            contribution_threshold_xdr,
+            one_third_participation_milestone_xdr,
+            full_participation_milestone_xdr,
+            minimum_icp_xdr_rate,
+            maximum_icp_xdr_rate,
+        } = NeuronsFundEconomics::try_from(neurons_fund_economics)?;
+
+        if icp_xdr_rate <= minimum_icp_xdr_rate {
+            println!(
+                "{}WARNING: icp_xdr_rate ({}) is being clamped at the lower bound ({}).",
+                governance::LOG_PREFIX,
+                icp_xdr_rate,
+                minimum_icp_xdr_rate,
+            );
+        }
+        if icp_xdr_rate >= maximum_icp_xdr_rate {
+            println!(
+                "{}WARNING: icp_xdr_rate ({}) is being clamped at the upper bound ({}).",
+                governance::LOG_PREFIX,
+                icp_xdr_rate,
+                maximum_icp_xdr_rate,
+            );
+        }
+        let icp_xdr_rate = icp_xdr_rate.clamp(minimum_icp_xdr_rate, maximum_icp_xdr_rate);
+
+        if icp_xdr_rate.is_zero() {
+            // We don't expect this to ever happen in practice.
+            return Err("icp_xdr_rate must be greater than zero.".to_string());
+        }
+        let xdr_icp_rate = icp_xdr_rate.inv();
+
+        let convert_xdr_to_icp = |amount_xdr: Decimal| -> Result<Decimal, String> {
+            amount_xdr.checked_mul(xdr_icp_rate).ok_or_else(|| {
+                format!(
+                    "Cannot convert {} XDR to ICP due to a Decimal overflow. xdr_icp_rate = {}.",
+                    amount_xdr, xdr_icp_rate,
+                )
+            })
+        };
+
+        let max_theoretical_neurons_fund_participation_amount_icp =
+            convert_xdr_to_icp(max_theoretical_neurons_fund_participation_amount_xdr)?;
+
+        let contribution_threshold_icp = convert_xdr_to_icp(contribution_threshold_xdr)?;
+
+        let one_third_participation_milestone_icp =
+            convert_xdr_to_icp(one_third_participation_milestone_xdr)?;
+
+        let full_participation_milestone_icp =
+            convert_xdr_to_icp(full_participation_milestone_xdr)?;
+
+        Ok(NeuronsFundParticipationLimits {
+            max_theoretical_neurons_fund_participation_amount_icp,
+            contribution_threshold_icp,
+            one_third_participation_milestone_icp,
+            full_participation_milestone_icp,
+        })
+    }
+
+    pub fn try_derive_neurons_fund_participation_limits(
+        &self,
+    ) -> Result<NeuronsFundParticipationLimits, String> {
+        let Some(ref economics) = self.heap_data.economics else {
+            return Err("Network Economics must be specified.".to_string());
+        };
+
+        // The initial values are expected to be populated in `canister_post_upgrade`.
+        let Some(ref neurons_fund_economics) = economics.neurons_fund_economics else {
+            return Err("Neurons' Fund economics must be specified.".to_string());
+        };
+
+        let icp_xdr_rate = self.icp_xdr_rate();
+
+        Self::try_derive_neurons_fund_participation_limits_impl(
+            neurons_fund_economics,
+            icp_xdr_rate,
+        )
+    }
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -65,6 +346,9 @@ pub struct NeuronsFundNeuronPortion {
     pub maturity_equivalent_icp_e8s: u64,
     /// Controller of the neuron from which this portion is taken.
     pub controller: PrincipalId,
+    /// Hotkeys of the neuron from which this portion is taken.
+    /// TOOD(NNS1-3198): This field is not currently populated.
+    pub hotkeys: Vec<PrincipalId>,
     /// Indicates whether the portion specified by `amount_icp_e8s` is limited due to SNS-specific
     /// participation constraints.
     pub is_capped: bool,
@@ -98,18 +382,19 @@ pub enum NeuronsFundNeuronPortionError {
     },
 }
 
-impl ToString for NeuronsFundNeuronPortionError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for NeuronsFundNeuronPortionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "Invalid NeuronsFundNeuronPortion: ";
         match self {
             Self::UnspecifiedField(field_name) => {
-                format!("{}field `{}` is not specified.", prefix, field_name)
+                write!(f, "{}field `{}` is not specified.", prefix, field_name)
             }
             Self::AmountTooBig {
                 amount_icp_e8s,
                 maturity_equivalent_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}`amount_icp_e8s` ({}) exceeds `maturity_equivalent_icp_e8s` ({})",
                     prefix, amount_icp_e8s, maturity_equivalent_icp_e8s,
                 )
@@ -137,9 +422,11 @@ impl NeuronsFundNeuronPortionPb {
                 maturity_equivalent_icp_e8s,
             });
         }
-        let controller = self.hotkey_principal.ok_or_else(|| {
+        #[allow(deprecated)] // TODO(NNS1-3198): remove .or(hotkey_principal)
+        let controller = self.controller.or(self.hotkey_principal).ok_or_else(|| {
             NeuronsFundNeuronPortionError::UnspecifiedField("hotkey_principal".to_string())
         })?;
+        let hotkeys = self.hotkeys.clone();
         let is_capped = self.is_capped.ok_or_else(|| {
             NeuronsFundNeuronPortionError::UnspecifiedField("is_capped".to_string())
         })?;
@@ -148,6 +435,7 @@ impl NeuronsFundNeuronPortionPb {
             amount_icp_e8s,
             maturity_equivalent_icp_e8s,
             controller,
+            hotkeys,
             is_capped,
         })
     }
@@ -266,7 +554,7 @@ impl NeuronsFundSnapshot {
             .neurons
             .into_iter()
             .filter_map(|(id, left)| {
-                let (amount_icp_e8s, maturity_equivalent_icp_e8s, controller, is_capped) =
+                let (amount_icp_e8s, maturity_equivalent_icp_e8s, controller, hotkeys, is_capped) =
                     if let Some(right) = deductible_neurons.remove(&id) {
                         let err_prefix =
                             || format!("Cannot compute diff of two portions of neuron {:?}: ", id);
@@ -304,6 +592,17 @@ impl NeuronsFundSnapshot {
                             };
                             right.controller
                         };
+                        let hotkeys = {
+                            if left.hotkeys != right.hotkeys {
+                                return Some(Err(format!(
+                                    "{}left.hotkeys={:?}, right.hotkeys={:?}.",
+                                    err_prefix(),
+                                    left.hotkeys,
+                                    right.hotkeys,
+                                )));
+                            };
+                            right.hotkeys
+                        };
                         let is_capped = {
                             if !left.is_capped && right.is_capped {
                                 return Some(Err(format!(
@@ -320,6 +619,7 @@ impl NeuronsFundSnapshot {
                             amount_icp_e8s,
                             maturity_equivalent_icp_e8s,
                             controller,
+                            hotkeys,
                             is_capped,
                         )
                     } else {
@@ -327,6 +627,7 @@ impl NeuronsFundSnapshot {
                             left.amount_icp_e8s,
                             left.maturity_equivalent_icp_e8s,
                             left.controller,
+                            left.hotkeys,
                             // The effectively taken portion of this neuron is zero, so it cannot
                             // be capped.
                             false,
@@ -338,8 +639,9 @@ impl NeuronsFundSnapshot {
                 } else {
                     let portion = NeuronsFundNeuronPortion {
                         id,
-                        controller,
                         amount_icp_e8s,
+                        controller,
+                        hotkeys,
                         maturity_equivalent_icp_e8s,
                         is_capped,
                     };
@@ -398,16 +700,15 @@ pub enum NeuronsFundSnapshotValidationError {
     NeuronsFundNeuronPortionError(usize, NeuronsFundNeuronPortionError),
 }
 
-impl ToString for NeuronsFundSnapshotValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for NeuronsFundSnapshotValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "Cannot validate NeuronsFundSnapshot: ";
         match self {
             Self::NeuronsFundNeuronPortionError(index, error) => {
-                format!(
+                write!(
+                    f,
                     "{}neurons_fund_neuron_portions[{}]: {}",
-                    prefix,
-                    index,
-                    error.to_string()
+                    prefix, index, error
                 )
             }
         }
@@ -469,18 +770,19 @@ pub enum SwapParametersError {
     },
 }
 
-impl ToString for SwapParametersError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for SwapParametersError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "Cannot extract data from SwapParameters: ";
         match self {
             Self::UnspecifiedField(field_name) => {
-                format!("{}field `{}` is not specified.", prefix, field_name,)
+                write!(f, "{}field `{}` is not specified.", prefix, field_name,)
             }
             Self::MaxIsLessThanOrEqualMinParticipationIcp {
                 min_direct_participation_icp_e8s,
                 max_direct_participation_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}invariant violated: min_direct_participation_icp_e8s ({}) \
                     <= max_direct_participation_icp_e8s ({}).",
                     prefix, min_direct_participation_icp_e8s, max_direct_participation_icp_e8s,
@@ -490,7 +792,8 @@ impl ToString for SwapParametersError {
                 min_participant_icp_e8s,
                 max_participant_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}invariant violated: min_participant_icp_e8s ({}) \
                     <= max_participant_icp_e8s ({}).",
                     prefix, min_participant_icp_e8s, max_participant_icp_e8s,
@@ -600,9 +903,8 @@ pub struct NeuronsFundParticipation<F> {
     total_maturity_equivalent_icp_e8s: u64,
     /// Maximum amount that the Neurons' Fund will participate with in this SNS swap, regardless of
     /// how large the value of `direct_participation_icp_e8s` is. This value is capped by whichever
-    /// of the three is the smallest value:
-    /// * `ideal_matched_participation_function.apply(swap_participation_limits. )`,
-    /// * `MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S`,
+    /// of the two is the smallest value:
+    /// * `ideal_matched_participation_function.apply(swap_participation_limits.max_direct_participation_icp_e8s)`,
     /// * 10% of the total Neurons' Fund maturity ICP equivalent.
     ///
     /// Warning: This value does not take into account limiting the participation of individual
@@ -706,12 +1008,14 @@ where
                      id,
                      maturity_equivalent_icp_e8s,
                      controller,
+                     hotkeys,
                      ..
                  }| {
                     NeuronsFundNeuron {
                         id: *id,
                         maturity_equivalent_icp_e8s: *maturity_equivalent_icp_e8s,
                         controller: *controller,
+                        hotkeys: hotkeys.clone(),
                     }
                 },
             )
@@ -737,11 +1041,6 @@ where
             take_max_initial_neurons_fund_participation_percentage(
                 total_maturity_equivalent_icp_e8s,
             );
-        // Apply hard cap.
-        let max_neurons_fund_swap_participation_icp_e8s = u64::min(
-            max_neurons_fund_swap_participation_icp_e8s,
-            MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S,
-        );
         // Apply cap dictated by `ideal_matched_participation_function`.
         let max_neurons_fund_swap_participation_icp_e8s = u64::min(
             max_neurons_fund_swap_participation_icp_e8s,
@@ -784,9 +1083,9 @@ where
             } else if intended_neurons_fund_participation_icp_e8s == 0 {
                 println!(
                     "{}WARNING: intended_neurons_fund_participation_icp_e8s is zero, matching \
-                direct_participation_icp_e8s = {}. total_maturity_equivalent_icp_e8s = {}. \
-                ideal_matched_participation_function = {:?}\n \
-                Plot: \n{:?}",
+                    direct_participation_icp_e8s = {}. total_maturity_equivalent_icp_e8s = {}. \
+                    ideal_matched_participation_function = {:?}\n \
+                    Plot: \n{:?}",
                     governance::LOG_PREFIX,
                     direct_participation_icp_e8s,
                     total_maturity_equivalent_icp_e8s,
@@ -817,6 +1116,7 @@ where
                      id,
                      maturity_equivalent_icp_e8s,
                      controller,
+                     hotkeys,
                  }| {
                     // Division is safe, as `total_maturity_equivalent_icp_e8s != 0` in this branch.
                     let proportion_to_overall_neurons_fund = u64_to_dec(maturity_equivalent_icp_e8s)?
@@ -882,6 +1182,7 @@ where
                         amount_icp_e8s,
                         maturity_equivalent_icp_e8s,
                         controller,
+                        hotkeys,
                         is_capped,
                     };
                     if let Some(old_neuron_portion) = overall_neuron_portions.insert(id, new_neuron_portion) {
@@ -1073,6 +1374,7 @@ where
     /// 1. Direct participation from 0 till (200 / 0.7) ICP: {} // no neurons are above threshold
     /// 2. Direct participation from (200 / 0.7) ICP till (200 / 0.3) ICP: { N1 }
     /// 3. Direct participation from (200 / 0.3) ICP till +inf: { N1, N2 }
+    ///
     /// Explanation for the `(200 / 0.7)` value above. When direct participation is 200 / 0.7,
     /// the ideal matching is also 200 / 0.7 (per the ideal matching function). Thus, N1 tries
     /// to participate at (200 / 0.7) * 0.7 = 200, which is enough to reach the threshold.
@@ -1239,6 +1541,7 @@ pub type PolynomialNeuronsFundParticipation = NeuronsFundParticipation<Polynomia
 impl PolynomialNeuronsFundParticipation {
     /// Create a new Neurons' Fund participation for the given `swap_participation_limits`.
     pub fn new(
+        neurons_fund_participation_limits: NeuronsFundParticipationLimits,
         swap_participation_limits: SwapParticipationLimits,
         neurons_fund: Vec<NeuronsFundNeuron>,
     ) -> Result<Self, String> {
@@ -1246,6 +1549,7 @@ impl PolynomialNeuronsFundParticipation {
             Self::count_neurons_fund_total_maturity_equivalent_icp_e8s(&neurons_fund)?;
         let ideal_matched_participation_function = Box::from(PolynomialMatchingFunction::new(
             total_maturity_equivalent_icp_e8s,
+            neurons_fund_participation_limits,
         )?);
         Self::new_impl(
             total_maturity_equivalent_icp_e8s,
@@ -1271,12 +1575,14 @@ impl PolynomialNeuronsFundParticipation {
                      id,
                      maturity_equivalent_icp_e8s,
                      controller,
+                     hotkeys,
                      ..
                  }| {
                     NeuronsFundNeuron {
                         id: *id,
                         maturity_equivalent_icp_e8s: *maturity_equivalent_icp_e8s,
                         controller: *controller,
+                        hotkeys: hotkeys.clone(),
                     }
                 },
             )
@@ -1313,30 +1619,32 @@ pub enum NeuronsFundParticipationValidationError {
     },
 }
 
-impl ToString for NeuronsFundParticipationValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for NeuronsFundParticipationValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "NeuronsFundParticipation is invalid: ";
         match self {
             Self::UnspecifiedField(field_name) => {
-                format!("{}field `{}` is not specified.", prefix, field_name)
+                write!(f, "{}field `{}` is not specified.", prefix, field_name)
             }
             Self::NeuronsFundSnapshotValidationError(error) => {
-                format!("{}{}", prefix, error.to_string())
+                write!(f, "{}{}", prefix, error)
             }
             Self::MatchFunctionDeserializationFailed(error) => {
-                format!(
+                write!(
+                    f,
                     "{}failed to deserialize an IdealMatchingFunction instance: {}",
                     prefix, error
                 )
             }
             Self::SwapParametersError(error) => {
-                format!("{}{}", prefix, error.to_string())
+                write!(f, "{}{}", prefix, error)
             }
             Self::NeuronsFundParticipationGreaterThanDirectParticipation {
                 allocated_neurons_fund_participation_icp_e8s,
                 direct_participation_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}invariant violated: allocated_neurons_fund_participation_icp_e8s ({}) \
                     must be <= direct_participation_icp_e8s ({}).",
                     prefix,
@@ -1350,7 +1658,8 @@ impl ToString for NeuronsFundParticipationValidationError {
                 max_neurons_fund_swap_participation_icp_e8s,
                 total_maturity_equivalent_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}invariant violated: allocated_neurons_fund_participation_icp_e8s ({}) \
                     must be <= intended_neurons_fund_participation_icp_e8s ({}) \
                     must be <= max_neurons_fund_swap_participation_icp_e8s ({}) \
@@ -1366,7 +1675,8 @@ impl ToString for NeuronsFundParticipationValidationError {
                 allocated_neurons_fund_participation_icp_e8s,
                 neurons_fund_reserves_total_amount_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}inconsistent total allocation data: \
                     allocated_neurons_fund_participation_icp_e8s ({}) \
                     must be == neurons_fund_reserves.total_amount_icp_e8s ({}).",
@@ -1423,6 +1733,7 @@ where
             Some(participation.intended_neurons_fund_participation_icp_e8s);
         let allocated_neurons_fund_participation_icp_e8s =
             Some(participation.allocated_neurons_fund_participation_icp_e8s);
+        #[allow(deprecated)] // TODO(NNS1-3198): Remove
         let neurons_fund_neuron_portions: Vec<NeuronsFundNeuronPortionPb> = participation
             .into_snapshot()
             .neurons()
@@ -1431,8 +1742,11 @@ where
                 nns_neuron_id: Some(neuron.id),
                 amount_icp_e8s: Some(neuron.amount_icp_e8s),
                 maturity_equivalent_icp_e8s: Some(neuron.maturity_equivalent_icp_e8s),
-                hotkey_principal: Some(neuron.controller),
                 is_capped: Some(neuron.is_capped),
+                controller: Some(neuron.controller),
+                hotkeys: neuron.hotkeys.clone(),
+                // TODO(NNS1-3198): remove due to the  very misleading name
+                hotkey_principal: Some(neuron.controller),
             })
             .collect();
         let neurons_fund_reserves = Some(NeuronsFundSnapshotPb {
@@ -1690,6 +2004,184 @@ fn apply_neurons_fund_snapshot(
             "Errors while mutating the Neurons' Fund:\n  - {}",
             neurons_fund_action_error.join("\n  - ")
         ))
+    }
+}
+
+pub mod neurons_fund_neuron {
+    use ic_base_types::PrincipalId;
+    use std::collections::HashSet;
+
+    /// The number of hotkeys for each Neurons' Fund neuron must be limited due to SNS constraints,
+    /// i.e., an SNS cannot represent arbitrarily-big sets of hotkeys using SNS neuron permissions.
+    /// Concretely, this value should be less than or equal
+    /// `MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_FLOOR` - 2
+    /// because two permissions will be used for the NNS Governance and the NNS neuron controller.
+    pub const MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON: usize = 3;
+
+    /// Returns up to `MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON` elements out of `hotkeys`.
+    ///
+    /// Priority is given to *self-authenticating* principals; if there are too few such principals,
+    /// the function picks the remaining elements in the order in which they appear in the original
+    /// vector.
+    pub fn pick_most_important_hotkeys(hotkeys: &Vec<PrincipalId>) -> Vec<PrincipalId> {
+        // Remove duplicates while preserving the order.
+        let mut unique_hotkeys = vec![];
+        let mut non_self_auth_hotkeys = vec![];
+        let mut observed = HashSet::new();
+        for hotkey in hotkeys {
+            if !observed.contains(hotkey) {
+                observed.insert(*hotkey);
+                // Collect hotkeys that are self-authenticating; save non_self_auth_hotkeys for
+                // later, in case there is still space for some of them.
+                if hotkey.is_self_authenticating() {
+                    unique_hotkeys.push(*hotkey);
+                } else {
+                    non_self_auth_hotkeys.push(*hotkey);
+                }
+            }
+            // Limit how many hotkeys may be collected.
+            if unique_hotkeys.len() == MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON {
+                break;
+            }
+        }
+
+        // If there is space in `unique_hotkeys`, fill it up using `non_self_auth_hotkeys`.
+        while unique_hotkeys.len() < MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON
+            && !non_self_auth_hotkeys.is_empty()
+        {
+            let non_self_authenticating_hotkey = non_self_auth_hotkeys.remove(0);
+            unique_hotkeys.push(non_self_authenticating_hotkey);
+        }
+
+        unique_hotkeys
+    }
+}
+
+#[cfg(test)]
+mod pick_most_important_hotkeys_tests {
+    use super::neurons_fund_neuron::pick_most_important_hotkeys;
+    use ic_types::PrincipalId;
+
+    fn new_non_self_authenticating_principal_id(id: u64) -> PrincipalId {
+        let res = PrincipalId::new_user_test_id(id);
+        assert!(!res.is_self_authenticating());
+        res
+    }
+
+    fn new_self_authenticating_principal_id(id: u64) -> PrincipalId {
+        let res = PrincipalId::new_self_authenticating(&id.to_be_bytes());
+        assert!(res.is_self_authenticating());
+        res
+    }
+
+    #[test]
+    fn trivial() {
+        assert_eq!(pick_most_important_hotkeys(&vec![]), vec![]);
+    }
+
+    #[test]
+    fn ordering_preserved_for_self_auth() {
+        let hot_keys = vec![
+            new_self_authenticating_principal_id(1),
+            new_self_authenticating_principal_id(2),
+        ];
+
+        assert_eq!(
+            pick_most_important_hotkeys(&hot_keys),
+            vec![
+                new_self_authenticating_principal_id(1),
+                new_self_authenticating_principal_id(2),
+            ],
+        );
+    }
+
+    #[test]
+    fn ordering_preserved_for_non_self_auth() {
+        let hot_keys = vec![
+            new_non_self_authenticating_principal_id(1),
+            new_non_self_authenticating_principal_id(2),
+        ];
+
+        assert_eq!(
+            pick_most_important_hotkeys(&hot_keys),
+            vec![
+                new_non_self_authenticating_principal_id(1),
+                new_non_self_authenticating_principal_id(2),
+            ],
+        );
+    }
+
+    #[test]
+    fn ordering_preserved_for_self_auth_followed_by_non_self_auth() {
+        let hot_keys = vec![
+            new_self_authenticating_principal_id(1),
+            new_non_self_authenticating_principal_id(2),
+        ];
+
+        assert_eq!(
+            pick_most_important_hotkeys(&hot_keys),
+            vec![
+                new_self_authenticating_principal_id(1),
+                new_non_self_authenticating_principal_id(2),
+            ],
+        );
+    }
+
+    #[test]
+    fn ordering_reversed_for_non_self_auth_followed_by_self_auth() {
+        let hot_keys = vec![
+            new_non_self_authenticating_principal_id(1),
+            new_self_authenticating_principal_id(2),
+        ];
+
+        assert_eq!(
+            pick_most_important_hotkeys(&hot_keys),
+            vec![
+                new_self_authenticating_principal_id(2),
+                new_non_self_authenticating_principal_id(1),
+            ],
+        );
+    }
+
+    #[test]
+    fn plenty_self_authenticating() {
+        let hot_keys = vec![
+            new_self_authenticating_principal_id(1),
+            new_non_self_authenticating_principal_id(2),
+            new_self_authenticating_principal_id(3),
+            new_self_authenticating_principal_id(4),
+            new_self_authenticating_principal_id(5),
+        ];
+
+        assert_eq!(
+            pick_most_important_hotkeys(&hot_keys),
+            vec![
+                new_self_authenticating_principal_id(1),
+                // #2 dropped as a non-self-authenticating principal.
+                new_self_authenticating_principal_id(3),
+                new_self_authenticating_principal_id(4),
+                // #5 dropped as there are already sufficiently-many hotkeys.
+            ],
+        );
+    }
+
+    #[test]
+    fn few_self_authenticating() {
+        let hot_keys = vec![
+            new_non_self_authenticating_principal_id(1),
+            new_self_authenticating_principal_id(2),
+            new_non_self_authenticating_principal_id(3),
+            new_non_self_authenticating_principal_id(4),
+        ];
+
+        assert_eq!(
+            pick_most_important_hotkeys(&hot_keys),
+            vec![
+                new_self_authenticating_principal_id(2),
+                new_non_self_authenticating_principal_id(1),
+                new_non_self_authenticating_principal_id(3),
+            ],
+        );
     }
 }
 

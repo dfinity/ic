@@ -3,7 +3,7 @@
 //!
 //! The public interface for the threshold ECDSA implementation is in `src/lib.rs`.
 //!
-//! Internally within the library, the error type `ThresholdEcdsaError` is used. In
+//! Internally within the library, the error type `CanisterThresholdError` is used. In
 //! the public interfaces, this error is mapped onto function specific error types.
 //!
 //! ## Attack Model
@@ -24,7 +24,8 @@
 //! The dealing will either be "masked" (the commitments are Pedersen commitments)
 //! or "unmasked" (the commitments are simple dlog commitments).
 //!
-//! There are four types of dealings
+//! There are five types of dealings
+//!  - RandomUnmasked: outputs unmasked dealing, no proof
 //!  - Random: outputs masked dealing, no proof
 //!  - ReshareOfUnmasked: outputs unmasked dealing, no proof is
 //!    required since equivalence is provable from the commitments
@@ -151,25 +152,6 @@
 //! derivation function is used elsewhere, namely in [`Seed`] and the
 //! [random oracle](#utility-functions-random-oracle).
 //!
-//! ## Utility Functions: Field Arithmetic
-//!
-//! Files: `fe.rs` and in `fe-derive` crate
-//!
-//! Implementing hash2curve requires arithmetic over the field modulo
-//! the prime (for secp256k1, this is 2**256 - 0x1000003d1). This is
-//! not supported by available Rust libraries so it is included here.
-//!
-//! `fe.rs` provides a wrapper, [`EccFieldElement`], that handles arithmetic
-//! for multiple curves. It is simply an enum which dispatches to the
-//! relevant implementation.
-//!
-//! The implementation of the arithmetic itself is crated via a Rust proc
-//! macro in the associated `fe-derive` crate. It uses a simple packed
-//! `u64` representation with all arithmetic done in Montgomery form. The
-//! Montgomery parameters are computed at compile time by the proc macro.
-//! These are instantiated by the calls to
-//! [`fe_derive::derive_field_element!`] in `fe.rs`.
-//!
 //! ## Utility Functions: Seed
 //!
 //! File: `lib.rs` in `seed` crate
@@ -204,23 +186,24 @@
 
 #![forbid(unsafe_code)]
 
-use ic_crypto_internal_seed::xmd::XmdError;
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey};
+use ic_crypto_internal_seed::XmdError;
+use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey};
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use strum::EnumIter;
 
 pub use ic_crypto_internal_seed::Seed;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
     IDkgVerifyTranscriptError,
 };
-pub use ic_types::crypto::canister_threshold_sig::EcdsaPublicKey;
+pub use ic_types::crypto::canister_threshold_sig::PublicKey;
 pub use ic_types::NodeIndex;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum ThresholdEcdsaError {
+pub enum CanisterThresholdError {
     CurveMismatch,
     InconsistentCiphertext,
     InconsistentOpeningAndCommitment,
@@ -243,38 +226,98 @@ pub enum ThresholdEcdsaError {
     UnexpectedCommitmentType,
 }
 
-pub type ThresholdEcdsaResult<T> = std::result::Result<T, ThresholdEcdsaError>;
+pub type CanisterThresholdResult<T> = std::result::Result<T, CanisterThresholdError>;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ThresholdEcdsaSerializationError(pub String);
+pub struct CanisterThresholdSerializationError(pub String);
 
-pub type ThresholdEcdsaSerializationResult<T> =
-    std::result::Result<T, ThresholdEcdsaSerializationError>;
+pub type CanisterThresholdSerializationResult<T> =
+    std::result::Result<T, CanisterThresholdSerializationError>;
 
-mod complaints;
-mod dealings;
-mod fe;
-mod group;
-mod hash2curve;
-mod key_derivation;
-mod mega;
-mod poly;
-pub mod ro;
-pub mod sign;
+/// Identifies an IDKG protocol purposes
+///
+/// The IDKG is flexible, and usable for many different purposes.
+/// This enumeration identifies what the intended use of an IDKG
+/// instance is.
+///
+#[derive(Copy, Clone, Debug, EnumIter, Eq, PartialEq)]
+pub enum IdkgProtocolAlgorithm {
+    EcdsaSecp256k1,
+    EcdsaSecp256r1,
+    Bip340,
+    Ed25519,
+}
+
+impl IdkgProtocolAlgorithm {
+    pub fn from_algorithm(alg_id: ic_types::crypto::AlgorithmId) -> Option<Self> {
+        match alg_id {
+            AlgorithmId::ThresholdEcdsaSecp256k1 => Some(Self::EcdsaSecp256k1),
+            AlgorithmId::ThresholdEcdsaSecp256r1 => Some(Self::EcdsaSecp256r1),
+            AlgorithmId::ThresholdSchnorrBip340 => Some(Self::Bip340),
+            AlgorithmId::ThresholdEd25519 => Some(Self::Ed25519),
+            _ => None,
+        }
+    }
+
+    pub fn to_algorithm_id(&self) -> AlgorithmId {
+        match self {
+            Self::EcdsaSecp256k1 => AlgorithmId::ThresholdEcdsaSecp256k1,
+            Self::EcdsaSecp256r1 => AlgorithmId::ThresholdEcdsaSecp256r1,
+            Self::Bip340 => AlgorithmId::ThresholdSchnorrBip340,
+            Self::Ed25519 => AlgorithmId::ThresholdEd25519,
+        }
+    }
+
+    pub fn tag(&self) -> &'static str {
+        match self {
+            Self::EcdsaSecp256k1 => "ecdsa-secp256k1",
+            Self::EcdsaSecp256r1 => "ecdsa-secp256r1",
+            Self::Bip340 => "bip340",
+            Self::Ed25519 => "ed25519",
+        }
+    }
+
+    pub fn curve(&self) -> EccCurveType {
+        match self {
+            Self::EcdsaSecp256k1 => EccCurveType::K256,
+            Self::EcdsaSecp256r1 => EccCurveType::P256,
+            Self::Bip340 => EccCurveType::K256,
+            Self::Ed25519 => EccCurveType::Ed25519,
+        }
+    }
+}
+
 pub mod test_utils;
-mod transcript;
-pub mod zk;
 
-pub use crate::complaints::IDkgComplaintInternal;
-pub use crate::dealings::*;
-pub use crate::fe::*;
-pub use crate::group::*;
-pub use crate::mega::*;
-pub use crate::poly::*;
-pub use crate::transcript::*;
+mod domain_sep;
+mod idkg;
+mod signing;
+mod utils;
 
-pub use crate::key_derivation::{DerivationIndex, DerivationPath};
-pub use sign::{ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal};
+use domain_sep::DomainSep;
+
+pub use crate::idkg::mega::*;
+
+pub use crate::idkg::complaints::*;
+pub use crate::idkg::dealings::*;
+pub use crate::idkg::transcript::*;
+pub use crate::idkg::zk;
+
+pub use crate::utils::group::*;
+pub use crate::utils::poly::*;
+
+pub use crate::utils::ro::*;
+
+pub use crate::signing::bip340::{
+    ThresholdBip340CombinedSignatureInternal, ThresholdBip340SignatureShareInternal,
+};
+pub use crate::signing::ecdsa::{
+    ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal,
+};
+pub use crate::signing::eddsa::{
+    ThresholdEd25519CombinedSignatureInternal, ThresholdEd25519SignatureShareInternal,
+};
+pub use crate::signing::key_derivation::{DerivationIndex, DerivationPath};
 
 /// Create MEGa encryption keypair
 pub fn gen_keypair(curve_type: EccCurveType, seed: Seed) -> (MEGaPublicKey, MEGaPrivateKey) {
@@ -296,20 +339,20 @@ pub enum IdkgCreateDealingInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for IdkgCreateDealingInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for IdkgCreateDealingInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::InvalidRecipients => Self::InvalidRecipients,
-            ThresholdEcdsaError::InvalidSecretShare => Self::InvalidSecretShare,
-            ThresholdEcdsaError::InvalidThreshold(t, r) => Self::InvalidThreshold(t, r),
+            CanisterThresholdError::InvalidRecipients => Self::InvalidRecipients,
+            CanisterThresholdError::InvalidSecretShare => Self::InvalidSecretShare,
+            CanisterThresholdError::InvalidThreshold(t, r) => Self::InvalidThreshold(t, r),
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
 }
 
-/// Create a dealing for threshold ECDSA
+/// Create an IDKG dealing
 pub fn create_dealing(
-    algorithm_id: ic_types::crypto::AlgorithmId,
+    algorithm_id: AlgorithmId,
     associated_data: &[u8],
     dealer_index: NodeIndex,
     threshold: NumberOfNodes,
@@ -317,19 +360,19 @@ pub fn create_dealing(
     shares: &SecretShares,
     seed: Seed,
 ) -> Result<IDkgDealingInternal, IdkgCreateDealingInternalError> {
-    let signature_curve = EccCurveType::from_algorithm(algorithm_id)
+    let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
         .ok_or(IdkgCreateDealingInternalError::UnsupportedAlgorithm)?;
 
     IDkgDealingInternal::new(
         shares,
-        signature_curve,
+        alg,
         seed,
         threshold.get() as usize,
         recipients,
         dealer_index,
         associated_data,
     )
-    .map_err(|e| e.into())
+    .map_err(IdkgCreateDealingInternalError::from)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -340,18 +383,18 @@ pub enum IDkgCreateTranscriptInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for IDkgCreateTranscriptInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for IDkgCreateTranscriptInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InsufficientDealings => Self::InsufficientDealings,
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
+            CanisterThresholdError::InsufficientDealings => Self::InsufficientDealings,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
 }
 
-impl From<XmdError> for ThresholdEcdsaError {
+impl From<XmdError> for CanisterThresholdError {
     fn from(e: XmdError) -> Self {
         match e {
             XmdError::InvalidOutputLength(x) => Self::InvalidArguments(format!("{:?}", x)),
@@ -366,16 +409,16 @@ pub fn create_transcript(
     verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
     operation_mode: &IDkgTranscriptOperationInternal,
 ) -> Result<IDkgTranscriptInternal, IDkgCreateTranscriptInternalError> {
-    let curve = EccCurveType::from_algorithm(algorithm_id)
+    let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
         .ok_or(IDkgCreateTranscriptInternalError::UnsupportedAlgorithm)?;
 
     IDkgTranscriptInternal::new(
-        curve,
+        alg.curve(),
         reconstruction_threshold.get() as usize,
         verified_dealings,
         operation_mode,
     )
-    .map_err(|e| e.into())
+    .map_err(IDkgCreateTranscriptInternalError::from)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -430,16 +473,17 @@ pub fn verify_transcript(
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum IDkgComputeSecretSharesInternalError {
     ComplaintShouldBeIssued,
-    InsufficientOpenings(usize, usize),
     InvalidCiphertext(String),
-    UnableToReconstruct(String),
     UnableToCombineOpenings(String),
+    UnableToReconstruct(String),
+    UnsupportedAlgorithm,
 }
 
 /// Computes secret shares (in the form of commitment openings) from
 /// the given dealings.
 ///
 /// # Arguments:
+/// * `algorithm_id`: the algorithm being executed by this IDKG
 /// * `verified_dealings`: dealings to be decrypted,
 /// * `transcript`: the combined commitment to the coefficients of the shared polynomial,
 /// * `context_data`: associated data used in encryption and the zero-knowledge proofs,
@@ -452,6 +496,7 @@ pub enum IDkgComputeSecretSharesInternalError {
 /// * `InvalidCiphertext`: if a ciphertext cannot be decrypted.
 /// * `UnableToCombineOpenings`: internal error denoting that the decrypted share cannot be combined.
 pub fn compute_secret_shares(
+    algorithm_id: AlgorithmId,
     verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
     transcript: &IDkgTranscriptInternal,
     context_data: &[u8],
@@ -459,7 +504,11 @@ pub fn compute_secret_shares(
     secret_key: &MEGaPrivateKey,
     public_key: &MEGaPublicKey,
 ) -> Result<CommitmentOpening, IDkgComputeSecretSharesInternalError> {
+    let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
+        .ok_or(IDkgComputeSecretSharesInternalError::UnsupportedAlgorithm)?;
+
     CommitmentOpening::from_dealings(
+        alg,
         verified_dealings,
         &transcript.combined_commitment,
         context_data,
@@ -467,6 +516,16 @@ pub fn compute_secret_shares(
         secret_key,
         public_key,
     )
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum IDkgComputeSecretSharesWithOpeningsInternalError {
+    ComplaintShouldBeIssued,
+    InsufficientOpenings(usize, usize),
+    InvalidCiphertext(String),
+    UnsupportedAlgorithm,
+    UnableToReconstruct(String),
+    UnableToCombineOpenings(String),
 }
 
 /// Computes secret shares (in the form of commitment openings) from
@@ -478,6 +537,7 @@ pub fn compute_secret_shares(
 ///   many) for each corrupted dealing.
 ///
 /// # Arguments:
+/// * `algorithm_id`: the algorithm being executed by this IDKG
 /// * `verified_dealings`: dealings to be decrypted,
 /// * `openings`: openings answering complaints against dealing that could not be decrypted correctly,
 /// * `transcript`: the combined commitment to the coefficients of the shared polynomial,
@@ -493,6 +553,7 @@ pub fn compute_secret_shares(
 /// * `UnableToCombineOpenings`: internal error denoting that the decrypted share cannot be combined.
 /// * `UnableToReconstruct`: internal error denoting that the received openings cannot be used to recompute a share.
 pub fn compute_secret_shares_with_openings(
+    algorithm_id: AlgorithmId,
     verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
     openings: &BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
     transcript: &IDkgTranscriptInternal,
@@ -500,8 +561,12 @@ pub fn compute_secret_shares_with_openings(
     receiver_index: NodeIndex,
     secret_key: &MEGaPrivateKey,
     public_key: &MEGaPublicKey,
-) -> Result<CommitmentOpening, IDkgComputeSecretSharesInternalError> {
+) -> Result<CommitmentOpening, IDkgComputeSecretSharesWithOpeningsInternalError> {
+    let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
+        .ok_or(IDkgComputeSecretSharesWithOpeningsInternalError::UnsupportedAlgorithm)?;
+
     CommitmentOpening::from_dealings_and_openings(
+        alg,
         verified_dealings,
         openings,
         &transcript.combined_commitment,
@@ -521,12 +586,12 @@ pub enum IDkgVerifyDealingInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for IDkgVerifyDealingInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for IDkgVerifyDealingInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::InvalidProof => Self::InvalidProof,
-            ThresholdEcdsaError::InvalidCommitment => Self::InvalidCommitment,
-            ThresholdEcdsaError::InvalidRecipients => Self::InvalidRecipients,
+            CanisterThresholdError::InvalidProof => Self::InvalidProof,
+            CanisterThresholdError::InvalidCommitment => Self::InvalidCommitment,
+            CanisterThresholdError::InvalidRecipients => Self::InvalidRecipients,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -563,20 +628,20 @@ pub fn publicly_verify_dealing(
 ) -> Result<(), IDkgVerifyDealingInternalError> {
     let key_curve = EccCurveType::K256;
 
-    let signature_curve = EccCurveType::from_algorithm(algorithm_id)
+    let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
         .ok_or(IDkgVerifyDealingInternalError::UnsupportedAlgorithm)?;
 
     dealing
         .publicly_verify(
             key_curve,
-            signature_curve,
+            alg,
             transcript_type,
             reconstruction_threshold,
             dealer_index,
             number_of_receivers,
             associated_data,
         )
-        .map_err(|e| e.into())
+        .map_err(IDkgVerifyDealingInternalError::from)
 }
 
 /// Verify a dealing using private information
@@ -594,7 +659,7 @@ pub fn privately_verify_dealing(
     dealer_index: NodeIndex,
     recipient_index: NodeIndex,
 ) -> Result<(), IDkgVerifyDealingInternalError> {
-    let signature_curve = EccCurveType::from_algorithm(algorithm_id)
+    let signature_alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
         .ok_or(IDkgVerifyDealingInternalError::UnsupportedAlgorithm)?;
 
     let key_curve = private_key.curve_type();
@@ -602,14 +667,14 @@ pub fn privately_verify_dealing(
     dealing
         .privately_verify(
             key_curve,
-            signature_curve,
+            signature_alg,
             private_key,
             public_key,
             associated_data,
             dealer_index,
             recipient_index,
         )
-        .map_err(|e| e.into())
+        .map_err(IDkgVerifyDealingInternalError::from)
 }
 
 impl From<&ExtendedDerivationPath> for DerivationPath {
@@ -620,20 +685,9 @@ impl From<&ExtendedDerivationPath> for DerivationPath {
         Self::new(
             std::iter::once(extended_derivation_path.caller.to_vec())
                 .chain(extended_derivation_path.derivation_path.clone())
-                .map(key_derivation::DerivationIndex)
+                .map(crate::signing::key_derivation::DerivationIndex)
                 .collect::<Vec<_>>(),
         )
-    }
-}
-
-impl ThresholdEcdsaSigShareInternal {
-    pub fn serialize(&self) -> ThresholdEcdsaSerializationResult<Vec<u8>> {
-        serde_cbor::to_vec(self).map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
-    }
-
-    pub fn deserialize(raw: &[u8]) -> ThresholdEcdsaSerializationResult<Self> {
-        serde_cbor::from_slice::<Self>(raw)
-            .map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
     }
 }
 
@@ -644,24 +698,19 @@ pub enum ThresholdEcdsaGenerateSigShareInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdEcdsaGenerateSigShareInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdEcdsaGenerateSigShareInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
 }
 
-// Returns None if the AlgorithmId does not map to threshold ECDSA
-fn signature_parameters(algorithm_id: AlgorithmId) -> Option<(EccCurveType, usize)> {
-    EccCurveType::from_algorithm(algorithm_id).map(|curve| (curve, curve.scalar_bytes()))
-}
-
 /// Create a new threshold ECDSA signature share
 ///
-/// The derivation_path
+/// The derivation_path creates a new key relative to the master key
 ///
 /// The nonce should be random and shared by all nodes, for instance
 /// by deriving a value from the random tape.
@@ -675,7 +724,7 @@ fn signature_parameters(algorithm_id: AlgorithmId) -> Option<(EccCurveType, usiz
 /// order, for instance for P-256 a 256-bit hash function must be
 /// used.
 #[allow(clippy::too_many_arguments)]
-pub fn sign_share(
+pub fn create_ecdsa_signature_share(
     derivation_path: &DerivationPath,
     hashed_message: &[u8],
     nonce: Randomness,
@@ -686,7 +735,7 @@ pub fn sign_share(
     key_times_lambda: &CommitmentOpening,
     algorithm_id: AlgorithmId,
 ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaGenerateSigShareInternalError> {
-    let (curve_type, hash_len) = signature_parameters(algorithm_id).ok_or_else(|| {
+    let (curve_type, hash_len) = ecdsa_signature_parameters(algorithm_id).ok_or_else(|| {
         ThresholdEcdsaGenerateSigShareInternalError::InvalidArguments(format!(
             "unsupported algorithm: {algorithm_id:?}"
         ))
@@ -709,7 +758,7 @@ pub fn sign_share(
         key_times_lambda,
         curve_type,
     )
-    .map_err(|e| e.into())
+    .map_err(ThresholdEcdsaGenerateSigShareInternalError::from)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -720,12 +769,12 @@ pub enum ThresholdEcdsaVerifySigShareInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdEcdsaVerifySigShareInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdEcdsaVerifySigShareInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidSignatureShare => Self::InvalidSignatureShare,
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidSignatureShare => Self::InvalidSignatureShare,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -736,7 +785,7 @@ impl From<ThresholdEcdsaError> for ThresholdEcdsaVerifySigShareInternalError {
 /// The values provided must be consistent with when the signature share
 /// was created
 #[allow(clippy::too_many_arguments)]
-pub fn verify_signature_share(
+pub fn verify_ecdsa_signature_share(
     sig_share: &ThresholdEcdsaSigShareInternal,
     derivation_path: &DerivationPath,
     hashed_message: &[u8],
@@ -749,7 +798,7 @@ pub fn verify_signature_share(
     key_times_lambda: &IDkgTranscriptInternal,
     algorithm_id: AlgorithmId,
 ) -> Result<(), ThresholdEcdsaVerifySigShareInternalError> {
-    let (curve_type, hash_len) = signature_parameters(algorithm_id).ok_or_else(|| {
+    let (curve_type, hash_len) = ecdsa_signature_parameters(algorithm_id).ok_or_else(|| {
         ThresholdEcdsaVerifySigShareInternalError::InvalidArguments(format!(
             "unsupported algorithm: {algorithm_id:?}"
         ))
@@ -774,7 +823,7 @@ pub fn verify_signature_share(
             key_times_lambda,
             curve_type,
         )
-        .map_err(|e| e.into())
+        .map_err(ThresholdEcdsaVerifySigShareInternalError::from)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -785,12 +834,12 @@ pub enum ThresholdEcdsaCombineSigSharesInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdEcdsaCombineSigSharesInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdEcdsaCombineSigSharesInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InsufficientDealings => Self::InsufficientShares,
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
+            CanisterThresholdError::InsufficientDealings => Self::InsufficientShares,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -800,8 +849,11 @@ impl From<ThresholdEcdsaError> for ThresholdEcdsaCombineSigSharesInternalError {
 ///
 /// The signature shares must be verified prior to use, and there must
 /// be at least reconstruction_threshold many of them.
+///
+/// All shares must have been created with respect to the same derivation path,
+/// message, randomness, and transcripts.
 #[allow(clippy::too_many_arguments)]
-pub fn combine_sig_shares(
+pub fn combine_ecdsa_signature_shares(
     derivation_path: &DerivationPath,
     hashed_message: &[u8],
     randomness: Randomness,
@@ -811,10 +863,10 @@ pub fn combine_sig_shares(
     sig_shares: &BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal>,
     algorithm_id: AlgorithmId,
 ) -> Result<ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaCombineSigSharesInternalError> {
-    let curve = EccCurveType::from_algorithm(algorithm_id)
+    let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
         .ok_or(ThresholdEcdsaCombineSigSharesInternalError::UnsupportedAlgorithm)?;
 
-    sign::ThresholdEcdsaCombinedSigInternal::new(
+    crate::signing::ecdsa::ThresholdEcdsaCombinedSigInternal::new(
         derivation_path,
         hashed_message,
         randomness,
@@ -822,9 +874,9 @@ pub fn combine_sig_shares(
         presig_transcript,
         reconstruction_threshold,
         sig_shares,
-        curve,
+        alg.curve(),
     )
-    .map_err(|e| e.into())
+    .map_err(ThresholdEcdsaCombineSigSharesInternalError::from)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -835,12 +887,12 @@ pub enum ThresholdEcdsaVerifySignatureInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdEcdsaVerifySignatureInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdEcdsaVerifySignatureInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::CurveMismatch => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidCommitment => Self::InconsistentCommitments,
-            ThresholdEcdsaError::InvalidSignature => Self::InvalidSignature,
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidSignature => Self::InvalidSignature,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -853,7 +905,7 @@ impl From<ThresholdEcdsaError> for ThresholdEcdsaVerifySignatureInternalError {
 /// with `derivation_path`, this function also verifies that the
 /// signature was generated correctly with regards to the provided
 /// presignature transcript and randomness.
-pub fn verify_threshold_signature(
+pub fn verify_ecdsa_threshold_signature(
     signature: &ThresholdEcdsaCombinedSigInternal,
     derivation_path: &DerivationPath,
     hashed_message: &[u8],
@@ -862,7 +914,7 @@ pub fn verify_threshold_signature(
     key_transcript: &IDkgTranscriptInternal,
     algorithm_id: AlgorithmId,
 ) -> Result<(), ThresholdEcdsaVerifySignatureInternalError> {
-    let (curve_type, hash_len) = signature_parameters(algorithm_id).ok_or_else(|| {
+    let (curve_type, hash_len) = ecdsa_signature_parameters(algorithm_id).ok_or_else(|| {
         ThresholdEcdsaVerifySignatureInternalError::InvalidArguments(format!(
             "unsupported algorithm: {algorithm_id:?}"
         ))
@@ -883,72 +935,473 @@ pub fn verify_threshold_signature(
             key_transcript,
             curve_type,
         )
-        .map_err(|e| e.into())
+        .map_err(ThresholdEcdsaVerifySignatureInternalError::from)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum ThresholdEcdsaDerivePublicKeyError {
-    InvalidArgument(String),
-    InternalError(ThresholdEcdsaError),
+pub enum ThresholdBip340GenerateSigShareInternalError {
+    InvalidArguments(String),
+    InconsistentCommitments,
+    InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdEcdsaDerivePublicKeyError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdBip340GenerateSigShareInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::InvalidArguments(s) => Self::InvalidArgument(s),
-            ThresholdEcdsaError::CurveMismatch
-            | ThresholdEcdsaError::InconsistentCiphertext
-            | ThresholdEcdsaError::InconsistentOpeningAndCommitment
-            | ThresholdEcdsaError::InsufficientDealings
-            | ThresholdEcdsaError::InsufficientOpenings(_, _)
-            | ThresholdEcdsaError::InterpolationError
-            | ThresholdEcdsaError::InvalidCommitment
-            | ThresholdEcdsaError::InvalidComplaint
-            | ThresholdEcdsaError::InvalidFieldElement
-            | ThresholdEcdsaError::InvalidPoint
-            | ThresholdEcdsaError::InvalidProof
-            | ThresholdEcdsaError::InvalidRandomOracleInput
-            | ThresholdEcdsaError::InvalidRecipients
-            | ThresholdEcdsaError::InvalidScalar
-            | ThresholdEcdsaError::InvalidSecretShare
-            | ThresholdEcdsaError::InvalidSignature
-            | ThresholdEcdsaError::InvalidSignatureShare
-            | ThresholdEcdsaError::InvalidThreshold(_, _)
-            | ThresholdEcdsaError::UnexpectedCommitmentType => Self::InternalError(e),
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
+            x => Self::InternalError(format!("{:?}", x)),
         }
     }
 }
 
-pub fn derive_public_key(
-    master_public_key: &MasterEcdsaPublicKey,
+/// Create a new threshold BIP340 Schnorr signature share
+///
+/// The derivation_path creates a new key relative to the master key
+///
+/// The nonce should be random and shared by all nodes, for instance
+/// by deriving a value from the random tape.
+///
+/// The presig_transcript is the transcript of the pre-signature (kappa)
+///
+/// The message can be of any length
+pub fn create_bip340_signature_share(
     derivation_path: &DerivationPath,
-) -> Result<EcdsaPublicKey, ThresholdEcdsaDerivePublicKeyError> {
-    Ok(crate::sign::derive_public_key(
-        master_public_key,
+    message: &[u8],
+    nonce: Randomness,
+    key_transcript: &IDkgTranscriptInternal,
+    presig_transcript: &IDkgTranscriptInternal,
+    key_opening: &CommitmentOpening,
+    presig_opening: &CommitmentOpening,
+) -> Result<ThresholdBip340SignatureShareInternal, ThresholdBip340GenerateSigShareInternalError> {
+    ThresholdBip340SignatureShareInternal::new(
         derivation_path,
-    )?)
+        message,
+        nonce,
+        key_transcript,
+        key_opening,
+        presig_transcript,
+        presig_opening,
+    )
+    .map_err(ThresholdBip340GenerateSigShareInternalError::from)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ThresholdBip340VerifySigShareInternalError {
+    InvalidArguments(String),
+    InconsistentCommitments,
+    InvalidSignatureShare,
+    InternalError(String),
+}
+
+impl From<CanisterThresholdError> for ThresholdBip340VerifySigShareInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
+        match e {
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidSignatureShare => Self::InvalidSignatureShare,
+            x => Self::InternalError(format!("{:?}", x)),
+        }
+    }
+}
+
+/// Verify a signature share
+///
+/// The values provided must be consistent with when the signature share
+/// was created
+pub fn verify_bip340_signature_share(
+    sig_share: &ThresholdBip340SignatureShareInternal,
+    derivation_path: &DerivationPath,
+    hashed_message: &[u8],
+    randomness: Randomness,
+    signer_index: NodeIndex,
+    key_transcript: &IDkgTranscriptInternal,
+    presig_transcript: &IDkgTranscriptInternal,
+) -> Result<(), ThresholdBip340VerifySigShareInternalError> {
+    sig_share
+        .verify(
+            derivation_path,
+            hashed_message,
+            randomness,
+            signer_index,
+            key_transcript,
+            presig_transcript,
+        )
+        .map_err(ThresholdBip340VerifySigShareInternalError::from)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ThresholdBip340CombineSigSharesInternalError {
+    UnsupportedAlgorithm,
+    InconsistentCommitments,
+    InsufficientShares,
+    InternalError(String),
+}
+
+impl From<CanisterThresholdError> for ThresholdBip340CombineSigSharesInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
+        match e {
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
+            CanisterThresholdError::InsufficientDealings => Self::InsufficientShares,
+            x => Self::InternalError(format!("{:?}", x)),
+        }
+    }
+}
+
+/// Combine sufficient signature shares into an BIP340 signature
+///
+/// The signature shares must be verified prior to use, and there must
+/// be at least reconstruction_threshold many of them.
+///
+/// All shares must have been created with respect to the same derivation path,
+/// message, randomness, and transcripts.
+pub fn combine_bip340_signature_shares(
+    derivation_path: &DerivationPath,
+    message: &[u8],
+    randomness: Randomness,
+    key_transcript: &IDkgTranscriptInternal,
+    presig_transcript: &IDkgTranscriptInternal,
+    reconstruction_threshold: NumberOfNodes,
+    sig_shares: &BTreeMap<NodeIndex, ThresholdBip340SignatureShareInternal>,
+) -> Result<ThresholdBip340CombinedSignatureInternal, ThresholdBip340CombineSigSharesInternalError>
+{
+    ThresholdBip340CombinedSignatureInternal::new(
+        derivation_path,
+        message,
+        randomness,
+        key_transcript,
+        presig_transcript,
+        reconstruction_threshold,
+        sig_shares,
+    )
+    .map_err(ThresholdBip340CombineSigSharesInternalError::from)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ThresholdBip340VerifySignatureInternalError {
+    InvalidSignature,
+    UnexpectedCommitmentType,
+    InternalError(String),
+}
+
+impl From<CanisterThresholdError> for ThresholdBip340VerifySignatureInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
+        match e {
+            CanisterThresholdError::UnexpectedCommitmentType => Self::UnexpectedCommitmentType,
+            CanisterThresholdError::InvalidSignature => Self::InvalidSignature,
+            x => Self::InternalError(format!("{:?}", x)),
+        }
+    }
+}
+
+/// Verify a threshold BIP340 Schnorr signature
+///
+/// In addition to checking that the signature itself is consistent
+/// with the provided message and the public key associated with
+/// `derivation_path`, this function also verifies that the signature
+/// was generated correctly with regards to the provided presignature
+/// transcript and randomness.
+pub fn verify_threshold_bip340_signature(
+    signature: &ThresholdBip340CombinedSignatureInternal,
+    derivation_path: &DerivationPath,
+    message: &[u8],
+    randomness: Randomness,
+    presig_transcript: &IDkgTranscriptInternal,
+    key_transcript: &IDkgTranscriptInternal,
+) -> Result<(), ThresholdBip340VerifySignatureInternalError> {
+    signature
+        .verify(
+            derivation_path,
+            message,
+            randomness,
+            presig_transcript,
+            key_transcript,
+        )
+        .map_err(ThresholdBip340VerifySignatureInternalError::from)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ThresholdEd25519GenerateSigShareInternalError {
+    InvalidArguments(String),
+    InconsistentCommitments,
+    InternalError(String),
+}
+
+impl From<CanisterThresholdError> for ThresholdEd25519GenerateSigShareInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
+        match e {
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
+            x => Self::InternalError(format!("{:?}", x)),
+        }
+    }
+}
+
+/// Create a new threshold Ed25519 Schnorr signature share
+///
+/// The derivation_path creates a new key relative to the master key
+///
+/// The nonce should be random and shared by all nodes, for instance
+/// by deriving a value from the random tape.
+///
+/// The presig_transcript is the transcript of the pre-signature (kappa)
+///
+/// The message can be of any length
+pub fn create_ed25519_signature_share(
+    derivation_path: &DerivationPath,
+    message: &[u8],
+    nonce: Randomness,
+    key_transcript: &IDkgTranscriptInternal,
+    presig_transcript: &IDkgTranscriptInternal,
+    key_opening: &CommitmentOpening,
+    presig_opening: &CommitmentOpening,
+) -> Result<ThresholdEd25519SignatureShareInternal, ThresholdEd25519GenerateSigShareInternalError> {
+    ThresholdEd25519SignatureShareInternal::new(
+        derivation_path,
+        message,
+        nonce,
+        key_transcript,
+        key_opening,
+        presig_transcript,
+        presig_opening,
+    )
+    .map_err(ThresholdEd25519GenerateSigShareInternalError::from)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ThresholdEd25519VerifySigShareInternalError {
+    InvalidArguments(String),
+    InconsistentCommitments,
+    InvalidSignatureShare,
+    InternalError(String),
+}
+
+impl From<CanisterThresholdError> for ThresholdEd25519VerifySigShareInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
+        match e {
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidSignatureShare => Self::InvalidSignatureShare,
+            x => Self::InternalError(format!("{:?}", x)),
+        }
+    }
+}
+
+/// Verify a signature share
+///
+/// The values provided must be consistent with when the signature share
+/// was created
+pub fn verify_ed25519_signature_share(
+    sig_share: &ThresholdEd25519SignatureShareInternal,
+    derivation_path: &DerivationPath,
+    hashed_message: &[u8],
+    randomness: Randomness,
+    signer_index: NodeIndex,
+    key_transcript: &IDkgTranscriptInternal,
+    presig_transcript: &IDkgTranscriptInternal,
+) -> Result<(), ThresholdEd25519VerifySigShareInternalError> {
+    sig_share
+        .verify(
+            derivation_path,
+            hashed_message,
+            randomness,
+            signer_index,
+            key_transcript,
+            presig_transcript,
+        )
+        .map_err(ThresholdEd25519VerifySigShareInternalError::from)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ThresholdEd25519CombineSigSharesInternalError {
+    UnsupportedAlgorithm,
+    InconsistentCommitments,
+    InsufficientShares,
+    InternalError(String),
+}
+
+impl From<CanisterThresholdError> for ThresholdEd25519CombineSigSharesInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
+        match e {
+            CanisterThresholdError::CurveMismatch => Self::InconsistentCommitments,
+            CanisterThresholdError::InvalidCommitment => Self::InconsistentCommitments,
+            CanisterThresholdError::InsufficientDealings => Self::InsufficientShares,
+            x => Self::InternalError(format!("{:?}", x)),
+        }
+    }
+}
+
+/// Combine sufficient signature shares into an Ed25519 signature
+///
+/// The signature shares must be verified prior to use, and there must
+/// be at least reconstruction_threshold many of them.
+///
+/// All shares must have been created with respect to the same derivation path,
+/// message, randomness, and transcripts.
+pub fn combine_ed25519_signature_shares(
+    derivation_path: &DerivationPath,
+    message: &[u8],
+    randomness: Randomness,
+    key_transcript: &IDkgTranscriptInternal,
+    presig_transcript: &IDkgTranscriptInternal,
+    reconstruction_threshold: NumberOfNodes,
+    sig_shares: &BTreeMap<NodeIndex, ThresholdEd25519SignatureShareInternal>,
+) -> Result<ThresholdEd25519CombinedSignatureInternal, ThresholdEd25519CombineSigSharesInternalError>
+{
+    ThresholdEd25519CombinedSignatureInternal::new(
+        derivation_path,
+        message,
+        randomness,
+        key_transcript,
+        presig_transcript,
+        reconstruction_threshold,
+        sig_shares,
+    )
+    .map_err(ThresholdEd25519CombineSigSharesInternalError::from)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ThresholdEd25519VerifySignatureInternalError {
+    InvalidSignature,
+    UnexpectedCommitmentType,
+    InternalError(String),
+}
+
+impl From<CanisterThresholdError> for ThresholdEd25519VerifySignatureInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
+        match e {
+            CanisterThresholdError::UnexpectedCommitmentType => Self::UnexpectedCommitmentType,
+            CanisterThresholdError::InvalidSignature => Self::InvalidSignature,
+            x => Self::InternalError(format!("{:?}", x)),
+        }
+    }
+}
+
+/// Verify a threshold Ed25519 Schnorr signature
+///
+/// In addition to checking that the signature itself is consistent
+/// with the provided message and the public key associated with
+/// `derivation_path`, this function also verifies that the signature
+/// was generated correctly with regards to the provided presignature
+/// transcript and randomness.
+pub fn verify_threshold_ed25519_signature(
+    signature: &ThresholdEd25519CombinedSignatureInternal,
+    derivation_path: &DerivationPath,
+    message: &[u8],
+    randomness: Randomness,
+    presig_transcript: &IDkgTranscriptInternal,
+    key_transcript: &IDkgTranscriptInternal,
+) -> Result<(), ThresholdEd25519VerifySignatureInternalError> {
+    signature
+        .verify(
+            derivation_path,
+            message,
+            randomness,
+            presig_transcript,
+            key_transcript,
+        )
+        .map_err(ThresholdEd25519VerifySignatureInternalError::from)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum DeriveThresholdPublicKeyError {
+    InvalidArgument(String),
+    InternalError(CanisterThresholdError),
+}
+
+impl From<CanisterThresholdError> for DeriveThresholdPublicKeyError {
+    fn from(e: CanisterThresholdError) -> Self {
+        match e {
+            CanisterThresholdError::InvalidArguments(s) => Self::InvalidArgument(s),
+            CanisterThresholdError::CurveMismatch
+            | CanisterThresholdError::InconsistentCiphertext
+            | CanisterThresholdError::InconsistentOpeningAndCommitment
+            | CanisterThresholdError::InsufficientDealings
+            | CanisterThresholdError::InsufficientOpenings(_, _)
+            | CanisterThresholdError::InterpolationError
+            | CanisterThresholdError::InvalidCommitment
+            | CanisterThresholdError::InvalidComplaint
+            | CanisterThresholdError::InvalidFieldElement
+            | CanisterThresholdError::InvalidPoint
+            | CanisterThresholdError::InvalidProof
+            | CanisterThresholdError::InvalidRandomOracleInput
+            | CanisterThresholdError::InvalidRecipients
+            | CanisterThresholdError::InvalidScalar
+            | CanisterThresholdError::InvalidSecretShare
+            | CanisterThresholdError::InvalidSignature
+            | CanisterThresholdError::InvalidSignatureShare
+            | CanisterThresholdError::InvalidThreshold(_, _)
+            | CanisterThresholdError::UnexpectedCommitmentType => Self::InternalError(e),
+        }
+    }
+}
+
+/// Returns a public key derived from `master_public_key` according to the
+/// `derivation_path`.  The algorithm id of the derived key is the same
+/// as the algorithm id of `master_public_key`.
+pub fn derive_threshold_public_key(
+    master_public_key: &MasterPublicKey,
+    derivation_path: &DerivationPath,
+) -> Result<PublicKey, DeriveThresholdPublicKeyError> {
+    let expected_curve = match master_public_key.algorithm_id {
+        AlgorithmId::EcdsaSecp256k1 => EccCurveType::K256,
+        AlgorithmId::ThresholdEcdsaSecp256k1 => EccCurveType::K256,
+
+        AlgorithmId::EcdsaP256 => EccCurveType::P256,
+        AlgorithmId::ThresholdEcdsaSecp256r1 => EccCurveType::P256,
+
+        AlgorithmId::SchnorrSecp256k1 => EccCurveType::K256,
+        AlgorithmId::ThresholdSchnorrBip340 => EccCurveType::K256,
+
+        AlgorithmId::Ed25519 => EccCurveType::Ed25519,
+        AlgorithmId::ThresholdEd25519 => EccCurveType::Ed25519,
+
+        x => {
+            return Err(DeriveThresholdPublicKeyError::InvalidArgument(format!(
+                "Not a known signature algo related to threshold signatures {:?}",
+                x
+            )))
+        }
+    };
+
+    let raw_master_pk = EccPoint::deserialize(expected_curve, &master_public_key.public_key)?;
+
+    let (key_tweak, chain_key) = derivation_path.derive_tweak(&raw_master_pk)?;
+    let tweak_g = EccPoint::mul_by_g(&key_tweak);
+    let public_key_point = tweak_g.add_points(&raw_master_pk)?;
+
+    Ok(PublicKey {
+        algorithm_id: master_public_key.algorithm_id,
+        public_key: public_key_point.serialize(),
+        chain_key,
+    })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum IDkgGenerateComplaintsInternalError {
+    UnsupportedAlgorithm,
     InvalidArguments(String),
     InternalError(String),
 }
 
 impl From<IDkgGenerateComplaintsInternalError> for IDkgLoadTranscriptError {
-    fn from(generate_complaints_internal_error: IDkgGenerateComplaintsInternalError) -> Self {
+    fn from(e: IDkgGenerateComplaintsInternalError) -> Self {
         type Igcie = IDkgGenerateComplaintsInternalError;
         type Ilte = IDkgLoadTranscriptError;
-        match generate_complaints_internal_error {
+        match e {
+            Igcie::UnsupportedAlgorithm => Ilte::InvalidArguments {
+                internal_error: format!("{:?}", e),
+            },
             Igcie::InvalidArguments(internal_error) => Ilte::InvalidArguments { internal_error },
             Igcie::InternalError(internal_error) => Ilte::InternalError { internal_error },
         }
     }
 }
 
-impl From<ThresholdEcdsaError> for IDkgGenerateComplaintsInternalError {
-    fn from(threshold_ecdsa_error: ThresholdEcdsaError) -> Self {
-        type Tee = ThresholdEcdsaError;
+impl From<CanisterThresholdError> for IDkgGenerateComplaintsInternalError {
+    fn from(threshold_ecdsa_error: CanisterThresholdError) -> Self {
+        type Tee = CanisterThresholdError;
         match threshold_ecdsa_error {
             Tee::InvalidArguments(err) => Self::InvalidArguments(err),
             Tee::CurveMismatch => Self::InvalidArguments("curve mismatch".to_string()),
@@ -971,6 +1424,7 @@ impl From<ThresholdEcdsaError> for IDkgGenerateComplaintsInternalError {
 /// This function assumes there is at least one erroneous dealing that
 /// requires complaining.
 pub fn generate_complaints(
+    algorithm_id: AlgorithmId,
     verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
     associated_data: &[u8],
     receiver_index: NodeIndex,
@@ -978,7 +1432,11 @@ pub fn generate_complaints(
     public_key: &MEGaPublicKey,
     seed: Seed,
 ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgGenerateComplaintsInternalError> {
-    Ok(complaints::generate_complaints(
+    let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
+        .ok_or(IDkgGenerateComplaintsInternalError::UnsupportedAlgorithm)?;
+
+    Ok(idkg::complaints::generate_complaints(
+        alg,
         verified_dealings,
         associated_data,
         receiver_index,
@@ -990,18 +1448,19 @@ pub fn generate_complaints(
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum IDkgVerifyComplaintInternalError {
+    UnsupportedAlgorithm,
     InvalidComplaint,
     InvalidArgument(String),
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for IDkgVerifyComplaintInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for IDkgVerifyComplaintInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::InvalidProof => Self::InvalidComplaint,
-            ThresholdEcdsaError::InvalidComplaint => Self::InvalidComplaint,
-            ThresholdEcdsaError::CurveMismatch => Self::InvalidComplaint,
-            ThresholdEcdsaError::InvalidArguments(e) => Self::InvalidArgument(e),
+            CanisterThresholdError::InvalidProof => Self::InvalidComplaint,
+            CanisterThresholdError::InvalidComplaint => Self::InvalidComplaint,
+            CanisterThresholdError::CurveMismatch => Self::InvalidComplaint,
+            CanisterThresholdError::InvalidArguments(e) => Self::InvalidArgument(e),
             other => Self::InternalError(format!("{:?}", other)),
         }
     }
@@ -1012,6 +1471,9 @@ impl From<IDkgVerifyComplaintInternalError> for IDkgVerifyComplaintError {
         type Vcie = IDkgVerifyComplaintInternalError;
         type Vce = IDkgVerifyComplaintError;
         match verify_complaint_internal_error {
+            Vcie::UnsupportedAlgorithm => Vce::InvalidArgument {
+                internal_error: "Unsupported algorithm".to_string(),
+            },
             Vcie::InvalidComplaint => Vce::InvalidComplaint,
             Vcie::InternalError(internal_error) => Vce::InternalError { internal_error },
             Vcie::InvalidArgument(internal_error) => Vce::InvalidArgument { internal_error },
@@ -1021,6 +1483,7 @@ impl From<IDkgVerifyComplaintInternalError> for IDkgVerifyComplaintError {
 
 /// Verifies a complaint against a dealing.
 pub fn verify_complaint(
+    algorithm_id: AlgorithmId,
     complaint: &IDkgComplaintInternal,
     complainer_index: NodeIndex,
     complainer_key: &MEGaPublicKey,
@@ -1028,7 +1491,11 @@ pub fn verify_complaint(
     dealer_index: NodeIndex,
     associated_data: &[u8],
 ) -> Result<(), IDkgVerifyComplaintInternalError> {
+    let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
+        .ok_or(IDkgVerifyComplaintInternalError::UnsupportedAlgorithm)?;
+
     Ok(complaint.verify(
+        alg,
         dealing,
         dealer_index,
         complainer_index,
@@ -1040,10 +1507,11 @@ pub fn verify_complaint(
 #[derive(Clone, Debug)]
 pub enum ThresholdOpenDealingInternalError {
     InternalError(String),
+    UnsupportedAlgorithm,
 }
 
-impl From<ThresholdEcdsaError> for ThresholdOpenDealingInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdOpenDealingInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         Self::InternalError(format!("{:?}", e))
     }
 }
@@ -1060,6 +1528,7 @@ impl From<ThresholdEcdsaError> for ThresholdOpenDealingInternalError {
 /// * The complaint which caused us to provide an opening for this dealing has
 ///   already been verified to be valid.
 pub fn open_dealing(
+    algorithm_id: AlgorithmId,
     verified_dealing: &IDkgDealingInternal,
     associated_data: &[u8],
     dealer_index: NodeIndex,
@@ -1067,7 +1536,11 @@ pub fn open_dealing(
     opener_secret_key: &MEGaPrivateKey,
     opener_public_key: &MEGaPublicKey,
 ) -> Result<CommitmentOpening, ThresholdOpenDealingInternalError> {
+    let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
+        .ok_or(ThresholdOpenDealingInternalError::UnsupportedAlgorithm)?;
+
     CommitmentOpening::open_dealing(
+        alg,
         verified_dealing,
         associated_data,
         dealer_index,
@@ -1075,7 +1548,7 @@ pub fn open_dealing(
         opener_secret_key,
         opener_public_key,
     )
-    .map_err(|e| e.into())
+    .map_err(ThresholdOpenDealingInternalError::from)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1085,10 +1558,10 @@ pub enum ThresholdVerifyOpeningInternalError {
     InternalError(String),
 }
 
-impl From<ThresholdEcdsaError> for ThresholdVerifyOpeningInternalError {
-    fn from(e: ThresholdEcdsaError) -> Self {
+impl From<CanisterThresholdError> for ThresholdVerifyOpeningInternalError {
+    fn from(e: CanisterThresholdError) -> Self {
         match e {
-            ThresholdEcdsaError::InconsistentOpeningAndCommitment => Self::MismatchingType,
+            CanisterThresholdError::InconsistentOpeningAndCommitment => Self::MismatchingType,
             x => Self::InternalError(format!("{:?}", x)),
         }
     }
@@ -1103,11 +1576,11 @@ impl From<ThresholdEcdsaError> for ThresholdVerifyOpeningInternalError {
 /// * The dealing has already been publicly verified
 /// # Errors
 /// * `ThresholdVerifyOpeningInternalError::InvalidOpening` if the opening does
-/// not match with the polynomial commitment.
+///   not match with the polynomial commitment.
 /// * `ThresholdVerifyOpeningInternalError::MismatchingType` if the opening
-/// has a type that is inconsistent with the polynomial commitment.
+///   has a type that is inconsistent with the polynomial commitment.
 /// * `ThresholdVerifyOpeningInternalError::InternalError` if there is an
-/// unexpected internal error.
+///   unexpected internal error.
 pub fn verify_dealing_opening(
     verified_dealing: &IDkgDealingInternal,
     opener_index: NodeIndex,
@@ -1139,5 +1612,17 @@ pub fn verify_mega_public_key(
         Ok(())
     } else {
         Err(MEGaKeyVerificationError::InvalidPublicKey)
+    }
+}
+
+// Returns None if the AlgorithmId does not map to threshold ECDSA
+fn ecdsa_signature_parameters(algorithm_id: AlgorithmId) -> Option<(EccCurveType, usize)> {
+    if algorithm_id.is_threshold_ecdsa() {
+        IdkgProtocolAlgorithm::from_algorithm(algorithm_id).map(|alg| {
+            let curve = alg.curve();
+            (curve, curve.scalar_bytes())
+        })
+    } else {
+        None
     }
 }

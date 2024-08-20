@@ -30,5 +30,5 @@ message CanisterHttpSendResponse {
 }
 
 service CanisterHttpService {
-    rpc CanisterHttpSend(CanisterHttpSendRequest) returns (CanisterHttpSendResponse);
+  rpc CanisterHttpSend(CanisterHttpSendRequest) returns (CanisterHttpSendResponse);
 }

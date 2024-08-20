@@ -1,0 +1,44 @@
+# A .bazelrc used internally by DFINITY for metrics, cache, etc
+
+# Build event upload configuration
+build:bes --build_event_binary_file=bazel-bep.pb --profile=profile.json
+build:bes --bes_results_url=https://dash.idx.dfinity.network/invocation/
+build:bes --bes_backend=bes.idx.dfinity.network
+build:bes --bes_upload_mode=wait_for_upload_complete
+build:bes --bes_timeout=180s # Default is no timeout.
+build:bes --experimental_remote_build_event_upload=minimal
+
+# by default, only include build event upload on CI
+build:ci --config=bes
+# additionally, upload build events asynchronously on CI
+build:ci --bes_upload_mode=fully_async
+
+# DFINITY internal remote cache setup
+build --remote_cache=bazel-remote.idx.dfinity.network
+build --experimental_remote_cache_async
+build --experimental_remote_cache_compression # If enabled, compress/decompress cache blobs with zstd.
+build --remote_timeout=60s # Default is also 60s but we set it explicitly to remind ourselves of this timeout.
+build:ci --remote_timeout=5m # Default is 60s.
+# TODO: re-enable after fixing the error like this:
+# `Failed to fetch file with hash 'xxx' because it does not exist remotely. --remote_download_outputs=minimal does not work if your remote cache evicts files during builds.`
+# Probably disabling `--experimental_remote_cache_async` will help
+#build --remote_download_minimal # https://bazel.build/reference/command-line-reference#flag--remote_download_minimal
+#build --remote_download_outputs=toplevel # Still download outputs from top level targets.
+
+build --experimental_remote_downloader=bazel-remote.idx.dfinity.network --experimental_remote_downloader_local_fallback
+build:local --experimental_remote_downloader=
+build --remote_local_fallback
+build    --remote_upload_local_results=false
+build:ci --remote_upload_local_results=true
+
+build:ci --noremote_local_fallback
+
+# Run `bazel build ... --config=local` to build targets without cache
+build:local --remote_cache=
+
+# Upload bes by default when running system tests so that e.g. failures can
+# be shared easily without having to rerun a potentially very-long systest
+build:systest --config=bes
+
+build:systest --s3_endpoint=https://s3-upload.idx.dfinity.network
+build:testnet --s3_endpoint=https://s3-upload.idx.dfinity.network

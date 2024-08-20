@@ -254,34 +254,3 @@ fn slightly_dishonest_dlog() {
     answer *= Scalar::from_isize(-12345678);
     assert_eq!(cheat_solver.solve(&(base * &answer)), Some(answer));
 }
-
-fn cheating_dlog_instance(m: usize) -> (Scalar, Gt) {
-    let rng = &mut reproducible_rng();
-
-    let z = 1069531200 * 16 * m as u64;
-
-    let s = Scalar::from_u64(rng.gen::<u64>() % z);
-
-    let delta = std::cmp::max(1, rng.gen::<u16>() % 10) as u64;
-    let delta = Scalar::from_u64(delta);
-
-    let delta_inv = delta.inverse().expect("Delta not invertible");
-
-    let s_div_delta = s * delta_inv;
-
-    let p = Gt::generator() * &s_div_delta;
-    (s_div_delta, p)
-}
-
-#[test]
-fn test_that_cheating_dealer_solver_can_solve_instance() {
-    let m = 29;
-    let solver = CheatingDealerDlogSolver::new(m, 16);
-
-    let (solution, target) = cheating_dlog_instance(m);
-
-    assert_eq!(
-        solution,
-        solver.solve(&target).expect("Unable to solve dlog")
-    );
-}

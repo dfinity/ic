@@ -1,45 +1,18 @@
-from data_source.console_logger_finding_data_source_subscriber import ConsoleLoggerFindingDataSourceSubscriber
+import logging
+
 from data_source.jira_finding_data_source import JiraFindingDataSource
+from data_source.slack_findings_failover_data_store import SlackFindingsFailoverDataStore
 from integration.slack.slack_default_notification_handler import SlackDefaultNotificationHandler
 from integration.slack.slack_trivy_finding_notification_handler import SlackTrivyFindingNotificationHandler
-from model.project import Project
-from model.repository import Repository
-from model.team import Team
+from model.ic import get_ic_repo_ci_pipeline_base_url, get_ic_repo_for_trivy, get_ic_repo_merge_request_base_url
 from notification.notification_config import NotificationConfig
 from notification.notification_creator import NotificationCreator
-from scanner.console_logger_scanner_subscriber import ConsoleLoggerScannerSubscriber
 from scanner.dependency_scanner import DependencyScanner
 from scanner.manager.bazel_trivy_dependency_manager import BazelTrivyContainer
 from scanner.scanner_job_type import ScannerJobType
 
-REPOS_TO_SCAN = [
-    Repository(
-        "ic",
-        "https://gitlab.com/dfinity-lab/public/ic",
-        [
-            Project(
-                name="boundary-guestos",
-                path="ic/ic-os/boundary-guestos/envs/prod",
-                link="https://gitlab.com/dfinity-lab/public/ic/-/tree/master/ic-os/boundary-guestos/rootfs",
-                owner=Team.BOUNDARY_NODE_TEAM,
-            ),
-            Project(
-                name="boundary-guestos",
-                path="ic/ic-os/boundary-guestos/envs/prod-sev",
-                link="https://gitlab.com/dfinity-lab/public/ic/-/tree/master/ic-os/boundary-guestos/rootfs",
-                owner=Team.BOUNDARY_NODE_TEAM,
-            ),
-            Project(
-                name="guestos",
-                path="ic/ic-os/guestos/envs/prod",
-                link="https://gitlab.com/dfinity-lab/public/ic/-/tree/master/ic-os/guestos/rootfs",
-                owner=Team.NODE_TEAM,
-            ),
-        ],
-    )
-]
-
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.WARNING)
     scanner_job = ScannerJobType.PERIODIC_SCAN
     notify_on_scan_job_succeeded, notify_on_scan_job_failed = {}, {}
     for job_type in ScannerJobType:
@@ -56,14 +29,19 @@ if __name__ == "__main__":
         notify_on_finding_deleted=notify_on_finding_deleted,
         notify_on_scan_job_succeeded=notify_on_scan_job_succeeded,
         notify_on_scan_job_failed=notify_on_scan_job_failed,
+        merge_request_base_url=get_ic_repo_merge_request_base_url(),
+        ci_pipeline_base_url=get_ic_repo_ci_pipeline_base_url(),
         notification_handlers=[SlackTrivyFindingNotificationHandler(), SlackDefaultNotificationHandler()]
     )
     notifier = NotificationCreator(config)
-    finding_data_source_subscribers = [ConsoleLoggerFindingDataSourceSubscriber(), notifier]
-    scanner_subscribers = [ConsoleLoggerScannerSubscriber(), notifier]
+    finding_data_source_subscribers = [notifier]
+    scanner_subscribers = [notifier]
+    ic_repo = get_ic_repo_for_trivy()
+    assert len(ic_repo) == 1
     scanner_job = DependencyScanner(
         BazelTrivyContainer(app_owner_msg_subscriber=notifier),
-        JiraFindingDataSource(finding_data_source_subscribers),
+        JiraFindingDataSource(finding_data_source_subscribers, app_owner_msg_subscriber=notifier),
         scanner_subscribers,
+        SlackFindingsFailoverDataStore(projects=ic_repo[0].projects)
     )
-    scanner_job.do_periodic_scan(REPOS_TO_SCAN)
+    scanner_job.do_periodic_scan(get_ic_repo_for_trivy())

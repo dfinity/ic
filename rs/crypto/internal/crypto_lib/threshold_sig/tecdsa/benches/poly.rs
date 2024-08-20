@@ -1,4 +1,3 @@
-use core::time::Duration;
 use criterion::*;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -147,10 +146,10 @@ fn poly_interpolate_scalar(c: &mut Criterion) {
     }
 }
 
-//criterion_group!(benches, poly_bench);
-criterion_group! {
-name = benches;
-config = Criterion::default().measurement_time(Duration::from_secs(30));
-targets = poly_bench, poly_interpolate_point, poly_interpolate_scalar
-}
+criterion_group!(
+    benches,
+    poly_bench,
+    poly_interpolate_point,
+    poly_interpolate_scalar
+);
 criterion_main!(benches);

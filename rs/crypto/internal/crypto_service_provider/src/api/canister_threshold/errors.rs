@@ -1,13 +1,13 @@
 //! Errors encountered during CSP canister threshold signature operations.
 use crate::KeyId;
-use ic_crypto_internal_threshold_sig_ecdsa::ThresholdEcdsaSerializationError;
+use ic_crypto_internal_threshold_sig_ecdsa::CanisterThresholdSerializationError;
 use ic_interfaces::crypto::IDkgDealingEncryptionKeyRotationError;
 use serde::{Deserialize, Serialize};
 
 /// Errors encountered during generation of a MEGa encryption key pair.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum CspCreateMEGaKeyError {
-    SerializationError(ThresholdEcdsaSerializationError),
+    SerializationError(CanisterThresholdSerializationError),
     TransientInternalError { internal_error: String },
     DuplicateKeyId { key_id: KeyId },
     InternalError { internal_error: String },

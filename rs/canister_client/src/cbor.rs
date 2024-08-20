@@ -338,9 +338,9 @@ mod tests {
     use ic_crypto_test_utils_root_of_trust::MockRootOfTrustProvider;
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree};
     use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
-    use ic_test_utilities::types::ids::node_test_id;
+    use ic_test_utilities_types::ids::node_test_id;
     use ic_types::messages::{
-        HttpCanisterUpdate, HttpReadStateResponse, HttpRequest, HttpUserQuery, UserQuery,
+        HttpCanisterUpdate, HttpReadStateResponse, HttpRequest, HttpUserQuery, Query,
     };
     use ic_types::time::current_time;
     use ic_types::{PrincipalId, UserId};
@@ -515,7 +515,7 @@ mod tests {
         assert_eq!(read.content, content_copy);
 
         // The signature matches
-        let read_request = HttpRequest::<UserQuery>::try_from(read).unwrap();
+        let read_request = HttpRequest::<Query>::try_from(read).unwrap();
         assert_ok!(request_validator().validate_request(
             &read_request,
             test_start_time,
@@ -561,7 +561,7 @@ mod tests {
         assert_eq!(read.content, content_copy);
 
         // The signature matches
-        let read_request = HttpRequest::<UserQuery>::try_from(read).unwrap();
+        let read_request = HttpRequest::<Query>::try_from(read).unwrap();
         assert_ok!(request_validator().validate_request(
             &read_request,
             test_start_time,

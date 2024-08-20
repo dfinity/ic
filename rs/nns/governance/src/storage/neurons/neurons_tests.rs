@@ -1,81 +1,83 @@
 use super::*;
 
-use crate::pb::v1::Vote;
+use crate::{
+    neuron::{DissolveStateAndAge, NeuronBuilder},
+    pb::v1::{abridged_neuron::DissolveState, Vote},
+};
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::ProposalId;
+use icp_ledger::Subaccount;
 use lazy_static::lazy_static;
 use pretty_assertions::assert_eq;
 
-// TODO(NNS1-2497): Add tests that fail if our BoundedStorage types grow. This
-// way, people are very aware of how they might be eating into our headroom.
-
-lazy_static! {
-    static ref MODEL_NEURON: Neuron = Neuron {
-        id: Some(NeuronId { id: 42 }),
-        cached_neuron_stake_e8s: 0xCAFE, // Yummy.
-
-        hot_keys: vec![
-            PrincipalId::new_user_test_id(100),
-            PrincipalId::new_user_test_id(101),
-        ],
-
-        followees: hashmap! {
-            0 => Followees {
-                followees: vec![
-                    NeuronId { id: 200 },
-                    NeuronId { id: 201 },
-                ],
-            },
-            1 => Followees {
-                followees: vec![
-                    // Not sorted and has duplicates, to make sure we preserve order and
-                    // multiplicity.
-                    NeuronId { id: 211 },
-                    NeuronId { id: 212 },
-                    NeuronId { id: 210 },
-                    NeuronId { id: 210 },
-                ],
-            },
+fn create_model_neuron(id: u64) -> Neuron {
+    let controller = PrincipalId::new_user_test_id(id);
+    let subaccount = Subaccount::from(&controller);
+    NeuronBuilder::new(
+        NeuronId { id },
+        subaccount,
+        controller,
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 10_000_000_000,
+            aging_since_timestamp_seconds: 123_456_789,
         },
-
-        recent_ballots: vec![
-            BallotInfo {
-                proposal_id: Some(ProposalId { id: 300 }),
-                vote: Vote::Yes as i32,
-            },
-            BallotInfo {
-                proposal_id: Some(ProposalId { id: 301 }),
-                vote: Vote::No as i32,
-            },
-        ],
-
-        known_neuron_data: Some(KnownNeuronData {
-            name: "Fabulous".to_string(),
-            description: Some("Follow MeEe for max rewards!".to_string()),
-        }),
-
-        transfer: Some(NeuronStakeTransfer {
-            transfer_timestamp: 123_456_789,
-            from: Some(PrincipalId::new_user_test_id(400)),
-            from_subaccount: vec![4, 0x01],
-            to_subaccount: vec![4, 0x02],
-            neuron_stake_e8s: 403,
-            block_height: 404,
-            memo: 405,
-        }),
-
-        ..Default::default()
-    };
+        123_456_789,
+    )
+    .with_hot_keys(vec![
+        PrincipalId::new_user_test_id(100),
+        PrincipalId::new_user_test_id(101),
+    ])
+    .with_followees(hashmap! {
+        0 => Followees {
+            followees: vec![
+                NeuronId { id: 200 },
+                NeuronId { id: 201 },
+            ],
+        },
+        1 => Followees {
+            followees: vec![
+                // Not sorted and has duplicates, to make sure we preserve order and
+                // multiplicity.
+                NeuronId { id: 211 },
+                NeuronId { id: 212 },
+                NeuronId { id: 210 },
+                NeuronId { id: 210 },
+            ],
+        },
+    })
+    .with_known_neuron_data(Some(KnownNeuronData {
+        name: "Fabulous".to_string(),
+        description: Some("Follow MeEe for max rewards!".to_string()),
+    }))
+    .with_recent_ballots(vec![
+        BallotInfo {
+            proposal_id: Some(ProposalId { id: 300 }),
+            vote: Vote::Yes as i32,
+        },
+        BallotInfo {
+            proposal_id: Some(ProposalId { id: 301 }),
+            vote: Vote::No as i32,
+        },
+    ])
+    .with_transfer(Some(NeuronStakeTransfer {
+        transfer_timestamp: 123_456_789,
+        from: Some(PrincipalId::new_user_test_id(400)),
+        from_subaccount: vec![4, 0x01],
+        to_subaccount: vec![4, 0x02],
+        neuron_stake_e8s: 403,
+        block_height: 404,
+        memo: 405,
+    }))
+    .build()
 }
 
 fn new_red_herring_neuron(seed: u64) -> Neuron {
-    // Here, we use MODEL_NEURON, simply because this is a little bit more
-    // convenient, and it doesn't particularly matter what the result looks like
-    // exactly. What matters is that it is distinct.
-    let mut result = MODEL_NEURON.clone();
+    // Here, we use create_model_neuron(), simply because this is a little bit more convenient, and
+    // it doesn't particularly matter what the result looks like exactly. What matters is that it is
+    // distinct.
+    let mut result = create_model_neuron(seed);
 
     // To make the result distinct, we have to make some perturbations.
-    result.id.as_mut().unwrap().id = seed;
     result.neuron_fees_e8s = seed;
 
     // We must also make the auxiliary fields distinct.
@@ -128,8 +130,11 @@ fn create_red_herring_neurons(store: &mut StableNeuronStore<VectorMemory>) {
 
 fn assert_that_red_herring_neurons_are_untouched(store: &StableNeuronStore<VectorMemory>) {
     for red_herring_neuron in &*RED_HERRING_NEURONS {
-        let id = *red_herring_neuron.id.as_ref().unwrap();
-        assert_eq!(store.read(id), Ok(red_herring_neuron.clone()));
+        let id = red_herring_neuron.id();
+        assert_eq!(
+            store.read(id, NeuronSections::all()),
+            Ok(red_herring_neuron.clone())
+        );
     }
 }
 
@@ -155,7 +160,7 @@ fn test_store_simplest_nontrivial_case() {
     let mut store = new_heap_based();
 
     // 1. Create a Neuron.
-    let neuron_1 = MODEL_NEURON.clone();
+    let neuron_1 = create_model_neuron(42);
     assert_eq!(store.create(neuron_1.clone()), Ok(()));
 
     create_red_herring_neurons(&mut store);
@@ -163,11 +168,7 @@ fn test_store_simplest_nontrivial_case() {
 
     // 2. Bad create: use an existing NeuronId. This should result in an
     // InvalidCommand Err.
-    let bad_create_result = store.create(Neuron {
-        id: Some(NeuronId { id: 42 }),
-        cached_neuron_stake_e8s: 0xDEAD_BEEF,
-        ..Default::default()
-    });
+    let bad_create_result = store.create(create_model_neuron(42));
     match &bad_create_result {
         Err(err) => match err {
             NeuronStoreError::NeuronAlreadyExists(neuron_id) => {
@@ -186,10 +187,13 @@ fn test_store_simplest_nontrivial_case() {
     }
 
     // 3. Read back the first neuron (the second one should have no effect).
-    assert_eq!(store.read(NeuronId { id: 42 }), Ok(neuron_1.clone()),);
+    assert_eq!(
+        store.read(NeuronId { id: 42 }, NeuronSections::all()),
+        Ok(neuron_1.clone()),
+    );
 
     // 4. Bad read: Unknown NeuronId. This should result in a NotFound Err.
-    let bad_read_result = store.read(NeuronId { id: 0xDEAD_BEEF });
+    let bad_read_result = store.read(NeuronId { id: 0xDEAD_BEEF }, NeuronSections::default());
     match &bad_read_result {
         Err(err) => match err {
             NeuronStoreError::NeuronNotFound { neuron_id } => {
@@ -235,31 +239,29 @@ fn test_store_simplest_nontrivial_case() {
         let mut transfer = neuron_1.transfer.clone();
         transfer.as_mut().unwrap().memo = 405_405;
 
-        Neuron {
-            cached_neuron_stake_e8s: 0xFEED, // After drink, we eat.
+        let mut neuron = neuron_1.clone();
+        neuron.cached_neuron_stake_e8s = 0xFEED; // After drink, we eat.
 
-            hot_keys,
-            followees,
-            recent_ballots,
+        neuron.hot_keys = hot_keys;
+        neuron.followees = followees;
+        neuron.recent_ballots = recent_ballots;
 
-            known_neuron_data,
-            transfer,
+        neuron.known_neuron_data = known_neuron_data;
+        neuron.transfer = transfer;
 
-            ..neuron_1.clone()
-        }
+        neuron
     };
     assert_eq!(store.update(&neuron_1, neuron_5.clone()), Ok(()));
     assert_that_red_herring_neurons_are_untouched(&store);
 
     // 6. Read to verify update.
-    assert_eq!(store.read(NeuronId { id: 42 }), Ok(neuron_5.clone()));
+    assert_eq!(
+        store.read(NeuronId { id: 42 }, NeuronSections::all()),
+        Ok(neuron_5.clone())
+    );
 
     // 7. Bad update: Neuron not found (unknown ID).
-    let non_existent_neuron = Neuron {
-        id: Some(NeuronId { id: 0xDEAD_BEEF }),
-        cached_neuron_stake_e8s: 0xBAD_F00D,
-        ..Default::default()
-    };
+    let non_existent_neuron = create_model_neuron(0xDEAD_BEEF);
     let update_result = store.update(&non_existent_neuron, non_existent_neuron.clone());
     match &update_result {
         // This is what we expected.
@@ -276,7 +278,7 @@ fn test_store_simplest_nontrivial_case() {
     assert_that_red_herring_neurons_are_untouched(&store);
 
     // 8. Read to verify bad update.
-    let read_result = store.read(NeuronId { id: 0xDEAD_BEEF });
+    let read_result = store.read(NeuronId { id: 0xDEAD_BEEF }, NeuronSections::default());
     match &read_result {
         // This is what we expected.
         Err(err) => {
@@ -293,16 +295,17 @@ fn test_store_simplest_nontrivial_case() {
     }
 
     // 9. Update again.
-    let neuron_9 = Neuron {
-        known_neuron_data: None,
-        transfer: None,
-        ..neuron_5.clone()
-    };
+    let mut neuron_9 = neuron_5.clone();
+    neuron_9.known_neuron_data = None;
+    neuron_9.transfer = None;
     assert_eq!(store.update(&neuron_5, neuron_9.clone()), Ok(()));
     assert_that_red_herring_neurons_are_untouched(&store);
 
     // 10. Read to verify second update.
-    assert_eq!(store.read(NeuronId { id: 42 }), Ok(neuron_9));
+    assert_eq!(
+        store.read(NeuronId { id: 42 }, NeuronSections::all()),
+        Ok(neuron_9)
+    );
 
     // 11. Delete.
     assert_eq!(store.delete(NeuronId { id: 42 }), Ok(()));
@@ -327,7 +330,7 @@ fn test_store_simplest_nontrivial_case() {
     assert_that_red_herring_neurons_are_untouched(&store);
 
     // 13. Read to verify delete.
-    let read_result = store.read(NeuronId { id: 42 });
+    let read_result = store.read(NeuronId { id: 42 }, NeuronSections::default());
     match &read_result {
         // This is what we expected.
         Err(err) => {
@@ -353,8 +356,8 @@ fn test_store_simplest_nontrivial_case() {
         key_value_to_neuron_id: impl Fn(Key, Value) -> NeuronId,
         bad_neuron_id: NeuronId,
     ) where
-        Key: BoundedStorable + Ord + Copy + std::fmt::Debug,
-        Value: BoundedStorable + Clone + std::fmt::Debug,
+        Key: Storable + Ord + Copy + std::fmt::Debug,
+        Value: Storable + Clone + std::fmt::Debug,
         Memory: ic_stable_structures::Memory,
     {
         for (key, value) in map.iter() {
@@ -372,7 +375,7 @@ fn test_store_simplest_nontrivial_case() {
     // No zombies. This requires looking at privates. Normally, we try to avoid
     // this, but APIs normally assume internal consistency, but that is exactly
     // what we're trying to to verify here.
-    let original_neuron_id = *MODEL_NEURON.id.as_ref().unwrap();
+    let original_neuron_id = neuron_1.id();
 
     assert_no_zombie_references_in(
         "hot_keys",
@@ -408,56 +411,72 @@ fn test_store_simplest_nontrivial_case() {
 }
 
 #[test]
-fn test_store_as_neuron_deserialized_as_abridged() {
-    // Step 1: Prepare a neuron and get its serialized bytes.
-    let neuron = Neuron {
-        id: Some(NeuronId { id: 1 }),
-        account: vec![u8::MAX; 32],
-        controller: Some(PrincipalId::new_user_test_id(1)),
-        cached_neuron_stake_e8s: 1,
-        neuron_fees_e8s: 2,
-        created_timestamp_seconds: 3,
-        aging_since_timestamp_seconds: 4,
-        spawn_at_timestamp_seconds: Some(5),
-        kyc_verified: false,
-        maturity_e8s_equivalent: 6,
-        staked_maturity_e8s_equivalent: Some(7),
-        auto_stake_maturity: Some(true),
-        not_for_profit: true,
-        joined_community_fund_timestamp_seconds: Some(8),
-        neuron_type: Some(9),
-        dissolve_state: Some(NeuronDissolveState::WhenDissolvedTimestampSeconds(10)),
-        ..Default::default()
-    };
-    let serialized = neuron.encode_to_vec();
+fn test_partial_read() {
+    let mut store = new_heap_based();
+    let neuron = create_model_neuron(42);
+    assert_eq!(store.create(neuron.clone()), Ok(()));
 
-    // Step 2: Deserialize as abridged neuron.
-    let abridged = AbridgedNeuron::decode(&serialized[..]).unwrap();
+    let partial_read_test_helper = |sections: NeuronSections| {
+        let neuron_read_result = store.read(NeuronId { id: 42 }, sections).unwrap();
 
-    // Step 3: Verify the abridged neuron has the same fields.
-    assert_eq!(
-        abridged,
-        AbridgedNeuron {
-            id: Some(NeuronId { id: 1 }),
-            account: vec![u8::MAX; 32],
-            controller: Some(PrincipalId::new_user_test_id(1)),
-            cached_neuron_stake_e8s: 1,
-            neuron_fees_e8s: 2,
-            created_timestamp_seconds: 3,
-            aging_since_timestamp_seconds: 4,
-            spawn_at_timestamp_seconds: Some(5),
-            kyc_verified: false,
-            maturity_e8s_equivalent: 6,
-            staked_maturity_e8s_equivalent: Some(7),
-            auto_stake_maturity: Some(true),
-            not_for_profit: true,
-            joined_community_fund_timestamp_seconds: Some(8),
-            neuron_type: Some(9),
-            dissolve_state: Some(AbridgedNeuronDissolveState::WhenDissolvedTimestampSeconds(
-                10
-            )),
+        assert_eq!(neuron_read_result.controller(), neuron.controller());
+
+        if sections.hot_keys {
+            assert_eq!(neuron_read_result.hot_keys, neuron.hot_keys);
+        } else {
+            assert_eq!(neuron_read_result.hot_keys, vec![]);
         }
-    );
+
+        if sections.followees {
+            assert_eq!(neuron_read_result.followees, neuron.followees);
+        } else {
+            assert_eq!(neuron_read_result.followees, HashMap::new());
+        }
+
+        if sections.recent_ballots {
+            assert_eq!(neuron_read_result.recent_ballots, neuron.recent_ballots);
+        } else {
+            assert_eq!(neuron_read_result.recent_ballots, vec![]);
+        }
+
+        if sections.known_neuron_data {
+            assert_eq!(
+                neuron_read_result.known_neuron_data,
+                neuron.known_neuron_data,
+            );
+        } else {
+            assert_eq!(neuron_read_result.known_neuron_data, None);
+        }
+
+        if sections.transfer {
+            assert_eq!(neuron_read_result.transfer, neuron.transfer);
+        } else {
+            assert_eq!(neuron_read_result.transfer, None);
+        }
+    };
+
+    partial_read_test_helper(NeuronSections::default());
+    partial_read_test_helper(NeuronSections::all());
+    partial_read_test_helper(NeuronSections {
+        hot_keys: true,
+        ..NeuronSections::default()
+    });
+    partial_read_test_helper(NeuronSections {
+        followees: true,
+        ..NeuronSections::default()
+    });
+    partial_read_test_helper(NeuronSections {
+        recent_ballots: true,
+        ..NeuronSections::default()
+    });
+    partial_read_test_helper(NeuronSections {
+        known_neuron_data: true,
+        ..NeuronSections::default()
+    });
+    partial_read_test_helper(NeuronSections {
+        transfer: true,
+        ..NeuronSections::default()
+    });
 }
 
 #[test]
@@ -467,7 +486,6 @@ fn test_abridged_neuron_size() {
     // 0u64). Therefore, we make the numbers below as large as possible even though they aren't
     // realistic.
     let abridged_neuron = AbridgedNeuron {
-        id: Some(NeuronId { id: u64::MAX }),
         account: vec![u8::MAX; 32],
         controller: Some(PrincipalId::new(
             PrincipalId::MAX_LENGTH_IN_BYTES,
@@ -485,13 +503,12 @@ fn test_abridged_neuron_size() {
         not_for_profit: true,
         joined_community_fund_timestamp_seconds: Some(u64::MAX),
         neuron_type: Some(i32::MAX),
-        dissolve_state: Some(AbridgedNeuronDissolveState::WhenDissolvedTimestampSeconds(
-            u64::MAX,
-        )),
+        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(u64::MAX)),
+        visibility: None,
     };
 
-    assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::MAX_SIZE);
+    assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::BOUND.max_size());
     // This size can be updated. This assertion is created so that we are aware of the available
     // headroom.
-    assert_eq!(abridged_neuron.encoded_len(), 197);
+    assert_eq!(abridged_neuron.encoded_len(), 184);
 }

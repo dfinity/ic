@@ -1,5 +1,4 @@
-pub use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
-use ic_canister_client_sender::Secp256k1KeyPair;
+use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_rosetta_api::convert::{
     from_hex, from_model_account_identifier, operations_to_requests, to_hex,
     to_model_account_identifier,
@@ -9,6 +8,7 @@ use ic_rosetta_api::models::operation::OperationType;
 use ic_rosetta_api::models::{
     ConstructionCombineResponse, ConstructionParseResponse, ConstructionPayloadsRequestMetadata,
     ConstructionPayloadsResponse, CurveType, PublicKey, Signature, SignatureType,
+    SignedTransaction,
 };
 use ic_rosetta_api::models::{ConstructionSubmitResponse, Error as RosettaError};
 use ic_rosetta_api::request::request_result::RequestResult;
@@ -24,13 +24,15 @@ use ic_rosetta_api::transaction_id::TransactionIdentifier;
 use ic_rosetta_api::{convert, errors, errors::ApiError, DEFAULT_TOKEN_SYMBOL};
 use ic_types::{messages::Blob, time, PrincipalId};
 use icp_ledger::{AccountIdentifier, BlockIndex, Operation, Tokens};
-use log::debug;
 use rand::{seq::SliceRandom, thread_rng};
 use rosetta_api_serv::RosettaApiHandle;
 use rosetta_core::convert::principal_id_from_public_key;
+pub use rosetta_core::models::Ed25519KeyPair as EdKeypair;
 use rosetta_core::models::RosettaSupportedKeyPair;
+use rosetta_core::models::Secp256k1KeyPair;
 use std::collections::HashMap;
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::Arc;
 
 pub mod rosetta_api_serv;
@@ -43,22 +45,20 @@ pub fn to_public_key<T: RosettaSupportedKeyPair>(keypair: &T) -> PublicKey {
 }
 
 pub fn make_user_ed25519(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey, PrincipalId) {
-    let kp = EdKeypair::generate_from_u64(seed);
+    let kp = EdKeypair::generate(seed);
     let pid = kp.generate_principal_id().unwrap();
     let aid: AccountIdentifier = pid.into();
     let pb = to_public_key(&kp);
-    debug!("[test] created user {}", aid);
     (aid, kp, pb, pid)
 }
 
 pub fn make_user_ecdsa_secp256k1(
     seed: u64,
 ) -> (AccountIdentifier, Secp256k1KeyPair, PublicKey, PrincipalId) {
-    let kp = Secp256k1KeyPair::generate_from_u64(seed);
+    let kp = Secp256k1KeyPair::generate(seed);
     let pid = kp.generate_principal_id().unwrap();
     let aid: AccountIdentifier = pid.into();
     let pb = to_public_key(&kp);
-    debug!("[test] created user {}", aid);
     (aid, kp, pb, pid)
 }
 
@@ -88,7 +88,7 @@ where
         // first ask for the fee
         let mut fee_found = false;
         for o in Request::requests_to_operations(&[request.request.clone()], token_name).unwrap() {
-            if o._type.parse::<OperationType>().unwrap() == OperationType::Fee {
+            if o.type_.parse::<OperationType>().unwrap() == OperationType::Fee {
                 fee_found = true;
             } else {
                 dry_run_ops.push(o.clone());
@@ -177,7 +177,7 @@ where
 
     if accept_suggested_fee {
         for o in &mut all_ops {
-            if o._type.parse::<OperationType>().unwrap() == OperationType::Fee {
+            if o.type_.parse::<OperationType>().unwrap() == OperationType::Fee {
                 o.amount = Some(signed_amount(-(fee_icpts.get_e8s() as i128), token_name));
             }
         }
@@ -279,7 +279,7 @@ where
                 .get(
                     &from_model_account_identifier(p.account_identifier.as_ref().unwrap()).unwrap(),
                 )
-                .map(Arc::clone)
+                .cloned()
                 .unwrap_or_else(|| Arc::clone(&keypairs[0]));
             let bytes = from_hex(&p.hex_bytes).unwrap();
             let signature_bytes = keypair.sign(&bytes);
@@ -374,7 +374,7 @@ where
     {
         Ok((submit_res, charged_fee)) => {
             let results = convert::from_transaction_operation_results(
-                submit_res.metadata,
+                submit_res.metadata.try_into().unwrap(),
                 DEFAULT_TOKEN_SYMBOL,
             )
             .expect("Couldn't convert metadata to TransactionResults");
@@ -428,7 +428,7 @@ where
     {
         Ok((submit_res, charged_fee)) => Ok((
             submit_res.transaction_identifier.into(),
-            submit_res.metadata,
+            submit_res.metadata.try_into().unwrap(),
             charged_fee,
         )),
         Err(e) => Err(e),
@@ -508,7 +508,9 @@ where
         .unwrap()?;
 
     let submit_res = ros
-        .construction_submit(signed.signed_transaction().unwrap())
+        .construction_submit(
+            SignedTransaction::from_str(&signed.signed_transaction.clone()).unwrap(),
+        )
         .await
         .unwrap()?;
 
@@ -519,18 +521,20 @@ where
 
     // check idempotency
     let submit_res2 = ros
-        .construction_submit(signed.signed_transaction().unwrap())
+        .construction_submit(
+            SignedTransaction::from_str(&signed.signed_transaction.clone()).unwrap(),
+        )
         .await
         .unwrap()?;
     assert_eq!(submit_res, submit_res2);
 
-    let mut txn = signed.signed_transaction().unwrap();
-    for (_, request) in txn.iter_mut() {
+    let mut txn = SignedTransaction::from_str(&signed.signed_transaction).unwrap();
+    for (_, request) in txn.requests.iter_mut() {
         *request = vec![request.last().unwrap().clone()];
     }
 
     let submit_res3 = ros
-        .construction_submit(signed.signed_transaction().unwrap())
+        .construction_submit(SignedTransaction::from_str(&signed.signed_transaction).unwrap())
         .await
         .unwrap()?;
     assert_eq!(submit_res, submit_res3);
@@ -575,7 +579,7 @@ pub async fn send_icpts_with_window<T: RosettaSupportedKeyPair>(
 where
     Arc<T>: RosettaSupportedKeyPair,
 {
-    let public_key_der = ic_canister_client_sender::ed25519_public_key_to_der(keypair.get_pb_key());
+    let public_key_der = EdKeypair::der_encode_pk(keypair.get_pb_key()).unwrap();
 
     let from: AccountIdentifier = PrincipalId::new_self_authenticating(&public_key_der).into();
 
@@ -694,23 +698,19 @@ fn compare_accounts(
 #[test]
 fn test_keypair_encoding() {
     //Create keypairs of each type
-    let kp_ed_keypair = EdKeypair::generate_from_u64(100);
-    let kp_secp256k1_key_pair = Secp256k1KeyPair::generate_from_u64(200);
+    let kp_ed_keypair = EdKeypair::generate(100);
+    let kp_secp256k1_key_pair = Secp256k1KeyPair::generate(200);
 
-    //Testing the functions of RosettaSupportedKeypair for EdKeyPair
-    assert_eq!(
-        kp_ed_keypair.public_key,
-        kp_ed_keypair.get_pb_key().as_slice()
-    );
+    //Testing the functions of RosettaSupportedKeypair for EdKeypair
     assert_eq!(kp_ed_keypair.get_curve_type(), CurveType::Edwards25519);
     let pid = kp_ed_keypair.generate_principal_id().unwrap();
     //RosettaSupportedKeyPairs supports two encoding types: HEX and DER.
     let pk_hex_encoded = kp_ed_keypair.hex_encode_pk();
     let pk_decoded = EdKeypair::hex_decode_pk(&pk_hex_encoded).unwrap();
-    assert_eq!(pk_decoded, kp_ed_keypair.public_key.to_vec());
+    assert_eq!(pk_decoded, kp_ed_keypair.get_pb_key());
     let pk_der_encoded = EdKeypair::der_encode_pk(kp_ed_keypair.get_pb_key()).unwrap();
     let pk_decoded = EdKeypair::der_decode_pk(pk_der_encoded).unwrap();
-    assert_eq!(pk_decoded, kp_ed_keypair.public_key.to_vec());
+    assert_eq!(pk_decoded, kp_ed_keypair.get_pb_key());
     //See if the principal id is recoverable from the hex encoded public key
     assert_eq!(EdKeypair::get_principal_id(&pk_hex_encoded).unwrap(), pid);
 
@@ -719,7 +719,7 @@ fn test_keypair_encoding() {
     assert_eq!(aid_b, pid.into());
     assert_eq!(pb_b, to_public_key(&kp_ed_keypair));
     assert_eq!(
-        kp_ed_keypair.public_key.to_vec(),
+        kp_ed_keypair.get_pb_key(),
         from_hex(&pb_b.hex_bytes).unwrap()
     );
     assert_eq!(pid_b, pid);

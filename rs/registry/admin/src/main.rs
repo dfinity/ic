@@ -1,29 +1,33 @@
 //! Command-line utility to help submitting proposals to modify the IC's NNS.
+use crate::helpers::*;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Encode, Principal};
 use clap::{Args, Parser};
+use create_subnet::ProposeToCreateSubnetCmd;
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, SetAuthorizedSubnetworkListArgs, SubnetListWithType,
     UpdateSubnetTypeArgs,
 };
+use helpers::{
+    get_proposer_and_sender, get_subnet_ids, get_subnet_record_with_details, parse_proposal_url,
+    shortened_pid_string, shortened_subnet_string,
+};
 use ic_btc_interface::{Flag, SetConfigRequest};
 use ic_canister_client::{Agent, Sender};
 use ic_canister_client_sender::SigKeys;
-use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_utils_threshold_sig_der::{
     parse_threshold_sig_key, parse_threshold_sig_key_from_der,
 };
 use ic_http_utils::file_downloader::{check_file_hash, FileDownloader};
-use ic_ic00_types::{CanisterInstallMode, EcdsaKeyId};
-use ic_interfaces_registry::RegistryClient;
+use ic_interfaces_registry::{RegistryClient, RegistryDataProvider};
+use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR,
-    TEST_USER2_PRINCIPAL, TEST_USER3_KEYPAIR, TEST_USER3_PRINCIPAL, TEST_USER4_KEYPAIR,
-    TEST_USER4_PRINCIPAL,
+    TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR, TEST_USER2_PRINCIPAL,
+    TEST_USER3_KEYPAIR, TEST_USER3_PRINCIPAL, TEST_USER4_KEYPAIR, TEST_USER4_PRINCIPAL,
 };
 use ic_nervous_system_humanize::{
     parse_duration, parse_percentage, parse_time_of_day, parse_tokens,
@@ -34,8 +38,8 @@ use ic_nervous_system_root::change_canister::{
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance::{
-    governance::{BitcoinNetwork, BitcoinSetConfigProposal},
+use ic_nns_governance_api::{
+    bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
     pb::v1::{
         add_or_remove_node_provider::Change,
         create_service_nervous_system::{
@@ -47,23 +51,25 @@ use ic_nns_governance::{
             swap_parameters, GovernanceParameters, InitialTokenDistribution, LedgerParameters,
             SwapParameters,
         },
-        manage_neuron::Command,
-        proposal::Action,
-        AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, ManageNeuron,
-        NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, RewardNodeProviders,
+        install_code::CanisterInstallMode as GovernanceInstallMode,
+        stop_or_start_canister::CanisterAction as GovernanceCanisterAction,
+        update_canister_settings::{
+            CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
+        },
+        AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, InstallCodeRequest,
+        MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, NnsFunction,
+        NodeProvider, ProposalActionRequest, RewardNodeProviders, StopOrStartCanister,
+        UpdateCanisterSettings,
     },
-    proposals::proposal_submission::{
+    proposal_helpers::{
         create_external_update_proposal_candid, create_make_proposal_payload,
         decode_make_proposal_response,
     },
+    subnet_rental::{RentalConditionId, SubnetRentalRequest},
 };
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
-use ic_nns_test_utils::{
-    governance::{HardResetNnsRootToVersionPayload, UpgradeRootProposal},
-    ids::TEST_NEURON_1_ID,
-};
-use ic_prep_lib::subnet_configuration;
+use ic_nns_test_utils::governance::{HardResetNnsRootToVersionPayload, UpgradeRootProposal};
 use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord,
     crypto::v1::{PublicKey, X509PublicKeyCert},
@@ -80,8 +86,8 @@ use ic_protobuf::registry::{
 };
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{
-    crypto::CryptoRegistry, deserialize_registry_value, ecdsa_keys::EcdsaKeysRegistry,
-    hostos_version::HostosRegistry, subnet::SubnetRegistry,
+    chain_keys::ChainKeysRegistry, crypto::CryptoRegistry, deserialize_registry_value,
+    ecdsa_keys::EcdsaKeysRegistry, hostos_version::HostosRegistry, subnet::SubnetRegistry,
 };
 use ic_registry_keys::{
     get_node_operator_id_from_record_key, get_node_record_node_id, is_node_operator_record_key,
@@ -99,48 +105,45 @@ use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
 };
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_registry_nns_data_provider_wrappers::NnsDataProvider;
+use ic_registry_nns_data_provider_wrappers::{CertifiedNnsDataProvider, NnsDataProvider};
 use ic_registry_routing_table::{
     CanisterIdRange, CanisterMigrations as OtherCanisterMigrations,
     RoutingTable as OtherRoutingTable,
 };
-use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
-use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error;
 use ic_sns_init::pb::v1::SnsInitPayload; // To validate CreateServiceNervousSystem.
-use ic_sns_swap::pb::v1::NeuronBasketConstructionParameters;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, InsertUpgradePathEntriesRequest, PrettySnsVersion, SnsCanisterType, SnsUpgrade,
     SnsVersion, SnsWasm, UpdateAllowedPrincipalsRequest, UpdateSnsSubnetListRequest,
 };
 use ic_types::{
     crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
-    p2p, CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
+    CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
 };
 use indexmap::IndexMap;
 use itertools::izip;
 use maplit::hashmap;
 use prost::Message;
+use recover_subnet::ProposeToUpdateRecoveryCupCmd;
 use registry_canister::mutations::{
-    common::decode_registry_value,
     complete_canister_migration::CompleteCanisterMigrationPayload,
-    do_add_api_boundary_node::AddApiBoundaryNodePayload,
+    do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
     do_add_node_operator::AddNodeOperatorPayload,
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
-    do_create_subnet::{CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest},
-    do_recover_subnet::RecoverSubnetPayload,
+    do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
+    do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
+    do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
     do_set_firewall_config::SetFirewallConfigPayload,
     do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
-    do_update_elected_hostos_versions::UpdateElectedHostosVersionsPayload,
-    do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload,
+    do_update_elected_hostos_versions::{
+        ReviseElectedHostosVersionsPayload, UpdateElectedHostosVersionsPayload,
+    },
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
     do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
-    do_update_subnet::UpdateSubnetPayload,
-    do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
-    do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
+    do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
     firewall::{
         add_firewall_rules_compute_entries, compute_firewall_ruleset_hash,
         remove_firewall_rules_compute_entries, update_firewall_rules_compute_entries,
@@ -151,13 +154,13 @@ use registry_canister::mutations::{
     reroute_canister_ranges::RerouteCanisterRangesPayload,
 };
 use serde::{Deserialize, Serialize};
-use std::net::Ipv6Addr;
 use std::{
     collections::{BTreeMap, HashSet},
     convert::TryFrom,
     fmt::Debug,
     fs::{metadata, read_to_string, File},
     io::Read,
+    net::Ipv6Addr,
     path::{Path, PathBuf},
     process::exit,
     str::FromStr,
@@ -165,8 +168,11 @@ use std::{
     time::SystemTime,
 };
 use types::{
-    NodeDetails, ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SubnetRecord,
+    LogVisibility, NodeDetails, ProposalAction, ProposalMetadata, ProposalPayload,
+    ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SubnetDescriptor,
+    SubnetRecord,
 };
+use update_subnet::ProposeToUpdateSubnetCmd;
 use url::Url;
 
 #[macro_use]
@@ -174,13 +180,17 @@ extern crate ic_admin_derive;
 
 extern crate chrono;
 
+mod create_subnet;
+mod helpers;
+mod recover_subnet;
 mod types;
+mod update_subnet;
 
 #[cfg(test)]
 mod main_tests;
 
 const IC_ROOT_PUBLIC_KEY_BASE64: &str = r#"MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAIFMDm7HH6tYOwi9gTc8JVw8NxsuhIY8mKTx4It0I10U+12cDNVG2WhfkToMCyzFNBWDv0tDkuRn25bWW5u0y3FxEvhHLg1aTRRQX/10hLASkQkcX4e5iINGP5gJGguqrg=="#;
-const IC_DOMAIN: &str = "ic0.app";
+const IC_DOMAINS: &[&str; 3] = &["ic0.app", "icp0.io", "icp-api.io"];
 
 /// Common command-line options for `ic-admin`.
 #[derive(Parser)]
@@ -244,47 +254,6 @@ struct Opts {
     json: bool,
 }
 
-impl ProposeToCreateSubnetCmd {
-    /// Set fields (that were not provided by the user explicitly) to defaults.
-    fn apply_defaults_for_unset_fields(&mut self) {
-        let subnet_config =
-            subnet_configuration::get_default_config_params(self.subnet_type, self.node_ids.len());
-        let gossip_config = p2p::build_default_gossip_config();
-        // set subnet params
-        self.max_ingress_bytes_per_message
-            .get_or_insert(subnet_config.max_ingress_bytes_per_message);
-        self.max_ingress_messages_per_block
-            .get_or_insert(subnet_config.max_ingress_messages_per_block);
-        self.max_block_payload_size
-            .get_or_insert(subnet_config.max_block_payload_size);
-        self.unit_delay_millis
-            .get_or_insert(subnet_config.unit_delay.as_millis() as u64);
-        self.initial_notary_delay_millis
-            .get_or_insert(subnet_config.initial_notary_delay.as_millis() as u64);
-        self.dkg_dealings_per_block
-            .get_or_insert(subnet_config.dkg_dealings_per_block as u64);
-        self.dkg_interval_length
-            .get_or_insert(subnet_config.dkg_interval_length.get());
-        // set gossip params
-        self.gossip_max_artifact_streams_per_peer
-            .get_or_insert(gossip_config.max_artifact_streams_per_peer);
-        self.gossip_max_chunk_wait_ms
-            .get_or_insert(gossip_config.max_chunk_wait_ms);
-        self.gossip_max_duplicity
-            .get_or_insert(gossip_config.max_duplicity);
-        self.gossip_max_chunk_size
-            .get_or_insert(gossip_config.max_chunk_size);
-        self.gossip_receive_check_cache_size
-            .get_or_insert(gossip_config.receive_check_cache_size);
-        self.gossip_pfn_evaluation_period_ms
-            .get_or_insert(gossip_config.pfn_evaluation_period_ms);
-        self.gossip_registry_poll_period_ms
-            .get_or_insert(gossip_config.registry_poll_period_ms);
-        self.gossip_retransmission_request_ms
-            .get_or_insert(gossip_config.retransmission_request_ms);
-    }
-}
-
 /// List of sub-commands accepted by `ic-admin`.
 #[derive(Parser)]
 #[allow(clippy::large_enum_variant)]
@@ -311,15 +280,19 @@ enum SubCommand {
     GetSubnetList,
     /// Get info about a Replica version
     GetReplicaVersion(GetReplicaVersionCmd),
-    /// Propose updating a subnet's Replica version
-    ProposeToUpdateSubnetReplicaVersion(ProposeToUpdateSubnetReplicaVersionCmd),
+    /// Deprecated. Please use `ProposeToDeployGuestosToAllSubnetNodes` instead.
+    ProposeToUpdateSubnetReplicaVersion(ProposeToDeployGuestosToAllSubnetNodesCmd),
+    /// Propose to deploy a priorly elected GuestOS version to all subnet nodes.
+    ProposeToDeployGuestosToAllSubnetNodes(ProposeToDeployGuestosToAllSubnetNodesCmd),
     /// Get the list of blessed Replica versions.
     GetBlessedReplicaVersions,
     /// Get the latest routing table.
     GetRoutingTable,
-    /// Submits a proposal to update currently elected replica versions, by electing
-    /// a new version and/or unelecting multiple versions.
-    ProposeToUpdateElectedReplicaVersions(ProposeToUpdateElectedReplicaVersionsCmd),
+    /// Deprecated. Please use `ProposeToReviseElectedGuestosVersions` instead.
+    ProposeToUpdateElectedReplicaVersions(ProposeToReviseElectedGuestssVersionsCmd),
+    /// Submits a proposal to change the set of currently elected GuestOS versions, by electing
+    /// a new version and/or unelecting multiple priorly elected versions.
+    ProposeToReviseElectedGuestosVersions(ProposeToReviseElectedGuestssVersionsCmd),
     /// Submits a proposal to create a new subnet.
     ProposeToCreateSubnet(ProposeToCreateSubnetCmd),
     /// Submits a proposal to create a new service nervous system (usually referred to as SNS).
@@ -404,8 +377,15 @@ enum SubCommand {
     GetNodeRewardsTable,
     /// Submit a proposal to update the node rewards table
     ProposeToUpdateNodeRewardsTable(ProposeToUpdateNodeRewardsTableCmd),
-    /// Submit a proposal to update the unassigned nodes
+    /// Submit a proposal to update the unassigned nodes. This subcommand is obsolete; please use
+    /// `ProposeToDeployGuestosToAllUnassignedNodes` or `ProposeToUpdateSshReadonlyAccessForAllUnassignedNodes` instead.
     ProposeToUpdateUnassignedNodesConfig(ProposeToUpdateUnassignedNodesConfigCmd),
+    /// Propose to deploy the GuestOS version to all unassigned nodes.
+    ProposeToDeployGuestosToAllUnassignedNodes(ProposeToDeployGuestosToAllUnassignedNodesCmd),
+    /// Propose to update the SSH keys that have read-only access to all unassigned nodes.
+    ProposeToUpdateSshReadonlyAccessForAllUnassignedNodes(
+        ProposeToUpdateSshReadonlyAccessForAllUnassignedNodesCmd,
+    ),
     /// Get the SSH key access lists for unassigned nodes
     GetUnassignedNodes,
     /// Get the monthly Node Provider rewards
@@ -433,32 +413,49 @@ enum SubCommand {
     ProposeToInsertSnsWasmUpgradePathEntries(ProposeToInsertSnsWasmUpgradePathEntriesCmd),
     /// Get the ECDSA key ids and their signing subnets
     GetEcdsaSigningSubnets,
+    /// Get the Master public key ids and their signing subnets
+    GetChainKeySigningSubnets,
     /// Propose to update the list of SNS Subnet IDs that SNS-WASM deploys SNS instances to
     ProposeToUpdateSnsSubnetIdsInSnsWasm(ProposeToUpdateSnsSubnetIdsInSnsWasmCmd),
     /// Propose to update the list of Principals that are allowed to deploy SNS instances
     ProposeToUpdateSnsDeployWhitelist(ProposeToUpdateSnsDeployWhitelistCmd),
-    /// Propose to start a decentralization sale
+    /// Propose to start a decentralization swap. This subcommand is obsolete; please use
+    /// `ProposeToCreateServiceNervousSystem` instead.
     ProposeToOpenSnsTokenSwap(ProposeToOpenSnsTokenSwap),
     /// Propose to set the Bitcoin configuration
     ProposeToSetBitcoinConfig(ProposeToSetBitcoinConfig),
-    /// Submits a proposal to update currently elected HostOS versions, by electing
-    /// a new version and/or unelecting multiple versions.
+    /// Submits a proposal to change the set of currently elected HostOS versions, by electing
+    /// a new version and/or unelecting multiple versions. This subcommand is obsolete; please use
+    /// `ProposeToReviseElectedHostosVersions` instead.
     ProposeToUpdateElectedHostosVersions(ProposeToUpdateElectedHostosVersionsCmd),
-    /// Set or remove a HostOS version on Nodes
+    /// Submits a proposal to change the set of currently elected HostOS versions, by electing
+    /// a new version and/or unelecting multiple versions.
+    ProposeToReviseElectedHostosVersions(ProposeToReviseElectedHostosVersionsCmd),
+    /// Set or remove a HostOS version on Nodes. This subcommand is obsolete; please use
+    /// `ProposeToDeployHostosToSomeNodes` instead.
     ProposeToUpdateNodesHostosVersion(ProposeToUpdateNodesHostosVersionCmd),
+    /// Propose to deploy a HostOS version to some nodes.
+    ProposeToDeployHostosToSomeNodes(ProposeToDeployHostosToSomeNodesCmd),
     /// Get current list of elected HostOS versions
     GetElectedHostosVersions,
     /// Propose to add an API Boundary Node
-    ProposeToAddApiBoundaryNode(ProposeToAddApiBoundaryNodeCmd),
+    ProposeToAddApiBoundaryNodes(ProposeToAddApiBoundaryNodesCmd),
     /// Propose to remove a set of API Boundary Nodes
     ProposeToRemoveApiBoundaryNodes(ProposeToRemoveApiBoundaryNodesCmd),
-    /// Propose to update the version of a set of API Boundary Nodes
+    /// Propose to update the version of a set of API Boundary Nodes. This subcommand is obsolete; please use
+    /// `ProposeToDeployGuestosToSomeApiBoundaryNodes` instead.
     ProposeToUpdateApiBoundaryNodesVersion(ProposeToUpdateApiBoundaryNodesVersionCmd),
+    /// Propose to upgrade the GuestOS version of a set of API Boundary Nodes.
+    ProposeToDeployGuestosToSomeApiBoundaryNodes(ProposeToDeployGuestosToSomeApiBoundaryNodesCmd),
     /// Sub-command to fetch an API Boundary Node record from the registry.
     /// Retrieve an API Boundary Node record
     GetApiBoundaryNode(GetApiBoundaryNodeCmd),
     /// Retrieve all API Boundary Node Ids
     GetApiBoundaryNodes,
+    /// Submits a proposal to express the interest in renting a subnet.
+    ProposeToRentSubnet(ProposeToRentSubnetCmd),
+    /// Propose to update the settings of a canister.
+    ProposeToUpdateCanisterSettings(ProposeToUpdateCanisterSettingsCmd),
 }
 
 /// Indicates whether a value should be added or removed.
@@ -498,88 +495,9 @@ struct GetTlsCertificateCmd {
     node_id: PrincipalId,
 }
 
-/// Extracts the summary from either a file or from a string.
-pub fn summary_from_string_or_file(
-    summary: &Option<String>,
-    summary_file: &Option<PathBuf>,
-) -> String {
-    match (summary, summary_file) {
-        (None, None) | (Some(_), Some(_)) => {
-            panic!("Exactly one of summary or summary_file must be specified.")
-        }
-        (Some(s), None) => s.clone(),
-        (None, Some(p)) => read_to_string(p).expect("Couldn't read summary from file."),
-    }
-}
-
-/// Selects a `(NeuronId, Sender)` pair to submit the proposal. If
-/// `use_test_neuron` is true, it returns `TEST_NEURON_1_ID` and a `Sender`
-/// based on that test neuron's private key, otherwise it validates and returns
-/// the `NeuronId` and `Sender` passed as argument.
-fn get_proposer_and_sender(
-    proposer: Option<NeuronId>,
-    sender: Sender,
-    use_test_neuron: bool,
-) -> (NeuronId, Sender) {
-    if use_test_neuron {
-        return (
-            NeuronId(TEST_NEURON_1_ID),
-            Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
-        );
-    }
-    let proposer = proposer.expect("A proposal must have a proposer.");
-    assert!(
-        sender.get_principal_id() != Sender::Anonymous.get_principal_id(),
-        "Must specify a keypair to submit a proposal that corresponds to the owner of a neuron."
-    );
-    (proposer, sender)
-}
-
-/// Trait to extract metadata from a proposal subcommand.
-/// This trait is totally implemented in macros and should
-/// be used within the derive directive.
-pub trait ProposalMetadata {
-    fn summary(&self) -> String;
-    fn url(&self) -> String;
-    fn proposer_and_sender(&self, sender: Sender) -> (NeuronId, Sender);
-    fn is_dry_run(&self) -> bool;
-    fn is_json(&self) -> bool;
-}
-
 /// Trait to extract the title for proposal type.
 pub trait ProposalTitle {
     fn title(&self) -> String;
-}
-
-/// Trait to extract the payload for each proposal type.
-/// This trait is async as building some payloads requires async calls.
-#[async_trait]
-pub trait ProposalPayload<T: CandidType> {
-    async fn payload(&self, nns_url: Url) -> T;
-}
-
-/// Shortens the provided `PrincipalId` to make it easier to display.
-fn shortened_pid_string(pid: &PrincipalId) -> String {
-    format!("{}", pid)[..5].to_string()
-}
-
-/// Shortens the provided `PrincipalId`s to make them easier to display.
-fn shortened_pids_string(pids: &[PrincipalId]) -> String {
-    let mut pids_string = "[".to_string();
-    pids_string.push_str(
-        &pids
-            .to_vec()
-            .iter()
-            .map(PrincipalId::to_string)
-            .map(|mut s| {
-                s.truncate(5);
-                s
-            })
-            .collect::<Vec<String>>()
-            .join(", "),
-    );
-    pids_string.push(']');
-    pids_string
 }
 
 /// Sub-command to submit a proposal to remove nodes from a subnet.
@@ -605,7 +523,7 @@ impl ProposalTitle for ProposeToRemoveNodesFromSubnetCmd {
 
 #[async_trait]
 impl ProposalPayload<RemoveNodesFromSubnetPayload> for ProposeToRemoveNodesFromSubnetCmd {
-    async fn payload(&self, _: Url) -> RemoveNodesFromSubnetPayload {
+    async fn payload(&self, _: &Agent) -> RemoveNodesFromSubnetPayload {
         let node_ids = self
             .node_ids
             .clone()
@@ -649,8 +567,8 @@ impl ProposalTitle for ProposeToChangeSubnetMembershipCmd {
 
 #[async_trait]
 impl ProposalPayload<ChangeSubnetMembershipPayload> for ProposeToChangeSubnetMembershipCmd {
-    async fn payload(&self, nns_url: Url) -> ChangeSubnetMembershipPayload {
-        let registry_canister = RegistryCanister::new(vec![nns_url]);
+    async fn payload(&self, agent: &Agent) -> ChangeSubnetMembershipPayload {
+        let registry_canister = RegistryCanister::new_with_agent(agent.clone());
         let subnet_id = self.subnet.get_id(&registry_canister).await;
         let node_ids_add = self
             .node_ids_add
@@ -713,7 +631,7 @@ struct GetReplicaVersionCmd {
 /// subnet to the given (blessed) version.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
-struct ProposeToUpdateSubnetReplicaVersionCmd {
+struct ProposeToDeployGuestosToAllSubnetNodesCmd {
     /// The subnet to update.
     subnet: SubnetDescriptor,
     /// The new Replica version to use.
@@ -746,7 +664,7 @@ impl ProposalTitle for ProposeToRemoveNodeOperatorsCmd {
 
 #[async_trait]
 impl ProposalPayload<RemoveNodeOperatorsPayload> for ProposeToRemoveNodeOperatorsCmd {
-    async fn payload(&self, _: Url) -> RemoveNodeOperatorsPayload {
+    async fn payload(&self, _: &Agent) -> RemoveNodeOperatorsPayload {
         RemoveNodeOperatorsPayload {
             node_operators_to_remove: self
                 .node_operators_to_remove
@@ -758,15 +676,7 @@ impl ProposalPayload<RemoveNodeOperatorsPayload> for ProposeToRemoveNodeOperator
     }
 }
 
-/// Shortens the id of the provided subent to make it easier to display.
-fn shortened_subnet_string(subnet: &SubnetDescriptor) -> String {
-    match *subnet {
-        SubnetDescriptor::Id(pid) => shortened_pid_string(&pid),
-        SubnetDescriptor::Index(i) => format!("{}", i),
-    }
-}
-
-impl ProposalTitle for ProposeToUpdateSubnetReplicaVersionCmd {
+impl ProposalTitle for ProposeToDeployGuestosToAllSubnetNodesCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -780,50 +690,91 @@ impl ProposalTitle for ProposeToUpdateSubnetReplicaVersionCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<UpdateSubnetReplicaVersionPayload> for ProposeToUpdateSubnetReplicaVersionCmd {
-    async fn payload(&self, nns_url: Url) -> UpdateSubnetReplicaVersionPayload {
-        let registry_canister = RegistryCanister::new(vec![nns_url.clone()]);
+impl ProposalPayload<DeployGuestosToAllSubnetNodesPayload>
+    for ProposeToDeployGuestosToAllSubnetNodesCmd
+{
+    async fn payload(&self, agent: &Agent) -> DeployGuestosToAllSubnetNodesPayload {
+        let registry_canister = RegistryCanister::new_with_agent(agent.clone());
         let subnet_id = self.subnet.get_id(&registry_canister).await;
-        UpdateSubnetReplicaVersionPayload {
+        DeployGuestosToAllSubnetNodesPayload {
             subnet_id: subnet_id.get(),
             replica_version_id: self.replica_version_id.clone(),
         }
     }
 }
 
-/// Sub-command to  submit a proposal change public keys with "readonly" access
-/// privileges or the replica version for the set of all unassigned nodes. There
-/// is no easy way to set a privilege to an empty list.
+/// Obsolete; please use `ProposeToDeployGuestosToAllUnassignedNodes` or
+/// `ProposeToUpdateSshReadonlyAccessForAllUnassignedNodes` instead.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser, Clone)]
+struct ProposeToUpdateUnassignedNodesConfigCmd {}
+
+/// Sub-command to  submit a proposal to deploy a specific replica version to the set of all
+/// unassigned nodes.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
-struct ProposeToUpdateUnassignedNodesConfigCmd {
-    /// The list of public keys whose owners have "readonly" SSH access to all
-    /// unassigned nodes.
-    #[clap(long, multiple_values(true))]
-    pub ssh_readonly_access: Option<Vec<String>>,
-
+struct ProposeToDeployGuestosToAllUnassignedNodesCmd {
     /// The ID of the replica version that all the unassigned nodes run.
     #[clap(long)]
-    pub replica_version_id: Option<String>,
+    pub replica_version_id: String,
 }
 
-impl ProposalTitle for ProposeToUpdateUnassignedNodesConfigCmd {
+impl ProposalTitle for ProposeToDeployGuestosToAllUnassignedNodesCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
-            None => "Update all unassigned nodes".to_string(),
+            None => "Deploy a guestos version to all unassigned nodes".to_string(),
         }
     }
 }
 
 #[async_trait]
-impl ProposalPayload<UpdateUnassignedNodesConfigPayload>
-    for ProposeToUpdateUnassignedNodesConfigCmd
+impl ProposalPayload<DeployGuestosToAllUnassignedNodesPayload>
+    for ProposeToDeployGuestosToAllUnassignedNodesCmd
 {
-    async fn payload(&self, _: Url) -> UpdateUnassignedNodesConfigPayload {
-        UpdateUnassignedNodesConfigPayload {
-            ssh_readonly_access: self.ssh_readonly_access.clone(),
-            replica_version: self.replica_version_id.clone(),
+    async fn payload(&self, _: &Agent) -> DeployGuestosToAllUnassignedNodesPayload {
+        DeployGuestosToAllUnassignedNodesPayload {
+            elected_replica_version: self.replica_version_id.clone(),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to change the public keys with "readonly"
+/// access privileges. There is no easy way to set a privilege to an empty list.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToUpdateSshReadonlyAccessForAllUnassignedNodesCmd {
+    /// The list of public keys whose owners have "readonly" SSH access to all
+    /// unassigned nodes.
+    #[clap(long, multiple_values(true))]
+    pub ssh_readonly_access: Vec<String>,
+}
+
+impl ProposalTitle for ProposeToUpdateSshReadonlyAccessForAllUnassignedNodesCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => {
+                "Update public keys with SSH readonly access for all unassigned nodes".to_string()
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<UpdateSshReadOnlyAccessForAllUnassignedNodesPayload>
+    for ProposeToUpdateSshReadonlyAccessForAllUnassignedNodesCmd
+{
+    async fn payload(&self, _: &Agent) -> UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
+        UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
+            ssh_readonly_keys: self
+                .ssh_readonly_access
+                .iter()
+                .filter_map(|k| match k.trim() {
+                    "" => None,
+                    k => Some(k.to_string()),
+                })
+                .collect::<Vec<_>>(),
         }
     }
 }
@@ -850,7 +801,7 @@ impl ProposalTitle for ProposeXdrIcpConversionRateCmd {
 
 #[async_trait]
 impl ProposalPayload<UpdateIcpXdrConversionRatePayload> for ProposeXdrIcpConversionRateCmd {
-    async fn payload(&self, _: Url) -> UpdateIcpXdrConversionRatePayload {
+    async fn payload(&self, _: &Agent) -> UpdateIcpXdrConversionRatePayload {
         UpdateIcpXdrConversionRatePayload {
             data_source: "IC admin".to_string(),
             timestamp_seconds: SystemTime::now()
@@ -869,6 +820,11 @@ impl ProposalPayload<UpdateIcpXdrConversionRatePayload> for ProposeXdrIcpConvers
 struct StartCanisterCmd {
     #[clap(long)]
     pub canister_id: CanisterId,
+
+    /// If true, the proposal will be sent as an StopOrStartCanister proposal instead of ExecuteNnsFunction.
+    /// TODO(NNS1-3223): Change to `use_legacy_excutenns` after the StopOrStartCanister proposal is supported.
+    #[clap(long)]
+    use_explicit_action_type: bool,
 }
 
 impl ProposalTitle for StartCanisterCmd {
@@ -882,11 +838,24 @@ impl ProposalTitle for StartCanisterCmd {
 
 #[async_trait]
 impl ProposalPayload<StopOrStartCanisterRequest> for StartCanisterCmd {
-    async fn payload(&self, _: Url) -> StopOrStartCanisterRequest {
+    async fn payload(&self, _: &Agent) -> StopOrStartCanisterRequest {
         StopOrStartCanisterRequest {
             canister_id: self.canister_id,
             action: CanisterAction::Start,
         }
+    }
+}
+
+#[async_trait]
+impl ProposalAction for StartCanisterCmd {
+    async fn action(&self) -> ProposalActionRequest {
+        let canister_id = Some(self.canister_id.get());
+        let action = Some(GovernanceCanisterAction::Start as i32);
+        let start_canister = StopOrStartCanister {
+            canister_id,
+            action,
+        };
+        ProposalActionRequest::StopOrStartCanister(start_canister)
     }
 }
 
@@ -896,6 +865,11 @@ impl ProposalPayload<StopOrStartCanisterRequest> for StartCanisterCmd {
 struct StopCanisterCmd {
     #[clap(long)]
     pub canister_id: CanisterId,
+
+    /// If true, the proposal will be sent as an StopOrStartCanister proposal instead of ExecuteNnsFunction.
+    /// TODO(NNS1-3223): Change to `use_legacy_excutenns` after the StopOrStartCanister proposal is supported.
+    #[clap(long)]
+    use_explicit_action_type: bool,
 }
 
 impl ProposalTitle for StopCanisterCmd {
@@ -909,7 +883,7 @@ impl ProposalTitle for StopCanisterCmd {
 
 #[async_trait]
 impl ProposalPayload<StopOrStartCanisterRequest> for StopCanisterCmd {
-    async fn payload(&self, _: Url) -> StopOrStartCanisterRequest {
+    async fn payload(&self, _: &Agent) -> StopOrStartCanisterRequest {
         StopOrStartCanisterRequest {
             canister_id: self.canister_id,
             action: CanisterAction::Stop,
@@ -917,17 +891,26 @@ impl ProposalPayload<StopOrStartCanisterRequest> for StopCanisterCmd {
     }
 }
 
+#[async_trait]
+impl ProposalAction for StopCanisterCmd {
+    async fn action(&self) -> ProposalActionRequest {
+        let canister_id = Some(self.canister_id.get());
+        let action = Some(GovernanceCanisterAction::Stop as i32);
+        let stop_canister = StopOrStartCanister {
+            canister_id,
+            action,
+        };
+        ProposalActionRequest::StopOrStartCanister(stop_canister)
+    }
+}
+
 /// Sub-command to submit a proposal to update elected replica versions.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
-struct ProposeToUpdateElectedReplicaVersionsCmd {
+struct ProposeToReviseElectedGuestssVersionsCmd {
     #[clap(long)]
     /// The replica version ID to elect.
     pub replica_version_to_elect: Option<String>,
-
-    #[clap(long)]
-    /// The launch measurement of the replica version to elect.
-    pub guest_launch_measurement: Option<String>,
 
     #[clap(long)]
     /// The hex-formatted SHA-256 hash of the archive served by
@@ -944,7 +927,7 @@ struct ProposeToUpdateElectedReplicaVersionsCmd {
     pub replica_versions_to_unelect: Vec<String>,
 }
 
-impl ProposalTitle for ProposeToUpdateElectedReplicaVersionsCmd {
+impl ProposalTitle for ProposeToReviseElectedGuestssVersionsCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -957,328 +940,19 @@ impl ProposalTitle for ProposeToUpdateElectedReplicaVersionsCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<UpdateElectedReplicaVersionsPayload>
-    for ProposeToUpdateElectedReplicaVersionsCmd
+impl ProposalPayload<ReviseElectedGuestosVersionsPayload>
+    for ProposeToReviseElectedGuestssVersionsCmd
 {
-    async fn payload(&self, _: Url) -> UpdateElectedReplicaVersionsPayload {
-        let payload = UpdateElectedReplicaVersionsPayload {
+    async fn payload(&self, _: &Agent) -> ReviseElectedGuestosVersionsPayload {
+        let payload = ReviseElectedGuestosVersionsPayload {
             replica_version_to_elect: self.replica_version_to_elect.clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: self.release_package_urls.clone(),
-            guest_launch_measurement_sha256_hex: self.guest_launch_measurement.clone(),
+            guest_launch_measurement_sha256_hex: None,
             replica_versions_to_unelect: self.replica_versions_to_unelect.clone(),
         };
         payload.validate().expect("Failed to validate payload");
         payload
-    }
-}
-
-/// Sub-command to submit a proposal to create a new subnet.
-#[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
-struct ProposeToCreateSubnetCmd {
-    #[clap(long)]
-    #[allow(dead_code)]
-    /// Obsolete. Does nothing. Exists for compatibility with legacy scripts.
-    subnet_handler_id: Option<String>,
-
-    #[clap(name = "NODE_ID", multiple_values(true), required = true)]
-    /// The node IDs of the nodes that will be part of the new subnet.
-    pub node_ids: Vec<PrincipalId>,
-
-    #[clap(long)]
-    // Assigns this subnet ID to the newly created subnet
-    pub subnet_id_override: Option<PrincipalId>,
-
-    #[clap(long)]
-    /// Maximum amount of bytes per message. This is a hard cap.
-    pub max_ingress_bytes_per_message: Option<u64>,
-
-    #[clap(long)]
-    /// Maximum number of ingress messages per block. This is a hard cap.
-    pub max_ingress_messages_per_block: Option<u64>,
-
-    #[clap(long)]
-    /// Maximum size in bytes ingress and xnet messages can occupy in a block.
-    pub max_block_payload_size: Option<u64>,
-
-    // the default is from subnet_configuration.rs from ic-prep
-    #[clap(long)]
-    ///  Unit delay for blockmaker (in milliseconds).
-    pub unit_delay_millis: Option<u64>,
-
-    #[clap(long)]
-    /// Initial delay for notary (in milliseconds), to give time to rank-0 block
-    /// propagation.
-    pub initial_notary_delay_millis: Option<u64>,
-
-    #[clap(long, parse(try_from_str = ReplicaVersion::try_from))]
-    /// ID of the Replica version to run.
-    pub replica_version_id: Option<ReplicaVersion>,
-
-    #[clap(long)]
-    /// The length of all DKG intervals. The DKG interval length is the number
-    /// of rounds following the DKG summary.
-    pub dkg_interval_length: Option<u64>,
-
-    #[clap(long)]
-    /// The upper bound for the number of allowed DKG dealings in a block.
-    pub dkg_dealings_per_block: Option<u64>,
-
-    // These are for the GossipConfig sub-struct
-    #[clap(long)]
-    /// max outstanding request per peer MIN/DEFAULT/MAX.
-    pub gossip_max_artifact_streams_per_peer: Option<u32>,
-
-    #[clap(long)]
-    /// timeout for a outstanding request.
-    pub gossip_max_chunk_wait_ms: Option<u32>,
-
-    #[clap(long)]
-    /// max duplicate requests in underutilized networks.
-    pub gossip_max_duplicity: Option<u32>,
-
-    #[clap(long)]
-    /// maximum chunk size supported on this subnet.
-    pub gossip_max_chunk_size: Option<u32>,
-
-    #[clap(long)]
-    /// history size for receive check.
-    pub gossip_receive_check_cache_size: Option<u32>,
-
-    #[clap(long)]
-    /// period for re evaluating the priority function.
-    pub gossip_pfn_evaluation_period_ms: Option<u32>,
-
-    #[clap(long)]
-    /// period for polling the registry for updates.
-    pub gossip_registry_poll_period_ms: Option<u32>,
-
-    #[clap(long)]
-    /// period for sending retransmission request.
-    pub gossip_retransmission_request_ms: Option<u32>,
-
-    #[clap(long)]
-    /// if set, the subnet will start as (new) NNS.
-    pub start_as_nns: bool,
-
-    #[clap(long)]
-    /// The type of the subnet.
-    /// Can be either "application" or "system".
-    pub subnet_type: SubnetType,
-
-    /// If set, the created subnet will be halted: it will not create or execute
-    /// blocks
-    #[clap(long)]
-    pub is_halted: bool,
-
-    /// The maximum number of instructions a message can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[clap(long)]
-    pub max_instructions_per_message: Option<u64>,
-
-    /// The maximum number of instructions a round can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[clap(long)]
-    pub max_instructions_per_round: Option<u64>,
-
-    /// The maximum number of instructions an `install_code` message can
-    /// execute. See the comments in `subnet_config.rs` for more details.
-    #[clap(long)]
-    pub max_instructions_per_install_code: Option<u64>,
-
-    /// Configuration for ECDSA: the number of quadruples to create in advance.
-    /// This controls how many signatures the subnet can make rapidly as quadruples are used in the
-    /// signing process and are expensive to compute.  Having a store of them allows the subnet
-    /// to quickly sign bursts of requests before needing to regenerate them.
-    /// Defaults to 1, must be at least 1.
-    #[clap(long)]
-    pub ecdsa_quadruples_to_create_in_advance: Option<u32>,
-
-    /// Configuration for ECDSA:
-    /// A list of existing ECDSA keys as json objects to be requested from other subnets for this
-    /// subnet, and (optionally) the subnet to request each key from.
-    ///
-    /// Keys must be given in CurveID:KeyName format, like `Secp256k1:some_key_name`.
-    ///
-    /// Example:
-    /// '[
-    ///     {
-    ///         "key_id": "Secp256k1:key_id_1",
-    ///         "subnet_id": "gxevo-lhkam-aaaaa-aaaap-yai"
-    ///     }
-    /// ]'
-    /// For keys with no subnet specified:
-    ///'[
-    ///     {
-    ///         "key_id": "Secp256k1:key_id_1"
-    ///     }
-    /// ]'
-    #[clap(long)]
-    pub ecdsa_keys_to_request: Option<String>,
-
-    /// The maximum number of ECDSA signature requests that can be enqueued at a
-    /// given time. Signature requests will be rejected if the queue is full.
-    #[clap(long)]
-    pub max_ecdsa_queue_size: Option<u32>,
-
-    /// The number of nanoseconds that an ECDSA signature request will time out.
-    /// If none is specified, no request will time out.
-    #[clap(long)]
-    pub signature_request_timeout_ns: Option<u64>,
-
-    /// Configuration for ECDSA:
-    /// idkg key rotation period of a single node in milliseconds.
-    /// If none is specified key rotation is disabled.
-    #[clap(long)]
-    pub idkg_key_rotation_period_ms: Option<u64>,
-
-    /// The list of public keys whose owners have "readonly" SSH access to all
-    /// replicas on this subnet.
-    #[clap(long, multiple_values(true))]
-    ssh_readonly_access: Vec<String>,
-    /// The list of public keys whose owners have "backup" SSH access to nodes
-    /// on the NNS subnet.
-    #[clap(long, multiple_values(true))]
-    ssh_backup_access: Vec<String>,
-
-    /// The maximum number of canisters that are allowed to be created in this
-    /// subnet.
-    #[clap(long)]
-    pub max_number_of_canisters: Option<u64>,
-
-    /// The features that are enabled and disabled on the subnet.
-    #[clap(long)]
-    pub features: Option<SubnetFeatures>,
-}
-
-/// Parse the options that are used to create EcdsaInitialConfig option
-/// and optionally create an InitialEcdsaConfig object if one or both is set.
-/// `ecdsa_keys_to_request` is a JSON encoded object, whose schema is specified in the documentation
-/// for ProposeToCreateSubnetCmd and ProposeToUpdateRecoveryCupCmd.
-fn parse_initial_ecdsa_config_options(
-    ecdsa_quadruples_to_create_in_advance: &Option<u32>,
-    ecdsa_keys_to_request: &Option<String>,
-    max_ecdsa_queue_size: &Option<u32>,
-    signature_request_timeout_ns: &Option<u64>,
-    idkg_key_rotation_period_ms: &Option<u64>,
-) -> Option<EcdsaInitialConfig> {
-    if ecdsa_quadruples_to_create_in_advance.is_none() && ecdsa_keys_to_request.is_none() {
-        return None;
-    }
-    let quadruples_to_create_in_advance: u32 = ecdsa_quadruples_to_create_in_advance.unwrap_or(1);
-
-    if quadruples_to_create_in_advance < 1 {
-        panic!("--ecdsa-quadruples-to-create-in-advance must be at least 1");
-    }
-
-    Some(EcdsaInitialConfig {
-        quadruples_to_create_in_advance,
-        keys: ecdsa_keys_to_request
-            .as_ref()
-            .map_or_else(std::vec::Vec::new, |json| {
-                let raw: Vec<BTreeMap<String, String>> = serde_json::from_str(json).unwrap();
-
-                raw.iter()
-                    .map(|btree| {
-                        let key_id = btree
-                            .get("key_id")
-                            .map(|key| {
-                                key.parse::<EcdsaKeyId>()
-                                    .unwrap_or_else(|_| panic!("Could not parse key_id: '{}'", key))
-                            })
-                            .unwrap();
-
-                        let subnet_id = btree
-                            .get("subnet_id")
-                            .map(|x| Some(PrincipalId::from_str(x).unwrap()))
-                            .expect("subnet_id is required in EcdsaKeyRequest.");
-
-                        EcdsaKeyRequest { key_id, subnet_id }
-                    })
-                    .collect()
-            }),
-        max_queue_size: Some(max_ecdsa_queue_size.unwrap_or(DEFAULT_ECDSA_MAX_QUEUE_SIZE)),
-        signature_request_timeout_ns: *signature_request_timeout_ns,
-        idkg_key_rotation_period_ms: *idkg_key_rotation_period_ms,
-    })
-}
-
-impl ProposalTitle for ProposeToCreateSubnetCmd {
-    fn title(&self) -> String {
-        match &self.proposal_title {
-            Some(title) => title.clone(),
-            None => format!(
-                "Create new subnet with nodes: {}",
-                shortened_pids_string(&self.node_ids)
-            ),
-        }
-    }
-}
-
-#[async_trait]
-impl ProposalPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
-    async fn payload(&self, _: Url) -> CreateSubnetPayload {
-        let node_ids = self
-            .node_ids
-            .clone()
-            .into_iter()
-            .map(NodeId::from)
-            .collect();
-
-        let ecdsa_config = parse_initial_ecdsa_config_options(
-            &self.ecdsa_quadruples_to_create_in_advance,
-            &self.ecdsa_keys_to_request,
-            &self.max_ecdsa_queue_size,
-            &self.signature_request_timeout_ns,
-            &self.idkg_key_rotation_period_ms,
-        );
-
-        let scheduler_config = SchedulerConfig::default_for_subnet_type(self.subnet_type);
-        CreateSubnetPayload {
-            node_ids,
-            subnet_id_override: self.subnet_id_override,
-            ingress_bytes_per_block_soft_cap: Default::default(),
-            max_ingress_bytes_per_message: self.max_ingress_bytes_per_message.unwrap(),
-            max_ingress_messages_per_block: self.max_ingress_messages_per_block.unwrap(),
-            max_block_payload_size: self.max_block_payload_size.unwrap(),
-            replica_version_id: self
-                .replica_version_id
-                .clone()
-                .unwrap_or_default()
-                .to_string(),
-            unit_delay_millis: self.unit_delay_millis.unwrap(),
-            initial_notary_delay_millis: self.initial_notary_delay_millis.unwrap(),
-            dkg_interval_length: self.dkg_interval_length.unwrap(),
-            dkg_dealings_per_block: self.dkg_dealings_per_block.unwrap(),
-            gossip_max_artifact_streams_per_peer: self
-                .gossip_max_artifact_streams_per_peer
-                .unwrap(),
-            gossip_max_chunk_wait_ms: self.gossip_max_chunk_wait_ms.unwrap(),
-            gossip_max_duplicity: self.gossip_max_duplicity.unwrap(),
-            gossip_max_chunk_size: self.gossip_max_chunk_size.unwrap(),
-            gossip_receive_check_cache_size: self.gossip_receive_check_cache_size.unwrap(),
-            gossip_pfn_evaluation_period_ms: self.gossip_pfn_evaluation_period_ms.unwrap(),
-            gossip_registry_poll_period_ms: self.gossip_registry_poll_period_ms.unwrap(),
-            gossip_retransmission_request_ms: self.gossip_retransmission_request_ms.unwrap(),
-            start_as_nns: self.start_as_nns,
-            subnet_type: self.subnet_type,
-            is_halted: self.is_halted,
-            max_instructions_per_message: self
-                .max_instructions_per_message
-                .unwrap_or_else(|| scheduler_config.max_instructions_per_message.get()),
-            max_instructions_per_round: self
-                .max_instructions_per_round
-                .unwrap_or_else(|| scheduler_config.max_instructions_per_round.get()),
-            max_instructions_per_install_code: self
-                .max_instructions_per_install_code
-                .unwrap_or_else(|| scheduler_config.max_instructions_per_install_code.get()),
-            features: self.features.unwrap_or_default().into(),
-            ssh_readonly_access: self.ssh_readonly_access.clone(),
-            ssh_backup_access: self.ssh_backup_access.clone(),
-            max_number_of_canisters: self.max_number_of_canisters.unwrap_or(0),
-            ecdsa_config,
-        }
     }
 }
 
@@ -1315,8 +989,8 @@ impl ProposalTitle for ProposeToAddNodesToSubnetCmd {
 
 #[async_trait]
 impl ProposalPayload<AddNodesToSubnetPayload> for ProposeToAddNodesToSubnetCmd {
-    async fn payload(&self, nns_url: Url) -> AddNodesToSubnetPayload {
-        let registry_canister = RegistryCanister::new(vec![nns_url.clone()]);
+    async fn payload(&self, agent: &Agent) -> AddNodesToSubnetPayload {
+        let registry_canister = RegistryCanister::new_with_agent(agent.clone());
         let node_ids = self
             .node_ids
             .clone()
@@ -1326,507 +1000,6 @@ impl ProposalPayload<AddNodesToSubnetPayload> for ProposeToAddNodesToSubnetCmd {
         AddNodesToSubnetPayload {
             subnet_id: self.subnet.get_id(&registry_canister).await.get(),
             node_ids,
-        }
-    }
-}
-
-/// Sub-command to submit a proposal to update the recovery CUP of a subnet.
-#[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
-struct ProposeToUpdateRecoveryCupCmd {
-    #[clap(long, required = true, alias = "subnet-index")]
-    /// The targeted subnet.
-    subnet: SubnetDescriptor,
-
-    #[clap(long, required = true)]
-    /// The height of the CUP
-    pub height: u64,
-
-    #[clap(long, required = true)]
-    /// The block time to start from (nanoseconds from Epoch)
-    pub time_ns: u64,
-
-    #[clap(long, required = true)]
-    /// The hash of the state
-    pub state_hash: String,
-
-    #[clap(long, multiple_values(true))]
-    /// Replace the members of the given subnet with these nodes
-    pub replacement_nodes: Option<Vec<PrincipalId>>,
-
-    /// A uri from which data to replace the registry local store should be
-    /// downloaded
-    #[clap(long)]
-    pub registry_store_uri: Option<String>,
-
-    /// The hash of the data that is to be retrieved at the registry store URI
-    #[clap(long)]
-    pub registry_store_hash: Option<String>,
-
-    /// The registry version that should be used for the recovery cup
-    #[clap(long)]
-    pub registry_version: Option<u64>,
-
-    /// Configuration for ECDSA: the number of quadruples to create in advance.
-    /// This controls how many signatures the subnet can make rapidly as quadruples are used in the
-    /// signing process and are expensive to compute.  Having a store of them allows the subnet
-    /// to quickly sign bursts of requests before needing to regenerate them.
-    /// Defaults to 1, must be at least 1.
-    #[clap(long)]
-    pub ecdsa_quadruples_to_create_in_advance: Option<u32>,
-
-    /// Configuration for ECDSA:
-    /// A list of existing ECDSA keys as json objects to be requested from other subnets for this
-    /// subnet, and (optionally) the subnet to request each key from.
-    ///
-    /// Keys must be given in CurveID:KeyName format, like `Secp256k1:some_key_name`.
-    ///
-    /// Example:
-    /// '[
-    ///     {
-    ///         "key_id": "Secp256k1:key_id_1",
-    ///         "subnet_id": "gxevo-lhkam-aaaaa-aaaap-yai"
-    ///     }
-    /// ]'
-    /// For keys with no subnet specified:
-    ///'[
-    ///     {
-    ///         "key_id": "Secp256k1:key_id_1"
-    ///     }
-    /// ]'
-    #[clap(long)]
-    pub ecdsa_keys_to_request: Option<String>,
-
-    /// Configuration for ECDSA:
-    /// The maximum number of signature requests that can be enqueued at any one
-    /// time. Requests will be rejected if the queue is full.
-    #[clap(long)]
-    pub max_ecdsa_queue_size: Option<u32>,
-
-    /// The number of nanoseconds that an ECDSA signature request will time out.
-    /// If none is specified, no request will time out.
-    #[clap(long)]
-    pub signature_request_timeout_ns: Option<u64>,
-
-    /// Configuration for ECDSA:
-    /// idkg key rotation period of a single node in milliseconds.
-    /// If none is specified key rotation is disabled.
-    #[clap(long)]
-    pub idkg_key_rotation_period_ms: Option<u64>,
-}
-
-impl ProposalTitle for ProposeToUpdateRecoveryCupCmd {
-    fn title(&self) -> String {
-        match &self.proposal_title {
-            Some(title) => title.clone(),
-            None => format!(
-                "Update recovery cup of subnet: {} to height: {}",
-                shortened_subnet_string(&self.subnet),
-                self.height
-            ),
-        }
-    }
-}
-
-#[async_trait]
-impl ProposalPayload<RecoverSubnetPayload> for ProposeToUpdateRecoveryCupCmd {
-    async fn payload(&self, nns_url: Url) -> RecoverSubnetPayload {
-        let registry_canister = RegistryCanister::new(vec![nns_url.clone()]);
-        let subnet_id = self.subnet.get_id(&registry_canister).await.get();
-        let node_ids = self
-            .replacement_nodes
-            .clone()
-            .map(|nodes| nodes.into_iter().map(NodeId::from).collect());
-
-        let hash = self.registry_store_hash.clone().unwrap_or_default();
-
-        let registry_version = self.registry_version.unwrap_or(0);
-
-        let ecdsa_config = parse_initial_ecdsa_config_options(
-            &self.ecdsa_quadruples_to_create_in_advance,
-            &self.ecdsa_keys_to_request,
-            &self.max_ecdsa_queue_size,
-            &self.signature_request_timeout_ns,
-            &self.idkg_key_rotation_period_ms,
-        );
-        RecoverSubnetPayload {
-            subnet_id,
-            height: self.height,
-            time_ns: self.time_ns,
-            state_hash: hex::decode(self.state_hash.clone())
-                .expect("The provided state hash was invalid"),
-            replacement_nodes: node_ids,
-            registry_store_uri: self
-                .registry_store_uri
-                .clone()
-                .map(|uri| (uri, hash, registry_version)),
-            ecdsa_config,
-        }
-    }
-}
-
-/// Sub-command to submit a proposal to update a subnet.
-#[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
-struct ProposeToUpdateSubnetCmd {
-    /// The subnet that should be updated.
-    #[clap(long, required = true, alias = "subnet-id")]
-    subnet: SubnetDescriptor,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub max_ingress_bytes_per_message: Option<u64>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub max_ingress_messages_per_block: Option<u64>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub max_block_payload_size: Option<u64>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub unit_delay_millis: Option<u64>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub initial_notary_delay_millis: Option<u64>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub dkg_interval_length: Option<u64>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub dkg_dealings_per_block: Option<u64>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub gossip_max_artifact_streams_per_peer: Option<u32>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub gossip_max_chunk_wait_ms: Option<u32>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub gossip_max_duplicity: Option<u32>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub gossip_max_chunk_size: Option<u32>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub gossip_receive_check_cache_size: Option<u32>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub gossip_pfn_evaluation_period_ms: Option<u32>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub gossip_registry_poll_period_ms: Option<u32>,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub gossip_retransmission_request_ms: Option<u32>,
-
-    #[clap(long)]
-    /// If set, it will set a default value for the entire gossip config. Useful
-    /// when you want to only set some fields for the gossip config and there's
-    /// currently none set.
-    pub set_gossip_config_to_default: bool,
-
-    #[clap(long)]
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    pub start_as_nns: Option<bool>,
-
-    /// If set, the subnet will be halted: it will no longer create or execute
-    /// blocks
-    #[clap(long)]
-    pub is_halted: Option<bool>,
-
-    /// If set, the subnet will be halted at the next CUP height: it will no longer create or execute
-    /// blocks
-    #[clap(long)]
-    pub halt_at_cup_height: Option<bool>,
-
-    #[clap(long)]
-    /// If set, this updates the instruction limit per message.
-    /// See the comments in `subnet_config.rs` for more details
-    /// on how to choose values.
-    max_instructions_per_message: Option<u64>,
-
-    #[clap(long)]
-    /// If set, this updates the instruction limit per round.
-    /// See the comments in `subnet_config.rs` for more details
-    /// on how to choose values.
-    max_instructions_per_round: Option<u64>,
-
-    #[clap(long)]
-    /// If set, this updates the instruction limit per
-    /// `install_code` message. See the comments in `subnet_config.rs`
-    /// for more details on how to choose values.
-    max_instructions_per_install_code: Option<u64>,
-
-    #[clap(long)]
-    /// Enable key signing on this subnet for a particular key_id.
-    /// Only one key_id is permitted at a time at the moment.
-    ///
-    /// Keys must be given in CurveID:KeyName format, like `Secp256k1:some_key_name`.
-    ecdsa_key_signing_enable: Option<Vec<String>>,
-
-    #[clap(long)]
-    /// Disable key signing on this subnet for a particular key_id.
-    /// Cannot have same values as ecdsa_key_signing_enable, or proposal will not execute.
-    ///
-    /// Keys must be given in CurveID:KeyName format, like `Secp256k1:some_key_name`.
-    ecdsa_key_signing_disable: Option<Vec<String>>,
-
-    /// Configuration for ECDSA: the number of quadruples to create in advance.
-    /// This controls how many signatures the subnet can make rapidly as quadruples are used in the
-    /// signing process and are expensive to compute.  Having a store of them allows the subnet
-    /// to quickly sign bursts of requests before needing to regenerate them.
-    /// Defaults to 1, must be at least 1.
-    #[clap(long)]
-    pub ecdsa_quadruples_to_create_in_advance: Option<u32>,
-
-    /// Configuration for ECDSA:
-    /// The keys to add to this subnet. The keys must not already exist on the IC. The subnet will
-    /// create the keys when it is added but is not already held by the subnet.
-    ///
-    /// Keys must be given in CurveID:KeyName format, like `Secp256k1:some_key_name`.
-    #[clap(long)]
-    pub ecdsa_keys_to_generate: Option<Vec<String>>,
-
-    /// Configuration for ECDSA:
-    /// The keys to remove from this subnet.
-    /// If this subnet signs for a particular key, it must also be given in the
-    /// `ecdsa_key_signing_disable` option.
-    ///
-    /// Keys must be given in CurveID:KeyName format, like `Secp256k1:some_key_name`.
-    #[clap(long)]
-    pub ecdsa_keys_to_remove: Option<Vec<String>>,
-
-    /// Configuration for ECDSA:
-    /// The maximum number of signature requests that can be enqueued at once.
-    /// If the queue fills up, signature requests will be rejected until there
-    /// is space.
-    #[clap(long)]
-    pub max_ecdsa_queue_size: Option<u32>,
-
-    /// Configuration for ECDSA:
-    /// The number of nanoseconds that an ECDSA signature request will time out.
-    /// If none is specified, no request will time out.
-    #[clap(long)]
-    pub signature_request_timeout_ns: Option<u64>,
-
-    /// Configuration for ECDSA:
-    /// idkg key rotation period of a single node in milliseconds.
-    /// If none is specified key rotation is disabled.
-    #[clap(long)]
-    pub idkg_key_rotation_period_ms: Option<u64>,
-
-    /// The features that are enabled and disabled on the subnet.
-    #[clap(long)]
-    pub features: Option<SubnetFeatures>,
-
-    /// The list of public keys whose owners have "readonly" SSH access to all
-    /// replicas on this subnet.
-    #[clap(long, multiple_values(true))]
-    ssh_readonly_access: Option<Vec<String>>,
-    /// The list of public keys whose owners have "backup" SSH access to nodes
-    /// on the NNS subnet.
-    #[clap(long, multiple_values(true))]
-    ssh_backup_access: Option<Vec<String>>,
-
-    /// If set, the created proposal will contain a desired override of that
-    /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
-    /// of this field.
-    #[clap(long)]
-    pub max_number_of_canisters: Option<u64>,
-}
-
-fn parse_ecdsa_keys_option(maybe_value: &Option<Vec<String>>) -> Vec<EcdsaKeyId> {
-    maybe_value
-        .as_ref()
-        .map(|key_strings| parse_ecdsa_keys(key_strings))
-        .unwrap_or_default()
-}
-
-fn parse_ecdsa_keys(key_strings: &[String]) -> Vec<EcdsaKeyId> {
-    key_strings
-        .iter()
-        .map(|key| {
-            key.parse::<EcdsaKeyId>()
-                .unwrap_or_else(|_| panic!("Could not parse key_id: '{}'", key))
-        })
-        .collect::<Vec<EcdsaKeyId>>()
-}
-
-impl ProposalTitle for ProposeToUpdateSubnetCmd {
-    fn title(&self) -> String {
-        match &self.proposal_title {
-            Some(title) => title.clone(),
-            None => format!(
-                "Update configuration of subnet: {}",
-                shortened_subnet_string(&self.subnet),
-            ),
-        }
-    }
-}
-
-#[async_trait]
-impl ProposalPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
-    async fn payload(&self, nns_url: Url) -> UpdateSubnetPayload {
-        let registry_canister = RegistryCanister::new(vec![nns_url.clone()]);
-        let subnet_id = self.subnet.get_id(&registry_canister).await;
-
-        let ecdsa_config = if self.ecdsa_quadruples_to_create_in_advance.is_none()
-            && self.ecdsa_keys_to_generate.is_none()
-            && self.ecdsa_keys_to_remove.is_none()
-            && self.idkg_key_rotation_period_ms.is_none()
-        {
-            // No update
-            None
-        } else {
-            let subnet = get_subnet_record(&registry_canister, subnet_id).await;
-            let current_quadruples_value = subnet
-                .ecdsa_config
-                .as_ref()
-                .map(|c| c.quadruples_to_create_in_advance);
-            let current_max_queue_size =
-                subnet.ecdsa_config.as_ref().and_then(|c| c.max_queue_size);
-            let signature_request_timeout_ns = subnet
-                .ecdsa_config
-                .as_ref()
-                .and_then(|c| c.signature_request_timeout_ns);
-            let idkg_key_rotation_period_ms = subnet
-                .ecdsa_config
-                .as_ref()
-                .and_then(|c| c.idkg_key_rotation_period_ms);
-
-            let keys_to_remove = parse_ecdsa_keys_option(&self.ecdsa_keys_to_remove);
-            let mut keys_to_add = parse_ecdsa_keys_option(&self.ecdsa_keys_to_generate);
-            let mut current_keys = subnet
-                .ecdsa_config
-                .as_ref()
-                .map(|c| c.key_ids.to_vec())
-                .unwrap_or_default();
-
-            current_keys.retain(|current| !keys_to_remove.contains(current));
-            current_keys.append(&mut keys_to_add);
-
-            Some(EcdsaConfig {
-                // Default to current value if present, then 1
-                quadruples_to_create_in_advance: self
-                    .ecdsa_quadruples_to_create_in_advance
-                    .unwrap_or_else(|| current_quadruples_value.unwrap_or(1)),
-                key_ids: current_keys,
-                max_queue_size: Some(self.max_ecdsa_queue_size.unwrap_or_else(|| {
-                    current_max_queue_size.unwrap_or(DEFAULT_ECDSA_MAX_QUEUE_SIZE)
-                })),
-                signature_request_timeout_ns: self
-                    .signature_request_timeout_ns
-                    .or(signature_request_timeout_ns),
-                idkg_key_rotation_period_ms: self
-                    .idkg_key_rotation_period_ms
-                    .or(idkg_key_rotation_period_ms),
-            })
-        };
-
-        let ecdsa_key_signing_enable = self
-            .ecdsa_key_signing_enable
-            .as_ref()
-            .map(|key_strings| parse_ecdsa_keys(key_strings));
-
-        let ecdsa_key_signing_disable = self
-            .ecdsa_key_signing_disable
-            .as_ref()
-            .map(|key_strings| parse_ecdsa_keys(key_strings));
-
-        if let (Some(enable_signing), Some(disable_signing)) =
-            (&ecdsa_key_signing_enable, &ecdsa_key_signing_disable)
-        {
-            let enable_set = enable_signing.iter().collect::<HashSet<_>>();
-            let disable_set = disable_signing.iter().collect::<HashSet<_>>();
-            let intersection = enable_set.intersection(&disable_set).collect::<Vec<_>>();
-            if !intersection.is_empty() {
-                panic!("You are attempting to enable and disable signing for the same ECDSA keys: {:?}",
-                       intersection
-                )
-            }
-        }
-
-        UpdateSubnetPayload {
-            subnet_id,
-            max_ingress_bytes_per_message: self.max_ingress_bytes_per_message,
-            max_ingress_messages_per_block: self.max_ingress_messages_per_block,
-            max_block_payload_size: self.max_block_payload_size,
-            unit_delay_millis: self.unit_delay_millis,
-            initial_notary_delay_millis: self.initial_notary_delay_millis,
-            dkg_interval_length: self.dkg_interval_length,
-            dkg_dealings_per_block: self.dkg_dealings_per_block,
-            max_artifact_streams_per_peer: self.gossip_max_artifact_streams_per_peer,
-            max_chunk_wait_ms: self.gossip_max_chunk_wait_ms,
-            max_duplicity: self.gossip_max_duplicity,
-            max_chunk_size: self.gossip_max_chunk_size,
-            receive_check_cache_size: self.gossip_receive_check_cache_size,
-            pfn_evaluation_period_ms: self.gossip_pfn_evaluation_period_ms,
-            registry_poll_period_ms: self.gossip_registry_poll_period_ms,
-            retransmission_request_ms: self.gossip_retransmission_request_ms,
-            set_gossip_config_to_default: self.set_gossip_config_to_default,
-            start_as_nns: self.start_as_nns,
-
-            // See EXC-408: changing the subnet type is disabled.
-            subnet_type: None,
-
-            is_halted: self.is_halted,
-            halt_at_cup_height: self.halt_at_cup_height,
-            max_instructions_per_message: self.max_instructions_per_message,
-            max_instructions_per_round: self.max_instructions_per_round,
-            max_instructions_per_install_code: self.max_instructions_per_install_code,
-            features: self.features.map(|v| v.into()),
-            ecdsa_config,
-            ecdsa_key_signing_enable,
-            ecdsa_key_signing_disable,
-            ssh_readonly_access: self.ssh_readonly_access.clone(),
-            ssh_backup_access: self.ssh_backup_access.clone(),
-            max_number_of_canisters: self.max_number_of_canisters,
         }
     }
 }
@@ -1875,11 +1048,16 @@ struct ProposeToChangeNnsCanisterCmd {
     /// If set, it will update the canister's memory allocation to this value.
     /// See `MemoryAllocation` for the semantics of this field.
     memory_allocation: Option<u64>,
+
+    /// If true, the proposal will be sent as an InstallCode proposal instead of ExecuteNnsFunction.
+    /// TODO(NNS1-3223): Change to `use_legacy_excutenns` after the InstallCode proposal is supported.
+    #[clap(long)]
+    use_explicit_action_type: bool,
 }
 
 #[async_trait]
 impl ProposalPayload<UpgradeRootProposal> for ProposeToChangeNnsCanisterCmd {
-    async fn payload(&self, _: Url) -> UpgradeRootProposal {
+    async fn payload(&self, _: &Agent) -> UpgradeRootProposal {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
             &self.wasm_module_url,
@@ -1913,7 +1091,7 @@ impl ProposalTitle for ProposeToChangeNnsCanisterCmd {
 
 #[async_trait]
 impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
-    async fn payload(&self, _: Url) -> ChangeCanisterRequest {
+    async fn payload(&self, _: &Agent) -> ChangeCanisterRequest {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
             &self.wasm_module_url,
@@ -1932,8 +1110,39 @@ impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
             arg,
             compute_allocation: self.compute_allocation.map(candid::Nat::from),
             memory_allocation: self.memory_allocation.map(candid::Nat::from),
-            query_allocation: None,
         }
+    }
+}
+
+#[async_trait]
+impl ProposalAction for ProposeToChangeNnsCanisterCmd {
+    async fn action(&self) -> ProposalActionRequest {
+        let canister_id = Some(self.canister_id.get());
+        let wasm_module = Some(
+            read_wasm_module(
+                &self.wasm_module_path,
+                &self.wasm_module_url,
+                &self.wasm_module_sha256,
+            )
+            .await,
+        );
+        let arg = self.arg.as_ref().map(|path| read_file_fully(path));
+        let skip_stopping_before_installing = Some(self.skip_stopping_before_installing);
+        let install_mode = match self.mode {
+            CanisterInstallMode::Install => Some(GovernanceInstallMode::Install as i32),
+            CanisterInstallMode::Reinstall => Some(GovernanceInstallMode::Reinstall as i32),
+            CanisterInstallMode::Upgrade => Some(GovernanceInstallMode::Upgrade as i32),
+        };
+
+        let install_code = InstallCodeRequest {
+            skip_stopping_before_installing,
+            install_mode,
+            canister_id,
+            wasm_module,
+            arg,
+        };
+
+        ProposalActionRequest::InstallCode(install_code)
     }
 }
 
@@ -1971,7 +1180,7 @@ impl ProposalTitle for ProposeToHardResetNnsRootToVersionCmd {
 
 #[async_trait]
 impl ProposalPayload<HardResetNnsRootToVersionPayload> for ProposeToHardResetNnsRootToVersionCmd {
-    async fn payload(&self, _: Url) -> HardResetNnsRootToVersionPayload {
+    async fn payload(&self, _: &Agent) -> HardResetNnsRootToVersionPayload {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
             &self.wasm_module_url,
@@ -2012,8 +1221,124 @@ impl ProposalTitle for ProposeToUninstallCodeCmd {
 
 #[async_trait]
 impl ProposalPayload<CanisterIdRecord> for ProposeToUninstallCodeCmd {
-    async fn payload(&self, _: Url) -> CanisterIdRecord {
+    async fn payload(&self, _: &Agent) -> CanisterIdRecord {
         CanisterIdRecord::from(self.canister_id)
+    }
+}
+
+/// Sub-command to submit a subnet rental request proposal.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToRentSubnetCmd {
+    #[clap(long, required = true)]
+    /// One of the predefined rental conditions of the subnet rental canister.
+    rental_condition_id: RentalConditionId,
+    /// The user who will be whitelisted for the subnet if the subnet rental request results in a successful subnet rental agreement.
+    #[clap(long, required = true)]
+    user: PrincipalId,
+}
+
+impl ProposalTitle for ProposeToRentSubnetCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Subnet rental request with condition {:?}",
+                self.rental_condition_id
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<SubnetRentalRequest> for ProposeToRentSubnetCmd {
+    async fn payload(&self, _agent: &Agent) -> SubnetRentalRequest {
+        SubnetRentalRequest {
+            user: self.user,
+            rental_condition_id: self.rental_condition_id,
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to update the settings of a canister. When neigther
+/// `--controllers` nor `--remove-all-controllers` is provided, the controllers will not be updated.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToUpdateCanisterSettingsCmd {
+    #[clap(long, required = true)]
+    /// The ID of the target canister.
+    canister_id: CanisterId,
+
+    /// If set, it will update the canister's controllers to this value.
+    #[clap(long, multiple_values(true), group = "update_controllers")]
+    controllers: Option<Vec<PrincipalId>>,
+    /// If set, it will remove all controllers of the canister.
+    #[clap(long, group = "update_controllers")]
+    remove_all_controllers: bool,
+
+    #[clap(long)]
+    /// If set, it will update the canister's compute allocation to this value.
+    compute_allocation: Option<u64>,
+    #[clap(long)]
+    /// If set, it will update the canister's memory allocation to this value.
+    memory_allocation: Option<u64>,
+    #[clap(long)]
+    /// If set, it will update the canister's freezing threshold to this value.
+    freezing_threshold: Option<u64>,
+    #[clap(long)]
+    /// If set, it will update the canister's log wasm memory limit to this value.
+    wasm_memory_limit: Option<u64>,
+    #[clap(long)]
+    /// If set, it will update the canister's log visibility to this value.
+    log_visibility: Option<LogVisibility>,
+}
+
+impl ProposalTitle for ProposeToUpdateCanisterSettingsCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!("Update canister settings: {}", self.canister_id),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
+    async fn action(&self) -> ProposalActionRequest {
+        let canister_id = Some(self.canister_id.get());
+
+        let controllers = if self.remove_all_controllers {
+            Some(Controllers {
+                controllers: vec![],
+            })
+        } else {
+            self.controllers
+                .clone()
+                .map(|controllers| Controllers { controllers })
+        };
+        let compute_allocation = self.compute_allocation;
+        let memory_allocation = self.memory_allocation;
+        let freezing_threshold = self.freezing_threshold;
+        let wasm_memory_limit = self.wasm_memory_limit;
+        let log_visibility = match self.log_visibility {
+            Some(LogVisibility::Controllers) => Some(GovernanceLogVisibility::Controllers as i32),
+            Some(LogVisibility::Public) => Some(GovernanceLogVisibility::Public as i32),
+            None => None,
+        };
+
+        let update_settings = UpdateCanisterSettings {
+            canister_id,
+            settings: Some(CanisterSettings {
+                controllers,
+                compute_allocation,
+                memory_allocation,
+                freezing_threshold,
+                wasm_memory_limit,
+                log_visibility,
+            }),
+        };
+
+        ProposalActionRequest::UpdateCanisterSettings(update_settings)
     }
 }
 
@@ -2063,7 +1388,7 @@ impl ProposalTitle for ProposeToAddNnsCanisterCmd {
 
 #[async_trait]
 impl ProposalPayload<AddCanisterRequest> for ProposeToAddNnsCanisterCmd {
-    async fn payload(&self, _: Url) -> AddCanisterRequest {
+    async fn payload(&self, _: &Agent) -> AddCanisterRequest {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
             &self.wasm_module_url,
@@ -2084,7 +1409,6 @@ impl ProposalPayload<AddCanisterRequest> for ProposeToAddNnsCanisterCmd {
             initial_cycles: 1,
             compute_allocation: self.compute_allocation.map(candid::Nat::from),
             memory_allocation: self.memory_allocation.map(candid::Nat::from),
-            query_allocation: None,
         }
     }
 }
@@ -2121,7 +1445,7 @@ impl ProposalTitle for ProposeToAddWasmToSnsWasmCmd {
 
 #[async_trait]
 impl ProposalPayload<AddWasmRequest> for ProposeToAddWasmToSnsWasmCmd {
-    async fn payload(&self, _: Url) -> AddWasmRequest {
+    async fn payload(&self, _: &Agent) -> AddWasmRequest {
         let wasm = read_wasm_module(
             &self.wasm_module_path,
             &self.wasm_module_url,
@@ -2137,6 +1461,8 @@ impl ProposalPayload<AddWasmRequest> for ProposeToAddWasmToSnsWasmCmd {
         let sns_wasm = SnsWasm {
             wasm,
             canister_type,
+            // Will be automatically set by NNS Governance
+            proposal_id: None,
         };
 
         AddWasmRequest {
@@ -2268,7 +1594,7 @@ impl ProposalTitle for ProposeToInsertSnsWasmUpgradePathEntriesCmd {
 impl ProposalPayload<InsertUpgradePathEntriesRequest>
     for ProposeToInsertSnsWasmUpgradePathEntriesCmd
 {
-    async fn payload(&self, _: Url) -> InsertUpgradePathEntriesRequest {
+    async fn payload(&self, _: &Agent) -> InsertUpgradePathEntriesRequest {
         let force_upgrade_main_upgrade_path = self.force_upgrade_main_upgrade_path.unwrap_or(false);
 
         let sns_governance_canister_id = self.sns_governance_canister_id.map(|c| c.into());
@@ -2366,7 +1692,7 @@ impl ProposalTitle for ProposeToUpdateSnsSubnetIdsInSnsWasmCmd {
 
 #[async_trait]
 impl ProposalPayload<UpdateSnsSubnetListRequest> for ProposeToUpdateSnsSubnetIdsInSnsWasmCmd {
-    async fn payload(&self, _: Url) -> UpdateSnsSubnetListRequest {
+    async fn payload(&self, _: &Agent) -> UpdateSnsSubnetListRequest {
         UpdateSnsSubnetListRequest {
             sns_subnet_ids_to_add: self.sns_subnet_ids_to_add.clone(),
             sns_subnet_ids_to_remove: self.sns_subnet_ids_to_remove.clone(),
@@ -2386,159 +1712,10 @@ struct ProposeToUpdateSnsDeployWhitelistCmd {
     pub removed_principals: Vec<PrincipalId>,
 }
 
+/// Obsolete; please use `CreateServiceNervousSystem` instead.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser, Clone)]
-struct ProposeToOpenSnsTokenSwap {
-    #[clap(long)]
-    /// The swap canister of the SNS up for sale
-    target_swap_canister_id: PrincipalId,
-
-    #[clap(long)]
-    /// The minimum number of investors needed for the sale to succeed.
-    min_participants: u32,
-
-    #[clap(long)]
-    /// The minimum ICP e8s that must be invested, in total over all investors, for the sale to succeed.
-    ///
-    /// This is equivalent to the reserve price at auctions.
-    min_icp_e8s: u64,
-
-    #[clap(long)]
-    /// The maximum ICP e8s that may be invested, in total over all investors.  If this threshold is reached
-    /// then a decision will be made immediately about whether the sale has succeeded, rather than waiting
-    /// for the specified sale end time.
-    ///
-    /// This is comparable to the "buy now" price at auctions.
-    max_icp_e8s: u64,
-
-    #[clap(long)]
-    /// The minimum ICP e8s that any one investor may contribute.
-    ///
-    /// If the level is too low you the value of the neuron may be dwarfed by trivialities such as transaction fees.
-    min_participant_icp_e8s: u64,
-
-    #[clap(long)]
-    /// The maximum ICP e8s that any one investor may contribute.
-    ///
-    /// A low level will limit the power of any one investor and improve decentralisation but may reduce
-    /// the funds committed to the sale.
-    ///
-    /// A high level may allow a small number of large investors to take control of the dapp and render
-    /// the decentralisation meaningless.
-    max_participant_icp_e8s: u64,
-
-    #[clap(long)]
-    /// The time, in seconds since 1 Jan 1970, at which the sale is closed if it has not already reached
-    /// its funding limit.
-    swap_due_timestamp_seconds: u64,
-
-    #[clap(long)]
-    /// The number of project tokens offered for sale.
-    ///
-    /// Note that the units are e8s, so 100_000_000 corresponds to a single project token.
-    sns_token_e8s: u64,
-
-    #[clap(long)]
-    /// The number of neurons each investor will receive after the
-    /// decentralization swap. The total tokens swapped for will be
-    /// evenly distributed across the `count` neurons.
-    neuron_basket_count: u64,
-
-    #[clap(long)]
-    /// The interval in seconds that the dissolve delay of each neuron in the
-    /// basket will be increased by. The 0th neuron created will have its dissolve
-    /// delay set to 0, and each subsequent neuron will have a dissolve delay
-    /// calculated by:
-    /// `(i * dissolve_delay_interval_seconds) + rand(0..dissolve_delay_interval_seconds)`
-    neuron_basket_dissolve_delay_interval_seconds: u64,
-
-    #[clap(long)]
-    /// The amount that the community fund will collectively spend in maturity on
-    /// the swap.
-    community_fund_investment_e8s: Option<u64>,
-
-    #[clap(long)]
-    /// An optional delay, so that the actual sale does not get opened immediately
-    /// after the adoption of the sale proposal.
-    sale_delay_seconds: Option<u64>,
-}
-
-impl From<&ProposeToOpenSnsTokenSwap> for OpenSnsTokenSwap {
-    fn from(cli_proposal: &ProposeToOpenSnsTokenSwap) -> OpenSnsTokenSwap {
-        let min_direct_participation_icp_e8s =
-            cli_proposal
-                .community_fund_investment_e8s
-                .map(|community_fund_investment_e8s| {
-                    cli_proposal
-                        .min_participant_icp_e8s
-                        .checked_sub(community_fund_investment_e8s)
-                        .unwrap()
-                });
-        let max_direct_participation_icp_e8s =
-            cli_proposal
-                .community_fund_investment_e8s
-                .map(|community_fund_investment_e8s| {
-                    cli_proposal
-                        .max_participant_icp_e8s
-                        .checked_sub(community_fund_investment_e8s)
-                        .unwrap()
-                });
-
-        let ProposeToOpenSnsTokenSwap {
-            target_swap_canister_id,
-            min_participants,
-            min_icp_e8s,
-            max_icp_e8s,
-            min_participant_icp_e8s,
-            max_participant_icp_e8s,
-            swap_due_timestamp_seconds,
-            sns_token_e8s,
-            neuron_basket_count,
-            neuron_basket_dissolve_delay_interval_seconds,
-            community_fund_investment_e8s,
-            sale_delay_seconds,
-            // General proposal fields.  These are listed explicitly
-            // so that it is clear which fields we are not using.
-            proposer: _,
-            test_neuron_proposer: _,
-            proposal_url: _,
-            proposal_title: _,
-            summary: _,
-            summary_file: _,
-            dry_run: _,
-            json: _,
-        } = (*cli_proposal).clone();
-        OpenSnsTokenSwap {
-            target_swap_canister_id: Some(target_swap_canister_id),
-            params: Some(ic_sns_swap::pb::v1::Params {
-                min_participants,
-                min_icp_e8s,
-                max_icp_e8s,
-                min_direct_participation_icp_e8s,
-                max_direct_participation_icp_e8s,
-                min_participant_icp_e8s,
-                max_participant_icp_e8s,
-                swap_due_timestamp_seconds,
-                sns_token_e8s,
-                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                    count: neuron_basket_count,
-                    dissolve_delay_interval_seconds: neuron_basket_dissolve_delay_interval_seconds,
-                }),
-                sale_delay_seconds,
-            }),
-            community_fund_investment_e8s,
-        }
-    }
-}
-
-impl ProposalTitle for ProposeToOpenSnsTokenSwap {
-    fn title(&self) -> String {
-        match &self.proposal_title {
-            Some(title) => title.clone(),
-            None => "Open SNS Token swap".to_string(),
-        }
-    }
-}
+struct ProposeToOpenSnsTokenSwap {}
 
 impl ProposalTitle for ProposeToUpdateSnsDeployWhitelistCmd {
     fn title(&self) -> String {
@@ -2551,7 +1728,7 @@ impl ProposalTitle for ProposeToUpdateSnsDeployWhitelistCmd {
 
 #[async_trait]
 impl ProposalPayload<UpdateAllowedPrincipalsRequest> for ProposeToUpdateSnsDeployWhitelistCmd {
-    async fn payload(&self, _: Url) -> UpdateAllowedPrincipalsRequest {
+    async fn payload(&self, _: &Agent) -> UpdateAllowedPrincipalsRequest {
         UpdateAllowedPrincipalsRequest {
             added_principals: self.added_principals.clone(),
             removed_principals: self.removed_principals.clone(),
@@ -2575,7 +1752,7 @@ impl ProposalTitle for ProposeToClearProvisionalWhitelistCmd {
 
 #[async_trait]
 impl ProposalPayload<()> for ProposeToClearProvisionalWhitelistCmd {
-    async fn payload(&self, _: Url) -> () {}
+    async fn payload(&self, _: &Agent) -> () {}
 }
 
 /// Sub-command to submit a proposal set the list of authorized subnets.
@@ -2623,7 +1800,7 @@ impl ProposalTitle for ProposeToSetAuthorizedSubnetworksCmd {
 
 #[async_trait]
 impl ProposalPayload<SetAuthorizedSubnetworkListArgs> for ProposeToSetAuthorizedSubnetworksCmd {
-    async fn payload(&self, _: Url) -> SetAuthorizedSubnetworkListArgs {
+    async fn payload(&self, _: &Agent) -> SetAuthorizedSubnetworkListArgs {
         let subnets: Vec<SubnetId> = self
             .subnets
             .clone()
@@ -2670,7 +1847,7 @@ impl ProposalTitle for ProposeToUpdateSubnetTypeCmd {
 
 #[async_trait]
 impl ProposalPayload<UpdateSubnetTypeArgs> for ProposeToUpdateSubnetTypeCmd {
-    async fn payload(&self, _: Url) -> UpdateSubnetTypeArgs {
+    async fn payload(&self, _: &Agent) -> UpdateSubnetTypeArgs {
         match self.operation {
             AddOrRemove::Add => UpdateSubnetTypeArgs::Add(self.subnet_type.clone()),
             AddOrRemove::Remove => UpdateSubnetTypeArgs::Remove(self.subnet_type.clone()),
@@ -2723,7 +1900,7 @@ impl ProposalTitle for ProposeToChangeSubnetTypeAssignmentCmd {
 
 #[async_trait]
 impl ProposalPayload<ChangeSubnetTypeAssignmentArgs> for ProposeToChangeSubnetTypeAssignmentCmd {
-    async fn payload(&self, _: Url) -> ChangeSubnetTypeAssignmentArgs {
+    async fn payload(&self, _: &Agent) -> ChangeSubnetTypeAssignmentArgs {
         match self.operation {
             AddOrRemove::Add => ChangeSubnetTypeAssignmentArgs::Add(SubnetListWithType {
                 subnets: self.subnets.iter().cloned().map(SubnetId::from).collect(),
@@ -2824,7 +2001,7 @@ impl ProposalTitle for ProposeToAddNodeOperatorCmd {
 
 #[async_trait]
 impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
-    async fn payload(&self, _: Url) -> AddNodeOperatorPayload {
+    async fn payload(&self, _: &Agent) -> AddNodeOperatorPayload {
         let rewardable_nodes = self
             .rewardable_nodes
             .as_ref()
@@ -2899,7 +2076,7 @@ impl ProposalTitle for ProposeToUpdateNodeOperatorConfigCmd {
 
 #[async_trait]
 impl ProposalPayload<UpdateNodeOperatorConfigPayload> for ProposeToUpdateNodeOperatorConfigCmd {
-    async fn payload(&self, _: Url) -> UpdateNodeOperatorConfigPayload {
+    async fn payload(&self, _: &Agent) -> UpdateNodeOperatorConfigPayload {
         let rewardable_nodes = self
             .rewardable_nodes
             .as_ref()
@@ -3020,7 +2197,7 @@ impl ProposalTitle for ProposeToAddOrRemoveDataCentersCmd {
 
 #[async_trait]
 impl ProposalPayload<AddOrRemoveDataCentersProposalPayload> for ProposeToAddOrRemoveDataCentersCmd {
-    async fn payload(&self, _: Url) -> AddOrRemoveDataCentersProposalPayload {
+    async fn payload(&self, _: &Agent) -> AddOrRemoveDataCentersProposalPayload {
         let payload = self.get_payload();
 
         if !self.skip_confirmation {
@@ -3066,7 +2243,7 @@ impl ProposalTitle for ProposeToUpdateNodeRewardsTableCmd {
 
 #[async_trait]
 impl ProposalPayload<UpdateNodeRewardsTableProposalPayload> for ProposeToUpdateNodeRewardsTableCmd {
-    async fn payload(&self, _: Url) -> UpdateNodeRewardsTableProposalPayload {
+    async fn payload(&self, _: &Agent) -> UpdateNodeRewardsTableProposalPayload {
         let map: BTreeMap<String, BTreeMap<String, NodeRewardRate>> =
             serde_json::from_str(&self.updated_node_rewards)
                 .unwrap_or_else(|e| panic!("Unable to parse updated_node_rewards: {}", e));
@@ -3116,7 +2293,7 @@ impl ProposalTitle for ProposeToSetFirewallConfigCmd {
 
 #[async_trait]
 impl ProposalPayload<SetFirewallConfigPayload> for ProposeToSetFirewallConfigCmd {
-    async fn payload(&self, _: Url) -> SetFirewallConfigPayload {
+    async fn payload(&self, _: &Agent) -> SetFirewallConfigPayload {
         let firewall_config =
             String::from_utf8(read_file_fully(&self.firewall_config_file)).unwrap();
         let ipv4_prefixes: Vec<String> = if self.ipv4_prefixes.eq("-") {
@@ -3171,7 +2348,7 @@ impl ProposalTitle for ProposeToAddFirewallRulesCmd {
 
 #[async_trait]
 impl ProposalPayload<AddFirewallRulesPayload> for ProposeToAddFirewallRulesCmd {
-    async fn payload(&self, _: Url) -> AddFirewallRulesPayload {
+    async fn payload(&self, _: &Agent) -> AddFirewallRulesPayload {
         let rule_file = String::from_utf8(read_file_fully(&self.rules_file)).unwrap();
         let rules: Vec<FirewallRule> = serde_json::from_str(&rule_file)
             .unwrap_or_else(|_| panic!("Failed to parse firewall rules"));
@@ -3220,7 +2397,7 @@ impl ProposalTitle for ProposeToRemoveFirewallRulesCmd {
 
 #[async_trait]
 impl ProposalPayload<RemoveFirewallRulesPayload> for ProposeToRemoveFirewallRulesCmd {
-    async fn payload(&self, _: Url) -> RemoveFirewallRulesPayload {
+    async fn payload(&self, _: &Agent) -> RemoveFirewallRulesPayload {
         let positions: Vec<i32> = self
             .positions
             .clone()
@@ -3267,7 +2444,7 @@ impl ProposalTitle for ProposeToUpdateFirewallRulesCmd {
 
 #[async_trait]
 impl ProposalPayload<UpdateFirewallRulesPayload> for ProposeToUpdateFirewallRulesCmd {
-    async fn payload(&self, _: Url) -> UpdateFirewallRulesPayload {
+    async fn payload(&self, _: &Agent) -> UpdateFirewallRulesPayload {
         let rule_file = String::from_utf8(read_file_fully(&self.rules_file)).unwrap();
         let rules: Vec<FirewallRule> = serde_json::from_str(&rule_file)
             .unwrap_or_else(|_| panic!("Failed to parse firewall rules"));
@@ -3331,7 +2508,7 @@ impl ProposalTitle for ProposeToRemoveNodesCmd {
 
 #[async_trait]
 impl ProposalPayload<RemoveNodesPayload> for ProposeToRemoveNodesCmd {
-    async fn payload(&self, _: Url) -> RemoveNodesPayload {
+    async fn payload(&self, _: &Agent) -> RemoveNodesPayload {
         RemoveNodesPayload {
             node_ids: self
                 .node_ids
@@ -3390,48 +2567,6 @@ struct VoteOnRootProposalToUpgradeGovernanceCanisterCmd {
     pub ballot: RootProposalBallot,
 }
 
-/// A description of a subnet, either by index, or by id.
-#[derive(Clone, Copy)]
-enum SubnetDescriptor {
-    Id(PrincipalId),
-    Index(usize),
-}
-
-impl FromStr for SubnetDescriptor {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let maybe_index = usize::from_str(s);
-        let maybe_principal = PrincipalId::from_str(s);
-        match (maybe_index, maybe_principal) {
-            (Err(e1), Err(e2)) => Err(format!(
-                "Cannot parse argument '{}' as a subnet descriptor. \
-                 It is not an index because {}. It is not a principal because {}.",
-                s, e1, e2
-            )),
-            (Ok(i), Err(_)) => Ok(Self::Index(i)),
-            (Err(_), Ok(id)) => Ok(Self::Id(id)),
-            (Ok(_), Ok(_)) => Err(format!(
-                "Well that's embarrassing. {} can be interpreted both as an index and as a \
-                 principal. I did not think this was possible!",
-                s
-            )),
-        }
-    }
-}
-
-impl SubnetDescriptor {
-    async fn get_id(&self, registry_canister: &RegistryCanister) -> SubnetId {
-        match self {
-            Self::Id(p) => SubnetId::new(*p),
-            Self::Index(i) => {
-                let subnets = get_subnet_ids(registry_canister).await;
-                *(subnets.get(*i)
-                    .unwrap_or_else(|| panic!("Tried to get subnet of index {}, but there are only {} subnets according to the registry", i, subnets.len())))
-            }
-        }
-    }
-}
-
 /// Sub-command to submit a proposal to modify the canister migrations.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
@@ -3463,7 +2598,7 @@ impl ProposalTitle for ProposeToPrepareCanisterMigrationCmd {
 
 #[async_trait]
 impl ProposalPayload<PrepareCanisterMigrationPayload> for ProposeToPrepareCanisterMigrationCmd {
-    async fn payload(&self, _: Url) -> PrepareCanisterMigrationPayload {
+    async fn payload(&self, _: &Agent) -> PrepareCanisterMigrationPayload {
         PrepareCanisterMigrationPayload {
             canister_id_ranges: self.canister_id_ranges.clone(),
             source_subnet: SubnetId::from(self.source_subnet),
@@ -3503,7 +2638,7 @@ impl ProposalTitle for ProposeToRerouteCanisterRangesCmd {
 
 #[async_trait]
 impl ProposalPayload<RerouteCanisterRangesPayload> for ProposeToRerouteCanisterRangesCmd {
-    async fn payload(&self, _: Url) -> RerouteCanisterRangesPayload {
+    async fn payload(&self, _: &Agent) -> RerouteCanisterRangesPayload {
         RerouteCanisterRangesPayload {
             reassigned_canister_ranges: self.canister_id_ranges.clone(),
             source_subnet: SubnetId::from(self.source_subnet),
@@ -3538,7 +2673,7 @@ impl ProposalTitle for ProposeToCompleteCanisterMigrationCmd {
 
 #[async_trait]
 impl ProposalPayload<CompleteCanisterMigrationPayload> for ProposeToCompleteCanisterMigrationCmd {
-    async fn payload(&self, _: Url) -> CompleteCanisterMigrationPayload {
+    async fn payload(&self, _: &Agent) -> CompleteCanisterMigrationPayload {
         CompleteCanisterMigrationPayload {
             canister_id_ranges: self.canister_id_ranges.clone(),
             migration_trace: self
@@ -3565,6 +2700,12 @@ struct ProposeToSetBitcoinConfig {
 
     #[clap(long, help = "Sets/clears the watchdog canister principal.")]
     pub watchdog_canister: Option<Option<PrincipalId>>,
+
+    #[clap(
+        long,
+        help = "Whether or not to disable the API if canister isn't fully synced."
+    )]
+    pub disable_api_if_not_fully_synced: Option<bool>,
 }
 
 impl ProposalTitle for ProposeToSetBitcoinConfig {
@@ -3584,7 +2725,7 @@ impl ProposalTitle for ProposeToSetBitcoinConfig {
 
 #[async_trait]
 impl ProposalPayload<BitcoinSetConfigProposal> for ProposeToSetBitcoinConfig {
-    async fn payload(&self, _: Url) -> BitcoinSetConfigProposal {
+    async fn payload(&self, _: &Agent) -> BitcoinSetConfigProposal {
         let request = SetConfigRequest {
             stability_threshold: self.stability_threshold,
             api_access: self
@@ -3593,6 +2734,13 @@ impl ProposalPayload<BitcoinSetConfigProposal> for ProposeToSetBitcoinConfig {
             watchdog_canister: self
                 .watchdog_canister
                 .map(|principal_id| principal_id.map(Principal::from)),
+            disable_api_if_not_fully_synced: self.disable_api_if_not_fully_synced.map(|flag| {
+                if flag {
+                    Flag::Enabled
+                } else {
+                    Flag::Disabled
+                }
+            }),
             ..Default::default()
         };
 
@@ -4007,9 +3155,12 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             governance_parameters,
         };
 
+        let result = ic_nns_governance::pb::v1::CreateServiceNervousSystem::from(result);
+
+        // TODO migrate validation out of SnsInitPayload so we no longer have to support ic_nns_gov types
         SnsInitPayload::try_from(result.clone())?;
 
-        Ok(result)
+        Ok(result.into())
     }
 }
 
@@ -4026,13 +3177,13 @@ async fn propose_to_create_service_nervous_system(
 ) {
     let is_dry_run = cmd.is_dry_run();
 
-    let action = Some(Action::CreateServiceNervousSystem(
+    let action = Some(ProposalActionRequest::CreateServiceNervousSystem(
         CreateServiceNervousSystem::try_from(cmd.clone()).unwrap(),
     ));
     let title = cmd.title();
     let summary = cmd.summary.clone().unwrap();
     let url = parse_proposal_url(cmd.proposal_url.clone());
-    let proposal = Proposal {
+    let proposal = MakeProposalRequest {
         title: Some(title.clone()),
         summary,
         url,
@@ -4064,10 +3215,14 @@ async fn propose_to_create_service_nervous_system(
     }
 }
 
-/// Sub-command to submit a proposal to update elected HostOS versions.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
-struct ProposeToUpdateElectedHostosVersionsCmd {
+struct ProposeToUpdateElectedHostosVersionsCmd {}
+
+/// Sub-command to change the set of currently elected HostOS versions.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToReviseElectedHostosVersionsCmd {
     #[clap(long)]
     /// The HostOS version ID to elect.
     pub hostos_version_to_elect: Option<String>,
@@ -4087,7 +3242,7 @@ struct ProposeToUpdateElectedHostosVersionsCmd {
     pub hostos_versions_to_unelect: Vec<String>,
 }
 
-impl ProposalTitle for ProposeToUpdateElectedHostosVersionsCmd {
+impl ProposalTitle for ProposeToReviseElectedHostosVersionsCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -4101,24 +3256,32 @@ impl ProposalTitle for ProposeToUpdateElectedHostosVersionsCmd {
 
 #[async_trait]
 impl ProposalPayload<UpdateElectedHostosVersionsPayload>
-    for ProposeToUpdateElectedHostosVersionsCmd
+    for ProposeToReviseElectedHostosVersionsCmd
 {
-    async fn payload(&self, _: Url) -> UpdateElectedHostosVersionsPayload {
+    async fn payload(&self, _: &Agent) -> UpdateElectedHostosVersionsPayload {
         let payload = UpdateElectedHostosVersionsPayload {
             hostos_version_to_elect: self.hostos_version_to_elect.clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: self.release_package_urls.clone(),
             hostos_versions_to_unelect: self.hostos_versions_to_unelect.clone(),
         };
-        payload.validate().expect("Failed to validate payload");
+        // TODO[NNS1-3000]: Use new Registry naming convention once NNS Governance supports it.
+        ReviseElectedHostosVersionsPayload::from(payload.clone())
+            .validate()
+            .expect("Failed to validate payload");
         payload
     }
 }
 
-/// Sub-command to set HostOS version on a set of Nodes.
+/// Obsolete; please use `ProposeToDeployHostosToSomeNodes` instead.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
-struct ProposeToUpdateNodesHostosVersionCmd {
+struct ProposeToUpdateNodesHostosVersionCmd {}
+
+/// Sub-command to deploy a HostOS version to a set of nodes.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToDeployHostosToSomeNodesCmd {
     /// The list of nodes on which to set the given HostosVersion
     #[clap(name = "NODE_ID", multiple_values(true), required = true)]
     pub node_ids: Vec<PrincipalId>,
@@ -4152,7 +3315,7 @@ impl HostosVersionFlag {
     }
 }
 
-impl ProposalTitle for ProposeToUpdateNodesHostosVersionCmd {
+impl ProposalTitle for ProposeToDeployHostosToSomeNodesCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -4172,8 +3335,8 @@ impl ProposalTitle for ProposeToUpdateNodesHostosVersionCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<UpdateNodesHostosVersionPayload> for ProposeToUpdateNodesHostosVersionCmd {
-    async fn payload(&self, _: Url) -> UpdateNodesHostosVersionPayload {
+impl ProposalPayload<UpdateNodesHostosVersionPayload> for ProposeToDeployHostosToSomeNodesCmd {
+    async fn payload(&self, _: &Agent) -> UpdateNodesHostosVersionPayload {
         let node_ids = self
             .node_ids
             .clone()
@@ -4190,34 +3353,37 @@ impl ProposalPayload<UpdateNodesHostosVersionPayload> for ProposeToUpdateNodesHo
 
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
-struct ProposeToAddApiBoundaryNodeCmd {
-    #[clap(long, required = true, alias = "node-id")]
-    /// The node to assign as an API Boundary Node
-    node: PrincipalId,
-
-    #[clap(long, required = true)]
-    /// The domain name the API Boundary Node will use
-    domain: String,
+struct ProposeToAddApiBoundaryNodesCmd {
+    #[clap(long, required = true, multiple_values(true), alias = "node-ids")]
+    /// The nodes to assign as an API Boundary Node
+    nodes: Vec<PrincipalId>,
 
     #[clap(long, required = true, alias = "version-id")]
     /// The version the API Boundary Node will use
     version: String,
 }
 
-impl ProposalTitle for ProposeToAddApiBoundaryNodeCmd {
+impl ProposalTitle for ProposeToAddApiBoundaryNodesCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
-            None => format!("Add API Boundary Node {}", self.node),
+            None => format!(
+                "Add API Boundary Nodes {}",
+                self.nodes
+                    .iter()
+                    .map(|id| format!("{id}"))
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
         }
     }
 }
 
 #[async_trait]
-impl ProposalPayload<AddApiBoundaryNodePayload> for ProposeToAddApiBoundaryNodeCmd {
-    async fn payload(&self, _: Url) -> AddApiBoundaryNodePayload {
-        AddApiBoundaryNodePayload {
-            node_id: NodeId::from(self.node),
+impl ProposalPayload<AddApiBoundaryNodesPayload> for ProposeToAddApiBoundaryNodesCmd {
+    async fn payload(&self, _: &Agent) -> AddApiBoundaryNodesPayload {
+        AddApiBoundaryNodesPayload {
+            node_ids: self.nodes.iter().cloned().map(NodeId::from).collect(),
             version: self.version.clone(),
         }
     }
@@ -4249,16 +3415,21 @@ impl ProposalTitle for ProposeToRemoveApiBoundaryNodesCmd {
 
 #[async_trait]
 impl ProposalPayload<RemoveApiBoundaryNodesPayload> for ProposeToRemoveApiBoundaryNodesCmd {
-    async fn payload(&self, _: Url) -> RemoveApiBoundaryNodesPayload {
+    async fn payload(&self, _: &Agent) -> RemoveApiBoundaryNodesPayload {
         RemoveApiBoundaryNodesPayload {
             node_ids: self.nodes.iter().cloned().map(NodeId::from).collect(),
         }
     }
 }
 
+/// Obsolete; please use `ProposeToDeployGuestosToSomeApiBoundaryNodes` instead.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser, Clone)]
+struct ProposeToUpdateApiBoundaryNodesVersionCmd {}
+
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
-struct ProposeToUpdateApiBoundaryNodesVersionCmd {
+struct ProposeToDeployGuestosToSomeApiBoundaryNodesCmd {
     #[clap(long, required = true, multiple_values(true), alias = "node-ids")]
     /// The set of API Boundary Nodes that should have their version updated
     nodes: Vec<PrincipalId>,
@@ -4268,7 +3439,7 @@ struct ProposeToUpdateApiBoundaryNodesVersionCmd {
     version: String,
 }
 
-impl ProposalTitle for ProposeToUpdateApiBoundaryNodesVersionCmd {
+impl ProposalTitle for ProposeToDeployGuestosToSomeApiBoundaryNodesCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -4286,9 +3457,9 @@ impl ProposalTitle for ProposeToUpdateApiBoundaryNodesVersionCmd {
 
 #[async_trait]
 impl ProposalPayload<UpdateApiBoundaryNodesVersionPayload>
-    for ProposeToUpdateApiBoundaryNodesVersionCmd
+    for ProposeToDeployGuestosToSomeApiBoundaryNodesCmd
 {
-    async fn payload(&self, _: Url) -> UpdateApiBoundaryNodesVersionPayload {
+    async fn payload(&self, _: &Agent) -> UpdateApiBoundaryNodesVersionPayload {
         UpdateApiBoundaryNodesVersionPayload {
             node_ids: self.nodes.iter().cloned().map(NodeId::from).collect(),
             version: self.version.clone(),
@@ -4308,7 +3479,7 @@ async fn get_firewall_rules_from_registry(
     scope: &FirewallRulesScope,
 ) -> Vec<FirewallRule> {
     let registry_answer = registry_canister
-        .get_value(make_firewall_rules_record_key(scope).into_bytes(), None)
+        .get_value_with_update(make_firewall_rules_record_key(scope).into_bytes(), None)
         .await;
 
     if let Ok((bytes, _)) = registry_answer {
@@ -4319,29 +3490,6 @@ async fn get_firewall_rules_from_registry(
     } else {
         vec![]
     }
-}
-
-async fn get_subnet_record(
-    registry_canister: &RegistryCanister,
-    subnet_id: SubnetId,
-) -> SubnetRecord {
-    let registry_answer = registry_canister
-        .get_value(make_subnet_record_key(subnet_id).into_bytes(), None)
-        .await;
-
-    let (bytes, _) = registry_answer.unwrap();
-    let value = SubnetRecordProto::decode(&bytes[..]).expect("Error decoding value from registry.");
-    SubnetRecord::from(&value)
-}
-
-async fn get_subnet_record_with_details(
-    subnet_id: SubnetId,
-    registry_canister: &RegistryCanister,
-    all_nodes_with_details: &IndexMap<PrincipalId, NodeDetails>,
-) -> SubnetRecord {
-    get_subnet_record(registry_canister, subnet_id)
-        .await
-        .with_node_details(all_nodes_with_details)
 }
 
 /// Utility function to convert a Url to a host:port string.
@@ -4361,6 +3509,12 @@ fn url_to_host_with_port(url: Url) -> String {
 
 /// Utility function to find NNS URLs that the local machine can connect to.
 async fn find_reachable_nns_urls(nns_urls: Vec<Url>) -> Vec<Url> {
+    // Early return, otherwise `futures::future::select_all` will panic without a good error
+    // message.
+    if nns_urls.is_empty() {
+        return Vec::new();
+    }
+
     let retries_max = 3;
     let timeout_duration = tokio::time::Duration::from_secs(10);
 
@@ -4450,14 +3604,13 @@ async fn main() {
         );
     }
 
-    let registry_canister = RegistryCanister::new(reachable_nns_urls.clone());
-
     let sender = if opts.secret_key_pem.is_some() || opts.use_hsm {
         // Make sure to let the user know that we only actually use the sender
         // in methods that go through the NNS handlers and not for other methods.
         //
         // TODO(NNS1-486): Remove ic-admin command whitelist for sender
         match opts.subcmd {
+            SubCommand::ProposeToDeployGuestosToAllSubnetNodes(_) => (),
             SubCommand::ProposeToUpdateSubnetReplicaVersion(_) => (),
             SubCommand::ProposeToCreateSubnet(_) => (),
             SubCommand::ProposeToAddNodesToSubnet(_) => (),
@@ -4468,6 +3621,7 @@ async fn main() {
             SubCommand::ProposeToHardResetNnsRootToVersion(_) => (),
             SubCommand::ProposeToUninstallCode(_) => (),
             SubCommand::ProposeToAddNnsCanister(_) => (),
+            SubCommand::ProposeToReviseElectedGuestosVersions(_) => (),
             SubCommand::ProposeToUpdateElectedReplicaVersions(_) => (),
             SubCommand::ProposeToUpdateSubnet(_) => (),
             SubCommand::ProposeToClearProvisionalWhitelist(_) => (),
@@ -4485,7 +3639,13 @@ async fn main() {
             SubCommand::VoteOnRootProposalToUpgradeGovernanceCanister(_) => (),
             SubCommand::ProposeToAddOrRemoveDataCenters(_) => (),
             SubCommand::ProposeToUpdateNodeRewardsTable(_) => (),
-            SubCommand::ProposeToUpdateUnassignedNodesConfig(_) => (),
+            SubCommand::ProposeToUpdateUnassignedNodesConfig(_) => panic!(
+                "Subcommand ProposeToUpdateUnassignedNodesConfig is obsolete; please use \
+                ProposeToDeployGuestosToAllUnassignedNodesCmd or \
+                ProposeToUpdateSshReadonlyAccessForAllUnassignedNodes instead"
+            ),
+            SubCommand::ProposeToDeployGuestosToAllUnassignedNodes(_) => (),
+            SubCommand::ProposeToUpdateSshReadonlyAccessForAllUnassignedNodes(_) => (),
             SubCommand::ProposeToAddNodeOperator(_) => (),
             SubCommand::ProposeToRemoveNodeOperators(_) => (),
             SubCommand::ProposeToAddWasmToSnsWasm(_) => (),
@@ -4497,15 +3657,32 @@ async fn main() {
             SubCommand::ProposeXdrIcpConversionRate(_) => (),
             SubCommand::ProposeToUpdateSnsSubnetIdsInSnsWasm(_) => (),
             SubCommand::ProposeToUpdateSnsDeployWhitelist(_) => (),
-            SubCommand::ProposeToOpenSnsTokenSwap(_) => (),
             SubCommand::ProposeToInsertSnsWasmUpgradePathEntries(_) => (),
-            SubCommand::ProposeToUpdateElectedHostosVersions(_) => (),
-            SubCommand::ProposeToUpdateNodesHostosVersion(_) => (),
+            SubCommand::ProposeToUpdateElectedHostosVersions(_) => panic!(
+                "Subcommand ProposeToUpdateElectedHostosVersions is obsolete; please use \
+                ProposeToReviseElectedHostosVersions instead"
+            ),
+            SubCommand::ProposeToReviseElectedHostosVersions(_) => (),
+            SubCommand::ProposeToUpdateNodesHostosVersion(_) => panic!(
+                "Subcommand ProposeToUpdateNodesHostosVersion is obsolete; please use \
+                ProposeToDeployHostosToSomeNodes instead"
+            ),
+            SubCommand::ProposeToDeployHostosToSomeNodes(_) => (),
             SubCommand::ProposeToCreateServiceNervousSystem(_) => (),
             SubCommand::ProposeToSetBitcoinConfig(_) => (),
-            SubCommand::ProposeToAddApiBoundaryNode(_) => (),
+            SubCommand::ProposeToAddApiBoundaryNodes(_) => (),
             SubCommand::ProposeToRemoveApiBoundaryNodes(_) => (),
-            SubCommand::ProposeToUpdateApiBoundaryNodesVersion(_) => (),
+            SubCommand::ProposeToUpdateApiBoundaryNodesVersion(_) => panic!(
+                "Subcommand ProposeToUpdateApiBoundaryNodesVersion is obsolete; please use \
+                ProposeToDeployGuestosToSomeApiBoundaryNodes instead"
+            ),
+            SubCommand::ProposeToDeployGuestosToSomeApiBoundaryNodes(_) => (),
+            SubCommand::ProposeToOpenSnsTokenSwap(_) => panic!(
+                "Subcommand OpenSnsTokenSwap is obsolete; please use \
+                ProposeToCreateServiceNervousSystem instead"
+            ),
+            SubCommand::ProposeToRentSubnet(_) => (),
+            SubCommand::ProposeToUpdateCanisterSettings(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
@@ -4529,6 +3706,13 @@ async fn main() {
     } else {
         Sender::Anonymous
     };
+
+    let registry_canister = RegistryCanister::new_with_agent(make_canister_client(
+        reachable_nns_urls.clone(),
+        opts.verify_nns_responses,
+        opts.nns_public_key_pem_file.clone(),
+        sender.clone(),
+    ));
 
     match opts.subcmd {
         SubCommand::GetPublicKey(get_pk_cmd) => {
@@ -4669,7 +3853,7 @@ async fn main() {
         }
         SubCommand::GetSubnetList => {
             let value: Vec<_> = registry_canister
-                .get_value(make_subnet_list_record_key().as_bytes().to_vec(), None)
+                .get_value_with_update(make_subnet_list_record_key().as_bytes().to_vec(), None)
                 .await
                 .map(|(bytes, _version)| SubnetListRecord::decode(&bytes[..]).unwrap())
                 .unwrap()
@@ -4695,7 +3879,7 @@ async fn main() {
             eprintln!("Download IC-OS .. ");
             let tmp_dir = tempfile::tempdir().unwrap().into_path();
             let mut tmp_file = tmp_dir.clone();
-            tmp_file.push("temp.gz");
+            tmp_file.push("temp-image");
 
             // Download the IC-OS upgrade, do not check sha256 yet, we will do that
             // explicitly later
@@ -4730,11 +3914,12 @@ async fn main() {
                 exit(1);
             }
         }
-        SubCommand::ProposeToUpdateSubnetReplicaVersion(cmd) => {
+        SubCommand::ProposeToUpdateSubnetReplicaVersion(cmd)
+        | SubCommand::ProposeToDeployGuestosToAllSubnetNodes(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_external_proposal_from_command(
                 cmd,
-                NnsFunction::UpdateSubnetReplicaVersion,
+                NnsFunction::DeployGuestosToAllSubnetNodes,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,
@@ -4762,12 +3947,10 @@ async fn main() {
             .await;
         }
         SubCommand::GetEcdsaSigningSubnets => {
-            let registry_client = RegistryClientImpl::new(
-                Arc::new(NnsDataProvider::new(
-                    tokio::runtime::Handle::current(),
-                    reachable_nns_urls.clone(),
-                )),
-                None,
+            let registry_client = make_registry_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
             );
 
             // maximum number of retries, let the user ctrl+c if necessary
@@ -4783,11 +3966,32 @@ async fn main() {
                 println!("KeyId {:?}: {:?}", key_id, subnets);
             }
         }
-        SubCommand::ProposeToUpdateElectedReplicaVersions(cmd) => {
+        SubCommand::GetChainKeySigningSubnets => {
+            let registry_client = make_registry_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+            );
+
+            // maximum number of retries, let the user ctrl+c if necessary
+            registry_client
+                .try_polling_latest_version(usize::MAX)
+                .unwrap();
+
+            let signing_subnets = registry_client
+                .get_chain_key_signing_subnets(registry_client.get_latest_version())
+                .unwrap()
+                .unwrap();
+            for (key_id, subnets) in signing_subnets.iter() {
+                println!("KeyId {:?}: {:?}", key_id, subnets);
+            }
+        }
+        SubCommand::ProposeToUpdateElectedReplicaVersions(cmd)
+        | SubCommand::ProposeToReviseElectedGuestosVersions(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_external_proposal_from_command(
                 cmd,
-                NnsFunction::UpdateElectedReplicaVersions,
+                NnsFunction::ReviseElectedGuestosVersions,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,
@@ -4905,21 +4109,19 @@ async fn main() {
         }
         SubCommand::ProposeToChangeNnsCanister(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            if cmd.canister_id == ROOT_CANISTER_ID {
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            if cmd.use_explicit_action_type {
+                propose_action_from_command(cmd, canister_client, proposer).await;
+            } else if cmd.canister_id == ROOT_CANISTER_ID {
                 propose_external_proposal_from_command::<
                     UpgradeRootProposal,
                     ProposeToChangeNnsCanisterCmd,
-                >(
-                    cmd,
-                    NnsFunction::NnsRootUpgrade,
-                    make_canister_client(
-                        reachable_nns_urls,
-                        opts.verify_nns_responses,
-                        opts.nns_public_key_pem_file,
-                        sender,
-                    ),
-                    proposer,
-                )
+                >(cmd, NnsFunction::NnsRootUpgrade, canister_client, proposer)
                 .await;
             } else {
                 propose_external_proposal_from_command::<
@@ -4928,12 +4130,7 @@ async fn main() {
                 >(
                     cmd,
                     NnsFunction::NnsCanisterUpgrade,
-                    make_canister_client(
-                        reachable_nns_urls,
-                        opts.verify_nns_responses,
-                        opts.nns_public_key_pem_file,
-                        sender,
-                    ),
+                    canister_client,
                     proposer,
                 )
                 .await;
@@ -4989,33 +4186,43 @@ async fn main() {
         }
         SubCommand::ProposeToStartCanister(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            propose_external_proposal_from_command(
-                cmd,
-                NnsFunction::StopOrStartNnsCanister,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-                proposer,
-            )
-            .await;
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            if cmd.use_explicit_action_type {
+                propose_action_from_command(cmd, canister_client, proposer).await;
+            } else {
+                propose_external_proposal_from_command(
+                    cmd,
+                    NnsFunction::StopOrStartNnsCanister,
+                    canister_client,
+                    proposer,
+                )
+                .await;
+            }
         }
         SubCommand::ProposeToStopCanister(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            propose_external_proposal_from_command(
-                cmd,
-                NnsFunction::StopOrStartNnsCanister,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-                proposer,
-            )
-            .await;
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            if cmd.use_explicit_action_type {
+                propose_action_from_command(cmd, canister_client, proposer).await;
+            } else {
+                propose_external_proposal_from_command(
+                    cmd,
+                    NnsFunction::StopOrStartNnsCanister,
+                    canister_client,
+                    proposer,
+                )
+                .await;
+            }
         }
         SubCommand::ProposeToClearProvisionalWhitelist(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
@@ -5177,9 +4384,12 @@ async fn main() {
         }
         SubCommand::GetFirewallConfig => {
             let key = make_firewall_config_record_key();
-            let (bytes, _) = registry_canister.get_value(key.into(), None).await.unwrap();
+            let (bytes, _) = registry_canister
+                .get_value_with_update(key.into(), None)
+                .await
+                .unwrap();
 
-            let firewall_config = decode_registry_value::<FirewallConfig>(bytes);
+            let firewall_config = FirewallConfig::decode(bytes.as_slice()).unwrap();
             println!("{:#?}", firewall_config);
         }
         SubCommand::ProposeToSetFirewallConfig(cmd) => {
@@ -5344,7 +4554,7 @@ async fn main() {
         }
         SubCommand::GetNodeRewardsTable => {
             let (bytes, _) = registry_canister
-                .get_value(NODE_REWARDS_TABLE_KEY.as_bytes().to_vec(), None)
+                .get_value_with_update(NODE_REWARDS_TABLE_KEY.as_bytes().to_vec(), None)
                 .await
                 .unwrap();
 
@@ -5377,7 +4587,7 @@ async fn main() {
                 pub table: BTreeMap<String, NodeRewardRatesFlattened>,
             }
 
-            let table = decode_registry_value::<NodeRewardsTableFlattened>(bytes);
+            let table = NodeRewardsTableFlattened::decode(bytes.as_slice()).unwrap();
             println!(
                 "{}",
                 serde_json::to_string_pretty(&table)
@@ -5399,11 +4609,26 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::ProposeToUpdateUnassignedNodesConfig(cmd) => {
+        SubCommand::ProposeToDeployGuestosToAllUnassignedNodes(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_external_proposal_from_command(
                 cmd,
-                NnsFunction::UpdateUnassignedNodesConfig,
+                NnsFunction::DeployGuestosToAllUnassignedNodes,
+                make_canister_client(
+                    reachable_nns_urls,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToUpdateSshReadonlyAccessForAllUnassignedNodes(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,
@@ -5552,21 +4777,6 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::ProposeToOpenSnsTokenSwap(cmd) => {
-            let (proposer, sender) =
-                get_proposer_and_sender(cmd.proposer, sender, cmd.test_neuron_proposer);
-            propose_to_open_sns_token_swap(
-                cmd,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-                proposer,
-            )
-            .await;
-        }
         SubCommand::ProposeToInsertSnsWasmUpgradePathEntries(cmd) => {
             let (proposer, sender) =
                 get_proposer_and_sender(cmd.proposer, sender, cmd.test_neuron_proposer);
@@ -5579,7 +4789,7 @@ async fn main() {
             );
             // Custom rendering to make it easier to debug your command
             if cmd.is_dry_run() {
-                let payload = cmd.payload(agent.url.clone()).await;
+                let payload = cmd.payload(&agent).await;
                 print_insert_sns_wasm_upgrade_path_entries_payload(payload);
                 return;
             }
@@ -5611,11 +4821,11 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::ProposeToUpdateElectedHostosVersions(cmd) => {
+        SubCommand::ProposeToReviseElectedHostosVersions(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_external_proposal_from_command(
                 cmd,
-                NnsFunction::UpdateElectedHostosVersions,
+                NnsFunction::ReviseElectedHostosVersions,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,
@@ -5626,11 +4836,11 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::ProposeToUpdateNodesHostosVersion(cmd) => {
+        SubCommand::ProposeToDeployHostosToSomeNodes(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_external_proposal_from_command(
                 cmd,
-                NnsFunction::UpdateNodesHostosVersion,
+                NnsFunction::DeployHostosToSomeNodes,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,
@@ -5665,11 +4875,11 @@ async fn main() {
                 }
             }
         }
-        SubCommand::ProposeToAddApiBoundaryNode(cmd) => {
+        SubCommand::ProposeToAddApiBoundaryNodes(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_external_proposal_from_command(
                 cmd,
-                NnsFunction::AddApiBoundaryNode,
+                NnsFunction::AddApiBoundaryNodes,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,
@@ -5695,11 +4905,11 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::ProposeToUpdateApiBoundaryNodesVersion(cmd) => {
+        SubCommand::ProposeToDeployGuestosToSomeApiBoundaryNodes(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_external_proposal_from_command(
                 cmd,
-                NnsFunction::UpdateApiBoundaryNodesVersion,
+                NnsFunction::DeployGuestosToSomeApiBoundaryNodes,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,
@@ -5728,6 +4938,34 @@ async fn main() {
                     .expect("Failed to serialize the records to JSON")
             );
         }
+        SubCommand::ProposeToRentSubnet(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::SubnetRentalRequest,
+                make_canister_client(
+                    reachable_nns_urls,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToUpdateCanisterSettings(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            propose_action_from_command(cmd, canister_client, proposer).await;
+        }
+        // Since we're matching on the `SubCommand` type the second time, this match doesn't have
+        // to be exhaustive, e.g., we've already verified that the subcommand is not obsolete.
+        _ => unreachable!(),
     }
 }
 
@@ -5769,7 +5007,7 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
     registry: &RegistryCanister,
     as_json: bool,
 ) -> T {
-    let value = registry.get_value(key.clone(), None).await;
+    let value = registry.get_value_with_update(key.clone(), None).await;
     match value.clone() {
         Ok((bytes, version)) => {
             if key.starts_with(b"subnet_record_") {
@@ -5937,7 +5175,7 @@ async fn propose_external_proposal_from_command<
     agent: Agent,
     proposer: NeuronId,
 ) {
-    let payload = cmd.payload(agent.url.clone()).await;
+    let payload = cmd.payload(&agent).await;
     let canister_client = GovernanceCanisterClient(NnsCanisterClient::new(
         agent,
         GOVERNANCE_CANISTER_ID,
@@ -5973,6 +5211,35 @@ async fn propose_external_proposal_from_command<
             std::process::exit(1);
         }
     };
+}
+
+async fn propose_action_from_command<Command>(cmd: Command, agent: Agent, proposer: NeuronId)
+where
+    Command: ProposalMetadata + ProposalTitle + ProposalAction,
+{
+    let canister_client = GovernanceCanisterClient(NnsCanisterClient::new(
+        agent,
+        GOVERNANCE_CANISTER_ID,
+        Some(proposer),
+    ));
+
+    let action = cmd.action().await;
+
+    print_proposal(&action, &cmd);
+
+    if cmd.is_dry_run() {
+        return;
+    }
+
+    let proposal_id = canister_client
+        .submit_proposal_action(action, cmd.url(), cmd.title(), cmd.summary())
+        .await
+        .unwrap_or_else(|e| {
+            eprintln!("propose_action_from_command error: {:?}", e);
+            std::process::exit(1);
+        });
+
+    println!("proposal {}", proposal_id);
 }
 
 #[derive(Serialize)]
@@ -6185,13 +5452,13 @@ async fn get_node_list_since(
 ) -> IndexMap<PrincipalId, NodeDetails> {
     eprintln!("INFO: Fetching a list of all nodes from the registry...");
     let (nns_subnet_id_vec, _) = registry
-        .get_value(ROOT_SUBNET_ID_KEY.as_bytes().to_vec(), None)
+        .get_value_with_update(ROOT_SUBNET_ID_KEY.as_bytes().to_vec(), None)
         .await
         .unwrap();
     let nns_subnet_id =
-        decode_registry_value::<ic_protobuf::types::v1::SubnetId>(nns_subnet_id_vec);
+        ic_protobuf::types::v1::SubnetId::decode(nns_subnet_id_vec.as_slice()).unwrap();
     let (nns_pub_key_vec, _) = registry
-        .get_value(
+        .get_value_with_update(
             make_crypto_threshold_signing_pubkey_key(SubnetId::new(
                 PrincipalId::try_from(nns_subnet_id.principal_id.unwrap().raw).unwrap(),
             ))
@@ -6249,6 +5516,7 @@ async fn get_node_list_since(
                     *node_map.entry(node_id).or_default() = record;
                 }
                 None => {
+                    #[allow(deprecated)]
                     node_map.remove(&node_id);
                 }
             };
@@ -6261,6 +5529,7 @@ async fn get_node_list_since(
                     *node_operator_map.entry(node_operator_id).or_default() = record;
                 }
                 None => {
+                    #[allow(deprecated)]
                     node_operator_map.remove(&node_operator_id);
                 }
             };
@@ -6296,26 +5565,13 @@ async fn get_node_list_since(
                     node_provider_id,
                     dc_id,
                     hostos_version_id: node_record.hostos_version_id,
+                    domain: node_record.domain,
                 },
             )
         })
         .collect();
 
     result
-}
-
-/// Parses the URL of a proposal.
-fn parse_proposal_url(url: Option<Url>) -> String {
-    match url {
-        Some(url) => {
-            if url.scheme() != "https" {
-                panic!("proposal-url must use https");
-            }
-            url.to_string()
-        }
-        // By default point to the landing page of `nns-proposals` repository.
-        None => "".to_string(),
-    }
 }
 
 /// Reads the wasm module into memory and validates it against a sha256 checksum
@@ -6359,49 +5615,6 @@ async fn download_wasm_module(url: &Url) -> PathBuf {
     tmp_file
 }
 
-/// Extracts the ids from a `SubnetListRecord`.
-fn extract_subnet_ids(subnet_list_record: &SubnetListRecord) -> Vec<SubnetId> {
-    subnet_list_record
-        .subnets
-        .iter()
-        .map(|x| {
-            SubnetId::from(
-                PrincipalId::try_from(x.clone().as_slice()).expect("failed parsing principal id"),
-            )
-        })
-        .collect()
-}
-
-/// Returns the ids from all the subnets currently in the registry.
-async fn get_subnet_ids(registry: &RegistryCanister) -> Vec<SubnetId> {
-    let (subnet_list_record, _) = get_subnet_list_record(registry).await;
-    extract_subnet_ids(&subnet_list_record)
-}
-
-/// Returns the record that lists all the subnets currently in the registry.
-async fn get_subnet_list_record(registry: &RegistryCanister) -> (SubnetListRecord, bool) {
-    // First we need to get the current subnet list record.
-
-    let subnet_list_record_result = registry
-        .get_value(make_subnet_list_record_key().as_bytes().to_vec(), None)
-        .await;
-    match subnet_list_record_result {
-        Ok((bytes, _version)) => match SubnetListRecord::decode(&bytes[..]) {
-            Ok(record) => (record, false),
-            Err(error) => panic!("Error decoding subnet list record: {:?}", error),
-        },
-        Err(error) => match error {
-            // It might be the first time we store a subnet, so we might
-            // have to update the subnet list record.
-            Error::KeyNotPresent(_) => (SubnetListRecord::default(), true),
-            _ => panic!(
-                "Error while fetching current subnet list record: {:?}",
-                error
-            ),
-        },
-    }
-}
-
 /// Writes the threshold signing public key of the given subnet to the given
 /// path.
 async fn store_subnet_pk<P: AsRef<Path>>(
@@ -6419,7 +5632,7 @@ async fn get_subnet_pk(registry: &RegistryCanister, subnet_id: SubnetId) -> Publ
     let k = make_crypto_threshold_signing_pubkey_key(subnet_id)
         .as_bytes()
         .to_vec();
-    match registry.get_value(k.clone(), None).await {
+    match registry.get_value_with_update(k.clone(), None).await {
         Ok((bytes, _)) => {
             PublicKey::decode(&bytes[..]).expect("Error decoding PublicKey from registry")
         }
@@ -6474,75 +5687,6 @@ pub fn store_threshold_sig_pk<P: AsRef<Path>>(pk: &PublicKey, path: P) {
     let path = path.as_ref();
     std::fs::write(path, bytes)
         .unwrap_or_else(|e| panic!("failed to store public key to {}: {}", path.display(), e));
-}
-
-/// Submit a proposal to open a decentralized SNS dapp token swap
-async fn propose_to_open_sns_token_swap(
-    cmd: ProposeToOpenSnsTokenSwap,
-    agent: Agent,
-    proposer: NeuronId,
-) {
-    /// Make the proposal, capturing any errors.
-    async fn make_proposal(
-        cmd: ProposeToOpenSnsTokenSwap,
-        agent: Agent,
-        proposer: NeuronId,
-    ) -> anyhow::Result<Option<ProposalId>> {
-        let ProposeToOpenSnsTokenSwap { proposal_url, .. } = cmd.clone();
-        let canister_client = GovernanceCanisterClient(NnsCanisterClient::new(
-            agent,
-            GOVERNANCE_CANISTER_ID,
-            Some(proposer),
-        ));
-        let payload = OpenSnsTokenSwap::from(&cmd);
-        print_proposal(&payload, &cmd);
-
-        if cmd.is_dry_run() {
-            return Ok(None);
-        }
-
-        let title = cmd
-            .proposal_title
-            .clone()
-            .ok_or_else(|| anyhow!("Please specify a proposal title"))?;
-        let summary = cmd
-            .summary
-            .clone()
-            .ok_or_else(|| anyhow!("Please specify a proposal summary"))?;
-
-        let serialized = Encode!(&ManageNeuron {
-            id: Some((*canister_client.0.proposal_author()).into()),
-            neuron_id_or_subaccount: None,
-            command: Some(Command::MakeProposal(Box::new(Proposal {
-                title: Some(title),
-                summary,
-                url: parse_proposal_url(proposal_url),
-                action: Some(Action::OpenSnsTokenSwap(payload)),
-            }))),
-        })
-        .map_err(|e| {
-            anyhow!(
-                "Cannot candid-serialize the open_sns_token_swap_proposal payload: {}",
-                e
-            )
-        })?;
-        let response = canister_client
-            .0
-            .execute_update("manage_neuron", serialized)
-            .await
-            .map_err(|e| anyhow!("Proposal creation failed: {e}"))?
-            .ok_or_else(|| anyhow!("submit_proposal replied nothing."))?;
-
-        decode_make_proposal_response(response)
-            .map_err(|e| anyhow!("Failed to decode response: {e}"))
-            .map(Some)
-    }
-    if let Some(proposal_id) = make_proposal(cmd, agent, proposer)
-        .await
-        .expect("Failed to propose to open SNS token swap")
-    {
-        println!("{proposal_id}");
-    }
 }
 
 /// Submit a proposal to add a new node provider record
@@ -6797,20 +5941,21 @@ struct GovernanceCanisterClient(NnsCanisterClient);
 /// A client for the root canister.
 struct RootCanisterClient(NnsCanisterClient);
 
-/// Build a new canister client.
-/// `nns_public_key_pem` is the key used for response verification. If None mainnet public key is used.
-fn make_canister_client(
-    nns_urls: Vec<Url>,
+fn is_mainnet(url: &Url) -> bool {
+    url.domain().map_or(false, |domain| {
+        IC_DOMAINS
+            .iter()
+            .any(|&ic_domain| domain.contains(ic_domain))
+    })
+}
+
+fn parse_nns_public_key(
+    nns_url: Url,
     verify_nns_responses: bool,
     nns_public_key_pem_file: Option<PathBuf>,
-    sender: Sender,
-) -> Agent {
+) -> Option<ThresholdSigPublicKey> {
     // If we talk to `ic0.app` we verify against mainnet root key by default.
-    if verify_nns_responses
-        || nns_urls[0]
-            .domain()
-            .map_or(false, |d| d.contains(IC_DOMAIN))
-    {
+    if verify_nns_responses || is_mainnet(&nns_url) {
         let nns_key = if let Some(path) = nns_public_key_pem_file {
             parse_threshold_sig_key(&path).expect("Failed to parse PEM file.")
         } else {
@@ -6819,9 +5964,31 @@ fn make_canister_client(
             parse_threshold_sig_key_from_der(&decoded_nns_mainnet_key)
                 .expect("Failed to decode mainnet public key.")
         };
-        Agent::new(nns_urls[0].clone(), sender).with_nns_public_key(nns_key)
+        Some(nns_key)
     } else {
-        Agent::new(nns_urls[0].clone(), sender)
+        None
+    }
+}
+
+/// Build a new canister client.
+/// `nns_public_key_pem` is the key used for response verification. If None mainnet public key is used.
+fn make_canister_client(
+    nns_urls: Vec<Url>,
+    verify_nns_responses: bool,
+    nns_public_key_pem_file: Option<PathBuf>,
+    sender: Sender,
+) -> Agent {
+    let nns_url = &nns_urls[0];
+    let agent = Agent::new(nns_url.clone(), sender);
+
+    if let Some(nns_public_key) = parse_nns_public_key(
+        nns_url.clone(),
+        verify_nns_responses,
+        nns_public_key_pem_file,
+    ) {
+        agent.with_nns_public_key(nns_public_key)
+    } else {
+        agent
     }
 }
 
@@ -6872,13 +6039,13 @@ impl GovernanceCanisterClient {
         title: String,
         summary: String,
     ) -> Result<ProposalId, String> {
-        let serialized = Encode!(&ManageNeuron {
+        let serialized = Encode!(&ManageNeuronRequest {
             neuron_id_or_subaccount: None,
-            command: Some(Command::MakeProposal(Box::new(Proposal {
+            command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(MakeProposalRequest {
                 title: Some(title),
                 summary,
                 url,
-                action: Some(Action::AddOrRemoveNodeProvider(payload)),
+                action: Some(ProposalActionRequest::AddOrRemoveNodeProvider(payload)),
             }))),
             id: Some((*self.0.proposal_author()).into()),
         })
@@ -6921,9 +6088,43 @@ impl GovernanceCanisterClient {
         .await
     }
 
+    async fn submit_proposal_action(
+        &self,
+        action: ProposalActionRequest,
+        url: String,
+        title: String,
+        summary: String,
+    ) -> Result<ProposalId, String> {
+        let serialized = Encode!(&ManageNeuronRequest {
+            neuron_id_or_subaccount: None,
+            command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
+                MakeProposalRequest {
+                    title: Some(title),
+                    summary,
+                    url,
+                    action: Some(action),
+                }
+            ))),
+            id: Some((*self.0.proposal_author()).into()),
+        })
+        .map_err(|e| {
+            format!(
+                "Cannot candid-serialize the submit_proposal_action payload: {}",
+                e
+            )
+        })?;
+        let response = self
+            .0
+            .execute_update("manage_neuron", serialized)
+            .await?
+            .ok_or_else(|| "submit_proposal replied nothing.".to_string())?;
+
+        decode_make_proposal_response(response)
+    }
+
     async fn submit_external_proposal(
         &self,
-        submit_proposal_command: &ManageNeuron,
+        submit_proposal_command: &ManageNeuronRequest,
         title: &str,
     ) -> Result<ProposalId, String> {
         let serialized = Encode!(submit_proposal_command).map_err(|e| {
@@ -7077,6 +6278,30 @@ impl RootCanisterClient {
             )
         })?
     }
+}
+
+fn make_registry_client(
+    nns_urls: Vec<Url>,
+    verify_nns_responses: bool,
+    nns_public_key_pem_file: Option<PathBuf>,
+) -> RegistryClientImpl {
+    let nns_public_key = parse_nns_public_key(
+        nns_urls[0].clone(),
+        verify_nns_responses,
+        nns_public_key_pem_file,
+    );
+    let data_provider: Arc<dyn RegistryDataProvider> = match nns_public_key {
+        Some(nns_public_key) => Arc::new(CertifiedNnsDataProvider::new(
+            tokio::runtime::Handle::current(),
+            nns_urls,
+            nns_public_key,
+        )),
+        None => Arc::new(NnsDataProvider::new(
+            tokio::runtime::Handle::current(),
+            nns_urls,
+        )),
+    };
+    RegistryClientImpl::new(data_provider, None)
 }
 
 fn print_proposal<T: Serialize + Debug, Command: ProposalMetadata + ProposalTitle>(

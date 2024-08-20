@@ -3,7 +3,6 @@ use std::collections::HashSet;
 use super::*;
 use crate::timestamp::TimeStamp;
 use crate::tokens::Tokens;
-use serde::{Deserialize, Serialize};
 use std::cmp;
 
 fn ts(n: u64) -> TimeStamp {
@@ -14,25 +13,10 @@ fn tokens(n: u64) -> Tokens {
     Tokens::from_e8s(n)
 }
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash, Clone, Default, PartialOrd, Ord)]
 struct Account(u64);
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-struct Key(u64, u64);
-
-impl From<(&Account, &Account)> for Key {
-    fn from((a, s): (&Account, &Account)) -> Self {
-        Self(a.0, s.0)
-    }
-}
-
-impl From<Key> for (Account, Account) {
-    fn from(key: Key) -> Self {
-        (Account(key.0), Account(key.1))
-    }
-}
-
-type TestAllowanceTable = AllowanceTable<Key, Account, Tokens>;
+type TestAllowanceTable = AllowanceTable<HeapAllowancesData<Account, Tokens>>;
 
 #[test]
 fn allowance_table_default() {
@@ -559,4 +543,79 @@ fn arrival_table_updated_correctly() {
             .approve(&Account(1), &Account(2), tokens(i), None, ts(i), None)
             .unwrap();
     }
+}
+
+#[test]
+fn expected_allowance_not_checked_against_expired() {
+    let mut table = TestAllowanceTable::default();
+
+    table
+        .approve(
+            &Account(1),
+            &Account(2),
+            tokens(5),
+            Some(ts(2)),
+            ts(1),
+            None,
+        )
+        .unwrap();
+
+    assert_eq!(
+        table
+            .approve(
+                &Account(1),
+                &Account(2),
+                tokens(100),
+                None,
+                ts(1),
+                Some(tokens(0))
+            )
+            .unwrap_err(),
+        ApproveError::AllowanceChanged {
+            current_allowance: tokens(5)
+        }
+    );
+
+    table
+        .approve(
+            &Account(1),
+            &Account(2),
+            tokens(100),
+            None,
+            ts(2),
+            Some(tokens(0)),
+        )
+        .unwrap();
+
+    assert_eq!(
+        table.allowance(&Account(1), &Account(2), ts(3)),
+        Allowance {
+            amount: tokens(100),
+            expires_at: None,
+            arrived_at: TimeStamp::from_nanos_since_unix_epoch(2),
+        }
+    );
+}
+
+#[test]
+fn expected_allowance_if_zero_no_approval() {
+    let mut table = TestAllowanceTable::default();
+
+    // If there were no approvals present, we used to always accept 0 approvals
+    // without checking the expected_allowance.
+    assert_eq!(
+        table
+            .approve(
+                &Account(1),
+                &Account(2),
+                tokens(0),
+                None,
+                ts(1),
+                Some(tokens(4))
+            )
+            .unwrap_err(),
+        ApproveError::AllowanceChanged {
+            current_allowance: tokens(0)
+        }
+    );
 }

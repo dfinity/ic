@@ -15,16 +15,15 @@ backoff = { workspace = true }
 bytes = { workspace = true }
 crossbeam-channel = { workspace = true }
 futures = { workspace = true }
-ic-artifact-manager = { path = "../../artifact_manager" }
+ic-artifact-manager = { path = "../artifact_manager" }
 ic-config = { path = "../../config" }
 ic-async-utils = { path = "../../async_utils" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
-ic-icos-sev = { path = "../../ic_os/sev" }
 ic-logger = { path = "../../monitoring/logger" }
-ic-protobuf = { path = "../../protobuf" }
 ic-metrics = { path = "../../monitoring/metrics" }
+ic-protobuf = { path = "../../protobuf" }
 ic-quic-transport = { path = "../quic_transport" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
@@ -41,9 +40,12 @@ tokio-util = { workspace = true }
 libp2p = { version = "0.53.1", features = ["full"]}
 
 [dev-dependencies]
+anyhow = { workspace = true }
+futures = { workspace = true }
 ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 mockall = { workspace = true }
+tower = { workspace = true }
 turmoil = { workspace = true }
 
 [[bin]]

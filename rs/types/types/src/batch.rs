@@ -18,30 +18,33 @@ pub use self::{
     xnet::XNetPayload,
 };
 use crate::{
-    consensus::ecdsa::QuadrupleId,
-    crypto::canister_threshold_sig::MasterEcdsaPublicKey,
-    messages::{Response, SignedIngress},
+    consensus::idkg::PreSigId,
+    crypto::canister_threshold_sig::MasterPublicKey,
+    messages::{CallbackId, Payload, SignedIngress},
     xnet::CertifiedStreamSlice,
     Height, Randomness, RegistryVersion, SubnetId, Time,
 };
 use ic_base_types::NodeId;
-use ic_btc_types_internal::BitcoinAdapterResponse;
+use ic_btc_replica_types::BitcoinAdapterResponse;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_ic00_types::EcdsaKeyId;
+use ic_management_canister_types::MasterPublicKeyId;
+use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryInto,
+    hash::Hash,
 };
-
-pub const ENABLE_QUERY_STATS: bool = false;
 
 /// The `Batch` provided to Message Routing for deterministic processing.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Batch {
     /// The sequence number attached to the batch.
     pub batch_number: Height,
+    /// The batch summary is always set by the consensus, see `deliver_batches()`.
+    /// The tests and the `PocketIC` might set it to `None`, i.e. "unknown".
+    pub batch_summary: Option<BatchSummary>,
     /// Whether the state obtained by executing this batch needs to be fully
     /// hashed to be eligible for StateSync.
     pub requires_full_state_hash: bool,
@@ -49,16 +52,16 @@ pub struct Batch {
     pub messages: BatchMessages,
     /// A source of randomness for processing the Batch.
     pub randomness: Randomness,
-    /// The ECDSA public keys of the subnet.
-    pub ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
-    /// The ECDSA quadruple Ids available to be matched with signature requests.
-    pub ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
+    /// The Master public keys of the subnet.
+    pub idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    /// The pre-signature Ids available to be matched with signature requests.
+    pub idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
     /// The version of the registry to be referenced when processing the batch.
     pub registry_version: RegistryVersion,
     /// A clock time to be used for processing messages.
     pub time: Time,
     /// Responses to subnet calls that require consensus' involvement.
-    pub consensus_responses: Vec<Response>,
+    pub consensus_responses: Vec<ConsensusResponse>,
     /// Information about block makers
     pub blockmaker_metrics: BlockmakerMetrics,
 }
@@ -109,6 +112,22 @@ pub struct BatchPayload {
     pub query_stats: Vec<u8>,
 }
 
+/// Batch properties collected form the last DKG summary block.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BatchSummary {
+    /// The next checkpoint height.
+    ///
+    /// In a case of a subnet recovery, the DSM will observe an instant
+    /// jump for the `batch_number` and `next_checkpoint_height` values.
+    /// The `next_checkpoint_height`, if set, should be always greater
+    /// than the `batch_number`.
+    pub next_checkpoint_height: Height,
+    /// The current checkpoint interval length.
+    ///
+    /// The DKG interval length is normally 499 rounds (199 for system subnets).
+    pub current_interval_length: Height,
+}
+
 /// Return ingress messages, xnet messages, and responses from the bitcoin adapter.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BatchMessages {
@@ -118,22 +137,28 @@ pub struct BatchMessages {
     pub query_stats: Option<QueryStatsPayload>,
 }
 
+/// Error type that can occur during an `BatchPayload::into_messages` call
+#[derive(Debug)]
+pub enum IntoMessagesError {
+    IngressPayloadError(IngressPayloadError),
+    QueryStatsPayloadError(ProxyDecodeError),
+}
+
 impl BatchPayload {
     /// Extract and return the set of ingress and xnet messages in a
     /// BatchPayload.
     /// Return error if deserialization of ingress payload fails.
     #[allow(clippy::result_large_err)]
-    pub fn into_messages(self) -> Result<BatchMessages, IngressPayloadError> {
+    pub fn into_messages(self) -> Result<BatchMessages, IntoMessagesError> {
         Ok(BatchMessages {
-            signed_ingress_msgs: self.ingress.try_into()?,
+            signed_ingress_msgs: self
+                .ingress
+                .try_into()
+                .map_err(IntoMessagesError::IngressPayloadError)?,
             certified_stream_slices: self.xnet.stream_slices,
             bitcoin_adapter_responses: self.self_validating.0,
-            query_stats: match ENABLE_QUERY_STATS {
-                true => QueryStatsPayload::deserialize(&self.query_stats)
-                    .ok()
-                    .flatten(),
-                false => None,
-            },
+            query_stats: QueryStatsPayload::deserialize(&self.query_stats)
+                .map_err(IntoMessagesError::QueryStatsPayloadError)?,
         })
     }
 
@@ -160,6 +185,55 @@ impl BlockmakerMetrics {
     }
 }
 
+/// Response to a subnet call that requires Consensus' involvement.
+///
+/// Only holds the payload and callback ID, Execution populates other fields
+/// (originator, respondent, refund) from the incoming request.
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct ConsensusResponse {
+    pub callback: CallbackId,
+    pub payload: Payload,
+}
+
+impl ConsensusResponse {
+    pub fn new(callback: CallbackId, payload: Payload) -> Self {
+        Self { callback, payload }
+    }
+}
+
+impl From<&ConsensusResponse> for pb::ConsensusResponse {
+    fn from(rep: &ConsensusResponse) -> Self {
+        let p = match &rep.payload {
+            Payload::Data(d) => pb::consensus_response::Payload::Data(d.clone()),
+            Payload::Reject(r) => pb::consensus_response::Payload::Reject(r.into()),
+        };
+        Self {
+            callback: rep.callback.get(),
+            payload: Some(p),
+        }
+    }
+}
+
+impl TryFrom<pb::ConsensusResponse> for ConsensusResponse {
+    type Error = ProxyDecodeError;
+
+    fn try_from(rep: pb::ConsensusResponse) -> Result<Self, Self::Error> {
+        let payload = match rep
+            .payload
+            .ok_or(ProxyDecodeError::MissingField("ConsensusResponse::payload"))?
+        {
+            pb::consensus_response::Payload::Data(d) => Payload::Data(d),
+            pb::consensus_response::Payload::Reject(r) => Payload::Reject(r.try_into()?),
+        };
+
+        Ok(Self {
+            callback: rep.callback.into(),
+            payload,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,7 +245,6 @@ mod tests {
     fn default_batch_payload_is_empty() {
         assert_eq!(IngressPayload::default().count_bytes(), 0);
         assert_eq!(SelfValidatingPayload::default().count_bytes(), 0);
-        assert_eq!(CanisterHttpPayload::default().count_bytes(), 0);
     }
 
     #[test]

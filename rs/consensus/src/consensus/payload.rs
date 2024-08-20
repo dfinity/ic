@@ -63,6 +63,7 @@ impl BatchPayloadSectionBuilder {
         proposal_context: &ProposalContext,
         max_size: NumBytes,
         past_payloads: &[(Height, Time, Payload)],
+        payload_priority: usize,
         metrics: &PayloadBuilderMetrics,
         logger: &ReplicaLogger,
     ) -> NumBytes {
@@ -162,6 +163,7 @@ impl BatchPayloadSectionBuilder {
                     proposal_context.validation_context,
                     &past_payloads,
                     max_size,
+                    payload_priority,
                 );
 
                 // As a safety measure, the payload is validated, before submitting it.
@@ -372,8 +374,8 @@ mod tests {
     use ic_interfaces::messaging::XNetPayloadValidationError;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::{mock_time, types::ids::node_test_id};
-    use ic_types::{batch::ValidationContext, RegistryVersion};
+    use ic_test_utilities_types::ids::node_test_id;
+    use ic_types::{batch::ValidationContext, time::UNIX_EPOCH, RegistryVersion};
 
     struct TestXNetPayloadBuilder {
         return_size: u64,
@@ -409,7 +411,7 @@ mod tests {
         let validation_context = ValidationContext {
             registry_version: RegistryVersion::new(1),
             certified_height: Height::new(0),
-            time: mock_time(),
+            time: UNIX_EPOCH,
         };
         let proposal_context = ProposalContext {
             proposer: node_test_id(0),
@@ -432,6 +434,7 @@ mod tests {
             &proposal_context,
             NumBytes::new(4 * 1024 * 1024),
             &[],
+            0,
             &metrics,
             &no_op_logger(),
         );
@@ -450,6 +453,7 @@ mod tests {
             &proposal_context,
             NumBytes::new(20_000),
             &[],
+            0,
             &metrics,
             &no_op_logger(),
         );
