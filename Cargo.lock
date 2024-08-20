@@ -5973,7 +5973,7 @@ dependencies = [
 [[package]]
 name = "ic-cbor"
 version = "2.6.0"
-source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
+source = "git+https://github.com/dfinity/response-verification#da70db93832f88ecc556ae082612aedec47d3816"
 dependencies = [
  "candid",
  "ic-certification 2.6.0 (git+https://github.com/dfinity/response-verification)",
@@ -6113,7 +6113,7 @@ dependencies = [
 [[package]]
 name = "ic-certificate-verification"
 version = "2.6.0"
-source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
+source = "git+https://github.com/dfinity/response-verification#da70db93832f88ecc556ae082612aedec47d3816"
 dependencies = [
  "cached 0.47.0",
  "candid",
@@ -6165,7 +6165,7 @@ dependencies = [
 [[package]]
 name = "ic-certification"
 version = "2.6.0"
-source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
+source = "git+https://github.com/dfinity/response-verification#da70db93832f88ecc556ae082612aedec47d3816"
 dependencies = [
  "hex",
  "sha2 0.10.8",
@@ -8086,7 +8086,7 @@ dependencies = [
 [[package]]
 name = "ic-http-certification"
 version = "2.6.0"
-source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
+source = "git+https://github.com/dfinity/response-verification#da70db93832f88ecc556ae082612aedec47d3816"
 dependencies = [
  "candid",
  "http 0.2.12",
@@ -10986,7 +10986,7 @@ dependencies = [
 [[package]]
 name = "ic-representation-independent-hash"
 version = "2.6.0"
-source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
+source = "git+https://github.com/dfinity/response-verification#da70db93832f88ecc556ae082612aedec47d3816"
 dependencies = [
  "leb128",
  "sha2 0.10.8",
@@ -11019,7 +11019,7 @@ dependencies = [
 [[package]]
 name = "ic-response-verification"
 version = "2.6.0"
-source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
+source = "git+https://github.com/dfinity/response-verification#da70db93832f88ecc556ae082612aedec47d3816"
 dependencies = [
  "base64 0.21.5",
  "candid",
