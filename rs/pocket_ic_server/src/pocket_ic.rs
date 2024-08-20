@@ -21,8 +21,9 @@ use ic_config::{
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_public::{
     metrics::HttpHandlerMetrics, CallServiceV2, CallServiceV3, CanisterReadStateServiceBuilder,
-    IngressValidatorBuilder, QueryServiceBuilder,
+    IngressValidatorBuilder, QueryServiceBuilder, SubnetReadStateServiceBuilder,
 };
+use ic_https_outcalls_adapter::CanisterHttp;
 use ic_https_outcalls_adapter_client::CanisterHttpAdapterClientImpl;
 use ic_https_outcalls_service::canister_http_service_server::CanisterHttpService;
 use ic_https_outcalls_service::canister_http_service_server::CanisterHttpServiceServer;
@@ -31,6 +32,7 @@ use ic_https_outcalls_service::CanisterHttpSendResponse;
 use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_interfaces_state_manager::StateReader;
+use ic_logger::ReplicaLogger;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId,
     Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs,
@@ -73,7 +75,7 @@ use std::hash::Hash;
 use std::str::FromStr;
 use std::{
     cmp::max,
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     fs::File,
     io::{BufReader, Write},
     path::PathBuf,
@@ -81,6 +83,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 use tempfile::TempDir;
+use tokio::sync::Mutex as TokioMutex;
 use tokio::{runtime::Runtime, sync::mpsc};
 use tonic::transport::{Channel, Server};
 use tonic::transport::{Endpoint, Uri};
@@ -145,9 +148,12 @@ struct SubnetConfigInternal {
     pub alloc_range: Option<CanisterIdRange>,
 }
 
+pub(crate) type CanisterHttpAdapters = Arc<TokioMutex<HashMap<SubnetId, CanisterHttp>>>;
+
 pub struct PocketIc {
     state_dir: Option<PathBuf>,
     subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
+    canister_http_adapters: CanisterHttpAdapters,
     routing_table: RoutingTable,
     /// Created on initialization and updated if a new subnet is created.
     topology: TopologyInternal,
@@ -203,6 +209,10 @@ impl Drop for PocketIc {
 }
 
 impl PocketIc {
+    pub(crate) fn canister_http_adapters(&self) -> CanisterHttpAdapters {
+        self.canister_http_adapters.clone()
+    }
+
     pub(crate) fn topology(&self) -> Topology {
         let mut topology = Topology(BTreeMap::new());
         let subnets = self.subnets.read().unwrap();
@@ -538,9 +548,24 @@ impl PocketIc {
         )
         .0;
 
+        let canister_http_adapters = Arc::new(TokioMutex::new(
+            subnets
+                .read()
+                .unwrap()
+                .iter()
+                .map(|(subnet_id, sm)| {
+                    (
+                        *subnet_id,
+                        new_canister_http_adapter(sm.replica_logger.clone(), &sm.metrics_registry),
+                    )
+                })
+                .collect(),
+        ));
+
         Self {
             state_dir,
             subnets,
+            canister_http_adapters,
             routing_table,
             topology,
             randomness: StdRng::seed_from_u64(42),
@@ -1566,6 +1591,7 @@ impl Operation for CallRequest {
                 let ingress_filter = subnet.ingress_filter.clone();
 
                 let ingress_validator = IngressValidatorBuilder::builder(
+                    subnet.replica_logger.clone(),
                     node.node_id,
                     subnet.get_subnet_id(),
                     subnet.registry_client.clone(),
@@ -1702,6 +1728,7 @@ impl Operation for QueryRequest {
                 subnet.certify_latest_state();
                 let query_handler = subnet.query_handler.clone();
                 let svc = QueryServiceBuilder::builder(
+                    subnet.replica_logger.clone(),
                     node.node_id,
                     Arc::new(PocketNodeSigner(node.signing_key.clone())),
                     subnet.registry_client.clone(),
@@ -1750,12 +1777,12 @@ impl Operation for QueryRequest {
 }
 
 #[derive(Debug)]
-pub struct ReadStateRequest {
+pub struct CanisterReadStateRequest {
     pub effective_canister_id: CanisterId,
     pub bytes: Bytes,
 }
 
-impl Operation for ReadStateRequest {
+impl Operation for CanisterReadStateRequest {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         match route(
             pic,
@@ -1767,6 +1794,7 @@ impl Operation for ReadStateRequest {
                 let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
                 subnet.certify_latest_state();
                 let svc = CanisterReadStateServiceBuilder::builder(
+                    subnet.replica_logger.clone(),
                     subnet.state_manager.clone(),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
@@ -1800,9 +1828,57 @@ impl Operation for ReadStateRequest {
         self.bytes.hash(&mut hasher);
         let hash = Digest(hasher.finish());
         OpId(format!(
-            "read_state({},{})",
+            "canister_read_state({},{})",
             self.effective_canister_id, hash,
         ))
+    }
+}
+
+#[derive(Debug)]
+pub struct SubnetReadStateRequest {
+    pub subnet_id: SubnetId,
+    pub bytes: Bytes,
+}
+
+impl Operation for SubnetReadStateRequest {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        match route(pic, EffectivePrincipal::SubnetId(self.subnet_id), false) {
+            Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
+            Ok(subnet) => {
+                let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
+                subnet.certify_latest_state();
+                let svc = SubnetReadStateServiceBuilder::builder(
+                    Arc::new(RwLock::new(delegation)),
+                    subnet.state_manager.clone(),
+                )
+                .build_service();
+
+                let request = axum::http::Request::builder()
+                    .method(Method::POST)
+                    .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
+                    .uri(format!(
+                        "/api/v2/subnet/{}/read_state",
+                        PrincipalId(self.subnet_id.get().into())
+                    ))
+                    .body(self.bytes.clone().into())
+                    .unwrap();
+                let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
+
+                let fut: ApiResponse = Box::pin(into_api_response(resp));
+                OpOut::RawResponse(fut.shared())
+            }
+        }
+    }
+
+    fn retry_if_busy(&self) -> bool {
+        true
+    }
+
+    fn id(&self) -> OpId {
+        let mut hasher = Sha256::new();
+        self.bytes.hash(&mut hasher);
+        let hash = Digest(hasher.finish());
+        OpId(format!("subnet_read_state({},{})", self.subnet_id, hash,))
     }
 }
 
@@ -2260,6 +2336,11 @@ fn route(
                     for subnet in pic.subnets.read().unwrap().values() {
                         subnet.execute_round();
                     }
+                    // We update the canister http adapters.
+                    pic.canister_http_adapters.blocking_lock().insert(
+                        sm.get_subnet_id(),
+                        new_canister_http_adapter(sm.replica_logger.clone(), &sm.metrics_registry),
+                    );
                     Ok(sm)
                 } else {
                     // If the request is not an update call to create a canister using the provisional API,
@@ -2325,6 +2406,46 @@ fn systemtime_to_unix_epoch_nanos(st: SystemTime) -> u64 {
         .as_nanos()
         .try_into()
         .unwrap()
+}
+
+fn new_canister_http_adapter(
+    log: ReplicaLogger,
+    metrics_registry: &MetricsRegistry,
+) -> CanisterHttp {
+    use hyper_legacy::{client::connect::HttpConnector, Client};
+    use hyper_rustls::HttpsConnectorBuilder;
+    use hyper_socks2::SocksConnector;
+
+    // Socks client setup
+    // We don't really use the Socks client in PocketIC as we set `socks_proxy_allowed: false` in the request,
+    // but we still have to provide one when constructing the production `CanisterHttp` object
+    // and thus we use a reserved (and invalid) proxy IP address.
+    let mut http_connector = HttpConnector::new();
+    http_connector.enforce_http(false);
+    http_connector.set_connect_timeout(Some(Duration::from_secs(2)));
+    let proxy_connector = SocksConnector {
+        proxy_addr: "http://240.0.0.0:8080"
+            .parse::<tonic::transport::Uri>()
+            .expect("Failed to parse socks url."),
+        auth: None,
+        connector: http_connector.clone(),
+    };
+    let https_connector = HttpsConnectorBuilder::new()
+        .with_native_roots()
+        .https_only()
+        .enable_http1()
+        .wrap_connector(proxy_connector);
+    let socks_client = Client::builder().build::<_, hyper_legacy::Body>(https_connector);
+
+    // Https client setup.
+    let builder = HttpsConnectorBuilder::new()
+        .with_native_roots()
+        .https_or_http()
+        .enable_http1();
+    let https_client =
+        Client::builder().build::<_, hyper_legacy::Body>(builder.wrap_connector(http_connector));
+
+    CanisterHttp::new(https_client, socks_client, log, metrics_registry)
 }
 
 #[cfg(test)]
