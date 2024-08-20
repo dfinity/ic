@@ -37,7 +37,7 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
     // Downgrade back to the mainnet ledger version
     upgrade_canister(
         &state_machine,
-        (canister_id_str, canister_name),
+        (CK_BTC_LEDGER_CANISTER_ID, CK_BTC_LEDGER_CANISTER_NAME),
         mainnet_ledger_wasm,
     );
 }
