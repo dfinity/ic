@@ -39,8 +39,9 @@ impl Display for GitCommitHash {
     }
 }
 
+//TODO XC-173: remove public field. Use a generic Hash struct and unify with GitCommitHash.
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub struct CompressedWasmHash(String);
+pub struct CompressedWasmHash(pub String);
 
 impl Display for CompressedWasmHash {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

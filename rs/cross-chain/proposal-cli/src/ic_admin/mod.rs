@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::git::CompressedWasmHash;
 use crate::proposal::ProposalTemplate;
 use askama::Template;
@@ -34,7 +37,7 @@ pub struct IcAdminArgs {
 
     #[clap(long)]
     /// The id of the neuron on behalf of which the proposal will be submitted.
-    proposer: Option<u64>,
+    proposer: u64,
 
     /// The title of the proposal.
     #[clap(long)]
