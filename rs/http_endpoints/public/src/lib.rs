@@ -347,7 +347,7 @@ pub fn start_server(
     );
 
     let call_router =
-        call::CallServiceV2::new_router(call_handler.clone(), ingress_watcher_handle.clone());
+        call::CallServiceV2::new_router(call_handler.clone(), Some(ingress_watcher_handle.clone()));
 
     let call_v3_router = call::CallServiceV3::new_router(
         call_handler,
