@@ -96,7 +96,7 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     }
 }
 
-#[cfg(not(feature = "u256-tokens"))]
+#[cfg(feature = "u256-tokens")]
 #[test]
 fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     // SNS canisters
