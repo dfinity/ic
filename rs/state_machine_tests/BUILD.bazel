@@ -12,7 +12,6 @@ DEPENDENCIES = [
     "//rs/constants",
     "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/ed25519",
-    "//rs/crypto/extended_bip32",
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/test_utils/ni-dkg",
     "//rs/crypto/tree_hash",
@@ -151,7 +150,6 @@ rust_ic_test(
     crate = ":state_machine_tests",
     deps = [
         # Keep sorted.
-        "//rs/crypto/utils/canister_threshold_sig",
         "@crate_index//:proptest",
     ],
 )

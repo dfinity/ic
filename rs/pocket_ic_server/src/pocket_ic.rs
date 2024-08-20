@@ -358,7 +358,16 @@ impl PocketIc {
                         spec.get_dts_flag(),
                     )
                 });
-                sys.chain(app)
+                let verified_app = subnet_configs.verified_application.iter().map(|spec| {
+                    (
+                        SubnetKind::VerifiedApplication,
+                        spec.get_state_path(),
+                        spec.get_subnet_id(),
+                        spec.get_instruction_config(),
+                        spec.get_dts_flag(),
+                    )
+                });
+                sys.chain(app).chain(verified_app)
             };
 
             let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
@@ -566,6 +575,11 @@ impl PocketIc {
         if let Some(subnet) = random_app_subnet {
             return subnet;
         }
+        let random_verified_app_subnet =
+            self.get_random_subnet_of_type(rest::SubnetKind::VerifiedApplication);
+        if let Some(subnet) = random_verified_app_subnet {
+            return subnet;
+        }
         let random_system_subnet = self.get_random_subnet_of_type(rest::SubnetKind::System);
         if let Some(subnet) = random_system_subnet {
             return subnet;
@@ -672,6 +686,7 @@ fn conv_type(inp: rest::SubnetKind) -> SubnetType {
     match inp {
         Application | Fiduciary | SNS => SubnetType::Application,
         Bitcoin | II | NNS | System => SubnetType::System,
+        VerifiedApplication => SubnetType::VerifiedApplication,
     }
 }
 
@@ -679,6 +694,7 @@ fn subnet_size(subnet: SubnetKind) -> u64 {
     use rest::SubnetKind::*;
     match subnet {
         Application => 13,
+        VerifiedApplication => 13,
         Fiduciary => 28,
         SNS => 34,
         Bitcoin => 13,
@@ -698,7 +714,7 @@ fn from_range(range: &CanisterIdRange) -> rest::CanisterIdRange {
 fn subnet_kind_canister_range(subnet_kind: SubnetKind) -> Option<Vec<CanisterIdRange>> {
     use rest::SubnetKind::*;
     match subnet_kind {
-        Application | System => None,
+        Application | VerifiedApplication | System => None,
         NNS => Some(vec![
             gen_range("rwlgt-iiaaa-aaaaa-aaaaa-cai", "renrk-eyaaa-aaaaa-aaada-cai"),
             gen_range("qoctq-giaaa-aaaaa-aaaea-cai", "n5n4y-3aaaa-aaaaa-p777q-cai"),
