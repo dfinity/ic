@@ -1,11 +1,11 @@
-name: EVM RPC CI
+name: EVM RPC
 
 on:
   pull_request:
 
 jobs:
   build-evm-rpc:
-    name: Build (EVM RPC fork)
+    name: Build
     runs-on:
       group: ubuntu-latest
     steps:
