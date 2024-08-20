@@ -41,6 +41,14 @@ fn ledger_wasm() -> Vec<u8> {
     )
 }
 
+fn ledger_wasm_upgradetomemorymanager() -> Vec<u8> {
+    ic_test_utilities_load_wasm::load_wasm(
+        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
+        "ledger-canister-upgrade-to-memory-manager",
+        &[],
+    )
+}
+
 fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerCanisterInitPayload {
     let initial_values = args
         .initial_balances
@@ -969,10 +977,11 @@ fn test_block_transformation() {
 }
 
 #[test]
-fn test_approval_upgrade() {
+fn test_upgrade_serialization() {
     let ledger_wasm_mainnet =
         std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
     let ledger_wasm_current = ledger_wasm();
+    let ledger_wasm_upgradetomemorymanager = ledger_wasm_upgradetomemorymanager();
 
     let p1 = PrincipalId::new_user_test_id(1);
     let p2 = PrincipalId::new_user_test_id(2);
@@ -1025,6 +1034,10 @@ fn test_approval_upgrade() {
 
     // Test if the old serialized approvals are correctly deserialized
     test_upgrade(ledger_wasm_current.clone());
+    // Test serializing to the memory manager
+    test_upgrade(ledger_wasm_upgradetomemorymanager.clone());
+    // Test deserializing from and serializing to the memory manager
+    test_upgrade(ledger_wasm_upgradetomemorymanager);
     // Test if new approvals serialization also works
     test_upgrade(ledger_wasm_current);
     // Test if downgrade works
@@ -1395,7 +1408,7 @@ fn test_icrc21_standard() {
 }
 
 mod metrics {
-    use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
+    use crate::{encode_init_args, encode_upgrade_args, ledger_wasm, ledger_wasm_upgradetomemorymanager};
     use ic_icrc1_ledger_sm_tests::metrics::LedgerSuiteType;
 
     #[test]
@@ -1427,7 +1440,7 @@ mod metrics {
     fn should_set_ledger_upgrade_instructions_consumed_metric() {
         ic_icrc1_ledger_sm_tests::metrics::assert_ledger_upgrade_instructions_consumed_metric_set(
             ledger_wasm(),
-            None,
+            Some(ledger_wasm_upgradetomemorymanager()),
             encode_init_args,
             encode_upgrade_args,
         );

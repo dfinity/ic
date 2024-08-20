@@ -27,6 +27,7 @@ ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
 ic-metrics-encoder = "1"
+ic-stable-structures = { workspace = true }
 icp-ledger = { path = "../" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 intmap = { version = "1.1.0", features = ["serde"] }
@@ -46,3 +47,4 @@ ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 
 [features]
 notify-method = []
+upgrade-to-memory-manager = []

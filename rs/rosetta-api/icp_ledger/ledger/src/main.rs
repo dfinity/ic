@@ -25,6 +25,9 @@ use ic_ledger_core::{
     timestamp::TimeStamp,
     tokens::{Tokens, DECIMAL_PLACES},
 };
+use ic_stable_structures::reader::Reader;
+#[cfg(feature = "upgrade-to-memory-manager")]
+use ic_stable_structures::writer::{BufferedWriter, Writer};
 use icp_ledger::{
     max_blocks_per_request, protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob,
     AccountIdentifier, ArchiveInfo, ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives,
@@ -50,7 +53,7 @@ use icrc_ledger_types::{
     icrc1::transfer::TransferArg,
     icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
 };
-use ledger_canister::{Ledger, LEDGER, MAX_MESSAGE_SIZE_BYTES};
+use ledger_canister::{Ledger, LEDGER, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY};
 use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
 use on_wire::IntoWire;
@@ -749,7 +752,39 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
     let start = dfn_core::api::performance_counter(0);
     let mut stable_reader = stable::StableReader::new();
     let mut ledger = LEDGER.write().unwrap();
-    *ledger = ciborium::de::from_reader(&mut stable_reader).expect("Decoding stable memory failed");
+    let mut pre_upgrade_instructions_consumed = 0;
+    match ciborium::de::from_reader(&mut stable_reader) {
+        Ok(state) => {
+            *ledger = state;
+            let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
+            pre_upgrade_instructions_consumed =
+                match stable_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
+                    Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
+                    Err(_) => {
+                        // If upgrading from a version that didn't write the instructions counter to stable memory
+                        0u64
+                    }
+                };
+        }
+        Err(_) => {
+            *ledger = UPGRADES_MEMORY.with_borrow(|bs| {
+                let mut reader = Reader::new(bs, 0);
+                let ledger_state = ciborium::de::from_reader(&mut reader).expect(
+                    "Failed to read the Ledger state from memory manager managed stable structures",
+                );
+                let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
+                pre_upgrade_instructions_consumed =
+                    match reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
+                        Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
+                        Err(_) => {
+                            // If upgrading from a version that didn't write the instructions counter to stable memory
+                            0u64
+                        }
+                    };
+                ledger_state
+            });
+        }
+    };
 
     if let Some(args) = args {
         match args {
@@ -768,15 +803,6 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
             .map(|h| h.into_bytes())
             .unwrap_or([0u8; 32]),
     );
-    let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
-    let pre_upgrade_instructions_consumed =
-        match stable_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
-            Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
-            Err(_) => {
-                // If upgrading from a version that didn't write the instructions counter to stable memory
-                0u64
-            }
-        };
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
     let end = dfn_core::api::performance_counter(0);
@@ -790,6 +816,7 @@ fn post_upgrade_() {
     over_init(|CandidOne(args)| post_upgrade(args));
 }
 
+#[cfg(not(feature = "upgrade-to-memory-manager"))]
 #[export_name = "canister_pre_upgrade"]
 fn pre_upgrade() {
     let start = dfn_core::api::performance_counter(0);
@@ -810,6 +837,32 @@ fn pre_upgrade() {
     stable_writer
         .write_all(&counter_bytes)
         .expect("failed to write instructions consumed to stable memory");
+}
+
+#[cfg(feature = "upgrade-to-memory-manager")]
+#[export_name = "canister_pre_upgrade"]
+fn pre_upgrade() {
+    let start = dfn_core::api::performance_counter(0);
+    setup::START.call_once(|| {
+        printer::hook();
+    });
+
+    let ledger = LEDGER
+        .read()
+        // This should never happen, but it's better to be safe than sorry
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    UPGRADES_MEMORY.with_borrow_mut(|bs| {
+        let writer = Writer::new(bs, 0);
+        let mut buffered_writer = BufferedWriter::new(8388608, writer);
+        ciborium::ser::into_writer(&*ledger, &mut buffered_writer)
+            .expect("Failed to write the Ledger state in stable memory");
+        let end = dfn_core::api::performance_counter(0);
+        let instructions_consumed = end - start;
+        let counter_bytes: [u8; 8] = instructions_consumed.to_le_bytes();
+        buffered_writer
+            .write_all(&counter_bytes)
+            .expect("failed to write instructions consumed to UPGRADES_MEMORY");
+    });
 }
 
 struct Access;
