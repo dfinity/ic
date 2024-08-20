@@ -10,5 +10,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      - name: Build Rust package
-        run: cargo +nightly build --package ic-cketh-minter
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --package ic-cketh-minter
