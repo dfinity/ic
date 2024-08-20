@@ -135,7 +135,7 @@ jobs:
   fi-tests-nightly:
     name: Bazel Test FI Nightly
     <<: *dind-large-setup
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - <<: *checkout
       - <<: *before-script
