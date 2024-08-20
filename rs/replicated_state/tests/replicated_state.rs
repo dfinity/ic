@@ -1050,7 +1050,7 @@ proptest! {
 
     #[test]
     fn iter_with_stale_entries_terminates(
-        (mut replicated_state, _, total_requests) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, Some(8)),
+        (mut replicated_state, _, total_requests) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)),
         batch_time_seconds in any::<u32>(),
     ) {
         const NANOS_PER_SEC: u64 = 1_000_000_000;
@@ -1064,13 +1064,13 @@ proptest! {
         let output_messages = replicated_state.output_into_iter().count();
 
         // All messages have either been timed out or output.
-        assert_eq!(total_requests, timed_out_messages + output_messages);
-        assert_eq!(replicated_state.output_message_count(), 0);
+        prop_assert_eq!(total_requests, timed_out_messages + output_messages);
+        prop_assert_eq!(replicated_state.output_message_count(), 0);
     }
 
     #[test]
     fn peek_next_loop_with_stale_entries_terminates(
-        (mut replicated_state, _, total_requests) in arb_replicated_state_with_queues(SUBNET_ID, 20, 20, Some(8)),
+        (mut replicated_state, _, total_requests) in arb_replicated_state_with_output_queues(SUBNET_ID, 10, 10, Some(5)),
         batch_time in any::<u32>(),
     ) {
         const NANOS_PER_SEC: u64 = 1_000_000_000;
@@ -1082,12 +1082,12 @@ proptest! {
         let mut output_messages = 0;
         while let Some(msg) = output_iter.peek() {
             output_messages += 1;
-            assert_eq!(Some(msg.clone()), output_iter.next());
+            prop_assert_eq!(Some(msg.clone()), output_iter.next());
         }
         drop(output_iter);
 
         // All messages have either been timed out or output.
-        assert_eq!(total_requests, timed_out_messages + output_messages);
-        assert_eq!(replicated_state.output_message_count(), 0);
+        prop_assert_eq!(total_requests, timed_out_messages + output_messages);
+        prop_assert_eq!(replicated_state.output_message_count(), 0);
     }
 }
