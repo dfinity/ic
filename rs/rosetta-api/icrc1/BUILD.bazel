@@ -114,6 +114,7 @@ rust_test(
             "tests/golden_state_upgrade_downgrade.rs",
         ],
         crate_features = features,
+        crate_root = "tests/golden_state_upgrade_downgrade.rs",
         data = [
             "//rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm",
             "@mainnet_ckbtc_ic-icrc1-ledger//file",
