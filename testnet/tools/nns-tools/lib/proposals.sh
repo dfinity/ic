@@ -86,7 +86,8 @@ generate_nns_upgrade_proposal_text() {
         ARGS_HASH=$(sha_256 "$FILE")
     fi
 
-    OUTPUT=$(cat <<++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    OUTPUT=$(
+        cat <<++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # Upgrade the $CAPITALIZED_CANISTER_NAME Canister to $SHORT_NEXT_COMMIT
 
 __Proposer__: ${PROPOSER}\\
@@ -105,7 +106,8 @@ TODO TO BE FILLED OUT BY THE PROPOSER
 \`\`\`
 \$ git log --format="%C(auto) %h %s" $LAST_COMMIT..$NEXT_COMMIT --  $RELATIVE_CODE_LOCATION
 $(git log --format="%C(auto) %h %s" "$LAST_COMMIT".."$NEXT_COMMIT" -- $CANISTER_CODE_LOCATION)
-\`\`\`$(if [ ! -z "$CANDID_ARGS" ]; then echo "
+\`\`\`$(if [ ! -z "$CANDID_ARGS" ]; then
+            echo "
 
 
 ## Upgrade Arguments
@@ -144,7 +146,8 @@ git checkout $NEXT_COMMIT
 sha256sum ./artifacts/canisters/$(_canister_download_name_for_nns_canister_type "$CANISTER_NAME").wasm.gz
 \`\`\`
 
-This should match \`wasm_module\` field of this proposal.$(if [ ! -z "$CANDID_ARGS" ]; then echo "
+This should match \`wasm_module\` field of this proposal.$(if [ ! -z "$CANDID_ARGS" ]; then
+            echo "
 
 
 ## Upgrade Arguments Verification
@@ -159,9 +162,9 @@ didc encode '$CANDID_ARGS' | sha256sum
 
 This should match the \`arg_hex\` field of this proposal.
 "
-    fi)
+        fi)
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-          )
+    )
 
     if [ -z "$OUTPUT_FILE" ]; then
         echo "$OUTPUT"
