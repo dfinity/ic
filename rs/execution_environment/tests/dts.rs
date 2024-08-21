@@ -411,9 +411,7 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
     env.tick();
 
     // Send a normal ingress message while the execution is paused.
-    let msg_id = env.send_ingress(PrincipalId::new_anonymous(), canister_id, "read", vec![]);
-
-    let err = env.await_ingress(msg_id, 100).unwrap_err();
+    let err = env.send_ingress_safe(PrincipalId::new_anonymous(), canister_id, "read", vec![]).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
     assert_eq!(
         err.description(),
@@ -467,9 +465,7 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
     env.tick();
 
     // Send a normal ingress message while the execution is paused.
-    let msg_id = env.send_ingress(PrincipalId::new_anonymous(), canister_id, "read", vec![]);
-
-    let err = env.await_ingress(msg_id, 1).unwrap_err();
+    let err = env.send_ingress_safe(PrincipalId::new_anonymous(), canister_id, "read", vec![]).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
     assert_eq!(
         err.description(),
