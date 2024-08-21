@@ -639,10 +639,7 @@ impl RankMap {
     /// block proposal.
     fn add(&mut self, proposal: &BlockProposal) {
         let signed_metadata = BlockMetadata::signed_from_proposal(proposal, &self.config);
-        self.map
-            .entry(signed_metadata.height())
-            .or_default()
-            .insert(proposal.rank(), signed_metadata);
+        self.add_from_parts(proposal.rank(), signed_metadata);
     }
 
     fn add_from_parts(&mut self, rank: Rank, signed_metadata: BasicSigned<BlockMetadata>) {
@@ -656,12 +653,12 @@ impl RankMap {
         self.map.get_mut(&height).and_then(|map| map.remove(&rank));
     }
 
-    fn get(&self, height: Height, rank: Rank) -> Option<BasicSigned<BlockMetadata>> {
-        self.map.get(&height)?.get(&rank).cloned()
+    fn get(&self, height: Height, rank: Rank) -> Option<&BasicSigned<BlockMetadata>> {
+        self.map.get(&height)?.get(&rank)
     }
 
     fn get_lowest_rank(&self, height: Height) -> Option<Rank> {
-        self.map.get(&height)?.first_key_value().map(|(r, _)| *r)
+        self.map.get(&height)?.keys().next().copied()
     }
 }
 
@@ -1055,8 +1052,9 @@ impl Validator {
             // Disqualify rank if equivocation was found. If there already
             // exists a validated block of the same rank as the current
             // proposal, we must generate an equivocation proof.
-            if let Some(existing_metadata) =
-                valid_qualified_ranks.get(proposal.height(), proposal.rank())
+            if let Some(existing_metadata) = valid_qualified_ranks
+                .get(proposal.height(), proposal.rank())
+                .cloned()
             {
                 // Ensure the proposal has a different hash from the validated
                 // block of same rank. Then we can construct the proof.
@@ -3669,7 +3667,7 @@ pub mod test {
                     ConsensusMessage::BlockProposal(_)
                 )]
             );
-            pool.remove_unvalidated(block.clone());
+            pool.apply_changes(changeset);
 
             let mut second_block = block.clone();
             second_block.content.as_mut().context.time += Duration::from_nanos(1);
