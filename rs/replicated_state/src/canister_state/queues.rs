@@ -181,7 +181,7 @@ pub struct NewCanisterQueues {
 ///    (e.g. in order to efficiently implement per destination limits).
 #[derive(Debug)]
 pub struct CanisterOutputQueuesIterator<'a> {
-    /// FilterValue queue of non-empty output queues. The next message to be popped
+    /// Priority queue of non-empty output queues. The next message to be popped
     /// / peeked is the one at the head of the first queue.
     queues: VecDeque<(&'a CanisterId, &'a mut OutputQueue)>,
 
