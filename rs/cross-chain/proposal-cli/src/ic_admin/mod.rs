@@ -76,7 +76,9 @@ pub struct ProposalFiles {
 }
 
 #[derive(Template)]
-#[template(path = "submit_with_ic_admin.sh", escape = "none")]
+#[template(path = "submit_with_ic_admin.shx", escape = "none")]
+// The template uses the extension ".shx" to avoid the automatic linting done by "shfmt" on all ".sh" files.
+// This is necessary because the template contains not-yet-valid shell code, that will only be valid after the template is rendered.
 pub struct IcAdminTemplate {
     pub args: IcAdminArgs,
 
