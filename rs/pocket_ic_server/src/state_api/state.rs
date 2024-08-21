@@ -9,14 +9,11 @@ use crate::state_api::canister_id::{self, DomainResolver, ResolvesDomain};
 use crate::{InstanceId, OpId, Operation};
 use axum::{
     extract::{Request as AxumRequest, State},
-    middleware::Next,
     response::{IntoResponse, Response},
-    Extension,
 };
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
 use base64;
-use candid::Principal;
 use fqdn::{fqdn, FQDN};
 use futures::future::Shared;
 use http::{
@@ -409,11 +406,6 @@ const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister
 const MAX_REQUEST_BODY_SIZE: usize = 10 * 1_048_576;
 const MINUTE: Duration = Duration::from_secs(60);
 
-#[derive(Clone)]
-struct RequestCtx {
-    pub verify: bool,
-}
-
 fn layer(methods: &[Method]) -> CorsLayer {
     CorsLayer::new()
         .allow_origin(Any)
@@ -512,15 +504,24 @@ impl HandlerState {
 // Main HTTP->IC request handler
 async fn handler(
     State(state): State<Arc<HandlerState>>,
-    canister_id: Option<Extension<Principal>>,
     host_canister_id: Option<canister_id::HostHeader>,
     query_param_canister_id: Option<canister_id::QueryParam>,
     referer_host_canister_id: Option<canister_id::RefererHeaderHost>,
     referer_query_param_canister_id: Option<canister_id::RefererHeaderQueryParam>,
-    Extension(ctx): Extension<Arc<RequestCtx>>,
     request: AxumRequest,
 ) -> Result<Response, ErrorCause> {
-    let canister_id = canister_id.map(|v| v.0);
+    // Extract the authority
+    let Some(authority) = extract_authority(&request) else {
+        return Err(ErrorCause::NoAuthority);
+    };
+
+    // Resolve the domain
+    let lookup = state
+        .resolver
+        .resolve(&authority)
+        .ok_or(ErrorCause::UnknownDomain)?;
+
+    let canister_id = lookup.canister_id;
     let host_canister_id = host_canister_id.map(|v| v.0);
     let query_param_canister_id = query_param_canister_id.map(|v| v.0);
     let referer_host_canister_id = referer_host_canister_id.map(|v| v.0);
@@ -557,7 +558,7 @@ async fn handler(
         // Execute the request
         let mut req = state.client.request(args);
         // Skip verification if it's disabled globally or if it is a "raw" request.
-        req.unsafe_set_skip_verification(!ctx.verify);
+        req.unsafe_set_skip_verification(!lookup.verify);
         req.send().await
     };
 
@@ -583,45 +584,6 @@ fn extract_authority(request: &AxumRequest) -> Option<FQDN> {
                 .and_then(|x| x.split(':').next())
         })
         .and_then(|x| FQDN::from_str(x).ok())
-}
-
-async fn validate_middleware(
-    State(resolver): State<Arc<dyn ResolvesDomain>>,
-    mut request: AxumRequest,
-    next: Next,
-) -> Result<impl IntoResponse, ErrorCause> {
-    // Extract the authority
-    let Some(authority) = extract_authority(&request) else {
-        return Err(ErrorCause::NoAuthority);
-    };
-
-    // Resolve the domain
-    let lookup = resolver
-        .resolve(&authority)
-        .ok_or(ErrorCause::UnknownDomain)?;
-
-    // Inject canister_id separately if it was resolved
-    if let Some(v) = lookup.canister_id {
-        request.extensions_mut().insert(v);
-    }
-
-    // Inject request context
-    // TODO remove Arc?
-    let ctx = Arc::new(RequestCtx {
-        verify: lookup.verify,
-    });
-    request.extensions_mut().insert(ctx.clone());
-
-    // Execute the request
-    let mut response = next.run(request).await;
-
-    // Inject the same into the response
-    response.extensions_mut().insert(ctx);
-    if let Some(v) = lookup.canister_id {
-        response.extensions_mut().insert(v);
-    }
-
-    Ok(response)
 }
 
 // END ADAPTED from ic-gateway
@@ -709,12 +671,21 @@ impl ApiState {
         self.stop_progress(instance_id).await;
         let instances = self.instances.read().await;
         let mut canister_http_adapters = self.canister_http_adapters.write().await;
-        canister_http_adapters.remove(&instance_id);
-        let mut instance_state = instances[instance_id].lock().await;
-        if let InstanceState::Available(pocket_ic) =
-            std::mem::replace(&mut *instance_state, InstanceState::Deleted)
-        {
-            std::mem::drop(pocket_ic);
+        loop {
+            let mut instance_state = instances[instance_id].lock().await;
+            match std::mem::replace(&mut *instance_state, InstanceState::Deleted) {
+                InstanceState::Available(pocket_ic) => {
+                    std::mem::drop(pocket_ic);
+                    canister_http_adapters.remove(&instance_id);
+                    break;
+                }
+                InstanceState::Deleted => {
+                    break;
+                }
+                InstanceState::Busy { .. } => {}
+            }
+            drop(instance_state);
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
     }
 
@@ -724,7 +695,6 @@ impl ApiState {
     ) -> HttpGatewayInfo {
         use crate::state_api::routes::verify_cbor_content_header;
         use axum::extract::{DefaultBodyLimit, Path, State};
-        use axum::middleware::from_fn_with_state;
         use axum::routing::{get, post};
         use axum::Router;
         use http_body_util::Full;
@@ -762,6 +732,30 @@ impl ApiState {
             let url = format!(
                 "{}/api/{}/canister/{}/{}",
                 replica_url, api_version, effective_canister_id, endpoint
+            );
+            let req = Request::builder()
+                .method(Method::POST)
+                .uri(url)
+                .header(CONTENT_TYPE, "application/cbor")
+                .body(Full::<Bytes>::new(bytes))
+                .unwrap();
+            let resp = client.request(req).await.unwrap();
+
+            (resp.status(), resp)
+        }
+
+        async fn handler_api_subnet(
+            api_version: ApiVersion,
+            replica_url: String,
+            subnet_id: SubnetId,
+            endpoint: &str,
+            bytes: Bytes,
+        ) -> (StatusCode, Response<Incoming>) {
+            let client =
+                Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
+            let url = format!(
+                "{}/api/{}/subnet/{}/{}",
+                replica_url, api_version, subnet_id, endpoint
             );
             let req = Request::builder()
                 .method(Method::POST)
@@ -819,7 +813,7 @@ impl ApiState {
             .await
         }
 
-        async fn handler_read_state(
+        async fn handler_canister_read_state(
             State(replica_url): State<String>,
             Path(effective_canister_id): Path<CanisterId>,
             bytes: Bytes,
@@ -832,6 +826,14 @@ impl ApiState {
                 bytes,
             )
             .await
+        }
+
+        async fn handler_subnet_read_state(
+            State(replica_url): State<String>,
+            Path(subnet_id): Path<SubnetId>,
+            bytes: Bytes,
+        ) -> (StatusCode, Response<Incoming>) {
+            handler_api_subnet(ApiVersion::V2, replica_url, subnet_id, "read_state", bytes).await
         }
 
         let ip_addr = http_gateway_config
@@ -889,30 +891,39 @@ impl ApiState {
             );
             let state_handler = Arc::new(HandlerState::new(client, domain_resolver.clone()));
 
-            let domain_resolver = Arc::new(domain_resolver) as Arc<dyn ResolvesDomain>;
-
-            let router = Router::new()
-                .route("/api/v2/status", get(handler_status))
+            let router_api_v2 = Router::new()
                 .route(
-                    "/api/v2/canister/:ecid/call",
+                    "/canister/:ecid/call",
                     post(handler_call_v2)
                         .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
                 .route(
-                    "/api/v3/canister/:ecid/call",
-                    post(handler_call_v3)
-                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
-                )
-                .route(
-                    "/api/v2/canister/:ecid/query",
+                    "/canister/:ecid/query",
                     post(handler_query)
                         .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
                 .route(
-                    "/api/v2/canister/:ecid/read_state",
-                    post(handler_read_state)
+                    "/canister/:ecid/read_state",
+                    post(handler_canister_read_state)
                         .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
+                .route(
+                    "/subnet/:sid/read_state",
+                    post(handler_subnet_read_state)
+                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                )
+                .route("/status", get(handler_status))
+                .fallback(|| async { (StatusCode::NOT_FOUND, "") });
+            let router_api_v3 = Router::new()
+                .route(
+                    "/canister/:ecid/call",
+                    post(handler_call_v3)
+                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                )
+                .fallback(|| async { (StatusCode::NOT_FOUND, "") });
+            let router = Router::new()
+                .nest("/api/v2", router_api_v2)
+                .nest("/api/v3", router_api_v3)
                 .fallback(
                     post(handler)
                         .get(handler)
@@ -929,7 +940,6 @@ impl ApiState {
                 )
                 .layer(DefaultBodyLimit::disable())
                 .layer(cors_layer())
-                .layer(from_fn_with_state(domain_resolver, validate_middleware))
                 .with_state(replica_url.trim_end_matches('/').to_string())
                 .into_make_service();
 
@@ -1329,6 +1339,7 @@ impl ApiState {
                             drop(graph_guard);
                             let mut instance_state = instances[instance_id].blocking_lock();
                             if let InstanceState::Deleted = &*instance_state {
+                                error!("The instance is deleted immediately after an operation. This is a bug!");
                                 std::mem::drop(pocket_ic);
                             } else {
                                 *instance_state = InstanceState::Available(pocket_ic);

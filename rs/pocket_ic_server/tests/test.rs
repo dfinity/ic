@@ -911,3 +911,79 @@ fn test_query_stats_live() {
         }
     })
 }
+
+/// Tests subnet read state requests.
+#[test]
+fn test_subnet_read_state() {
+    const INIT_CYCLES: u128 = 2_000_000_000_000;
+
+    // Create PocketIC instance with one NNS subnet and one app subnet.
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    // Retrieve the app subnet from the topology.
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+
+    // We create a counter canister on the app subnet.
+    let canister_id = pic.create_canister_on_subnet(None, None, app_subnet);
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    let counter_wasm = wat::parse_str(COUNTER_WAT).unwrap();
+    pic.install_canister(canister_id, counter_wasm, vec![], None);
+
+    let endpoint = pic.make_live(None);
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    rt.block_on(async {
+        let agent = ic_agent::Agent::builder()
+            .with_url(endpoint.clone())
+            .build()
+            .unwrap();
+        agent.fetch_root_key().await.unwrap();
+
+        let metrics = agent.read_state_subnet_metrics(app_subnet).await.unwrap();
+        assert_eq!(metrics.num_canisters, 1);
+    })
+}
+
+/// Tests that HTTP gateway can handle requests with IP address hosts.
+#[test]
+fn test_gateway_ip_addr_host() {
+    // Create PocketIC instance with one NNS subnet and one app subnet.
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    // Retrieve the app subnet from the topology.
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+
+    // We create a canister on the app subnet.
+    pic.create_canister_on_subnet(None, None, app_subnet);
+
+    let mut endpoint = pic.make_live(None);
+    endpoint
+        .set_ip_host(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))
+        .unwrap();
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    rt.block_on(async {
+        let agent = ic_agent::Agent::builder()
+            .with_url(endpoint.clone())
+            .build()
+            .unwrap();
+        agent.fetch_root_key().await.unwrap();
+
+        let metrics = agent.read_state_subnet_metrics(app_subnet).await.unwrap();
+        assert_eq!(metrics.num_canisters, 1);
+    })
+}
