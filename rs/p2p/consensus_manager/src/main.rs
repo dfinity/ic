@@ -23,24 +23,17 @@ use either::Either;
 use futures::{io::Read, StreamExt};
 use ic_crypto_test_utils_tls::x509_certificates::CertWithPrivateKey;
 use ic_crypto_tls_interfaces::TlsConfig;
-use ic_interfaces::p2p::{
-    artifact_manager::ArtifactProcessorEvent,
-    consensus::{PriorityFn, PriorityFnAndFilterProducer, ValidatedPoolReader},
-};
+use ic_interfaces::p2p::consensus::{Priority, PriorityFn, PriorityFnFactory, ValidatedPoolReader};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, new_replica_logger_from_config, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_pprof::{Pprof, PprofCollector};
 use ic_quic_transport::{DummyUdpSocket, SubnetTopology};
 use ic_types::{
-    artifact::{
-        Advert, ArtifactKind, ArtifactTag, IdentifiableArtifact, PbArtifact, Priority,
-        UnvalidatedArtifactMutation,
-    },
+    artifact::{IdentifiableArtifact, PbArtifact, UnvalidatedArtifactMutation},
     crypto::CryptoHash,
-    NodeId, RegistryVersion,
+    NodeId, PrincipalId, RegistryVersion,
 };
-use ic_types_test_utils::ids::node_test_id;
 use libp2p::{
     core::ConnectedPoint, gossipsub::IdentTopic, swarm::SwarmEvent, Multiaddr, PeerId, Swarm,
     SwarmBuilder,
@@ -56,12 +49,18 @@ use tokio::{
     sync::watch,
 };
 use tokio_rustls::rustls::{
-    client::{ServerCertVerified, ServerCertVerifier},
-    server::{ClientCertVerified, ClientCertVerifier},
-    Certificate, ClientConfig, PrivateKey, ServerConfig,
+    client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
+    pki_types::{CertificateDer, PrivateKeyDer},
+    server::danger::{ClientCertVerified, ClientCertVerifier},
+    ClientConfig, ServerConfig, SignatureScheme,
 };
 use tokio_util::time::DelayQueue;
 // use tokio_util::time::DelayQueue;
+
+/// Returns a [`NodeId`] that can be used in tests.
+pub fn node_test_id(i: u64) -> NodeId {
+    NodeId::from(PrincipalId::new_node_test_id(i))
+}
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct TestArtifact(Vec<u8>);
@@ -105,29 +104,26 @@ impl PbArtifact for TestArtifact {
 }
 
 impl ValidatedPoolReader<TestArtifact> for TestConsensus {
-    fn get(
-        &self,
-        id: &<TestArtifact as ArtifactKind>::Id,
-    ) -> Option<<TestArtifact as ArtifactKind>::Message> {
+    fn get(&self, id: &<TestArtifact as IdentifiableArtifact>::Id) -> Option<TestArtifact> {
         let mut id = id.clone();
         id.resize(self.message_size, 0);
 
-        Some(id)
+        Some(Self(id))
     }
-    fn get_all_validated(
-        &self,
-    ) -> Box<dyn Iterator<Item = <TestArtifact as ArtifactKind>::Message> + '_> {
+    fn get_all_validated(&self) -> Box<dyn Iterator<Item = TestArtifact> + '_> {
         Box::new(std::iter::empty())
     }
 }
 
-impl PriorityFnAndFilterProducer<TestArtifact, TestConsensus> for TestConsensus {
+impl PriorityFnFactory<TestArtifact, TestConsensus> for TestConsensus {
     /// Evaluates to drop iff this node produced it originally or it is older than `RELAY_LIFETIME`
     fn get_priority_function(
         &self,
         _pool: &TestConsensus,
-    ) -> PriorityFn<<TestArtifact as ArtifactKind>::Id, <TestArtifact as ArtifactKind>::Attribute>
-    {
+    ) -> PriorityFn<
+        <TestArtifact as IdentifiableArtifact>::Id,
+        <TestArtifact as IdentifiableArtifact>::Attribute,
+    > {
         let node_id = self.node_id;
         let log = self.log.clone();
         Box::new(move |id, _attribute| {
@@ -152,9 +148,6 @@ impl PriorityFnAndFilterProducer<TestArtifact, TestConsensus> for TestConsensus 
             //     Priority::Fetch
             // }
         })
-    }
-    fn get_filter(&self) -> <TestArtifact as ArtifactKind>::Filter {
-        <TestArtifact as ArtifactKind>::Filter::default()
     }
 }
 
@@ -210,7 +203,7 @@ struct Metrics {
 async fn load_generator(
     node_id: u64,
     log: ReplicaLogger,
-    artifact_processor_rx: tokio::sync::mpsc::Sender<ArtifactProcessorEvent<TestArtifact>>,
+    artifact_processor_rx: tokio::sync::mpsc::Sender<ArtifactMutation<TestArtifact>>,
     received_artifacts: tokio::sync::mpsc::UnboundedReceiver<
         UnvalidatedArtifactMutation<TestArtifact>,
     >,
@@ -279,7 +272,7 @@ async fn load_generator(
                         if relaying && message_id % 51== 0 {
                         // if relaying {
                             // purge_queue.insert(TestArtifact::message_to_advert(&message), Duration::from_secs(60));
-                            match artifact_processor_rx.send(ArtifactProcessorEvent::Advert((message.id(),false))).await {
+                            match artifact_processor_rx.send(ArtifactMutation::Advert((message.id(),false))).await {
                                 Ok(_) => {},
                                 Err(e) => {
                                     error!(log, "Artifact processor failed to send relay: {:?}", e);
@@ -317,7 +310,7 @@ async fn load_generator(
                 // purge_queue.insert(TestArtifact::message_to_advert(&id), Duration::from_secs(60));
 
                 match artifact_processor_rx
-                    .send(ArtifactProcessorEvent::Advert((message.id(),true)))
+                    .send(ArtifactProcessorEvent::Advert((id,true)))
                     .await {
                         Ok(_) => {},
                         Err(e) => {
@@ -550,18 +543,14 @@ fn start_cm(
     let (tx, watcher) =
         tokio::sync::watch::channel(SubnetTopology::new(Vec::new(), 1.into(), 2.into()));
 
-    new_p2p_consensus.add_client(
-        ap_rx,
-        Arc::new(RwLock::new(test_consensus.clone())) as Arc<_>,
-        Arc::new(test_consensus.clone()) as Arc<_>,
-        cb_tx,
-    );
+    let downloader = ic_artifact_downloader::FetchArtifact();
+    new_p2p_consensus.add_client(ap_rx, Arc::new(test_consensus.clone()) as Arc<_>, cb_tx);
 
     info!(log, "Running on {:?} with id {}", transport_addr, node_id);
     info!(log, "Connecting to {:?}", watcher);
     let tls = TlsConfigImpl {
-        cert: Certificate(cert.cert_der()),
-        private: PrivateKey(cert.key_pair().serialize_for_rustls()),
+        cert: CertificateDer::from(cert.cert_der()),
+        private: PrivateKeyDer::try_from(cert.key_pair().serialize_for_rustls()).unwrap(),
     };
     let quic_transport = Arc::new(ic_quic_transport::QuicTransport::start(
         &log,
@@ -707,7 +696,7 @@ fn start_libp2p(
                         let peer_id = peerid_to_nodeid(propagation_source);
                         let msg = message.data;
                         cb_tx
-                            .send(UnvalidatedArtifactMutation::Insert((msg, peer_id)))
+                            .send(ArtifactMutation::Insert((TestArtifact(msg), peer_id)))
                             .unwrap();
                     }
                     _ => {
@@ -735,11 +724,11 @@ fn start_libp2p(
         async fn handle_advert_send(
             log: &ReplicaLogger,
             swarm: &mut Swarm<MainBehaviour>,
-            msg: ArtifactProcessorEvent<TestArtifact>,
+            msg: ArtifactMutation<TestArtifact>,
             pool: &TestConsensus,
         ) {
             match msg {
-                ArtifactProcessorEvent::Advert((advert,_)) => {
+                ArtifactMutation::Advert((advert,_)) => {
                     let id = advert.id.clone();
                     let pool = pool.clone();
                     let artifact =
@@ -807,8 +796,8 @@ struct MainBehaviour {
 }
 
 struct TlsConfigImpl {
-    pub cert: Certificate,
-    pub private: PrivateKey,
+    pub cert: CertificateDer<'static>,
+    pub private: PrivateKeyDer<'static>,
 }
 
 impl TlsConfig for TlsConfigImpl {
@@ -824,9 +813,8 @@ impl TlsConfig for TlsConfigImpl {
         _registry_version: ic_types::RegistryVersion,
     ) -> Result<ServerConfig, ic_crypto_tls_interfaces::TlsConfigError> {
         Ok(ServerConfig::builder()
-            .with_safe_defaults()
-            .with_client_cert_verifier(Arc::new(NoClientAuth))
-            .with_single_cert(vec![self.cert.clone()], self.private.clone())
+            .with_client_cert_verifier(Arc::new(NoClientAuth::default()))
+            .with_single_cert(vec![self.cert.clone()], self.private.clone_key())
             .unwrap())
     }
     fn client_config(
@@ -835,47 +823,90 @@ impl TlsConfig for TlsConfigImpl {
         _registry_version: ic_types::RegistryVersion,
     ) -> Result<ClientConfig, ic_crypto_tls_interfaces::TlsConfigError> {
         Ok(ClientConfig::builder()
-            .with_safe_defaults()
+            .dangerous()
             .with_custom_certificate_verifier(Arc::new(NoServerAuth))
-            .with_client_auth_cert(vec![self.cert.clone()], self.private.clone())
+            .with_client_auth_cert(vec![self.cert.clone()], self.private.clone_key())
             .unwrap())
     }
 }
 
-struct NoClientAuth;
+#[derive(Debug, Default)]
+struct NoClientAuth {
+    root_hint_subjects: Vec<tokio_rustls::rustls::DistinguishedName>,
+}
 
 impl ClientCertVerifier for NoClientAuth {
     fn offer_client_auth(&self) -> bool {
         true
     }
-    fn client_auth_mandatory(&self) -> bool {
-        true
+    fn root_hint_subjects(&self) -> &[tokio_rustls::rustls::DistinguishedName] {
+        &self.root_hint_subjects
     }
-    fn client_auth_root_subjects(&self) -> &[tokio_rustls::rustls::DistinguishedName] {
-        &[]
+    fn supported_verify_schemes(&self) -> Vec<tokio_rustls::rustls::SignatureScheme> {
+        vec![]
     }
     fn verify_client_cert(
         &self,
-        _end_entity: &tokio_rustls::rustls::Certificate,
-        _intermediates: &[tokio_rustls::rustls::Certificate],
-        _now: std::time::SystemTime,
-    ) -> Result<tokio_rustls::rustls::server::ClientCertVerified, tokio_rustls::rustls::Error> {
+        _end_entity: &tokio_rustls::rustls::pki_types::CertificateDer<'_>,
+        _intermediates: &[tokio_rustls::rustls::pki_types::CertificateDer<'_>],
+        _now: tokio_rustls::rustls::pki_types::UnixTime,
+    ) -> Result<tokio_rustls::rustls::server::danger::ClientCertVerified, tokio_rustls::rustls::Error>
+    {
         Ok(ClientCertVerified::assertion())
+    }
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &tokio_rustls::rustls::pki_types::CertificateDer<'_>,
+        _dss: &tokio_rustls::rustls::DigitallySignedStruct,
+    ) -> Result<
+        tokio_rustls::rustls::client::danger::HandshakeSignatureValid,
+        tokio_rustls::rustls::Error,
+    > {
+        Ok(HandshakeSignatureValid::assertion())
+    }
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &tokio_rustls::rustls::pki_types::CertificateDer<'_>,
+        _dss: &tokio_rustls::rustls::DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, tokio_rustls::rustls::Error> {
+        Ok(HandshakeSignatureValid::assertion())
     }
 }
 
+#[derive(Debug)]
 struct NoServerAuth;
 
 impl ServerCertVerifier for NoServerAuth {
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &tokio_rustls::rustls::pki_types::CertificateDer<'_>,
+        _dss: &tokio_rustls::rustls::DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, tokio_rustls::rustls::Error> {
+        Ok(HandshakeSignatureValid::assertion())
+    }
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &tokio_rustls::rustls::pki_types::CertificateDer<'_>,
+        _dss: &tokio_rustls::rustls::DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, tokio_rustls::rustls::Error> {
+        Ok(HandshakeSignatureValid::assertion())
+    }
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        vec![]
+    }
     fn verify_server_cert(
         &self,
-        _end_entity: &Certificate,
-        _intermediates: &[Certificate],
-        _server_name: &tokio_rustls::rustls::ServerName,
-        _scts: &mut dyn Iterator<Item = &[u8]>,
+        _end_entity: &tokio_rustls::rustls::pki_types::CertificateDer<'_>,
+        _intermediates: &[tokio_rustls::rustls::pki_types::CertificateDer<'_>],
+        _server_name: &tokio_rustls::rustls::pki_types::ServerName<'_>,
         _ocsp_response: &[u8],
-        _now: std::time::SystemTime,
-    ) -> Result<tokio_rustls::rustls::client::ServerCertVerified, tokio_rustls::rustls::Error> {
+        _now: tokio_rustls::rustls::pki_types::UnixTime,
+    ) -> Result<tokio_rustls::rustls::client::danger::ServerCertVerified, tokio_rustls::rustls::Error>
+    {
         Ok(ServerCertVerified::assertion())
     }
 }
