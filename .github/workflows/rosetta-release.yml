@@ -9,6 +9,7 @@ on:
       icrc_rosetta_release_version:
         description: 'ICRC Rosetta release version'
         required: false
+  pull_request:
 
 permissions:
   contents: write
