@@ -7,7 +7,6 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1.36"
-either = "1.6.0"
 clap = { version = "4", features = ["derive"] }
 axum = "0.7.0"
 prometheus-client = "0.22.0"

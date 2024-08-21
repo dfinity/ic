@@ -3381,7 +3381,6 @@ dependencies = [
  "dyn-clone",
  "ed25519-dalek",
  "educe",
- "either",
  "erased-serde",
  "escargot",
  "ethers-core",
@@ -4136,9 +4135,9 @@ dependencies = [
 
 [[package]]
 name = "event-listener"
-version = "5.2.0"
+version = "5.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b5fb89194fa3cad959b833185b3063ba881dbfc7030680b314250779fb4cc91"
+checksum = "6032be9bd27023a771701cc49f9f053c751055f71efb2e0ae5c15809093675ba"
 dependencies = [
  "concurrent-queue",
  "parking",
@@ -4161,7 +4160,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f214dc438f977e6d4e3500aaa277f5ad94ca83fbbd9b1a15713ce2344ccc5a1"
 dependencies = [
- "event-listener 5.2.0",
+ "event-listener 5.3.1",
  "pin-project-lite",
 ]
 

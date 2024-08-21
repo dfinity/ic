@@ -1,5 +1,5 @@
 {
-  "checksum": "18462a37fff5697600626717d75cd71b64564d722b070f3967aec4b75cc03f2c",
+  "checksum": "a23bdef390298edc2cf05fdf3f6af7ef70ad7439e57786104db14905762fdfe1",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -19477,10 +19477,6 @@
               "target": "ed25519_dalek"
             },
             {
-              "id": "either 1.13.0",
-              "target": "either"
-            },
-            {
               "id": "erased-serde 0.3.28",
               "target": "erased_serde"
             },
@@ -23469,14 +23465,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "event-listener 5.2.0": {
+    "event-listener 5.3.1": {
       "name": "event-listener",
-      "version": "5.2.0",
+      "version": "5.3.1",
       "package_url": "https://github.com/smol-rs/event-listener",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/event-listener/5.2.0/download",
-          "sha256": "2b5fb89194fa3cad959b833185b3063ba881dbfc7030680b314250779fb4cc91"
+          "url": "https://static.crates.io/crates/event-listener/5.3.1/download",
+          "sha256": "6032be9bd27023a771701cc49f9f053c751055f71efb2e0ae5c15809093675ba"
         }
       },
       "targets": [
@@ -23526,7 +23522,7 @@
           }
         },
         "edition": "2021",
-        "version": "5.2.0"
+        "version": "5.3.1"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -23631,7 +23627,7 @@
         "deps": {
           "common": [
             {
-              "id": "event-listener 5.2.0",
+              "id": "event-listener 5.3.1",
               "target": "event_listener"
             },
             {
@@ -91353,7 +91349,6 @@
     "dyn-clone 1.0.14",
     "ed25519-dalek 2.1.1",
     "educe 0.4.22",
-    "either 1.13.0",
     "erased-serde 0.3.28",
     "escargot 0.5.7",
     "ethers-core 2.0.8",

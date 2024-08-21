@@ -132,27 +132,27 @@ impl<
                 }
             }
 
-            // #[cfg(debug_assertions)]
-            // {
-            //     if self.join_set.len() < self.active_adverts.len() {
-            //         // This invariant can be violated if the root cancellation token is cancelled.
-            //         // It can be violated because the active_adverts HashMap is only cleared
-            //         // when purging artifacts, and not when the tasks join due to a cancellation
-            //         // not triggered by the manager.
-            //         let is_not_cancelled =
-            //             time::timeout(Duration::from_secs(5), cancellation_token.cancelled())
-            //                 .await
-            //                 .is_err();
+            #[cfg(debug_assertions)]
+            {
+                if self.join_set.len() < self.active_adverts.len() {
+                    // This invariant can be violated if the root cancellation token is cancelled.
+                    // It can be violated because the active_adverts HashMap is only cleared
+                    // when purging artifacts, and not when the tasks join due to a cancellation
+                    // not triggered by the manager.
+                    let is_not_cancelled =
+                        time::timeout(Duration::from_secs(5), cancellation_token.cancelled())
+                            .await
+                            .is_err();
 
-            //         if is_not_cancelled {
-            //             panic!(
-            //                 "Invariant violated: join_set.len() {:?} >= active_adverts.len() {:?}.",
-            //                 self.join_set.len(),
-            //                 self.active_adverts.len()
-            //             );
-            //         }
-            //     }
-            // }
+                    if is_not_cancelled {
+                        panic!(
+                            "Invariant violated: join_set.len() {:?} >= active_adverts.len() {:?}.",
+                            self.join_set.len(),
+                            self.active_adverts.len()
+                        );
+                    }
+                }
+            }
         }
 
         while let Some(result) = self.join_set.join_next().await {

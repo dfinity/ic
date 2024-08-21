@@ -1,53 +1,40 @@
 use std::{
-    collections::{hash_map::DefaultHasher, HashSet},
+    collections::HashSet,
     convert::Infallible,
     hash::Hasher,
     net::{IpAddr, SocketAddr},
     str::FromStr,
-    sync::{
-        atomic::{AtomicU64, Ordering::Relaxed},
-        Arc, Mutex, RwLock,
-    },
+    sync::{atomic::AtomicU64, Arc, Mutex, RwLock},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use axum::{
     extract::State,
-    http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
     Router,
 };
 use clap::Parser;
-use either::Either;
-use futures::{io::Read, StreamExt};
+use futures::StreamExt;
 use ic_crypto_test_utils_tls::x509_certificates::CertWithPrivateKey;
 use ic_crypto_tls_interfaces::TlsConfig;
-use ic_interfaces::p2p::consensus::{Priority, PriorityFn, PriorityFnFactory, ValidatedPoolReader};
+use ic_interfaces::p2p::consensus::{
+    ArtifactMutation, ArtifactWithOpt, Priority, PriorityFn, PriorityFnFactory, ValidatedPoolReader,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, new_replica_logger_from_config, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_pprof::{Pprof, PprofCollector};
-use ic_quic_transport::{DummyUdpSocket, SubnetTopology};
+use ic_quic_transport::{create_udp_socket, SubnetTopology};
 use ic_types::{
     artifact::{IdentifiableArtifact, PbArtifact, UnvalidatedArtifactMutation},
-    crypto::CryptoHash,
-    NodeId, PrincipalId, RegistryVersion,
+    NodeId, PrincipalId,
 };
-use libp2p::{
-    core::ConnectedPoint, gossipsub::IdentTopic, swarm::SwarmEvent, Multiaddr, PeerId, Swarm,
-    SwarmBuilder,
-};
+use libp2p::{gossipsub::IdentTopic, swarm::SwarmEvent, Multiaddr, PeerId, Swarm, SwarmBuilder};
 use prometheus::{Histogram, IntCounter, TextEncoder};
-use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    runtime::Handle,
-    select,
-    sync::watch,
-};
+use tokio::{runtime::Handle, select, sync::watch};
 use tokio_rustls::rustls::{
     client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
     pki_types::{CertificateDer, PrivateKeyDer},
@@ -108,7 +95,7 @@ impl ValidatedPoolReader<TestArtifact> for TestConsensus {
         let mut id = id.clone();
         id.resize(self.message_size, 0);
 
-        Some(Self(id))
+        Some(TestArtifact(id))
     }
     fn get_all_validated(&self) -> Box<dyn Iterator<Item = TestArtifact> + '_> {
         Box::new(std::iter::empty())
@@ -134,7 +121,7 @@ impl PriorityFnFactory<TestArtifact, TestConsensus> for TestConsensus {
             if message_is_relayed_back {
                 Priority::Drop
             } else {
-                Priority::Fetch
+                Priority::FetchNow
             }
             // let expiry_time_secs = u64::from_le_bytes(id[16..24].try_into().unwrap());
 
@@ -204,7 +191,7 @@ async fn load_generator(
     node_id: u64,
     log: ReplicaLogger,
     artifact_processor_rx: tokio::sync::mpsc::Sender<ArtifactMutation<TestArtifact>>,
-    received_artifacts: tokio::sync::mpsc::UnboundedReceiver<
+    mut received_artifacts: tokio::sync::mpsc::UnboundedReceiver<
         UnvalidatedArtifactMutation<TestArtifact>,
     >,
     message_rate: usize,
@@ -225,7 +212,7 @@ async fn load_generator(
         })
     };
 
-    let mut purge_queue: DelayQueue<Advert<TestArtifact>> = DelayQueue::new();
+    let mut purge_queue: DelayQueue<TestArtifact> = DelayQueue::new();
 
     let mut produce_and_send_artifact = tokio::time::interval(
         Duration::from_secs(1)
@@ -272,7 +259,7 @@ async fn load_generator(
                         if relaying && message_id % 51== 0 {
                         // if relaying {
                             // purge_queue.insert(TestArtifact::message_to_advert(&message), Duration::from_secs(60));
-                            match artifact_processor_rx.send(ArtifactMutation::Advert((message.id(),false))).await {
+                            match artifact_processor_rx.send(ArtifactMutation::Insert(ArtifactWithOpt { artifact: message , is_latency_sensitive: false  })).await {
                                 Ok(_) => {},
                                 Err(e) => {
                                     error!(log, "Artifact processor failed to send relay: {:?}", e);
@@ -310,7 +297,10 @@ async fn load_generator(
                 // purge_queue.insert(TestArtifact::message_to_advert(&id), Duration::from_secs(60));
 
                 match artifact_processor_rx
-                    .send(ArtifactProcessorEvent::Advert((id,true)))
+                    .send(ArtifactMutation::Insert(ArtifactWithOpt{
+                        artifact: TestArtifact(id),
+                        is_latency_sensitive: true
+                    }))
                     .await {
                         Ok(_) => {},
                         Err(e) => {
@@ -327,7 +317,7 @@ async fn load_generator(
                 info!(log, "Received artifacts total {}", metrics.received_artifact_count.get());
             }
             Some(n) = purge_queue.next() => {
-                let _ = artifact_processor_rx.send(ArtifactProcessorEvent::Purge(n.into_inner().id)).await.unwrap();
+                let _ = artifact_processor_rx.send(ArtifactMutation::Remove(n.into_inner().id())).await.unwrap();
             }
         }
     }
@@ -517,7 +507,7 @@ fn start_cm(
     transport_addr: SocketAddr,
     test_consensus: TestConsensus,
     cb_tx: tokio::sync::mpsc::UnboundedSender<UnvalidatedArtifactMutation<TestArtifact>>,
-    mut ap_rx: tokio::sync::mpsc::Receiver<ArtifactProcessorEvent<TestArtifact>>,
+    mut ap_rx: tokio::sync::mpsc::Receiver<ArtifactMutation<TestArtifact>>,
     metrics: MetricsRegistry,
 ) {
     // generate deterministic crypto based on id
@@ -543,9 +533,6 @@ fn start_cm(
     let (tx, watcher) =
         tokio::sync::watch::channel(SubnetTopology::new(Vec::new(), 1.into(), 2.into()));
 
-    let downloader = ic_artifact_downloader::FetchArtifact();
-    new_p2p_consensus.add_client(ap_rx, Arc::new(test_consensus.clone()) as Arc<_>, cb_tx);
-
     info!(log, "Running on {:?} with id {}", transport_addr, node_id);
     info!(log, "Connecting to {:?}", watcher);
     let tls = TlsConfigImpl {
@@ -560,9 +547,17 @@ fn start_cm(
         Arc::new(MockReg) as Arc<_>,
         node_id,
         watcher.clone(),
-        Either::<_, DummyUdpSocket>::Left(transport_addr),
+        create_udp_socket(&rt_handle, transport_addr),
         new_p2p_consensus.router(),
     ));
+    let downloader = ic_artifact_downloader::FetchArtifact::new(
+        log.clone(),
+        rt_handle.clone(),
+        Arc::new(RwLock::new(test_consensus.clone())),
+        Arc::new(test_consensus.clone()),
+        metrics.clone(),
+    );
+    new_p2p_consensus.add_client(ap_rx, cb_tx, downloader);
     new_p2p_consensus.run(quic_transport, watcher);
 
     let _ = tx
@@ -578,7 +573,7 @@ fn start_libp2p(
     transport_addr: SocketAddr,
     pool: TestConsensus,
     cb_tx: tokio::sync::mpsc::UnboundedSender<UnvalidatedArtifactMutation<TestArtifact>>,
-    mut ap_rx: tokio::sync::mpsc::Receiver<ArtifactProcessorEvent<TestArtifact>>,
+    mut ap_rx: tokio::sync::mpsc::Receiver<ArtifactMutation<TestArtifact>>,
     metrics_registry: Arc<Mutex<prometheus_client::registry::Registry>>,
 ) {
     let sk: [u8; 32] = [id as u8; 32];
@@ -696,7 +691,7 @@ fn start_libp2p(
                         let peer_id = peerid_to_nodeid(propagation_source);
                         let msg = message.data;
                         cb_tx
-                            .send(ArtifactMutation::Insert((TestArtifact(msg), peer_id)))
+                            .send(UnvalidatedArtifactMutation::Insert((TestArtifact(msg), peer_id)))
                             .unwrap();
                     }
                     _ => {
@@ -728,22 +723,11 @@ fn start_libp2p(
             pool: &TestConsensus,
         ) {
             match msg {
-                ArtifactMutation::Advert((advert,_)) => {
-                    let id = advert.id.clone();
-                    let pool = pool.clone();
-                    let artifact =
-                        tokio::task::spawn_blocking(move || pool.get(&id))
-                            .await;
-
-                    let a = match artifact {
-                        Ok(Some(artifact)) => artifact,
-                        _ => return,
-                    };
-
+                ArtifactMutation::Insert(ArtifactWithOpt { artifact, is_latency_sensitive }) => {
                     if let Err(e) = swarm
                         .behaviour_mut()
                         .gossip_sub
-                        .publish(IdentTopic::new("exp"), a.0)
+                        .publish(IdentTopic::new("exp"), artifact.0)
                     {
                         info!(log, "Publish err {e:?}");
                     }
