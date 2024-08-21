@@ -42,7 +42,7 @@ impl MetadataSection {
         {
             errs.push(".visibility should be `icp:private` or `icp:public`.".to_string());
         }
-        if &self.name == "" {
+        if self.name.is_empty() {
             errs.push(".name must not be the empty string.".to_string());
         }
         if self.name.len() > MAX_METADATA_SECTION_NAME_BYTES {
