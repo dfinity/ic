@@ -735,36 +735,22 @@ impl StreamHandlerImpl {
                 state,
                 available_guaranteed_response_memory,
             ) {
-                Ok(()) => {
+                None => {
                     // Message successfully inducted or dropped.
                     stream.push_accept_signal();
                 }
-                Err((StateError::CanisterMigrating { .. }, RequestOrResponse::Response(_))) => {
-                    // Unable to deliver a response due to migrating canister, push reject signal.
-                    stream.push_reject_signal(RejectReason::CanisterMigrating);
-                }
-                Err((err, RequestOrResponse::Request(request))) => {
-                    // TODO(MR-249): Replace generating reject responses with pushing reject signals.
-                    // Unable to induct a request, generate reject response and push it into `stream`.
-                    let code = match err {
-                        StateError::CanisterNotFound(_) => RejectCode::DestinationInvalid,
-                        StateError::CanisterStopped(_) => RejectCode::CanisterError,
-                        StateError::CanisterStopping(_) => RejectCode::CanisterError,
-                        StateError::CanisterMigrating { .. } => RejectCode::SysTransient,
-                        StateError::QueueFull { .. } => RejectCode::SysTransient,
-                        StateError::OutOfMemory { .. } => RejectCode::CanisterError,
-                        StateError::NonMatchingResponse { .. }
-                        | StateError::BitcoinNonMatchingResponse { .. } => {
-                            unreachable!("Not a user error: {}", err);
-                        }
-                    };
-                    *available_guaranteed_response_memory -=
-                        stream.push(generate_reject_response(&request, code, err.to_string()))
-                            as i64;
-                    stream.push_accept_signal()
-                }
-                Err((_, RequestOrResponse::Response(_))) => {
-                    unreachable!("No signals are generated for response induction failures except for CanisterMigrating");
+                Some((reason, msg)) => {
+                    // Unable to induct a message, push reject signal.
+                    stream.push_reject_signal(reason);
+                    debug_assert!(
+                        matches!(
+                            (reason, msg),
+                            // All reasons are legal for requests.
+                            (_, RequestOrResponse::Request(_))
+                            // Only `CanisterMigrating` is legal for responses.
+                            | (RejectReason::CanisterMigrating, RequestOrResponse::Response(_))
+                        )
+                    );
                 }
             }
         } else {
@@ -793,7 +779,7 @@ impl StreamHandlerImpl {
         msg_type: &str,
         state: &mut ReplicatedState,
         available_guaranteed_response_memory: &mut i64,
-    ) -> Result<(), (StateError, RequestOrResponse)> {
+    ) -> Option<(RejectReason, RequestOrResponse)> {
         // Subnet that should have received the message according to the routing table.
         let receiver_host_subnet = state
             .metadata
@@ -824,7 +810,16 @@ impl StreamHandlerImpl {
                                     &err,
                                     &request
                                 );
-                                return Err((err, msg));
+                                let reason = match err {
+                                    StateError::CanisterNotFound(_) => RejectReason::CanisterNotFound,
+                                    StateError::CanisterStopped(_) => RejectReason::CanisterStopped,
+                                    StateError::CanisterStopping(_) => RejectReason::CanisterStopping,
+                                    StateError::QueueFull { .. } => RejectReason::QueueFull,
+                                    StateError::OutOfMemory { .. } => RejectReason::OutOfMemory,
+                                    StateError::NonMatchingResponse { .. }
+                                    | StateError::BitcoinNonMatchingResponse { .. } => RejectReason::Unknown,
+                                };
+                                return Some((reason, msg));
                             }
                             RequestOrResponse::Response(response) => {
                                 // Critical error, responses should always be inducted successfully.
@@ -845,10 +840,6 @@ impl StreamHandlerImpl {
             // Receiver canister is migrating to/from this subnet.
             Some(host_subnet) if self.should_reroute_message_to(&msg, host_subnet, state) => {
                 self.observe_inducted_message_status(msg_type, LABEL_VALUE_CANISTER_MIGRATED);
-                let err = StateError::CanisterMigrating {
-                    canister_id: msg.receiver(),
-                    host_subnet,
-                };
 
                 match &msg {
                     RequestOrResponse::Request(request) => {
@@ -858,7 +849,7 @@ impl StreamHandlerImpl {
                             request.receiver,
                             request
                         );
-                        return Err((err, msg));
+                        return Some((RejectReason::CanisterMigrating, msg));
                     }
                     RequestOrResponse::Response(response) => {
                         if state.metadata.certification_version >= CertificationVersion::V9 {
@@ -868,7 +859,7 @@ impl StreamHandlerImpl {
                                 response.originator,
                                 response
                             );
-                            return Err((err, msg));
+                            return Some((RejectReason::CanisterMigrating, msg));
                         } else {
                             fatal!(
                                 self.log,
@@ -901,7 +892,7 @@ impl StreamHandlerImpl {
         }
 
         // Any reject signals generated were returned before this point.
-        Ok(())
+        None
     }
 
     /// Checks whether `actual_subnet_id` is a valid host subnet for `msg.sender()`
