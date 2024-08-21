@@ -195,7 +195,6 @@ impl std::iter::Iterator for OutputIterator<'_> {
     /// for that canister, the canister iterator is moved to the back of the
     /// iteration order.
     fn next(&mut self) -> Option<Self::Item> {
-        // FIXME: Add a test for a canister iterator with all-stale entries.
         while let Some(mut canister_iterator) = self.canister_iterators.pop_front() {
             // `next()` may consume an arbitrary number of stale references.
             self.size -= canister_iterator.size();
@@ -726,7 +725,7 @@ impl ReplicatedState {
             None => {
                 let subnet_id = self.metadata.own_subnet_id.get_ref();
                 if msg.receiver().get_ref() == subnet_id {
-                    // FIXME Assert that this is a request; else check for a matching `Callback`.
+                    // TODO(MR-523) Assert that this is a request; else check for a matching `Callback`.
                     push_input(
                         &mut self.subnet_queues,
                         msg,
