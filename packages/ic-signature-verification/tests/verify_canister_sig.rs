@@ -35,6 +35,23 @@ fn should_verify_canister_sig() {
 }
 
 #[test]
+fn should_fail_verify_canister_sig_on_wrong_msg() {
+    let rng = &mut ReproducibleRng::new();
+    for with_delegation in [false, true] {
+        let sig_data = new_valid_sig_and_crypto_component(rng, with_delegation);
+        let wrong_msg = [1u8, 2, 3, 4];
+
+        let result = ic_signature_verification::verify_canister_sig(
+            &wrong_msg,
+            &sig_data.canister_sig.get_ref().0,
+            &get_canister_sig_pk_der(&sig_data.canister_pk.key),
+            &get_root_pk_raw(&sig_data.root_of_trust),
+        );
+        assert_matches!(result, Err(e) if e.contains("signature entry not found"));
+    }
+}
+
+#[test]
 fn should_fail_verify_canister_sig_on_invalid_sig() {
     let rng = &mut ReproducibleRng::new();
     for with_delegation in [false, true] {
