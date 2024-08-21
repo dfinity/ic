@@ -991,17 +991,17 @@ fn test_gateway_ip_addr_host() {
 
 #[test]
 fn test_unresponsive_gateway_backend() {
+    let client = Client::new();
+
     // Create PocketIC instance with one NNS subnet and one app subnet.
-    let (mut backend_server_url, _) = start_server_helper(None, Some(5), false);
-    backend_server_url.set_host(Some("localhost")).unwrap();
+    let (backend_server_url, mut backend_process) = start_server_helper(None, None, false);
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_application_subnet()
         .with_server_url(backend_server_url.clone())
         .build();
-    let client = Client::new();
 
-    // Create HTTP gateway on a different gateway server
+    // Create HTTP gateway on a different gateway server.
     let (gateway_server_url, _) = start_server_helper(None, None, false);
     let create_gateway_endpoint = gateway_server_url.join("http_gateway").unwrap();
     let backend_instance_url = backend_server_url
@@ -1038,11 +1038,9 @@ fn test_unresponsive_gateway_backend() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
-    // Delete the PocketIC instance, but keep the HTTP gateway running.
+    // Kill the backend server, but keep the HTTP gateway running.
     drop(pic);
-
-    // Wait for the backend server to terminate (its TTL is 5 secs).
-    std::thread::sleep(Duration::from_secs(10));
+    backend_process.kill().unwrap();
 
     // Query the status endpoint via HTTP gateway again.
     let resp = client
@@ -1052,7 +1050,7 @@ fn test_unresponsive_gateway_backend() {
     assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
     assert!(String::from_utf8(resp.bytes().unwrap().as_ref().to_vec())
         .unwrap()
-        .contains("connection_failure: client error (Connect)"));
+        .contains("connection_failure: client error"));
 }
 
 #[test]
