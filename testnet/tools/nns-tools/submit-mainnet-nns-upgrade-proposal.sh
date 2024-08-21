@@ -42,8 +42,12 @@ submit_nns_upgrade_proposal_mainnet() {
     PROPOSAL_TITLE=$(grep '.' "$PROPOSAL_FILE" | head -n 1 | sed 's/# //')
 
     VERSION=$(grep '__Source Code__: ' $PROPOSAL_FILE | sed -E 's~.*\[(.{40})\].*~\1~')
-    CAPITALIZED_CANISTER_NAME=$(echo $PROPOSAL_TITLE | sed -E 's~Upgrade the (.+) Canister to .+~\1~')
-    CANISTER_NAME="$(tr '[:upper:]' '[:lower:]' <<<${CAPITALIZED_CANISTER_NAME:0:1})${CAPITALIZED_CANISTER_NAME:1}"
+    HUMANIZED_CANISTER_NAME=$(echo $PROPOSAL_TITLE | sed -E 's~Upgrade the (.+) Canister to .+~\1~')
+    CANISTER_NAME=$(
+        echo "$HUMANIZED_CANISTER_NAME" \
+        | tr '[:upper:]' '[:lower:]' \
+        | sed 's/ /-/g' # Replace spaces with dash.
+    )
     CANISTER_ID=$(nns_canister_id "$CANISTER_NAME")
 
     CANDID_UPGRADE_ARGS=$(extract_candid_upgrade_args "$PROPOSAL_FILE")
@@ -63,8 +67,9 @@ submit_nns_upgrade_proposal_mainnet() {
     cat "$PROPOSAL_FILE"
     echo_line
     echo
+
     echo "Upgrade Synopsis:"
-    echo "    Target Canister: $CAPITALIZED_CANISTER_NAME (NNS)"
+    echo "    Target Canister: $HUMANIZED_CANISTER_NAME (NNS)"
     echo "    Build Commit: $VERSION"
 
     if [ ! -z "$CANDID_ARGS_FILE" ]; then
@@ -135,7 +140,7 @@ submit_nns_upgrade_proposal_mainnet() {
     # Report conclusion.
     echo
     if [ "$DRY_RUN" = true ]; then
-        print_yellow "This was a just a dry run, but everything went ok."
+        print_yellow "This was just a dry run. Still, everything went ok."
     else
         echo "🎉 Success!"
         echo "https://dashboard.internetcomputer.org/proposal/${PROPOSAL_ID}"
