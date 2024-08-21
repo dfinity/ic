@@ -1,10 +1,12 @@
+use crate::common::ledger_wasm;
 use candid::Encode;
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nns_test_utils::governance::bump_gzip_timestamp;
 use ic_state_machine_tests::StateMachine;
-use std::path::PathBuf;
 use std::str::FromStr;
+
+mod common;
 
 #[cfg(not(feature = "u256-tokens"))]
 #[test]
@@ -12,7 +14,7 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
     const CK_BTC_LEDGER_CANISTER_ID: &str = "mxzaz-hqaaa-aaaar-qaada-cai";
     const CK_BTC_LEDGER_CANISTER_NAME: &str = "ckBTC";
 
-    let ledger_wasm = ledger_wasm();
+    let ledger_wasm = Wasm::from_bytes(ledger_wasm());
 
     let state_machine =
         ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic(
@@ -42,7 +44,7 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     const CK_PEPE_LEDGER: (&str, &str) = ("etik7-oiaaa-aaaar-qagia-cai", "ckPEPE");
     const CK_SHIB_LEDGER: (&str, &str) = ("fxffn-xiaaa-aaaar-qagoa-cai", "ckSHIB");
 
-    let ledger_wasm_u256 = ledger_wasm();
+    let ledger_wasm_u256 = Wasm::from_bytes(ledger_wasm());
 
     let canister_ids_and_names = vec![
         CK_ETH_LEDGER,
@@ -76,7 +78,7 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     }
 }
 
-#[cfg(not(feature = "u256-tokens"))]
+#[cfg(feature = "u256-tokens")]
 #[test]
 fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     // SNS canisters
@@ -107,7 +109,10 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     const WATERNEURON: (&str, &str) = ("jcmow-hyaaa-aaaaq-aadlq-cai", "WaterNeuron");
     const YUKU: (&str, &str) = ("atbfz-diaaa-aaaaq-aacyq-cai", "Yuku");
 
-    let ledger_wasm = ledger_wasm();
+    let ledger_wasm = Wasm::from_bytes(ledger_wasm());
+    let mainnet_ledger_wasm = Wasm::from_bytes(common::load_wasm_using_env_var(
+        "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
+    ));
 
     let canister_id_and_names = vec![
         DRAGGINZ,
@@ -161,6 +166,12 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
             &state_machine,
             canister_id,
         );
+        // Downgrade back to the mainnet ledger version
+        upgrade_canister(
+            &state_machine,
+            (canister_id_str, canister_name),
+            mainnet_ledger_wasm.clone(),
+        );
     }
 }
 
@@ -173,14 +184,6 @@ fn upgrade_canister(
         CanisterId::unchecked_from_principal(PrincipalId::from_str(canister_id_str).unwrap());
     upgrade_ledger(state_machine, ledger_wasm, canister_id);
     println!("Upgraded {} '{}'", canister_name, canister_id_str);
-}
-
-fn ledger_wasm() -> Wasm {
-    Wasm::from_bytes(ic_test_utilities_load_wasm::load_wasm(
-        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("ledger"),
-        "ic-icrc1-ledger",
-        &[],
-    ))
 }
 
 fn upgrade_ledger(state_machine: &StateMachine, wasm: Wasm, canister_id: CanisterId) {
