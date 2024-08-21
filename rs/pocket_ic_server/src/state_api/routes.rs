@@ -32,6 +32,7 @@ use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use hyper::header;
 use ic_http_endpoints_public::cors_layer;
+use ic_state_machine_tests::Level;
 use ic_types::{CanisterId, SubnetId};
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
@@ -42,6 +43,7 @@ use pocket_ic::common::rest::{
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
+use std::str::FromStr;
 use std::{collections::BTreeMap, fs::File, sync::Arc, time::Duration};
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
 use tower_http::limit::RequestBodyLimitLayer;
@@ -1100,12 +1102,29 @@ pub async fn create_instance(
         );
     }
 
+    let log_level = if let Some(log_level) = instance_config.log_level {
+        match Level::from_str(&log_level) {
+            Ok(log_level) => Some(log_level),
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(rest::CreateInstanceResponse::Error {
+                        message: format!("Failed to parse log level: {:?}", e),
+                    }),
+                )
+            }
+        }
+    } else {
+        None
+    };
+
     let pocket_ic = tokio::task::spawn_blocking(move || {
         PocketIc::new(
             runtime,
             subnet_configs,
             instance_config.state_dir,
             instance_config.nonmainnet_features,
+            log_level,
         )
     })
     .await
