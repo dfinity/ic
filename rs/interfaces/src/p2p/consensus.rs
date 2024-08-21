@@ -84,12 +84,11 @@ pub enum Priority {
 }
 
 /// Priority function used by `ArtifactClient`.
-pub type PriorityFn<Id, Attribute> =
-    Box<dyn Fn(&Id, &Attribute) -> Priority + Send + Sync + 'static>;
+pub type PriorityFn<Id> = Box<dyn Fn(&Id) -> Priority + Send + Sync + 'static>;
 
 pub trait PriorityFnFactory<Artifact: IdentifiableArtifact, Pool>: Send + Sync {
     /// Returns a priority function for the given pool.
-    fn get_priority_function(&self, pool: &Pool) -> PriorityFn<Artifact::Id, Artifact::Attribute>;
+    fn get_priority_function(&self, pool: &Pool) -> PriorityFn<Artifact::Id>;
 }
 
 /// ValidatedPoolReader trait is the generic interface used by P2P to interact
@@ -142,7 +141,6 @@ pub trait ArtifactAssembler<A1: IdentifiableArtifact, A2: PbArtifact>:
     fn assemble_message<P: Peers + Send + 'static>(
         &self,
         id: <A2 as IdentifiableArtifact>::Id,
-        attr: <A2 as IdentifiableArtifact>::Attribute,
         artifact: Option<(A2, NodeId)>,
         peers: P,
     ) -> impl std::future::Future<Output = Result<(A1, NodeId), Aborted>> + Send;

@@ -4627,8 +4627,9 @@ fn buy_token_ok(
     );
 }
 
+#[track_caller]
 fn buy_token_err(swap: &mut Swap, user: &PrincipalId, balance_icp: &u64, error_message: &str) {
-    assert!(swap
+    let observed = swap
         .refresh_buyer_token_e8s(
             *user,
             None,
@@ -4643,8 +4644,13 @@ fn buy_token_err(swap: &mut Swap, user: &PrincipalId, balance_icp: &u64, error_m
         )
         .now_or_never()
         .unwrap()
-        .unwrap_err()
-        .contains(error_message));
+        .unwrap_err();
+    assert!(
+        observed.contains(error_message),
+        "Expected substring `{}` not found in observed error `{}`.",
+        error_message,
+        observed,
+    );
 }
 
 fn check_final_conditions(
@@ -4893,6 +4899,73 @@ fn test_refresh_buyer_tokens_not_enough_tokens_left() {
         &user1,
         &amount_user1_0,
         "minimum required to participate",
+    );
+
+    // The one token should still be left fur purchase
+    check_final_conditions(
+        &mut swap,
+        &user2,
+        &amount_user2_0,
+        &(params.max_direct_participation_icp_e8s.unwrap() - E8),
+    );
+}
+
+// Similar to test_refresh_buyer_tokens_not_enough_tokens_left, but we check that, once the number
+// of SNS neurons that all participants (user2, user3, user4) would need to get (if the swap
+// succeeds) exceeds the threshold `MAX_NEURONS_FOR_DIRECT_PARTICIPANTS`, then the swap would reject
+// a new user (user1) that did not yet participate, while existing participants (e.g., user2) are
+// still able to increase their participation amount.
+#[test]
+fn test_refresh_buyer_tokens_no_sns_neuron_baskets_available() {
+    let user1 = PrincipalId::new_user_test_id(1);
+    let user2 = PrincipalId::new_user_test_id(2);
+    let user3 = PrincipalId::new_user_test_id(3);
+    let user4 = PrincipalId::new_user_test_id(4);
+
+    let mut swap = SwapBuilder::new()
+        .with_sns_governance_canister_id(SNS_GOVERNANCE_CANISTER_ID)
+        .with_lifecycle(Open)
+        .with_swap_start_due(Some(START_TIMESTAMP_SECONDS), Some(END_TIMESTAMP_SECONDS))
+        .with_min_participants(1)
+        .with_min_max_participant_icp(2 * E8, 40 * E8)
+        .with_min_max_direct_participation(5 * E8, 100 * E8)
+        .with_sns_tokens(100_000 * E8)
+        // An extremely large basket size, so we can reach MAX_NEURONS_FOR_DIRECT_PARTICIPANTS with
+        // a relatively small number of participants.
+        .with_neuron_basket_count(33_000)
+        .with_neurons_fund_participation()
+        .build();
+
+    let params = swap.params.clone().unwrap();
+
+    let amount_user1_0 = 5 * E8;
+    let amount_user2_0 = 40 * E8;
+    let amount_user3_0 = 40 * E8;
+    let amount_user4_0 = 99 * E8 - (amount_user2_0 + amount_user3_0);
+
+    // All tokens but one should be already bought up by users 2 to 4 --> 99 Tokens were bought
+    buy_token_ok(&mut swap, &user2, &amount_user2_0, &amount_user2_0);
+    buy_token_ok(&mut swap, &user3, &amount_user3_0, &amount_user3_0);
+    buy_token_ok(&mut swap, &user4, &amount_user4_0, &amount_user4_0);
+
+    // Make sure the 99 tokens were registered
+    assert_eq!(
+        swap.get_buyers_total().buyers_total,
+        amount_user2_0 + amount_user3_0 + amount_user4_0
+    );
+
+    // Make sure that only an amount smaller than the minimum amount to be bought per user is available
+    assert!(
+        params.max_direct_participation_icp_e8s.unwrap() - swap.get_buyers_total().buyers_total
+            < params.min_participant_icp_e8s
+    );
+
+    // No user that has not participated in the swap yet can buy this one token left
+    buy_token_err(
+        &mut swap,
+        &user1,
+        &amount_user1_0,
+        "The swap has reached the maximum number of direct participants",
     );
 
     // The one token should still be left fur purchase
