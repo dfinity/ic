@@ -692,36 +692,6 @@ impl Payload {
             LabeledTree::Leaf(value) => Ok(value),
         }
     }
-    /*
-        fn reject_signals_count_bytes(&self) -> usize {
-            match self.header.reject_signals_len() {
-                0 => 0,
-
-                n => {
-                    let unique_count = self.header.unique_reject_reasons_count();
-                    // 2 bytes for the reject signals struct.
-                    // `unique_count * 2` for each vector of signals per unique reject reason.
-                    // `n` for n signals.
-                    //
-                    // Note that this assumes small deltas between signals. With larger deltas,
-                    // signals get encoded as 2 or even 3 bytes, but then we must have much fewer
-                    // signals, so they won't have a significant influence on payload size.
-                    2 + unique_count * 2 + (n * 7) / 6
-                    //3 + n
-                }
-
-
-    /*
-                // 3 bytes (field number, type array, length) plus 1 byte per signal.
-                //
-                // Note that this assumes small deltas between signals. With larger deltas,
-                // signals get encoded as 2 or even 3 bytes, but then we must have much fewer
-                // signals, so they won't have a significant influence on payload size.
-                n => 3 + n,
-    */
-            }
-        }
-    */
 }
 
 impl CountBytes for Payload {
