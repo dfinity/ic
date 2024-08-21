@@ -610,17 +610,13 @@ impl StreamHandlerImpl {
                         state,
                         available_guaranteed_response_memory,
                     ) {
-                        Ok(()) => {
+                        None => {
                             // Reject response successfully inducted or dropped.
                         }
-                        Err((StateError::CanisterMigrating { .. }, reject_response)) => {
+                        Some((reason, reject_response)) => {
+                            debug_assert!(reason == RejectReason::CanisterMigrating);
                             // Canister is being migrated, reroute reject response.
                             reroute_response(reject_response, state, streams, &self.log);
-                        }
-                        Err(_) => {
-                            unreachable!(
-                                "Errors other than `CanisterMigrating` shouldn't be possible."
-                            );
                         }
                     }
                 }
@@ -742,15 +738,13 @@ impl StreamHandlerImpl {
                 Some((reason, msg)) => {
                     // Unable to induct a message, push reject signal.
                     stream.push_reject_signal(reason);
-                    debug_assert!(
-                        matches!(
-                            (reason, msg),
-                            // All reasons are legal for requests.
-                            (_, RequestOrResponse::Request(_))
+                    debug_assert!(matches!(
+                        (reason, msg),
+                        // All reasons are legal for requests.
+                        (_, RequestOrResponse::Request(_))
                             // Only `CanisterMigrating` is legal for responses.
                             | (RejectReason::CanisterMigrating, RequestOrResponse::Response(_))
-                        )
-                    );
+                    ));
                 }
             }
         } else {
@@ -811,13 +805,19 @@ impl StreamHandlerImpl {
                                     &request
                                 );
                                 let reason = match err {
-                                    StateError::CanisterNotFound(_) => RejectReason::CanisterNotFound,
+                                    StateError::CanisterNotFound(_) => {
+                                        RejectReason::CanisterNotFound
+                                    }
                                     StateError::CanisterStopped(_) => RejectReason::CanisterStopped,
-                                    StateError::CanisterStopping(_) => RejectReason::CanisterStopping,
+                                    StateError::CanisterStopping(_) => {
+                                        RejectReason::CanisterStopping
+                                    }
                                     StateError::QueueFull { .. } => RejectReason::QueueFull,
                                     StateError::OutOfMemory { .. } => RejectReason::OutOfMemory,
                                     StateError::NonMatchingResponse { .. }
-                                    | StateError::BitcoinNonMatchingResponse { .. } => RejectReason::Unknown,
+                                    | StateError::BitcoinNonMatchingResponse { .. } => {
+                                        RejectReason::Unknown
+                                    }
                                 };
                                 return Some((reason, msg));
                             }
