@@ -5,7 +5,8 @@ use canister_test::{Canister, Runtime};
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_management_canister_types::{
-    DerivationPath, ECDSAPublicKeyArgs, EcdsaKeyId, Method as Ic00Method,
+    DerivationPath, ECDSAPublicKeyArgs, EcdsaKeyId, MasterPublicKeyId, Method as Ic00Method,
+    SchnorrKeyId, SchnorrPublicKeyArgs,
 };
 use ic_nns_test_utils::itest_helpers::{
     set_up_registry_canister, set_up_universal_canister, try_call_via_universal_canister,
@@ -13,14 +14,18 @@ use ic_nns_test_utils::itest_helpers::{
 use ic_nns_test_utils::registry::{get_value_or_panic, new_node_keys_and_node_id};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::routing_table::v1 as pb;
-use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord};
+use ic_protobuf::registry::subnet::v1::{
+    CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, SubnetListRecord, SubnetRecord,
+};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::RoutingTable;
-use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{
+    ChainKeyConfig, EcdsaConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_types::ReplicaVersion;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
@@ -47,30 +52,51 @@ pub fn get_subnet_holding_ecdsa_keys(
 ) -> SubnetRecord {
     let mut record: SubnetRecord = CreateSubnetPayload {
         unit_delay_millis: 10,
-        gossip_retransmission_request_ms: 10_000,
-        gossip_registry_poll_period_ms: 2000,
-        gossip_pfn_evaluation_period_ms: 50,
-        gossip_receive_check_cache_size: 1,
-        gossip_max_duplicity: 1,
-        gossip_max_chunk_wait_ms: 200,
-        gossip_max_artifact_streams_per_peer: 1,
         replica_version_id: ReplicaVersion::default().into(),
         node_ids,
         ..Default::default()
     }
     .into();
-    record.ecdsa_config = Some(
-        EcdsaConfig {
-            quadruples_to_create_in_advance: 1,
-            key_ids: ecdsa_key_ids.to_vec(),
-            max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-            signature_request_timeout_ns: None,
-            idkg_key_rotation_period_ms: None,
-        }
-        .into(),
-    );
+
+    let ecdsa_config = EcdsaConfig {
+        quadruples_to_create_in_advance: 1,
+        key_ids: ecdsa_key_ids.to_vec(),
+        max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+        signature_request_timeout_ns: None,
+        idkg_key_rotation_period_ms: None,
+    };
+    record.chain_key_config = Some(ChainKeyConfig::from(ecdsa_config.clone()).into());
+    record.ecdsa_config = Some(ecdsa_config.into());
 
     record
+}
+
+pub fn get_subnet_holding_chain_keys(
+    key_ids: Vec<MasterPublicKeyId>,
+    node_ids: Vec<NodeId>,
+) -> SubnetRecord {
+    let unit_delay_millis = 10;
+    let replica_version_id = String::from(ReplicaVersion::default());
+    let mut subnet_record = SubnetRecord::from(CreateSubnetPayload {
+        unit_delay_millis,
+        replica_version_id,
+        node_ids,
+        ..Default::default()
+    });
+    subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
+        key_configs: key_ids
+            .into_iter()
+            .map(|key_id| KeyConfig {
+                key_id,
+                pre_signatures_to_create_in_advance: 1,
+                max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+            })
+            .collect(),
+        signature_request_timeout_ns: None,
+        idkg_key_rotation_period_ms: None,
+    }));
+
+    subnet_record
 }
 
 /// This allows us to create a registry canister that is in-sync with the FakeRegistryClient
@@ -272,6 +298,55 @@ pub async fn wait_for_ecdsa_setup(
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     public_key_result.unwrap().unwrap();
+}
+
+/// Requests a Schnorr public key several times until it succeeds.
+pub async fn wait_for_schnorr_setup(
+    runtime: &Runtime,
+    calling_canister: &Canister<'_>,
+    key_id: &SchnorrKeyId,
+) {
+    let public_key_request = SchnorrPublicKeyArgs {
+        canister_id: None,
+        derivation_path: DerivationPath::new(vec![]),
+        key_id: key_id.clone(),
+    };
+    let mut public_key_result = None;
+    for i in 0..100 {
+        public_key_result = Some(
+            try_call_via_universal_canister(
+                calling_canister,
+                &runtime.get_management_canister_with_effective_canister_id(
+                    calling_canister.canister_id().into(),
+                ),
+                &Ic00Method::SchnorrPublicKey.to_string(),
+                Encode!(&public_key_request).unwrap(),
+            )
+            .await,
+        );
+        println!("Response: {:?}", public_key_result);
+        if public_key_result.as_ref().unwrap().is_ok() {
+            break;
+        }
+        println!("Waiting for public key... {}", i);
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    public_key_result.unwrap().unwrap();
+}
+
+pub async fn wait_for_chain_key_setup(
+    runtime: &Runtime,
+    calling_canister: &Canister<'_>,
+    master_public_key_id: &MasterPublicKeyId,
+) {
+    match master_public_key_id {
+        MasterPublicKeyId::Ecdsa(key_id) => {
+            wait_for_ecdsa_setup(runtime, calling_canister, key_id).await;
+        }
+        MasterPublicKeyId::Schnorr(key_id) => {
+            wait_for_schnorr_setup(runtime, calling_canister, key_id).await;
+        }
+    }
 }
 
 pub fn check_error_message<T: std::fmt::Debug>(

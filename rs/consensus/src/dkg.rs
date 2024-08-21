@@ -2,54 +2,42 @@
 //! component into the consensus algorithm that is implemented within this
 //! crate.
 
-use crate::consensus::{check_protocol_version, dkg_key_manager::DkgKeyManager};
-use crate::ecdsa::{
-    make_bootstrap_summary,
-    payload_builder::make_bootstrap_summary_with_initial_dealings,
-    utils::{get_ecdsa_config_if_enabled, inspect_ecdsa_initializations},
+use crate::{
+    consensus::{check_protocol_version, dkg_key_manager::DkgKeyManager},
+    idkg::{
+        make_bootstrap_summary,
+        payload_builder::make_bootstrap_summary_with_initial_dealings,
+        utils::{get_chain_key_config_if_enabled, inspect_chain_key_initializations},
+    },
 };
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
+    crypto::ErrorReproducibility,
     dkg::{ChangeAction, ChangeSet, DkgPool},
-    p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
-    validation::ValidationError,
+    p2p::consensus::{ChangeSetProducer, Priority, PriorityFn, PriorityFnFactory},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManagerError;
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_types::consensus::SummaryPayload;
-use ic_types::crypto::{CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash};
 use ic_types::{
-    artifact::{Priority, PriorityFn},
-    artifact_kind::DkgArtifact,
     batch::ValidationContext,
     consensus::{
-        dkg,
         dkg::{DealingContent, DkgMessageId, Message},
         idkg, Block, BlockPayload, CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon,
-        Payload, RandomBeaconContent, Rank,
+        Payload, RandomBeaconContent, Rank, SummaryPayload,
     },
     crypto::{
         crypto_hash,
-        threshold_sig::ni_dkg::{
-            config::NiDkgConfig,
-            errors::{
-                create_transcript_error::DkgCreateTranscriptError,
-                verify_dealing_error::DkgVerifyDealingError,
-            },
-            NiDkgId, NiDkgTag, NiDkgTargetSubnet,
-        },
-        CryptoError, Signed,
+        threshold_sig::ni_dkg::{config::NiDkgConfig, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
     },
-    registry::RegistryClientError,
     signature::ThresholdSignature,
     Height, NodeId, RegistryVersion, SubnetId, Time,
 };
-pub use payload_builder::{create_payload, make_genesis_summary};
+pub(crate) use payload_validator::{DkgPayloadValidationFailure, InvalidDkgPayloadReason};
 use phantom_newtype::Id;
 use prometheus::Histogram;
 use rayon::prelude::*;
@@ -63,6 +51,8 @@ pub(crate) mod payload_validator;
 #[cfg(test)]
 mod test_utils;
 mod utils;
+
+pub use payload_builder::{create_payload, make_genesis_summary, PayloadCreationError};
 
 // The maximal number of DKGs for other subnets we want to run in one interval.
 const MAX_REMOTE_DKGS_PER_INTERVAL: usize = 1;
@@ -80,90 +70,6 @@ const TAGS: [NiDkgTag; 2] = [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold];
 struct Metrics {
     on_state_change_duration: Histogram,
     on_state_change_processed: Histogram,
-}
-
-/// Transient Dkg message validation errors.
-// The `Debug` implementation is ignored during the dead code analysis and we are getting a `field
-// is never used` warning on this enum even though we are implicitly reading them when we log the
-// enum. See https://github.com/rust-lang/rust/issues/88900
-#[allow(dead_code)]
-#[derive(Debug)]
-pub(crate) enum PermanentError {
-    CryptoError(CryptoError),
-    DkgCreateTranscriptError(DkgCreateTranscriptError),
-    DkgVerifyDealingError(DkgVerifyDealingError),
-    MismatchedDkgSummary(dkg::Summary, dkg::Summary),
-    MissingDkgConfigForDealing,
-    DkgStartHeightDoesNotMatchParentBlock,
-    DkgSummaryAtNonStartHeight(Height),
-    DkgDealingAtStartHeight(Height),
-    InvalidDealer(NodeId),
-    DealerAlreadyDealt(NodeId),
-}
-
-/// Permanent Dkg message validation errors.
-#[allow(missing_docs)]
-#[derive(Debug)]
-pub enum TransientError {
-    /// Crypto related errors.
-    CryptoError(CryptoError),
-    StateManagerError(StateManagerError),
-    DkgCreateTranscriptError(DkgCreateTranscriptError),
-    DkgVerifyDealingError(DkgVerifyDealingError),
-    FailedToGetDkgIntervalSettingFromRegistry(RegistryClientError),
-    FailedToGetSubnetMemberListFromRegistry(RegistryClientError),
-    MissingDkgStartBlock,
-}
-
-/// Dkg errors.
-pub(crate) type DkgMessageValidationError = ValidationError<PermanentError, TransientError>;
-
-impl From<DkgCreateTranscriptError> for PermanentError {
-    fn from(err: DkgCreateTranscriptError) -> Self {
-        PermanentError::DkgCreateTranscriptError(err)
-    }
-}
-
-impl From<DkgCreateTranscriptError> for TransientError {
-    fn from(err: DkgCreateTranscriptError) -> Self {
-        TransientError::DkgCreateTranscriptError(err)
-    }
-}
-
-impl From<DkgVerifyDealingError> for PermanentError {
-    fn from(err: DkgVerifyDealingError) -> Self {
-        PermanentError::DkgVerifyDealingError(err)
-    }
-}
-
-impl From<DkgVerifyDealingError> for TransientError {
-    fn from(err: DkgVerifyDealingError) -> Self {
-        TransientError::DkgVerifyDealingError(err)
-    }
-}
-
-impl From<CryptoError> for PermanentError {
-    fn from(err: CryptoError) -> Self {
-        PermanentError::CryptoError(err)
-    }
-}
-
-impl From<CryptoError> for TransientError {
-    fn from(err: CryptoError) -> Self {
-        TransientError::CryptoError(err)
-    }
-}
-
-impl From<PermanentError> for DkgMessageValidationError {
-    fn from(err: PermanentError) -> Self {
-        ValidationError::Permanent(err)
-    }
-}
-
-impl From<TransientError> for DkgMessageValidationError {
-    fn from(err: TransientError) -> Self {
-        ValidationError::Transient(err)
-    }
 }
 
 /// `DkgImpl` is responsible for holding DKG dependencies and for responding to
@@ -359,26 +265,22 @@ impl DkgImpl {
             return ChangeSet::from(ChangeAction::RemoveFromUnvalidated((*message).clone()));
         }
 
-        // Verify the signature and reject if it's invalid, or skip, if there was an
-        // error.
-        match self
-            .crypto
-            .verify(message, config.registry_version())
-            .map_err(DkgMessageValidationError::from)
-        {
+        // Verify the signature and reject if it's invalid, or skip, if there was an error.
+        match self.crypto.verify(message, config.registry_version()) {
             Ok(()) => (),
-            Err(ValidationError::Permanent(err)) => {
+            Err(err) if err.is_reproducible() => {
                 return get_handle_invalid_change_action(
                     message,
-                    format!("Invalid signature: {:?}", err),
+                    format!("Invalid signature: {}", err),
                 )
                 .into()
             }
-            Err(ValidationError::Transient(err)) => {
+            Err(err) => {
                 error!(
                     self.logger,
-                    "Couldn't verify the signature of a DKG dealing: {:?}", err
+                    "Couldn't verify the signature of a DKG dealing: {}", err
                 );
+
                 return ChangeSet::new();
             }
         }
@@ -390,17 +292,16 @@ impl DkgImpl {
             config,
             *dealer_id,
             &message.content.dealing,
-        )
-        .map_err(DkgMessageValidationError::from)
-        {
+        ) {
             Ok(()) => ChangeAction::MoveToValidated((*message).clone()).into(),
-            Err(ValidationError::Permanent(err)) => get_handle_invalid_change_action(
+            Err(err) if err.is_reproducible() => get_handle_invalid_change_action(
                 message,
-                format!("Dealing verification failed: {:?}", err),
+                format!("Dealing verification failed: {}", err),
             )
             .into(),
-            Err(ValidationError::Transient(err)) => {
-                error!(self.logger, "Couldn't verify a DKG dealing: {:?}", err);
+            Err(err) => {
+                error!(self.logger, "Couldn't verify a DKG dealing: {}", err);
+
                 ChangeSet::new()
             }
         }
@@ -485,10 +386,10 @@ impl<T: DkgPool> ChangeSetProducer<T> for DkgImpl {
 // If a node happens to disconnect, it would send out dealings based on
 // its previous state after it reconnects, regardless of whether it has sent
 // them before.
-impl<Pool: DkgPool> PriorityFnAndFilterProducer<DkgArtifact, Pool> for DkgGossipImpl {
-    fn get_priority_function(&self, dkg_pool: &Pool) -> PriorityFn<DkgMessageId, ()> {
+impl<Pool: DkgPool> PriorityFnFactory<Message, Pool> for DkgGossipImpl {
+    fn get_priority_function(&self, dkg_pool: &Pool) -> PriorityFn<DkgMessageId> {
         let start_height = dkg_pool.get_current_start_height();
-        Box::new(move |id, _| {
+        Box::new(move |id| {
             use std::cmp::Ordering;
             match id.height.cmp(&start_height) {
                 Ordering::Equal => Priority::FetchNow,
@@ -557,19 +458,23 @@ pub fn make_registry_cup_from_cup_contents(
     );
     let cup_height = Height::new(cup_contents.height);
 
-    let ecdsa_summary =
-        match bootstrap_ecdsa_summary(&cup_contents, subnet_id, registry_version, registry, logger)
-        {
-            Ok(summary) => summary,
-            Err(err) => {
-                warn!(
-                    logger,
-                    "Failed constructing ECDSA summary block from CUP contents: {}", err
-                );
+    let idkg_summary = match bootstrap_idkg_summary(
+        &cup_contents,
+        subnet_id,
+        registry_version,
+        registry,
+        logger,
+    ) {
+        Ok(summary) => summary,
+        Err(err) => {
+            warn!(
+                logger,
+                "Failed constructing IDKG summary block from CUP contents: {}", err
+            );
 
-                None
-            }
-        };
+            None
+        }
+    };
 
     let low_dkg_id = dkg_summary
         .current_transcript(&NiDkgTag::LowThreshold)
@@ -593,7 +498,7 @@ pub fn make_registry_cup_from_cup_contents(
             crypto_hash,
             BlockPayload::Summary(SummaryPayload {
                 dkg: dkg_summary,
-                ecdsa: ecdsa_summary,
+                idkg: idkg_summary,
             }),
         ),
         height: cup_height,
@@ -630,12 +535,15 @@ pub fn make_registry_cup_from_cup_contents(
     })
 }
 
-fn bootstrap_ecdsa_summary_from_cup_contents(
+fn bootstrap_idkg_summary_from_cup_contents(
     cup_contents: &CatchUpPackageContents,
     subnet_id: SubnetId,
     logger: &ReplicaLogger,
 ) -> Result<idkg::Summary, String> {
-    let initial_dealings = inspect_ecdsa_initializations(&cup_contents.ecdsa_initializations)?;
+    let initial_dealings = inspect_chain_key_initializations(
+        &cup_contents.ecdsa_initializations,
+        &cup_contents.chain_key_initializations,
+    )?;
     if initial_dealings.is_empty() {
         return Ok(None);
     };
@@ -646,10 +554,10 @@ fn bootstrap_ecdsa_summary_from_cup_contents(
         initial_dealings,
         logger,
     )
-    .map_err(|err| format!("Failed to create ECDSA summary block: {:?}", err))
+    .map_err(|err| format!("Failed to create IDKG summary block: {:?}", err))
 }
 
-fn bootstrap_ecdsa_summary(
+fn bootstrap_idkg_summary(
     cup_contents: &CatchUpPackageContents,
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
@@ -657,17 +565,21 @@ fn bootstrap_ecdsa_summary(
     logger: &ReplicaLogger,
 ) -> Result<idkg::Summary, String> {
     if let Some(summary) =
-        bootstrap_ecdsa_summary_from_cup_contents(cup_contents, subnet_id, logger)?
+        bootstrap_idkg_summary_from_cup_contents(cup_contents, subnet_id, logger)?
     {
         return Ok(Some(summary));
     }
 
-    match get_ecdsa_config_if_enabled(subnet_id, registry_version, registry_client, logger)
-        .map_err(|err| format!("Failed getting the ECDSA config: {:?}", err))?
+    match get_chain_key_config_if_enabled(subnet_id, registry_version, registry_client)
+        .map_err(|err| format!("Failed getting the chain key config: {:?}", err))?
     {
-        Some(ecdsa_config) => Ok(make_bootstrap_summary(
+        Some(chain_key_config) => Ok(make_bootstrap_summary(
             subnet_id,
-            ecdsa_config.key_ids,
+            chain_key_config
+                .key_configs
+                .iter()
+                .map(|key_config| key_config.key_id.clone())
+                .collect(),
             Height::new(cup_contents.height),
         )),
         None => Ok(None),
@@ -676,8 +588,7 @@ fn bootstrap_ecdsa_summary(
 
 #[cfg(test)]
 mod tests {
-    use super::test_utils::complement_state_manager_with_remote_dkg_requests;
-    use super::*;
+    use super::{test_utils::complement_state_manager_with_remote_dkg_requests, *};
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_consensus_mocks::{
         dependencies, dependencies_with_subnet_params,
@@ -2214,6 +2125,7 @@ mod tests {
                         state_hash: vec![1, 2, 3, 4, 5],
                         registry_store_uri: None,
                         ecdsa_initializations: vec![],
+                        chain_key_initializations: vec![],
                     };
 
                 // Encode the cup to protobuf

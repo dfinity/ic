@@ -13,6 +13,7 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::messages::ResponseBuilder;
+use ic_types::messages::NO_DEADLINE;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, MessageId},
@@ -2985,4 +2986,42 @@ fn test_best_effort_responses_feature_flag_disabled() {
         }
         _ => panic!("Unexpected result"),
     };
+}
+
+fn helper_ic0_msg_deadline_best_effort_responses_feature_flag(
+    flag: FlagStatus,
+) -> Result<WasmResult, UserError> {
+    let mut test = ExecutionTestBuilder::new()
+        .with_best_effort_responses(flag)
+        .build();
+
+    let canister_id = test
+        .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
+        .unwrap();
+
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().msg_deadline().reply_int64().build(),
+    )
+}
+
+#[test]
+fn test_ic0_msg_deadline_best_effort_responses_feature_flag_enabled() {
+    let no_deadline = Time::from(NO_DEADLINE).as_nanos_since_unix_epoch();
+    assert_eq!(
+        helper_ic0_msg_deadline_best_effort_responses_feature_flag(FlagStatus::Enabled).unwrap(),
+        WasmResult::Reply(no_deadline.to_le_bytes().into())
+    );
+}
+
+#[test]
+fn test_ic0_msg_deadline_best_effort_responses_feature_flag_disabled() {
+    let err = helper_ic0_msg_deadline_best_effort_responses_feature_flag(FlagStatus::Disabled)
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    assert!(err
+        .description()
+        .ends_with("ic0::msg_deadline is not enabled."));
 }

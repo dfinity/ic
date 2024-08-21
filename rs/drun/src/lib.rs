@@ -1,7 +1,6 @@
 //! Standalone interface for testing application canisters.
 
 use crate::message::{msg_stream_from_file, Message};
-use futures::future::join_all;
 use hex::encode;
 use ic_config::{subnet_config::SubnetConfig, Config};
 use ic_crypto_test_utils_ni_dkg::dummy_initial_dkg_transcript_with_master_key;
@@ -225,7 +224,10 @@ pub async fn run_drun(uo: DrunOptions) -> Result<(), String> {
         None,
         ic_types::malicious_flags::MaliciousFlags::default(),
     ));
-    let (_, ingress_history_writer, ingress_hist_reader, query_handler, _, scheduler) =
+
+    let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
+
+    let (_, ingress_history_writer, ingress_hist_reader, query_handler, scheduler) =
         ExecutionServices::setup_execution(
             log.clone().into(),
             &metrics_registry,
@@ -236,16 +238,13 @@ pub async fn run_drun(uo: DrunOptions) -> Result<(), String> {
             Arc::clone(&cycles_account_manager),
             Arc::clone(&state_manager) as Arc<_>,
             state_manager.get_fd_factory(),
+            completed_execution_messages_tx,
         )
         .into_parts();
 
     let runtime = tokio::runtime::Handle::current();
-    let _metrics_endpoint = MetricsHttpEndpoint::new_insecure(
-        runtime.clone(),
-        cfg.metrics,
-        metrics_registry.clone(),
-        &log,
-    );
+    let _metrics_endpoint =
+        MetricsHttpEndpoint::new(runtime.clone(), cfg.metrics, metrics_registry.clone(), &log);
 
     let message_routing = MessageRoutingImpl::new(
         Arc::clone(&state_manager) as _,
@@ -261,19 +260,18 @@ pub async fn run_drun(uo: DrunOptions) -> Result<(), String> {
         MaliciousFlags::default(),
     );
 
-    join_all(msg_stream.map(|parse_result| async {
-        match parse_result {
-            Ok(Message::Install(msg)) => {
+    for parse_result in msg_stream {
+        match parse_result? {
+            Message::Install(msg) => {
                 deliver_message(
                     msg,
                     &message_routing,
                     ingress_hist_reader.as_ref(),
                     extra_batches,
                 );
-                Ok(())
             }
 
-            Ok(Message::Query(q)) => {
+            Message::Query(q) => {
                 let (_ni_dkg_transcript, secret_key) =
                     dummy_initial_dkg_transcript_with_master_key(&mut StdRng::seed_from_u64(42));
                 certify_latest_state_helper(
@@ -288,35 +286,28 @@ pub async fn run_drun(uo: DrunOptions) -> Result<(), String> {
                     }
                 };
                 print_query_result(query_result);
-                Ok(())
             }
 
-            Ok(Message::Ingress(msg)) => {
+            Message::Ingress(msg) => {
                 deliver_message(
                     msg,
                     &message_routing,
                     ingress_hist_reader.as_ref(),
                     extra_batches,
                 );
-                Ok(())
             }
 
-            Ok(Message::Create(msg)) => {
+            Message::Create(msg) => {
                 deliver_message(
                     msg,
                     &message_routing,
                     ingress_hist_reader.as_ref(),
                     extra_batches,
                 );
-                Ok(())
             }
-
-            Err(e) => Err(e),
         }
-    }))
-    .await
-    .into_iter()
-    .collect()
+    }
+    Ok(())
 }
 
 fn print_query_result(res: Result<WasmResult, UserError>) {
@@ -365,15 +356,15 @@ fn get_random_seed() -> [u8; 32] {
 fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -> Batch {
     Batch {
         batch_number: message_routing.expected_batch_height(),
-        next_checkpoint_height: None,
+        batch_summary: None,
         requires_full_state_hash: !msgs.is_empty(),
         messages: BatchMessages {
             signed_ingress_msgs: msgs,
             ..BatchMessages::default()
         },
         randomness: Randomness::from(get_random_seed()),
-        ecdsa_subnet_public_keys: BTreeMap::new(),
-        ecdsa_quadruple_ids: BTreeMap::new(),
+        idkg_subnet_public_keys: BTreeMap::new(),
+        idkg_pre_signature_ids: BTreeMap::new(),
         registry_version: RegistryVersion::from(1),
         time: time::current_time(),
         consensus_responses: vec![],

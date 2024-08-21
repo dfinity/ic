@@ -22,18 +22,15 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},
 };
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::{
     init::LifelineCanisterInitPayload,
     types::{NeuronId, ProposalId},
 };
 use ic_nns_constants::*;
-use ic_nns_governance::{
-    governance::TimeWarp,
-    init::TEST_NEURON_1_ID,
-    pb::v1::{Governance, NnsFunction, ProposalStatus},
-};
+use ic_nns_governance::governance::TimeWarp;
+use ic_nns_governance_api::pb::v1::{Governance, NnsFunction, ProposalStatus};
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_registry_transport::pb::v1::RegistryMutation;
@@ -720,15 +717,23 @@ pub async fn maybe_upgrade_to_self(canister: &mut Canister<'_>, scenario: Upgrad
     }
 }
 
-/// Appends a few inert bytes to the provided Wasm. Results in a functionally
-/// identical binary.
-pub fn append_inert(wasm: Option<&Wasm>) -> Wasm {
-    let mut wasm = wasm.unwrap().clone().bytes();
-    // This sequence of bytes encodes an empty wasm custom section
-    // named "a". It is harmless to suffix any wasm with it, even multiple
-    // times.
-    wasm.append(&mut vec![0, 2, 1, 97]);
-    Wasm::from_bytes(wasm)
+fn is_gzipped_blob(blob: &[u8]) -> bool {
+    (blob.len() > 4)
+        // Has magic bytes.
+        && (blob[0..2] == [0x1F, 0x8B])
+}
+
+/// Bumps the gzip timestamp of the provided gzipped Wasm.
+/// Results in a functionally identical binary.
+pub fn bump_gzip_timestamp(wasm: &Wasm) -> Wasm {
+    // wasm is gzipped and the subslice [4..8]
+    // is the little endian representation of a timestamp
+    // so we just increment that timestamp
+    let mut new_wasm = wasm.clone().bytes();
+    assert!(is_gzipped_blob(&new_wasm));
+    let t = u32::from_le_bytes(new_wasm[4..8].try_into().unwrap());
+    new_wasm[4..8].copy_from_slice(&(t + 1).to_le_bytes());
+    Wasm::from_bytes(new_wasm)
 }
 
 /// Perform a change on a canister by upgrading it or
@@ -871,7 +876,7 @@ pub async fn reinstall_nns_canister_by_proposal(
         governance,
         root,
         true,
-        append_inert(Some(&wasm)),
+        bump_gzip_timestamp(&wasm),
         Some(arg),
     )
     .await
@@ -900,7 +905,7 @@ pub async fn maybe_upgrade_root_controlled_canister_to_self(
     // Copy the wasm of the canister to upgrade. We'll need it to upgrade back to
     // it. To observe that the upgrade happens, we need to make the binary different
     // post-upgrade.
-    let wasm = append_inert(Some(canister.wasm().unwrap()));
+    let wasm = bump_gzip_timestamp(canister.wasm().unwrap());
     let wasm_clone = wasm.clone().bytes();
     upgrade_nns_canister_by_proposal(
         canister,

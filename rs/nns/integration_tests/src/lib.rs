@@ -131,3 +131,9 @@ mod uninstall_canister_by_proposal;
 
 #[cfg(test)]
 mod canister_upgrade;
+
+#[cfg(test)]
+mod subnet_rental_canister;
+
+#[cfg(test)]
+mod stop_or_start_canister;

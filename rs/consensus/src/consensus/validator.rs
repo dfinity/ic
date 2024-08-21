@@ -9,21 +9,23 @@ use crate::{
         status::{self, Status},
         ConsensusMessageId,
     },
-    dkg, ecdsa,
+    dkg, idkg,
 };
 use ic_consensus_utils::{
     active_high_threshold_transcript, active_low_threshold_transcript,
     crypto::ConsensusCrypto,
-    find_lowest_ranked_proposals, get_oldest_ecdsa_state_registry_version, is_time_to_make_block,
+    find_lowest_ranked_non_disqualified_proposals, get_oldest_idkg_state_registry_version,
+    is_time_to_make_block,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
     RoundRobin,
 };
 use ic_interfaces::{
     batch_payload::ProposalContext,
-    consensus::{PayloadBuilder, PayloadPermanentError, PayloadTransientError},
+    consensus::{InvalidPayloadReason, PayloadBuilder, PayloadValidationFailure},
     consensus_pool::*,
     dkg::DkgPool,
+    ingress_manager::IngressSelector,
     messaging::MessageRouting,
     time_source::TimeSource,
     validation::{ValidationError, ValidationResult},
@@ -35,10 +37,11 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        Block, BlockPayload, BlockProposal, CatchUpContent, CatchUpPackage, CatchUpShareContent,
-        Committee, ConsensusMessage, ConsensusMessageHashable, FinalizationContent, HasCommittee,
-        HasHeight, HasRank, HasVersion, Notarization, NotarizationContent, RandomBeacon,
-        RandomBeaconShare, RandomTape, RandomTapeShare, Rank,
+        Block, BlockMetadata, BlockPayload, BlockProposal, CatchUpContent, CatchUpPackage,
+        CatchUpShareContent, Committee, ConsensusMessage, ConsensusMessageHashable,
+        EquivocationProof, FinalizationContent, HasCommittee, HasHeight, HasRank, HasVersion,
+        Notarization, NotarizationContent, RandomBeacon, RandomBeaconShare, RandomTape,
+        RandomTapeShare, Rank,
     },
     crypto::{threshold_sig::ni_dkg::NiDkgId, CryptoError, CryptoHashOf, Signed},
     registry::RegistryClientError,
@@ -49,7 +52,7 @@ use ic_types::{
 use std::{
     collections::{BTreeMap, HashSet},
     sync::{Arc, RwLock},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 /// The number of seconds spent in unvalidated pool, after which we start
@@ -63,17 +66,17 @@ const LOG_EVERY_N_SECONDS: i32 = 60;
 /// where holding it back before, to give recomputation a chance during catch up.
 const CATCH_UP_HOLD_OF_TIME: Duration = Duration::from_secs(150);
 
-/// Possible validator transient errors.
+/// Possible transient validation failures.
 #[derive(Debug)]
 // The fields are only read by the `Debug` implementation.
 // The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
 #[allow(dead_code)]
-enum TransientError {
+enum ValidationFailure {
     CryptoError(CryptoError),
     RegistryClientError(RegistryClientError),
-    PayloadValidationError(PayloadTransientError),
-    DkgPayloadValidationError(dkg::TransientError),
-    EcdsaPayloadValidationError(ecdsa::TransientError),
+    PayloadValidationFailed(PayloadValidationFailure),
+    DkgPayloadValidationFailed(dkg::DkgPayloadValidationFailure),
+    IDkgPayloadValidationFailed(idkg::IDkgPayloadValidationFailure),
     DkgSummaryNotFound(Height),
     RandomBeaconNotFound(Height),
     StateHashError(StateHashError),
@@ -85,21 +88,21 @@ enum TransientError {
     CatchUpHeightNegligible,
 }
 
-/// Possible validator permanent errors.
+/// Possible reasons for invalid artifacts.
 #[derive(Debug)]
 // The fields are only read by the `Debug` implementation.
 // The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
 #[allow(dead_code)]
-enum PermanentError {
+enum InvalidArtifactReason {
     CryptoError(CryptoError),
     MismatchedRank(Rank, Option<Rank>),
     MembershipError(MembershipError),
     InappropriateDkgId(NiDkgId),
     SignerNotInThresholdCommittee(NodeId),
     SignerNotInMultiSigCommittee(NodeId),
-    PayloadValidationError(PayloadPermanentError),
-    DkgPayloadValidationError(dkg::PermanentError),
-    EcdsaPayloadValidationError(ecdsa::PermanentError),
+    InvalidPayload(InvalidPayloadReason),
+    InvalidDkgPayload(dkg::InvalidDkgPayloadReason),
+    InvalidIDkgPayload(idkg::InvalidIDkgPayloadReason),
     InsufficientSignatures,
     CannotVerifyBlockHeightZero,
     NonEmptyPayloadPastUpgradePoint,
@@ -111,42 +114,43 @@ enum PermanentError {
     MismatchedRandomBeaconInCatchUpPackageShare,
     RepeatedSigner,
     ReplicaVersionMismatch,
+    NotABlockmaker,
 }
 
-impl From<CryptoError> for TransientError {
-    fn from(err: CryptoError) -> TransientError {
-        TransientError::CryptoError(err)
+impl From<CryptoError> for ValidationFailure {
+    fn from(err: CryptoError) -> ValidationFailure {
+        ValidationFailure::CryptoError(err)
     }
 }
 
-impl From<CryptoError> for PermanentError {
-    fn from(err: CryptoError) -> PermanentError {
-        PermanentError::CryptoError(err)
+impl From<CryptoError> for InvalidArtifactReason {
+    fn from(err: CryptoError) -> InvalidArtifactReason {
+        InvalidArtifactReason::CryptoError(err)
     }
 }
 
-impl<T> From<PermanentError> for ValidationError<PermanentError, T> {
-    fn from(err: PermanentError) -> ValidationError<PermanentError, T> {
-        ValidationError::Permanent(err)
+impl<T> From<InvalidArtifactReason> for ValidationError<InvalidArtifactReason, T> {
+    fn from(err: InvalidArtifactReason) -> ValidationError<InvalidArtifactReason, T> {
+        ValidationError::InvalidArtifact(err)
     }
 }
 
-impl<P> From<TransientError> for ValidationError<P, TransientError> {
-    fn from(err: TransientError) -> ValidationError<P, TransientError> {
-        ValidationError::Transient(err)
+impl<P> From<ValidationFailure> for ValidationError<P, ValidationFailure> {
+    fn from(err: ValidationFailure) -> ValidationError<P, ValidationFailure> {
+        ValidationError::ValidationFailed(err)
     }
 }
 
-type ValidatorError = ValidationError<PermanentError, TransientError>;
+type ValidatorError = ValidationError<InvalidArtifactReason, ValidationFailure>;
 
 fn membership_error_to_validation_error(err: MembershipError) -> ValidatorError {
     match err {
-        MembershipError::NodeNotFound(_) => PermanentError::MembershipError(err).into(),
+        MembershipError::NodeNotFound(_) => InvalidArtifactReason::MembershipError(err).into(),
         MembershipError::UnableToRetrieveDkgSummary(h) => {
-            TransientError::DkgSummaryNotFound(h).into()
+            ValidationFailure::DkgSummaryNotFound(h).into()
         }
         MembershipError::RegistryClientError(err) => {
-            TransientError::RegistryClientError(err).into()
+            ValidationFailure::RegistryClientError(err).into()
         }
     }
 }
@@ -159,6 +163,7 @@ trait SignatureVerify: HasHeight {
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         pool: &PoolReader<'_>,
+        cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError>;
 }
 
@@ -168,6 +173,7 @@ impl SignatureVerify for BlockProposal {
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         pool: &PoolReader<'_>,
+        cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
         let previous_beacon = get_previous_beacon(pool, height)?;
@@ -175,13 +181,13 @@ impl SignatureVerify for BlockProposal {
             .get_block_maker_rank(height, &previous_beacon, self.signature.signer)
             .map_err(membership_error_to_validation_error)?;
         if rank != Some(self.rank()) {
-            return Err(ValidationError::from(PermanentError::MismatchedRank(
-                self.rank(),
-                rank,
-            )));
+            return Err(ValidationError::from(
+                InvalidArtifactReason::MismatchedRank(self.rank(), rank),
+            ));
         }
         let registry_version = get_registry_version(pool, height)?;
-        crypto.verify(self, registry_version)?;
+        let signed_metadata = BlockMetadata::signed_from_proposal(self, cfg);
+        crypto.verify(&signed_metadata, registry_version)?;
         Ok(())
     }
 }
@@ -192,14 +198,15 @@ impl SignatureVerify for RandomTape {
         _membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         pool: &PoolReader<'_>,
+        _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let transcript = active_low_threshold_transcript(pool.as_cache(), self.height())
-            .ok_or_else(|| TransientError::DkgSummaryNotFound(self.height()))?;
+            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         if self.signature.signer == transcript.dkg_id {
             crypto.verify_aggregate(self, self.signature.signer)?;
             Ok(())
         } else {
-            Err(PermanentError::InappropriateDkgId(self.signature.signer).into())
+            Err(InvalidArtifactReason::InappropriateDkgId(self.signature.signer).into())
         }
     }
 }
@@ -210,10 +217,11 @@ impl SignatureVerify for RandomTapeShare {
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         pool: &PoolReader<'_>,
+        _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
         let transcript = active_low_threshold_transcript(pool.as_cache(), height)
-            .ok_or_else(|| TransientError::DkgSummaryNotFound(self.height()))?;
+            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         verify_threshold_committee(
             membership,
             self.signature.signer,
@@ -231,14 +239,15 @@ impl SignatureVerify for RandomBeacon {
         _membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         pool: &PoolReader<'_>,
+        _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let transcript = active_low_threshold_transcript(pool.as_cache(), self.height())
-            .ok_or_else(|| TransientError::DkgSummaryNotFound(self.height()))?;
+            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         if self.signature.signer == transcript.dkg_id {
             crypto.verify_aggregate(self, self.signature.signer)?;
             Ok(())
         } else {
-            Err(PermanentError::InappropriateDkgId(self.signature.signer).into())
+            Err(InvalidArtifactReason::InappropriateDkgId(self.signature.signer).into())
         }
     }
 }
@@ -249,10 +258,11 @@ impl SignatureVerify for RandomBeaconShare {
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         pool: &PoolReader<'_>,
+        _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
         let transcript = active_low_threshold_transcript(pool.as_cache(), height)
-            .ok_or_else(|| TransientError::DkgSummaryNotFound(self.height()))?;
+            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         verify_threshold_committee(
             membership,
             self.signature.signer,
@@ -271,10 +281,11 @@ impl SignatureVerify for Signed<CatchUpContent, ThresholdSignatureShare<CatchUpC
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         pool: &PoolReader<'_>,
+        _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
         let transcript = active_high_threshold_transcript(pool.as_cache(), height)
-            .ok_or_else(|| TransientError::DkgSummaryNotFound(self.height()))?;
+            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         verify_threshold_committee(
             membership,
             self.signature.signer,
@@ -292,6 +303,7 @@ impl SignatureVerify for CatchUpPackage {
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         _pool: &PoolReader<'_>,
+        _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         crypto
             .verify_combined_threshold_sig_by_public_key(
@@ -309,10 +321,45 @@ impl SignatureVerify for CatchUpPackage {
     }
 }
 
+impl SignatureVerify for EquivocationProof {
+    fn verify_signature(
+        &self,
+        membership: &Membership,
+        crypto: &dyn ConsensusCrypto,
+        pool: &PoolReader<'_>,
+        _cfg: &ReplicaConfig,
+    ) -> ValidationResult<ValidatorError> {
+        let height = self.height();
+        let previous_beacon = get_previous_beacon(pool, height)?;
+        let registry_version = get_registry_version(pool, height)?;
+        if membership
+            .get_block_maker_rank(height, &previous_beacon, self.signer)
+            .map_err(membership_error_to_validation_error)?
+            .is_none()
+        {
+            return Err(ValidationError::from(InvalidArtifactReason::NotABlockmaker));
+        }
+
+        let (first, second) = self.into_signed_metadata();
+        crypto.verify_basic_sig(
+            &first.signature.signature,
+            &first.content,
+            self.signer,
+            registry_version,
+        )?;
+        crypto.verify_basic_sig(
+            &second.signature.signature,
+            &second.content,
+            self.signer,
+            registry_version,
+        )?;
+        Ok(())
+    }
+}
+
 /// `NotaryIssued` is a trait that exists to deduplicate the validation code of
 /// Notarization, Finalization and the corresponding shares.
 trait NotaryIssued: Sized + HasHeight + std::fmt::Debug {
-    fn block(&self) -> &CryptoHashOf<Block>;
     fn verify_multi_sig_combined(
         crypto: &dyn ConsensusCrypto,
         signed_message: &Signed<Self, MultiSignature<Self>>,
@@ -328,10 +375,6 @@ trait NotaryIssued: Sized + HasHeight + std::fmt::Debug {
 }
 
 impl NotaryIssued for NotarizationContent {
-    fn block(&self) -> &CryptoHashOf<Block> {
-        &self.block
-    }
-
     fn verify_multi_sig_combined(
         crypto: &dyn ConsensusCrypto,
         signed_message: &Signed<Self, MultiSignature<Self>>,
@@ -373,10 +416,6 @@ impl NotaryIssued for NotarizationContent {
 }
 
 impl NotaryIssued for FinalizationContent {
-    fn block(&self) -> &CryptoHashOf<Block> {
-        &self.block
-    }
-
     fn verify_multi_sig_combined(
         crypto: &dyn ConsensusCrypto,
         signed_message: &Signed<Self, MultiSignature<Self>>,
@@ -429,6 +468,7 @@ impl<T: NotaryIssued> SignatureVerify for Signed<T, MultiSignature<T>> {
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         pool: &PoolReader<'_>,
+        _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
         let previous_beacon = get_previous_beacon(pool, height)?;
@@ -454,6 +494,7 @@ impl<T: NotaryIssued> SignatureVerify for Signed<T, MultiSignatureShare<T>> {
         membership: &Membership,
         crypto: &dyn ConsensusCrypto,
         pool: &PoolReader<'_>,
+        _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
         let previous_beacon = get_previous_beacon(pool, height)?;
@@ -471,9 +512,9 @@ fn get_previous_beacon(
     let previous_height = height.decrement();
     match pool.get_random_beacon(previous_height) {
         Some(beacon) => Ok(beacon),
-        None => Err(ValidationError::from(TransientError::RandomBeaconNotFound(
-            previous_height,
-        ))),
+        None => Err(ValidationError::from(
+            ValidationFailure::RandomBeaconNotFound(previous_height),
+        )),
     }
 }
 
@@ -484,7 +525,7 @@ fn get_registry_version(
     match pool.registry_version(height) {
         Some(version) => Ok(version),
         None => Err(ValidationError::from(
-            TransientError::FailedToGetRegistryVersion,
+            ValidationFailure::FailedToGetRegistryVersion,
         )),
     }
 }
@@ -500,10 +541,10 @@ fn verify_notaries(
         .map_err(membership_error_to_validation_error)?;
     let unique_signers: HashSet<_> = signers.iter().collect();
     if unique_signers.len() < signers.len() {
-        return Err(PermanentError::RepeatedSigner.into());
+        return Err(InvalidArtifactReason::RepeatedSigner.into());
     }
     if signers.len() < threshold {
-        return Err(PermanentError::InsufficientSignatures.into());
+        return Err(InvalidArtifactReason::InsufficientSignatures.into());
     }
     for node_id in signers.iter() {
         verify_notary(membership, height, previous_beacon, *node_id)?;
@@ -521,7 +562,7 @@ fn verify_notary(
         .node_belongs_to_notarization_committee(height, previous_beacon, node_id)
         .map_err(membership_error_to_validation_error)?
     {
-        Err(PermanentError::SignerNotInMultiSigCommittee(node_id).into())
+        Err(InvalidArtifactReason::SignerNotInMultiSigCommittee(node_id).into())
     } else {
         Ok(())
     }
@@ -537,7 +578,7 @@ fn verify_threshold_committee(
         .node_belongs_to_threshold_committee(node_id, height, committee)
         .map_err(membership_error_to_validation_error)?
     {
-        Err(PermanentError::SignerNotInThresholdCommittee(node_id).into())
+        Err(InvalidArtifactReason::SignerNotInThresholdCommittee(node_id).into())
     } else {
         Ok(())
     }
@@ -551,7 +592,7 @@ fn get_notarized_parent(
     let height = proposal.height().decrement();
     pool.get_notarized_block(parent, height)
         .map(|block| block.into_inner())
-        .map_err(|_| TransientError::BlockNotFound(parent.clone(), height).into())
+        .map_err(|_| ValidationFailure::BlockNotFound(parent.clone(), height).into())
 }
 
 /// Collect the min of validated block proposal ranks in the range.
@@ -564,7 +605,7 @@ fn get_min_validated_ranks(
             let height = Height::from(h);
             (
                 height,
-                find_lowest_ranked_proposals(pool, height)
+                find_lowest_ranked_non_disqualified_proposals(pool, height)
                     .first()
                     .map(|block| block.rank()),
             )
@@ -588,10 +629,7 @@ pub struct Validator {
     metrics: ValidatorMetrics,
     schedule: RoundRobin,
     time_source: Arc<dyn TimeSource>,
-    /// Earliest monotonic measurement available for the validator, used for fallback
-    /// during out-of-sync validation. Should ideally represent a time close to the
-    /// start of the replica process.
-    origin_instant: Instant,
+    ingress_selector: Option<Arc<dyn IngressSelector>>,
 }
 
 impl Validator {
@@ -609,6 +647,7 @@ impl Validator {
         log: ReplicaLogger,
         metrics: ValidatorMetrics,
         time_source: Arc<dyn TimeSource>,
+        ingress_selector: Option<Arc<dyn IngressSelector>>,
     ) -> Validator {
         Validator {
             replica_config,
@@ -622,8 +661,8 @@ impl Validator {
             log,
             metrics,
             schedule: RoundRobin::default(),
-            origin_instant: time_source.get_instant(),
             time_source,
+            ingress_selector,
         }
     }
 
@@ -645,7 +684,8 @@ impl Validator {
         let validate_tape_shares = || self.validate_tape_shares(pool_reader);
         let validate_catch_up_package_shares =
             || self.validate_catch_up_package_shares(pool_reader);
-        let calls: [&'_ dyn Fn() -> ChangeSet; 11] = [
+        let validate_equivocation_proofs = || self.validate_equivocation_proofs(pool_reader);
+        let calls: [&'_ dyn Fn() -> ChangeSet; 12] = [
             &|| self.call_with_metrics("Finalization", validate_finalization),
             &|| self.call_with_metrics("Notarization", validate_notarization),
             &|| self.call_with_metrics("BlockProposal", validate_blocks),
@@ -657,6 +697,7 @@ impl Validator {
             &|| self.call_with_metrics("RandomBeaconShare", validate_beacon_shares),
             &|| self.call_with_metrics("RandomTapeShare", validate_tape_shares),
             &|| self.call_with_metrics("CUPShare", validate_catch_up_package_shares),
+            &|| self.call_with_metrics("EquivocationProof", validate_equivocation_proofs),
         ];
         self.schedule.call_next(&calls)
     }
@@ -681,8 +722,13 @@ impl Validator {
         artifact: &S,
     ) -> ValidationResult<ValidatorError> {
         check_protocol_version(artifact.version())
-            .map_err(|_| PermanentError::ReplicaVersionMismatch)?;
-        artifact.verify_signature(self.membership.as_ref(), self.crypto.as_ref(), pool_reader)
+            .map_err(|_| InvalidArtifactReason::ReplicaVersionMismatch)?;
+        artifact.verify_signature(
+            self.membership.as_ref(),
+            self.crypto.as_ref(),
+            pool_reader,
+            &self.replica_config,
+        )
     }
 
     /// Return a `ChangeSet` of `Finalization`s. See `validate_notary_issued`
@@ -837,7 +883,8 @@ impl Validator {
         let max_height = notarization_height.increment();
         let range = HeightRange::new(finalized_height.increment(), max_height);
         // Collect the min of validated block proposal ranks in the range.
-        let mut known_ranks: BTreeMap<Height, Option<Rank>> =
+        // Ignores disqualified ranks.
+        let mut known_qualified_ranks: BTreeMap<Height, Option<Rank>> =
             get_min_validated_ranks(pool_reader, &range);
 
         // It is necessary to traverse all the proposals and not only the ones with min
@@ -849,103 +896,8 @@ impl Validator {
             .block_proposal()
             .get_by_height_range(range)
         {
-            if proposal.check_integrity() {
-                // Attempt to validate the proposal through a notarization
-                if let Some(notarization) = pool_reader
-                    .pool()
-                    .unvalidated()
-                    .notarization()
-                    .get_by_height(proposal.height())
-                    .find(|notarization| &notarization.content.block == proposal.content.get_hash())
-                {
-                    // Verify notarization signature before checking block validity.
-                    let verification = self.verify_artifact(pool_reader, &notarization);
-                    if let Err(ValidationError::Permanent(e)) = verification {
-                        change_set.push(ChangeAction::HandleInvalid(
-                            notarization.into_message(),
-                            format!("{:?}", e),
-                        ));
-                    } else if verification.is_ok() {
-                        if get_notarized_parent(pool_reader, &proposal).is_ok() {
-                            self.metrics.observe_block(pool_reader, &proposal);
-                            known_ranks.insert(proposal.height(), Some(proposal.rank()));
-                            change_set.push(ChangeAction::MoveToValidated(proposal.into_message()));
-                            change_set
-                                .push(ChangeAction::MoveToValidated(notarization.into_message()));
-                        }
-                        // If the parent is notarized, this block and its notarization are
-                        // validated. If not, this block currently cannot be
-                        // validated through parent either.
-                        continue;
-                    }
-                    // Note that transient errors on notarization signature
-                    // verification should cause fall through, and the block
-                    // proposals proceed to be checked normally.
-                }
-
-                // Skip validation and drop the block if it has a higher rank than a known valid
-                // block. Note that this must happen after we first allow "block with
-                // notarization" validation (see above). Otherwise we may get stuck when a block
-                // maker equivocates.
-                if let Some(Some(min_rank)) = known_ranks.get(&proposal.height()) {
-                    if proposal.rank() > *min_rank {
-                        // Skip them instead of removal because we don't want to end up
-                        // requesting these artifacts again.
-                        let id = proposal.get_id();
-                        if self.unvalidated_for_too_long(pool_reader, &id) {
-                            warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
-                                  self.log,
-                                  "Due a valid proposal with a lower rank {}, /
-                                  skipping validating the proposal: {:?} with rank {}",
-                                  min_rank.0, id, proposal.rank().0
-                            );
-                        }
-                        continue;
-                    }
-                }
-
-                // We only validate blocks from a block maker of a certain rank after a
-                // rank-based delay. If this time has not elapsed yet, we ignore the block for
-                // now.
-                if !is_time_to_make_block(
-                    &self.log,
-                    self.registry_client.as_ref(),
-                    self.replica_config.subnet_id,
-                    pool_reader,
-                    proposal.height(),
-                    proposal.rank(),
-                    self.time_source.as_ref(),
-                ) {
-                    continue;
-                }
-
-                match self.check_block_validity(pool_reader, &proposal) {
-                    Ok(()) => {
-                        self.metrics.observe_block(pool_reader, &proposal);
-                        known_ranks.insert(proposal.height(), Some(proposal.rank()));
-                        change_set.push(ChangeAction::MoveToValidated(proposal.into_message()))
-                    }
-                    Err(ValidationError::Permanent(PermanentError::ReplicaVersionMismatch)) => {
-                        change_set
-                            .push(ChangeAction::RemoveFromUnvalidated(proposal.into_message()))
-                    }
-                    Err(ValidationError::Permanent(err)) => change_set.push(
-                        ChangeAction::HandleInvalid(proposal.into_message(), format!("{:?}", err)),
-                    ),
-                    Err(ValidationError::Transient(err)) => {
-                        if self.unvalidated_for_too_long(pool_reader, &proposal.get_id()) {
-                            warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
-                                  self.log,
-                                  "Couldn't check the block validity: {:?}", err
-                            );
-                        }
-                    }
-                }
-            } else {
-                warn!(
-                    self.log,
-                    "Invalid block (compromised payload integrity): {:?}", proposal
-                );
+            // Handle integrity check and verification errors early
+            if !proposal.check_integrity() {
                 change_set.push(ChangeAction::HandleInvalid(
                     proposal.clone().into_message(),
                     format!(
@@ -954,7 +906,115 @@ impl Validator {
                         proposal.as_ref().payload.get_hash(),
                         proposal.as_ref().payload.as_ref()
                     ),
-                ))
+                ));
+                continue;
+            }
+            let verification_result = self.verify_artifact(pool_reader, &proposal);
+            if let Err(error) = verification_result {
+                if let Some(action) = self.compute_action_from_validation_error(
+                    pool_reader,
+                    error,
+                    proposal.into_message(),
+                ) {
+                    change_set.push(action);
+                }
+                continue;
+            }
+
+            // Attempt to validate the proposal through a notarization
+            if let Some(notarization) = pool_reader
+                .pool()
+                .unvalidated()
+                .notarization()
+                .get_by_height(proposal.height())
+                .find(|notarization| &notarization.content.block == proposal.content.get_hash())
+            {
+                // Verify notarization signature. If the signature is valid, both
+                // artifacts may be validated.
+                let verification = self.verify_artifact(pool_reader, &notarization);
+                if let Err(ValidationError::InvalidArtifact(e)) = verification {
+                    change_set.push(ChangeAction::HandleInvalid(
+                        notarization.into_message(),
+                        format!("{:?}", e),
+                    ));
+                } else if verification.is_ok() {
+                    if get_notarized_parent(pool_reader, &proposal).is_ok() {
+                        change_set.push(ChangeAction::MoveToValidated(notarization.into_message()));
+                        // A successful verification is enough to validate this block,
+                        // because from the notarization we know that the block validity
+                        // was already checked.
+                        known_qualified_ranks.insert(proposal.height(), Some(proposal.rank()));
+                        change_set.push(ChangeAction::MoveToValidated(proposal.into_message()));
+                    }
+                    // If the parent is notarized, this block and its notarization are
+                    // validated. If not, this block currently cannot be
+                    // validated through parent either.
+                    continue;
+                }
+                // Note that transient errors on notarization signature
+                // verification should cause fall through, and the block
+                // proposals proceed to be checked normally.
+            }
+
+            // Skip validation and drop the block if it has a higher rank than a
+            // known valid block. Note that this must happen after we first allow
+            // "block with notarization" validation (see above). Otherwise we may
+            // get stuck when a block maker equivocates.
+            if let Some(Some(min_rank)) = known_qualified_ranks.get(&proposal.height()) {
+                if proposal.rank() > *min_rank {
+                    // Skip them instead of removal because we don't want to end up
+                    // requesting these artifacts again.
+                    let id = proposal.get_id();
+                    if self.unvalidated_for_too_long(pool_reader, &id) {
+                        warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
+                              self.log,
+                              "Due a valid proposal with a lower rank {}, /
+                              skipping validating the proposal: {:?} with rank {}",
+                              min_rank.0, id, proposal.rank().0
+                        );
+                    }
+                    continue;
+                }
+            }
+
+            // We only validate blocks from a block maker of a certain rank after a
+            // rank-based delay. If this time has not elapsed yet, we ignore the block for
+            // now.
+            if !is_time_to_make_block(
+                &self.log,
+                self.registry_client.as_ref(),
+                self.replica_config.subnet_id,
+                pool_reader,
+                proposal.height(),
+                proposal.rank(),
+                self.time_source.as_ref(),
+            ) {
+                continue;
+            }
+
+            // The artifact was already verified at this point, so we can do
+            // all the remaining block validity checks.
+            let check = self.check_block_validity(pool_reader, &proposal);
+            if let Some(action) = self.compute_action_from_artifact_verification(
+                pool_reader,
+                check,
+                proposal.into_message(),
+            ) {
+                if let ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal)) =
+                    &action
+                {
+                    known_qualified_ranks.insert(proposal.height(), Some(proposal.rank()));
+                }
+                change_set.push(action);
+            }
+        }
+
+        for action in &change_set {
+            if let ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal)) = action
+            {
+                self.metrics
+                    .observe_data_payload(proposal, self.ingress_selector.as_deref());
+                self.metrics.observe_block(pool_reader, proposal);
             }
         }
         self.metrics.observe_and_reset_dkg_time_per_validator_run();
@@ -962,20 +1022,18 @@ impl Validator {
     }
 
     /// Check whether or not the provided `BlockProposal` can be moved into the
-    /// validated pool. A `ValidatiorError::TransientError` value is returned
-    /// when any of the following conditions are met:
+    /// validated pool. This function assumes that the block proposal was already
+    /// verified (see [`SignatureVerify`]). A `ValidatiorError::ValidationFailure`
+    /// value is returned when any of the following conditions are met:
     ///
     /// - the `Block`'s validation context is not available locally.
     /// - The `Block`'s parent is not in the validated pool
     /// - The `Block`'s parent is not notarized
     /// - The payload_builder returns an `Err` result of any kind
     ///
-    /// A `ValidatorError::PermanentError` is returned when any of the following
+    /// A `ValidatorError::InvalidArtifact` is returned when any of the following
     /// conditions are met:
     ///
-    /// - The signer of the `BlockProposal` does not have the rank claimed on
-    ///   the `Block`
-    /// - The signature on the `BlockProposal` is invalid.
     /// - Any messages included in the payload are present in some ancestor of
     ///   the block
     /// - Any of the values in the `ValidationContext` on the `Block` are less
@@ -988,7 +1046,7 @@ impl Validator {
         proposal: &BlockProposal,
     ) -> ValidationResult<ValidatorError> {
         if proposal.height() == Height::from(0) {
-            return Err(PermanentError::CannotVerifyBlockHeightZero.into());
+            return Err(InvalidArtifactReason::CannotVerifyBlockHeightZero.into());
         }
 
         let Some(status) = status::get_status(
@@ -998,26 +1056,25 @@ impl Validator {
             pool_reader,
             &self.log,
         ) else {
-            return Err(TransientError::FailedToGetRegistryVersion.into());
+            return Err(ValidationFailure::FailedToGetRegistryVersion.into());
         };
 
         // If the replica is halted, block payload should be empty.
         if status == Status::Halting || status == Status::Halted {
             let payload = proposal.as_ref().payload.as_ref();
             if !payload.is_summary() && !payload.is_empty() {
-                return Err(PermanentError::NonEmptyPayloadPastUpgradePoint.into());
+                return Err(InvalidArtifactReason::NonEmptyPayloadPastUpgradePoint.into());
             }
         }
 
         let proposer = proposal.signature.signer;
         let parent = get_notarized_parent(pool_reader, proposal)?;
-        self.verify_artifact(pool_reader, proposal)?;
 
         // Ensure registry_version, certified_height increase monotonically and that
         // time increases *strictly* monotonically.
         let proposal = proposal.as_ref();
         if !proposal.context.greater(&parent.context) {
-            return Err(PermanentError::NonStrictlyIncreasingValidationContext.into());
+            return Err(InvalidArtifactReason::NonStrictlyIncreasingValidationContext.into());
         }
 
         let local_context = ValidationContext {
@@ -1036,7 +1093,7 @@ impl Validator {
         // further slowdown for other rounds.
         let parent_block_instant = pool_reader
             .get_block_instant(&proposal.parent)
-            .unwrap_or(self.origin_instant);
+            .unwrap_or(self.time_source.get_origin_instant());
         let duration_since_received_parent = self
             .time_source
             .get_instant()
@@ -1059,7 +1116,7 @@ impl Validator {
             ) >= proposal.context.time;
 
         if !sufficient_local_ctx {
-            return Err(TransientError::ValidationContextNotReached(
+            return Err(ValidationFailure::ValidationContextNotReached(
                 proposal.context.clone(),
                 local_context,
             )
@@ -1090,12 +1147,12 @@ impl Validator {
             )
             .map_err(|err| {
                 err.map(
-                    PermanentError::PayloadValidationError,
-                    TransientError::PayloadValidationError,
+                    InvalidArtifactReason::InvalidPayload,
+                    ValidationFailure::PayloadValidationFailed,
                 )
             })?;
 
-        ecdsa::validate_payload(
+        idkg::validate_payload(
             self.replica_config.subnet_id,
             self.registry_client.as_ref(),
             self.crypto.as_ref(),
@@ -1104,12 +1161,12 @@ impl Validator {
             &proposal.context,
             &parent,
             proposal.payload.as_ref(),
-            self.metrics.ecdsa_validation_duration.clone(),
+            self.metrics.idkg_validation_duration.clone(),
         )
         .map_err(|err| {
             err.map(
-                PermanentError::EcdsaPayloadValidationError,
-                TransientError::EcdsaPayloadValidationError,
+                InvalidArtifactReason::InvalidIDkgPayload,
+                ValidationFailure::IDkgPayloadValidationFailed,
             )
         })?;
 
@@ -1133,8 +1190,8 @@ impl Validator {
         )
         .map_err(|err| {
             err.map(
-                PermanentError::DkgPayloadValidationError,
-                TransientError::DkgPayloadValidationError,
+                InvalidArtifactReason::InvalidDkgPayload,
+                ValidationFailure::DkgPayloadValidationFailed,
             )
         });
         let elapsed = timer.stop_and_record();
@@ -1417,11 +1474,10 @@ impl Validator {
                             share.into_message(),
                         )
                     }
-                    Err(ValidationError::Permanent(err)) => Some(ChangeAction::HandleInvalid(
-                        share.into_message(),
-                        format!("{:?}", err),
-                    )),
-                    Err(ValidationError::Transient(err)) => {
+                    Err(ValidationError::InvalidArtifact(err)) => Some(
+                        ChangeAction::HandleInvalid(share.into_message(), format!("{:?}", err)),
+                    ),
+                    Err(ValidationError::ValidationFailed(err)) => {
                         if self.unvalidated_for_too_long(pool_reader, &share.get_id()) {
                             warn!(
                                 every_n_seconds => LOG_EVERY_N_SECONDS,
@@ -1437,7 +1493,7 @@ impl Validator {
     }
 
     /// Return the finalized block at height if the given `CatchUpContent` is
-    /// consistent, PermanentError if it is inconsistent, and TransientError
+    /// consistent, InvalidArtifact if it is inconsistent, and ValidationFailure
     /// if there is insufficient data to verify consistency (see CON-330).
     ///
     /// A CatchUpContent is inconsistent if things in it do not match up, e.g.
@@ -1454,10 +1510,10 @@ impl Validator {
         let height = share_content.height();
         let block = pool_reader
             .get_finalized_block(height)
-            .ok_or(TransientError::FinalizedBlockNotFound(height))?;
+            .ok_or(ValidationFailure::FinalizedBlockNotFound(height))?;
         if ic_types::crypto::crypto_hash(&block) != share_content.block {
             warn!(self.log, "Block from received CatchUpShareContent does not match finalized block in the pool: {:?} {:?}", share_content, block);
-            return Err(PermanentError::MismatchedBlockInCatchUpPackageShare.into());
+            return Err(InvalidArtifactReason::MismatchedBlockInCatchUpPackageShare.into());
         }
         if !block.payload.is_summary() {
             warn!(
@@ -1466,45 +1522,109 @@ impl Validator {
                 share_content,
                 block
             );
-            return Err(PermanentError::DataPayloadBlockInCatchUpPackageShare.into());
+            return Err(InvalidArtifactReason::DataPayloadBlockInCatchUpPackageShare.into());
         }
 
         let beacon = pool_reader
             .get_random_beacon(height)
-            .ok_or(TransientError::RandomBeaconNotFound(height))?;
+            .ok_or(ValidationFailure::RandomBeaconNotFound(height))?;
         if &beacon != share_content.random_beacon.get_value() {
             warn!(self.log, "RandomBeacon from received CatchUpContent does not match RandomBeacon in the pool: {:?} {:?}", share_content, beacon);
-            return Err(PermanentError::MismatchedRandomBeaconInCatchUpPackageShare.into());
+            return Err(InvalidArtifactReason::MismatchedRandomBeaconInCatchUpPackageShare.into());
         }
 
         let hash = self
             .state_manager
             .get_state_hash_at(height)
-            .map_err(TransientError::StateHashError)?;
+            .map_err(ValidationFailure::StateHashError)?;
         if hash != share_content.state_hash {
             warn!(self.log, "State hash from received CatchUpContent does not match local state hash: {:?} {:?}", share_content, hash);
-            return Err(PermanentError::MismatchedStateHashInCatchUpPackageShare.into());
+            return Err(InvalidArtifactReason::MismatchedStateHashInCatchUpPackageShare.into());
         }
 
         let summary = block.payload.as_ref().as_summary();
-        let registry_version = if let Some(ecdsa) = summary.ecdsa.as_ref() {
+        let registry_version = if let Some(idkg) = summary.idkg.as_ref() {
             // Should succeed as we already got the hash above
             let state = self
                 .state_manager
                 .get_state_at(height)
-                .map_err(TransientError::StateManagerError)?;
-            get_oldest_ecdsa_state_registry_version(ecdsa, state.get_ref())
+                .map_err(ValidationFailure::StateManagerError)?;
+            get_oldest_idkg_state_registry_version(idkg, state.get_ref())
         } else {
             None
         };
         if registry_version != share_content.oldest_registry_version_in_use_by_replicated_state {
             warn!(self.log, "Oldest registry version from received CatchUpContent does not match local one: {:?} {:?}", share_content, registry_version);
             return Err(
-                PermanentError::MismatchedOldestRegistryVersionInCatchUpPackageShare.into(),
+                InvalidArtifactReason::MismatchedOldestRegistryVersionInCatchUpPackageShare.into(),
             );
         }
 
         Ok(block)
+    }
+
+    /// Return a `ChangeSet` of `EquivocationProof` artifacts. This consists
+    /// of checking that both signatures are valid signatures of the two
+    /// derived block metadata instances, that the subnet is identical to
+    /// our current subnet, and that the signer was a blockmaker at that height.
+    fn validate_equivocation_proofs(&self, pool_reader: &PoolReader<'_>) -> ChangeSet {
+        let finalized_height = pool_reader.get_finalized_height();
+        let range = match pool_reader
+            .pool()
+            .unvalidated()
+            .equivocation_proof()
+            .height_range()
+        {
+            Some(height) => height,
+            None => return ChangeSet::new(),
+        };
+
+        let range_to_validate = HeightRange::new(finalized_height.increment(), range.max);
+        let mut existing_proofs = HashSet::<(NodeId, Height)>::from_iter(
+            pool_reader
+                .pool()
+                .validated()
+                .equivocation_proof()
+                .get_by_height_range(range_to_validate.clone())
+                .map(|proof| (proof.signer, proof.height)),
+        );
+
+        pool_reader
+            .pool()
+            .unvalidated()
+            .equivocation_proof()
+            .get_by_height_range(range_to_validate)
+            .filter_map(|proof| {
+                let signer_height_pair = (proof.signer, proof.height);
+                if existing_proofs.contains(&signer_height_pair) {
+                    return Some(ChangeAction::RemoveFromUnvalidated(proof.into_message()));
+                }
+
+                let result = if proof.hash1 == proof.hash2 {
+                    Some(ChangeAction::HandleInvalid(
+                        proof.into_message(),
+                        "both block hashes in the equivocation proof are identical".to_string(),
+                    ))
+                } else if proof.subnet_id != self.replica_config.subnet_id {
+                    Some(ChangeAction::HandleInvalid(
+                        proof.into_message(),
+                        "equivocation proof has different subnet id".to_string(),
+                    ))
+                } else {
+                    let verification = self.verify_artifact(pool_reader, &proof);
+                    self.compute_action_from_artifact_verification(
+                        pool_reader,
+                        verification,
+                        proof.into_message(),
+                    )
+                };
+
+                if let Some(ChangeAction::MoveToValidated(_)) = result {
+                    existing_proofs.insert(signer_height_pair);
+                }
+                result
+            })
+            .collect()
     }
 
     fn dedup_change_actions(&self, name: &str, actions: ChangeSet) -> ChangeSet {
@@ -1534,17 +1654,28 @@ impl Validator {
     ) -> Option<ChangeAction> {
         match result {
             Ok(()) => Some(ChangeAction::MoveToValidated(message)),
-            Err(ValidationError::Permanent(PermanentError::ReplicaVersionMismatch)) => {
+            Err(err) => self.compute_action_from_validation_error(pool_reader, err, message),
+        }
+    }
+
+    fn compute_action_from_validation_error(
+        &self,
+        pool_reader: &PoolReader<'_>,
+        error: ValidatorError,
+        message: ConsensusMessage,
+    ) -> Option<ChangeAction> {
+        match error {
+            ValidationError::InvalidArtifact(InvalidArtifactReason::ReplicaVersionMismatch) => {
                 Some(ChangeAction::RemoveFromUnvalidated(message))
             }
-            Err(ValidationError::Permanent(s)) => {
+            ValidationError::InvalidArtifact(s) => {
                 Some(ChangeAction::HandleInvalid(message, format!("{:?}", s)))
             }
-            Err(ValidationError::Transient(err)) => {
+            ValidationError::ValidationFailed(err) => {
                 if self.unvalidated_for_too_long(pool_reader, &message.get_id()) {
                     warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
                           self.log,
-                          "Could not verify signature: {:?}", err
+                          "Could not determine if artifact is valid: {:?}", err
                     );
                 }
                 None
@@ -1574,7 +1705,7 @@ impl Validator {
         &self,
         catch_up_package: &CatchUpPackage,
         pool_reader: &PoolReader<'_>,
-    ) -> Result<(), ValidationError<PermanentError, TransientError>> {
+    ) -> Result<(), ValidationError<InvalidArtifactReason, ValidationFailure>> {
         let cup_height = catch_up_package.height();
 
         // Check that this is a CUP that is close to the current state we have
@@ -1615,8 +1746,8 @@ impl Validator {
                     );
                     Ok(())
                 }
-                Some(_) => Err(ValidationError::Transient(
-                    TransientError::CatchUpHeightNegligible,
+                Some(_) => Err(ValidationError::ValidationFailed(
+                    ValidationFailure::CatchUpHeightNegligible,
                 )),
                 None => Ok(()),
             }
@@ -1636,21 +1767,21 @@ impl Validator {
 
 #[cfg(test)]
 pub mod test {
-    use crate::ecdsa::test_utils::{
-        add_available_quadruple_to_payload, empty_ecdsa_payload, fake_ecdsa_key_id,
-        fake_sign_with_ecdsa_context_with_quadruple, fake_state_with_ecdsa_contexts,
-    };
-
     use super::*;
+    use crate::idkg::test_utils::{
+        add_available_quadruple_to_payload, empty_idkg_payload, fake_ecdsa_master_public_key_id,
+        fake_signature_request_context_with_pre_sig, fake_state_with_signature_requests,
+    };
     use assert_matches::assert_matches;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
+    use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{
         dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
         Dependencies, RefMockPayloadBuilder,
     };
     use ic_consensus_utils::get_block_maker_delay;
     use ic_interfaces::{
-        messaging::XNetTransientValidationError, p2p::consensus::MutablePool,
+        messaging::XNetPayloadValidationFailure, p2p::consensus::MutablePool,
         time_source::TimeSource,
     };
     use ic_interfaces_mocks::messaging::RefMockMessageRouting;
@@ -1664,22 +1795,23 @@ pub mod test {
     use ic_test_utilities_consensus::{assert_changeset_matches_pattern, fake::*, matches_pattern};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::{
+        ids::{node_test_id, subnet_test_id},
+        messages::SignedIngressBuilder,
+    };
     use ic_types::{
+        batch::{BatchPayload, IngressPayload},
         consensus::{
-            idkg::QuadrupleId, BlockPayload, CatchUpPackageShare, Finalization, FinalizationShare,
-            HashedBlock, HashedRandomBeacon, NotarizationShare, Payload, RandomBeaconContent,
-            RandomTapeContent, SummaryPayload,
+            dkg, idkg::PreSigId, BlockPayload, CatchUpPackageShare, DataPayload, EquivocationProof,
+            Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon, NotarizationShare,
+            Payload, RandomBeaconContent, RandomTapeContent, SummaryPayload,
         },
-        crypto::{CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
+        crypto::{BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
         replica_config::ReplicaConfig,
         signature::ThresholdSignature,
-        CryptoHashOfState, ReplicaVersion,
+        CryptoHashOfState, ReplicaVersion, Time,
     };
-    use std::{
-        borrow::Borrow,
-        sync::{Arc, RwLock},
-    };
+    use std::sync::{Arc, RwLock};
 
     pub fn assert_block_valid(results: &[ChangeAction], block: &BlockProposal) {
         match results.first() {
@@ -1730,6 +1862,7 @@ pub mod test {
                 no_op_logger(),
                 ValidatorMetrics::new(MetricsRegistry::new()),
                 Arc::clone(&dependencies.time_source) as Arc<_>,
+                /*ingress_selector=*/ None,
             );
             Self {
                 validator,
@@ -1882,30 +2015,22 @@ pub mod test {
                 .expect_get_state_hash_at()
                 .return_const(Ok(state_hash.clone()));
 
-            let key_id = fake_ecdsa_key_id();
+            let key_id = fake_ecdsa_master_public_key_id();
             // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
-            let quadruple_id1 = QuadrupleId::new(1);
-            let quadruple_id2 = QuadrupleId::new(2);
-            let quadruple_id3 = QuadrupleId::new(3);
+            let pre_sig_id1 = PreSigId(1);
+            let pre_sig_id2 = PreSigId(2);
+            let pre_sig_id3 = PreSigId(3);
 
             let contexts = vec![
-                fake_sign_with_ecdsa_context_with_quadruple(
-                    1,
-                    key_id.clone(),
-                    Some(quadruple_id1.clone()),
-                ),
-                fake_sign_with_ecdsa_context_with_quadruple(2, key_id.clone(), None),
-                fake_sign_with_ecdsa_context_with_quadruple(
-                    3,
-                    key_id.clone(),
-                    Some(quadruple_id3.clone()),
-                ),
+                fake_signature_request_context_with_pre_sig(1, key_id.clone(), Some(pre_sig_id1)),
+                fake_signature_request_context_with_pre_sig(2, key_id.clone(), None),
+                fake_signature_request_context_with_pre_sig(3, key_id.clone(), Some(pre_sig_id3)),
             ];
 
             state_manager
                 .get_mut()
                 .expect_get_state_at()
-                .return_const(Ok(fake_state_with_ecdsa_contexts(
+                .return_const(Ok(fake_state_with_signature_requests(
                     Height::from(0),
                     contexts.clone(),
                 )
@@ -1939,18 +2064,18 @@ pub mod test {
             let block = proposal.content.as_mut();
             block.context.certified_height = block.height();
 
-            let mut ecdsa = empty_ecdsa_payload(subnet_test_id(0));
+            let mut idkg = empty_idkg_payload(subnet_test_id(0));
             // Add the three quadruples using registry version 3, 1 and 2 in order
-            add_available_quadruple_to_payload(&mut ecdsa, quadruple_id1, RegistryVersion::from(3));
-            add_available_quadruple_to_payload(&mut ecdsa, quadruple_id2, RegistryVersion::from(1));
-            add_available_quadruple_to_payload(&mut ecdsa, quadruple_id3, RegistryVersion::from(2));
+            add_available_quadruple_to_payload(&mut idkg, pre_sig_id1, RegistryVersion::from(3));
+            add_available_quadruple_to_payload(&mut idkg, pre_sig_id2, RegistryVersion::from(1));
+            add_available_quadruple_to_payload(&mut idkg, pre_sig_id3, RegistryVersion::from(2));
 
             let dkg = block.payload.as_ref().as_summary().dkg.clone();
             block.payload = Payload::new(
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(SummaryPayload {
                     dkg,
-                    ecdsa: Some(ecdsa),
+                    idkg: Some(idkg),
                 }),
             );
             proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
@@ -2244,7 +2369,6 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 data_provider,
                 registry_client,
@@ -2284,13 +2408,7 @@ pub mod test {
             let rank = Rank(1);
             let mut test_block: Block = pool.make_next_block_from_parent(parent, rank).into();
 
-            let node_id = get_block_maker_by_rank(
-                membership.borrow(),
-                &PoolReader::new(&pool),
-                test_block.height(),
-                &committee,
-                rank,
-            );
+            let node_id = pool.get_block_maker_by_rank(test_block.height(), rank);
 
             test_block.context.registry_version = RegistryVersion::from(11);
             test_block.context.certified_height = Height::from(1);
@@ -2352,12 +2470,10 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 data_provider,
                 registry_client,
                 mut pool,
-                time_source,
                 replica_config,
                 ..
             } = setup_dependencies(pool_config, &committee);
@@ -2391,13 +2507,7 @@ pub mod test {
             let parent: &Block = block_chain.last().unwrap().as_ref();
             let rank = Rank(1);
             let mut test_block: Block = pool.make_next_block_from_parent(parent, rank).into();
-            let node_id = get_block_maker_by_rank(
-                membership.borrow(),
-                &PoolReader::new(&pool),
-                test_block.height(),
-                &committee,
-                rank,
-            );
+            let node_id = pool.get_block_maker_by_rank(test_block.height(), rank);
 
             test_block.context.registry_version = RegistryVersion::from(11);
             test_block.context.certified_height = Height::from(1);
@@ -2415,38 +2525,6 @@ pub mod test {
             pool.finalize(&block_chain[1]);
             pool.finalize(&block_chain[2]);
 
-            // ensure that the validator initially does not validate anything, as it is not
-            // time for rank 1 yet
-            assert!(validator
-                .on_state_change(&PoolReader::new(&pool))
-                .is_empty(),);
-
-            // Time between blocks increases by at least initial_notary_delay + 1ns
-            let monotonic_block_increment = registry_client
-                .get_notarization_delay_settings(
-                    replica_config.subnet_id,
-                    test_block.context.registry_version,
-                )
-                .unwrap()
-                .expect("subnet record should be available")
-                .initial_notary_delay
-                + Duration::from_nanos(1);
-
-            // After sufficiently advancing the time, ensure that the validator validates
-            // the block
-            let delay = monotonic_block_increment
-                + get_block_maker_delay(
-                    &no_op_logger(),
-                    registry_client.as_ref(),
-                    replica_config.subnet_id,
-                    PoolReader::new(&pool)
-                        .registry_version(test_block.height())
-                        .unwrap(),
-                    rank,
-                )
-                .unwrap();
-
-            time_source.set_time(parent.context.time + delay).unwrap();
             let results = validator.on_state_change(&PoolReader::new(&pool));
             assert_eq!(results.len(), 1);
             assert_matches!(&results[0], ChangeAction::RemoveFromUnvalidated(ConsensusMessage::BlockProposal(b))
@@ -2465,7 +2543,6 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 data_provider,
                 registry_client,
@@ -2502,13 +2579,8 @@ pub mod test {
             pool.insert_beacon_chain(&pool.make_next_beacon(), Height::from(3));
 
             let mut test_block = pool.make_next_block();
-            test_block.signature.signer = get_block_maker_by_rank(
-                membership.borrow(),
-                &PoolReader::new(&pool),
-                test_block.height(),
-                &committee,
-                Rank(0),
-            );
+            test_block.signature.signer =
+                pool.get_block_maker_by_rank(test_block.height(), Rank(0));
             test_block.content.as_mut().context.registry_version = RegistryVersion::from(11);
             test_block.content.as_mut().context.certified_height = Height::from(1);
             test_block.content.as_mut().rank = Rank(0);
@@ -2524,13 +2596,7 @@ pub mod test {
 
             let rank = Rank(0);
             let mut next_block = pool.make_next_block_from_parent(test_block.as_ref(), rank);
-            next_block.signature.signer = get_block_maker_by_rank(
-                membership.borrow(),
-                &PoolReader::new(&pool),
-                next_block.height(),
-                &committee,
-                rank,
-            );
+            next_block.signature.signer = pool.get_block_maker_by_rank(next_block.height(), rank);
             next_block.content.as_mut().context.registry_version = RegistryVersion::from(11);
             next_block.content.as_mut().context.certified_height = Height::from(1);
             next_block.content.as_mut().rank = rank;
@@ -2556,7 +2622,6 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 data_provider,
                 registry_client,
@@ -2589,7 +2654,7 @@ pub mod test {
 
             registry_client.update_to_latest_version();
 
-            let mut parent_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
+            let mut parent_block = make_next_block(&pool);
             parent_block.content.as_mut().context.registry_version = RegistryVersion::from(12);
             parent_block.content.as_mut().context.certified_height = Height::from(1);
             parent_block.update_content();
@@ -2597,7 +2662,7 @@ pub mod test {
 
             // Construct a block with a higher registry version but lower certified height
             // (which will be considered invalid)
-            let mut test_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
+            let mut test_block = make_next_block(&pool);
             test_block.content.as_mut().context.registry_version = RegistryVersion::from(12);
             test_block.content.as_mut().context.certified_height = Height::from(0);
             test_block.update_content();
@@ -2609,7 +2674,7 @@ pub mod test {
 
             // Construct a block with a registry version that is higher than any we
             // currently recognize. This should yield an empty change set
-            let mut test_block = make_next_block(&pool, membership.borrow(), &subnet_members);
+            let mut test_block = make_next_block(&pool);
             test_block.content.as_mut().context.registry_version = RegistryVersion::from(2000);
             test_block.update_content();
             pool.insert_unvalidated(test_block);
@@ -2617,37 +2682,9 @@ pub mod test {
         })
     }
 
-    // utility function to determine the identity of the block maker with the
-    // specified rank at a given height. Panics if this rank does not exist.
-    fn get_block_maker_by_rank(
-        membership: &Membership,
-        pool_reader: &PoolReader,
-        height: Height,
-        subnet_members: &[NodeId],
-        rank: Rank,
-    ) -> NodeId {
-        *subnet_members
-            .iter()
-            .find(|node| {
-                let prev_beacon = pool_reader.get_random_beacon(height.decrement()).unwrap();
-                membership.get_block_maker_rank(height, &prev_beacon, **node) == Ok(Some(rank))
-            })
-            .unwrap()
-    }
-
-    fn make_next_block(
-        pool: &TestConsensusPool,
-        membership: &Membership,
-        subnet_members: &[NodeId],
-    ) -> BlockProposal {
+    fn make_next_block(pool: &TestConsensusPool) -> BlockProposal {
         let mut next_block = pool.make_next_block();
-        next_block.signature.signer = get_block_maker_by_rank(
-            membership,
-            &PoolReader::new(pool),
-            next_block.height(),
-            subnet_members,
-            Rank(0),
-        );
+        next_block.signature.signer = pool.get_block_maker_by_rank(next_block.height(), Rank(0));
         next_block.content.as_mut().rank = Rank(0);
         next_block.update_content();
         next_block
@@ -2661,7 +2698,6 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 mut pool,
                 time_source,
@@ -2694,7 +2730,7 @@ pub mod test {
             // because state_manager will return certified height 0 the first time,
             // indicating that the replicated state at height 1 is not certified
             // yet).
-            let mut test_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
+            let mut test_block = make_next_block(&pool);
             test_block.content.as_mut().context.certified_height = Height::from(1);
             test_block.update_content();
             pool.insert_unvalidated(test_block.clone());
@@ -2723,7 +2759,6 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 mut pool,
                 time_source,
@@ -2748,7 +2783,7 @@ pub mod test {
 
             // We construct a block with a time greater than the current consensus time.
             // It should not be validated yet.
-            let mut test_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
+            let mut test_block = make_next_block(&pool);
             let block_time = test_block.content.as_mut().context.time;
             test_block.update_content();
             pool.insert_unvalidated(test_block.clone());
@@ -2772,7 +2807,7 @@ pub mod test {
             pool.finalize(&test_block);
             pool.insert_validated(pool.make_next_beacon());
 
-            let mut test_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
+            let mut test_block = make_next_block(&pool);
             test_block.content.as_mut().context.time =
                 block_time.checked_sub(Duration::from_nanos(1)).unwrap();
             test_block.update_content();
@@ -3070,7 +3105,6 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 registry_client,
                 mut pool,
@@ -3108,7 +3142,7 @@ pub mod test {
             // The current time is the time at which we inserted, notarized and finalized
             // the current tip of the chain (i.e. the parent of test_block).
             let parent_time = time_source.get_relative_time();
-            let mut test_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
+            let mut test_block = make_next_block(&pool);
             let rank = Rank(1);
             let delay = get_block_maker_delay(
                 &no_op_logger(),
@@ -3122,13 +3156,7 @@ pub mod test {
             .unwrap();
             test_block.content.as_mut().rank = rank;
             test_block.content.as_mut().context.time += delay;
-            test_block.signature.signer = get_block_maker_by_rank(
-                membership.borrow(),
-                &PoolReader::new(&pool),
-                test_block.height(),
-                &subnet_members,
-                rank,
-            );
+            test_block.signature.signer = pool.get_block_maker_by_rank(test_block.height(), rank);
             test_block.update_content();
             let proposal_time = test_block.content.get_value().context.time;
             pool.insert_unvalidated(test_block.clone());
@@ -3165,7 +3193,7 @@ pub mod test {
             pool.insert_validated(pool.make_next_beacon());
 
             // Continue stalling the clock, and validate a rank > 0 block.
-            let mut test_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
+            let mut test_block = make_next_block(&pool);
             let rank = Rank(1);
             let delay = get_block_maker_delay(
                 &no_op_logger(),
@@ -3179,13 +3207,7 @@ pub mod test {
             .unwrap();
             test_block.content.as_mut().rank = rank;
             test_block.content.as_mut().context.time += delay;
-            test_block.signature.signer = get_block_maker_by_rank(
-                membership.borrow(),
-                &PoolReader::new(&pool),
-                test_block.height(),
-                &subnet_members,
-                rank,
-            );
+            test_block.signature.signer = pool.get_block_maker_by_rank(test_block.height(), rank);
             test_block.update_content();
             let proposal_time = test_block.content.get_value().context.time;
             pool.insert_unvalidated(test_block.clone());
@@ -3213,7 +3235,6 @@ pub mod test {
             let ValidatorAndDependencies {
                 validator,
                 payload_builder,
-                membership,
                 state_manager,
                 mut pool,
                 ..
@@ -3224,9 +3245,9 @@ pub mod test {
                 .get_mut()
                 .expect_validate_payload()
                 .returning(|_, _, _, _| {
-                    Err(ValidationError::Transient(
-                        PayloadTransientError::XNetPayloadValidationError(
-                            XNetTransientValidationError::StateNotCommittedYet(Height::from(0)),
+                    Err(ValidationError::ValidationFailed(
+                        PayloadValidationFailure::XNetPayloadValidationFailed(
+                            XNetPayloadValidationFailure::StateNotCommittedYet(Height::from(0)),
                         ),
                     ))
                 });
@@ -3240,13 +3261,7 @@ pub mod test {
             let parent_block = pool.make_next_block();
             let rank = Rank(0);
             let mut block = pool.make_next_block_from_parent(parent_block.as_ref(), rank);
-            block.signature.signer = get_block_maker_by_rank(
-                membership.borrow(),
-                &PoolReader::new(&pool),
-                block.height(),
-                &subnet_members,
-                rank,
-            );
+            block.signature.signer = pool.get_block_maker_by_rank(block.height(), rank);
 
             block.update_content();
             let content = NotarizationContent::new(
@@ -3272,11 +3287,243 @@ pub mod test {
             assert_eq!(
                 changeset,
                 vec![
-                    ChangeAction::MoveToValidated(block.into_message()),
-                    ChangeAction::MoveToValidated(notarization.into_message())
+                    ChangeAction::MoveToValidated(notarization.into_message()),
+                    ChangeAction::MoveToValidated(block.into_message())
                 ]
             );
             pool.apply_changes(changeset);
         })
+    }
+
+    /// Returns a consensus pool and validator, along with a valid equivocation proof.
+    fn setup_equivocation_proof_test(
+        pool_config: ArtifactPoolConfig,
+    ) -> (TestConsensusPool, Validator, EquivocationProof) {
+        let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+        let ValidatorAndDependencies {
+            validator,
+            mut pool,
+            replica_config,
+            ..
+        } = setup_dependencies(pool_config, &subnet_members);
+
+        pool.advance_round_normal_operation();
+        pool.insert_validated(pool.make_next_beacon());
+
+        let original = pool.make_next_block();
+        let mut block = original.clone();
+        let correct_signer = pool.get_block_maker_by_rank(block.height(), Rank(0));
+
+        // Create two different blocks from the same block maker
+        let ingress = IngressPayload::from(vec![SignedIngressBuilder::new()
+            .method_payload(vec![0; 64])
+            .nonce(0)
+            .expiry_time(Time::from_nanos_since_unix_epoch(0))
+            .build()]);
+        block.content.as_mut().payload = Payload::new(
+            ic_types::crypto::crypto_hash,
+            BlockPayload::Data(DataPayload {
+                batch: BatchPayload {
+                    ingress,
+                    ..BatchPayload::default()
+                },
+                dealings: dkg::Dealings::new_empty(Height::new(0)),
+                idkg: None,
+            }),
+        );
+        block.signature.signer = correct_signer;
+        block.update_content();
+        let first = block.clone();
+        block.content.as_mut().payload = Payload::new(
+            ic_types::crypto::crypto_hash,
+            BlockPayload::Data(DataPayload {
+                batch: BatchPayload {
+                    ingress: IngressPayload::from(vec![]),
+                    ..BatchPayload::default()
+                },
+                dealings: dkg::Dealings::new_empty(Height::new(0)),
+                idkg: None,
+            }),
+        );
+        block.update_content();
+        let second = block.clone();
+
+        (
+            pool,
+            validator,
+            EquivocationProof {
+                signer: correct_signer,
+                version: block.content.as_ref().version.clone(),
+                height: Height::new(2),
+                subnet_id: replica_config.subnet_id,
+                hash1: first.content.get_hash().clone(),
+                signature1: BasicSigOf::new(BasicSig(vec![])),
+                hash2: second.content.get_hash().clone(),
+                signature2: BasicSigOf::new(BasicSig(vec![])),
+            },
+        )
+    }
+
+    #[test]
+    fn test_equivocation_invalid_for_identical_hashes() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+            // Invalidate proof with identical hashes
+            proof.hash2 = proof.hash1.clone();
+            pool.insert_unvalidated(proof.clone());
+            assert_matches!(
+                &validator.on_state_change(&PoolReader::new(&pool))[..],
+                [ChangeAction::HandleInvalid(
+                    ConsensusMessage::EquivocationProof(_),
+                    reason
+                )] if reason.contains("both block hashes in the equivocation proof are identical")
+            );
+        });
+    }
+
+    #[test]
+    fn test_equivocation_invalid_for_wrong_subnet_id() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+            // Invalidate proof with incorrect subnet ID
+            proof.subnet_id = subnet_test_id(1337);
+            pool.insert_unvalidated(proof.clone());
+            assert_matches!(
+                &validator.on_state_change(&PoolReader::new(&pool))[..],
+                [ChangeAction::HandleInvalid(
+                    ConsensusMessage::EquivocationProof(_),
+                    reason
+                )] if reason.contains("equivocation proof has different subnet id")
+            );
+        });
+    }
+
+    #[test]
+    fn test_equivocation_invalid_for_signer_not_in_subnet() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+            // Don't validate if signer is not part of subnet
+            proof.signer = node_test_id(10);
+            pool.insert_unvalidated(proof.clone());
+            assert_matches!(
+                &validator.on_state_change(&PoolReader::new(&pool))[..],
+                [ChangeAction::HandleInvalid(
+                    ConsensusMessage::EquivocationProof(_),
+                    reason
+                )] if reason.contains("NodeNotFound")
+            );
+        });
+    }
+
+    #[test]
+    fn test_equivocation_invalid_for_signer_not_blockmaker() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+            // Some test id that's different from the block maker, but still part of the subnet
+            let non_blockmaker_node = node_test_id(3);
+            assert!(non_blockmaker_node != proof.signer);
+
+            proof.signer = non_blockmaker_node;
+            pool.insert_unvalidated(proof.clone());
+            assert_matches!(
+                &validator.on_state_change(&PoolReader::new(&pool))[..],
+                [ChangeAction::HandleInvalid(
+                    ConsensusMessage::EquivocationProof(_),
+                    reason
+                )] if reason.contains("NotABlockmaker")
+            );
+        });
+    }
+
+    #[test]
+    fn test_equivocation_validates() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, proof) = setup_equivocation_proof_test(pool_config);
+            // Validate a well-formed equivocation proof, with the correct subnet ID
+            pool.insert_unvalidated(proof.clone());
+            assert_matches!(
+                validator.on_state_change(&PoolReader::new(&pool))[..],
+                [ChangeAction::MoveToValidated(
+                    ConsensusMessage::EquivocationProof(_)
+                )]
+            );
+        });
+    }
+
+    #[test]
+    fn test_equivocation_ignored_if_below_finalized_height() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, _) = setup_equivocation_proof_test(pool_config);
+            let block = pool.make_next_block();
+            pool.insert_validated(block.clone());
+            pool.notarize(&block);
+            pool.finalize(&block);
+            assert!(validator.on_state_change(&PoolReader::new(&pool))[..].is_empty());
+        });
+    }
+
+    #[test]
+    fn test_equivocation_validate_only_one_per_height_and_signer() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let (mut pool, validator, mut proof) = setup_equivocation_proof_test(pool_config);
+            // Insert two different proofs for the same height and signer
+            pool.insert_unvalidated(proof.clone());
+            let mut hash = proof.hash1.clone().get();
+            hash.0[0] = !hash.0[0];
+            proof.hash2 = CryptoHashOf::new(hash);
+            pool.insert_unvalidated(proof.clone());
+
+            // We should validate only a single equivocation proof, the other
+            // one is expected to be removed from the unvalidated pool.
+            let change_set = validator.on_state_change(&PoolReader::new(&pool));
+            assert_matches!(
+                change_set[..],
+                [
+                    ChangeAction::MoveToValidated(ConsensusMessage::EquivocationProof(_)),
+                    ChangeAction::RemoveFromUnvalidated(ConsensusMessage::EquivocationProof(_))
+                ]
+            );
+        });
+    }
+
+    /// The validation logic may have a fast path for validating blocks for
+    /// which there exists a valid notarization.
+    #[test]
+    fn test_validator_rejects_incorrect_signature_in_notarization_fast_path() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let ValidatorAndDependencies {
+                validator,
+                mut pool,
+                ..
+            } = setup_dependencies(pool_config, &subnet_members);
+
+            pool.advance_round_normal_operation_n(9);
+
+            let mut block = pool.make_next_block();
+
+            // Insert notarization into unvalidated pool, not the block
+            let mut notarization = Notarization::fake(NotarizationContent::new(
+                block.height(),
+                block.content.get_hash().clone(),
+            ));
+            notarization.signature.signers =
+                vec![node_test_id(1), node_test_id(2), node_test_id(3)];
+            pool.insert_unvalidated(notarization);
+
+            // Insert tampered block into unvalidated pool
+            assert_ne!(block.signature.signer, node_test_id(100));
+            block.signature.signer = node_test_id(3);
+            pool.insert_unvalidated(block);
+
+            // Incorrect block proposals should not get validated
+            assert_matches!(
+                validator.on_state_change(&PoolReader::new(&pool))[..],
+                [ChangeAction::HandleInvalid(
+                    ConsensusMessage::BlockProposal(_),
+                    _
+                )]
+            );
+        });
     }
 }

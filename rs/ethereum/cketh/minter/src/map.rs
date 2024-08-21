@@ -14,6 +14,7 @@ use std::collections::BTreeMap;
 /// Internally, an entry `(Key, AltKey, V)` is stored as two entries in two separate maps:
 /// * `(Key, AltKey)` in a BTreeMap<Key, AltKey>
 /// * `(AltKey, V)` in a BTreeMap<AltKey, V>
+///
 /// Meaning that the alternative key is duplicated, but not the primary key. This allows to easily remove
 /// data given the primary key since with only 2 map lookups we have the chain `Key -> AltKey -> V`.
 /// In contrast, this structure is not thought to allow efficient removal by the alternative key
@@ -84,70 +85,56 @@ impl<Key: Ord, AltKey: Ord, V> MultiKeyMap<Key, AltKey, V> {
         Ok(())
     }
 
-    pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V>
+    pub fn get<Q>(&self, key: &Q) -> Option<&V>
     where
         Key: Borrow<Q>,
-        Q: Ord,
+        Q: ?Sized + Ord,
     {
         self.by_key
             .get(key)
             .and_then(|alt_key| self.by_alt_key.get(alt_key))
     }
 
-    pub fn get_entry<Q: ?Sized>(&self, key: &Q) -> Option<(&AltKey, &V)>
+    pub fn get_entry<Q>(&self, key: &Q) -> Option<(&AltKey, &V)>
     where
         Key: Borrow<Q>,
-        Q: Ord,
+        Q: ?Sized + Ord,
     {
         self.by_key
             .get(key)
             .and_then(|alt_key| self.by_alt_key.get(alt_key).map(|v| (alt_key, v)))
     }
 
-    pub fn get_entry_alt<Q: ?Sized>(&self, alt_key: &Q) -> Option<(&Key, &V)>
-    where
-        AltKey: Borrow<Q>,
-        Q: Ord,
-    {
-        self.iter().find_map(|(key, alt_key_, v)| {
-            if alt_key_.borrow() == alt_key {
-                Some((key, v))
-            } else {
-                None
-            }
-        })
-    }
-
-    pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Option<&mut V>
+    pub fn get_mut<Q>(&mut self, key: &Q) -> Option<&mut V>
     where
         Key: Borrow<Q>,
-        Q: Ord,
+        Q: ?Sized + Ord,
     {
         self.by_key
             .get(key)
             .and_then(|alt_key| self.by_alt_key.get_mut(alt_key))
     }
 
-    pub fn get_alt<Q: ?Sized>(&self, alt_key: &Q) -> Option<&V>
+    pub fn get_alt<Q>(&self, alt_key: &Q) -> Option<&V>
     where
         AltKey: Borrow<Q>,
-        Q: Ord,
+        Q: ?Sized + Ord,
     {
         self.by_alt_key.get(alt_key)
     }
 
-    pub fn contains<Q: ?Sized>(&self, key: &Q) -> bool
+    pub fn contains<Q>(&self, key: &Q) -> bool
     where
         Key: Borrow<Q>,
-        Q: Ord,
+        Q: ?Sized + Ord,
     {
         self.by_key.contains_key(key)
     }
 
-    pub fn contains_alt<Q: ?Sized>(&self, alt_key: &Q) -> bool
+    pub fn contains_alt<Q>(&self, alt_key: &Q) -> bool
     where
         AltKey: Borrow<Q>,
-        Q: Ord,
+        Q: ?Sized + Ord,
     {
         self.by_alt_key.contains_key(alt_key)
     }
@@ -168,10 +155,10 @@ impl<Key: Ord, AltKey: Ord, V> MultiKeyMap<Key, AltKey, V> {
         self.by_alt_key.keys()
     }
 
-    pub fn remove_entry<Q: ?Sized>(&mut self, key: &Q) -> Option<(Key, AltKey, V)>
+    pub fn remove_entry<Q>(&mut self, key: &Q) -> Option<(Key, AltKey, V)>
     where
         Key: Borrow<Q>,
-        Q: Ord,
+        Q: ?Sized + Ord,
     {
         self.by_key.remove_entry(key).map(|(key, alt_key)| {
             let value = self
@@ -225,5 +212,107 @@ impl<Key: Ord, AltKey: Ord + Clone, V> FromIterator<(Key, AltKey, V)>
             .map(|(key, alt_key, value)| ((key, alt_key.clone()), (alt_key, value)))
             .unzip();
         Self { by_key, by_alt_key }
+    }
+}
+
+/// A map with two keys: a primary key `Key` and an alternative key `AltKey`.
+/// The stored value `V` is indexed by both keys and can be efficiently retrieved from either key.
+///
+/// In comparison to `MultiKeyMap`, which only duplicates the alternative key,
+/// both the primary key and the alternative key are duplicated.
+/// This makes it possible to efficiently retrieve both the entry (AltKey, V) given the primary key
+/// and the entry (Key, V) given the alternative key.
+///
+/// Internally, this struct is a simple wrapper around `MultiKeyMap<Key, AltKey, (Key, V)>`.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct DedupMultiKeyMap<Key, AltKey, V>
+where
+    Key: Ord,
+    AltKey: Ord,
+{
+    map: MultiKeyMap<Key, AltKey, (Key, V)>,
+}
+
+impl<Key: Ord, AltKey: Ord, V> DedupMultiKeyMap<Key, AltKey, V> {
+    pub fn new() -> Self {
+        Self {
+            map: Default::default(),
+        }
+    }
+
+    pub fn try_insert(
+        &mut self,
+        key: Key,
+        alt_key: AltKey,
+        value: V,
+    ) -> Result<(), OccupiedError<Key, AltKey, V>>
+    where
+        Key: Clone,
+        AltKey: Clone,
+    {
+        self.map
+            .try_insert(key.clone(), alt_key.clone(), (key, value))
+            .map_err(|err| OccupiedError {
+                occupied_key: err.occupied_key,
+                value: err.value.1,
+            })
+    }
+
+    pub fn get<Q>(&self, key: &Q) -> Option<&V>
+    where
+        Key: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
+        self.map.get(key).map(|(_key, value)| value)
+    }
+
+    pub fn get_alt<Q>(&self, alt_key: &Q) -> Option<&V>
+    where
+        AltKey: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
+        self.map.get_alt(alt_key).map(|(_key, value)| value)
+    }
+
+    pub fn get_entry<Q>(&self, key: &Q) -> Option<(&AltKey, &V)>
+    where
+        Key: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
+        self.map
+            .get_entry(key)
+            .map(|(alt_key, (_key, value))| (alt_key, value))
+    }
+
+    pub fn get_entry_alt<Q>(&self, alt_key: &Q) -> Option<(&Key, &V)>
+    where
+        AltKey: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
+        self.map.get_alt(alt_key).map(|(key, value)| (key, value))
+    }
+
+    pub fn contains_alt<Q>(&self, alt_key: &Q) -> bool
+    where
+        AltKey: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
+        self.map.contains_alt(alt_key)
+    }
+
+    pub fn alt_keys(&self) -> impl Iterator<Item = &AltKey> {
+        self.map.alt_keys()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&Key, &AltKey, &V)> {
+        self.map
+            .iter()
+            .map(|(key, alt_key, (_key, value))| (key, alt_key, value))
+    }
+}
+
+impl<Key: Ord, AltKey: Ord, V> Default for DedupMultiKeyMap<Key, AltKey, V> {
+    fn default() -> Self {
+        Self::new()
     }
 }

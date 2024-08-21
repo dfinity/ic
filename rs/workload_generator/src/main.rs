@@ -36,7 +36,7 @@ use ic_test_identity::{get_pair, TEST_IDENTITY_KEYPAIR, TEST_IDENTITY_KEYPAIR_HA
 use ic_types::{messages::Blob, CanisterId, PrincipalId, UserId};
 use stats::Summary;
 
-#[cfg(build = "debug")]
+#[cfg(debug_assertions)]
 fn get_logger() -> slog::Logger {
     let plain = slog_term::PlainSyncDecorator::new(std::io::stdout());
     slog::Logger::root(
@@ -47,7 +47,7 @@ fn get_logger() -> slog::Logger {
         slog_o!(),
     )
 }
-#[cfg(not(build = "debug"))]
+#[cfg(not(debug_assertions))]
 fn get_logger() -> slog::Logger {
     let plain = slog_term::PlainSyncDecorator::new(std::io::stdout());
     slog::Logger::root(
@@ -368,14 +368,12 @@ async fn main() {
                 ),
                 ..Default::default()
             };
-            Some(
-                ic_http_endpoints_metrics::MetricsHttpEndpoint::new_insecure(
-                    tokio::runtime::Handle::current(),
-                    config,
-                    ic_metrics::MetricsRegistry::global(),
-                    &logger,
-                ),
-            )
+            Some(ic_http_endpoints_metrics::MetricsHttpEndpoint::new(
+                tokio::runtime::Handle::current(),
+                config,
+                ic_metrics::MetricsRegistry::global(),
+                &logger,
+            ))
         }
         None => {
             println!("⚠️  Printed rates are completion rates, not rates at which requests are issued. Recommending to use Prometheus metrics (-p) to verify rate at which workload generator issues requests");

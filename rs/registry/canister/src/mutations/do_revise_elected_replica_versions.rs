@@ -1,17 +1,11 @@
 use std::collections::BTreeSet;
 
-use crate::{
-    common::LOG_PREFIX,
-    mutations::common::{decode_registry_value, encode_or_panic},
-    registry::Registry,
-};
+use crate::{common::LOG_PREFIX, registry::Registry};
 
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::{PrincipalId, SubnetId};
-use serde::Serialize;
-
 use ic_protobuf::registry::{
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
     subnet::v1::{SubnetListRecord, SubnetRecord},
@@ -22,6 +16,8 @@ use ic_registry_keys::{
     make_subnet_record_key, make_unassigned_nodes_config_record_key,
 };
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+use prost::Message;
+use serde::Serialize;
 
 impl Registry {
     /// Update the elected replica versions by:
@@ -33,7 +29,7 @@ impl Registry {
     ///
     /// This method is called by the governance canister, after a proposal
     /// for updating the elected replica versions has been accepted.
-    pub fn do_revise_elected_replica_versions(
+    pub fn do_revise_elected_guestos_versions(
         &mut self,
         payload: ReviseElectedGuestosVersionsPayload,
     ) {
@@ -71,7 +67,7 @@ impl Registry {
                 RegistryMutation {
                     mutation_type: registry_mutation::Type::Insert as i32,
                     key: make_replica_version_key(version).as_bytes().to_vec(),
-                    value: encode_or_panic(&ReplicaVersionRecord {
+                    value: ReplicaVersionRecord {
                         release_package_sha256_hex: payload
                             .release_package_sha256_hex
                             .unwrap_or_else(|| {
@@ -80,7 +76,8 @@ impl Registry {
                         release_package_urls: payload.release_package_urls,
                         guest_launch_measurement_sha256_hex: payload
                             .guest_launch_measurement_sha256_hex,
-                    }),
+                    }
+                    .encode_to_vec(),
                 },
             );
         }
@@ -90,9 +87,10 @@ impl Registry {
             RegistryMutation {
                 mutation_type: registry_mutation::Type::Upsert as i32,
                 key: make_blessed_replica_versions_key().as_bytes().to_vec(),
-                value: encode_or_panic(&BlessedReplicaVersions {
+                value: BlessedReplicaVersions {
                     blessed_version_ids: versions,
-                }),
+                }
+                .encode_to_vec(),
             },
         );
 
@@ -113,7 +111,8 @@ impl Registry {
         let before_removal = self
             .get(blessed_key.as_bytes(), version)
             .map(|reg_value| {
-                decode_registry_value::<BlessedReplicaVersions>(reg_value.value.clone())
+                BlessedReplicaVersions::decode(reg_value.value.as_slice())
+                    .unwrap()
                     .blessed_version_ids
             })
             .unwrap_or_default();
@@ -133,7 +132,9 @@ impl Registry {
         let subnets = self
             .get(subnets_key.as_bytes(), version)
             .map(|reg_value| {
-                decode_registry_value::<SubnetListRecord>(reg_value.value.clone()).subnets
+                SubnetListRecord::decode(reg_value.value.as_slice())
+                    .unwrap()
+                    .subnets
             })
             .unwrap_or_default();
 
@@ -144,7 +145,9 @@ impl Registry {
                 let subnet_id = SubnetId::new(PrincipalId::try_from(id).unwrap());
                 let subnet_key = make_subnet_record_key(subnet_id);
                 let reg_value = self.get(subnet_key.as_bytes(), version).unwrap();
-                decode_registry_value::<SubnetRecord>(reg_value.value.clone()).replica_version_id
+                SubnetRecord::decode(reg_value.value.as_slice())
+                    .unwrap()
+                    .replica_version_id
             })
             .filter(|id| versions_to_remove.contains(id))
             .collect::<BTreeSet<String>>();
@@ -161,7 +164,8 @@ impl Registry {
         let in_use = self
             .get(unassigned_key.as_bytes(), version)
             .map(|reg_value| {
-                decode_registry_value::<UnassignedNodesConfigRecord>(reg_value.value.clone())
+                UnassignedNodesConfigRecord::decode(reg_value.value.as_slice())
+                    .unwrap()
                     .replica_version
             })
             .filter(|id| versions_to_remove.contains(id));

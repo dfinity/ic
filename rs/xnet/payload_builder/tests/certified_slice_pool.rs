@@ -69,7 +69,7 @@ proptest! {
 
         with_test_replica_logger(|log| {
             // Increment `signals_end` so we can later safely decrement it without underflow.
-            stream.increment_signals_end();
+            stream.push_accept_signal();
             let signals_end = stream.signals_end();
 
             let fixture = StateManagerFixture::new(log).with_stream(DST_SUBNET, stream);
@@ -343,7 +343,7 @@ proptest! {
                     // But GC should fail.
                     match unpacked.garbage_collect(&ExpectedIndices {
                         message_index: from.increment(),
-                        signal_index: StreamIndex::from(std::u64::MAX),
+                        signal_index: StreamIndex::from(u64::MAX),
                     }) {
                         Err(CertifiedSliceError::WitnessPruningFailed(_)) => {}
                         actual => panic!(
@@ -497,7 +497,7 @@ proptest! {
 
         with_test_replica_logger(|log| {
             // Increment `signals_end` so we can later safely decrement it without underflow.
-            stream.increment_signals_end();
+            stream.push_accept_signal();
 
             // Indices just before the slice. Garbage collecting these should be a no-op.
             let indices_before = ExpectedIndices{
@@ -690,7 +690,7 @@ proptest! {
         let to = from + (msg_count as u64).into();
         with_test_replica_logger(|log| {
             // Increment `signals_end` so we can later safely decrement it without underflow.
-            stream.increment_signals_end();
+            stream.push_accept_signal();
 
             let fixture = StateManagerFixture::new(log.clone()).with_stream(DST_SUBNET, stream.clone());
             let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
@@ -733,7 +733,7 @@ proptest! {
 
             // But appending the same slice with a higher `signals_end` should result in an empty
             // slice (with the new `signals_end`).
-            stream.increment_signals_end();
+            stream.push_accept_signal();
             let new_fixture = StateManagerFixture::new(log.clone()).with_stream(DST_SUBNET, stream.clone());
             let new_slice = new_fixture.get_slice(DST_SUBNET, from, msg_count);
 
@@ -796,7 +796,7 @@ proptest! {
     ) {
         with_test_replica_logger(|log| {
             // Increment `signals_end` so we can later safely decrement it without underflow.
-            stream.increment_signals_end();
+            stream.push_accept_signal();
 
             let fixture = StateManagerFixture::new(log.clone()).with_stream(DST_SUBNET, stream.clone());
             let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
@@ -847,7 +847,7 @@ proptest! {
     ) {
         with_test_replica_logger(|log| {
             // Increment `signals_end` so we can later safely decrement it without underflow.
-            stream.increment_signals_end();
+            stream.push_accept_signal();
 
             let fixture = StateManagerFixture::new(log.clone()).with_stream(DST_SUBNET, stream.clone());
             let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
@@ -943,7 +943,7 @@ proptest! {
     ) {
         with_test_replica_logger(|log| {
             // Increment `signals_end` so we can later safely decrement it without underflow.
-            stream.increment_signals_end();
+            stream.push_accept_signal();
 
             let fixture = StateManagerFixture::new(log.clone()).with_stream(DST_SUBNET, stream.clone());
             let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
@@ -997,7 +997,7 @@ proptest! {
 
         with_test_replica_logger(|log| {
             // Increment `signals_end` so we can later safely decrement it without underflow.
-            stream.increment_signals_end();
+            stream.push_accept_signal();
 
             let fixture = StateManagerFixture::new(log.clone()).with_stream(DST_SUBNET, stream.clone());
             let prefix_msg_count = (from - stream_begin).get() as usize;
@@ -1071,7 +1071,7 @@ proptest! {
     ) {
         with_test_replica_logger(|log| {
             // Increment `signals_end` so we can later safely decrement it without underflow.
-            stream.increment_signals_end();
+            stream.push_accept_signal();
 
             let fixture = StateManagerFixture::new(log.clone()).with_stream(DST_SUBNET, stream.clone());
             let slice = fixture.get_slice(DST_SUBNET, from, msg_count);

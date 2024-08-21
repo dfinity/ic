@@ -20,7 +20,7 @@ DEV_DEPENDENCIES = [
 rust_library(
     name = "lib",
     srcs = glob(["src/*.rs"]),
-    compile_data = ["src/universal-canister.wasm"],
+    compile_data = ["src/universal-canister.wasm.gz"],
     crate_name = "ic_universal_canister",
     version = "0.9.0",
     deps = DEPENDENCIES,
@@ -31,6 +31,7 @@ rust_doc_test(
     name = "lib_doc_test",
     crate = ":lib",
     deps = [
+        # Keep sorted.
         "//rs/crypto/sha2",
         "//rs/types/types",
     ],
@@ -39,6 +40,6 @@ rust_doc_test(
 rust_test(
     name = "lib_test",
     crate = ":lib",
-    data = ["src/universal-canister.wasm"],
+    data = ["src/universal-canister.wasm.gz"],
     deps = DEV_DEPENDENCIES,
 )

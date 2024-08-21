@@ -355,6 +355,10 @@ impl ResponseHelper {
     ) -> Result<ExecuteMessageResult, (Self, HypervisorError, NumInstructions)> {
         self.canister
             .system_state
+            .canister_log
+            .append(&mut output.canister_log);
+        self.canister
+            .system_state
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
                 round.log,
@@ -415,7 +419,7 @@ impl ResponseHelper {
             Ok(_) => Ok(self.finish(
                 output.wasm_result,
                 instructions_available,
-                NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64),
+                NumBytes::from((output.instance_stats.dirty_pages() * PAGE_SIZE) as u64),
                 original,
                 round,
                 round_limits,
@@ -436,6 +440,10 @@ impl ResponseHelper {
         round_limits: &mut RoundLimits,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
+        self.canister
+            .system_state
+            .canister_log
+            .append(&mut output.canister_log);
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(
@@ -472,7 +480,7 @@ impl ResponseHelper {
                 self.finish(
                     Err(callback_err),
                     output.num_instructions_left,
-                    NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64),
+                    NumBytes::from((output.instance_stats.dirty_pages() * PAGE_SIZE) as u64),
                     original,
                     round,
                     round_limits,
@@ -1035,6 +1043,7 @@ fn execute_response_cleanup(
         ApiType::Cleanup {
             caller: original.call_origin.get_principal(),
             time: original.time,
+            execution_mode: execution_parameters.execution_mode.clone(),
             call_context_instructions_executed: original.instructions_executed,
         },
         helper.canister().execution_state.as_ref().unwrap(),
@@ -1108,8 +1117,8 @@ fn process_response_result(
                     "[DTS] Finished response callback {:} of canister {} after {} / {} instructions.",
                     original.callback_id,
                     clean_canister.canister_id(),
-                    slice.executed_instructions,
-                    instructions_used,
+                    slice.executed_instructions.display(),
+                    instructions_used.display(),
                 );
             }
             update_round_limits(round_limits, &slice);
@@ -1203,8 +1212,8 @@ fn process_cleanup_result(
                     "[DTS] Finished cleanup callback {:?} of canister {} after {} / {} instructions.",
                     original.callback_id,
                     clean_canister.canister_id(),
-                    slice.executed_instructions,
-                    instructions_used,
+                    slice.executed_instructions.display(),
+                    instructions_used.display(),
                 );
             }
             update_round_limits(round_limits, &slice);

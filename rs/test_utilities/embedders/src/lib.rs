@@ -134,6 +134,7 @@ impl WasmtimeInstanceBuilder {
             ComputeAllocation::default(),
             RequestMetadata::new(0, UNIX_EPOCH),
             self.api_type.caller(),
+            self.api_type.call_context_id(),
         );
 
         let subnet_memory_capacity = i64::MAX / 2;
@@ -165,7 +166,9 @@ impl WasmtimeInstanceBuilder {
             embedder.config().feature_flags.wasm_native_stable_memory,
             embedder.config().max_sum_exported_function_name_lengths,
             Memory::new_for_testing(),
-            Rc::new(ic_system_api::DefaultOutOfInstructionsHandler {}),
+            Rc::new(ic_system_api::DefaultOutOfInstructionsHandler::new(
+                self.num_instructions,
+            )),
             log,
         );
         let instruction_limit = api.slice_instruction_limit();

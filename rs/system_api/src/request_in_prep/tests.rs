@@ -35,7 +35,7 @@ fn method_names_larger_than_max_sum_exported_function_names_rejected() {
     let heap = vec![0; 1024];
     let method_name_source = 0;
     let max_sum_exported_function_name_lengths = 1000;
-    let method_name_len = max_sum_exported_function_name_lengths as u32 + 1;
+    let method_name_len = max_sum_exported_function_name_lengths + 1;
     let callback = WasmClosure::new(0, 0);
     let max_size_remote_subnet = NumBytes::from(10);
     RequestInPrep::new(

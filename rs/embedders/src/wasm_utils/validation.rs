@@ -20,7 +20,8 @@ use crate::wasmtime_embedder::{
 };
 use crate::{
     wasm_utils::instrumentation::{
-        ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
+        main_memory_type, WasmMemoryType, ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
+        DIRTY_PAGES_COUNTER_GLOBAL_NAME,
     },
     MAX_WASM_STACK_SIZE, MIN_GUARD_REGION_SIZE,
 };
@@ -48,7 +49,6 @@ struct FunctionSignature {
     pub return_type: Vec<ValType>,
 }
 
-const METHOD_MODULE: &str = "method";
 pub(super) const API_VERSION_IC0: &str = "ic0";
 
 // Constructs a map of function name -> HashMap<String,
@@ -59,236 +59,15 @@ pub(super) const API_VERSION_IC0: &str = "ic0";
 // user tries to import a function that doesn't exist in any of the expected
 // modules vs the case where the function exists but is imported from the wrong
 // module.
-fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>> {
+// Returns system api functions available only in wasm32 mode
+fn get_valid_system_apis_32_only() -> HashMap<String, HashMap<String, FunctionSignature>> {
     let valid_system_apis = vec![
-        (
-            // Public methods
-            "msg_caller_size",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![],
-                    return_type: vec![ValType::I32],
-                },
-            )],
-        ),
-        (
-            "msg_caller_copy",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32, ValType::I32],
-                    return_type: vec![],
-                },
-            )],
-        ),
-        (
-            "msg_arg_data_size",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![],
-                    return_type: vec![ValType::I32],
-                },
-            )],
-        ),
-        (
-            "msg_arg_data_copy",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32, ValType::I32],
-                    return_type: vec![],
-                },
-            )],
-        ),
-        (
-            "msg_method_name_size",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![],
-                    return_type: vec![ValType::I32],
-                },
-            )],
-        ),
-        (
-            "msg_method_name_copy",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32, ValType::I32],
-                    return_type: vec![],
-                },
-            )],
-        ),
-        (
-            "accept_message",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![],
-                    return_type: vec![],
-                },
-            )],
-        ),
-        (
-            "msg_reject_code",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![],
-                    return_type: vec![ValType::I32],
-                },
-            )],
-        ),
-        (
-            "msg_reject_msg_size",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![],
-                    return_type: vec![ValType::I32],
-                },
-            )],
-        ),
-        (
-            "msg_reject_msg_copy",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32, ValType::I32],
-                    return_type: vec![],
-                },
-            )],
-        ),
-        (
-            "msg_reply_data_append",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32],
-                    return_type: vec![],
-                },
-            )],
-        ),
-        (
-            "msg_reply",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![],
-                    return_type: vec![],
-                },
-            )],
-        ),
-        (
-            "msg_reject",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32],
-                    return_type: vec![],
-                },
-            )],
-        ),
-        (
-            "canister_self_size",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![],
-                    return_type: vec![ValType::I32],
-                },
-            )],
-        ),
-        (
-            "canister_self_copy",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32, ValType::I32],
-                    return_type: vec![],
-                },
-            )],
-        ),
-        // Inter-canister method calls
-        (
-            "public",
-            vec![(
-                METHOD_MODULE,
-                FunctionSignature {
-                    param_types: vec![ValType::I64, ValType::I32, ValType::I32],
-                    return_type: vec![ValType::I64],
-                },
-            )],
-        ),
-        (
-            "call_new",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![
-                        ValType::I32,
-                        ValType::I32,
-                        ValType::I32,
-                        ValType::I32,
-                        ValType::I32,
-                        ValType::I32,
-                        ValType::I32,
-                        ValType::I32,
-                    ],
-                    return_type: vec![],
-                },
-            )],
-        ),
-        (
-            "call_data_append",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32],
-                    return_type: vec![],
-                },
-            )],
-        ),
-        (
-            "call_on_cleanup",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32],
-                    return_type: vec![],
-                },
-            )],
-        ),
         (
             "call_cycles_add",
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValType::I64],
-                    return_type: vec![],
-                },
-            )],
-        ),
-        (
-            "call_perform",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![],
-                    return_type: vec![ValType::I32],
-                },
-            )],
-        ),
-        // Debugging aids
-        (
-            "debug_print",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32],
                     return_type: vec![],
                 },
             )],
@@ -329,6 +108,269 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![ValType::I32, ValType::I32, ValType::I32],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "canister_cycle_balance",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![ValType::I64],
+                },
+            )],
+        ),
+        (
+            "msg_cycles_available",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![ValType::I64],
+                },
+            )],
+        ),
+        (
+            "msg_cycles_refunded",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![ValType::I64],
+                },
+            )],
+        ),
+        (
+            "msg_cycles_accept",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I64],
+                    return_type: vec![ValType::I64],
+                },
+            )],
+        ),
+    ];
+
+    valid_system_apis
+        .into_iter()
+        .map(|(func_name, signatures)| {
+            (
+                func_name.to_string(),
+                signatures
+                    .into_iter()
+                    .map(|(module, signature)| (module.to_string(), signature))
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+// Returns system api functions available both in wasm32 and wasm64
+#[allow(non_snake_case)]
+fn get_valid_system_apis_common(I: ValType) -> HashMap<String, HashMap<String, FunctionSignature>> {
+    let valid_system_apis = vec![
+        (
+            // Public methods
+            "msg_caller_size",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![I],
+                },
+            )],
+        ),
+        (
+            "msg_caller_copy",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "msg_arg_data_size",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![I],
+                },
+            )],
+        ),
+        (
+            "msg_arg_data_copy",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "msg_method_name_size",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![I],
+                },
+            )],
+        ),
+        (
+            "msg_method_name_copy",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "accept_message",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "msg_reject_code",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![ValType::I32],
+                },
+            )],
+        ),
+        (
+            "msg_reject_msg_size",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![I],
+                },
+            )],
+        ),
+        (
+            "msg_reject_msg_copy",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "msg_reply_data_append",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "msg_reply",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "msg_reject",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "canister_self_size",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![I],
+                },
+            )],
+        ),
+        (
+            "canister_self_copy",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        // Inter-canister method calls
+        (
+            "call_new",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, I, I, I, I, I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "call_data_append",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "call_on_cleanup",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "call_perform",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![ValType::I32],
+                },
+            )],
+        ),
+        // Debugging aids
+        (
+            "debug_print",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I],
                     return_type: vec![],
                 },
             )],
@@ -418,48 +460,8 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32],
+                    param_types: vec![I, I],
                     return_type: vec![],
-                },
-            )],
-        ),
-        (
-            "canister_cycle_balance",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![],
-                    return_type: vec![ValType::I64],
-                },
-            )],
-        ),
-        (
-            "msg_cycles_available",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![],
-                    return_type: vec![ValType::I64],
-                },
-            )],
-        ),
-        (
-            "msg_cycles_refunded",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![],
-                    return_type: vec![ValType::I64],
-                },
-            )],
-        ),
-        (
-            "msg_cycles_accept",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I64],
-                    return_type: vec![ValType::I64],
                 },
             )],
         ),
@@ -468,7 +470,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32],
+                    param_types: vec![I, I],
                     return_type: vec![],
                 },
             )],
@@ -489,7 +491,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![],
-                    return_type: vec![ValType::I32],
+                    return_type: vec![I],
                 },
             )],
         ),
@@ -498,7 +500,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32, ValType::I32],
+                    param_types: vec![I, I, I],
                     return_type: vec![],
                 },
             )],
@@ -538,7 +540,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32],
+                    param_types: vec![I],
                     return_type: vec![],
                 },
             )],
@@ -548,7 +550,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32],
+                    param_types: vec![I],
                     return_type: vec![],
                 },
             )],
@@ -558,7 +560,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32],
+                    param_types: vec![I],
                     return_type: vec![],
                 },
             )],
@@ -568,7 +570,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I64, ValType::I64, ValType::I32],
+                    param_types: vec![ValType::I64, ValType::I64, I],
                     return_type: vec![],
                 },
             )],
@@ -578,7 +580,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32],
+                    param_types: vec![I, I],
                     return_type: vec![ValType::I32],
                 },
             )],
@@ -598,7 +600,7 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
-                    param_types: vec![ValType::I64, ValType::I64, ValType::I32],
+                    param_types: vec![ValType::I64, ValType::I64, I],
                     return_type: vec![],
                 },
             )],
@@ -610,6 +612,16 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 FunctionSignature {
                     param_types: vec![ValType::I32],
                     return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "msg_deadline",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![],
+                    return_type: vec![ValType::I64],
                 },
             )],
         ),
@@ -757,7 +769,14 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
     let mut imports_details = WasmImportsDetails::default();
 
     if !module.imports.is_empty() {
-        let valid_system_apis = get_valid_system_apis();
+        let valid_system_apis = match main_memory_type(module) {
+            WasmMemoryType::Wasm32 => {
+                let mut all = get_valid_system_apis_common(ValType::I32);
+                all.extend(get_valid_system_apis_32_only());
+                all
+            }
+            WasmMemoryType::Wasm64 => get_valid_system_apis_common(ValType::I64),
+        };
         for entry in &module.imports {
             let import_module = entry.module;
             let field = entry.name;
@@ -886,7 +905,7 @@ fn validate_export_section(
                     func_name = parts[0];
                     let unmangled_func_name = parts[1];
                     if seen_funcs.contains(unmangled_func_name) {
-                        return Err(WasmValidationError::InvalidExportSection(format!(
+                        return Err(WasmValidationError::UserInvalidExportSection(format!(
                             "Duplicate function '{}' exported multiple times \
                              with different call types: update, query, or composite_query.",
                             unmangled_func_name
@@ -930,11 +949,11 @@ fn validate_export_section(
         }
         if number_exported_functions > max_number_exported_functions {
             let err = format!("The number of exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds {}.", max_number_exported_functions);
-            return Err(WasmValidationError::InvalidExportSection(err));
+            return Err(WasmValidationError::UserInvalidExportSection(err));
         }
         if sum_exported_function_name_lengths > max_sum_exported_function_name_lengths {
             let err = format!("The sum of `<name>` lengths in exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds {}.", max_sum_exported_function_name_lengths);
-            return Err(WasmValidationError::InvalidExportSection(err));
+            return Err(WasmValidationError::UserInvalidExportSection(err));
         }
     }
     Ok(())
@@ -944,24 +963,45 @@ fn validate_export_section(
 // expression. Required because of OP. See also:
 // instrumentation.rs
 fn validate_data_section(module: &Module) -> Result<(), WasmValidationError> {
-    fn validate_segment(s: &DataSegment) -> Result<(), WasmValidationError> {
-        match &s.kind {
-            DataSegmentKind::Passive => Ok(()),
-            DataSegmentKind::Active {
-                memory_index: _,
-                offset_expr,
-            } => match offset_expr {
+    fn validate_segment(
+        s: &DataSegment,
+        mem_type: WasmMemoryType,
+    ) -> Result<(), WasmValidationError> {
+        match (&s.kind, mem_type) {
+            (DataSegmentKind::Passive, _) => Ok(()),
+            (
+                DataSegmentKind::Active {
+                    memory_index: _,
+                    offset_expr,
+                },
+                WasmMemoryType::Wasm32,
+            ) => match offset_expr {
                 Operator::I32Const { .. } => Ok(()),
                 _ => Err(WasmValidationError::InvalidDataSection(format!(
-                    "Invalid offset expression in data segment: {:?}",
+                    "Invalid offset expression in data segment for 32bit memory: {:?}",
+                    offset_expr
+                ))),
+            },
+            (
+                DataSegmentKind::Active {
+                    memory_index: _,
+                    offset_expr,
+                },
+                WasmMemoryType::Wasm64,
+            ) => match offset_expr {
+                Operator::I64Const { .. } => Ok(()),
+                _ => Err(WasmValidationError::InvalidDataSection(format!(
+                    "Invalid offset expression in data segment for 64bit memory: {:?}",
                     offset_expr
                 ))),
             },
         }
     }
 
+    let mem_type = main_memory_type(module);
+
     for d in &module.data {
-        validate_segment(d)?;
+        validate_segment(d, mem_type)?;
     }
     Ok(())
 }
@@ -1091,9 +1131,9 @@ fn test_extract_section_name() {
 ///      * `icp:public`
 ///      * `icp:private`
 /// * Checks that no more than `max_custom_sections` are defined in the
-/// module.
+///   module.
 /// * Checks that the size of a custom section does not exceed
-/// `max_custom_section_size`.
+///   `max_custom_section_size`.
 ///
 /// Returns the validated custom sections.
 fn validate_custom_section(
@@ -1145,13 +1185,15 @@ fn validate_custom_section(
     Ok(WasmMetadata::new(validated_custom_sections))
 }
 
-fn wasm_function_complexity(body: &Body<'_>) -> Complexity {
+fn wasm_function_complexity(
+    index: usize,
+    body: &Body<'_>,
+) -> Result<Complexity, WasmValidationError> {
     use Operator::*;
 
-    let complexity = body
-        .instructions
-        .iter()
-        .map(|instruction| match instruction {
+    let mut complexity: u64 = 0;
+    for instruction in &body.instructions {
+        complexity = complexity.saturating_add(match instruction {
             Block { .. }
             | Loop { .. }
             | If { .. }
@@ -1160,41 +1202,45 @@ fn wasm_function_complexity(body: &Body<'_>) -> Complexity {
             | BrTable { .. }
             | Call { .. }
             | CallIndirect { .. }
-            // `MemoryGrow` and `TableGrow` add `Call` instructions after
-            // instrumentation.
-            | MemoryGrow { .. }
-            | TableGrow { .. } => 50,
+            | MemoryGrow { .. } => 50,
+            TableGrow { .. } => {
+                return Err(WasmValidationError::UnsupportedWasmInstruction {
+                    index,
+                    instruction: "table.grow".into(),
+                });
+            }
             TableGet { .. } => 14,
             RefFunc { .. } => 8,
-            TableSet { .. } => 7,
+            TableSet { .. } => {
+                return Err(WasmValidationError::UnsupportedWasmInstruction {
+                    index,
+                    instruction: "table.set".into(),
+                });
+            }
             RefIsNull => 6,
-            TableFill { .. }
-            | I32TruncF32S
-            | I32TruncF32U
-            | I32TruncF64S
-            | I32TruncF64U
-            | I64ExtendI32S
-            | I64ExtendI32U
-            | I64TruncF32S
-            | I64TruncF32U
-            | I64TruncF64S
-            | I64TruncF64U
-            | F32ConvertI32S
-            | F32ConvertI32U
-            | F32ConvertI64S
-            | F32ConvertI64U
-            | F32DemoteF64
-            | F64ConvertI32S
-            | F64ConvertI32U
-            | F64ConvertI64S
-            | F64ConvertI64U => 5,
-            F32Neg
-            | F32Abs
-            | F64Neg
-            | F64Abs
-            | TableCopy { .. }
-            | TableInit { .. }
-            | MemoryCopy { .. } => 4,
+            TableFill { .. } => {
+                return Err(WasmValidationError::UnsupportedWasmInstruction {
+                    index,
+                    instruction: "table.fill".into(),
+                });
+            }
+            I32TruncF32S | I32TruncF32U | I32TruncF64S | I32TruncF64U | I64ExtendI32S
+            | I64ExtendI32U | I64TruncF32S | I64TruncF32U | I64TruncF64S | I64TruncF64U
+            | F32ConvertI32S | F32ConvertI32U | F32ConvertI64S | F32ConvertI64U | F32DemoteF64
+            | F64ConvertI32S | F64ConvertI32U | F64ConvertI64S | F64ConvertI64U => 5,
+            F32Neg | F32Abs | F64Neg | F64Abs | MemoryCopy { .. } => 4,
+            TableCopy { .. } => {
+                return Err(WasmValidationError::UnsupportedWasmInstruction {
+                    index,
+                    instruction: "table.copy".into(),
+                });
+            }
+            TableInit { .. } => {
+                return Err(WasmValidationError::UnsupportedWasmInstruction {
+                    index,
+                    instruction: "table.init".into(),
+                });
+            }
             F32Copysign
             | F64Copysign
             | F64Eq
@@ -1296,9 +1342,9 @@ fn wasm_function_complexity(body: &Body<'_>) -> Complexity {
             | I64Extend32S
             | F64PromoteF32 => 2,
             _ => 1,
-        })
-        .sum();
-    Complexity(complexity)
+        });
+    }
+    Ok(Complexity(complexity))
 }
 
 fn validate_code_section(
@@ -1309,7 +1355,7 @@ fn validate_code_section(
 
     for (index, func_body) in module.code_sections.iter().enumerate() {
         let size = func_body.instructions.len();
-        let complexity = wasm_function_complexity(func_body);
+        let complexity = wasm_function_complexity(index, func_body)?;
         if complexity > WASM_FUNCTION_COMPLEXITY_LIMIT {
             return Err(WasmValidationError::FunctionComplexityTooHigh {
                 index,
@@ -1368,8 +1414,6 @@ pub fn wasmtime_validation_config(embedders_config: &EmbeddersConfig) -> wasmtim
     config.wasm_relaxed_simd(false);
     // Tail calls may be enabled in the future.
     config.wasm_tail_call(false);
-    // Threads are disabled for determinism.
-    config.wasm_threads(false);
 
     config
         // The maximum size in bytes where a linear memory is considered

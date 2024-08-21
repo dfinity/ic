@@ -1,3 +1,213 @@
 = Ledger Suite Orchestrator
 
-TODO XC-53: add content
+The ledger suite orchestrator manages ledger suites of all ckERC20 tokens.
+Each ledger suite, one for each ckERC20 token, consists of multiple canisters:
+one ledger; one index; and zero, one or multiple archives.
+
+The ledger suite orchestrator has the following 3 main responsibilities:
+
+. Create a new ledger suite for a new ckERC20 token with a single NNS proposal.
+. Upgrade managed canisters with a single NNS proposal.
+. Top up the managed canisters with cycles.
+
+== Architecture
+
+* The ledger suite orchestrator is controlled by the NNS.
+* Any state change (adding a new ERC-20 token/upgrade) is controlled by the NNS.
+* The NNS also controls all created children canisters to allow for emergency upgrades targeting specific canisters.
+* The ledger suite orchestrator (LSO) embeds the following wasms:
+** The ledger wasm (using the `U256` variant).
+** The index-ng wasm (using the `U256` variant).
+** The archive wasm (using the `U256` variant).
+* For simplicity, the ledger suite orchestrator does not differentiate between the ckERC20 tokens it manages. In particular the `U256` variant is used for all wasms.
+
+[TIP]
+.Who controls who?
+====
+
+....
+                                                      ┌───────────┐
+                                                      │           │
+┌──────────────────────────┬──────────────────────────┤    NNS    ├──────────────┐
+│                          │                          │           │              │
+│                          │                          └─────┬─────┘              │
+│                          │                                │                    │
+│      ┌─────────┐         │   ┌─────────┐                  │                    │
+│      │ ckUSDC  │         │   │ ckUSDT  │                  │                    │
+├─────►│         │◄───┐    ├──►│         │◄───┐             │                    │
+│      │ ledger  │    │    │   │ ledger  │    │             │                    │
+│      └─────────┘    │    │   └─────────┘    │             │                    │
+│                     │    │                  │             │                    │
+│                     │    │                  │             ▼                    ▼
+│      ┌─────────┐    │    │   ┌─────────┐    │       ┌───────────┐        ┌───────────┐
+│      │ ckUSDC  │    │    │   │ ckUSDT  │    │       │           │        │           │
+├─────►│         │◄───┤    ├──►│         │◄───┼───────┤    LSO    ├─xxxxx─►│   minter  │
+│      │ index   │    │    │   │ index   │    │       │           │        │           │
+│      └─────────┘    │    │   └─────────┘    │       └─────┬─────┘        └───────────┘
+│                     │    │                  │             │
+│                     │    │                  │             │
+│      ┌─────────┐    │    │   ┌─────────┐    │             │
+│      │ ckUSDC  │    │    │   │ ckUSDT  │    │             │
+└─────►│         │◄───┤    └──►│         │◄───┘             │
+       │ archive │    │        │ archive │                  │
+       └─────────┘    │        └─────────┘                  │
+                      │                                     │
+                      └─────────────────────────────────────┘
+....
+
+Legend:
+
+. A -> B: canister A controls canister B
+. LSO ─xxx─► minter: LSO notifies minter of a new ckERC20 token
+====
+
+[TIP]
+.Lifecycle of a ledger suite
+====
+To understand how ckERC20 tokens are managed, it's essential to understand the lifecycle of a ledger suite, which is as follows:
+
+. The index canister periodically pulls transactions from the ledger and from the archive canister(s). The ledger and the archive(s) don't know anything about the index canister.
+. Once a certain number of transactions on the ledger is reached, specified by `trigger_threshold` in the `archive_options` of the ledger initialization arguments, the ledger will create a new archive canister and hand over control of that newly created canister to the `controller_id` specified in the `archive_options`.
+. At that point, once a certain number of transactions on the ledger is reached, specified by `num_blocks_to_archive` in the `archive_options`, the ledger pushes past transactions to the archive canister.
+. If the size of the archive canister exceeds a certain threshold, specified by `node_max_memory_size_bytes` in the `archive_options`, the ledger will create a new archive canister as in step 2.
+
+Remarks:
+
+* Upgrading the ledger won't upgrade any spawned archive canisters.
+* The initial version (Git hash `4472b0064d347a88649beb526214fde204f906fb`) of the ledger used doesn't use stable memory.
+* Both the index canister and archive canisters used in ckERC20 use stable memory. It's therefore possible to configure the `archive_options` in such a way that it will be very unlikely that a second archive canister is ever needed.
+====
+
+
+[#add-new-ckerc20]
+== Adding a new ckERC20 token
+
+Adding a new ERC-20 token involves an NNS upgrade proposal for the ledger suite orchestrator (like https://dashboard.internetcomputer.org/proposal/129750[129750]) specifying the following:
+
+* Identifier for the new ERC-20 token: this is the pair Ethereum chain ID (`1` for Ethereum mainnet or `11155111` for Ethereum Testnet Sepolia) and the ERC-20 smart contract Ethereum address.
+* Initialization args for the ICRC ledger
+
+See the <<ckusdc-example>> example for a detailed explanation of the arguments used.
+
+[#ckusdc-example]
+[EXAMPLE]
+.ckUSDC
+====
+As an example, we detail the arguments that would be needed to add the ckUSDC token with the latest version of the ledger suite orchestrator.
+Note that the original proposal https://dashboard.internetcomputer.org/proposal/129750[129750] to add ckUSDC used a different version for the ledger suite orchestrator (`4472b0064d347a88649beb526214fde204f906fb`), which explains why some arguments that appear in the proposal are no longer required or use a slightly different syntax. Always refer to the Candid interface (`ledger_suite_orchestrator.did`) for the most up-to-date information.
+
+. `contract`: Uniquely identifies the ERC-20 smart contract.
+.. `chain_id = 1`: designates Ethereum mainnet. This value MUST be `1`.
+.. `address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"`: address of the ERC-20 smart contract on Ethereum mainnet. The address MUST be a valid Ethereum address corresponding to an ERC-20 smart contract as specified in https://eips.ethereum.org/EIPS/eip-20[EIP-20].
+. `ledger_init_arg`: Initialization arguments for the ledger that will be spawned off by the orchestrator.
+.. `decimals = 6`: number of decimals to used by the ledger. This SHOULD be the same number as the one returned by `decimals()` on the ERC-20 smart contract.
+.. `transfer_fee = 10_000`: cost of a user transaction on the ledger (e.g., `icrc1_transfer`, `icrc2_approve`, etc.). The goal of this fee is that it should be high enough to prevent spam (and in the future to pay for the cycles consumption), but low enough to encourage users from using the ckERC20 token.
+... This number SHOULD be a power of 10 (e.g., 1, 10, 100, 1_000, 10_000, etc.) to ease any user's mental arithmetic.
+... This number SHOULD be between the equivalent of 0.001 USD to 0.01 USD.
+.. `token_symbol = "ckUSDC"`: symbol of the twin ERC-20 token on the IC. This MUST be an ASCII string of at most 20 characters starting with the `ck` prefix. The symbol MUST be unique among all ckERC20 tokens. This SHOULD correspond to the `symbol()` of the ERC-20 smart contract prefixed with `ck`.
+.. `token_name = "ckUSDC"`: name of the twin ERC-20 token on the IC. This MAY be the same as `token_symbol`.
+.. `token_logo = "data:image/svg+xml;base64PHN2ZyB3...+Cg==`: logo of the twin ERC-20 token on the IC. This MUST be a https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/Data_URLs[data URL].
+====
+
+[TIP]
+.Submit the proposal
+====
+Submitting a proposal involves the following steps:
+
+. A neuron with ID `NEURON_ID` that can submit NNS proposals.
+. A markdown proposal `orchestrator_add_new_ckerc20.md`, that SHOULD closely follow the format of proposal https://dashboard.internetcomputer.org/proposal/129750[129750].
+. The ledger suite orchestrator upgrade args `AddErc20Arg` as explained above, which are Candid-encoded using https://github.com/dfinity/candid[`didc`] and written in binary format using `xxd` as shown below using the ckUSDC upgrade args as an example (change the values in `AddErc20Arg` according to your needs and the remarks above).
++
+[source,shell]
+----
+didc encode -d ledger_suite_orchestrator.did -t '(OrchestratorArg)' '(variant { AddErc20Arg = record { contract = record { chain_id = 1; address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" }; ledger_init_arg = record { minting_account = record { owner = principal "sv3dd-oaaaa-aaaar-qacoa-cai" }; fee_collector_account = opt record { owner = principal "sv3dd-oaaaa-aaaar-qacoa-cai"; subaccount = opt blob "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\0f\ee"; }; feature_flags  = opt record { icrc2 = true }; decimals = opt 6; max_memo_length = opt 80; transfer_fee = 10_000; token_symbol = "ckUSDC"; token_name = "ckUSDC"; token_logo = "data:image/svg+xml;base64PHN2ZyB3...+Cg=="; initial_balances = vec {}; maximum_number_of_accounts = null; accounts_overflow_trim_quantity = null }; git_commit_hash = "4472b0064d347a88649beb526214fde204f906fb";  ledger_compressed_wasm_hash = "4ca82938d223c77909dcf594a49ea72c07fd513726cfa7a367dd0be0d6abc679"; index_compressed_wasm_hash = "55dd5ea22b65adf877cea893765561ae290b52e7fdfdc043b5c18ffbaaa78f33"; }})' | xxd -r -p > args.bin
+----
+. The ledger suite orchestrator compressed wasm `ic-ledger-suite-orchestrator-canister.wasm.gz` and its hash `LEDGER_SUITE_ORCHESTRATOR_WASM_HASH` for the version indicated in `git_commit_hash`.
+You can download an already built binary at `https://download.dfinity.systems/ic/$GIT_COMMIT_HASH/canisters/ic-ledger-suite-orchestrator-canister.wasm.gz` or build the binary yourself following the https://github.com/dfinity/ic?tab=readme-ov-file#building-the-code[instructions] in the IC repository. The hash can then be computed as
++
+[source,shell]
+----
+sha256sum ic-ledger-suite-orchestrator-canister.wasm.gz
+----
+. To submit the proposal, you can use the https://internetcomputer.org/docs/current/developer-docs/developer-tools/cli-tools/ic-admin[`ic-admin`] tool as follows
++
+[source,shell]
+----
+ic-admin \
+    --use-hsm \
+    --key-id 01 \
+    --slot 0 \
+    --pin ${HSM_PIN} \
+    --nns-url "https://ic0.app" \
+    propose-to-change-nns-canister \
+    --proposer ${NEURON_ID} \
+    --canister-id vxkom-oyaaa-aaaar-qafda-cai \
+    --mode upgrade \
+    --wasm-module-path ./ic-ledger-suite-orchestrator-canister.wasm.gz \
+    --wasm-module-sha256 ${LEDGER_SUITE_ORCHESTRATOR_WASM_HASH} \
+    --arg args.bin \
+    --summary-file ./orchestrator_add_new_ckerc20.md
+----
+Note that depending on your setup, you MAY not need to use the `--use-hsm`, `--key-id`, `--slot`, and `--pin` flags. See the `ic-admin` help for more information.
+====
+
+[TIP]
+.Alternative for developers
+====
+For developers that are able to use https://github.com/dfinity/ic/blob/master/bazel/README.md[Bazel], a significant part of the manual steps described above can be automated using the internal tool `proposal-cli`. For example, to generate a proposal for the <<ckusdc-example>> example:
+[source,shell]
+----
+bazel run //rs/cross-chain/proposal-cli:make_proposal -- upgrade ckerc20-orchestrator --from 4472b0064d347a88649beb526214fde204f906fb --to 4472b0064d347a88649beb526214fde204f906fb --args '(variant { AddErc20Arg = record { contract = record { chain_id = 1; address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" }; ledger_init_arg = record { minting_account = record { owner = principal "sv3dd-oaaaa-aaaar-qacoa-cai" }; fee_collector_account = opt record { owner = principal "sv3dd-oaaaa-aaaar-qacoa-cai"; subaccount = opt blob "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\0f\ee"; }; feature_flags  = opt record { icrc2 = true }; decimals = opt 6; max_memo_length = opt 80; transfer_fee = 10_000; token_symbol = "ckUSDC"; token_name = "ckUSDC"; token_logo = "data:image/svg+xml;base64PHN2ZyB3...+Cg=="; initial_balances = vec {}; maximum_number_of_accounts = null; accounts_overflow_trim_quantity = null }; git_commit_hash = "4472b0064d347a88649beb526214fde204f906fb";  ledger_compressed_wasm_hash = "4ca82938d223c77909dcf594a49ea72c07fd513726cfa7a367dd0be0d6abc679"; index_compressed_wasm_hash = "55dd5ea22b65adf877cea893765561ae290b52e7fdfdc043b5c18ffbaaa78f33"; }})' --output-dir ~/proposal
+----
+Refer to the documentation of the `proposal-cli` tool for more information. Note that this tool will not submit any proposal.
+====
+
+
+Once the proposal is executed, the orchestrator verifies that the wasm hashes are known and then tries to do the following on a timer:
+
+. Create a new canister for the ledger, which is controlled by the ledger suite orchestrator itself and by all principals specified in `more_controller_ids` in the initialization arguments.
+. Install wasm module for the ledger with the given initialization arguments. In particular, the `archive_options` are decided by the orchestrator and are not part of the NNS proposal.
+. Create a new canister for the index, which is controlled by the ledger suite orchestrator itself and by all principals specified in `more_controller_ids` in the initialization arguments.
+. Install wasm module for the index canister. The init args only need to contain the canister ID of the ledger.
+. Notify the minter, identified through the field `minter_id` in the ledger suite orchestrator initialization arguments, of the newly created ledger ID together with the identifier for the ERC-20 token (so that the minter can adapt its scraping logic to additionally retrieve the logs for the added ERC-20 token). This update endpoint on the minter is restricted to the ledger suite orchestrator ID.
+
+In case any operation fails, retry on the next timer starting from the previously failing step.
+
+[TIP]
+.Which ckERC20 tokens are supported?
+====
+Once the proposal to add a new ckERC20 token is executed, the canister IDs of the created ledger and index will be added to the list of `managed_canisters`, which can be retrieved by querying the
+`get_orchestrator_info` endpoint.
+
+[source,shell]
+----
+dfx canister --network ic call orchestrator get_orchestrator_info
+----
+====
+
+== Upgrading managed ledger suites
+
+Upgrading all existing ledger suites managed by the orchestrator involves an NNS upgrade proposal for the ledger suite orchestrator specifying the following:
+
+. Optional wasm hash of the ledger
+. Optional wasm hash of the index
+. Optional wasm hash of the archive
+
+The orchestrator verifies that the wasm hashes when present are known and then tries to do the following for every managed ERC-20 token on a timer:
+
+. stop/upgrade/start index canister if a wasm hash was specified;
+. stop/upgrade/start ledger if a wasm hash was specified;
+. stop/upgrade/start archive canister if a wasm hash was specified. This also involves contacting the ledger to see if any archive canisters were created.
+
+In case any operation fails, a retry will be initiated on the next timer, starting from the previously failing step.
+
+Note that the orchestrator does not even check whether the current installed version is already the one given in the proposal, since it's expected that this will not be the case most of the time.
+
+
+== Cycles top-up of managed ledger suites
+
+On a timer, the ledger suite orchestrator tops up all managed canisters using a simple threshold strategy. The exact threshold and the top-up amount is specified in the ledger suite orchestrator initialization argument `CyclesManagement`. The topping-up strategy is as follows:
+
+. The ledger suite orchestrator is monitored by the cycles monitor canister. The orchestrator will need a fairly big chunk of cycles and an alert will be fired when it does not have enough cycles.
+. On a timer, it ensures that each managed canister has a cycles amount above the hard-coded threshold. This involves also contacting the ledger to see if any archive canisters were created, which is done on a separate timer.
+. The threshold is set high enough so that the ledger always has sufficiently many cycles to be able to spawn a new archive canister and that all canisters have sufficiently many cycles to be able to be upgraded at any time.

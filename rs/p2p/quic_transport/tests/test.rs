@@ -3,7 +3,6 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 use crate::common::PeerRestrictedTlsConfig;
 use axum::{http::Request, Router};
 use bytes::Bytes;
-use either::Either;
 use futures::FutureExt;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_logger::info;
@@ -16,7 +15,7 @@ use ic_p2p_test_utils::{
     },
     ConnectivityChecker,
 };
-use ic_quic_transport::{DummyUdpSocket, QuicTransport, Transport};
+use ic_quic_transport::{create_udp_socket, QuicTransport, Transport};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5};
 use tokio::{
@@ -26,7 +25,6 @@ use tokio::{
 use turmoil::Builder;
 
 mod common;
-
 #[test]
 fn test_ping_pong() {
     with_test_replica_logger(|log| {
@@ -111,7 +109,7 @@ fn test_graceful_shutdown() {
             registry_handler.registry_client.clone(),
             NODE_1,
             topology_watcher.clone(),
-            Either::Left::<_, DummyUdpSocket>(socket_1),
+            create_udp_socket(rt.handle(), socket_1),
             ConnectivityChecker::router(),
         ));
 
@@ -123,7 +121,7 @@ fn test_graceful_shutdown() {
             registry_handler.registry_client.clone(),
             NODE_2,
             topology_watcher,
-            Either::Left::<_, DummyUdpSocket>(socket_2),
+            create_udp_socket(rt.handle(), socket_2),
             ConnectivityChecker::router(),
         ));
 
@@ -188,7 +186,7 @@ fn test_real_socket() {
             registry_handler.registry_client.clone(),
             NODE_1,
             topology_watcher.clone(),
-            Either::Left::<_, DummyUdpSocket>(socket_1),
+            create_udp_socket(rt.handle(), socket_1),
             ConnectivityChecker::router(),
         ));
 
@@ -200,7 +198,7 @@ fn test_real_socket() {
             registry_handler.registry_client.clone(),
             NODE_2,
             topology_watcher,
-            Either::Left::<_, DummyUdpSocket>(socket_2),
+            create_udp_socket(rt.handle(), socket_2),
             ConnectivityChecker::router(),
         ));
 
@@ -257,7 +255,7 @@ fn test_real_socket_large_msg() {
             registry_handler.registry_client.clone(),
             NODE_1,
             topology_watcher.clone(),
-            Either::Left::<_, DummyUdpSocket>(socket_1),
+            create_udp_socket(rt.handle(), socket_1),
             ConnectivityChecker::router(),
         ));
 
@@ -269,7 +267,7 @@ fn test_real_socket_large_msg() {
             registry_handler.registry_client.clone(),
             NODE_2,
             topology_watcher,
-            Either::Left::<_, DummyUdpSocket>(socket_2),
+            create_udp_socket(rt.handle(), socket_2),
             ConnectivityChecker::router(),
         ));
 
@@ -717,7 +715,6 @@ fn test_changing_subnet_membership() {
         sim.run().unwrap();
     })
 }
-
 /// Test that we reconnect after TLS handshake failures.
 #[test]
 fn test_transient_failing_tls() {

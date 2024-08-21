@@ -20,23 +20,22 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
 use crate::ckbtc::lib::install_bitcoin_canister;
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    retry, retry_async, HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
-};
-use crate::driver::universal_vm::UniversalVms;
-use crate::util::runtime_from_url;
-use crate::util::{block_on, UniversalCanister};
-use crate::{
-    driver::ic::{InternetComputer, Subnet},
-    driver::universal_vm::UniversalVm,
-    retry_with_msg, retry_with_msg_async,
-};
 use anyhow::bail;
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use candid::Decode;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SshSession,
+    READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+};
+use ic_system_test_driver::driver::universal_vm::UniversalVms;
+use ic_system_test_driver::util::runtime_from_url;
+use ic_system_test_driver::util::{block_on, UniversalCanister};
+use ic_system_test_driver::{
+    driver::ic::{InternetComputer, Subnet},
+    driver::universal_vm::UniversalVm,
+};
 use ic_types::Height;
 use ic_universal_canister::{management, wasm};
 use slog::info;
@@ -51,7 +50,7 @@ pub fn config(env: TestEnv) {
     // https://en.bitcoinwiki.org/wiki/Running_Bitcoind
 
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_config_img(env.get_dependency_path("rs/tests/btc_uvm_config_image.zst"))
+        .with_config_img(get_dependency_path("rs/tests/btc_uvm_config_image.zst"))
         .start(&env)
         .expect("failed to setup universal VM");
 
@@ -130,7 +129,7 @@ pub fn get_balance(env: TestEnv) {
     // Create a wallet.
     // Retry since the bitcoind VM might not be up yet.
     let btc_rpc_c = btc_rpc.clone();
-    retry_with_msg!(
+    ic_system_test_driver::retry_with_msg!(
         "create wallet",
         logger.clone(),
         READY_WAIT_TIMEOUT,
@@ -161,11 +160,11 @@ pub fn get_balance(env: TestEnv) {
     let agent = node.with_default_agent(|agent| async move { agent });
     let res = block_on(async {
         let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
-        install_bitcoin_canister(&runtime, &logger, &env).await;
+        install_bitcoin_canister(&runtime, &logger).await;
         let canister =
             UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
                 .await;
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "check if balance matches expected balance {}",
                 expected_balance_in_satoshis

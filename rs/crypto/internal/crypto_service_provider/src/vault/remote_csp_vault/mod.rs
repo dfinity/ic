@@ -23,7 +23,7 @@ use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
-    IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
+    IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
     idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
@@ -180,6 +180,7 @@ pub trait TarpcCspVault {
 
     // Corresponds to `IDkgProtocolCspVault.idkg_load_transcript`
     async fn idkg_load_transcript(
+        algorithm_id: AlgorithmId,
         dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         context_data: ByteBuf,
         receiver_index: NodeIndex,
@@ -190,6 +191,7 @@ pub trait TarpcCspVault {
     // Corresponds to `IDkgProtocolCspVault.idkg_load_transcript_with_openings`
     #[allow(clippy::too_many_arguments)]
     async fn idkg_load_transcript_with_openings(
+        alg: AlgorithmId,
         dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
         openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
         context_data: ByteBuf,
@@ -209,6 +211,7 @@ pub trait TarpcCspVault {
 
     // Corresponds to `IDkgProtocolCspVault.idkg_open_dealing`
     async fn idkg_open_dealing(
+        alg: AlgorithmId,
         dealing: BatchSignedIDkgDealing,
         dealer_index: NodeIndex,
         context_data: ByteBuf,
@@ -216,9 +219,9 @@ pub trait TarpcCspVault {
         opener_key_id: KeyId,
     ) -> Result<CommitmentOpening, IDkgOpenTranscriptError>;
 
-    // Corresponds to `ThresholdEcdsaSignerCspVault.ecdsa_sign_share`
+    // Corresponds to `ThresholdEcdsaSignerCspVault.create_ecdsa_sig_share`
     #[allow(clippy::too_many_arguments)]
-    async fn ecdsa_sign_share(
+    async fn create_ecdsa_sig_share(
         derivation_path: ExtendedDerivationPath,
         hashed_message: ByteBuf,
         nonce: Randomness,
@@ -228,7 +231,7 @@ pub trait TarpcCspVault {
         kappa_times_lambda_raw: IDkgTranscriptInternalBytes,
         key_times_lambda_raw: IDkgTranscriptInternalBytes,
         algorithm_id: AlgorithmId,
-    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
+    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaCreateSigShareError>;
 
     // Corresponds to `ThresholdSchnorrSignerCspVault.create_schnorr_sig_share`
     async fn create_schnorr_sig_share(

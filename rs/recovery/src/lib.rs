@@ -339,6 +339,7 @@ impl Recovery {
         subnet_id: SubnetId,
         subcmd: Option<ReplaySubCmd>,
         canister_caller_id: Option<CanisterId>,
+        replay_until_height: Option<u64>,
     ) -> impl Step {
         ReplayStep {
             logger: self.logger.clone(),
@@ -347,6 +348,7 @@ impl Recovery {
             config: self.work_dir.join("ic.json5"),
             subcmd,
             canister_caller_id,
+            replay_until_height,
             result: self.work_dir.join(replay_helper::OUTPUT_FILE_NAME),
         }
     }
@@ -359,6 +361,7 @@ impl Recovery {
         upgrade_version: ReplicaVersion,
         upgrade_url: Url,
         sha256: String,
+        replay_until_height: Option<u64>,
     ) -> RecoveryResult<impl Step> {
         let version_record = format!(
             r#"{{ "release_package_sha256_hex": "{}", "release_package_urls": ["{}"] }}"#,
@@ -378,6 +381,7 @@ impl Recovery {
                 ),
             }),
             None,
+            replay_until_height,
         ))
     }
 
@@ -388,6 +392,7 @@ impl Recovery {
         subnet_id: SubnetId,
         new_registry_local_store: PathBuf,
         canister_caller_id: &str,
+        replay_until_height: Option<u64>,
     ) -> RecoveryResult<impl Step> {
         let canister_id = CanisterId::from_str(canister_caller_id).map_err(|e| {
             RecoveryError::invalid_output_error(format!("Failed to parse canister id: {}", e))
@@ -409,6 +414,7 @@ impl Recovery {
                 ),
             }),
             Some(canister_id),
+            replay_until_height,
         ))
     }
 
@@ -577,21 +583,21 @@ impl Recovery {
         state_hash: String,
         replacement_nodes: &[NodeId],
         registry_params: Option<RegistryParams>,
-        ecdsa_subnet_id: Option<SubnetId>,
+        chain_key_subnet_id: Option<SubnetId>,
     ) -> RecoveryResult<impl Step> {
-        let key_ids = ecdsa_subnet_id
-            .map(|id| match self.registry_helper.get_ecdsa_config(id) {
-                Ok((_registry_version, Some(config))) => config.key_ids,
+        let chain_key_config = chain_key_subnet_id
+            .map(|id| match self.registry_helper.get_chain_key_config(id) {
+                Ok((_registry_version, Some(config))) => Some((config, id)),
                 Ok((registry_version, None)) => {
                     info!(
                         self.logger,
-                        "No ECDSA config at registry version {}", registry_version
+                        "No Chain key config at registry version {}", registry_version
                     );
-                    vec![]
+                    None
                 }
                 Err(err) => {
-                    warn!(self.logger, "Failed to get ECDSA config: {}", err);
-                    vec![]
+                    warn!(self.logger, "Failed to get Chain Key config: {}", err);
+                    None
                 }
             })
             .unwrap_or_default();
@@ -604,10 +610,9 @@ impl Recovery {
                     subnet_id,
                     checkpoint_height,
                     state_hash,
-                    key_ids,
+                    chain_key_config,
                     replacement_nodes,
                     registry_params,
-                    ecdsa_subnet_id,
                     SystemTime::now(),
                 ),
         })
@@ -683,7 +688,7 @@ impl Recovery {
         })?;
 
         let mut cup_present = false;
-        for i in 0..30 {
+        for i in 0..35 {
             let maybe_cup = match block_on(get_catchup_content(&node_url)) {
                 Ok(res) => res,
                 Err(e) => {
@@ -781,7 +786,7 @@ impl Recovery {
             .arg("-zcvf")
             .arg(
                 self.work_dir
-                    .join(format!("{}.tar.gz", IC_REGISTRY_LOCAL_STORE)),
+                    .join(format!("{}.tar.zst", IC_REGISTRY_LOCAL_STORE)),
             )
             .arg(".");
 

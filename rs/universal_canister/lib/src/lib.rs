@@ -15,9 +15,9 @@ use universal_canister::Ops;
 ///
 /// For steps on how to produce it, please see the README in
 /// `rs/universal_canister`.
-pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm");
+pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm.gz");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("7ee086b08867bfc54b726f918044043a85e0739190c14565de18149412fcff13");
+    hex!("9c0b4ed1d729ffdd0e8d194df3be621f58a2fb86e1f1bbf556d89f43637de303");
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
@@ -314,7 +314,7 @@ impl PayloadBuilder {
         self
     }
 
-    pub fn call_with_cycles_and_best_effort_response(mut self, timeout_seconds: u32) -> Self {
+    pub fn call_with_best_effort_response(mut self, timeout_seconds: u32) -> Self {
         self = self.push_int(timeout_seconds);
         self.0.push(Ops::CallWithBestEffortResponse as u8);
         self
@@ -540,6 +540,12 @@ impl PayloadBuilder {
         self
     }
 
+    /// Pushes the deadline of the message onto the stack.
+    pub fn msg_deadline(mut self) -> Self {
+        self.0.push(Ops::MsgDeadline as u8);
+        self
+    }
+
     /// Pushes a blob of the given size filled with the caller data bytes starting
     /// from the given offset.
     pub fn msg_caller_copy(mut self, offset: u32, size: u32) -> Self {
@@ -641,6 +647,13 @@ impl PayloadBuilder {
     /// Push `blob` with canister cycles balance.
     pub fn cycles_balance128(mut self) -> Self {
         self.0.push(Ops::CyclesBalance128 as u8);
+        self
+    }
+
+    /// Allocates heap memory until the memory size is at least the specified amount in bytes.
+    pub fn memory_size_is_at_least(mut self, amount: u64) -> Self {
+        self = self.push_int64(amount);
+        self.0.push(Ops::MemorySizeIsAtLeast as u8);
         self
     }
 

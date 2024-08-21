@@ -80,11 +80,11 @@ impl From<InitialIDkgDealingsValidationError> for ProxyDecodeError {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ThresholdEcdsaGetPublicKeyError {
+pub enum CanisterThresholdGetPublicKeyError {
     InvalidArgument(String),
     InternalError(String),
 }
-impl_display_using_debug!(ThresholdEcdsaGetPublicKeyError);
+impl_display_using_debug!(CanisterThresholdGetPublicKeyError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgCreateTranscriptError {
@@ -333,14 +333,14 @@ pub enum ThresholdEcdsaVerifySigShareError {
 impl_display_using_debug!(ThresholdEcdsaVerifySigShareError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ThresholdEcdsaSignShareError {
+pub enum ThresholdEcdsaCreateSigShareError {
     InternalError { internal_error: String },
     NotAReceiver,
     SerializationError { internal_error: String },
     SecretSharesNotFound { commitment_string: String },
     TransientInternalError { internal_error: String },
 }
-impl_display_using_debug!(ThresholdEcdsaSignShareError);
+impl_display_using_debug!(ThresholdEcdsaCreateSigShareError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaVerifyCombinedSignatureError {

@@ -115,8 +115,10 @@ impl GitRepository {
             .arg("log")
             .arg("--format=%C(auto) %h %s")
             .arg(format!("{}..{}", from.0, to.0))
-            .arg("--")
-            .arg(canister.repo_dir());
+            .arg("--");
+        for repo_dir in canister.git_log_dirs() {
+            git_log.arg(repo_dir);
+        }
         let log = git_log.output().expect("failed to run git log");
         assert!(log.status.success());
 

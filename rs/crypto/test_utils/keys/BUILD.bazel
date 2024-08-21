@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/protobuf",
     "//rs/types/types",
     "@crate_index//:hex",
@@ -14,6 +15,7 @@ ALIASES = {}
 
 rust_library(
     name = "keys",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_test_utils_keys",

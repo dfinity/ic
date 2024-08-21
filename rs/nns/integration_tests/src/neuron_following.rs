@@ -1,6 +1,6 @@
 use assert_matches::assert_matches;
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     governance_error::ErrorType,
     manage_neuron_response::{Command, FollowResponse},
     Tally, Topic, Vote,
@@ -37,35 +37,35 @@ fn setup_state_machine_with_nns_canisters() -> StateMachine {
 
 #[test]
 fn follow_another() {
-    let mut state_machine = setup_state_machine_with_nns_canisters();
+    let state_machine = setup_state_machine_with_nns_canisters();
 
     let n1 = get_neuron_1();
     let n2 = get_neuron_2();
 
     // neuron 1 follows neuron 2
-    set_followees_on_topic(&mut state_machine, &n1, &[n2.neuron_id], VALID_TOPIC);
+    set_followees_on_topic(&state_machine, &n1, &[n2.neuron_id], VALID_TOPIC);
 }
 
 #[test]
 fn follow_itself() {
-    let mut state_machine = setup_state_machine_with_nns_canisters();
+    let state_machine = setup_state_machine_with_nns_canisters();
 
     let n1 = get_neuron_1();
 
     // cycles are allowed; neurons can follow themselves
-    set_followees_on_topic(&mut state_machine, &n1, &[n1.neuron_id], VALID_TOPIC);
+    set_followees_on_topic(&state_machine, &n1, &[n1.neuron_id], VALID_TOPIC);
 }
 
 #[test]
 fn follow_on_invalid_topic() {
-    let mut state_machine = setup_state_machine_with_nns_canisters();
+    let state_machine = setup_state_machine_with_nns_canisters();
 
     let n1 = get_neuron_1();
     let n2 = get_neuron_2();
 
     // neurons cannot follow another neuron on an invalid topic
     let result = nns_set_followees_for_neuron(
-        &mut state_machine,
+        &state_machine,
         n1.principal_id,
         n1.neuron_id,
         &[n2.neuron_id],
@@ -82,14 +82,14 @@ fn follow_on_invalid_topic() {
 
 #[test]
 fn unauthorized_neuron_cannot_follow_neuron() {
-    let mut state_machine = setup_state_machine_with_nns_canisters();
+    let state_machine = setup_state_machine_with_nns_canisters();
 
     let n1 = get_neuron_1();
     let unauthorized_neuron = get_unauthorized_neuron();
 
     // the unauthorized neuron cannot follow n1
     let result = nns_set_followees_for_neuron(
-        &mut state_machine,
+        &state_machine,
         unauthorized_neuron.principal_id,
         unauthorized_neuron.neuron_id,
         &[n1.neuron_id],
@@ -105,14 +105,14 @@ fn unauthorized_neuron_cannot_follow_neuron() {
 
 #[test]
 fn nonexistent_neuron_cannot_follow_neuron() {
-    let mut state_machine = setup_state_machine_with_nns_canisters();
+    let state_machine = setup_state_machine_with_nns_canisters();
 
     let n1 = get_neuron_1();
     let nonexistent_neuron = get_nonexistent_neuron();
 
     // the non-existing neuron cannot follow a neuron
     let result = nns_set_followees_for_neuron(
-        &mut state_machine,
+        &state_machine,
         nonexistent_neuron.principal_id,
         nonexistent_neuron.neuron_id,
         &[n1.neuron_id],
@@ -128,14 +128,14 @@ fn nonexistent_neuron_cannot_follow_neuron() {
 
 #[test]
 fn neuron_follow_nonexistent_neuron() {
-    let mut state_machine = setup_state_machine_with_nns_canisters();
+    let state_machine = setup_state_machine_with_nns_canisters();
 
     let n1 = get_neuron_1();
     let nonexistent_neuron = get_nonexistent_neuron();
 
     // neurons are allowed to follow nonexistent neurons
     set_followees_on_topic(
-        &mut state_machine,
+        &state_machine,
         &n1,
         &[nonexistent_neuron.neuron_id],
         VALID_TOPIC,
@@ -144,20 +144,20 @@ fn neuron_follow_nonexistent_neuron() {
 
 #[test]
 fn unfollow_all_in_a_topic() {
-    let mut state_machine = setup_state_machine_with_nns_canisters();
+    let state_machine = setup_state_machine_with_nns_canisters();
 
     let n1 = get_neuron_1();
     let n2 = get_neuron_2();
 
     // n1 follows n2
-    set_followees_on_topic(&mut state_machine, &n1, &[n2.neuron_id], VALID_TOPIC);
+    set_followees_on_topic(&state_machine, &n1, &[n2.neuron_id], VALID_TOPIC);
     // n1 unfollows all (n2)
-    clear_followees_on_topic(&mut state_machine, &n1, VALID_TOPIC);
+    clear_followees_on_topic(&state_machine, &n1, VALID_TOPIC);
 }
 
 #[test]
 fn follow_existing_and_nonexistent_neurons() {
-    let mut state_machine = setup_state_machine_with_nns_canisters();
+    let state_machine = setup_state_machine_with_nns_canisters();
 
     let n1 = get_neuron_1();
     let n2 = get_neuron_2();
@@ -165,7 +165,7 @@ fn follow_existing_and_nonexistent_neurons() {
 
     // n1 can follow a mix of existent and nonexistent neurons
     set_followees_on_topic(
-        &mut state_machine,
+        &state_machine,
         &n1,
         &[nonexistent_neuron.neuron_id, n2.neuron_id],
         VALID_TOPIC,
@@ -174,14 +174,14 @@ fn follow_existing_and_nonexistent_neurons() {
 
 #[test]
 fn follow_same_neuron_multiple_times() {
-    let mut state_machine = setup_state_machine_with_nns_canisters();
+    let state_machine = setup_state_machine_with_nns_canisters();
 
     let n1 = get_neuron_1();
     let n2 = get_neuron_2();
 
     // neurons can follow the same neuron multiple times
     set_followees_on_topic(
-        &mut state_machine,
+        &state_machine,
         &n1,
         &[n2.neuron_id, n2.neuron_id, n2.neuron_id],
         VALID_TOPIC,
@@ -190,64 +190,64 @@ fn follow_same_neuron_multiple_times() {
 
 #[test]
 fn vote_propagation_with_following() {
-    let mut state_machine = setup_state_machine_with_nns_canisters();
+    let state_machine = setup_state_machine_with_nns_canisters();
 
     let n1 = get_neuron_1();
     let n2 = get_neuron_2();
     let n3 = get_neuron_3();
 
     // make a proposal via n2 before setting up followees
-    let proposal_id = submit_proposal(&mut state_machine, &n2);
+    let proposal_id = submit_proposal(&state_machine, &n2);
 
-    let votes = get_yes_votes(&mut state_machine, &proposal_id);
+    let votes = get_yes_votes(&state_machine, &proposal_id);
     assert_eq!(votes, VOTING_POWER_NEURON_2);
 
-    let ballot_n2 = check_ballots(&mut state_machine, &proposal_id, &n2);
+    let ballot_n2 = check_ballots(&state_machine, &proposal_id, &n2);
     assert_eq!(ballot_n2, (VOTING_POWER_NEURON_2, Vote::Yes));
 
     // make n1 follow n2
     set_followees_on_topic(
-        &mut state_machine,
+        &state_machine,
         &n1,
         &[n2.neuron_id],
         NETWORK_CANISTER_MANAGEMENT_TOPIC,
     );
 
     // voting doesn't get propagated by mutating the following graph
-    let votes = get_yes_votes(&mut state_machine, &proposal_id);
+    let votes = get_yes_votes(&state_machine, &proposal_id);
     assert_eq!(votes, VOTING_POWER_NEURON_2);
-    let ballot_n1 = check_ballots(&mut state_machine, &proposal_id, &n1);
+    let ballot_n1 = check_ballots(&state_machine, &proposal_id, &n1);
     assert_eq!(ballot_n1, (VOTING_POWER_NEURON_1, Vote::Unspecified));
-    let ballot_n2 = check_ballots(&mut state_machine, &proposal_id, &n2);
+    let ballot_n2 = check_ballots(&state_machine, &proposal_id, &n2);
     assert_eq!(ballot_n2, (VOTING_POWER_NEURON_2, Vote::Yes));
 
     // re-vote explicitly, still no change
     nns_cast_vote(
-        &mut state_machine,
+        &state_machine,
         n2.principal_id,
         n2.neuron_id,
         proposal_id.0,
         Vote::Yes,
     );
-    let votes = get_yes_votes(&mut state_machine, &proposal_id);
+    let votes = get_yes_votes(&state_machine, &proposal_id);
     assert_eq!(votes, VOTING_POWER_NEURON_2);
 
     // n1 needs to vote explicitly
     nns_cast_vote(
-        &mut state_machine,
+        &state_machine,
         n1.principal_id,
         n1.neuron_id,
         proposal_id.0,
         Vote::Yes,
     );
-    let votes = get_yes_votes(&mut state_machine, &proposal_id);
+    let votes = get_yes_votes(&state_machine, &proposal_id);
     assert_eq!(votes, 1_544_404_516);
-    let ballot_n1 = check_ballots(&mut state_machine, &proposal_id, &n1);
+    let ballot_n1 = check_ballots(&state_machine, &proposal_id, &n1);
     assert_eq!(ballot_n1, (VOTING_POWER_NEURON_1, Vote::Yes));
 
     // make n3 follow n2
     set_followees_on_topic(
-        &mut state_machine,
+        &state_machine,
         &n3,
         &[n2.neuron_id],
         NETWORK_CANISTER_MANAGEMENT_TOPIC,
@@ -255,7 +255,7 @@ fn vote_propagation_with_following() {
 
     // make n2 follow n1
     set_followees_on_topic(
-        &mut state_machine,
+        &state_machine,
         &n2,
         &[n1.neuron_id],
         NETWORK_CANISTER_MANAGEMENT_TOPIC,
@@ -263,24 +263,24 @@ fn vote_propagation_with_following() {
 
     // now n1 and n2 follow each other (circle), and n3 follows n2
     // make another proposal via n2 now that followees are set up
-    let proposal_id = submit_proposal(&mut state_machine, &n2);
+    let proposal_id = submit_proposal(&state_machine, &n2);
 
     // verify that all three neurons did vote
-    let votes = get_yes_votes(&mut state_machine, &proposal_id);
+    let votes = get_yes_votes(&state_machine, &proposal_id);
     assert_eq!(
         votes,
         VOTING_POWER_NEURON_1 + VOTING_POWER_NEURON_2 + VOTING_POWER_NEURON_3
     );
-    let ballot_n1 = check_ballots(&mut state_machine, &proposal_id, &n1);
+    let ballot_n1 = check_ballots(&state_machine, &proposal_id, &n1);
     assert_eq!(ballot_n1, (VOTING_POWER_NEURON_1, Vote::Yes));
-    let ballot_n2 = check_ballots(&mut state_machine, &proposal_id, &n2);
+    let ballot_n2 = check_ballots(&state_machine, &proposal_id, &n2);
     assert_eq!(ballot_n2, (VOTING_POWER_NEURON_2, Vote::Yes));
-    let ballot_n3 = check_ballots(&mut state_machine, &proposal_id, &n3);
+    let ballot_n3 = check_ballots(&state_machine, &proposal_id, &n3);
     assert_eq!(ballot_n3, (VOTING_POWER_NEURON_3, Vote::Yes));
 
     // split n1 and build a follow chain like this:
     // n2 -> n1a -> n3 -> n1
-    let n1a_id = split_neuron(&mut state_machine, &n1, 500_000_000);
+    let n1a_id = split_neuron(&state_machine, &n1, 500_000_000);
     let n1a = TestNeuronOwner {
         neuron_id: n1a_id,
         principal_id: n1.principal_id,
@@ -288,28 +288,28 @@ fn vote_propagation_with_following() {
 
     // make n2 follow n1a
     set_followees_on_topic(
-        &mut state_machine,
+        &state_machine,
         &n2,
         &[n1a.neuron_id],
         NETWORK_CANISTER_MANAGEMENT_TOPIC,
     );
 
     // at this point n2 is not influential
-    let influential = get_neuron_ids(&mut state_machine, n1a.principal_id);
+    let influential = get_neuron_ids(&state_machine, n1a.principal_id);
     assert_eq!(influential.len(), 2);
     assert!(influential.contains(&n1a.neuron_id.id));
     assert!(influential.contains(&n1.neuron_id.id));
 
     // same following, different topic
     set_followees_on_topic(
-        &mut state_machine,
+        &state_machine,
         &n2,
         &[n1a.neuron_id],
         NEURON_MANAGEMENT_TOPIC,
     );
 
     // at this point n2 becomes influential (a `NeuronManagement` follower to n1a)
-    let influential = get_neuron_ids(&mut state_machine, n1a.principal_id);
+    let influential = get_neuron_ids(&state_machine, n1a.principal_id);
     assert_eq!(influential.len(), 3);
     assert!(influential.contains(&n1a.neuron_id.id));
     assert!(influential.contains(&n1.neuron_id.id));
@@ -317,13 +317,13 @@ fn vote_propagation_with_following() {
 
     // change following, in `NeuronManagement` topic
     set_followees_on_topic(
-        &mut state_machine,
+        &state_machine,
         &n3,
         &[n1a.neuron_id],
         NEURON_MANAGEMENT_TOPIC,
     );
     // at this point n3 becomes influential (a `NeuronManagement` follower to n1a)
-    let influential = get_neuron_ids(&mut state_machine, n1a.principal_id);
+    let influential = get_neuron_ids(&state_machine, n1a.principal_id);
     assert_eq!(influential.len(), 4);
     assert!(influential.contains(&n1a.neuron_id.id));
     assert!(influential.contains(&n1.neuron_id.id));
@@ -332,28 +332,28 @@ fn vote_propagation_with_following() {
 
     // change following, in `NeuronManagement` topic
     set_followees_on_topic(
-        &mut state_machine,
+        &state_machine,
         &n2,
         &[n3.neuron_id],
         NEURON_MANAGEMENT_TOPIC,
     );
     // at this point n2 ceases to be influential (as a `NeuronManagement` follower
     // to n1a)
-    let influential = get_neuron_ids(&mut state_machine, n1a.principal_id);
+    let influential = get_neuron_ids(&state_machine, n1a.principal_id);
     assert_eq!(influential.len(), 3);
     assert!(influential.contains(&n1a.neuron_id.id));
     assert!(influential.contains(&n1.neuron_id.id));
     assert!(influential.contains(&n3.neuron_id.id));
 
     set_followees_on_topic(
-        &mut state_machine,
+        &state_machine,
         &n1a,
         &[n3.neuron_id],
         NETWORK_CANISTER_MANAGEMENT_TOPIC,
     );
 
     set_followees_on_topic(
-        &mut state_machine,
+        &state_machine,
         &n3,
         &[n1.neuron_id],
         NETWORK_CANISTER_MANAGEMENT_TOPIC,
@@ -361,29 +361,25 @@ fn vote_propagation_with_following() {
 
     // fire off a new proposal by n1, and see all neurons voting
     // immediately along the chain
-    let proposal_id = submit_proposal(&mut state_machine, &n1);
+    let proposal_id = submit_proposal(&state_machine, &n1);
 
     // verify that all four neurons did vote
-    let votes = get_yes_votes(&mut state_machine, &proposal_id);
+    let votes = get_yes_votes(&state_machine, &proposal_id);
     assert_eq!(
         votes,
         702_002_052 + 701_988_012 + VOTING_POWER_NEURON_2 + VOTING_POWER_NEURON_3
     );
-    let ballot_n1 = check_ballots(&mut state_machine, &proposal_id, &n1);
+    let ballot_n1 = check_ballots(&state_machine, &proposal_id, &n1);
     assert_eq!(ballot_n1, (702_002_052, Vote::Yes));
-    let ballot_n1a = check_ballots(&mut state_machine, &proposal_id, &n1a);
+    let ballot_n1a = check_ballots(&state_machine, &proposal_id, &n1a);
     assert_eq!(ballot_n1a, (701_988_012, Vote::Yes));
-    let ballot_n2 = check_ballots(&mut state_machine, &proposal_id, &n2);
+    let ballot_n2 = check_ballots(&state_machine, &proposal_id, &n2);
     assert_eq!(ballot_n2, (VOTING_POWER_NEURON_2, Vote::Yes));
-    let ballot_n3 = check_ballots(&mut state_machine, &proposal_id, &n3);
+    let ballot_n3 = check_ballots(&state_machine, &proposal_id, &n3);
     assert_eq!(ballot_n3, (VOTING_POWER_NEURON_3, Vote::Yes));
 }
 
-fn split_neuron(
-    state_machine: &mut StateMachine,
-    neuron: &TestNeuronOwner,
-    amount: u64,
-) -> NeuronId {
+fn split_neuron(state_machine: &StateMachine, neuron: &TestNeuronOwner, amount: u64) -> NeuronId {
     let response = nns_split_neuron(state_machine, neuron.principal_id, neuron.neuron_id, amount);
     if let Command::Split(resp) = response.command.unwrap() {
         resp.created_neuron_id.unwrap()
@@ -393,7 +389,7 @@ fn split_neuron(
 }
 
 fn check_ballots(
-    state_machine: &mut StateMachine,
+    state_machine: &StateMachine,
     proposal_id: &ProposalId,
     neuron: &TestNeuronOwner,
 ) -> (u64, Vote) {
@@ -404,7 +400,7 @@ fn check_ballots(
     (ballot.voting_power, Vote::try_from(ballot.vote).unwrap())
 }
 
-fn get_yes_votes(state_machine: &mut StateMachine, proposal_id: &ProposalId) -> u64 {
+fn get_yes_votes(state_machine: &StateMachine, proposal_id: &ProposalId) -> u64 {
     let info = nns_governance_get_proposal_info_as_anonymous(state_machine, proposal_id.0);
     match info.latest_tally {
         Some(Tally { yes, .. }) => yes,
@@ -412,11 +408,7 @@ fn get_yes_votes(state_machine: &mut StateMachine, proposal_id: &ProposalId) -> 
     }
 }
 
-fn clear_followees_on_topic(
-    state_machine: &mut StateMachine,
-    neuron: &TestNeuronOwner,
-    topic: i32,
-) {
+fn clear_followees_on_topic(state_machine: &StateMachine, neuron: &TestNeuronOwner, topic: i32) {
     let result = nns_set_followees_for_neuron(
         state_machine,
         neuron.principal_id,
@@ -436,7 +428,7 @@ fn clear_followees_on_topic(
 
 /// make neuron follow the neurons in followees
 fn set_followees_on_topic(
-    state_machine: &mut StateMachine,
+    state_machine: &StateMachine,
     neuron: &TestNeuronOwner,
     followees: &[NeuronId],
     topic: i32,

@@ -12,7 +12,7 @@ use ic_types::{
 };
 
 #[derive(Debug)]
-pub enum CanisterHttpPermanentValidationError {
+pub enum InvalidCanisterHttpPayloadReason {
     /// The [`CanisterHttpPayload`] is too large
     PayloadTooBig {
         expected: usize,
@@ -72,9 +72,9 @@ pub enum CanisterHttpPermanentValidationError {
     DecodeError(ProxyDecodeError),
 }
 
-/// A transient error that can occur during validation of a [`CanisterHttpPayload`]
+/// A transient failure that can occur during validation of a [`CanisterHttpPayload`]
 #[derive(Debug)]
-pub enum CanisterHttpTransientValidationError {
+pub enum CanisterHttpPayloadValidationFailure {
     /// The state was not available at the time of validation
     StateUnavailable,
     /// The consensus registry version could not be retrieved from the summary
@@ -86,7 +86,7 @@ pub enum CanisterHttpTransientValidationError {
 }
 
 pub type CanisterHttpPayloadValidationError =
-    ValidationError<CanisterHttpPermanentValidationError, CanisterHttpTransientValidationError>;
+    ValidationError<InvalidCanisterHttpPayloadReason, CanisterHttpPayloadValidationFailure>;
 
 pub enum CanisterHttpChangeAction {
     AddToValidated(CanisterHttpResponseShare, CanisterHttpResponse),
@@ -99,7 +99,7 @@ pub enum CanisterHttpChangeAction {
 
 pub type CanisterHttpChangeSet = Vec<CanisterHttpChangeAction>;
 
-/// Artifact pool for the ECDSA messages (query interface)
+/// Artifact pool for the Canister HTTP messages (query interface)
 pub trait CanisterHttpPool: Send + Sync {
     fn get_validated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_>;
     fn get_unvalidated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_>;

@@ -9,13 +9,13 @@
 data_centers:
   ch1:
     vars:
-      ipv6_prefix: "2607:f6f0:3004:1"
+      ipv6_prefix: "2602:fb2b:120:10"
   dm1:
     vars:
       ipv6_prefix: "2604:6800:258:1"
   fr1:
     vars:
-      ipv6_prefix: "2001:4d78:40d"
+      ipv6_prefix: "2602:fb2b:110:10"
   ln1:
     vars:
       ipv6_prefix: "2a0b:21c0:4003:2"
@@ -117,8 +117,10 @@ boundary:
       - "162.209.33.190/29" # FR1 OOB (old)
       - "62.209.33.184/29" # FR1 OOB
     ipv6_http_ips:
-      - "2001:4d78:40d::/48" # FR1
-      - "2607:f6f0:3004::/48" # CH1
+      - "2602:fb2b:110::/48" # FR1
+      - "2001:4d78:40d::/48" # FR1-old
+      - "2602:fb2b:120::/48" # CH1
+      - "2607:f6f0:3004::/48" # CH1-old
       - "2607:fb58:9005::/48" # SF1-old
       - "2602:fb2b:100::/48" # SF1
       - "2a00:fb01:400::/56" # ZH1

@@ -7,7 +7,7 @@ use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResultV2,
 };
-use ic_nervous_system_common::{ExplosiveTokens, ONE_DAY_SECONDS};
+use ic_nervous_system_common::ExplosiveTokens;
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID,
@@ -36,8 +36,7 @@ use ic_sns_root::{
 use ic_sns_swap::pb::v1::{
     self as swap_pb, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateResponse,
     GetBuyersTotalResponse, GetLifecycleResponse, GetOpenTicketResponse, GetSaleParametersResponse,
-    ListCommunityFundParticipantsResponse, NeuronBasketConstructionParameters,
-    NewSaleTicketResponse, NotifyPaymentFailureResponse, OpenRequest, OpenResponse, Params,
+    ListCommunityFundParticipantsResponse, NewSaleTicketResponse, NotifyPaymentFailureResponse,
     RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Ticket,
 };
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
@@ -181,7 +180,7 @@ pub fn setup_sns_canisters(
 }
 
 pub fn sns_governance_list_neurons(
-    state_machine: &mut StateMachine,
+    state_machine: &StateMachine,
     sns_governance_canister_id: CanisterId,
     request: &ListNeurons,
 ) -> ListNeuronsResponse {
@@ -205,7 +204,7 @@ pub fn sns_governance_list_neurons(
 }
 
 pub fn sns_governance_get_nervous_system_parameters(
-    state_machine: &mut StateMachine,
+    state_machine: &StateMachine,
     sns_governance_canister_id: CanisterId,
 ) -> NervousSystemParameters {
     let result = state_machine
@@ -229,7 +228,7 @@ pub fn sns_governance_get_nervous_system_parameters(
 
 #[must_use]
 fn manage_neuron(
-    state_machine: &mut StateMachine,
+    state_machine: &StateMachine,
     sns_governance_canister_id: CanisterId,
     sender: PrincipalId,
     neuron_id: NeuronId,
@@ -257,7 +256,7 @@ fn manage_neuron(
 }
 
 pub fn sns_cast_vote(
-    state_machine: &mut StateMachine,
+    state_machine: &StateMachine,
     sns_governance_canister_id: CanisterId,
     sender: PrincipalId,
     neuron_id: NeuronId,
@@ -279,7 +278,7 @@ pub fn sns_cast_vote(
 }
 
 pub fn participate_in_swap(
-    state_machine: &mut StateMachine,
+    state_machine: &StateMachine,
     swap_canister_id: CanisterId,
     participant_principal_id: PrincipalId,
     amount: ExplosiveTokens,
@@ -361,7 +360,7 @@ pub fn init_canister(
 }
 
 pub fn send_participation_funds(
-    state_machine: &mut StateMachine,
+    state_machine: &StateMachine,
     swap_canister_id: CanisterId,
     participant_principal_id: PrincipalId,
     amount: ExplosiveTokens,
@@ -400,7 +399,7 @@ pub fn send_participation_funds(
 }
 
 pub fn swap_get_state(
-    state_machine: &mut StateMachine,
+    state_machine: &StateMachine,
     swap_canister_id: CanisterId,
     request: &swap_pb::GetStateRequest,
 ) -> swap_pb::GetStateResponse {
@@ -727,39 +726,6 @@ pub fn list_community_fund_participants(
         .query_as(*sender, *swap_id, "list_community_fund_participants", args)
         .unwrap();
     Decode!(&res.bytes(), ListCommunityFundParticipantsResponse).unwrap()
-}
-
-pub fn open_sale(env: &StateMachine, swap_id: &CanisterId, params: Option<Params>) -> OpenResponse {
-    let args = OpenRequest {
-        params: Some(
-            params.unwrap_or(Params {
-                min_participants: 1,
-                min_icp_e8s: 1,
-                max_icp_e8s: 10_000_000,
-                min_direct_participation_icp_e8s: Some(1),
-                max_direct_participation_icp_e8s: Some(10_000_000),
-                min_participant_icp_e8s: 2_020_000,
-                max_participant_icp_e8s: 10_000_000,
-                swap_due_timestamp_seconds: env
-                    .time()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs()
-                    + 13 * ONE_DAY_SECONDS,
-                sns_token_e8s: 10_000_000,
-                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                    count: 2,
-                    dissolve_delay_interval_seconds: 1,
-                }),
-                sale_delay_seconds: None,
-            }),
-        ),
-        cf_participants: vec![],
-        open_sns_token_swap_proposal_id: Some(0),
-    };
-    let args = Encode!(&args).unwrap();
-    let res = env.execute_ingress(*swap_id, "open", args).unwrap();
-    Decode!(&res.bytes(), OpenResponse).unwrap()
 }
 
 pub fn error_refund(

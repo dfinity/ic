@@ -22,10 +22,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::convert::{From, TryFrom, TryInto};
+use std::sync::Arc;
 use std::time::Duration;
 
 /// Contains all context information related to an incoming call.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CallContext {
     /// Tracks relevant information about who sent the request that created the
     /// `CallContext` needed to form the eventual reply.
@@ -210,7 +211,7 @@ pub enum CallContextAction {
 
 /// Call context and callback stats to initialize and validate `CanisterQueues`
 /// guaranteed response memory reservation and queue capacity stats.
-#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub(crate) struct CallContextManagerStats {
     /// The number of canister update call contexts that have not yet been responded
     /// to.
@@ -278,7 +279,7 @@ impl CallContextManagerStats {
     /// Time complexity: `O(N)`.
     pub(crate) fn calculate_stats(
         call_contexts: &BTreeMap<CallContextId, CallContext>,
-        callbacks: &BTreeMap<CallbackId, Callback>,
+        callbacks: &BTreeMap<CallbackId, Arc<Callback>>,
     ) -> CallContextManagerStats {
         let unresponded_canister_update_call_contexts = call_contexts
             .values()
@@ -320,7 +321,7 @@ impl CallContextManagerStats {
     /// Time complexity: `O(N)`.
     #[allow(dead_code)]
     pub(crate) fn calculate_unresponded_callbacks_per_respondent(
-        callbacks: &BTreeMap<CallbackId, Callback>,
+        callbacks: &BTreeMap<CallbackId, Arc<Callback>>,
         aborted_or_paused_response: Option<&Response>,
     ) -> BTreeMap<CanisterId, usize> {
         let mut callback_counts = callbacks.values().fold(
@@ -410,13 +411,13 @@ impl CallContextManagerStats {
 /// with the serialization of these pointers. In the future we might consider
 /// introducing an intermediate layer between the serialization and the actual
 /// working data structure, to separate these concerns.
-#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct CallContextManager {
     next_call_context_id: u64,
     next_callback_id: u64,
     /// Maps call context to its responded status.
     call_contexts: BTreeMap<CallContextId, CallContext>,
-    callbacks: BTreeMap<CallbackId, Callback>,
+    callbacks: BTreeMap<CallbackId, Arc<Callback>>,
 
     /// Guaranteed response and overall callback and call context stats.
     stats: CallContextManagerStats,
@@ -580,13 +581,13 @@ impl CallContextManager {
     }
 
     /// Returns the `Callback`s maintained by this `CallContextManager`.
-    pub fn callbacks(&self) -> &BTreeMap<CallbackId, Callback> {
+    pub fn callbacks(&self) -> &BTreeMap<CallbackId, Arc<Callback>> {
         &self.callbacks
     }
 
     /// Returns a reference to the callback with `callback_id`.
     pub fn callback(&self, callback_id: CallbackId) -> Option<&Callback> {
-        self.callbacks.get(&callback_id)
+        self.callbacks.get(&callback_id).map(AsRef::as_ref)
     }
 
     /// Validates the given response before inducting it into the queue.
@@ -779,7 +780,7 @@ impl CallContextManager {
 
         self.next_callback_id += 1;
         let callback_id = CallbackId::from(self.next_callback_id);
-        self.callbacks.insert(callback_id, callback);
+        self.callbacks.insert(callback_id, Arc::new(callback));
 
         debug_assert!(self.stats_ok());
 
@@ -788,7 +789,7 @@ impl CallContextManager {
 
     /// If we get a response for one of the outstanding calls, we unregister
     /// the callback and return it.
-    pub fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Callback> {
+    pub fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>> {
         self.callbacks.remove(&callback_id).map(|callback| {
             self.stats.on_unregister_callback(&callback);
             debug_assert!(self.stats_ok());
@@ -968,7 +969,7 @@ impl From<&CallContextManager> for pb::CallContextManager {
                 .iter()
                 .map(|(id, callback)| pb::CallbackEntry {
                     callback_id: id.get(),
-                    callback: Some(callback.into()),
+                    callback: Some(callback.as_ref().into()),
                 })
                 .collect(),
         }
@@ -979,7 +980,7 @@ impl TryFrom<pb::CallContextManager> for CallContextManager {
     type Error = ProxyDecodeError;
     fn try_from(value: pb::CallContextManager) -> Result<Self, Self::Error> {
         let mut call_contexts = BTreeMap::<CallContextId, CallContext>::new();
-        let mut callbacks = BTreeMap::<CallbackId, Callback>::new();
+        let mut callbacks = BTreeMap::<CallbackId, Arc<Callback>>::new();
         for pb::CallContextEntry {
             call_context_id,
             call_context,
@@ -997,7 +998,10 @@ impl TryFrom<pb::CallContextManager> for CallContextManager {
         {
             callbacks.insert(
                 callback_id.into(),
-                try_from_option_field(callback, "CallContextManager::callbacks::V")?,
+                Arc::new(try_from_option_field(
+                    callback,
+                    "CallContextManager::callbacks::V",
+                )?),
             );
         }
         let stats = CallContextManagerStats::calculate_stats(&call_contexts, &callbacks);

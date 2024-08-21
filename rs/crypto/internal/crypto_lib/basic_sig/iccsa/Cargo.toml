@@ -7,13 +7,13 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-hex = { workspace = true }
 base64 = { workspace = true }
+hex = { workspace = true }
 ic-certification = { path = "../../../../../certification" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
-ic-crypto-tree-hash = { path = "../../../../tree_hash" }
 ic-crypto-sha2 = { path = "../../../../sha2" }
+ic-crypto-tree-hash = { path = "../../../../tree_hash" }
 ic-types = { path = "../../../../../types/types" }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
@@ -24,8 +24,8 @@ simple_asn1 = { workspace = true }
 assert_matches = { workspace = true }
 ic-certification-test-utils = { path = "../../../../../certification/test-utils" }
 ic-crypto-internal-basic-sig-iccsa-test-utils = { path = "test_utils" }
-ic-crypto-test-utils-reproducible-rng = { path = "../../../../../crypto/test_utils/reproducible_rng" }
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
 ic-crypto-test-utils = { path = "../../../../test_utils" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../../../../crypto/test_utils/reproducible_rng" }
 ic-interfaces = { path = "../../../../../interfaces" }
-rand = "0.8.3"
+rand = { workspace = true }

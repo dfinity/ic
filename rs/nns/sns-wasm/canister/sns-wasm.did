@@ -2,15 +2,6 @@ type AddWasmRequest = record { hash : blob; wasm : opt SnsWasm };
 type AddWasmResponse = record { result : opt Result };
 type AirdropDistribution = record { airdrop_neurons : vec NeuronDistribution };
 type Canister = record { id : opt principal };
-type CfNeuron = record {
-  has_created_neuron_recipes : opt bool;
-  nns_neuron_id : nat64;
-  amount_icp_e8s : nat64;
-};
-type CfParticipant = record {
-  hotkey_principal : text;
-  cf_neurons : vec CfNeuron;
-};
 type Countries = record { iso_codes : vec text };
 type DappCanisters = record { canisters : vec Canister };
 type DappCanistersTransferResult = record {
@@ -57,6 +48,8 @@ type GetNextSnsVersionRequest = record {
   current_version : opt SnsVersion;
 };
 type GetNextSnsVersionResponse = record { next_version : opt SnsVersion };
+type GetProposalIdThatAddedWasmRequest = record { hash : blob };
+type GetProposalIdThatAddedWasmResponse = record { proposal_id : opt nat64 };
 type GetSnsSubnetIdsResponse = record { sns_subnet_ids : vec principal };
 type GetWasmMetadataRequest = record { hash : opt blob };
 type GetWasmMetadataResponse = record { result : opt Result_1 };
@@ -107,7 +100,6 @@ type NeuronDistribution = record {
   stake_e8s : nat64;
   vesting_period_seconds : opt nat64;
 };
-type NeuronsFundParticipants = record { participants : vec CfParticipant };
 type NeuronsFundParticipationConstraints = record {
   coefficient_intervals : vec LinearScalingCoefficient;
   max_neurons_fund_participation_icp_e8s : opt nat64;
@@ -160,7 +152,6 @@ type SnsInitPayload = record {
   transaction_fee_e8s : opt nat64;
   dapp_canisters : opt DappCanisters;
   neurons_fund_participation_constraints : opt NeuronsFundParticipationConstraints;
-  neurons_fund_participants : opt NeuronsFundParticipants;
   max_age_bonus_percentage : opt nat64;
   initial_token_distribution : opt InitialTokenDistribution;
   reward_rate_transition_duration_seconds : opt nat64;
@@ -227,6 +218,9 @@ service : (SnsWasmCanisterInitPayload) -> {
   get_latest_sns_version_pretty : (null) -> (vec record { text; text }) query;
   get_next_sns_version : (GetNextSnsVersionRequest) -> (
       GetNextSnsVersionResponse,
+    ) query;
+  get_proposal_id_that_added_wasm : (GetProposalIdThatAddedWasmRequest) -> (
+      GetProposalIdThatAddedWasmResponse,
     ) query;
   get_sns_subnet_ids : (record {}) -> (GetSnsSubnetIdsResponse) query;
   get_wasm : (GetWasmRequest) -> (GetWasmResponse) query;

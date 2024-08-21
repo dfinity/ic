@@ -1,6 +1,0 @@
-# Config file for build_container_filesystem_tar.py
-# CLI args will override these values
-# For more info: `build_container_filesystem_tar.py --help`
-dockerfile=Dockerfile
-build-arg:["BUILD_TYPE=dev","ROOT_PASSWORD=root"]
-file-build-arg="BASE_IMAGE=docker-base.prod"

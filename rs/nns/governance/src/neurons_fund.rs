@@ -346,6 +346,9 @@ pub struct NeuronsFundNeuronPortion {
     pub maturity_equivalent_icp_e8s: u64,
     /// Controller of the neuron from which this portion is taken.
     pub controller: PrincipalId,
+    /// Hotkeys of the neuron from which this portion is taken.
+    /// TOOD(NNS1-3198): This field is not currently populated.
+    pub hotkeys: Vec<PrincipalId>,
     /// Indicates whether the portion specified by `amount_icp_e8s` is limited due to SNS-specific
     /// participation constraints.
     pub is_capped: bool,
@@ -379,18 +382,19 @@ pub enum NeuronsFundNeuronPortionError {
     },
 }
 
-impl ToString for NeuronsFundNeuronPortionError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for NeuronsFundNeuronPortionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "Invalid NeuronsFundNeuronPortion: ";
         match self {
             Self::UnspecifiedField(field_name) => {
-                format!("{}field `{}` is not specified.", prefix, field_name)
+                write!(f, "{}field `{}` is not specified.", prefix, field_name)
             }
             Self::AmountTooBig {
                 amount_icp_e8s,
                 maturity_equivalent_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}`amount_icp_e8s` ({}) exceeds `maturity_equivalent_icp_e8s` ({})",
                     prefix, amount_icp_e8s, maturity_equivalent_icp_e8s,
                 )
@@ -418,9 +422,11 @@ impl NeuronsFundNeuronPortionPb {
                 maturity_equivalent_icp_e8s,
             });
         }
-        let controller = self.hotkey_principal.ok_or_else(|| {
+        #[allow(deprecated)] // TODO(NNS1-3198): remove .or(hotkey_principal)
+        let controller = self.controller.or(self.hotkey_principal).ok_or_else(|| {
             NeuronsFundNeuronPortionError::UnspecifiedField("hotkey_principal".to_string())
         })?;
+        let hotkeys = self.hotkeys.clone();
         let is_capped = self.is_capped.ok_or_else(|| {
             NeuronsFundNeuronPortionError::UnspecifiedField("is_capped".to_string())
         })?;
@@ -429,6 +435,7 @@ impl NeuronsFundNeuronPortionPb {
             amount_icp_e8s,
             maturity_equivalent_icp_e8s,
             controller,
+            hotkeys,
             is_capped,
         })
     }
@@ -547,7 +554,7 @@ impl NeuronsFundSnapshot {
             .neurons
             .into_iter()
             .filter_map(|(id, left)| {
-                let (amount_icp_e8s, maturity_equivalent_icp_e8s, controller, is_capped) =
+                let (amount_icp_e8s, maturity_equivalent_icp_e8s, controller, hotkeys, is_capped) =
                     if let Some(right) = deductible_neurons.remove(&id) {
                         let err_prefix =
                             || format!("Cannot compute diff of two portions of neuron {:?}: ", id);
@@ -585,6 +592,17 @@ impl NeuronsFundSnapshot {
                             };
                             right.controller
                         };
+                        let hotkeys = {
+                            if left.hotkeys != right.hotkeys {
+                                return Some(Err(format!(
+                                    "{}left.hotkeys={:?}, right.hotkeys={:?}.",
+                                    err_prefix(),
+                                    left.hotkeys,
+                                    right.hotkeys,
+                                )));
+                            };
+                            right.hotkeys
+                        };
                         let is_capped = {
                             if !left.is_capped && right.is_capped {
                                 return Some(Err(format!(
@@ -601,6 +619,7 @@ impl NeuronsFundSnapshot {
                             amount_icp_e8s,
                             maturity_equivalent_icp_e8s,
                             controller,
+                            hotkeys,
                             is_capped,
                         )
                     } else {
@@ -608,6 +627,7 @@ impl NeuronsFundSnapshot {
                             left.amount_icp_e8s,
                             left.maturity_equivalent_icp_e8s,
                             left.controller,
+                            left.hotkeys,
                             // The effectively taken portion of this neuron is zero, so it cannot
                             // be capped.
                             false,
@@ -619,8 +639,9 @@ impl NeuronsFundSnapshot {
                 } else {
                     let portion = NeuronsFundNeuronPortion {
                         id,
-                        controller,
                         amount_icp_e8s,
+                        controller,
+                        hotkeys,
                         maturity_equivalent_icp_e8s,
                         is_capped,
                     };
@@ -679,16 +700,15 @@ pub enum NeuronsFundSnapshotValidationError {
     NeuronsFundNeuronPortionError(usize, NeuronsFundNeuronPortionError),
 }
 
-impl ToString for NeuronsFundSnapshotValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for NeuronsFundSnapshotValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "Cannot validate NeuronsFundSnapshot: ";
         match self {
             Self::NeuronsFundNeuronPortionError(index, error) => {
-                format!(
+                write!(
+                    f,
                     "{}neurons_fund_neuron_portions[{}]: {}",
-                    prefix,
-                    index,
-                    error.to_string()
+                    prefix, index, error
                 )
             }
         }
@@ -750,18 +770,19 @@ pub enum SwapParametersError {
     },
 }
 
-impl ToString for SwapParametersError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for SwapParametersError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "Cannot extract data from SwapParameters: ";
         match self {
             Self::UnspecifiedField(field_name) => {
-                format!("{}field `{}` is not specified.", prefix, field_name,)
+                write!(f, "{}field `{}` is not specified.", prefix, field_name,)
             }
             Self::MaxIsLessThanOrEqualMinParticipationIcp {
                 min_direct_participation_icp_e8s,
                 max_direct_participation_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}invariant violated: min_direct_participation_icp_e8s ({}) \
                     <= max_direct_participation_icp_e8s ({}).",
                     prefix, min_direct_participation_icp_e8s, max_direct_participation_icp_e8s,
@@ -771,7 +792,8 @@ impl ToString for SwapParametersError {
                 min_participant_icp_e8s,
                 max_participant_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}invariant violated: min_participant_icp_e8s ({}) \
                     <= max_participant_icp_e8s ({}).",
                     prefix, min_participant_icp_e8s, max_participant_icp_e8s,
@@ -986,12 +1008,14 @@ where
                      id,
                      maturity_equivalent_icp_e8s,
                      controller,
+                     hotkeys,
                      ..
                  }| {
                     NeuronsFundNeuron {
                         id: *id,
                         maturity_equivalent_icp_e8s: *maturity_equivalent_icp_e8s,
                         controller: *controller,
+                        hotkeys: hotkeys.clone(),
                     }
                 },
             )
@@ -1092,6 +1116,7 @@ where
                      id,
                      maturity_equivalent_icp_e8s,
                      controller,
+                     hotkeys,
                  }| {
                     // Division is safe, as `total_maturity_equivalent_icp_e8s != 0` in this branch.
                     let proportion_to_overall_neurons_fund = u64_to_dec(maturity_equivalent_icp_e8s)?
@@ -1157,6 +1182,7 @@ where
                         amount_icp_e8s,
                         maturity_equivalent_icp_e8s,
                         controller,
+                        hotkeys,
                         is_capped,
                     };
                     if let Some(old_neuron_portion) = overall_neuron_portions.insert(id, new_neuron_portion) {
@@ -1348,6 +1374,7 @@ where
     /// 1. Direct participation from 0 till (200 / 0.7) ICP: {} // no neurons are above threshold
     /// 2. Direct participation from (200 / 0.7) ICP till (200 / 0.3) ICP: { N1 }
     /// 3. Direct participation from (200 / 0.3) ICP till +inf: { N1, N2 }
+    ///
     /// Explanation for the `(200 / 0.7)` value above. When direct participation is 200 / 0.7,
     /// the ideal matching is also 200 / 0.7 (per the ideal matching function). Thus, N1 tries
     /// to participate at (200 / 0.7) * 0.7 = 200, which is enough to reach the threshold.
@@ -1548,12 +1575,14 @@ impl PolynomialNeuronsFundParticipation {
                      id,
                      maturity_equivalent_icp_e8s,
                      controller,
+                     hotkeys,
                      ..
                  }| {
                     NeuronsFundNeuron {
                         id: *id,
                         maturity_equivalent_icp_e8s: *maturity_equivalent_icp_e8s,
                         controller: *controller,
+                        hotkeys: hotkeys.clone(),
                     }
                 },
             )
@@ -1590,30 +1619,32 @@ pub enum NeuronsFundParticipationValidationError {
     },
 }
 
-impl ToString for NeuronsFundParticipationValidationError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for NeuronsFundParticipationValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = "NeuronsFundParticipation is invalid: ";
         match self {
             Self::UnspecifiedField(field_name) => {
-                format!("{}field `{}` is not specified.", prefix, field_name)
+                write!(f, "{}field `{}` is not specified.", prefix, field_name)
             }
             Self::NeuronsFundSnapshotValidationError(error) => {
-                format!("{}{}", prefix, error.to_string())
+                write!(f, "{}{}", prefix, error)
             }
             Self::MatchFunctionDeserializationFailed(error) => {
-                format!(
+                write!(
+                    f,
                     "{}failed to deserialize an IdealMatchingFunction instance: {}",
                     prefix, error
                 )
             }
             Self::SwapParametersError(error) => {
-                format!("{}{}", prefix, error.to_string())
+                write!(f, "{}{}", prefix, error)
             }
             Self::NeuronsFundParticipationGreaterThanDirectParticipation {
                 allocated_neurons_fund_participation_icp_e8s,
                 direct_participation_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}invariant violated: allocated_neurons_fund_participation_icp_e8s ({}) \
                     must be <= direct_participation_icp_e8s ({}).",
                     prefix,
@@ -1627,7 +1658,8 @@ impl ToString for NeuronsFundParticipationValidationError {
                 max_neurons_fund_swap_participation_icp_e8s,
                 total_maturity_equivalent_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}invariant violated: allocated_neurons_fund_participation_icp_e8s ({}) \
                     must be <= intended_neurons_fund_participation_icp_e8s ({}) \
                     must be <= max_neurons_fund_swap_participation_icp_e8s ({}) \
@@ -1643,7 +1675,8 @@ impl ToString for NeuronsFundParticipationValidationError {
                 allocated_neurons_fund_participation_icp_e8s,
                 neurons_fund_reserves_total_amount_icp_e8s,
             } => {
-                format!(
+                write!(
+                    f,
                     "{}inconsistent total allocation data: \
                     allocated_neurons_fund_participation_icp_e8s ({}) \
                     must be == neurons_fund_reserves.total_amount_icp_e8s ({}).",
@@ -1700,6 +1733,7 @@ where
             Some(participation.intended_neurons_fund_participation_icp_e8s);
         let allocated_neurons_fund_participation_icp_e8s =
             Some(participation.allocated_neurons_fund_participation_icp_e8s);
+        #[allow(deprecated)] // TODO(NNS1-3198): Remove
         let neurons_fund_neuron_portions: Vec<NeuronsFundNeuronPortionPb> = participation
             .into_snapshot()
             .neurons()
@@ -1708,8 +1742,11 @@ where
                 nns_neuron_id: Some(neuron.id),
                 amount_icp_e8s: Some(neuron.amount_icp_e8s),
                 maturity_equivalent_icp_e8s: Some(neuron.maturity_equivalent_icp_e8s),
-                hotkey_principal: Some(neuron.controller),
                 is_capped: Some(neuron.is_capped),
+                controller: Some(neuron.controller),
+                hotkeys: neuron.hotkeys.clone(),
+                // TODO(NNS1-3198): remove due to the  very misleading name
+                hotkey_principal: Some(neuron.controller),
             })
             .collect();
         let neurons_fund_reserves = Some(NeuronsFundSnapshotPb {
@@ -1967,6 +2004,184 @@ fn apply_neurons_fund_snapshot(
             "Errors while mutating the Neurons' Fund:\n  - {}",
             neurons_fund_action_error.join("\n  - ")
         ))
+    }
+}
+
+pub mod neurons_fund_neuron {
+    use ic_base_types::PrincipalId;
+    use std::collections::HashSet;
+
+    /// The number of hotkeys for each Neurons' Fund neuron must be limited due to SNS constraints,
+    /// i.e., an SNS cannot represent arbitrarily-big sets of hotkeys using SNS neuron permissions.
+    /// Concretely, this value should be less than or equal
+    /// `MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_FLOOR` - 2
+    /// because two permissions will be used for the NNS Governance and the NNS neuron controller.
+    pub const MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON: usize = 3;
+
+    /// Returns up to `MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON` elements out of `hotkeys`.
+    ///
+    /// Priority is given to *self-authenticating* principals; if there are too few such principals,
+    /// the function picks the remaining elements in the order in which they appear in the original
+    /// vector.
+    pub fn pick_most_important_hotkeys(hotkeys: &Vec<PrincipalId>) -> Vec<PrincipalId> {
+        // Remove duplicates while preserving the order.
+        let mut unique_hotkeys = vec![];
+        let mut non_self_auth_hotkeys = vec![];
+        let mut observed = HashSet::new();
+        for hotkey in hotkeys {
+            if !observed.contains(hotkey) {
+                observed.insert(*hotkey);
+                // Collect hotkeys that are self-authenticating; save non_self_auth_hotkeys for
+                // later, in case there is still space for some of them.
+                if hotkey.is_self_authenticating() {
+                    unique_hotkeys.push(*hotkey);
+                } else {
+                    non_self_auth_hotkeys.push(*hotkey);
+                }
+            }
+            // Limit how many hotkeys may be collected.
+            if unique_hotkeys.len() == MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON {
+                break;
+            }
+        }
+
+        // If there is space in `unique_hotkeys`, fill it up using `non_self_auth_hotkeys`.
+        while unique_hotkeys.len() < MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON
+            && !non_self_auth_hotkeys.is_empty()
+        {
+            let non_self_authenticating_hotkey = non_self_auth_hotkeys.remove(0);
+            unique_hotkeys.push(non_self_authenticating_hotkey);
+        }
+
+        unique_hotkeys
+    }
+}
+
+#[cfg(test)]
+mod pick_most_important_hotkeys_tests {
+    use super::neurons_fund_neuron::pick_most_important_hotkeys;
+    use ic_types::PrincipalId;
+
+    fn new_non_self_authenticating_principal_id(id: u64) -> PrincipalId {
+        let res = PrincipalId::new_user_test_id(id);
+        assert!(!res.is_self_authenticating());
+        res
+    }
+
+    fn new_self_authenticating_principal_id(id: u64) -> PrincipalId {
+        let res = PrincipalId::new_self_authenticating(&id.to_be_bytes());
+        assert!(res.is_self_authenticating());
+        res
+    }
+
+    #[test]
+    fn trivial() {
+        assert_eq!(pick_most_important_hotkeys(&vec![]), vec![]);
+    }
+
+    #[test]
+    fn ordering_preserved_for_self_auth() {
+        let hot_keys = vec![
+            new_self_authenticating_principal_id(1),
+            new_self_authenticating_principal_id(2),
+        ];
+
+        assert_eq!(
+            pick_most_important_hotkeys(&hot_keys),
+            vec![
+                new_self_authenticating_principal_id(1),
+                new_self_authenticating_principal_id(2),
+            ],
+        );
+    }
+
+    #[test]
+    fn ordering_preserved_for_non_self_auth() {
+        let hot_keys = vec![
+            new_non_self_authenticating_principal_id(1),
+            new_non_self_authenticating_principal_id(2),
+        ];
+
+        assert_eq!(
+            pick_most_important_hotkeys(&hot_keys),
+            vec![
+                new_non_self_authenticating_principal_id(1),
+                new_non_self_authenticating_principal_id(2),
+            ],
+        );
+    }
+
+    #[test]
+    fn ordering_preserved_for_self_auth_followed_by_non_self_auth() {
+        let hot_keys = vec![
+            new_self_authenticating_principal_id(1),
+            new_non_self_authenticating_principal_id(2),
+        ];
+
+        assert_eq!(
+            pick_most_important_hotkeys(&hot_keys),
+            vec![
+                new_self_authenticating_principal_id(1),
+                new_non_self_authenticating_principal_id(2),
+            ],
+        );
+    }
+
+    #[test]
+    fn ordering_reversed_for_non_self_auth_followed_by_self_auth() {
+        let hot_keys = vec![
+            new_non_self_authenticating_principal_id(1),
+            new_self_authenticating_principal_id(2),
+        ];
+
+        assert_eq!(
+            pick_most_important_hotkeys(&hot_keys),
+            vec![
+                new_self_authenticating_principal_id(2),
+                new_non_self_authenticating_principal_id(1),
+            ],
+        );
+    }
+
+    #[test]
+    fn plenty_self_authenticating() {
+        let hot_keys = vec![
+            new_self_authenticating_principal_id(1),
+            new_non_self_authenticating_principal_id(2),
+            new_self_authenticating_principal_id(3),
+            new_self_authenticating_principal_id(4),
+            new_self_authenticating_principal_id(5),
+        ];
+
+        assert_eq!(
+            pick_most_important_hotkeys(&hot_keys),
+            vec![
+                new_self_authenticating_principal_id(1),
+                // #2 dropped as a non-self-authenticating principal.
+                new_self_authenticating_principal_id(3),
+                new_self_authenticating_principal_id(4),
+                // #5 dropped as there are already sufficiently-many hotkeys.
+            ],
+        );
+    }
+
+    #[test]
+    fn few_self_authenticating() {
+        let hot_keys = vec![
+            new_non_self_authenticating_principal_id(1),
+            new_self_authenticating_principal_id(2),
+            new_non_self_authenticating_principal_id(3),
+            new_non_self_authenticating_principal_id(4),
+        ];
+
+        assert_eq!(
+            pick_most_important_hotkeys(&hot_keys),
+            vec![
+                new_self_authenticating_principal_id(2),
+                new_non_self_authenticating_principal_id(1),
+                new_non_self_authenticating_principal_id(3),
+            ],
+        );
     }
 }
 

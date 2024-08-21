@@ -4,9 +4,9 @@ use ic_types::{
     consensus::{
         dkg,
         hashed::Hashed,
-        idkg::{EcdsaComplaintContent, EcdsaOpeningContent},
-        Block, BlockMetadata, BlockProposal, CatchUpContent, FinalizationContent, HashedBlock,
-        NotarizationContent, RandomBeaconContent, RandomTapeContent,
+        idkg::{IDkgComplaintContent, IDkgOpeningContent},
+        BlockMetadata, CatchUpContent, FinalizationContent, NotarizationContent,
+        RandomBeaconContent, RandomTapeContent,
     },
     crypto::{
         canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing},
@@ -44,33 +44,6 @@ pub trait SignVerify<Message, Signature, KeySelector> {
         message: &Signed<Message, Signature>,
         selector: KeySelector,
     ) -> ValidationResult<CryptoError>;
-}
-
-impl<C: BasicSigner<BlockMetadata> + BasicSigVerifier<BlockMetadata>>
-    SignVerify<Hashed<CryptoHashOf<Block>, Block>, BasicSignature<BlockMetadata>, RegistryVersion>
-    for C
-{
-    fn sign(
-        &self,
-        message: &Hashed<CryptoHashOf<Block>, Block>,
-        signer: NodeId,
-        selector: RegistryVersion,
-    ) -> CryptoResult<BasicSignature<BlockMetadata>> {
-        self.sign_basic(&BlockMetadata::from(message), signer, selector)
-            .map(|signature| BasicSignature { signature, signer })
-    }
-    fn verify(
-        &self,
-        message: &BlockProposal,
-        selector: RegistryVersion,
-    ) -> ValidationResult<CryptoError> {
-        self.verify_basic_sig(
-            &message.signature.signature,
-            &BlockMetadata::from(&message.content),
-            message.signature.signer,
-            selector,
-        )
-    }
 }
 
 impl<Message: Signable, C: BasicSigner<Message> + BasicSigVerifier<Message>>
@@ -458,13 +431,13 @@ impl<Message: Signable, C: ThresholdSigner<Message> + ThresholdSigVerifier<Messa
 /// consensus. Anything that implements the Crypto trait automatically
 /// implements this trait.
 pub trait ConsensusCrypto:
-    SignVerify<HashedBlock, BasicSignature<BlockMetadata>, RegistryVersion>
+    SignVerify<BlockMetadata, BasicSignature<BlockMetadata>, RegistryVersion>
     + SignVerify<NotarizationContent, MultiSignatureShare<NotarizationContent>, RegistryVersion>
     + SignVerify<FinalizationContent, MultiSignatureShare<FinalizationContent>, RegistryVersion>
     + SignVerify<SignedIDkgDealing, BasicSignature<SignedIDkgDealing>, RegistryVersion>
     + SignVerify<IDkgDealing, BasicSignature<IDkgDealing>, RegistryVersion>
-    + SignVerify<EcdsaComplaintContent, BasicSignature<EcdsaComplaintContent>, RegistryVersion>
-    + SignVerify<EcdsaOpeningContent, BasicSignature<EcdsaOpeningContent>, RegistryVersion>
+    + SignVerify<IDkgComplaintContent, BasicSignature<IDkgComplaintContent>, RegistryVersion>
+    + SignVerify<IDkgOpeningContent, BasicSignature<IDkgOpeningContent>, RegistryVersion>
     + SignVerify<RandomBeaconContent, ThresholdSignatureShare<RandomBeaconContent>, NiDkgId>
     + SignVerify<RandomTapeContent, ThresholdSignatureShare<RandomTapeContent>, NiDkgId>
     + SignVerify<CatchUpContent, ThresholdSignatureShare<CatchUpContent>, NiDkgId>

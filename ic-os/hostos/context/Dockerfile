@@ -2,17 +2,15 @@
 #
 # Build steps:
 # - `docker build --pull -t dfinity/hostos-main -f Dockerfile .`
-#
+
+# ------ NEAR-COMMON OS WORK ----------------------------------------
 
 # The base images are defined in docker-base.prod and docker-base.dev. Update
 # the references there when a new base image has been built. Note that this
 # argument MUST be given by the build script, otherwise build will fail.
 ARG BASE_IMAGE=
 
-#
-# First build stage:
-# - Construct the actual target image (IC-OS root filesystem)
-#
+
 FROM $BASE_IMAGE
 
 USER root:root
@@ -22,45 +20,55 @@ RUN mkdir -p /boot/config \
              /boot/grub
 COPY etc /etc
 
-# Change permissions on special files as they are copied.
-# See ic-os/hostos/context/Dockerfile for details
-COPY --chmod=644 etc/hosts /etc/hosts
-COPY --chmod=644 etc/hostname /etc/hostname
-COPY --chmod=644 etc/resolv.conf /etc/resolv.conf
-
-# Update POSIX permissions in /etc/
-RUN find /etc -type d -exec chmod 0755 {} \+ && \
-    find /etc -type f -not -path "/etc/hostname" -not -path "/etc/hosts" -not -path "/etc/resolv.conf" -exec chmod 0644 {} \+ && \
-    chmod 0755 /etc/systemd/system-generators/mount-generator && \
-    chmod 0440 /etc/sudoers && \
-    chmod 755 /etc/initramfs-tools/scripts/init-bottom/set-machine-id
-
 # Deactivate motd, it tries creating $HOME/.cache/motd.legal-displayed,
 # but we want to prohibit it from writing to user home dirs
 RUN sed -e '/.*pam_motd.so.*/d' -i /etc/pam.d/login && \
     sed -e '/.*pam_motd.so.*/d' -i /etc/pam.d/sshd
 
-# Deactivate lvm backup/archive: It writes backup information to /etc/lvm, but a) this is
-# per system (so backups are not persisted across upgrades) and thus not very
-# useful, and b) we want to turn /etc read-only eventually. So simply suppress
-# generating backups.
+# Deactivate lvm backup/archive: It writes backup information to /etc/lvm,
+# but this is per system (so backups are not persisted across upgrades)
+# and thus not very useful, and /etc is read-only.
+# So simply suppress generating backups.
 RUN sed -e 's/\(backup *= *\)1/\10/' -e 's/\(archive *= *\)1/\10/' -i /etc/lvm/lvm.conf
 
 # Deactivate systemd userdb. We don't use it.
 RUN sed -e 's/ *systemd//' -i /etc/nsswitch.conf
 
-# Activate the NSS IC OS Name Service Switch plugin.
-# See ../../../rs/ic_os/nss_icos/README.md for context.
-RUN sed -r -e 's/hosts:( *)files/hosts:\1files icos/' -i /etc/nsswitch.conf
+# Compile locale specification
+RUN localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
+
+# Clear files that may lead to indeterministic build.
+RUN apt-get clean && \
+    find /usr/lib/python3.8 -name "*.pyc" | xargs rm && \
+    find /usr/lib/python3 -name "*.pyc" | xargs rm && \
+    find /usr/share/python3 -name "*.pyc" | xargs rm && \
+    truncate --size 0 /etc/machine-id
+
+# ------ NEAR-COMMON ICOS WORK ----------------------------------------
+
+# Ensure correct permissions for /etc/{hosts, hostname, resolv.conf}.
+# Container engines bind mount these files to use the host's versions,
+# so changes made with RUN commands don't affect the final image.
+# Using COPY --chmod ensures the files are copied with the right permissions.
+COPY --chmod=644 etc/hosts /etc/hosts
+COPY --chmod=644 etc/hostname /etc/hostname
+COPY --chmod=644 etc/resolv.conf /etc/resolv.conf
+
+# Update POSIX permissions in /etc/
+# TODO: We overwrite all /etc files with 644 except for the specified.
+# See [NODE-1348] for context.
+RUN find /etc -type d -exec chmod 0755 {} \+ && \
+    find /etc -type f -not -path "/etc/hostname" -not -path "/etc/hosts" -not -path "/etc/resolv.conf" -exec chmod 0644 {} \+ && \
+    chmod 0755 /etc/systemd/system-generators/* && \
+    chmod 0440 /etc/sudoers && \
+    chmod 755 /etc/initramfs-tools/scripts/init-bottom/set-machine-id
 
 # Regenerate initramfs (config changed after copying in /etc)
 RUN RESUME=none update-initramfs -c -k all
 
-ARG ROOT_PASSWORD=
-RUN \
-    if [ "${ROOT_PASSWORD}" != "" ]; then \
-        echo "root:$(openssl passwd -6 -salt jE8zzDEHeRg/DuGq ${ROOT_PASSWORD})" | chpasswd -e ; \
-    fi
+# Activate the NSS IC OS Name Service Switch plugin.
+# See ../../../rs/ic_os/nss_icos/README.md for context.
+RUN sed -r -e 's/hosts:( *)files/hosts:\1files icos/' -i /etc/nsswitch.conf
 
 # Prepare for bind mount of authorized_keys
 RUN mkdir -p /root/.ssh && chmod 0700 /root/.ssh
@@ -73,9 +81,6 @@ RUN rm /etc/ssh/ssh*key*
 # Actually, prohibit-password is the default config, so would not be
 # strictly necessary to be explicit here.
 RUN sed -e "s/.*PermitRootLogin.*/PermitRootLogin prohibit-password/" -i /etc/ssh/sshd_config
-
-# All of the above sets up the base operating system. Everything below relates
-# to node operation.
 
 RUN \
     for SERVICE in /etc/systemd/system/*; do \
@@ -96,17 +101,27 @@ RUN systemctl disable \
     apt-daily.timer \
     apt-daily-upgrade.service \
     apt-daily-upgrade.timer \
-    logrotate.service \
-    logrotate.timer \
     motd-news.service \
     motd-news.timer
+
+# ------ HOSTOS WORK ---------------------------------------------
+
+ARG ROOT_PASSWORD=
+RUN \
+    if [ "${ROOT_PASSWORD}" != "" ]; then \
+        echo "root:$(openssl passwd -6 -salt jE8zzDEHeRg/DuGq ${ROOT_PASSWORD})" | chpasswd -e ; \
+    fi
+
+# Clear additional files that may lead to indeterministic build.
+RUN rm -rf \
+        /usr/local/share/qemu/edk2-arm-code.fd \
+        /usr/local/share/qemu/edk2-arm-vars.fd
 
 # Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf E.g., systemd-timesync/coredump
 RUN systemd-sysusers && \
     # Fix reproducibility issue. Notes in hostos/context/Dockerfile    
     usermod -p '!!' systemd-timesync && \
     usermod -p '!!' systemd-coredump
-
 
 # Set /bin/sh to point to /bin/bash instead of the default /bin/dash
 RUN echo "set dash/sh false" | debconf-communicate && dpkg-reconfigure -fnoninteractive dash
@@ -171,18 +186,7 @@ RUN addgroup node_exporter && \
 RUN adduser --system --disabled-password --home /var/lib/metrics-proxy --group --no-create-home metrics-proxy && \
     usermod -a -G node_exporter metrics-proxy
 
-# Compile locale specification
-RUN localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
-
-# Clear all files that may lead to indeterministic build or are large and unnecessary
-RUN apt-get clean && \
-    rm -rf \
-        /usr/local/share/qemu/edk2-arm-code.fd \
-        /usr/local/share/qemu/edk2-arm-vars.fd && \
-    find /usr/lib/python3.8 -name "*.pyc" | xargs rm && \
-    find /usr/lib/python3 -name "*.pyc" | xargs rm && \
-    find /usr/share/python3 -name "*.pyc" | xargs rm && \
-    truncate --size 0 /etc/machine-id
+# ------ INSTALL SCRIPTS -----------------------------------------
 
 # Install IC binaries and other data late -- this means everything above
 # will be cached when only the binaries change.

@@ -1,6 +1,5 @@
 use crate::{assert_reply, CkEthSetup, MAX_TICKS};
 use candid::{Decode, Encode};
-use ic_base_types::CanisterId;
 use ic_cdk::api::management_canister::http_request::{
     HttpResponse as OutCallHttpResponse, TransformArgs,
 };
@@ -213,7 +212,7 @@ impl StubOnce {
         }
     }
 
-    fn expect_rpc_call(self, env: &StateMachine, canister_id_cleanup_response: CanisterId) {
+    fn expect_rpc_call(self, env: &StateMachine) {
         let (id, context) = self.matcher.find_rpc_call(env).unwrap_or_else(|| {
             panic!(
                 "no request found matching the stub {:?}. Current requests {}",
@@ -267,6 +266,7 @@ impl StubOnce {
             },
             context: clean_up_context.to_vec(),
         };
+        let canister_id_cleanup_response = context.request.sender;
         let clean_up_response = Decode!(
             &assert_reply(
                 env.execute_ingress(
@@ -316,8 +316,8 @@ fn debug_http_outcalls(env: &StateMachine) -> String {
             .map(|body| std::str::from_utf8(body).unwrap())
             .expect("BUG: missing request body");
         debug_str.push(format!(
-            "{:?} {} {}",
-            context.http_method, context.url, request_body
+            "{:?} {} (max_response_bytes={:?}) {}",
+            context.http_method, context.url, context.max_response_bytes, request_body
         ));
     }
     debug_str.join("\n")
@@ -336,7 +336,7 @@ impl MockJsonRpcProviders {
     pub fn expect_rpc_calls<T: AsRef<CkEthSetup>>(self, cketh: T) {
         let cketh = cketh.as_ref();
         for stub in self.stubs {
-            stub.expect_rpc_call(&cketh.env, cketh.minter_id);
+            stub.expect_rpc_call(&cketh.env);
         }
     }
 

@@ -1,7 +1,7 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 
 #[test]
-fn test_hash2curve_kat_p256() -> Result<(), ThresholdEcdsaError> {
+fn test_hash2curve_kat_p256() -> Result<(), CanisterThresholdError> {
     let curve = EccCurveType::P256;
 
     /*
@@ -45,7 +45,7 @@ fn test_hash2curve_kat_p256() -> Result<(), ThresholdEcdsaError> {
 }
 
 #[test]
-fn test_hash2curve_kat_k256() -> Result<(), ThresholdEcdsaError> {
+fn test_hash2curve_kat_k256() -> Result<(), CanisterThresholdError> {
     let curve = EccCurveType::K256;
     let dst = "QUUX-V01-CS02-with-secp256k1_XMD:SHA-256_SSWU_RO_";
 
@@ -87,7 +87,7 @@ fn test_hash2curve_kat_k256() -> Result<(), ThresholdEcdsaError> {
 }
 
 #[test]
-fn test_hash2curve_kat_ed25519() -> Result<(), ThresholdEcdsaError> {
+fn test_hash2curve_kat_ed25519() -> Result<(), CanisterThresholdError> {
     let curve = EccCurveType::Ed25519;
     let dst = "QUUX-V01-CS02-with-edwards25519_XMD:SHA-512_ELL2_RO_";
 

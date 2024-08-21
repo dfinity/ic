@@ -66,6 +66,7 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         ComputeAllocation::default(),
         RequestMetadata::new(0, UNIX_EPOCH),
         Some(request.sender().into()),
+        None,
     );
 
     assert_eq!(
@@ -119,6 +120,7 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         ComputeAllocation::default(),
         RequestMetadata::new(0, UNIX_EPOCH),
         Some(request.sender().into()),
+        None,
     );
 
     assert_eq!(
@@ -155,6 +157,7 @@ fn push_output_request_succeeds_with_enough_cycles() {
         ComputeAllocation::default(),
         RequestMetadata::new(0, UNIX_EPOCH),
         caller,
+        None,
     );
 
     let prepayment_for_response_execution =
@@ -205,6 +208,7 @@ fn correct_charging_source_canister_for_a_request() {
         ComputeAllocation::default(),
         RequestMetadata::new(0, UNIX_EPOCH),
         Some(request.sender().into()),
+        None,
     );
 
     let xnet_cost = cycles_account_manager.xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE);
@@ -351,6 +355,7 @@ fn is_controller_test() {
         ComputeAllocation::default(),
         RequestMetadata::new(0, UNIX_EPOCH),
         caller,
+        None,
     );
 
     // Users IDs 1 and 2 are controllers, hence is_controller should return true,
@@ -386,17 +391,11 @@ fn call_increases_cycles_consumed_metric() {
             &no_op_logger(),
         )
         .unwrap();
-    assert!(
-        system_state
-            .canister_metrics
-            .consumed_cycles_since_replica_started
-            .get()
-            > 0
-    );
+    assert!(system_state.canister_metrics.consumed_cycles.get() > 0);
     assert_ne!(
         *system_state
             .canister_metrics
-            .get_consumed_cycles_since_replica_started_by_use_cases()
+            .get_consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap(),
         NominalCycles::from(0)
@@ -437,6 +436,7 @@ fn test_inter_canister_call(
         ComputeAllocation::default(),
         RequestMetadata::new(0, UNIX_EPOCH),
         Some(sender.into()),
+        None,
     );
 
     let request = RequestBuilder::default()

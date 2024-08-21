@@ -1,7 +1,7 @@
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES")
+load("//rs/tests:common.bzl", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES")
 load("//rs/tests:system_tests.bzl", "system_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test(
     name = "compute_allocation_test",
@@ -29,30 +29,6 @@ system_test(
 
 system_test(
     name = "general_execution_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test(
-    name = "query_apis_bitcoin_canister_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test(
-    name = "bitcoin_query_calls_to_application_subnet",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -108,5 +84,20 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "fill_execution_rounds_workload",
+    flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
+        "//rs/tests:jaeger_uvm_config_image",
+    ],
     deps = DEPENDENCIES + ["//rs/tests"],
 )

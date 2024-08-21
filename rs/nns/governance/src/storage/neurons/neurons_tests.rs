@@ -131,7 +131,10 @@ fn create_red_herring_neurons(store: &mut StableNeuronStore<VectorMemory>) {
 fn assert_that_red_herring_neurons_are_untouched(store: &StableNeuronStore<VectorMemory>) {
     for red_herring_neuron in &*RED_HERRING_NEURONS {
         let id = red_herring_neuron.id();
-        assert_eq!(store.read(id), Ok(red_herring_neuron.clone()));
+        assert_eq!(
+            store.read(id, NeuronSections::all()),
+            Ok(red_herring_neuron.clone())
+        );
     }
 }
 
@@ -184,10 +187,13 @@ fn test_store_simplest_nontrivial_case() {
     }
 
     // 3. Read back the first neuron (the second one should have no effect).
-    assert_eq!(store.read(NeuronId { id: 42 }), Ok(neuron_1.clone()),);
+    assert_eq!(
+        store.read(NeuronId { id: 42 }, NeuronSections::all()),
+        Ok(neuron_1.clone()),
+    );
 
     // 4. Bad read: Unknown NeuronId. This should result in a NotFound Err.
-    let bad_read_result = store.read(NeuronId { id: 0xDEAD_BEEF });
+    let bad_read_result = store.read(NeuronId { id: 0xDEAD_BEEF }, NeuronSections::default());
     match &bad_read_result {
         Err(err) => match err {
             NeuronStoreError::NeuronNotFound { neuron_id } => {
@@ -249,7 +255,10 @@ fn test_store_simplest_nontrivial_case() {
     assert_that_red_herring_neurons_are_untouched(&store);
 
     // 6. Read to verify update.
-    assert_eq!(store.read(NeuronId { id: 42 }), Ok(neuron_5.clone()));
+    assert_eq!(
+        store.read(NeuronId { id: 42 }, NeuronSections::all()),
+        Ok(neuron_5.clone())
+    );
 
     // 7. Bad update: Neuron not found (unknown ID).
     let non_existent_neuron = create_model_neuron(0xDEAD_BEEF);
@@ -269,7 +278,7 @@ fn test_store_simplest_nontrivial_case() {
     assert_that_red_herring_neurons_are_untouched(&store);
 
     // 8. Read to verify bad update.
-    let read_result = store.read(NeuronId { id: 0xDEAD_BEEF });
+    let read_result = store.read(NeuronId { id: 0xDEAD_BEEF }, NeuronSections::default());
     match &read_result {
         // This is what we expected.
         Err(err) => {
@@ -293,7 +302,10 @@ fn test_store_simplest_nontrivial_case() {
     assert_that_red_herring_neurons_are_untouched(&store);
 
     // 10. Read to verify second update.
-    assert_eq!(store.read(NeuronId { id: 42 }), Ok(neuron_9));
+    assert_eq!(
+        store.read(NeuronId { id: 42 }, NeuronSections::all()),
+        Ok(neuron_9)
+    );
 
     // 11. Delete.
     assert_eq!(store.delete(NeuronId { id: 42 }), Ok(()));
@@ -318,7 +330,7 @@ fn test_store_simplest_nontrivial_case() {
     assert_that_red_herring_neurons_are_untouched(&store);
 
     // 13. Read to verify delete.
-    let read_result = store.read(NeuronId { id: 42 });
+    let read_result = store.read(NeuronId { id: 42 }, NeuronSections::default());
     match &read_result {
         // This is what we expected.
         Err(err) => {
@@ -399,6 +411,75 @@ fn test_store_simplest_nontrivial_case() {
 }
 
 #[test]
+fn test_partial_read() {
+    let mut store = new_heap_based();
+    let neuron = create_model_neuron(42);
+    assert_eq!(store.create(neuron.clone()), Ok(()));
+
+    let partial_read_test_helper = |sections: NeuronSections| {
+        let neuron_read_result = store.read(NeuronId { id: 42 }, sections).unwrap();
+
+        assert_eq!(neuron_read_result.controller(), neuron.controller());
+
+        if sections.hot_keys {
+            assert_eq!(neuron_read_result.hot_keys, neuron.hot_keys);
+        } else {
+            assert_eq!(neuron_read_result.hot_keys, vec![]);
+        }
+
+        if sections.followees {
+            assert_eq!(neuron_read_result.followees, neuron.followees);
+        } else {
+            assert_eq!(neuron_read_result.followees, HashMap::new());
+        }
+
+        if sections.recent_ballots {
+            assert_eq!(neuron_read_result.recent_ballots, neuron.recent_ballots);
+        } else {
+            assert_eq!(neuron_read_result.recent_ballots, vec![]);
+        }
+
+        if sections.known_neuron_data {
+            assert_eq!(
+                neuron_read_result.known_neuron_data,
+                neuron.known_neuron_data,
+            );
+        } else {
+            assert_eq!(neuron_read_result.known_neuron_data, None);
+        }
+
+        if sections.transfer {
+            assert_eq!(neuron_read_result.transfer, neuron.transfer);
+        } else {
+            assert_eq!(neuron_read_result.transfer, None);
+        }
+    };
+
+    partial_read_test_helper(NeuronSections::default());
+    partial_read_test_helper(NeuronSections::all());
+    partial_read_test_helper(NeuronSections {
+        hot_keys: true,
+        ..NeuronSections::default()
+    });
+    partial_read_test_helper(NeuronSections {
+        followees: true,
+        ..NeuronSections::default()
+    });
+    partial_read_test_helper(NeuronSections {
+        recent_ballots: true,
+        ..NeuronSections::default()
+    });
+    partial_read_test_helper(NeuronSections {
+        known_neuron_data: true,
+        ..NeuronSections::default()
+    });
+    partial_read_test_helper(NeuronSections {
+        transfer: true,
+        ..NeuronSections::default()
+    });
+}
+
+#[test]
 fn test_abridged_neuron_size() {
     // All VARINT encoded fields (e.g. int32, uint64, ..., as opposed to fixed32/fixed64) have
     // larger serialized size for larger numbers (10 bytes for u64::MAX as uint64, while 1 byte for
@@ -423,6 +504,7 @@ fn test_abridged_neuron_size() {
         joined_community_fund_timestamp_seconds: Some(u64::MAX),
         neuron_type: Some(i32::MAX),
         dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(u64::MAX)),
+        visibility: None,
     };
 
     assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::BOUND.max_size());

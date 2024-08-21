@@ -1,13 +1,14 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/ic_os/partition_tools",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
-    "@crate_index//:tokio",
     "@crate_index//:tempfile",
-    "//rs/ic_os/partition_tools",
+    "@crate_index//:tokio",
 ]
 
 DEV_DEPENDENCIES = []

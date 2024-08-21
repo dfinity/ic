@@ -124,7 +124,7 @@ fn dts_subnet_config(
             max_instructions_per_message: message_instruction_limit,
             max_instructions_per_message_without_dts: slice_instruction_limit,
             max_instructions_per_slice: slice_instruction_limit,
-            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..subnet_config.scheduler_config
         },
@@ -173,7 +173,7 @@ fn dts_install_code_env(
                 max_instructions_per_message: message_instruction_limit,
                 max_instructions_per_message_without_dts: slice_instruction_limit,
                 max_instructions_per_slice: message_instruction_limit,
-                instruction_overhead_per_message: NumInstructions::from(0),
+                instruction_overhead_per_execution: NumInstructions::from(0),
                 instruction_overhead_per_canister: NumInstructions::from(0),
                 ..subnet_config.scheduler_config
             },
@@ -1790,12 +1790,13 @@ fn dts_canister_uninstalled_due_resource_charges_with_aborted_update() {
                 assert_eq!(result, WasmResult::Reply(vec![]));
             }
             Err(err) => {
-                assert_eq!(
-                    err.description(),
-                    format!(
-                        "Error from Canister {}: Attempt to execute a message, but the canister contains no Wasm module",
+                err.assert_contains(
+                    ErrorCode::CanisterWasmModuleNotFound,
+                    &format!(
+                        "Error from Canister {}: Attempted to execute a message, \
+                        but the canister contains no Wasm module.",
                         canisters[i]
-                    )
+                    ),
                 );
                 errors += 1;
             }

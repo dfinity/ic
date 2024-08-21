@@ -1,21 +1,21 @@
 #!/bin/sh
-# Uses the list of `wasmparser` supported WASM proposals, WASM instructions
-# benchmarks and WASM instructions costs defined in the `ic` repo to produce
-# a WASM instructions coverage report in Markdown format (see `WASM_COVERAGE.md`)
+# Uses the list of `wasmparser` supported Wasm proposals, Wasm instructions
+# benchmarks and Wasm instructions costs defined in the `ic` repo to produce
+# a Wasm instructions coverage report in Markdown format (see `WASM_COVERAGE.md`)
 #
 # Usage: wasm_coverage.sh
 
-# The file with basic WASM instruction benchmarks.
+# The file with basic Wasm instruction benchmarks.
 BASIC_BENCHES_FILE="${0%/*}/../wasm_instructions/basic.rs"
-# The file with SIMD WASM instruction benchmarks.
+# The file with Wasm SIMD instruction benchmarks.
 SIMD_BENCHES_FILE="${0%/*}/../wasm_instructions/simd.rs"
 # The file with `instruction_to_cost` function.
 INSTRUCTION_TO_COST_FILE="${0%/*}/../../../embedders/src/wasm_utils/instrumentation.rs"
-# The file with WASM proposal to WAS operator mapping.
+# The file with Wasm proposal to Wasm operator mapping.
 PROPOSAL_TO_OP_URL="https://raw.githubusercontent.com/bytecodealliance/wasm-tools/main/crates/wasmparser/src/lib.rs"
-# The file with WASM operator to WASM instruction mapping.
+# The file with Wasm operator to Wasm instruction mapping.
 OP_TO_INSTR_URL="https://raw.githubusercontent.com/bytecodealliance/wasm-tools/main/crates/wast/src/core/expr.rs"
-# The WASM proposal to exclude from the coverage, i.e. unsupported WASM proposals.
+# The Wasm proposal to exclude from the coverage, i.e. unsupported Wasm proposals.
 EXCLUDE_PROPOSALS="tail_call|relaxed_simd|threads|multi_memory|exceptions|memory64|extended_const|component_model|function_references|memory_control|gc|shared_everything_threads"
 
 # Extract `instruction_to_cost` function from the file.

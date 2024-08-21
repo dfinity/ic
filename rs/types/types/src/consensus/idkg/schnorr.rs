@@ -10,10 +10,12 @@ use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
 use std::convert::{AsMut, AsRef, TryFrom, TryInto};
+use std::fmt;
 use std::hash::Hash;
+use std::sync::Arc;
 
 use super::{
-    EcdsaBlockReader, IDkgTranscriptParamsRef, RandomUnmaskedTranscriptParams,
+    IDkgBlockReader, IDkgTranscriptParamsRef, RandomUnmaskedTranscriptParams,
     ThresholdSchnorrPresignatureTranscriptCreationError, ThresholdSchnorrSigInputsCreationError,
     TranscriptLookupError, TranscriptRef, UnmaskedTranscript,
 };
@@ -74,7 +76,7 @@ impl TranscriptInCreation {
 impl From<&TranscriptInCreation> for pb::TranscriptInCreation {
     fn from(pre_signature: &TranscriptInCreation) -> Self {
         Self {
-            key_id: Some(pre_signature.key_id.clone().into()),
+            key_id: Some((&pre_signature.key_id).into()),
             blinder_unmasked_config: Some((&pre_signature.blinder_unmasked_config).into()),
             blinder_unmasked: pre_signature
                 .blinder_unmasked
@@ -138,10 +140,10 @@ impl PreSignatureTranscriptRef {
         }
     }
 
-    /// Resolves the refs to get the PreSignatureQuadruple.
+    /// Resolves the refs to get the PreSignatureTranscript.
     pub fn translate(
         &self,
-        resolver: &dyn EcdsaBlockReader,
+        resolver: &dyn IDkgBlockReader,
     ) -> Result<SchnorrPreSignatureTranscript, PreSignatureTranscriptError> {
         let blinder_unmasked = resolver
             .transcript(self.blinder_unmasked_ref.as_ref())
@@ -168,7 +170,7 @@ impl PreSignatureTranscriptRef {
 impl From<&PreSignatureTranscriptRef> for pb::PreSignatureTranscriptRef {
     fn from(pre_signature_ref: &PreSignatureTranscriptRef) -> Self {
         Self {
-            key_id: Some(pre_signature_ref.key_id.clone().into()),
+            key_id: Some((&pre_signature_ref.key_id).into()),
             blinder_unmasked_ref: Some((&pre_signature_ref.blinder_unmasked_ref).into()),
             key_unmasked_ref: Some((&pre_signature_ref.key_unmasked_ref).into()),
         }
@@ -199,13 +201,24 @@ impl TryFrom<&pb::PreSignatureTranscriptRef> for PreSignatureTranscriptRef {
 
 /// Counterpart of ThresholdSchnorrSigInputs that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ThresholdSchnorrSigInputsRef {
     pub derivation_path: ExtendedDerivationPath,
-    pub message: Vec<u8>,
+    pub message: Arc<Vec<u8>>,
     pub nonce: Randomness,
     pub presig_transcript_ref: PreSignatureTranscriptRef,
+}
+
+impl fmt::Debug for ThresholdSchnorrSigInputsRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ThresholdSchnorrSigInputsRef")
+            .field("derivation_path", &self.derivation_path)
+            .field("message_length_in_bytes", &self.message.len())
+            .field("nonce", &hex::encode(self.nonce.as_ref()))
+            .field("presig_transcript_ref", &self.presig_transcript_ref)
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -218,7 +231,7 @@ pub enum ThresholdSchnorrSigInputsError {
 impl ThresholdSchnorrSigInputsRef {
     pub fn new(
         derivation_path: ExtendedDerivationPath,
-        message: Vec<u8>,
+        message: Arc<Vec<u8>>,
         nonce: Randomness,
         presig_transcript_ref: PreSignatureTranscriptRef,
     ) -> Self {
@@ -230,10 +243,10 @@ impl ThresholdSchnorrSigInputsRef {
         }
     }
 
-    /// Resolves the refs to get the ThresholdEcdsaSigInputs.
+    /// Resolves the refs to get the ThresholdSchnorrSigInputs.
     pub fn translate(
         &self,
-        resolver: &dyn EcdsaBlockReader,
+        resolver: &dyn IDkgBlockReader,
     ) -> Result<ThresholdSchnorrSigInputs, ThresholdSchnorrSigInputsError> {
         let presig_transcript = self
             .presig_transcript_ref

@@ -1,8 +1,9 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:anyhow",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
@@ -11,6 +12,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:once_cell",
 ]
 
@@ -23,9 +25,6 @@ rust_library(
     crate_name = "utils",
     edition = "2021",
     proc_macro_deps = [],
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
     deps = DEPENDENCIES,
 )
 

@@ -29,9 +29,9 @@ pub enum RejectCode {
     CanisterError = 5,
 }
 
-impl ToString for RejectCode {
-    fn to_string(&self) -> String {
-        self.to_str().to_owned()
+impl std::fmt::Display for RejectCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_str())
     }
 }
 
@@ -150,6 +150,7 @@ impl From<ErrorCode> for RejectCode {
             InsufficientCyclesInMemoryGrow => CanisterError,
             ReservedCyclesLimitExceededInMemoryAllocation => CanisterError,
             ReservedCyclesLimitExceededInMemoryGrow => CanisterError,
+            ReservedCyclesLimitIsTooLow => CanisterError,
             InsufficientCyclesInMessageMemoryGrow => CanisterError,
             CanisterMethodNotFound => CanisterError,
             CanisterWasmModuleNotFound => CanisterError,
@@ -229,6 +230,7 @@ pub enum ErrorCode {
     CanisterWasmModuleNotFound = 537,
     CanisterAlreadyInstalled = 538,
     CanisterWasmMemoryLimitExceeded = 539,
+    ReservedCyclesLimitIsTooLow = 540,
 }
 
 impl TryFrom<ErrorCodeProto> for ErrorCode {
@@ -325,6 +327,9 @@ impl TryFrom<ErrorCodeProto> for ErrorCode {
             ErrorCodeProto::CanisterWasmMemoryLimitExceeded => {
                 Ok(ErrorCode::CanisterWasmMemoryLimitExceeded)
             }
+            ErrorCodeProto::ReservedCyclesLimitIsTooLow => {
+                Ok(ErrorCode::ReservedCyclesLimitIsTooLow)
+            }
         }
     }
 }
@@ -412,6 +417,7 @@ impl From<ErrorCode> for ErrorCodeProto {
             ErrorCode::CanisterWasmMemoryLimitExceeded => {
                 ErrorCodeProto::CanisterWasmMemoryLimitExceeded
             }
+            ErrorCode::ReservedCyclesLimitIsTooLow => ErrorCodeProto::ReservedCyclesLimitIsTooLow,
         }
     }
 }
@@ -528,6 +534,7 @@ impl UserError {
             | ErrorCode::InsufficientCyclesInMemoryGrow
             | ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
             | ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
+            | ErrorCode::ReservedCyclesLimitIsTooLow
             | ErrorCode::InsufficientCyclesInMessageMemoryGrow
             | ErrorCode::CanisterSnapshotNotFound
             | ErrorCode::CanisterHeapDeltaRateLimited
@@ -537,6 +544,18 @@ impl UserError {
 
     pub fn count_bytes(&self) -> usize {
         std::mem::size_of_val(self) + self.description.len()
+    }
+
+    /// Panics if the error doesn't have the expected code and description.
+    /// Useful for tests to avoid matching exact error messages.
+    pub fn assert_contains(&self, code: ErrorCode, description: &str) {
+        assert_eq!(self.code, code);
+        assert!(
+            self.description.contains(description),
+            "Error matching description \"{}\" with \"{}\"",
+            self.description,
+            description
+        );
     }
 }
 
@@ -589,7 +608,7 @@ mod tests {
                 402, 403, 404, 405, 406, 407, 408,
                 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512, 513, 514,
                 517, 520, 521, 522, 524, 525, 526, 527, 528, 529, 530, 531, 532,
-                533, 534, 535, 536, 537, 538, 539
+                533, 534, 535, 536, 537, 538, 539, 540,
             ]
         );
     }

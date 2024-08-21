@@ -15,10 +15,9 @@ use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
-    artifact_kind::ConsensusArtifact,
     consensus::{
-        BlockProposal, CatchUpPackage, ConsensusMessageHashable, Finalization, HasHeight,
-        Notarization, RandomBeacon, RandomTape,
+        BlockProposal, CatchUpPackage, ConsensusMessage, ConsensusMessageHashable, Finalization,
+        HasHeight, Notarization, RandomBeacon, RandomTape,
     },
     time::UNIX_EPOCH,
     Height, RegistryVersion, SubnetId,
@@ -83,7 +82,7 @@ pub(crate) enum ExitPoint {
 
 /// Deserialize the CUP at the given height and inserts it into the pool.
 pub(crate) fn insert_cup_at_height(
-    pool: &mut dyn MutablePool<ConsensusArtifact, ChangeSet = ChangeSet>,
+    pool: &mut dyn MutablePool<ConsensusMessage, ChangeSet = ChangeSet>,
     backup_dir: &Path,
     height: Height,
 ) -> Result<(), ReplayError> {
@@ -391,7 +390,7 @@ pub(crate) fn deserialize_consensus_artifacts(
         artifacts.push(rt.into_message());
 
         // Insert the finalized notarization.
-        for file_name in &height_artifacts.notarizations.first() {
+        if let Some(file_name) = height_artifacts.notarizations.first() {
             let file = path.join(file_name);
             let not = read_artifact_if_correct_height::<Notarization, pb::Notarization>(
                 &file,

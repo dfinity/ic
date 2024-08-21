@@ -6,7 +6,7 @@ use ic_management_canister_types::{
     self as ic00, CanisterInstallModeV2, CanisterUpgradeOptions, Payload, WasmMemoryPersistence,
 };
 use ic_types::{
-    messages::{SignedIngress, UserQuery},
+    messages::{Query, QuerySource, SignedIngress},
     time::expiry_time_from_now,
     PrincipalId, UserId,
 };
@@ -22,7 +22,7 @@ use std::{
 #[derive(Debug, PartialEq)]
 pub(crate) enum Message {
     Ingress(SignedIngress),
-    Query(UserQuery),
+    Query(Query),
     Install(SignedIngress),
     Create(SignedIngress),
 }
@@ -30,7 +30,7 @@ pub(crate) enum Message {
 #[derive(Debug)]
 pub enum LineIteratorError {
     IoError(io::Error),
-    BufferLengthExceeded(Vec<u8>),
+    BufferLengthExceeded,
     FromUtf8Error(FromUtf8Error),
 }
 
@@ -40,7 +40,7 @@ impl fmt::Display for LineIteratorError {
 
         match self {
             IoError(e) => write!(f, "IO error: {}", e),
-            BufferLengthExceeded(_) => write!(f, "Line length exceeds buffer length"),
+            BufferLengthExceeded => write!(f, "Line length exceeds buffer length"),
             FromUtf8Error(e) => write!(f, "UTF-8 conversion error: {}", e),
         }
     }
@@ -114,9 +114,8 @@ impl<R: Read> Iterator for LineIterator<R> {
                 Ok(_) => match self.split_line() {
                     Some(line) => return Some(line),
                     None if self.buffer.len() == LINE_ITERATOR_BUFFER_SIZE => {
-                        let bytes = self.buffer.clone();
                         self.buffer.clear();
-                        return Some(Err(LineIteratorError::BufferLengthExceeded(bytes)));
+                        return Some(Err(LineIteratorError::BufferLengthExceeded));
                     }
                     None => continue,
                 },
@@ -169,13 +168,15 @@ fn parse_message(s: &str, nonce: u64) -> Result<Message, String> {
                 .build();
             Ok(Message::Ingress(signed_ingress))
         }
-        ["query", canister_id, method_name, payload] => Ok(Message::Query(UserQuery {
-            source: UserId::from(PrincipalId::new_anonymous()),
+        ["query", canister_id, method_name, payload] => Ok(Message::Query(Query {
+            source: QuerySource::User {
+                user_id: UserId::from(PrincipalId::new_anonymous()),
+                ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
+                nonce: Some(nonce.to_le_bytes().to_vec()),
+            },
             receiver: parse_canister_id(canister_id)?,
             method_name: validate_method_name(method_name)?,
             method_payload: parse_octet_string(payload)?,
-            ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
-            nonce: Some(nonce.to_le_bytes().to_vec()),
         })),
         ["create"] => parse_create(nonce),
         ["install", canister_id, wasm_file, payload] => {
@@ -461,19 +462,24 @@ mod tests {
         let nonce: u64 = 0;
         let parsed_message = parse_message(s, 0).unwrap();
         let ingress_expiry = match &parsed_message {
-            Message::Query(query) => query.ingress_expiry,
+            Message::Query(query) => match query.source {
+                QuerySource::User { ingress_expiry, .. } => ingress_expiry,
+                QuerySource::Anonymous => panic!("Expected a user query but got an anonymous one"),
+            },
             _ => panic!(
                 "parse_message() returned an unexpected message type: {:?}",
                 parsed_message
             ),
         };
-        let expected = Message::Query(UserQuery {
-            source: UserId::from(PrincipalId::new_anonymous()),
+        let expected = Message::Query(Query {
+            source: QuerySource::User {
+                user_id: UserId::from(PrincipalId::new_anonymous()),
+                ingress_expiry,
+                nonce: Some(nonce.to_le_bytes().to_vec()),
+            },
             receiver: canister_test_id(APP_CANISTER_ID),
             method_name: String::from("read"),
             method_payload: vec![1, 2, 3],
-            ingress_expiry,
-            nonce: Some(nonce.to_le_bytes().to_vec()),
         });
         assert_eq!(expected, parsed_message);
     }

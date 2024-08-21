@@ -1,3 +1,4 @@
+use crate::sns_upgrade::get_proposal_id_that_added_wasm;
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
     governance::{
@@ -37,6 +38,7 @@ use ic_nervous_system_common::{
     DEFAULT_TRANSFER_FEE, E8, ONE_DAY_SECONDS,
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
+use ic_protobuf::types::v1::CanisterInstallMode;
 use ic_sns_governance_proposals_amount_total_limit::{
     // TODO(NNS1-2982): Uncomment. mint_sns_tokens_7_day_total_upper_bound_tokens,
     transfer_sns_treasury_funds_7_day_total_upper_bound_tokens,
@@ -990,6 +992,21 @@ fn validate_and_render_upgrade_sns_controlled_canister(
 ) -> Result<String, String> {
     let mut defects = vec![];
 
+    let UpgradeSnsControlledCanister {
+        canister_id: _,
+        new_canister_wasm,
+        canister_upgrade_arg,
+        mode,
+    } = upgrade;
+    // Make sure `mode` is not None, and not an invalid/unknown value.
+    if let Some(mode) = mode {
+        if let Err(err) = CanisterInstallMode::try_from(*mode) {
+            defects.push(format!("Invalid mode: {}", err));
+        }
+    }
+    // Assume mode is the default if it is not set
+    let mode = upgrade.mode_or_upgrade();
+
     // Inspect canister_id.
     let mut canister_id = PrincipalId::new_user_test_id(0xDEADBEEF); // Initialize to garbage. This won't get used later.
     match validate_required_field("canister_id", &upgrade.canister_id) {
@@ -1010,20 +1027,19 @@ fn validate_and_render_upgrade_sns_controlled_canister(
     const MIN_WASM_LEN: usize = 8;
     if let Err(err) = validate_len(
         "new_canister_wasm",
-        &upgrade.new_canister_wasm,
+        new_canister_wasm,
         MIN_WASM_LEN,
         usize::MAX,
     ) {
         defects.push(err);
-    } else if upgrade.new_canister_wasm[..4] != RAW_WASM_HEADER[..]
-        && upgrade.new_canister_wasm[..3] != GZIPPED_WASM_HEADER[..]
+    } else if new_canister_wasm[..4] != RAW_WASM_HEADER[..]
+        && new_canister_wasm[..3] != GZIPPED_WASM_HEADER[..]
     {
         defects.push("new_canister_wasm lacks the magic value in its header.".into());
     }
 
-    if upgrade.new_canister_wasm.len()
-        + upgrade
-            .canister_upgrade_arg
+    if new_canister_wasm.len()
+        + canister_upgrade_arg
             .as_ref()
             .map(|arg| arg.len())
             .unwrap_or_default()
@@ -1040,18 +1056,33 @@ fn validate_and_render_upgrade_sns_controlled_canister(
         ));
     }
 
-    let mut state = Sha256::new();
-    state.write(&upgrade.new_canister_wasm);
-    let sha = state.finish();
+    let canister_wasm_sha256 = {
+        let mut state = Sha256::new();
+        state.write(new_canister_wasm);
+        let sha = state.finish();
+        hex::encode(sha)
+    };
+
+    let upgrade_args_sha_256 = canister_upgrade_arg
+        .as_ref()
+        .map(|arg| {
+            let mut state = Sha256::new();
+            state.write(arg);
+            let sha = state.finish();
+            format!("Upgrade arg sha256: {}", hex::encode(sha))
+        })
+        .unwrap_or_else(|| "No upgrade arg".to_string());
 
     Ok(format!(
         r"# Proposal to upgrade SNS controlled canister:
 
-## Canister id: {:?}
+## Canister id: {canister_id:?}
 
-## Canister wasm sha256: {}",
-        canister_id,
-        hex::encode(sha)
+## Canister wasm sha256: {canister_wasm_sha256}
+
+## Mode: {mode:?}
+
+## {upgrade_args_sha_256}",
     ))
 }
 
@@ -1082,7 +1113,7 @@ async fn validate_and_render_upgrade_sns_to_next_version(
 ) -> Result<String, String> {
     let UpgradeSnsParams {
         next_version,
-        canister_type_to_upgrade: _,
+        canister_type_to_upgrade,
         new_wasm_hash,
         canister_ids_to_upgrade,
     } = get_upgrade_params(env, root_canister_id, &current_version)
@@ -1094,9 +1125,23 @@ async fn validate_and_render_upgrade_sns_to_next_version(
             )
         })?;
 
+    let proposal_id_message = get_proposal_id_that_added_wasm(env, new_wasm_hash.to_vec())
+        .await
+        .ok()
+        // TODO(NNS1-3152): If there was an error, surface it in some way so the
+        // community can talk about it.
+        .flatten()
+        .map(|id| {
+            format!(
+                "## Proposal ID of the NNS proposal that blessed this WASM version: NNS Proposal {}",
+                id
+            )
+        })
+        .unwrap_or_default();
+
     // TODO display the hashes for current version and new version
     Ok(format!(
-        r"# Proposal to upgrade SNS to next version:
+        r"# Proposal to upgrade SNS {canister_type_to_upgrade:?} to next version:
 
 ## SNS Current Version:
 {}
@@ -1106,6 +1151,7 @@ async fn validate_and_render_upgrade_sns_to_next_version(
 
 ## Canisters to be upgraded: {}
 ## Upgrade Version: {}
+{proposal_id_message}
 ",
         render_version(&current_version),
         render_version(&next_version),
@@ -1326,17 +1372,27 @@ pub async fn validate_and_render_execute_nervous_system_function(
                     )
                     .await?;
 
+                let payload_hash = {
+                    let mut state = Sha256::new();
+                    state.write(execute.payload.as_slice());
+                    let sha = state.finish();
+                    hex::encode(sha)
+                };
+
                 Ok(format!(
                     r"# Proposal to execute nervous system function:
 
 ## Nervous system function:
 
-{:#?}
+{function:#?}
+
+## Payload sha256: 
+
+{payload_hash}
 
 ## Payload:
 
-{}",
-                    function, rendering
+{rendering}"
                 ))
             }
         }
@@ -1989,6 +2045,7 @@ impl ProposalData {
     /// - 'no': Amount of voting power voting 'no'.
     /// - 'total': Total voting power.
     /// - 'percentage_of_total_required': The minimum percentage of the total voting power required for a decision.
+    ///
     /// The function returns a `Vote`:
     /// - `Vote::Yes` if the amount of voting power voting 'yes' votes exceeds `percentage_of_total_required` of the total.
     /// - `Vote::No` if the amount of voting power voting 'no' votes is equal to or exceeds `1-percentage_of_total_required` of the total.
@@ -2376,8 +2433,8 @@ mod tests {
         },
         sns_upgrade::{
             CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
-            GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest,
-            GetWasmResponse, SnsCanisterType, SnsVersion, SnsWasm,
+            GetProposalIdThatAddedWasmRequest, GetProposalIdThatAddedWasmResponse,
+            GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, SnsVersion,
         },
         tests::{assert_is_err, assert_is_ok},
         types::test_helpers::NativeEnvironment,
@@ -2582,6 +2639,68 @@ mod tests {
             proposal::Action::Motion(motion) => assert_is_err(validate_and_render_motion(motion)),
             _ => panic!("proposal.action is not Motion."),
         }
+    }
+
+    #[test]
+    fn render_upgrade_sns_controlled_canister_proposal() {
+        let upgrade = UpgradeSnsControlledCanister {
+            canister_id: Some(basic_principal_id()),
+            new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            canister_upgrade_arg: None,
+            mode: Some(CanisterInstallModeProto::Upgrade.into()),
+        };
+        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade).unwrap();
+
+        assert_eq!(
+            text,
+            r#"# Proposal to upgrade SNS controlled canister:
+
+## Canister id: bg4sm-wzk
+
+## Canister wasm sha256: 93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476
+
+## Mode: Upgrade
+
+## No upgrade arg"#
+                .to_string()
+        );
+    }
+
+    #[test]
+    fn render_upgrade_sns_controlled_canister_proposal_with_upgrade_args() {
+        let upgrade = UpgradeSnsControlledCanister {
+            canister_id: Some(basic_principal_id()),
+            new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            canister_upgrade_arg: Some(vec![10, 20, 30, 40, 50, 60, 70, 80]),
+            mode: Some(CanisterInstallModeProto::Upgrade.into()),
+        };
+        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade).unwrap();
+
+        assert_eq!(
+            text,
+            r#"# Proposal to upgrade SNS controlled canister:
+
+## Canister id: bg4sm-wzk
+
+## Canister wasm sha256: 93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476
+
+## Mode: Upgrade
+
+## Upgrade arg sha256: 73f1171adc7e49b09423da2515a1077e3cc63e3fabcb9846cac437d044ac57ec"#
+                .to_string()
+        );
+    }
+
+    #[test]
+    fn render_upgrade_sns_controlled_canister_proposal_validates_mode() {
+        let upgrade = UpgradeSnsControlledCanister {
+            canister_id: Some(basic_principal_id()),
+            new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            canister_upgrade_arg: None,
+            mode: Some(100), // 100 is not a valid mode
+        };
+        let text = validate_and_render_upgrade_sns_controlled_canister(&upgrade).unwrap_err();
+        assert!(text.contains("Invalid mode"));
     }
 
     fn basic_upgrade_sns_controlled_canister_proposal() -> Proposal {
@@ -3000,8 +3119,6 @@ mod tests {
     /// It also is set to only upgrade root.
     fn setup_for_upgrade_sns_to_next_version_validation_tests(
     ) -> (NativeEnvironment, GovernanceProto) {
-        let expected_canister_to_be_upgraded = SnsCanisterType::Root;
-
         let expected_wasm_hash_requested = Sha256::hash(&[6]).to_vec();
         let root_canister_id = *SNS_ROOT_CANISTER_ID;
 
@@ -3110,16 +3227,13 @@ mod tests {
         );
         env.set_call_canister_response(
             SNS_WASM_CANISTER_ID,
-            "get_wasm",
-            Encode!(&GetWasmRequest {
+            "get_proposal_id_that_added_wasm",
+            Encode!(&GetProposalIdThatAddedWasmRequest {
                 hash: expected_wasm_hash_requested
             })
             .unwrap(),
-            Ok(Encode!(&GetWasmResponse {
-                wasm: Some(SnsWasm {
-                    wasm: vec![9, 8, 7, 6, 5, 4, 3, 2],
-                    canister_type: expected_canister_to_be_upgraded.into() // Governance
-                })
+            Ok(Encode!(&GetProposalIdThatAddedWasmResponse {
+                proposal_id: Some(2),
             })
             .unwrap()),
         );
@@ -3146,7 +3260,7 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        let expected_text = r"# Proposal to upgrade SNS to next version:
+        let expected_text = r"# Proposal to upgrade SNS Root to next version:
 
 ## SNS Current Version:
 Version {
@@ -3170,6 +3284,7 @@ Version {
 
 ## Canisters to be upgraded: q7t5l-saaaa-aaaaa-aah2a-cai
 ## Upgrade Version: 67586e98fad27da0b9968bc039a1ef34c939b9b8e523a8bef89d478608c5ecf6
+## Proposal ID of the NNS proposal that blessed this WASM version: NNS Proposal 2
 ";
         assert_eq!(actual_text, expected_text);
     }
@@ -4327,6 +4442,88 @@ Version {
             })
             .unwrap_err();
         assert!(rendered_error.contains("must change at least one value"));
+    }
+
+    #[tokio::test]
+    async fn validate_and_render_execute_nervous_system_function_success() {
+        let function_id = 1000;
+        let canister_id = CanisterId::from_u64(1);
+        let payload = vec![1, 2, 3];
+        let function = NervousSystemFunction {
+            id: 1000,
+            name: "a".to_string(),
+            description: None,
+            function_type: Some(FunctionType::GenericNervousSystemFunction(
+                GenericNervousSystemFunction {
+                    target_canister_id: Some(canister_id.get()),
+                    target_method_name: Some("test_method".to_string()),
+                    validator_canister_id: Some(canister_id.get()),
+                    validator_method_name: Some("test_validator_method".to_string()),
+                },
+            )),
+        };
+
+        // set up environment
+        let governance_canister_id = *SNS_GOVERNANCE_CANISTER_ID;
+        let mut env = NativeEnvironment::new(Some(governance_canister_id));
+        env.default_canister_call_response =
+            Err((Some(1), "Oh no something was not covered!".to_string()));
+        env.set_call_canister_response(
+            canister_id,
+            "test_validator_method",
+            payload.clone(),
+            Ok(Encode!(&Ok::<String, String>("Payload rendering here".to_string())).unwrap()),
+        );
+
+        let render = validate_and_render_execute_nervous_system_function(
+            &env,
+            &ExecuteGenericNervousSystemFunction {
+                function_id,
+                payload,
+            },
+            &btreemap! {function_id => function},
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            render,
+            r#"# Proposal to execute nervous system function:
+
+## Nervous system function:
+
+NervousSystemFunction {
+    id: 1000,
+    name: "a",
+    description: None,
+    function_type: Some(
+        GenericNervousSystemFunction(
+            GenericNervousSystemFunction {
+                target_canister_id: Some(
+                    rrkah-fqaaa-aaaaa-aaaaq-cai,
+                ),
+                target_method_name: Some(
+                    "test_method",
+                ),
+                validator_canister_id: Some(
+                    rrkah-fqaaa-aaaaa-aaaaq-cai,
+                ),
+                validator_method_name: Some(
+                    "test_validator_method",
+                ),
+            },
+        ),
+    ),
+}
+
+## Payload sha256: 
+
+039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81
+
+## Payload:
+
+Payload rendering here"#
+        );
     }
 
     #[test]

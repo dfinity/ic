@@ -25,7 +25,6 @@ pub use sign::{
 
 use crate::sign::ThresholdSigDataStoreImpl;
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_internal_csp::api::CspPublicKeyStore;
 use ic_crypto_internal_csp::vault::vault_from_config;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
@@ -202,7 +201,7 @@ impl CryptoComponentImpl<Csp> {
             new_logger!(&logger),
             Arc::clone(&metrics),
         );
-        let node_pks = csp
+        let node_pks = vault
             .current_node_public_keys()
             .expect("Failed to retrieve node public keys");
         let node_signing_pk = node_pks
@@ -266,8 +265,8 @@ fn key_from_registry(
 ///  * Should not have too many collisions within a short time span (e.g., 5 minutes)
 ///  * The generation of the identifier should not block or panic
 ///  * The generation of the identifier should not require synchronization between threads
-fn get_log_id(logger: &ReplicaLogger, module_path: &'static str) -> u64 {
-    if logger.is_enabled_at(slog::Level::Debug, module_path) {
+fn get_log_id(logger: &ReplicaLogger) -> u64 {
+    if logger.is_enabled_at(slog::Level::Debug) {
         ic_types::time::current_time().as_nanos_since_unix_epoch()
     } else {
         0

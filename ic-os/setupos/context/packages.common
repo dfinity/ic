@@ -11,6 +11,9 @@ systemd
 systemd-sysv
 systemd-journal-remote
 
+# Third-party services we will be running
+chrony
+
 # Required system setup tools
 attr
 ca-certificates

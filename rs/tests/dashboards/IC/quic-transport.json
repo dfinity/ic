@@ -2501,7 +2501,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "000000001"
           },
           "editorMode": "code",
           "exemplar": true,
@@ -2601,7 +2601,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "000000001"
           },
           "editorMode": "code",
           "exemplar": true,
@@ -2701,7 +2701,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "000000001"
           },
           "editorMode": "code",
           "exemplar": true,
@@ -2801,7 +2801,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "000000001"
           },
           "editorMode": "code",
           "exemplar": true,

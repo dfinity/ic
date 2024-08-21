@@ -83,11 +83,11 @@ disk.img
 dev-root-ca.crt
 
 # IC-OS binaries
-ic-os/utils/**/infogetty
-ic-os/utils/**/infogetty.o
-ic-os/utils/**/network_info.o
-ic-os/utils/**/prestorecon
-ic-os/utils/**/prestorecon.o
+cpp/**/infogetty
+cpp/**/infogetty.o
+cpp/**/network_info.o
+cpp/**/prestorecon
+cpp/**/prestorecon.o
 
 # Various build artifacts
 artifacts
@@ -112,8 +112,7 @@ artifacts
 # Boundary node prober binary
 boundary-node-prober
 
-# Scalability test results
-scalability/results/
+# Python pip file
 *Pipfile*
 
 # Bazel outdir dirs

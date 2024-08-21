@@ -8,14 +8,14 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-ic-protobuf = { path = "../../protobuf" }
 ic-base-types = { path = "../../types/base_types" }
+ic-protobuf = { path = "../../protobuf" }
 prost = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
+ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
+ic-registry-keys = { path = "../keys" }
 ic-registry-transport-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-ic-registry-keys = { path = "../keys" }
-ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
-tempfile = "3.1.0"
+tempfile = { workspace = true }

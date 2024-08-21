@@ -10,7 +10,12 @@ documentation.workspace = true
 
 [dependencies]
 axum = { workspace = true }
-axum-server = { version = "^0.6.0", features = ["tls-rustls"] }
 clap = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+rustls = { workspace = true }
+rustls-pemfile = "2.1.2"
 serde_json = { workspace = true }
 tokio = { workspace = true }
+tokio-rustls = { workspace = true }
+tower = { workspace = true }

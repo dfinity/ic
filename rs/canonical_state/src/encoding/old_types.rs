@@ -11,10 +11,14 @@ use std::{
 use crate::CertificationVersion;
 
 use super::types;
-use crate::encoding::types::{Bytes, Cycles, Funds, Response, STREAM_DEFAULT_FLAGS};
+use crate::encoding::types::{
+    Bytes, Cycles, Funds, Response, StreamFlagBits as StreamFlagBitsV17,
+    STREAM_DEFAULT_FLAGS as STREAM_DEFAULT_FLAGS_V17,
+    STREAM_SUPPORTED_FLAGS as STREAM_SUPPORTED_FLAGS_V17,
+};
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::messages::NO_DEADLINE;
-use ic_types::xnet::{StreamHeader, StreamIndex};
+use ic_types::xnet::{RejectReason, RejectSignal, StreamHeader, StreamIndex};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
@@ -476,6 +480,130 @@ impl TryFrom<RequestOrResponseV3> for ic_types::messages::RequestOrResponse {
     }
 }
 
+pub fn is_zero<T>(v: &T) -> bool
+where
+    T: Into<u64> + Copy,
+{
+    (*v).into() == 0
+}
+
+/// Copy of `types::StreamHeader` at canonical version 18 (before the addition of
+/// `reject_signals` and deprecation of `reject_signal_deltas`.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StreamHeaderV18 {
+    pub begin: u64,
+    pub end: u64,
+    pub signals_end: u64,
+    /// Delta encoded reject signals: the last signal is encoded as the delta
+    /// between `signals_end` and the stream index of the rejected message; all
+    /// other signals are encoded as the delta between the next stream index and
+    /// the current one.
+    ///
+    /// Note that `signals_end` is NOT part of the reject signals.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reject_signal_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub flags: u64,
+}
+
+impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeaderV18 {
+    fn from(
+        (header, certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
+    ) -> Self {
+        // Replicas with certification version < 9 do not produce reject signals. This
+        // includes replicas with certification version 8, but they may "inherit" reject
+        // signals from a replica with certification version 9 after a downgrade.
+        assert!(
+            header.reject_signals().is_empty() || certification_version >= CertificationVersion::V8,
+            "Replicas with certification version < 9 should not be producing reject signals"
+        );
+        // Replicas with certification version < 17 should not have flags set.
+        assert!(
+            *header.flags() == STREAM_DEFAULT_FLAGS_V17
+                || certification_version >= CertificationVersion::V17
+        );
+
+        let mut next_index = header.signals_end();
+        let mut reject_signal_deltas = vec![0; header.reject_signals().len()];
+        for (i, stream_index) in header
+            .reject_signals()
+            .iter()
+            .enumerate()
+            .map(|(i, signal)| {
+                // Reject signals at certification version < 19 may not produce signals other than
+                // `CanisterMigrating`.
+                assert_eq!(signal.reason, RejectReason::CanisterMigrating);
+                (i, signal.index)
+            })
+            .rev()
+        {
+            assert!(next_index > stream_index);
+            reject_signal_deltas[i] = next_index.get() - stream_index.get();
+            next_index = stream_index;
+        }
+
+        let mut flags = 0;
+        let ic_types::xnet::StreamFlags {
+            deprecated_responses_only,
+        } = *header.flags();
+        if deprecated_responses_only {
+            flags |= StreamFlagBitsV17::DeprecatedResponsesOnly as u64;
+        }
+
+        Self {
+            begin: header.begin().get(),
+            end: header.end().get(),
+            signals_end: header.signals_end().get(),
+            reject_signal_deltas,
+            flags,
+        }
+    }
+}
+
+impl TryFrom<StreamHeaderV18> for ic_types::xnet::StreamHeader {
+    type Error = ProxyDecodeError;
+    fn try_from(header: StreamHeaderV18) -> Result<Self, Self::Error> {
+        let mut reject_signals = VecDeque::with_capacity(header.reject_signal_deltas.len());
+        let mut stream_index = StreamIndex::new(header.signals_end);
+        for delta in header.reject_signal_deltas.iter().rev() {
+            if stream_index < StreamIndex::new(*delta) {
+                // Reject signal deltas are invalid.
+                return Err(ProxyDecodeError::Other(format!(
+                    "StreamHeader: reject signals are invalid, got `signals_end` {:?}, `reject_signal_deltas` {:?}",
+                    header.signals_end,
+                    header.reject_signal_deltas,
+                )));
+            }
+            stream_index -= StreamIndex::new(*delta);
+            reject_signals.push_front(RejectSignal::new(
+                RejectReason::CanisterMigrating,
+                stream_index,
+            ));
+        }
+
+        if header.flags & !STREAM_SUPPORTED_FLAGS_V17 != 0 {
+            return Err(ProxyDecodeError::Other(format!(
+                "StreamHeader: unsupported flags: got `flags` {:#b}, `supported_flags` {:#b}",
+                header.flags, STREAM_SUPPORTED_FLAGS_V17,
+            )));
+        }
+        let flags = ic_types::xnet::StreamFlags {
+            deprecated_responses_only: header.flags
+                & StreamFlagBitsV17::DeprecatedResponsesOnly as u64
+                != 0,
+        };
+
+        Ok(Self::new(
+            header.begin.into(),
+            header.end.into(),
+            header.signals_end.into(),
+            reject_signals,
+            flags,
+        ))
+    }
+}
+
 /// Copy of `types::StreamHeader` at canonical version 16 (before the addition of `flags`).
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -508,14 +636,25 @@ impl From<(&StreamHeader, CertificationVersion)> for StreamHeaderV16 {
         //
         // This `assert` was added for testing purposes and was never present
         // in any version on main net.
-        assert_eq!(*header.flags(), STREAM_DEFAULT_FLAGS);
+        assert_eq!(*header.flags(), STREAM_DEFAULT_FLAGS_V17);
 
         let mut next_index = header.signals_end();
         let mut reject_signal_deltas = vec![0; header.reject_signals().len()];
-        for (i, stream_index) in header.reject_signals().iter().enumerate().rev() {
-            assert!(next_index > *stream_index);
+        for (i, stream_index) in header
+            .reject_signals()
+            .iter()
+            .enumerate()
+            .map(|(i, signal)| {
+                // Reject signals at certification version < 19 may not produce signals other than
+                // `CanisterMigrating`.
+                assert_eq!(signal.reason, RejectReason::CanisterMigrating);
+                (i, signal.index)
+            })
+            .rev()
+        {
+            assert!(next_index > stream_index);
             reject_signal_deltas[i] = next_index.get() - stream_index.get();
-            next_index = *stream_index;
+            next_index = stream_index;
         }
 
         Self {
@@ -542,7 +681,10 @@ impl TryFrom<StreamHeaderV16> for StreamHeader {
                 )));
             }
             stream_index -= StreamIndex::new(*delta);
-            reject_signals.push_front(stream_index);
+            reject_signals.push_front(RejectSignal::new(
+                RejectReason::CanisterMigrating,
+                stream_index,
+            ));
         }
 
         Ok(Self::new(

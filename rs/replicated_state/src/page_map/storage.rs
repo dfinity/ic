@@ -181,7 +181,7 @@ impl Storage {
         let mut base_overlays = Vec::<OverlayFile>::new();
         let mut overlays = Vec::<OverlayFile>::new();
         for path in overlay_paths.iter() {
-            let overlay = OverlayFile::load(path).unwrap();
+            let overlay = OverlayFile::load(path)?;
             let start_page_index = overlay
                 .index_iter()
                 .next()
@@ -696,11 +696,12 @@ fn num_pages(mapping: &Mapping) -> usize {
 ///
 /// 1) The index is present and less than the maximum supported version.
 /// 2) The number of pages is present and consistent with the index.
+///
 /// For the index, check that all the ranges:
-///   1) Have positive length.
-///   2) Are backed by data within the [0; self.num_pages) interval in the overlay file.
-///   3) Don't overlap.
-///   4) Are not back-to-back, e.g. [2..4][4..9].
+/// 1) Have positive length.
+/// 2) Are backed by data within the [0; self.num_pages) interval in the overlay file.
+/// 3) Don't overlap.
+/// 4) Are not back-to-back, e.g. [2..4][4..9].
 ///
 /// We should always check correctness before constructing an `OverlayFile`.
 fn check_mapping_correctness(mapping: &Mapping, path: &Path) -> Result<(), PersistenceError> {
@@ -1598,6 +1599,26 @@ fn write_overlay(
             internal_error: err.to_string(),
         })?;
 
+    // Mark the file as readonly.
+    let metadata = path
+        .metadata()
+        .map_err(|err| PersistenceError::FileSystemError {
+            path: path.display().to_string(),
+            context: format!("Failed to write overlay file {}", path.display()),
+            internal_error: err.to_string(),
+        })?;
+    let mut permissions = metadata.permissions();
+    if !permissions.readonly() {
+        permissions.set_readonly(true);
+        std::fs::set_permissions(path, permissions).map_err(|err| {
+            PersistenceError::FileSystemError {
+                path: path.display().to_string(),
+                context: format!("Failed to write overlay file {}", path.display()),
+                internal_error: err.to_string(),
+            }
+        })?;
+    }
+
     let data_size = pages.len() * PAGE_SIZE;
     let index_size = ranges_serialized.len() + 8;
 
@@ -1612,19 +1633,19 @@ fn write_overlay(
     Ok(())
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum BaseFileSerialization {
     Base(CheckpointSerialization),
     Overlay(Vec<OverlayFileSerialization>),
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct StorageSerialization {
     pub base: BaseFileSerialization,
     pub overlays: Vec<OverlayFileSerialization>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct OverlayFileSerialization {
     pub mapping: MappingSerialization,
 }

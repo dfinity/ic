@@ -10,10 +10,8 @@ use ic_nns_common::init::{LifelineCanisterInitPayload, LifelineCanisterInitPaylo
 use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID,
 };
-use ic_nns_governance::{
-    init::GovernanceCanisterInitPayloadBuilder,
-    pb::v1::{Governance, NetworkEconomics, Neuron},
-};
+use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
+use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_gtc::{init::GenesisTokenCanisterInitPayloadBuilder, pb::v1::Gtc};
 use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
 use ic_nns_handler_root::init::{RootCanisterInitPayload, RootCanisterInitPayloadBuilder};
@@ -28,7 +26,6 @@ use icp_ledger::{
 use lifeline::LIFELINE_CANISTER_WASM;
 use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
 use std::{convert::TryInto, path::Path};
-use walrus::{Module, RawCustomSection};
 
 /// Payloads for all the canisters that exist at genesis.
 #[derive(Clone, Debug)]
@@ -140,6 +137,16 @@ impl NnsInitPayloadsBuilder {
         self
     }
 
+    pub fn with_test_neurons_fund_neurons_with_hotkeys(
+        &mut self,
+        hotkeys: Vec<PrincipalId>,
+        maturity_equivalent_icp_e8s: u64,
+    ) -> &mut Self {
+        self.governance
+            .with_test_neurons_fund_neurons_with_hotkeys(hotkeys, maturity_equivalent_icp_e8s);
+        self
+    }
+
     pub fn with_additional_neurons(&mut self, neurons: Vec<Neuron>) -> &mut Self {
         self.governance.with_additional_neurons(neurons);
         self
@@ -183,12 +190,14 @@ impl NnsInitPayloadsBuilder {
         self.genesis_token.add_sr_neurons(SEED_ROUND_ACCOUNTS);
         self.genesis_token.add_ect_neurons(ECT_ACCOUNTS);
 
+        let default_followees = &self.governance.proto.default_followees;
+
         let gtc_neurons = self
             .genesis_token
             .get_gtc_neurons()
             .into_iter()
             .map(|mut neuron| {
-                neuron.followees = self.governance.proto.default_followees.clone();
+                neuron.followees.clone_from(default_followees);
                 neuron
             })
             .collect();
@@ -235,13 +244,12 @@ impl NnsInitPayloadsBuilder {
     }
 
     pub fn build(&mut self) -> NnsInitPayloads {
-        assert!(self
+        assert!(!self
             .ledger
             .init_args()
             .unwrap()
             .initial_values
-            .get(&GOVERNANCE_CANISTER_ID.get().into())
-            .is_none());
+            .contains_key(&GOVERNANCE_CANISTER_ID.get().into()));
         for n in self.governance.proto.neurons.values() {
             let sub = Subaccount(n.account.as_slice().try_into().unwrap_or_else(|e| {
                 panic!(
@@ -276,16 +284,21 @@ impl NnsInitPayloadsBuilder {
     }
 }
 
-pub fn modify_wasm_bytes(wasm_bytes: &[u8], modify_with: &str) -> Vec<u8> {
-    let mut wasm_module = Module::from_buffer(wasm_bytes).unwrap();
-    let custom_section = RawCustomSection {
-        name: modify_with.into(),
-        data: vec![1u8, 2u8, 3u8],
-    };
-    wasm_module.customs.add(custom_section);
+fn is_gzipped_blob(blob: &[u8]) -> bool {
+    (blob.len() > 4)
+        // Has magic bytes.
+        && (blob[0..2] == [0x1F, 0x8B])
+}
 
-    // We get our new WASM, which is functionally the same.
-    wasm_module.emit_wasm()
+pub fn modify_wasm_bytes(wasm_bytes: &[u8], modify_with: u32) -> Vec<u8> {
+    // wasm_bytes are gzipped and the subslice [4..8]
+    // is the little endian representation of a timestamp
+    // so we just increment that timestamp
+    assert!(is_gzipped_blob(wasm_bytes));
+    let mut new_wasm_bytes = wasm_bytes.to_vec();
+    let t = u32::from_le_bytes(new_wasm_bytes[4..8].try_into().unwrap());
+    new_wasm_bytes[4..8].copy_from_slice(&(t + modify_with + 1).to_le_bytes());
+    new_wasm_bytes
 }
 
 /// Build Wasm for NNS Governance canister

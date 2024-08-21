@@ -8,5 +8,5 @@ documentation.workspace = true
 
 [dependencies]
 ic-crypto-internal-csp = { path = "../../internal/crypto_service_provider" }
-tempfile = "3.1.0"
+tempfile = { workspace = true }
 tokio = { workspace = true }

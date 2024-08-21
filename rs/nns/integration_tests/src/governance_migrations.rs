@@ -2,12 +2,10 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance::{
-    neuron_data_validation::NeuronDataValidationSummary,
-    pb::v1::{
-        manage_neuron_response::{Command, FollowResponse, SplitResponse},
-        Topic,
-    },
+use ic_nns_governance::neuron_data_validation::NeuronDataValidationSummary;
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron_response::{Command, FollowResponse, SplitResponse},
+    Topic,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -87,7 +85,7 @@ fn assert_neuron_indexes_lens(
 
 #[test]
 fn test_neuron_indexes_migrations() {
-    let mut state_machine = state_machine_builder_for_nns_tests().build();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
@@ -114,7 +112,7 @@ fn test_neuron_indexes_migrations() {
 
     // Follow will cause the neuron to be modified.
     let follow_response = nns_set_followees_for_neuron(
-        &mut state_machine,
+        &state_machine,
         neuron_3.principal_id,
         neuron_3.neuron_id,
         &[neuron_1.neuron_id, neuron_2.neuron_id],
@@ -137,7 +135,7 @@ fn test_neuron_indexes_migrations() {
 
     // Split will cause a neuron to be created.
     let split_response = nns_split_neuron(
-        &mut state_machine,
+        &state_machine,
         neuron_1.principal_id,
         neuron_1.neuron_id,
         500_000_000,

@@ -33,7 +33,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
     config.type_attribute(
-        "ic_registry_canister.pb.v1.GetSubnetForCanisterResponse",
+        "ic_registry_canister.pb.v1.SubnetForCanister",
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
 

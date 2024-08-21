@@ -79,7 +79,7 @@ pub fn encode_stream_slice(
     use Matcher as M;
     use Pattern as P;
 
-    let byte_limit = byte_limit.unwrap_or(std::usize::MAX);
+    let byte_limit = byte_limit.unwrap_or(usize::MAX);
     let size_limit_pattern = vec![
         M::Label(LABEL_STREAMS.to_vec()),
         M::Any,

@@ -1,9 +1,12 @@
 use super::{
-    checkpoint::Checkpoint, page_allocator::PageAllocatorSerialization,
-    storage::BaseFileSerialization, test_utils::base_only_storage_layout, Buffer, FileDescriptor,
-    MemoryInstructions, MemoryMapOrData, PageAllocatorRegistry, PageIndex, PageMap,
-    PageMapSerialization, PersistenceError, StorageMetrics, TestPageAllocatorFileDescriptorImpl,
-    WRITE_BUCKET_PAGES,
+    checkpoint::Checkpoint,
+    page_allocator::PageAllocatorSerialization,
+    storage::BaseFileSerialization,
+    storage::StorageLayout,
+    test_utils::{base_only_storage_layout, ShardedTestStorageLayout},
+    Buffer, FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocatorRegistry, PageIndex,
+    PageMap, PageMapSerialization, PersistenceError, Shard, StorageMetrics,
+    TestPageAllocatorFileDescriptorImpl, WRITE_BUCKET_PAGES,
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::LsmtConfig;
@@ -16,6 +19,7 @@ use std::{
     fs::OpenOptions,
     path::{Path, PathBuf},
 };
+use tempfile::Builder;
 
 fn persist_delta_to_base(
     pagemap: &PageMap,
@@ -474,7 +478,7 @@ fn get_memory_instructions_returns_deltas() {
                 MemoryMapOrData::Data(&[1u8; PAGE_SIZE])
             )]
         },
-        page_map.get_memory_instructions(range.clone(), range.clone(), 0)
+        page_map.get_memory_instructions(range.clone(), range.clone())
     );
     let metrics = StorageMetrics::new(&MetricsRegistry::new());
     persist_delta_to_base(&page_map, heap_file.to_path_buf(), &metrics).unwrap();
@@ -495,7 +499,7 @@ fn get_memory_instructions_returns_deltas() {
             range: range.clone(),
             instructions: vec![]
         },
-        page_map.get_memory_instructions(range.clone(), range.clone(), 0)
+        page_map.get_memory_instructions(range.clone(), range.clone())
     );
 
     let pages = &[
@@ -523,7 +527,7 @@ fn get_memory_instructions_returns_deltas() {
                 )
             ]
         },
-        page_map.get_memory_instructions(range.clone(), range, 0)
+        page_map.get_memory_instructions(range.clone(), range)
     );
 
     // Add a page that is not an end of the bucket.
@@ -550,7 +554,6 @@ fn get_memory_instructions_respects_min_range() {
             .get_memory_instructions(
                 PageIndex::new(12)..PageIndex::new(17),
                 PageIndex::new(0)..PageIndex::new(30),
-                2
             )
             .range
     );
@@ -566,7 +569,6 @@ fn get_memory_instructions_returns_max_range_on_empty_map() {
             .get_memory_instructions(
                 PageIndex::new(12)..PageIndex::new(17),
                 PageIndex::new(0)..PageIndex::new(30),
-                2
             )
             .range
     );
@@ -577,7 +579,6 @@ fn get_memory_instructions_returns_max_range_on_empty_map() {
             .get_memory_instructions(
                 PageIndex::new(12)..PageIndex::new(17),
                 PageIndex::new(0)..PageIndex::new(30),
-                0
             )
             .range
     );
@@ -597,45 +598,306 @@ fn get_memory_instructions_grows_left_and_right() {
     page_map.update(pages);
 
     assert_eq!(
-        PageIndex::new(7)..PageIndex::new(12),
-        page_map
-            .get_memory_instructions(
-                PageIndex::new(7)..PageIndex::new(8),
-                PageIndex::new(7)..PageIndex::new(30),
-                2
-            )
-            .range
-    );
-
-    assert_eq!(
-        PageIndex::new(17)..PageIndex::new(30),
-        page_map
-            .get_memory_instructions(
-                PageIndex::new(19)..PageIndex::new(21),
-                PageIndex::new(3)..PageIndex::new(30),
-                3
-            )
-            .range
-    );
-
-    // A case where it is allowed to grow either left or right
-    let result = page_map.get_memory_instructions(
-        PageIndex::new(14)..PageIndex::new(15),
-        PageIndex::new(3)..PageIndex::new(30),
-        3,
-    );
-    assert_eq!(3, result.range.end.get() - result.range.start.get());
-    assert_eq!(3, result.instructions.len());
-
-    // Grows to edge pages at 5 and 35 not inclusive
-    assert_eq!(
+        // Just to the edge of the page deltas at 5 and 35.
         PageIndex::new(6)..PageIndex::new(35),
         page_map
             .get_memory_instructions(
-                PageIndex::new(10)..PageIndex::new(20),
-                PageIndex::new(0)..PageIndex::new(100),
-                10
+                PageIndex::new(7)..PageIndex::new(20),
+                PageIndex::new(0)..PageIndex::new(40),
             )
             .range
     );
+}
+
+#[test]
+fn get_memory_instructions_ignores_base_file() {
+    let metrics = StorageMetrics::new(&MetricsRegistry::new());
+    let lsmt_config = LsmtConfig {
+        lsmt_status: FlagStatus::Enabled,
+        shard_num_pages: u64::MAX,
+    };
+    let tempdir = Builder::new().prefix("page_map_test").tempdir().unwrap();
+    let storage_layout = ShardedTestStorageLayout {
+        dir_path: tempdir.path().to_path_buf(),
+        base: tempdir.path().join("vmemory_0.bin"),
+        overlay_suffix: "vmemory_0.overlay".into(),
+    };
+
+    let mut page_map = PageMap::new_for_testing();
+    // Consecutive pages, so that they get treated like a base file.
+    let pages: Vec<_> = (10..20)
+        .map(|i| (PageIndex::new(i), &[1u8; PAGE_SIZE]))
+        .collect();
+    page_map.update(&pages);
+    page_map
+        .persist_unflushed_delta(&storage_layout, Height::new(0), &lsmt_config, &metrics)
+        .unwrap();
+
+    assert!(!storage_layout.base().exists());
+    assert!(storage_layout
+        .overlay(Height::new(0), Shard::new(0))
+        .exists());
+
+    let page_map = PageMap::open(
+        &storage_layout,
+        Height::new(0),
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+    )
+    .unwrap();
+
+    let base_instructions = page_map.get_base_memory_instructions();
+    assert_eq!(base_instructions.instructions.len(), 1);
+    assert_eq!(
+        base_instructions.instructions.first().unwrap().0,
+        PageIndex::new(10)..PageIndex::new(20)
+    );
+
+    let range = PageIndex::new(0)..PageIndex::new(100);
+    let memory_instructions = page_map.get_memory_instructions(range.clone(), range.clone());
+    // No non-base overlays or page deltas, so no instructions to report.
+    assert_eq!(memory_instructions.range, range);
+    assert_eq!(memory_instructions.instructions.len(), 0);
+}
+
+#[test]
+fn get_memory_instructions_stops_at_instructions_outside_min_range() {
+    let metrics = StorageMetrics::new(&MetricsRegistry::new());
+    let lsmt_config = LsmtConfig {
+        lsmt_status: FlagStatus::Enabled,
+        shard_num_pages: u64::MAX,
+    };
+    let tempdir = Builder::new().prefix("page_map_test").tempdir().unwrap();
+    let storage_layout = ShardedTestStorageLayout {
+        dir_path: tempdir.path().to_path_buf(),
+        base: tempdir.path().join("vmemory_0.bin"),
+        overlay_suffix: "vmemory_0.overlay".into(),
+    };
+
+    let mut page_map = PageMap::new_for_testing();
+    // Consecutive pages, so that they get treated like a base file.
+    let pages: Vec<_> = (10..20)
+        .map(|i| (PageIndex::new(i), &[1u8; PAGE_SIZE]))
+        .collect();
+    page_map.update(&pages);
+    page_map
+        .persist_unflushed_delta(&storage_layout, Height::new(0), &lsmt_config, &metrics)
+        .unwrap();
+    page_map.strip_unflushed_delta();
+
+    let pages = vec![
+        (PageIndex::new(5), &[1u8; PAGE_SIZE]),
+        (PageIndex::new(35), &[1u8; PAGE_SIZE]),
+    ];
+    page_map.update(&pages);
+    page_map
+        .persist_unflushed_delta(&storage_layout, Height::new(1), &lsmt_config, &metrics)
+        .unwrap();
+
+    assert!(!storage_layout.base().exists());
+    assert!(storage_layout
+        .overlay(Height::new(0), Shard::new(0))
+        .exists());
+    assert!(storage_layout
+        .overlay(Height::new(1), Shard::new(0))
+        .exists());
+
+    let page_map = PageMap::open(
+        &storage_layout,
+        Height::new(1),
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+    )
+    .unwrap();
+
+    let memory_instructions = page_map.get_memory_instructions(
+        PageIndex::new(15)..PageIndex::new(20),
+        PageIndex::new(0)..PageIndex::new(100),
+    );
+    // The two papes in overlays are outside of min_range, but inside max_range
+    assert_eq!(
+        memory_instructions.range,
+        PageIndex::new(6)..PageIndex::new(35)
+    );
+    assert_eq!(memory_instructions.instructions.len(), 0);
+
+    let memory_instructions = page_map.get_memory_instructions(
+        PageIndex::new(2)..PageIndex::new(40),
+        PageIndex::new(0)..PageIndex::new(100),
+    );
+    // The only two papes in overlays are inside min_range, so we extend all the way to max_range.
+    assert_eq!(
+        memory_instructions.range,
+        PageIndex::new(0)..PageIndex::new(100)
+    );
+    assert_eq!(memory_instructions.instructions.len(), 2);
+}
+
+#[test]
+fn get_memory_instructions_extends_mmap_past_min_range() {
+    let metrics = StorageMetrics::new(&MetricsRegistry::new());
+    let lsmt_config = LsmtConfig {
+        lsmt_status: FlagStatus::Enabled,
+        shard_num_pages: u64::MAX,
+    };
+    let tempdir = Builder::new().prefix("page_map_test").tempdir().unwrap();
+    let storage_layout = ShardedTestStorageLayout {
+        dir_path: tempdir.path().to_path_buf(),
+        base: tempdir.path().join("vmemory_0.bin"),
+        overlay_suffix: "vmemory_0.overlay".into(),
+    };
+
+    let mut page_map = PageMap::new_for_testing();
+    // Consecutive pages, so that they get treated like a base file.
+    let pages: Vec<_> = (10..20)
+        .map(|i| (PageIndex::new(i), &[1u8; PAGE_SIZE]))
+        .collect();
+    page_map.update(&pages);
+    page_map
+        .persist_unflushed_delta(&storage_layout, Height::new(0), &lsmt_config, &metrics)
+        .unwrap();
+    page_map.strip_unflushed_delta();
+
+    let pages: Vec<_> = (15..40)
+        .map(|i| (PageIndex::new(i), &[1u8; PAGE_SIZE]))
+        .collect();
+    page_map.update(&pages);
+    page_map
+        .persist_unflushed_delta(&storage_layout, Height::new(1), &lsmt_config, &metrics)
+        .unwrap();
+
+    assert!(!storage_layout.base().exists());
+    assert!(storage_layout
+        .overlay(Height::new(0), Shard::new(0))
+        .exists());
+    assert!(storage_layout
+        .overlay(Height::new(1), Shard::new(0))
+        .exists());
+
+    let page_map = PageMap::open(
+        &storage_layout,
+        Height::new(1),
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+    )
+    .unwrap();
+
+    let memory_instructions = page_map.get_memory_instructions(
+        PageIndex::new(10)..PageIndex::new(20),
+        PageIndex::new(0)..PageIndex::new(100),
+    );
+    // The large range in the overlay is only partially within min_range, but it is extended as it doesn't require extra instructions.
+    assert_eq!(
+        memory_instructions.range,
+        PageIndex::new(0)..PageIndex::new(100)
+    );
+    assert_eq!(memory_instructions.instructions.len(), 1);
+    assert_eq!(
+        memory_instructions.instructions.first().unwrap().0,
+        PageIndex::new(15)..PageIndex::new(40)
+    );
+
+    let memory_instructions = page_map.get_memory_instructions(
+        PageIndex::new(20)..PageIndex::new(50),
+        PageIndex::new(0)..PageIndex::new(100),
+    );
+    // The large range in the overlay is only partially within min_range, but it is extended as it doesn't require extra instructions.
+    assert_eq!(
+        memory_instructions.range,
+        PageIndex::new(0)..PageIndex::new(100)
+    );
+    assert_eq!(memory_instructions.instructions.len(), 1);
+    assert_eq!(
+        memory_instructions.instructions.first().unwrap().0,
+        PageIndex::new(15)..PageIndex::new(40)
+    );
+}
+
+#[test]
+fn restrict_to_range() {
+    let small_data = [1_u8; PAGE_SIZE];
+    let mut large_data = vec![2_u8; PAGE_SIZE];
+    large_data.extend_from_slice(&[3_u8; PAGE_SIZE]);
+    let fd = FileDescriptor { fd: 0 };
+
+    let instructions = vec![
+        // Will get dropped.
+        (
+            PageIndex::new(0)..PageIndex::new(1),
+            MemoryMapOrData::Data(&small_data),
+        ),
+        // Will get left part cut off.
+        (
+            PageIndex::new(5)..PageIndex::new(15),
+            MemoryMapOrData::MemoryMap(fd.clone(), 5 * PAGE_SIZE),
+        ),
+        // Will get left part cut off.
+        (
+            PageIndex::new(9)..PageIndex::new(11),
+            MemoryMapOrData::Data(&large_data),
+        ),
+        // Will be preserved.
+        (
+            PageIndex::new(10)..PageIndex::new(12),
+            MemoryMapOrData::MemoryMap(fd.clone(), 10 * PAGE_SIZE),
+        ),
+        // Will get right part cut off.
+        (
+            PageIndex::new(15)..PageIndex::new(25),
+            MemoryMapOrData::MemoryMap(fd.clone(), 15 * PAGE_SIZE),
+        ),
+        // Will get right part cut off.
+        (
+            PageIndex::new(19)..PageIndex::new(21),
+            MemoryMapOrData::Data(&large_data),
+        ),
+        // Will get parts cut off from both sides
+        (
+            PageIndex::new(5)..PageIndex::new(25),
+            MemoryMapOrData::MemoryMap(fd.clone(), 20 * PAGE_SIZE),
+        ),
+        // Will get dropped.
+        (
+            PageIndex::new(25)..PageIndex::new(30),
+            MemoryMapOrData::MemoryMap(fd.clone(), 25 * PAGE_SIZE),
+        ),
+    ];
+
+    let mut memory_instructions = MemoryInstructions {
+        range: PageIndex::new(0)..PageIndex::new(100),
+        instructions,
+    };
+
+    memory_instructions.restrict_to_range(&(PageIndex::new(10)..PageIndex::new(20)));
+
+    let expected_instructions = vec![
+        (
+            PageIndex::new(10)..PageIndex::new(15),
+            MemoryMapOrData::MemoryMap(fd.clone(), (5 + 5) * PAGE_SIZE),
+        ),
+        (
+            PageIndex::new(10)..PageIndex::new(11),
+            MemoryMapOrData::Data(&large_data[PAGE_SIZE..]),
+        ),
+        (
+            PageIndex::new(10)..PageIndex::new(12),
+            MemoryMapOrData::MemoryMap(fd.clone(), 10 * PAGE_SIZE),
+        ),
+        (
+            PageIndex::new(15)..PageIndex::new(20),
+            MemoryMapOrData::MemoryMap(fd.clone(), 15 * PAGE_SIZE),
+        ),
+        (
+            PageIndex::new(19)..PageIndex::new(20),
+            MemoryMapOrData::Data(&large_data[..PAGE_SIZE]),
+        ),
+        (
+            PageIndex::new(10)..PageIndex::new(20),
+            MemoryMapOrData::MemoryMap(fd.clone(), (20 + 5) * PAGE_SIZE),
+        ),
+    ];
+
+    let expected_memory_instructions = MemoryInstructions {
+        range: PageIndex::new(10)..PageIndex::new(20),
+        instructions: expected_instructions,
+    };
+
+    assert_eq!(memory_instructions, expected_memory_instructions);
 }

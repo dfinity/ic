@@ -11,7 +11,7 @@ use ic_interfaces::p2p::state_sync::{
     Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient,
 };
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{fatal, info, warn, ReplicaLogger};
 use ic_types::{CryptoHashOfState, Height};
 use std::sync::{Arc, Mutex};
 
@@ -77,18 +77,33 @@ impl StateSync {
         let ro_layout = self
             .state_manager
             .state_layout
-            .checkpoint(height)
+            .checkpoint_in_verification(height)
             .expect("failed to create checkpoint layout");
-        let state = crate::checkpoint::load_checkpoint_parallel(
+
+        let state = match crate::checkpoint::load_checkpoint_parallel_and_mark_verified(
             &ro_layout,
             self.state_manager.own_subnet_type,
             &self.state_manager.metrics.checkpoint_metrics,
             self.state_manager.get_fd_factory(),
-        )
-        .expect("failed to recover checkpoint");
+        ) {
+            Ok(state) => state,
+            Err(err) => {
+                fatal!(
+                    self.log,
+                    "Failed to load checkpoint or remove the unverified marker @height {}: {}",
+                    height,
+                    err
+                );
+            }
+        };
 
-        self.state_manager
-            .on_synced_checkpoint(state, height, manifest, meta_manifest, root_hash);
+        self.state_manager.on_synced_checkpoint(
+            state,
+            ro_layout,
+            manifest,
+            meta_manifest,
+            root_hash,
+        );
 
         let height = self.state_manager.states.read().last_advertised;
         let ids = self.get_all_validated_ids_by_height(height);
@@ -110,8 +125,11 @@ impl StateSync {
                 if metadata.root_hash().map(|v| v.get_ref()) == Some(&msg_id.hash) {
                     let manifest = metadata.manifest()?;
                     let meta_manifest = metadata.meta_manifest()?;
-                    let checkpoint_root =
-                        self.state_manager.state_layout.checkpoint(*height).ok()?;
+                    let checkpoint_root = self
+                        .state_manager
+                        .state_layout
+                        .checkpoint_verified(*height)
+                        .ok()?;
                     let state_sync_file_group = match &metadata.state_sync_file_group {
                         Some(value) => value.clone(),
                         None => {
@@ -173,7 +191,11 @@ impl StateSync {
                     let metadata = states.states_metadata.get(&h)?;
                     let manifest = metadata.manifest()?;
                     let meta_manifest = metadata.meta_manifest()?;
-                    let checkpoint_root = self.state_manager.state_layout.checkpoint(h).ok()?;
+                    let checkpoint_root = self
+                        .state_manager
+                        .state_layout
+                        .checkpoint_verified(h)
+                        .ok()?;
                     let msg = StateSyncMessage {
                         height: h,
                         root_hash: metadata.root_hash()?.clone(),
@@ -260,7 +282,7 @@ impl StateSyncClient for StateSync {
     }
 
     /// Non-blocking.
-    fn start_state_sync(
+    fn maybe_start_state_sync(
         &self,
         id: &StateSyncArtifactId,
     ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send>> {
@@ -277,8 +299,8 @@ impl StateSyncClient for StateSync {
     }
 
     /// Non-Blocking.
-    fn should_cancel(&self, id: &StateSyncArtifactId) -> bool {
-        // Requesting to cancel a state sync is only meaningful if the Id refers to an active state sync started with `start_state_sync`.
+    fn cancel_if_running(&self, id: &StateSyncArtifactId) -> bool {
+        // Requesting to cancel a state sync is only meaningful if the Id refers to an active state sync started with `maybe_start_state_sync`.
         // This sanity check if the API is properly called but does not affect the decision on whether to cancel the state sync.
         self.sanity_check_for_cancelling_state_sync(id);
 

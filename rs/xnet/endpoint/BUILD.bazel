@@ -26,6 +26,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/crypto/tls_interfaces/mocks",
     "//rs/interfaces/registry/mocks",
     "//rs/interfaces/state_manager",
     "//rs/registry/keys",

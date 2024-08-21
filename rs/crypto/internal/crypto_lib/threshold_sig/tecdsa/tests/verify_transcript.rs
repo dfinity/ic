@@ -1,9 +1,7 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
-mod test_utils;
-
-use crate::test_utils::*;
+use ic_crypto_internal_threshold_sig_ecdsa_test_utils::*;
 
 fn remove_dealing_and_verify(
     node_index: NodeIndex,
@@ -43,7 +41,7 @@ fn dup_dealing_and_verify(
 }
 
 #[test]
-fn should_verify_transcript_reject_if_dealing_is_removed() -> Result<(), ThresholdEcdsaError> {
+fn should_verify_transcript_reject_if_dealing_is_removed() -> Result<(), CanisterThresholdError> {
     let nodes = 4;
     let threshold = 2;
     let corrupted = 0;
@@ -84,7 +82,7 @@ fn should_verify_transcript_reject_if_dealing_is_removed() -> Result<(), Thresho
 }
 
 #[test]
-fn should_verify_transcript_reject_if_dealing_is_swapped() -> Result<(), ThresholdEcdsaError> {
+fn should_verify_transcript_reject_if_dealing_is_swapped() -> Result<(), CanisterThresholdError> {
     let nodes = 4;
     let threshold = 2;
     let corrupted = 0;
@@ -118,7 +116,8 @@ fn should_verify_transcript_reject_if_dealing_is_swapped() -> Result<(), Thresho
 }
 
 #[test]
-fn should_verify_transcript_reject_if_dealing_is_duplicated() -> Result<(), ThresholdEcdsaError> {
+fn should_verify_transcript_reject_if_dealing_is_duplicated() -> Result<(), CanisterThresholdError>
+{
     let nodes = 4;
     let threshold = 2;
     let corrupted = 0;

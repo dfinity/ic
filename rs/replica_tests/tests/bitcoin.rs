@@ -1,12 +1,13 @@
+use ic00::BitcoinGetBlockHeadersArgs;
 use ic_async_utils::incoming_from_path;
 use ic_base_types::CanisterId;
 use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
+use ic_btc_replica_types::{GetSuccessorsResponseComplete, GetSuccessorsResponsePartial};
 use ic_btc_service::{
     btc_service_server::{BtcService, BtcServiceServer},
     BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,
     BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
 };
-use ic_btc_types_internal::{GetSuccessorsResponseComplete, GetSuccessorsResponsePartial};
 use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig;
 use ic_config::{
     execution_environment::{BitcoinConfig, Config as HypervisorConfig},
@@ -156,19 +157,16 @@ fn call_send_transaction_internal(
         .unwrap()
 }
 
-fn bitcoin_test<F: 'static>(adapter: MockBitcoinAdapter, test: F)
+fn bitcoin_test<F>(adapter: MockBitcoinAdapter, test: F)
 where
-    F: FnOnce(utils::LocalTestRuntime),
+    F: FnOnce(utils::LocalTestRuntime) + 'static,
 {
     bitcoin_test_with_config(adapter, true, test)
 }
 
-fn bitcoin_test_with_config<F: 'static>(
-    adapter: MockBitcoinAdapter,
-    privileged_access: bool,
-    test: F,
-) where
-    F: FnOnce(utils::LocalTestRuntime),
+fn bitcoin_test_with_config<F>(adapter: MockBitcoinAdapter, privileged_access: bool, test: F)
+where
+    F: FnOnce(utils::LocalTestRuntime) + 'static,
 {
     let (mut config, _tmpdir) = ic_config::Config::temp_config();
     if privileged_access {
@@ -477,6 +475,7 @@ fn mock_bitcoin_canister_wat(network: BitcoinNetwork) -> String {
               (data (i32.const 0) "Hello from {}!")
               (export "canister_update bitcoin_get_balance" (func $ping))
               (export "canister_update bitcoin_get_utxos" (func $ping))
+              (export "canister_update bitcoin_get_block_headers" (func $ping))
               (export "canister_update bitcoin_send_transaction" (func $ping))
               (export "canister_update bitcoin_get_current_fee_percentiles" (func $ping))
             )"#,
@@ -504,6 +503,15 @@ fn test_canister_routing(env: StateMachine, networks: Vec<BitcoinNetwork>) {
                     network,
                     address: String::from(""),
                     filter: None,
+                }
+                .encode(),
+            ),
+            (
+                "bitcoin_get_block_headers",
+                BitcoinGetBlockHeadersArgs {
+                    network,
+                    start_height: 0,
+                    end_height: None,
                 }
                 .encode(),
             ),
@@ -655,6 +663,15 @@ fn requests_are_rejected_if_no_bitcoin_canisters_are_set() {
                     network,
                     address: String::from(""),
                     filter: None,
+                }
+                .encode(),
+            ),
+            (
+                "bitcoin_get_block_headers",
+                BitcoinGetBlockHeadersArgs {
+                    network,
+                    start_height: 0,
+                    end_height: None,
                 }
                 .encode(),
             ),

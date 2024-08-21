@@ -1,16 +1,4 @@
-use crate::{
-    driver::{
-        test_env::TestEnv,
-        test_env_api::{
-            HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-            NnsInstallationBuilder, SubnetSnapshot,
-        },
-    },
-    icrc1_agent_test::install_icrc1_ledger,
-    nns::vote_and_execute_proposal,
-    tecdsa::{get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature},
-    util::{assert_create_agent, runtime_from_url, MessageCanister},
-};
+use crate::icrc1_agent_test::install_icrc1_ledger;
 use candid::{Encode, Principal};
 use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
 use dfn_candid::candid;
@@ -20,35 +8,46 @@ use ic_canister_client::Sender;
 use ic_ckbtc_kyt::{
     InitArg as KytInitArg, KytMode, LifecycleArg, SetApiKeyArg, UpgradeArg as KytUpgradeArg,
 };
-use ic_ckbtc_minter::lifecycle::init::MinterArg;
-use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, Mode};
-use ic_ckbtc_minter::CKBTC_LEDGER_MEMO_SIZE;
+use ic_ckbtc_minter::{
+    lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg, Mode},
+    CKBTC_LEDGER_MEMO_SIZE,
+};
 use ic_config::{
     execution_environment::{BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID},
     subnet_config::ECDSA_SIGNATURE_FEE,
 };
-use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
-use ic_management_canister_types::CanisterIdRecord;
-use ic_management_canister_types::ProvisionalCreateCanisterWithCyclesArgs;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
-use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_constants::ROOT_CANISTER_ID;
-use ic_nns_governance::{
-    init::TEST_NEURON_1_ID,
-    pb::v1::{NnsFunction, ProposalStatus},
+use ic_consensus_threshold_sig_system_test_utils::{
+    get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature,
 };
+use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
+use ic_management_canister_types::{
+    CanisterIdRecord, MasterPublicKeyId, ProvisionalCreateCanisterWithCyclesArgs,
+};
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
+use ic_nns_common::types::{NeuronId, ProposalId};
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
     governance::submit_external_update_proposal, itest_helpers::install_rust_canister_from_path,
 };
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
+    driver::{
+        test_env::TestEnv,
+        test_env_api::{
+            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            IcNodeSnapshot, NnsInstallationBuilder, SubnetSnapshot,
+        },
+    },
+    nns::vote_and_execute_proposal,
+    util::{assert_create_agent, runtime_from_url, MessageCanister},
+};
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::ArchiveOptions;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{debug, info, Logger};
-use std::str::FromStr;
-use std::time::Duration;
+use std::{env, str::FromStr, time::Duration};
 
 pub(crate) const TEST_KEY_LOCAL: &str = "dfx_test_key";
 
@@ -116,25 +115,27 @@ pub(crate) async fn activate_ecdsa_signature(
     );
     let nns = runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
     let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
-    enable_ecdsa_signing(&governance, app_subnet_id, make_key(key_name)).await;
+    let ecdsa_key_id = make_key(key_name);
+    let key_id = MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone());
+    enable_ecdsa_signing(&governance, app_subnet_id, ecdsa_key_id).await;
     let sys_agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
 
     // Wait for key creation and verify signature (as it's done in tecdsa tests).
     let msg_can = MessageCanister::new(&sys_agent, sys_node.effective_canister_id()).await;
-    let public_key = get_public_key_with_logger(make_key(TEST_KEY_LOCAL), &msg_can, logger)
+    let public_key = get_public_key_with_logger(&key_id, &msg_can, logger)
         .await
         .unwrap();
-    let message_hash = [0xabu8; 32];
+    let message_hash = vec![0xabu8; 32];
     let signature = get_signature_with_logger(
-        &message_hash,
+        message_hash.clone(),
         ECDSA_SIGNATURE_FEE,
-        make_key(TEST_KEY_LOCAL),
+        &key_id,
         &msg_can,
         logger,
     )
     .await
     .unwrap();
-    verify_signature(&message_hash, &public_key, &signature);
+    verify_signature(&key_id, &message_hash, &public_key, &signature);
 }
 
 async fn enable_ecdsa_signing(governance: &Canister<'_>, subnet_id: SubnetId, key_id: EcdsaKeyId) {
@@ -190,6 +191,21 @@ fn empty_subnet_update() -> UpdateSubnetPayload {
         initial_notary_delay_millis: None,
         dkg_interval_length: None,
         dkg_dealings_per_block: None,
+        start_as_nns: None,
+        subnet_type: None,
+        is_halted: None,
+        halt_at_cup_height: None,
+        features: None,
+        ecdsa_config: None,
+        ecdsa_key_signing_enable: None,
+        ecdsa_key_signing_disable: None,
+        chain_key_config: None,
+        chain_key_signing_disable: None,
+        chain_key_signing_enable: None,
+        max_number_of_canisters: None,
+        ssh_readonly_access: None,
+        ssh_backup_access: None,
+        // Deprecated/unused values follow
         max_artifact_streams_per_peer: None,
         max_chunk_wait_ms: None,
         max_duplicity: None,
@@ -198,21 +214,7 @@ fn empty_subnet_update() -> UpdateSubnetPayload {
         pfn_evaluation_period_ms: None,
         registry_poll_period_ms: None,
         retransmission_request_ms: None,
-        set_gossip_config_to_default: false,
-        start_as_nns: None,
-        subnet_type: None,
-        is_halted: None,
-        halt_at_cup_height: None,
-        max_instructions_per_message: None,
-        max_instructions_per_round: None,
-        max_instructions_per_install_code: None,
-        features: None,
-        ecdsa_config: None,
-        ecdsa_key_signing_enable: None,
-        ecdsa_key_signing_disable: None,
-        max_number_of_canisters: None,
-        ssh_readonly_access: None,
-        ssh_backup_access: None,
+        set_gossip_config_to_default: Default::default(),
     }
 }
 
@@ -253,7 +255,6 @@ pub(crate) async fn create_canister(runtime: &Runtime) -> Canister<'_> {
 }
 
 pub(crate) async fn install_ledger(
-    env: &TestEnv,
     canister: &mut Canister<'_>,
     minting_user: PrincipalId,
     logger: &Logger,
@@ -276,12 +277,11 @@ pub(crate) async fn install_ledger(
             })
             .build(),
     );
-    install_icrc1_ledger(env, canister, &init_args).await;
+    install_icrc1_ledger(canister, &init_args).await;
     canister.canister_id()
 }
 
 pub(crate) async fn install_minter(
-    env: &TestEnv,
     canister: &mut Canister<'_>,
     ledger_id: CanisterId,
     logger: &Logger,
@@ -308,7 +308,9 @@ pub(crate) async fn install_minter(
 
     install_rust_canister_from_path(
         canister,
-        env.get_dependency_path("rs/bitcoin/ckbtc/minter/ckbtc_minter_debug.wasm"),
+        get_dependency_path(
+            env::var("IC_CKBTC_MINTER_WASM_PATH").expect("IC_CKBTC_MINTER_WASM_PATH not set"),
+        ),
         Some(Encode!(&minter_arg).unwrap()),
     )
     .await;
@@ -318,7 +320,6 @@ pub(crate) async fn install_minter(
 pub(crate) async fn install_kyt(
     kyt_canister: &mut Canister<'_>,
     logger: &Logger,
-    env: &TestEnv,
     minter_id: Principal,
     maintainers: Vec<Principal>,
 ) -> CanisterId {
@@ -331,7 +332,9 @@ pub(crate) async fn install_kyt(
 
     install_rust_canister_from_path(
         kyt_canister,
-        env.get_dependency_path("rs/bitcoin/ckbtc/kyt/kyt_canister.wasm"),
+        get_dependency_path(
+            env::var("IC_CKBTC_KYT_WASM_PATH").expect("IC_CKBTC_KYT_WASM_PATH not set"),
+        ),
         Some(Encode!(&kyt_init_args).unwrap()),
     )
     .await;
@@ -365,18 +368,13 @@ pub(crate) async fn upgrade_kyt(kyt_canister: &mut Canister<'_>, mode: KytMode) 
     kyt_canister.canister_id()
 }
 
-pub(crate) async fn install_bitcoin_canister(
-    runtime: &Runtime,
-    logger: &Logger,
-    env: &TestEnv,
-) -> CanisterId {
-    install_bitcoin_canister_with_network(runtime, logger, env, Network::Regtest).await
+pub(crate) async fn install_bitcoin_canister(runtime: &Runtime, logger: &Logger) -> CanisterId {
+    install_bitcoin_canister_with_network(runtime, logger, Network::Regtest).await
 }
 
 pub(crate) async fn install_bitcoin_canister_with_network(
     runtime: &Runtime,
     logger: &Logger,
-    env: &TestEnv,
     network: Network,
 ) -> CanisterId {
     info!(&logger, "Installing bitcoin canister ...");
@@ -402,15 +400,20 @@ pub(crate) async fn install_bitcoin_canister_with_network(
             get_current_fee_percentiles_maximum: 0,
             send_transaction_base: 0,
             send_transaction_per_byte: 0,
+            get_block_headers_base: 0,
+            get_block_headers_cycles_per_ten_instructions: 0,
+            get_block_headers_maximum: 0,
         },
         api_access: Flag::Enabled,
         disable_api_if_not_fully_synced: Flag::Disabled,
         watchdog_canister: None,
+        burn_cycles: Flag::Enabled,
+        lazily_evaluate_fee_percentiles: Flag::Enabled,
     };
 
     install_rust_canister_from_path(
         &mut bitcoin_canister,
-        env.get_dependency_path("external/btc_canister/file/ic-btc-canister.wasm.gz"),
+        get_dependency_path("external/btc_canister/file/ic-btc-canister.wasm.gz"),
         Some(Encode!(&args).unwrap()),
     )
     .await;

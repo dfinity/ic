@@ -33,5 +33,5 @@ candid_parser = { workspace = true }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
-rand = "0.8.3"
+rand = { workspace = true }
 xrc-mock = { path = "xrc_mock" }

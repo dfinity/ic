@@ -83,7 +83,7 @@ export CANISTERS_DIR_FULL="$ROOT_DIR/$CANISTERS_DIR"
 export DISK_DIR_FULL="$ROOT_DIR/$DISK_DIR"
 
 is_inside_DFINITY_container() {
-    [ -e /home/ubuntu/.DFINITY-TAG ] && ([ -e /.dockerenv ] || [ -e /run/.containerenv ] || [ -n "${CI:-}" ])
+    [ -e /home/ubuntu/.DFINITY-TAG ] && ([ -e /.dockerenv ] || [ -e /run/.containerenv ] || [ -n "${CI_JOB_NAME:-}" ])
 }
 
 validate_build_env() {

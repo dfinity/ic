@@ -3,17 +3,21 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/monitoring/metrics",
-    "@crate_index//:convert_case",
     "@crate_index//:prometheus",
     "@crate_index//:strum",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:strum_macros",
 ]
 
-DEV_DEPENDENCIES = []
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:convert_case",
+]
 
 MACRO_DEV_DEPENDENCIES = []
 

@@ -209,6 +209,8 @@ fn validate_and_instrument(
         config.metering_type,
         config.subnet_type,
         config.dirty_page_overhead,
+        config.max_wasm_memory_size,
+        config.max_stable_memory_size,
     )?;
     Ok((wasm_validation_details, instrumentation_output))
 }

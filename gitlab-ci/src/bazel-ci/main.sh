@@ -6,24 +6,28 @@
 
 set -eufo pipefail
 
+ic_version_rc_only="0000000000000000000000000000000000000000"
+if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
+    ic_version_rc_only="${CI_COMMIT_SHA}"
+    s3_upload="True"
+fi
+
+if [[ "${CI_COMMIT_BRANCH:-}" =~ ^hotfix-.* ]]; then
+    ic_version_rc_only="${CI_COMMIT_SHA}"
+    s3_upload="True"
+fi
+
 # We run the diff if the following is true:
 # - bazel target is //...
 # - merge request pipeline but not merge train pipeline
 # - target branch is not rc--*
+# - uploading to S3 has not been requested
 
-if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
+if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]] || [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[S3_UPLOAD]"* ]]; then
     RUN_ON_DIFF_ONLY="false"
+    s3_upload="True"
 fi
 
-if [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
-    && [ "${CI_PIPELINE_SOURCE:-}" == "merge_request_event" -o "${CI_PIPELINE_SOURCE:-}" == "pull_request" ] \
-    && [ "${CI_MERGE_REQUEST_EVENT_TYPE:-}" != "merge_train" ] \
-    && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
-    # get bazel targets that changed within the MR
-    BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/gitlab-ci/src/bazel-ci/diff.sh)
-fi
-
-# github logic
 if [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
     && [ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ] \
     && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
@@ -56,27 +60,14 @@ else
     exit 1
 fi
 
-GITLAB_TOKEN="${HOME}/.gitlab/api_token"
-mkdir -p "$(dirname "${GITLAB_TOKEN}")"
-echo "${GITLAB_API_TOKEN:-}" >"${GITLAB_TOKEN}"
-
-ic_version_rc_only="0000000000000000000000000000000000000000"
-if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
-    ic_version_rc_only="${CI_COMMIT_SHA}"
-    s3_upload="True"
-fi
-
-if [[ "${CI_COMMIT_BRANCH:-}" =~ ^hotfix-.+-rc--.+ ]]; then
-    ic_version_rc_only="${CI_COMMIT_SHA}"
-    s3_upload="True"
-fi
-
-if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[S3_UPLOAD]"* ]]; then
-    s3_upload="True"
-fi
-
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
     echo "upload_artifacts=true" >>"$GITHUB_OUTPUT"
+fi
+
+if [ -z "${KUBECONFIG:-}" ] && [ ! -z "${KUBECONFIG_TNET_CREATOR_LN1:-}" ]; then
+    export KUBECONFIG=$(mktemp -t kubeconfig-XXXXXX)
+    echo $KUBECONFIG_TNET_CREATOR_LN1 >$KUBECONFIG
+    trap 'rm -f -- "$KUBECONFIG"' EXIT
 fi
 
 # shellcheck disable=SC2086

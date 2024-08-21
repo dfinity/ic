@@ -16,12 +16,12 @@ impl Default for BatchBuilder {
         Self {
             batch: Batch {
                 batch_number: Height::from(0),
-                next_checkpoint_height: None,
+                batch_summary: None,
                 requires_full_state_hash: false,
                 messages: BatchMessages::default(),
                 randomness: Randomness::from([0; 32]),
-                ecdsa_subnet_public_keys: BTreeMap::new(),
-                ecdsa_quadruple_ids: BTreeMap::new(),
+                idkg_subnet_public_keys: BTreeMap::new(),
+                idkg_pre_signature_ids: BTreeMap::new(),
                 registry_version: RegistryVersion::from(1),
                 time: UNIX_EPOCH,
                 consensus_responses: vec![],

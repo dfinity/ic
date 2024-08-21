@@ -242,9 +242,24 @@ pub struct RateLimitingConfig {
     /// Allowed number of update calls per second per ip per boundary node. Panics if 0 is passed!
     #[clap(long)]
     pub rate_limit_per_second_per_ip: Option<u32>,
-    /// Allowed number of ledger transfer calls per second
-    #[clap(long, value_parser = clap::value_parser!(u32).range(1..))]
-    pub rate_limit_ledger_transfer: Option<u32>,
+    /// Path to a generic rate-limiter rules, if the file does not exist - no rules are applied.
+    /// File is checked every 10sec and is reloaded if the changes are detected.
+    /// Expecting YAML list with objects that have (canister_id, methods, limit) fields.
+    /// E.g.
+    ///
+    /// - canister_id: aaaaa-aa
+    ///   methods: ^(foo|bar)$
+    ///   limit: 60/1s
+    ///
+    /// - subnet_id: aaaaaa-aa
+    ///   canister_id: aaaaa-aa
+    ///   methods: ^baz$
+    ///   limit: block (this blocks all requests)
+    #[clap(
+        long,
+        default_value = "/run/ic-node/etc/ic-boundary/canister-ratelimit.yml"
+    )]
+    pub rate_limit_generic: PathBuf,
 }
 
 #[derive(Args)]
@@ -274,6 +289,10 @@ pub struct RetryConfig {
     /// Whether to retry update calls
     #[clap(long, default_value = "false")]
     pub retry_update_call: bool,
+
+    /// Whether to use latency-based routing for /call
+    #[clap(long, default_value = "false")]
+    pub disable_latency_routing: bool,
 }
 
 #[derive(Args)]

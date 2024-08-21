@@ -79,16 +79,21 @@ pub enum HypervisorError {
     /// The message sent to the canister refers to a method that is not
     /// exposed by this canister.
     MethodNotFound(WasmMethod),
+    /// System API contract was violated. The developer toolchain or CDK is
+    /// likely responsible for the error (as opposed to the canister developer).
+    ToolchainContractViolation {
+        error: String,
+    },
     /// System API contract was violated. They payload contains a
     /// detailed explanation of the issue suitable for displaying it
     /// to a user of IC.
-    ContractViolation {
+    UserContractViolation {
         error: String,
         suggestion: String,
         doc_link: String,
     },
     /// Wasm execution consumed too many instructions.
-    InstructionLimitExceeded,
+    InstructionLimitExceeded(NumInstructions),
     /// We could not validate the wasm module
     InvalidWasm(WasmValidationError),
     /// We could not instrument the wasm module
@@ -116,9 +121,11 @@ pub enum HypervisorError {
         cleanup_err: Box<HypervisorError>,
     },
     WasmEngineError(WasmEngineError),
-    /// The canister is close to running out of Wasm memory and
-    /// attempted to allocate reserved Wasm pages.
-    WasmReservedPages,
+    /// The canister is close to running out of Wasm memory and attempted to
+    /// allocate reserved Wasm pages. These pages are just reserved for
+    /// canisters using older versions of Motoko which could get bricked by
+    /// using up the full Wasm heap.
+    ReservedPagesForOldMotoko,
     /// The execution was aborted by deterministic time slicing. This error is
     /// not observable by the user and should be processed before leaving Wasm
     /// execution.
@@ -190,17 +197,21 @@ impl std::fmt::Display for HypervisorError {
 
                 write!(
                     f,
-                    "Canister has no {} method '{}'",
+                    "Canister has no {} method '{}'.",
                     kind,
                     wasm_method.name()
                 )
             }
-            Self::ContractViolation { error, .. } => {
+            Self::ToolchainContractViolation { error, .. } => {
                 write!(f, "Canister violated contract: {}", error)
             }
-            Self::InstructionLimitExceeded => write!(
+            Self::UserContractViolation { error, .. } => {
+                write!(f, "Canister violated contract: {}", error)
+            }
+            Self::InstructionLimitExceeded(limit) => write!(
                 f,
-                "Canister exceeded the instruction limit for single message execution.",
+                "Canister exceeded the limit of {} instructions for single message execution.",
+                limit
             ),
             Self::InvalidWasm(err) => write!(f, "Canister's Wasm module is not valid: {}", err),
             Self::InstrumentationFailed(err) => {
@@ -208,13 +219,13 @@ impl std::fmt::Display for HypervisorError {
             }
             Self::Trapped(code) => write!(f, "Canister trapped: {}", code),
             Self::CalledTrap(msg) => {
-                write!(f, "Canister trapped explicitly: {}", msg)
+                write!(f, "Canister called `ic0.trap` with message: {}", msg)
             }
             Self::WasmModuleNotFound => write!(
                 f,
-                "Attempt to execute a message, but the canister contains no Wasm module",
+                "Attempted to execute a message, but the canister contains no Wasm module.",
             ),
-            Self::OutOfMemory => write!(f, "Canister exceeded its allowed memory allocation",),
+            Self::OutOfMemory => write!(f, "Canister exceeded its allowed memory allocation.",),
             Self::InvalidPrincipalId(_) => {
                 write!(f, "Canister provided invalid principal id")
             }
@@ -234,7 +245,9 @@ impl std::fmt::Display for HypervisorError {
             Self::WasmEngineError(err) => {
                 write!(f, "Canister encountered a Wasm engine error: {}", err)
             }
-            Self::WasmReservedPages => write!(f, "Canister ran out of available Wasm memory."),
+            Self::ReservedPagesForOldMotoko => {
+                write!(f, "Canister tried to allocate pages reserved for upgrading older versions of Motoko.")
+            }
             Self::Aborted => {
                 // This error should never be visible to end users.
                 write!(f, "Aborted")
@@ -309,7 +322,7 @@ impl std::fmt::Display for HypervisorError {
             Self::WasmMemoryLimitExceeded { bytes, limit } => {
                 write!(f,
                         "Canister exceeded its current Wasm memory limit of {} bytes. \
-                        The peak Wasm memory usage was {} bytes.\
+                        The peak Wasm memory usage was {} bytes. \
                         If the canister reaches 4GiB, then it may stop functioning and may become unrecoverable. \
                         Please reach out to the canister owner to investigate the reason for the increased memory usage. \
                         It might be necessary to move data from the Wasm memory to the stable memory. \
@@ -330,32 +343,106 @@ impl CountBytes for HypervisorError {
 
 impl AsErrorHelp for HypervisorError {
     fn error_help(&self) -> ErrorHelp {
-        let empty_user_error = ErrorHelp::UserError {
-            suggestion: "".to_string(),
-            doc_link: "".to_string(),
-        };
+        fn doc_ref(section: &str) -> String {
+            format!(
+                "http://internetcomputer.org/docs/current/references/execution-errors#{}",
+                section
+            )
+        }
         match self {
-            Self::FunctionNotFound(_, _) => ErrorHelp::ToolchainError,
-            Self::MethodNotFound(_)
-            | Self::InstructionLimitExceeded
-            | Self::Trapped(_)
-            | Self::CalledTrap(_)
-            | Self::WasmModuleNotFound
-            | Self::OutOfMemory
-            | Self::InvalidPrincipalId(_)
-            | Self::MessageRejected
-            | Self::InsufficientCyclesBalance(_)
-            | Self::Cleanup { .. }
-            | Self::WasmEngineError(_)
-            | Self::WasmReservedPages
-            | Self::Aborted
-            | Self::SliceOverrun { .. }
-            | Self::MemoryAccessLimitExceeded(_)
-            | Self::InsufficientCyclesInMemoryGrow { .. }
-            | Self::ReservedCyclesLimitExceededInMemoryGrow { .. }
-            | Self::InsufficientCyclesInMessageMemoryGrow { .. }
-            | Self::WasmMemoryLimitExceeded { .. } => empty_user_error,
-            Self::ContractViolation {
+            Self::FunctionNotFound(_, _)
+            | Self::ToolchainContractViolation { .. }
+            | Self::InvalidPrincipalId(_) => ErrorHelp::ToolchainError,
+            Self::MethodNotFound(_) => ErrorHelp::UserError {
+                suggestion: "Check that the method being called is exported by \
+                the target canister."
+                    .to_string(),
+                doc_link: doc_ref("method-not-found"),
+            },
+            Self::InstructionLimitExceeded(_) => ErrorHelp::UserError {
+                suggestion: "Try optimizing this method to consume fewer \
+                instructions or split the work across multiple messages."
+                    .to_string(),
+                doc_link: doc_ref("instruction-limit-exceeded"),
+            },
+            Self::Trapped(_) => ErrorHelp::UserError {
+                suggestion: "Consider gracefully handling failures from this canister \
+                or altering the canister to handle exceptions."
+                    .to_string(),
+                doc_link: doc_ref("trapped"),
+            },
+            Self::CalledTrap(_) => ErrorHelp::UserError {
+                suggestion: "Consider gracefully handling failures from this canister \
+                or altering the canister to handle exceptions."
+                    .to_string(),
+                doc_link: doc_ref("trapped-explicitly"),
+            },
+            Self::WasmModuleNotFound => ErrorHelp::UserError {
+                suggestion: "Please install code to this canister before calling it.".to_string(),
+                doc_link: doc_ref("wasm-module-not-found"),
+            },
+            Self::OutOfMemory => ErrorHelp::UserError {
+                suggestion: "Check the canister's memory usage against its allocation \
+                and the system wide limits to determine why more memory cannot be \
+                allocated."
+                    .to_string(),
+                doc_link: doc_ref("out-of-memory"),
+            },
+            Self::MessageRejected => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            Self::InsufficientCyclesBalance(_) => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            Self::Cleanup { .. } => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            Self::WasmEngineError(_) => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            Self::ReservedPagesForOldMotoko => ErrorHelp::UserError {
+                suggestion: "Upgrade the canister to the latest version of Motoko.".to_string(),
+                doc_link: doc_ref("reserved-pages-for-old-motoko"),
+            },
+            Self::Aborted => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
+            Self::SliceOverrun { .. } => ErrorHelp::UserError {
+                suggestion: "Try breaking up large copies within the canister code \
+                into smaller chunks."
+                    .to_string(),
+                doc_link: doc_ref("slice-overrun"),
+            },
+            Self::MemoryAccessLimitExceeded(_) => ErrorHelp::UserError {
+                suggestion: "Try optimizing the use of stable memory so that individual \
+                messages don't need to access as much stable memory."
+                    .to_string(),
+                doc_link: doc_ref("memory-access-limit-exceeded"),
+            },
+            Self::InsufficientCyclesInMemoryGrow { .. } => ErrorHelp::UserError {
+                suggestion: "Try topping up the canister.".to_string(),
+                doc_link: doc_ref("insufficient-cycles-in-memory-grow"),
+            },
+            Self::ReservedCyclesLimitExceededInMemoryGrow { .. } => ErrorHelp::UserError {
+                suggestion: "Try increasing the canister's reserved cycles limit.".to_string(),
+                doc_link: doc_ref("reserved-cycles-limit-exceeded-in-memory-grow"),
+            },
+            Self::InsufficientCyclesInMessageMemoryGrow { .. } => ErrorHelp::UserError {
+                suggestion: "Try topping up the canister.".to_string(),
+                doc_link: doc_ref("insufficient-cycles-in-message-memory-grow"),
+            },
+            Self::WasmMemoryLimitExceeded { .. } => ErrorHelp::UserError {
+                suggestion: "Try checking the canister for a possible memory leak \
+                or modifying it to use more stable memory instead of Wasm memory."
+                    .to_string(),
+                doc_link: doc_ref("wasm-memory-limit-exceeded"),
+            },
+            Self::UserContractViolation {
                 suggestion,
                 doc_link,
                 ..
@@ -383,8 +470,9 @@ impl HypervisorError {
         let code = match self {
             Self::FunctionNotFound(_, _) => E::CanisterFunctionNotFound,
             Self::MethodNotFound(_) => E::CanisterMethodNotFound,
-            Self::ContractViolation { .. } => E::CanisterContractViolation,
-            Self::InstructionLimitExceeded => E::CanisterInstructionLimitExceeded,
+            Self::ToolchainContractViolation { .. } => E::CanisterContractViolation,
+            Self::UserContractViolation { .. } => E::CanisterContractViolation,
+            Self::InstructionLimitExceeded(_) => E::CanisterInstructionLimitExceeded,
             Self::InvalidWasm(_) => E::CanisterInvalidWasm,
             Self::InstrumentationFailed(_) => E::CanisterInvalidWasm,
             Self::Trapped(_) => E::CanisterTrapped,
@@ -399,7 +487,7 @@ impl HypervisorError {
                 callback_err.into_user_error(canister_id).code()
             }
             Self::WasmEngineError(_) => E::CanisterWasmEngineError,
-            Self::WasmReservedPages => E::CanisterOutOfMemory,
+            Self::ReservedPagesForOldMotoko => E::CanisterOutOfMemory,
             Self::Aborted => {
                 unreachable!("Aborted execution should not be visible to the user.");
             }
@@ -423,8 +511,9 @@ impl HypervisorError {
         match self {
             HypervisorError::FunctionNotFound(..) => "FunctionNotFound",
             HypervisorError::MethodNotFound(_) => "MethodNotFound",
-            HypervisorError::ContractViolation { .. } => "ContractViolation",
-            HypervisorError::InstructionLimitExceeded => "InstructionLimitExceeded",
+            HypervisorError::ToolchainContractViolation { .. } => "ToolchainContractViolation",
+            HypervisorError::UserContractViolation { .. } => "UserContractViolation",
+            HypervisorError::InstructionLimitExceeded(_) => "InstructionLimitExceeded",
             HypervisorError::InvalidWasm(_) => "InvalidWasm",
             HypervisorError::InstrumentationFailed(_) => "InstrumentationFailed",
             HypervisorError::Trapped(_) => "Trapped",
@@ -436,7 +525,7 @@ impl HypervisorError {
             HypervisorError::InsufficientCyclesBalance { .. } => "InsufficientCyclesBalance",
             HypervisorError::Cleanup { .. } => "Cleanup",
             HypervisorError::WasmEngineError(_) => "WasmEngineError",
-            HypervisorError::WasmReservedPages => "WasmReservedPages",
+            HypervisorError::ReservedPagesForOldMotoko => "ReservedPagesForOldMotoko",
             HypervisorError::Aborted => "Aborted",
             HypervisorError::SliceOverrun { .. } => "SliceOverrun",
             HypervisorError::MemoryAccessLimitExceeded(_) => "MemoryAccessLimitExceeded",

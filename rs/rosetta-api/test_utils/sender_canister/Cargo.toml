@@ -1,0 +1,24 @@
+[package]
+name = "ic-sender-canister"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[[bin]]
+name = "ic-sender-canister"
+path = "src/main.rs"
+
+[lib]
+name = "ic_sender_canister_lib"
+path = "src/lib.rs"
+
+[dependencies]
+candid = { workspace = true }
+futures = { workspace = true }
+ic-cdk = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }

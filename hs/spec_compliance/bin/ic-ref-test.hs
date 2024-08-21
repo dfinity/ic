@@ -5,6 +5,7 @@
 
 module Main (main) where
 
+import IC.Constants
 import qualified IC.Crypto.BLS as BLS
 import IC.Test.Agent (preFlight)
 import IC.Test.Options
@@ -31,6 +32,7 @@ main = do
       [ rerunningTests
           [ listingTests,
             includingOptions [endpointOption],
+            includingOptions [httpbinProtoOption],
             includingOptions [httpbinOption],
             includingOptions [polltimeoutOption],
             includingOptions [testSubnetOption],

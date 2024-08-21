@@ -4,7 +4,7 @@ mod config_tests;
 mod tests;
 
 use hyper::{Body, Request, Response, StatusCode};
-use ic_crypto_tls_interfaces::TlsHandshake;
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, info, warn, ReplicaLogger};
@@ -142,7 +142,7 @@ impl XNetEndpoint {
     pub fn new(
         runtime_handle: runtime::Handle,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        tls: Arc<dyn TlsHandshake + Send + Sync>,
+        tls: Arc<dyn TlsConfig + Send + Sync>,
         registry_client: Arc<dyn RegistryClient + Send + Sync>,
         config: XNetEndpointConfig,
         metrics: &MetricsRegistry,

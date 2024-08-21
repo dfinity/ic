@@ -97,7 +97,7 @@ configuration to include all registered custom domains.
 ## Directory Organization
 
 This directory contains all the code related to custom domains with the exception
-of the [`nginx` configuration](../../../ic-os/rootfs/boundary-guestos/etc/nginx/):
+of the [`nginx` configuration](../../../ic-os/components/boundary-guestos/etc/nginx/):
 
 - [`certificate_issuer`](certificate_issuer/) contains the boundary node service, which handles all registration requests, processes registration tasks and interfaces with the `certificate-orchestrator`.
 - [`certificate_syncer`](certificate_syncer/) contains the boundary node service, which ensures that `nginx` has access to all certificates and keys, and is configured to serve the custom domains.
@@ -303,15 +303,15 @@ When you deploy a boundary node with these configurations, the two services
 automatically start.
 
 The `certificate-issuer` relies on the following services and setup scripts:
-* [setup-certificate-issuer.service](../../../ic-os/rootfs/boundary-guestos/etc/systemd/system/setup-certificate-issuer.service)
-* [setup-certificate-issuer.sh](../../../ic-os/rootfs/boundary-guestos/opt/ic/bin/setup-certificate-issuer.sh)
-* [certificate-issuer.service](../../../ic-os/rootfs/boundary-guestos/etc/systemd/system/certificate-issuer.service)
+* [setup-certificate-issuer.service](../../../ic-os/components/boundary-guestos/etc/systemd/system/setup-certificate-issuer.service)
+* [setup-certificate-issuer.sh](../../../ic-os/components/boundary-guestos/opt/ic/bin/setup-certificate-issuer.sh)
+* [certificate-issuer.service](../../../ic-os/components/boundary-guestos/etc/systemd/system/certificate-issuer.service)
 
 The `certificate-syncer` relies on the following services and setup scripts:
-* [setup-certificate-syncer.service](../../../ic-os/rootfs/boundary-guestos/etc/systemd/system/setup-certificate-syncer.service)
-* [setup-certificate-syncer.sh](../../../ic-os/rootfs/boundary-guestos/opt/ic/bin/setup-certificate-syncer.sh)
-* [certificate-syncer.service](../../../ic-os/rootfs/boundary-guestos/etc/systemd/system/certificate-syncer.service)
+* [setup-certificate-syncer.service](../../../ic-os/components/boundary-guestos/etc/systemd/system/setup-certificate-syncer.service)
+* [setup-certificate-syncer.sh](../../../ic-os/components/boundary-guestos/opt/ic/bin/setup-certificate-syncer.sh)
+* [certificate-syncer.service](../../../ic-os/components/boundary-guestos/etc/systemd/system/certificate-syncer.service)
 
-In addition, the `certificate-syncer` needs a [configuration template](/ic-os/rootfs/boundary-guestos/etc/certificate-syncer/domain.tmpl) to dynamically include all
+In addition, the `certificate-syncer` needs a [configuration template](/ic-os/components/boundary-guestos/etc/certificate-syncer/domain.tmpl) to dynamically include all
 custom domains in the `nginx` configuration. It is part of the boundary node
 root filesystem and is maintained along with this codebase.

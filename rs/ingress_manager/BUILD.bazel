@@ -4,8 +4,9 @@ load("//bazel:defs.bzl", "rust_ic_bench")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/crypto/interfaces/sig_verification",
+    # Keep sorted.
     "//rs/constants",
+    "//rs/crypto/interfaces/sig_verification",
     "//rs/cycles_account_manager",
     "//rs/interfaces",
     "//rs/interfaces/registry",
@@ -26,6 +27,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/artifact_pool",
     "//rs/config",
     "//rs/interfaces/mocks",
@@ -82,6 +84,7 @@ rust_ic_bench(
     data = DATA,
     env = ENV,
     deps = [
+        # Keep sorted.
         ":ingress_manager",
         "//rs/artifact_pool",
         "//rs/constants",
@@ -116,6 +119,7 @@ rust_ic_bench(
     data = DATA,
     env = ENV,
     deps = [
+        # Keep sorted.
         ":ingress_manager",
         "//rs/artifact_pool",
         "//rs/config",

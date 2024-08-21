@@ -144,7 +144,6 @@ type UpgradeArgs = record {
     change_fee_collector : opt ChangeFeeCollector;
     max_memo_length : opt nat16;
     feature_flags : opt FeatureFlags;
-    maximum_number_of_accounts: opt nat64;
     accounts_overflow_trim_quantity: opt nat64;
     change_archive_options : opt ChangeArchiveOptions;
 };
@@ -425,6 +424,63 @@ type ICRC3DataCertificate = record {
   hash_tree : blob;
 };
 
+type icrc21_consent_message_metadata = record {
+    language: text;
+    utc_offset_minutes: opt int16;
+};
+
+type icrc21_consent_message_spec = record {
+    metadata: icrc21_consent_message_metadata;
+    device_spec: opt variant {
+        GenericDisplay;
+        LineDisplay: record {
+            characters_per_line: nat16;
+            lines_per_page: nat16;
+        };
+    };
+};
+
+type icrc21_consent_message_request = record {
+    method: text;
+    arg: blob;
+    user_preferences: icrc21_consent_message_spec;
+};
+
+type icrc21_consent_message = variant {
+    GenericDisplayMessage: text;
+    LineDisplayMessage: record {
+        pages: vec record {
+            lines: vec text;
+        };
+    };
+};
+
+type icrc21_consent_info = record {
+    consent_message: icrc21_consent_message;
+    metadata: icrc21_consent_message_metadata;
+};
+
+type icrc21_error_info = record {
+    description: text;
+};
+
+type icrc21_error = variant {
+    UnsupportedCanisterCall: icrc21_error_info;
+    ConsentMessageUnavailable: icrc21_error_info;
+    InsufficientPayment: icrc21_error_info;
+
+    // Any error not covered by the above variants.
+    GenericError: record {
+       error_code: nat;
+       description: text;
+   };
+};
+
+type icrc21_consent_message_response = variant {
+    Ok: icrc21_consent_info;
+    Err: icrc21_error;
+};
+
 service : (ledger_arg : LedgerArg) -> {
     archives : () -> (vec ArchiveInfo) query;
     get_transactions : (GetTransactionsRequest) -> (GetTransactionsResponse) query;
@@ -450,4 +506,7 @@ service : (ledger_arg : LedgerArg) -> {
     icrc3_get_tip_certificate : () -> (opt ICRC3DataCertificate) query;
     icrc3_get_blocks : (vec GetBlocksArgs) -> (GetBlocksResult) query;
     icrc3_supported_block_types : () -> (vec record { block_type : text; url : text }) query;
+
+    icrc21_canister_call_consent_message: (icrc21_consent_message_request) -> (icrc21_consent_message_response);
+    icrc10_supported_standards : () -> (vec record { name : text; url : text }) query;
 }

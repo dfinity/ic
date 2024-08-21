@@ -17,8 +17,9 @@ use axum::{
 use clap::Parser;
 use import::Import;
 use nix::sys::signal::Signal;
-use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider, KeyValue};
+use opentelemetry::{metrics::MeterProvider, KeyValue};
 use opentelemetry_prometheus::exporter;
+use opentelemetry_sdk::metrics::MeterProviderBuilder;
 use persist::Persist;
 use prometheus::{labels, Encoder as PrometheusEncoder, Registry, TextEncoder};
 use reqwest::{redirect::Policy, Url};
@@ -93,7 +94,9 @@ async fn main() -> Result<(), Error> {
     )
     .unwrap();
     let exporter = exporter().with_registry(registry.clone()).build()?;
-    let provider = MeterProvider::builder().with_reader(exporter).build();
+    let provider = MeterProviderBuilder::default()
+        .with_reader(exporter)
+        .build();
     let meter = provider.meter(SERVICE_NAME);
 
     let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { registry }));

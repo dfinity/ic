@@ -5,7 +5,7 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
 use ic_consensus::{
     certification::{CertificationCrypto, CertifierImpl},
-    dkg, ecdsa,
+    dkg, idkg,
 };
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
@@ -14,6 +14,7 @@ use ic_interfaces::time_source::TimeSource;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::malicious_flags::MaliciousFlags;
+use ic_types::Height;
 use ic_types::Time;
 use rand::{thread_rng, Rng, RngCore};
 use rand_chacha::{rand_core::SeedableRng, ChaChaRng};
@@ -21,7 +22,8 @@ use slog::Drain;
 use std::cell::{RefCell, RefMut};
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use tokio::sync::watch;
 
 fn stop_immediately(_: &ConsensusInstance<'_>) -> bool {
     true
@@ -41,7 +43,7 @@ enum NetworkStatus {
 const MAX_IDLE_TIME: u64 = 50000;
 
 pub struct ConsensusRunner<'a> {
-    idle_since: RefCell<Time>,
+    idle_since: RefCell<Instant>,
     pub time: Arc<FastForwardTimeSource>,
     pub instances: Vec<ConsensusInstance<'a>>,
     pub(crate) stop_predicate: StopPredicate,
@@ -105,7 +107,7 @@ impl<'a> ConsensusRunner<'a> {
         time_source: Arc<FastForwardTimeSource>,
         logger: ReplicaLogger,
     ) -> ConsensusRunner<'a> {
-        let now = time_source.get_relative_time();
+        let now = time_source.get_instant();
         let rng = RefCell::new(ChaChaRng::seed_from_u64(config.random_seed));
         ConsensusRunner {
             idle_since: RefCell::new(now),
@@ -158,7 +160,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.canister_http_payload_builder.clone(),
             deps.query_stats_payload_builder.clone(),
             deps.dkg_pool.clone(),
-            deps.ecdsa_pool.clone(),
+            deps.idkg_pool.clone(),
             dkg_key_manager.clone(),
             deps.message_routing.clone(),
             deps.state_manager.clone(),
@@ -176,7 +178,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.metrics_registry.clone(),
             replica_logger.clone(),
         );
-        let ecdsa = ecdsa::EcdsaImpl::new(
+        let idkg = idkg::IDkgImpl::new(
             deps.replica_config.node_id,
             deps.consensus_pool.read().unwrap().get_block_cache(),
             consensus_crypto,
@@ -187,12 +189,13 @@ impl<'a> ConsensusRunner<'a> {
         );
         let certifier = CertifierImpl::new(
             deps.replica_config.clone(),
-            membership,
+            Arc::clone(&deps.registry_client),
             certification_crypto,
             deps.state_manager.clone(),
             deps.consensus_pool.read().unwrap().get_cache(),
             deps.metrics_registry.clone(),
             replica_logger.clone(),
+            watch::channel(Height::from(0)).0,
         );
         let now = self.time.get_relative_time();
         let in_queue: Queue<Input> = Default::default();
@@ -211,11 +214,11 @@ impl<'a> ConsensusRunner<'a> {
                 apply_modifier_consensus(&modifier, consensus),
                 consensus_gossip,
                 dkg,
-                apply_modifier_ecdsa(&modifier, ecdsa),
+                apply_modifier_idkg(&modifier, idkg),
                 Box::new(certifier),
                 deps.consensus_pool.clone(),
                 deps.dkg_pool.clone(),
-                deps.ecdsa_pool.clone(),
+                deps.idkg_pool.clone(),
                 replica_logger,
                 deps.metrics_registry.clone(),
             ),
@@ -250,13 +253,20 @@ impl<'a> ConsensusRunner<'a> {
     fn process(&self) -> NetworkStatus {
         let delivered = self.config.delivery.deliver_next(self);
         let mut idle_since = self.idle_since.borrow_mut();
-        if let Some(new_time) = self.config.execution.execute_next(self) {
-            self.time.set_time(new_time).ok();
+
+        let new_time = match self.config.execution.execute_next(self) {
+            Some(t) => t,
+            None => self.time.get_relative_time() + Duration::from_millis(100),
+        };
+
+        // Stalled clocks means only monotonic time advances for nodes.
+        if self.config.stall_clocks {
+            self.time.set_time_monotonic(new_time).ok();
         } else {
-            let new_time = self.time.get_relative_time() + Duration::from_millis(100);
             self.time.set_time(new_time).ok();
         }
-        let now = self.time.get_relative_time();
+
+        let now = self.time.get_instant();
 
         let mut stopped = true;
         for instance in self.instances.iter() {
@@ -290,6 +300,7 @@ impl Default for ConsensusRunnerConfig {
             num_rounds: 20,
             degree: 9,
             use_priority_fn: false,
+            stall_clocks: false,
             execution: GlobalMessage::new(false),
             delivery: Sequential::new(),
         }
@@ -373,7 +384,7 @@ impl ConsensusRunnerConfig {
     }
 
     /// Parse and update configuration from environment: NUM_NODES,
-    /// NUM_ROUNDS, MAX_DELTA, DEGREE, USE_PRIORITY_FN, EXECUTION and DELIVERY
+    /// NUM_ROUNDS, MAX_DELTA, DEGREE, USE_PRIORITY_FN, STALL_CLOCKS, EXECUTION and DELIVERY
     /// (except RANDOM_SEED, which should be used when first creating the config).
     /// Return the updated config if parsing is successful, or an error message
     /// in string otherwise.
@@ -400,6 +411,11 @@ impl ConsensusRunnerConfig {
                     self.use_priority_fn = value
                         .parse()
                         .map_err(|_| "USE_PRIORITY_FN must be either true or false")?
+                }
+                "stall_clocks" => {
+                    self.stall_clocks = value
+                        .parse()
+                        .map_err(|_| "STALL_CLOCKS must be either true or false")?
                 }
                 _ => (),
             }

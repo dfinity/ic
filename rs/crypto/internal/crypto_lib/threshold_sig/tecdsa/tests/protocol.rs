@@ -5,20 +5,18 @@ use ic_types::Randomness;
 use rand::{Rng, RngCore};
 use std::collections::BTreeMap;
 
-mod test_utils;
+use ic_crypto_internal_threshold_sig_ecdsa_test_utils::*;
 
-use crate::test_utils::*;
-
-fn insufficient_dealings(r: Result<ProtocolRound, ThresholdEcdsaError>) {
+fn insufficient_dealings(r: Result<ProtocolRound, CanisterThresholdError>) {
     match r {
-        Err(ThresholdEcdsaError::InsufficientDealings) => {}
+        Err(CanisterThresholdError::InsufficientDealings) => {}
         Err(e) => panic!("Unexpected error {:?}", e),
         Ok(r) => panic!("Unexpected success {:?}", r),
     }
 }
 
 #[test]
-fn should_reshare_masked_random_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
+fn should_reshare_masked_random_transcripts_correctly() -> Result<(), CanisterThresholdError> {
     let mut rng = &mut reproducible_rng();
 
     for cfg in TestConfig::all() {
@@ -84,7 +82,7 @@ fn should_reshare_masked_random_transcripts_correctly() -> Result<(), ThresholdE
 }
 
 #[test]
-fn should_reshare_unmasked_random_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
+fn should_reshare_unmasked_random_transcripts_correctly() -> Result<(), CanisterThresholdError> {
     let mut rng = &mut reproducible_rng();
 
     for cfg in TestConfig::all() {
@@ -119,7 +117,7 @@ fn should_reshare_unmasked_random_transcripts_correctly() -> Result<(), Threshol
 }
 
 #[test]
-fn should_multiply_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
+fn should_multiply_transcripts_correctly() -> Result<(), CanisterThresholdError> {
     let mut rng = &mut reproducible_rng();
 
     for cfg in TestConfig::all() {
@@ -159,7 +157,7 @@ fn should_multiply_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
 }
 
 #[test]
-fn should_multiply_unmasked_random_transcripts_correctly() -> Result<(), ThresholdEcdsaError> {
+fn should_multiply_unmasked_random_transcripts_correctly() -> Result<(), CanisterThresholdError> {
     let mut rng = &mut reproducible_rng();
 
     for cfg in TestConfig::all() {
@@ -191,7 +189,7 @@ fn should_multiply_unmasked_random_transcripts_correctly() -> Result<(), Thresho
 }
 
 #[test]
-fn should_reshare_transcripts_with_dynamic_threshold() -> Result<(), ThresholdEcdsaError> {
+fn should_reshare_transcripts_with_dynamic_threshold() -> Result<(), CanisterThresholdError> {
     let mut rng = &mut reproducible_rng();
 
     for cfg in TestConfig::all() {
@@ -235,7 +233,7 @@ fn should_reshare_transcripts_with_dynamic_threshold() -> Result<(), ThresholdEc
 }
 
 #[test]
-fn should_multiply_transcripts_with_dynamic_threshold() -> Result<(), ThresholdEcdsaError> {
+fn should_multiply_transcripts_with_dynamic_threshold() -> Result<(), CanisterThresholdError> {
     let mut rng = &mut reproducible_rng();
 
     for cfg in TestConfig::all() {
@@ -297,11 +295,11 @@ fn random_subset<R: rand::Rng, T: Clone>(
 }
 
 #[test]
-fn should_basic_signing_protocol_work() -> Result<(), ThresholdEcdsaError> {
+fn should_basic_signing_protocol_work() -> Result<(), CanisterThresholdError> {
     fn test_sig_serialization(
         alg: ic_types::crypto::AlgorithmId,
         sig: &ThresholdEcdsaCombinedSigInternal,
-    ) -> Result<(), ThresholdEcdsaError> {
+    ) -> Result<(), CanisterThresholdError> {
         let bytes = sig.serialize();
         let sig2 = ThresholdEcdsaCombinedSigInternal::deserialize(alg, &bytes)
             .expect("Deserialization failed");
@@ -316,69 +314,66 @@ fn should_basic_signing_protocol_work() -> Result<(), ThresholdEcdsaError> {
     let rng = &mut reproducible_rng();
 
     for cfg in TestConfig::all() {
-        for use_masked_kappa in [true, false] {
-            let random_seed = Seed::from_rng(rng);
+        let random_seed = Seed::from_rng(rng);
 
-            let setup = EcdsaSignatureProtocolSetup::new(
-                cfg,
-                nodes,
-                threshold,
-                number_of_dealings_corrupted,
-                random_seed,
-                use_masked_kappa,
-            )?;
+        let setup = EcdsaSignatureProtocolSetup::new(
+            cfg,
+            nodes,
+            threshold,
+            number_of_dealings_corrupted,
+            random_seed,
+        )?;
 
-            let alg = setup.alg();
+        let alg = setup.alg();
 
-            let signed_message = rng.gen::<[u8; 32]>().to_vec();
-            let random_beacon = Randomness::from(rng.gen::<[u8; 32]>());
+        let signed_message = rng.gen::<[u8; 32]>().to_vec();
+        let random_beacon = Randomness::from(rng.gen::<[u8; 32]>());
 
-            let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
-            let proto = EcdsaSignatureProtocolExecution::new(
-                setup.clone(),
-                signed_message.clone(),
-                random_beacon,
-                derivation_path.clone(),
-            );
+        let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
+        let proto = EcdsaSignatureProtocolExecution::new(
+            setup.clone(),
+            signed_message.clone(),
+            random_beacon,
+            derivation_path.clone(),
+        );
 
-            let shares = proto.generate_shares()?;
+        let shares = proto.generate_shares()?;
 
-            for i in 0..=nodes {
-                let shares = random_subset(&shares, i, rng);
+        for i in 0..=nodes {
+            let shares = random_subset(&shares, i, rng);
 
-                if shares.len() < threshold {
-                    assert!(proto.generate_signature(&shares).is_err());
-                } else {
-                    let sig = proto.generate_signature(&shares).unwrap();
-                    test_sig_serialization(alg, &sig)?;
-                    assert!(proto.verify_signature(&sig).is_ok());
-                }
+            if shares.len() < threshold {
+                assert!(proto.generate_signature(&shares).is_err());
+            } else {
+                let sig = proto.generate_signature(&shares).unwrap();
+                test_sig_serialization(alg, &sig)?;
+                assert!(proto.verify_signature(&sig).is_ok());
             }
-
-            // Test that another run of the protocol generates signatures
-            // which are not verifiable in the earlier one (due to different rho)
-            let random_beacon2 = Randomness::from(rng.gen::<[u8; 32]>());
-            let proto2 = EcdsaSignatureProtocolExecution::new(
-                setup,
-                signed_message,
-                random_beacon2,
-                derivation_path,
-            );
-
-            let shares = proto2.generate_shares()?;
-            let sig = proto2.generate_signature(&shares).unwrap();
-            test_sig_serialization(alg, &sig)?;
-
-            assert!(proto.verify_signature(&sig).is_err());
-            assert!(proto2.verify_signature(&sig).is_ok());
         }
+
+        // Test that another run of the protocol generates signatures
+        // which are not verifiable in the earlier one (due to different rho)
+        let random_beacon2 = Randomness::from(rng.gen::<[u8; 32]>());
+        let proto2 = EcdsaSignatureProtocolExecution::new(
+            setup,
+            signed_message,
+            random_beacon2,
+            derivation_path,
+        );
+
+        let shares = proto2.generate_shares()?;
+        let sig = proto2.generate_signature(&shares).unwrap();
+        test_sig_serialization(alg, &sig)?;
+
+        assert!(proto.verify_signature(&sig).is_err());
+        assert!(proto2.verify_signature(&sig).is_ok());
     }
 
     Ok(())
 }
 
 #[test]
-fn should_be_able_to_perform_bip340_signature() -> Result<(), ThresholdEcdsaError> {
+fn should_be_able_to_perform_bip340_signature() -> Result<(), CanisterThresholdError> {
     let mut rng = &mut reproducible_rng();
 
     let nodes = 13;
@@ -396,7 +391,7 @@ fn should_be_able_to_perform_bip340_signature() -> Result<(), ThresholdEcdsaErro
 
         let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
 
-        let cfg = TestConfig::new(EccCurveType::K256);
+        let cfg = TestConfig::new(IdkgProtocolAlgorithm::Bip340, EccCurveType::K256);
 
         let setup = SchnorrSignatureProtocolSetup::new(
             cfg,
@@ -439,7 +434,7 @@ fn should_be_able_to_perform_bip340_signature() -> Result<(), ThresholdEcdsaErro
 }
 
 #[test]
-fn should_be_able_to_perform_ed25519_signature() -> Result<(), ThresholdEcdsaError> {
+fn should_be_able_to_perform_ed25519_signature() -> Result<(), CanisterThresholdError> {
     let mut rng = &mut reproducible_rng();
 
     let nodes = 4;
@@ -454,7 +449,7 @@ fn should_be_able_to_perform_ed25519_signature() -> Result<(), ThresholdEcdsaErr
     let random_seed = Seed::from_rng(&mut rng);
 
     // Ed25519 signatures using secp256k1 MEGa keys
-    let cfg = TestConfig::new_mixed(EccCurveType::Ed25519, EccCurveType::K256);
+    let cfg = TestConfig::new(IdkgProtocolAlgorithm::Ed25519, EccCurveType::K256);
 
     let setup =
         SchnorrSignatureProtocolSetup::new(cfg, nodes, threshold, corrupted_dealings, random_seed)?;
@@ -490,7 +485,7 @@ fn should_be_able_to_perform_ed25519_signature() -> Result<(), ThresholdEcdsaErr
 }
 
 #[test]
-fn invalid_signatures_are_rejected() -> Result<(), ThresholdEcdsaError> {
+fn invalid_signatures_are_rejected() -> Result<(), CanisterThresholdError> {
     let nodes = 13;
     let threshold = (nodes + 2) / 3;
     let number_of_dealings_corrupted = 0;
@@ -506,7 +501,6 @@ fn invalid_signatures_are_rejected() -> Result<(), ThresholdEcdsaError> {
             threshold,
             number_of_dealings_corrupted,
             random_seed,
-            true,
         )?;
 
         let alg = setup.alg();
@@ -551,7 +545,7 @@ fn invalid_signatures_are_rejected() -> Result<(), ThresholdEcdsaError> {
         assert!(proto.verify_signature(&sig_with_s_eq_zero).is_err());
 
         let sig_with_high_s = {
-            let s = EccScalar::deserialize(cfg.signature_curve(), &sig[half_sig..])
+            let s = EccScalar::deserialize(cfg.signature_alg().curve(), &sig[half_sig..])
                 .unwrap()
                 .negate();
 
@@ -581,7 +575,6 @@ fn should_fail_on_hashed_message_length_mismatch() {
             threshold,
             number_of_dealings_corrupted,
             Seed::from_rng(rng),
-            true,
         )
         .expect("failed to create setup");
 
@@ -589,7 +582,7 @@ fn should_fail_on_hashed_message_length_mismatch() {
         let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
         let random_beacon = Randomness::from(rng.gen::<[u8; 32]>());
 
-        let message_with_wrong_length = vec![0; cfg.signature_curve().scalar_bytes() + 1];
+        let message_with_wrong_length = vec![0; cfg.signature_alg().curve().scalar_bytes() + 1];
 
         let sign_share_result_with_wrong_msg_length = create_ecdsa_signature_share(
             &derivation_path,

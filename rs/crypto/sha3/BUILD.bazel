@@ -3,10 +3,12 @@ load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:sha3",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:hex",
 ]
 

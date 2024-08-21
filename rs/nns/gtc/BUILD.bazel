@@ -13,12 +13,14 @@ filegroup(
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/sha2",
+    "//rs/nervous_system/common",
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/gtc_accounts",
-    "//rs/nervous_system/common",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
@@ -26,35 +28,36 @@ BASE_DEPENDENCIES = [
     "@crate_index//:build-info",
     "@crate_index//:candid",
     "@crate_index//:hex",
+    "@crate_index//:hex-literal",
     "@crate_index//:lazy_static",
-    "@crate_index//:libsecp256k1",
     "@crate_index//:prost",
     "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:sha3",
-    "@crate_index//:simple_asn1",
-    "@crate_index//:hex-literal",
 ]
 
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nns/governance",
+    "//rs/nns/governance/api",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nns/governance:governance--test_feature",
+    "//rs/nns/governance/api:api--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
 ]
 
 BUILD_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:build-info-build",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nns/gtc/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
     "@crate_index//:tempfile",
@@ -176,6 +179,7 @@ generated_files_check(
     ],
     manifest_dir = "rs/nns/gtc",
     deps = [
+        # Keep sorted.
         "//rs/nns/gtc/protobuf_generator:lib",
         "//rs/test_utilities/compare_dirs",
         "@crate_index//:tempfile",

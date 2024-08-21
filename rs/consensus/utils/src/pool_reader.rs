@@ -353,8 +353,8 @@ impl<'a> PoolReader<'a> {
     }
 
     /// Get the round start time of a given height, which is the max timestamp
-    /// of first notarization and random beacon of the previous height.
-    /// Return None if a timestamp is not found.
+    /// of first notarization and random beacon of the previous height. Return
+    /// `None` if no suitable artifact indicating a round start has been found.
     pub fn get_round_start_time(&self, height: Height) -> Option<Time> {
         let validated = self.pool.validated();
         let catch_up_height = self.get_catch_up_height();
@@ -392,9 +392,15 @@ impl<'a> PoolReader<'a> {
     }
 
     /// Get the round start instant of a given height, which is the max instant
-    /// of first notarization and random beacon of the previous height.
-    /// Return None if a instant is not found.
-    pub fn get_round_start_instant(&self, height: Height) -> Option<Instant> {
+    /// of first notarization and random beacon of the previous height. If either
+    /// of the messages don't have instants, we use the given fallback instance.
+    /// Return `None` if no suitable artifact indicating a round start has been found.
+    ///
+    /// The reason we have a fallback for instants is because they are not persisted
+    /// on disk, so we could lose instants when e.g. the replica restarts due to
+    /// updates or crashes. We also don't collect instants in the uncached pool during
+    /// genesis.
+    pub fn get_round_start_instant(&self, height: Height, fallback: Instant) -> Option<Instant> {
         let validated = self.pool.validated();
         let catch_up_height = self.get_catch_up_height();
 
@@ -406,7 +412,7 @@ impl<'a> PoolReader<'a> {
             validated
                 .notarization()
                 .get_by_height(h)
-                .flat_map(|x| self.pool.message_instant(&x.get_id()))
+                .map(|x| self.pool.message_instant(&x.get_id()).unwrap_or(fallback))
                 .min()
         };
 
@@ -414,7 +420,7 @@ impl<'a> PoolReader<'a> {
         // Here we stop early if random beacon time is not available, to avoid doing
         // a redundant lookup on notarizations.
         self.get_random_beacon(prev_height)
-            .and_then(|x| self.pool.message_instant(&x.get_id()))
+            .map(|x| self.pool.message_instant(&x.get_id()).unwrap_or(fallback))
             .and_then(|random_beacon_time| {
                 get_notarization_instant(prev_height)
                     .map(|notarization_time| notarization_time.max(random_beacon_time))
@@ -422,12 +428,11 @@ impl<'a> PoolReader<'a> {
             .or_else(|| {
                 // If notarization and random beacon have already been purged at
                 // catch_up_height, we use the time of the CatchUpPackage instead.
-                if prev_height == catch_up_height {
+                (prev_height == catch_up_height).then(|| {
                     self.pool
                         .message_instant(&self.get_highest_catch_up_package().get_id())
-                } else {
-                    None
-                }
+                        .unwrap_or(fallback)
+                })
             })
     }
 
@@ -582,6 +587,19 @@ impl<'a> PoolReader<'a> {
             registry_version,
         )
     }
+
+    /// Returns the height of the next CUP.
+    pub fn get_next_cup_height(&self) -> Height {
+        self.get_highest_catch_up_package()
+            .content
+            .block
+            .as_ref()
+            .payload
+            .as_ref()
+            .as_summary()
+            .dkg
+            .get_next_start_height()
+    }
 }
 
 /// Take a slice returned by [`PoolReader::get_payloads_from_height`]
@@ -718,6 +736,7 @@ pub mod test {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
             let start = pool.make_next_block();
+            pool.insert_beacon_chain(&pool.make_next_beacon(), Height::from(10));
             pool.insert_block_chain_with(start.clone(), Height::from(10));
             let ten_block = pool
                 .validated()
@@ -773,19 +792,22 @@ pub mod test {
     // sorted in ascending order.
     fn test_get_by_height_range() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { mut pool, .. } = dependencies(pool_config, 1);
-            // Let's generate 4 proposals so that 2 of them end up in the
-            // unvalidated pool and have the same height.
             let rounds = 30;
-            let replicas = 3;
+            let replicas = 10;
+            let f = 3;
+            let Dependencies { mut pool, .. } = dependencies(pool_config, replicas);
+
+            // Because `TestConsensusPool::advance_round` alternates between
+            // putting blocks in validated and unvalidated pools for each rank,
+            // we expect (f+1)/2 blocks in the unvalidated pool per round.
             let mut round = pool
                 .prepare_round()
-                .with_replicas(replicas)
-                .with_new_block_proposals(replicas + 1)
-                .with_random_beacon_shares(replicas)
-                .with_notarization_shares(replicas)
-                .with_finalization_shares(replicas);
-            // Grow the artifact pool for `rounds` mimicking a subnet with 3 replicas.
+                .with_replicas(replicas as u32)
+                .with_new_block_proposals(f + 1)
+                .with_random_beacon_shares(replicas as u32)
+                .with_notarization_shares(replicas as u32)
+                .with_finalization_shares(replicas as u32);
+            // Grow the artifact pool for `rounds`.
             for _ in 0..rounds {
                 round.advance();
             }
@@ -810,9 +832,9 @@ pub mod test {
                     Height::from((rounds * 2) as u64),
                 ))
                 .collect::<Vec<_>>();
-            // We expect to see `2*rounds` unvalidated block proposals sorted by
+            // We expect to see `rounds * ((f+1)/2)` unvalidated block proposals sorted by
             // height in ascending order.
-            assert_eq!(artifacts.len(), 2 * rounds);
+            assert_eq!(artifacts.len(), rounds * ((f as usize + 1) / 2));
             for i in 0..artifacts.len() - 1 {
                 // Heights are ascending, but NOT unique.
                 assert!(artifacts[i].content.height() <= artifacts[i + 1].content.height());

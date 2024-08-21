@@ -31,7 +31,7 @@ async fn should_replay_events_for_mainnet() {
     assert_eq!(state.ethereum_network, EthereumNetwork::Mainnet);
     assert_eq!(
         state.eth_balance.eth_balance(),
-        Wei::from(377_363_723_116_064_057_529_u128)
+        Wei::from(698_140_999_426_625_854_528_u128)
     );
 }
 
@@ -46,7 +46,7 @@ async fn should_replay_events_for_sepolia() {
     assert_eq!(state.ethereum_network, EthereumNetwork::Sepolia);
     assert_eq!(
         state.eth_balance.eth_balance(),
-        Wei::from(27_071_340_712_277_320_265_554_u128)
+        Wei::from(29_749_130_254_874_558_434_938_u128)
     );
 }
 
@@ -378,9 +378,13 @@ impl GetEventsFile {
                         transaction_hash: transaction_hash.map(|h| h.parse().unwrap()),
                     },
                 },
-                EventPayload::SkippedBlock { block_number } => {
-                    ET::SkippedBlock(block_number.try_into().unwrap())
-                }
+                EventPayload::SkippedBlock {
+                    contract_address,
+                    block_number,
+                } => ET::SkippedBlockForContract {
+                    contract_address: contract_address.unwrap().parse().unwrap(),
+                    block_number: block_number.try_into().unwrap(),
+                },
                 EventPayload::AddedCkErc20Token {
                     chain_id,
                     address,
