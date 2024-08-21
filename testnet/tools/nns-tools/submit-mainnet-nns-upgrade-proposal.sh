@@ -43,8 +43,8 @@ submit_nns_upgrade_proposal_mainnet() {
     HUMANIZED_CANISTER_NAME=$(echo $PROPOSAL_TITLE | sed -E 's~Upgrade the (.+) Canister to .+~\1~')
     CANISTER_NAME=$(
         echo "$HUMANIZED_CANISTER_NAME" \
-        | tr '[:upper:]' '[:lower:]' \
-        | sed 's/ /-/g' # Replace spaces with dash.
+            | tr '[:upper:]' '[:lower:]' \
+            | sed 's/ /-/g' # Replace spaces with dash.
     )
     CANISTER_ID=$(nns_canister_id "$CANISTER_NAME")
 

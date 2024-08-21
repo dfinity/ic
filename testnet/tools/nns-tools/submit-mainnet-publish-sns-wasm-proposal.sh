@@ -40,7 +40,7 @@ submit_nns_publish_sns_wasm_proposal_mainnet() {
     VERSION=$(grep '__Source Code__: ' $PROPOSAL_FILE | sed -E 's~.*\[(.{40})\].*~\1~')
     PROPOSAL_TITLE=$(grep '.' "$PROPOSAL_FILE" | head -n 1 | sed 's/# //')
     HUMANIZED_CANISTER_TYPE=$(echo "$PROPOSAL_TITLE" | sed -E 's/Publish SNS (.+) Upgrade to .+/\1/')
-    CANISTER_TYPE=$(echo "$HUMANIZED_CANISTER_TYPE"  | tr '[:upper:]' '[:lower:]' | sed 's/ /-/')
+    CANISTER_TYPE=$(echo "$HUMANIZED_CANISTER_TYPE" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/')
 
     # Functions that exit if error
     validate_no_todos "$PROPOSAL_FILE"

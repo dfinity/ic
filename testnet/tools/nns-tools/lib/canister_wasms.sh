@@ -6,7 +6,7 @@ assert_that_a_prebuilt_nns_wasm_is_available() {
 
     DOWNLOAD_NAME=$(_canister_download_name_for_nns_canister_type "$CANISTER_TYPE")
     DOWNLOAD_URL="https://download.dfinity.systems/ic/${GIT_HASH}/canisters/${DOWNLOAD_NAME}.wasm.gz"
-    if ! curl "${DOWNLOAD_URL}" --head --fail --silent &> /dev/null; then
+    if ! curl "${DOWNLOAD_URL}" --head --fail --silent &>/dev/null; then
         print_red "There is no pre-built NNS $CANISTER_TYPE WASM at commit $VERSION."
         exit 1
     fi
@@ -18,7 +18,7 @@ assert_that_a_prebuilt_sns_wasm_is_available() {
 
     DOWNLOAD_NAME=$(_canister_download_name_for_sns_canister_type "$CANISTER_TYPE")
     DOWNLOAD_URL="https://download.dfinity.systems/ic/${VERSION}/canisters/${DOWNLOAD_NAME}.wasm.gz"
-    if ! curl "${DOWNLOAD_URL}" --head --fail --silent &> /dev/null; then
+    if ! curl "${DOWNLOAD_URL}" --head --fail --silent &>/dev/null; then
         print_red "There is no pre-built SNS $CANISTER_TYPE WASM at commit $VERSION."
         exit 1
     fi
