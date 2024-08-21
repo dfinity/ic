@@ -711,12 +711,16 @@ impl ApiState {
         let mut canister_http_adapters = self.canister_http_adapters.write().await;
         loop {
             let mut instance_state = instances[instance_id].lock().await;
-            if let InstanceState::Available(pocket_ic) =
-                std::mem::replace(&mut *instance_state, InstanceState::Deleted)
-            {
-                std::mem::drop(pocket_ic);
-                canister_http_adapters.remove(&instance_id);
-                break;
+            match std::mem::replace(&mut *instance_state, InstanceState::Deleted) {
+                InstanceState::Available(pocket_ic) => {
+                    std::mem::drop(pocket_ic);
+                    canister_http_adapters.remove(&instance_id);
+                    break;
+                }
+                InstanceState::Deleted => {
+                    break;
+                }
+                InstanceState::Busy { .. } => {}
             }
             drop(instance_state);
             tokio::time::sleep(Duration::from_secs(1)).await;
