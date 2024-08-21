@@ -187,7 +187,7 @@ def icos_build(
     )
 
     component_conformance_test(
-        name = name,
+        name = name + "_component_conformance_test",
         image = ":partition-root-unsigned.tzst",
         component_files = image_deps["component_files"].keys(),
     )
