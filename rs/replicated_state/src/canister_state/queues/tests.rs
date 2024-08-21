@@ -1639,7 +1639,7 @@ fn test_stats_best_effort() {
         guaranteed_response_memory_reservations: 0,
         input_queues_reserved_slots: 1,
         output_queues_reserved_slots: 1,
-        transient_stream_responses_size_bytes: 0,
+        transient_stream_guaranteed_responses_size_bytes: 0,
     };
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // Two guaranteed response requests, two guaranteed responses.
@@ -1702,7 +1702,7 @@ fn test_stats_best_effort() {
         guaranteed_response_memory_reservations: 0,
         input_queues_reserved_slots: 0,
         output_queues_reserved_slots: 1,
-        transient_stream_responses_size_bytes: 0,
+        transient_stream_guaranteed_responses_size_bytes: 0,
     };
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // And we have all-zero message stats.
@@ -1756,7 +1756,7 @@ fn test_stats_guaranteed_response() {
         guaranteed_response_memory_reservations: 2,
         input_queues_reserved_slots: 1,
         output_queues_reserved_slots: 1,
-        transient_stream_responses_size_bytes: 0,
+        transient_stream_guaranteed_responses_size_bytes: 0,
     };
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // Two guaranteed response requests, two guaranteed responses.
@@ -1826,7 +1826,7 @@ fn test_stats_guaranteed_response() {
         guaranteed_response_memory_reservations: 1,
         input_queues_reserved_slots: 0,
         output_queues_reserved_slots: 1,
-        transient_stream_responses_size_bytes: 0,
+        transient_stream_guaranteed_responses_size_bytes: 0,
     };
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // And we have all-zero message stats.
@@ -1882,7 +1882,7 @@ fn test_stats_oversized_requests() {
         guaranteed_response_memory_reservations: 2,
         input_queues_reserved_slots: 2,
         output_queues_reserved_slots: 2,
-        transient_stream_responses_size_bytes: 0,
+        transient_stream_guaranteed_responses_size_bytes: 0,
     };
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // Two best-effort requests, two oversized guaranteed requests, 4 requests in all.
@@ -1947,7 +1947,7 @@ fn test_stats_oversized_requests() {
         guaranteed_response_memory_reservations: 1,
         input_queues_reserved_slots: 0,
         output_queues_reserved_slots: 2,
-        transient_stream_responses_size_bytes: 0,
+        transient_stream_guaranteed_responses_size_bytes: 0,
     };
     assert_eq!(expected_queue_stats, queues.queue_stats);
 

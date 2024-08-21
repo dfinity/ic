@@ -439,11 +439,11 @@ impl CanisterState {
             + NumBytes::from(self.system_state.certified_data.len() as u64)
     }
 
-    /// Sets the (transient) size in bytes of responses from this canister
-    /// routed into streams and not yet garbage collected.
-    pub(super) fn set_stream_responses_size_bytes(&mut self, size_bytes: usize) {
+    /// Sets the (transient) size in bytes of guaranteed responses from this
+    /// canister routed into streams and not yet garbage collected.
+    pub(super) fn set_stream_guaranteed_responses_size_bytes(&mut self, size_bytes: usize) {
         self.system_state
-            .set_stream_responses_size_bytes(size_bytes);
+            .set_stream_guaranteed_responses_size_bytes(size_bytes);
     }
 
     /// Returns the current memory allocation of the canister.

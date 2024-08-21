@@ -437,7 +437,7 @@ impl ReplicatedState {
             epoch_query_stats,
             canister_snapshots,
         };
-        res.update_stream_responses_size_bytes();
+        res.update_stream_guaranteed_responses_size_bytes();
         res
     }
 
@@ -836,14 +836,14 @@ impl ReplicatedState {
         &self.epoch_query_stats
     }
 
-    /// Updates the byte size of responses in streams for each canister.
-    fn update_stream_responses_size_bytes(&mut self) {
-        for (canister_id, responses_size_bytes) in self.metadata.streams.responses_size_bytes() {
+    /// Updates the byte size of guaranteed responses in streams for each canister.
+    fn update_stream_guaranteed_responses_size_bytes(&mut self) {
+        for (canister_id, size_bytes) in self.metadata.streams.guaranteed_responses_size_bytes() {
             if let Some(canister_state) = self.canister_states.get_mut(canister_id) {
-                canister_state.set_stream_responses_size_bytes(*responses_size_bytes);
+                canister_state.set_stream_guaranteed_responses_size_bytes(*size_bytes);
             }
         }
-        Arc::make_mut(&mut self.metadata.streams).prune_zero_responses_size_bytes()
+        Arc::make_mut(&mut self.metadata.streams).prune_zero_guaranteed_responses_size_bytes()
     }
 
     /// Returns the number of canisters in this `ReplicatedState`.
@@ -1042,7 +1042,7 @@ impl ReplicatedState {
             subnet_queues,
         );
 
-        self.update_stream_responses_size_bytes();
+        self.update_stream_guaranteed_responses_size_bytes();
     }
 }
 
@@ -1073,7 +1073,7 @@ impl ReplicatedStateMessageRouting for ReplicatedState {
         assert!(self.metadata.streams.streams().is_empty());
 
         *Arc::make_mut(&mut self.metadata.streams) = streams;
-        self.update_stream_responses_size_bytes();
+        self.update_stream_guaranteed_responses_size_bytes();
     }
 }
 
