@@ -208,7 +208,7 @@ use ic_types::{
 };
 
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -232,8 +232,6 @@ pub(crate) use payload_verifier::{
     validate_payload, IDkgPayloadValidationFailure, InvalidIDkgPayloadReason,
 };
 pub use stats::IDkgStatsImpl;
-
-use self::utils::get_context_request_id;
 
 /// Similar to consensus, we don't fetch artifacts too far ahead in future.
 const LOOK_AHEAD: u64 = 10;
@@ -460,7 +458,6 @@ impl IDkgGossipImpl {
 
 struct IDkgPriorityFnArgs {
     finalized_height: Height,
-    #[allow(dead_code)]
     certified_height: Height,
 }
 
@@ -469,30 +466,6 @@ impl IDkgPriorityFnArgs {
         block_reader: &dyn IDkgBlockReader,
         state_reader: &dyn StateReader<State = ReplicatedState>,
     ) -> Self {
-        let mut requested_transcripts = BTreeSet::new();
-        for params in block_reader.requested_transcripts() {
-            requested_transcripts.insert(params.transcript_id);
-        }
-
-        let mut active_transcripts = BTreeSet::new();
-        for transcript_ref in block_reader.active_transcripts() {
-            active_transcripts.insert(transcript_ref.transcript_id);
-        }
-
-        let (certified_height, _) =
-            state_reader
-                .get_certified_state_snapshot()
-                .map_or(Default::default(), |snapshot| {
-                    let request_contexts = snapshot
-                        .get_state()
-                        .signature_request_contexts()
-                        .values()
-                        .flat_map(get_context_request_id)
-                        .collect::<BTreeSet<_>>();
-
-                    (snapshot.get_height(), request_contexts)
-                });
-
         Self {
             finalized_height: block_reader.tip_height(),
             certified_height: state_reader.latest_certified_height(),
@@ -576,9 +549,9 @@ fn compute_priority(
 mod tests {
     use self::test_utils::{
         fake_completed_signature_request_context, fake_ecdsa_master_public_key_id,
-        fake_signature_request_context_with_pre_sig, fake_state_with_signature_requests,
         TestIDkgBlockReader,
     };
+    use self::utils::get_context_request_id;
 
     use super::*;
     use ic_test_utilities::state_manager::RefMockStateManager;
@@ -604,19 +577,10 @@ mod tests {
         let pre_sig_id = PreSigId(0);
         let context_with_quadruple =
             fake_completed_signature_request_context(0, key_id.clone(), pre_sig_id);
-        let context_without_quadruple =
-            fake_signature_request_context_with_pre_sig(1, key_id.clone(), None);
-        let snapshot = fake_state_with_signature_requests(
-            height,
-            [
-                context_with_quadruple.clone(),
-                context_without_quadruple.clone(),
-            ],
-        );
         state_manager
             .get_mut()
-            .expect_get_certified_state_snapshot()
-            .returning(move || Some(Box::new(snapshot.clone()) as Box<_>));
+            .expect_latest_certified_height()
+            .returning(move || height);
 
         let expected_request_id = get_context_request_id(&context_with_quadruple.1).unwrap();
         assert_eq!(expected_request_id.pseudo_random_id, [0; 32]);
@@ -673,7 +637,7 @@ mod tests {
             (
                 IDkgMessageId::Dealing(
                     dealing_prefix(&transcript_id_fetch_1, &NODE_1),
-                    get_fake_artifact_id_data(xnet_transcript_id).into(),
+                    get_fake_artifact_id_data(transcript_id_fetch_1).into(),
                 ),
                 Priority::FetchNow,
             ),
