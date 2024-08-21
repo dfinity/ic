@@ -1,0 +1,61 @@
+name: Rosetta Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      rosetta_release_version:
+        description: 'Rosetta release version'
+        required: false
+      icrc_rosetta_release_version:
+        description: 'ICRC Rosetta release version'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  rosetta-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to Docker
+        uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKER_HUB_USER}}
+          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+
+      - name: Set up Bazel
+        uses: bazel-contrib/setup-bazel@0.8.5
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "IDX GitHub Automation"
+          git config --global user.email "idx@dfinity.org"
+
+      - name: Build and publish rosetta image
+        if: ${{ github.event.inputs.rosetta_release_version }}
+        env:
+          ROSETTA_RELEASE_VERSION: ${{ github.event.inputs.rosetta_release_version }}
+        run: |
+          set -euo pipefail
+          ROSETTA_API_DATE=$(date +"%Y%m%d")
+          for tag in "v${ROSETTA_RELEASE_VERSION}" "${{ github.sha }}" "$ROSETTA_API_DATE" latest; do
+            bazel run --stamp --embed_label="$tag" //rs/rosetta-api:push_rosetta_image
+          done
+          git tag "rosetta-release-$ROSETTA_RELEASE_VERSION" "${{ github.sha }}"
+          git push origin "rosetta-release-$ROSETTA_RELEASE_VERSION"
+
+      - name: Build and publish icrc rosetta image
+        if: ${{ github.event.inputs.icrc_rosetta_release_version  }} 
+        env:
+          ICRC_ROSETTA_RELEASE_VERSION: ${{ github.event.inputs.icrc_rosetta_release_version  }}
+        run: |
+          set -euo pipefail
+          for tag in "v${ROSETTA_RELEASE_VERSION}" latest; do
+            bazel run --stamp --embed_label="$tag" //rs/rosetta-api/icrc1/rosetta:push_ic_icrc_rosetta_image
+          done
+          git tag "icrc-rosetta-release-$ICRC_ROSETTA_RELEASE_VERSION" "${{ github.sha }}"
+          git push origin "icrc-rosetta-release-$ICRC_ROSETTA_RELEASE_VERSION"
