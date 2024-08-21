@@ -81,6 +81,7 @@ rust_binary(
     deps = DEPENDENCIES,
     testonly = True,
     data = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    visibility = ["//visibility:public"],
 )
 system_test_nns(
     name = "small_nns",
