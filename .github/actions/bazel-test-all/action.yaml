@@ -36,6 +36,11 @@ runs:
         run: |
           set -x +e
 
+          # temporarily set permissions again until we can figure out issue
+          if [ -e /cache ]; then
+            sudo chown -RL 1001:1001 /cache
+          fi
+
           if [ -n "$SSH_PRIVATE_KEY" ]; then
             # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
             test -z "${SSH_AUTH_SOCK:-}" && { eval "$(ssh-agent -s)"; ssh-add - <<< "${SSH_PRIVATE_KEY}"; }

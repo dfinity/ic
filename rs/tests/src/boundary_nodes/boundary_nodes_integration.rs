@@ -2903,7 +2903,7 @@ pub fn canister_routing_test(env: TestEnv) {
 
         block_on(agent_using_call_v2_endpoint(
             boundary_node.get_public_url().as_ref(),
-            Some(boundary_node.ipv6().into()),
+            boundary_node.ipv6().into(),
         ))
         .expect("Agent can be created")
     };
@@ -2955,4 +2955,86 @@ pub fn read_state_via_subnet_path_test(env: TestEnv) {
     let metrics = block_on(bn_agent.read_state_subnet_metrics(subnet_id))
         .expect("Call to read_state via /api/v2/subnet/{subnet_id}/read_state failed.");
     info!(log, "subnet metrics are {:?}", metrics);
+}
+
+/* tag::catalog[]
+Title:: Boundary nodes headers test
+
+Goal:: Make sure the boundary node sets the content-type, x-content-type-options, x-frame-options ehaders
+
+end::catalog[] */
+
+pub fn headers_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let boundary_node = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+    rt.block_on(async move {
+        let http_client_builder = reqwest::ClientBuilder::new();
+        let (client_builder, host) = if let Some(playnet) = boundary_node.get_playnet() {
+            (http_client_builder, playnet)
+        } else {
+            let host = "ic0.app";
+            let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0).into();
+            let client_builder = http_client_builder
+                .danger_accept_invalid_certs(true)
+                .resolve(host, bn_addr);
+            (client_builder, host.to_string())
+        };
+        let http_client = client_builder.build().unwrap();
+
+        ic_system_test_driver::retry_with_msg_async!(
+            "Making a status call to inspect the headers",
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                info!(&logger, "Requesting status endpoint...");
+                let res = http_client
+                    .get(format!("https://{host}/api/v2/status"))
+                    .send()
+                    .await
+                    .unwrap();
+
+                let headers = res.headers();
+                assert!(
+                    headers.contains_key("content-type"),
+                    "Header content-type is missing"
+                );
+                assert_eq!(
+                    headers.get("content-type").unwrap(),
+                    "application/cbor",
+                    "Header content-type does not match expected value: application/cbor"
+                );
+
+                assert!(
+                    headers.contains_key("x-content-type-options"),
+                    "Header x-content-type-options is missing"
+                );
+                assert_eq!(
+                    headers.get("x-content-type-options").unwrap(),
+                    "nosniff",
+                    "Header x-content-type-options does not match expected value: nosniff",
+                );
+
+                assert!(
+                    headers.contains_key("x-frame-options"),
+                    "Header x-frame-options is missing"
+                );
+                assert_eq!(
+                    headers.get("x-frame-options").unwrap(),
+                    "DENY",
+                    "Header x-frame-options does not match expected value: DENY",
+                );
+                Ok(())
+            }
+        )
+        .await
+        .unwrap();
+    });
 }

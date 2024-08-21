@@ -10,8 +10,16 @@ use ic_interfaces::{
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
-use ic_types::{artifact::CanisterHttpResponseId, canister_http::CanisterHttpResponseShare};
+use ic_types::{
+    artifact::CanisterHttpResponseId, canister_http::CanisterHttpResponseShare,
+    messages::CallbackId,
+};
 use std::{collections::BTreeSet, sync::Arc};
+
+// We are aiming for about 100 req/s for http outcalls. Assuming that the priority function gets
+// called about once every 3 seconds, we do not expect the number of requests to grow from one call
+// to another by about 100 http outcalls + 15 other management canister calls per second.
+const MAX_NUMBER_OF_REQUESTS_AHEAD: u64 = 3 * (100 + 15);
 
 /// The canonical implementation of [`PriorityFnFactory`]
 pub struct CanisterHttpGossipImpl {
@@ -63,13 +71,25 @@ impl<Pool: CanisterHttpPool> PriorityFnFactory<CanisterHttpResponseShare, Pool>
                 warn!(log, "Dropping canister http response share with callback id: {}, because registry version {} does not match expected version {}", id.content.id, id.content.registry_version, registry_version);
                 return Priority::Drop;
             }
+
+            // We derive the highest accepted request id from the next expected request id, plus the
+            // number of maximal number of new requests we can get between the function calls.
+            let highest_accepted_request_id =
+                CallbackId::from(next_callback_id.get() + MAX_NUMBER_OF_REQUESTS_AHEAD);
+
             // The https outcalls share should be fetched in two cases:
             //  - The Id of the share is part of the state which means it is active.
-            //  - The callback Id is higher than the next callback Id (the next callback Id is the Id used next in execution round).
+            //  - The callback Id is higher than the next callback Id (the next callback Id is the Id used next in execution round), but
+            //    not higher that `MAX_NUMBER_OF_REQUESTS_AHEAD`.
             //    Receiving an callback Id higher is possible because the priority fn is updated periodically (every 3s) with the latest state
             //    and can therefore store stale `known_request_ids` and stale `next_callback_id`.
-            if known_request_ids.contains(&id.content.id) || id.content.id >= next_callback_id {
+            if known_request_ids.contains(&id.content.id)
+                || (id.content.id >= next_callback_id
+                    && id.content.id <= highest_accepted_request_id)
+            {
                 Priority::FetchNow
+            } else if id.content.id > highest_accepted_request_id {
+                Priority::Stash
             } else {
                 Priority::Drop
             }

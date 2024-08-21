@@ -12,6 +12,7 @@
     "ic-owners-owners": "owners-owners",
     "idx": "eng-idx-bots",
     "InfraSec": "eng-infrasec",
+    "languages": "eng-motoko",
     "networking": "eng-networking",
     "nns-team": "eng-nns",
     "node": "eng-node-prs",

@@ -14,9 +14,6 @@ chrono = { workspace = true }
 futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic_consensus_system_test_utils = { path = "./utils" }
-ic_consensus_system_test_catch_up_test_common = { path = "./catch_up_test_common" }
-ic_consensus_system_test_liveness_test_common = { path = "./liveness_test_common" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
@@ -25,13 +22,16 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
 ic-types = { path = "../../types/types" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
+ic_consensus_system_test_catch_up_test_common = { path = "./catch_up_test_common" }
+ic_consensus_system_test_liveness_test_common = { path = "./liveness_test_common" }
+ic_consensus_system_test_utils = { path = "./utils" }
 k256 = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 reqwest = { workspace = true }
-serde_json = { workspace = true }
 serde_cbor = { workspace = true }
+serde_json = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }

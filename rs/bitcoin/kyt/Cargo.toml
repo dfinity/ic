@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-candid = { workspace = true }
-ic-cdk = { workspace = true }
 bitcoin = { workspace = true }
+candid = { workspace = true }
 futures = { workspace = true }
+ic-cdk = { workspace = true }
