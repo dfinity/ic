@@ -1724,50 +1724,9 @@ fn deserializing_stream_fails_for_bad_reject_signals() {
         messages_begin: 0,
         messages: Vec::new(),
         signals_end: 153,
-        deprecated_reject_signals: Vec::new(),
         reject_signals: Vec::new(),
         reverse_stream_flags: None,
     };
-
-    // TODO: [MR-577] remove this once all replicas have updated.
-    // Deserializing a stream with duplicate deprecated reject signals should fail.
-    let bad_stream = pb_queues::Stream {
-        deprecated_reject_signals: vec![1, 1],
-        ..stream.clone()
-    };
-    let deserialized_result: Result<Stream, _> = bad_stream.try_into();
-    assert_matches!(
-        deserialized_result,
-        Err(ProxyDecodeError::Other(err_msg)) if err_msg == "reject signals not strictly sorted, received [1, 1]"
-    );
-
-    // TODO: [MR-577] remove this once all replicas have updated.
-    // Deserializing a stream with descending deprecated reject signals should fail.
-    let bad_stream = pb_queues::Stream {
-        deprecated_reject_signals: vec![1, 0],
-        ..stream.clone()
-    };
-    let deserialized_result: Result<Stream, _> = bad_stream.try_into();
-    assert_matches!(
-        deserialized_result,
-        Err(ProxyDecodeError::Other(err_msg)) if err_msg == "reject signals not strictly sorted, received [1, 0]"
-    );
-
-    // TODO: [MR-577] remove this once all replicas have updated.
-    // Deserializing a stream with both deprecated and contemporary reject signals should fail.
-    let bad_stream = pb_queues::Stream {
-        deprecated_reject_signals: vec![0],
-        reject_signals: vec![pb_queues::RejectSignal {
-            reason: 1,
-            index: 0,
-        }],
-        ..stream.clone()
-    };
-    let deserialized_result: Result<Stream, _> = bad_stream.try_into();
-    assert_matches!(
-        deserialized_result,
-        Err(ProxyDecodeError::Other(err_msg)) if err_msg == "both contemporary and deprecated signals are populated got `reject_signals` [RejectSignal { reason: CanisterMigrating, index: 0 }], `deprecated_reject_signals` [0]"
-    );
 
     // Deserializing a stream with duplicate reject signals (by index) should fail.
     let bad_stream = pb_queues::Stream {
