@@ -7,15 +7,17 @@ source "$NNS_TOOLS_DIR/lib/include.sh"
 help() {
     print_green "
 Usage: $0 <PROPOSAL_FILE> <NEURON_ID>
-    PROPOSAL_FILE: File with proposal created by ./prepare-mainnet-upgrade-proposal-text.sh (or formatted in that way)
+    PROPOSAL_FILE: File with proposal created by
+     ./prepare-mainnet-upgrade-proposal-text.sh (or formatted in that way)
     NEURON_ID: Your mainnet neuron ID, associated with your HSM
 
-  This script will create a proposal on mainnet from a given proposal text.
-  It outputs the values for confirmation, and ensures that the target version matches the target hash.
+  Environment Variables:
+   DRY_RUN: If set to true, no proposal will be created, but other than that,
+    this script will do as much as it would otherwise.
 
-  For dry runs, do
-
-      DRY_RUN=true $0 ...
+  This script will create a proposal on mainnet from a given proposal text. It
+  outputs the values for confirmation, and ensures that the target version
+  matches the target hash.
   "
     exit 1
 }
@@ -28,10 +30,6 @@ PROPOSAL_FILE=$1
 NEURON_ID=$2
 
 DRY_RUN="${DRY_RUN:-false}"
-
-echo_line() {
-    print_blue "================================================================================"
-}
 
 submit_nns_upgrade_proposal_mainnet() {
     ensure_variable_set IC_ADMIN
