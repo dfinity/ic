@@ -337,12 +337,6 @@ fn canister_post_upgrade() {
     println!("{}Completed post upgrade", LOG_PREFIX);
 }
 
-// TODO[NNS1-2997]: Remove this function once the migration is completed.
-// #[heartbeat]
-// async fn heartbeat() {
-//     SnsWasmCanister::populate_wasm_metadata(&SNS_WASM).await
-// }
-
 #[export_name = "canister_update add_wasm"]
 fn add_wasm() {
     over(candid_one, add_wasm_)

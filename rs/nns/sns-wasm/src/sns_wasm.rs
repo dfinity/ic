@@ -2205,7 +2205,7 @@ mod test {
     }
 
     // Adds section "icp:[public|private] $name$contents" to `wasm`, returning `wasm`'s new hash.
-    fn annotate_wasm_with_metadata(
+    fn annotate_wasm_with_metadata_and_return_new_hash(
         wasm: &mut SnsWasm,
         is_public: bool,
         name: &str,
@@ -2221,7 +2221,12 @@ mod test {
         T: ToString,
     {
         let mut wasm = smallest_valid_wasm();
-        annotate_wasm_with_metadata(&mut wasm, true, &wasm_id.to_string(), vec![]);
+        annotate_wasm_with_metadata_and_return_new_hash(
+            &mut wasm,
+            true,
+            &wasm_id.to_string(),
+            vec![],
+        );
         wasm
     }
 
@@ -5009,7 +5014,7 @@ mod test {
         use pretty_assertions::assert_eq;
 
         // Gzips a wasm, returning the hash of its compressed representation.
-        fn gzip_wasm(wasm: &mut SnsWasm) -> Vec<u8> {
+        fn gzip_wasm_and_return_new_hash(wasm: &mut SnsWasm) -> Vec<u8> {
             wasm.wasm = wasm_helpers::gzip_wasm(&wasm.wasm[..]);
             Sha256::hash(&wasm.wasm).to_vec()
         }
@@ -5097,7 +5102,7 @@ mod test {
             let git_commit_id = git_commit_id.as_bytes();
 
             let mut wasm = smallest_valid_wasm();
-            let hash = annotate_wasm_with_metadata(
+            let hash = annotate_wasm_with_metadata_and_return_new_hash(
                 &mut wasm,
                 true,
                 "git_commit_id",
@@ -5140,13 +5145,13 @@ mod test {
             let mut wasm = smallest_valid_wasm();
 
             let hash = {
-                annotate_wasm_with_metadata(
+                annotate_wasm_with_metadata_and_return_new_hash(
                     &mut wasm,
                     true,
                     "git_commit_id",
                     git_commit_id.to_vec(),
                 );
-                annotate_wasm_with_metadata(
+                annotate_wasm_with_metadata_and_return_new_hash(
                     &mut wasm,
                     false,
                     "other_contents",
@@ -5194,13 +5199,13 @@ mod test {
             let mut wasm = smallest_valid_wasm();
 
             let hash = {
-                annotate_wasm_with_metadata(
+                annotate_wasm_with_metadata_and_return_new_hash(
                     &mut wasm,
                     true,
                     "git_commit_id",
                     git_commit_id.to_vec(),
                 );
-                gzip_wasm(&mut wasm)
+                gzip_wasm_and_return_new_hash(&mut wasm)
             };
 
             let mut canister = new_wasm_canister();
