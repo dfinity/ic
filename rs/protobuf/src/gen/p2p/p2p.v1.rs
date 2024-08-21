@@ -27,7 +27,7 @@ pub struct SlotUpdate {
     pub commit_id: u64,
     #[prost(uint64, tag = "2")]
     pub slot_id: u64,
-    #[prost(oneof = "slot_update::Update", tags = "3, 4")]
+    #[prost(oneof = "slot_update::Update", tags = "3, 5")]
     pub update: ::core::option::Option<slot_update::Update>,
 }
 /// Nested message and enum types in `SlotUpdate`.
@@ -37,13 +37,9 @@ pub mod slot_update {
     pub enum Update {
         #[prost(bytes, tag = "3")]
         Artifact(::prost::alloc::vec::Vec<u8>),
-        #[prost(message, tag = "4")]
-        Advert(super::Advert),
+        /// ID of the artifact the sending peer has.
+        /// The ID can be used to explicitly fetch the artifact.
+        #[prost(bytes, tag = "5")]
+        Id(::prost::alloc::vec::Vec<u8>),
     }
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Advert {
-    #[prost(bytes = "vec", tag = "1")]
-    pub id: ::prost::alloc::vec::Vec<u8>,
 }

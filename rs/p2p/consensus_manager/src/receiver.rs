@@ -90,8 +90,8 @@ async fn update_handler<Artifact: PbArtifact>(
         commit_id: CommitId::from(pb_slot_update.commit_id),
         slot_number: SlotNumber::from(pb_slot_update.slot_id),
         update: match pb_slot_update.update {
-            Some(pb::slot_update::Update::Advert(advert)) => {
-                let id: Artifact::Id = Artifact::PbId::decode(advert.id.as_slice())
+            Some(pb::slot_update::Update::Id(id)) => {
+                let id: Artifact::Id = Artifact::PbId::decode(id.as_slice())
                     .map_err(|e| UpdateHandlerError::IdDecoding(e))
                     .and_then(|pb_id| {
                         pb_id
