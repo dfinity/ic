@@ -952,6 +952,43 @@ fn test_subnet_read_state() {
     })
 }
 
+/// Tests that HTTP gateway can handle requests with IP address hosts.
+#[test]
+fn test_gateway_ip_addr_host() {
+    // Create PocketIC instance with one NNS subnet and one app subnet.
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    // Retrieve the app subnet from the topology.
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+
+    // We create a canister on the app subnet.
+    pic.create_canister_on_subnet(None, None, app_subnet);
+
+    let mut endpoint = pic.make_live(None);
+    endpoint
+        .set_ip_host(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))
+        .unwrap();
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    rt.block_on(async {
+        let agent = ic_agent::Agent::builder()
+            .with_url(endpoint.clone())
+            .build()
+            .unwrap();
+        agent.fetch_root_key().await.unwrap();
+
+        let metrics = agent.read_state_subnet_metrics(app_subnet).await.unwrap();
+        assert_eq!(metrics.num_canisters, 1);
+    })
+}
+
 #[test]
 fn test_unresponsive_gateway_backend() {
     // Create PocketIC instance with one NNS subnet and one app subnet.

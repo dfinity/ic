@@ -9,14 +9,11 @@ use crate::state_api::canister_id::{self, DomainResolver, ResolvesDomain};
 use crate::{InstanceId, OpId, Operation};
 use axum::{
     extract::{Request as AxumRequest, State},
-    middleware::Next,
     response::{IntoResponse, Response},
-    Extension,
 };
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
 use base64;
-use candid::Principal;
 use fqdn::{fqdn, FQDN};
 use futures::future::Shared;
 use http::{
@@ -409,11 +406,6 @@ const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister
 const MAX_REQUEST_BODY_SIZE: usize = 10 * 1_048_576;
 const MINUTE: Duration = Duration::from_secs(60);
 
-#[derive(Clone)]
-struct RequestCtx {
-    pub verify: bool,
-}
-
 fn layer(methods: &[Method]) -> CorsLayer {
     CorsLayer::new()
         .allow_origin(Any)
@@ -516,15 +508,24 @@ impl HandlerState {
 // Main HTTP->IC request handler
 async fn handler(
     State(state): State<Arc<HandlerState>>,
-    canister_id: Option<Extension<Principal>>,
     host_canister_id: Option<canister_id::HostHeader>,
     query_param_canister_id: Option<canister_id::QueryParam>,
     referer_host_canister_id: Option<canister_id::RefererHeaderHost>,
     referer_query_param_canister_id: Option<canister_id::RefererHeaderQueryParam>,
-    Extension(ctx): Extension<Arc<RequestCtx>>,
     request: AxumRequest,
 ) -> Result<Response, ErrorCause> {
-    let canister_id = canister_id.map(|v| v.0);
+    // Extract the authority
+    let Some(authority) = extract_authority(&request) else {
+        return Err(ErrorCause::NoAuthority);
+    };
+
+    // Resolve the domain
+    let lookup = state
+        .resolver
+        .resolve(&authority)
+        .ok_or(ErrorCause::UnknownDomain)?;
+
+    let canister_id = lookup.canister_id;
     let host_canister_id = host_canister_id.map(|v| v.0);
     let query_param_canister_id = query_param_canister_id.map(|v| v.0);
     let referer_host_canister_id = referer_host_canister_id.map(|v| v.0);
@@ -561,7 +562,7 @@ async fn handler(
         // Execute the request
         let mut req = state.client.request(args);
         // Skip verification if it's disabled globally or if it is a "raw" request.
-        req.unsafe_set_skip_verification(!ctx.verify);
+        req.unsafe_set_skip_verification(!lookup.verify);
         req.send().await
     };
 
@@ -587,45 +588,6 @@ fn extract_authority(request: &AxumRequest) -> Option<FQDN> {
                 .and_then(|x| x.split(':').next())
         })
         .and_then(|x| FQDN::from_str(x).ok())
-}
-
-async fn validate_middleware(
-    State(resolver): State<Arc<dyn ResolvesDomain>>,
-    mut request: AxumRequest,
-    next: Next,
-) -> Result<impl IntoResponse, ErrorCause> {
-    // Extract the authority
-    let Some(authority) = extract_authority(&request) else {
-        return Err(ErrorCause::NoAuthority);
-    };
-
-    // Resolve the domain
-    let lookup = resolver
-        .resolve(&authority)
-        .ok_or(ErrorCause::UnknownDomain)?;
-
-    // Inject canister_id separately if it was resolved
-    if let Some(v) = lookup.canister_id {
-        request.extensions_mut().insert(v);
-    }
-
-    // Inject request context
-    // TODO remove Arc?
-    let ctx = Arc::new(RequestCtx {
-        verify: lookup.verify,
-    });
-    request.extensions_mut().insert(ctx.clone());
-
-    // Execute the request
-    let mut response = next.run(request).await;
-
-    // Inject the same into the response
-    response.extensions_mut().insert(ctx);
-    if let Some(v) = lookup.canister_id {
-        response.extensions_mut().insert(v);
-    }
-
-    Ok(response)
 }
 
 // END ADAPTED from ic-gateway
@@ -728,7 +690,6 @@ impl ApiState {
     ) -> Result<HttpGatewayInfo, String> {
         use crate::state_api::routes::verify_cbor_content_header;
         use axum::extract::{DefaultBodyLimit, Path, State};
-        use axum::middleware::from_fn_with_state;
         use axum::routing::{get, post};
         use axum::Router;
         use http_body_util::Full;
@@ -929,8 +890,6 @@ impl ApiState {
             );
             let state_handler = Arc::new(HandlerState::new(client, domain_resolver.clone()));
 
-            let domain_resolver = Arc::new(domain_resolver) as Arc<dyn ResolvesDomain>;
-
             let router_api_v2 = Router::new()
                 .route(
                     "/canister/:ecid/call",
@@ -980,7 +939,6 @@ impl ApiState {
                 )
                 .layer(DefaultBodyLimit::disable())
                 .layer(cors_layer())
-                .layer(from_fn_with_state(domain_resolver, validate_middleware))
                 .with_state(replica_url.trim_end_matches('/').to_string())
                 .into_make_service();
 
