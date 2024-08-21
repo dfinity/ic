@@ -50,7 +50,7 @@ ALL_BINARIES = {
     # needed by DRE for release qualification
     "ic-workload-generator": "//rs/workload_generator:ic-workload-generator",
     # needed by DRE for release qualification
-    "from-config-binary": "//rs/tests/testing_verification/testnets:from-config-binary",
+    "from-config-binary": "//rs/tests/testing_verification/testnets:from_config_binary",
 }
 
 # test binaries or binaries using test utils
