@@ -507,8 +507,7 @@ fn compute_priority(
                 return Priority::FetchNow;
             }
 
-            let height = data.get_ref().height;
-            if height <= args.finalized_height + Height::from(LOOK_AHEAD) {
+            if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
                 Priority::FetchNow
             } else {
                 Priority::Stash
