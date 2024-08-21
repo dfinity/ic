@@ -171,9 +171,18 @@ impl HttpHandlerMetrics {
             ingress_watcher_wait_for_certification_duration_seconds: metrics_registry.histogram(
                 "replica_http_ingress_watcher_wait_for_certification_duration_seconds",
                 "The duration the call v3 handler waits for a message to complete execution at some height, h, and for h to become certified.",
-                // We have the final bucket at 10s as that is the maximum time the handler waits for certification
-                // 0.75s - 1.10s - 1.45s - 1.70s - ... - 10.5s
-                add_bucket(10.0, linear_buckets(0.75, 0.35, 30)),
+                // 40 buckets
+                // 0.70s - 0.90s - ... - 6.7s - 7.0s - 7.5s - ... - 12s
+                {
+                    let mut buckets = linear_buckets(0.75, 0.2, 30);
+                    // Extend the buckets with 7.0s - 12.0s
+                    for value in linear_buckets(7.0, 0.5, 10) {
+                        buckets = add_bucket(value, buckets);
+                    }
+
+                    buckets
+                },
+
             ),
             call_v3_certificate_status_total: metrics_registry.int_counter_vec(
                 "replica_http_call_v3_certificate_status_total",
