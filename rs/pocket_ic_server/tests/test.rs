@@ -1043,7 +1043,7 @@ fn test_unresponsive_gateway_backend() {
     let client = Client::new();
 
     // Create PocketIC instance with one NNS subnet and one app subnet.
-    let (backend_server_url, mut backend_process) = start_server_helper(None, None, false);
+    let (backend_server_url, mut backend_process) = start_server_helper(None, None, false, false);
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_application_subnet()
@@ -1051,7 +1051,7 @@ fn test_unresponsive_gateway_backend() {
         .build();
 
     // Create HTTP gateway on a different gateway server.
-    let (gateway_server_url, _) = start_server_helper(None, None, false);
+    let (gateway_server_url, _) = start_server_helper(None, None, false, false);
     let create_gateway_endpoint = gateway_server_url.join("http_gateway").unwrap();
     let backend_instance_url = backend_server_url
         .join(&format!("instances/{}/", pic.instance_id()))
@@ -1105,7 +1105,7 @@ fn test_unresponsive_gateway_backend() {
 #[test]
 fn test_invalid_gateway_backend() {
     // Create HTTP gateway with an invalid backend URL
-    let (gateway_server_url, _) = start_server_helper(None, None, false);
+    let (gateway_server_url, _) = start_server_helper(None, None, false, false);
     let create_gateway_endpoint = gateway_server_url.join("http_gateway").unwrap();
     let backend_url = "http://240.0.0.0";
     let http_gateway_config = HttpGatewayConfig {
