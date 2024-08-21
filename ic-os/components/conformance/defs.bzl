@@ -1,5 +1,3 @@
-load("@rules_python//python:defs.bzl", "py_test")
-
 # Adds a component conformance test rule that checks that component_files
 # only refer to file paths that are available in the image.
 def component_conformance_test(name, component_files, image):
