@@ -65,11 +65,6 @@ fn main() -> io::Result<()> {
     // Ensure that the hardcoded constant matches the OS page size.
     assert_eq!(ic_sys::sysconf_page_size(), PAGE_SIZE);
 
-    // Produce a thread dump and exit if this is a child process created for this
-    // purpose.
-    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    ic_backtrace::init();
-
     // At this point we need to setup a new process group. This is
     // done to ensure all our children processes belong to the same
     // process group (as policy wise in production we restrict setpgid

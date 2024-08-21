@@ -71,10 +71,10 @@ impl<Pool: CertificationPool> PriorityFnFactory<CertificationMessage, Pool>
     fn get_priority_function(
         &self,
         certification_pool: &Pool,
-    ) -> PriorityFn<CertificationMessageId, ()> {
+    ) -> PriorityFn<CertificationMessageId> {
         let certified_heights = certification_pool.certified_heights();
         let cup_height = self.consensus_pool_cache.catch_up_package().height();
-        Box::new(move |id, _| {
+        Box::new(move |id| {
             let height = id.height;
             // We drop all artifacts below the CUP height or those for which we have a full
             // certification already.
@@ -760,15 +760,12 @@ mod tests {
                     (4, Priority::FetchNow),
                 ] {
                     assert_eq!(
-                        prio_fn(
-                            &CertificationMessageId {
-                                height: Height::from(*height),
-                                hash: CertificationMessageHash::Certification(CryptoHashOf::from(
-                                    CryptoHash(Vec::new())
-                                )),
-                            },
-                            &()
-                        ),
+                        prio_fn(&CertificationMessageId {
+                            height: Height::from(*height),
+                            hash: CertificationMessageHash::Certification(CryptoHashOf::from(
+                                CryptoHash(Vec::new())
+                            )),
+                        },),
                         *prio
                     );
                 }

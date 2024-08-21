@@ -1,5 +1,5 @@
 use crate::{
-    decoder_config, enable_new_canister_management_topics,
+    are_set_visibility_proposals_enabled, decoder_config, enable_new_canister_management_topics,
     governance::{
         merge_neurons::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
@@ -18,7 +18,10 @@ use crate::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
         PolynomialNeuronsFundParticipation, SwapParticipationLimits,
     },
-    node_provider_rewards::{latest_node_provider_rewards, record_node_provider_rewards},
+    node_provider_rewards::{
+        latest_node_provider_rewards, list_node_provider_rewards, record_node_provider_rewards,
+        DateRangeFilter,
+    },
     pb::v1::{
         add_or_remove_node_provider::Change,
         archived_monthly_node_provider_rewards,
@@ -185,6 +188,8 @@ pub const MAX_NUMBER_OF_NEURONS: usize = 350_000;
 
 /// The maximum number results returned by the method `list_proposals`.
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
+
+const MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS: usize = 24;
 
 /// The number of e8s per ICP;
 const E8S_PER_ICP: u64 = TOKEN_SUBDIVIDABLE_BY;
@@ -4308,6 +4313,21 @@ impl Governance {
         self.heap_data.most_recent_monthly_node_provider_rewards = Some(most_recent_rewards);
     }
 
+    pub fn list_node_provider_rewards(
+        &self,
+        date_filter: Option<DateRangeFilter>,
+    ) -> Vec<MonthlyNodeProviderRewards> {
+        list_node_provider_rewards(MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS, date_filter)
+            .into_iter()
+            .map(|archived| match archived.version {
+                Some(archived_monthly_node_provider_rewards::Version::Version1(v1)) => {
+                    v1.rewards.unwrap()
+                }
+                _ => panic!("Should not be possible!"),
+            })
+            .collect()
+    }
+
     pub fn get_most_recent_monthly_node_provider_rewards(
         &self,
     ) -> Option<MonthlyNodeProviderRewards> {
@@ -4830,7 +4850,10 @@ impl Governance {
         manage_neuron: &ManageNeuron,
     ) -> Result<(), GovernanceError> {
         // TODO(NNS1-3228): Delete this.
-        if manage_neuron.is_set_visibility() {
+        if manage_neuron.is_set_visibility() &&
+            // But SetVisibility proposals are disabled
+            !are_set_visibility_proposals_enabled()
+        {
             return Err(GovernanceError::new_with_message(
                 ErrorType::Unavailable,
                 "Setting neuron visibility via proposal is not allowed yet, \
