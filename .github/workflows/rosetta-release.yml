@@ -13,6 +13,10 @@ on:
 permissions:
   contents: write
 
+env:
+  ROSETTA_RELEASE_VERSION: ${{ github.event.inputs.rosetta_release_version }}
+  ICRC_ROSETTA_RELEASE_VERSION: ${{ github.event.inputs.icrc_rosetta_release_version }}
+
 jobs:
   rosetta-release:
     runs-on: ubuntu-latest
@@ -35,10 +39,38 @@ jobs:
           git config --global user.name "IDX GitHub Automation"
           git config --global user.email "idx@dfinity.org"
 
+      - name: Check rosetta release version
+        if: ${{ github.event.inputs.rosetta_release_version }}
+        run: |
+          # - Query the current rosetta version
+          bazel build //rs/rosetta-api:version
+          readonly CURRENT_ROSETTA_VERSION="$(cat "$(bazel cquery --output=files //rs/rosetta-api:version)")"
+
+          # Compare the current Rosetta version with the ROSETTA_RELEASE_VERSION
+          if [ "$CURRENT_ROSETTA_VERSION" != "$ROSETTA_RELEASE_VERSION" ]; then
+            echo "Error: The Bazel query output does not match the rosetta_release_version input."
+            echo "Bazel query output: ${CURRENT_ROSETTA_VERSION}"
+            echo "rosetta_release_version input: ${ROSETTA_RELEASE_VERSION}"
+            exit 1
+          fi
+
+      - name: Check icrc rosetta release version
+        if: ${{ github.event.inputs.icrc_rosetta_release_version }}
+        run: |
+          # - Query the current rosetta version
+          bazel build //rs/rosetta-api/icrc1/rosetta:version
+          readonly ICRC_ROSETTA_RELEASE_VERSION="$(cat "$(bazel cquery --output=files //rs/rosetta-api/icrc1/rosetta:version)")"
+
+          # Compare the current Rosetta version with the ICRC_ROSETTA_RELEASE_VERSION
+          if [ "$CURRENT_ROSETTA_VERSION" != "${ICRC_ROSETTA_RELEASE_VERSION}" ]; then
+            echo "Error: The Bazel query output does not match the rosetta_release_version input."
+            echo "Bazel query output: ${ICRC_ROSETTA_RELEASE_VERSION}"
+            echo "rosetta_release_version input: ${ICRC_ROSETTA_RELEASE_VERSION}"
+            exit 1
+          fi
+
       - name: Build and publish rosetta image
         if: ${{ github.event.inputs.rosetta_release_version }}
-        env:
-          ROSETTA_RELEASE_VERSION: ${{ github.event.inputs.rosetta_release_version }}
         run: |
           set -euo pipefail
           ROSETTA_API_DATE=$(date +"%Y%m%d")
@@ -50,8 +82,6 @@ jobs:
 
       - name: Build and publish icrc rosetta image
         if: ${{ github.event.inputs.icrc_rosetta_release_version  }} 
-        env:
-          ICRC_ROSETTA_RELEASE_VERSION: ${{ github.event.inputs.icrc_rosetta_release_version  }}
         run: |
           set -euo pipefail
           for tag in "v${ROSETTA_RELEASE_VERSION}" latest; do
