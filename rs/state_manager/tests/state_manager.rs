@@ -1805,7 +1805,7 @@ fn can_keep_latest_verified_checkpoint_after_removal_with_unverified_checkpoints
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![height(0), height(6), height(8), height(9)],
+            vec![height(0), height(6), height(9)],
         );
 
         assert_eq!(height(9), state_manager.latest_state_height());
