@@ -9,7 +9,7 @@ use std::{
 use axum::http::{Response, StatusCode};
 use bytes::Bytes;
 use ic_artifact_downloader::FetchArtifact;
-use ic_interfaces::p2p::consensus::{ArtifactAssembler, Priority};
+use ic_interfaces::p2p::consensus::{ArtifactAssembler, FilterValue};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::{
@@ -38,12 +38,12 @@ async fn priority_from_stash_to_fetch() {
     mock_pfn
         .expect_get_priority_function()
         .times(1)
-        .returning(|_| Box::new(|_, _| Priority::Stash))
+        .returning(|_| Box::new(|_| FilterValue::MaybeWantsLater))
         .in_sequence(&mut seq);
     mock_pfn
         .expect_get_priority_function()
         .times(1)
-        .returning(|_| Box::new(|_, _| Priority::FetchNow))
+        .returning(|_| Box::new(|_| FilterValue::Wants))
         .in_sequence(&mut seq);
 
     let mut mock_transport = MockTransport::new();
@@ -69,7 +69,7 @@ async fn priority_from_stash_to_fetch() {
     let mut mock_peers = MockPeers::default();
     mock_peers.expect_peers().return_const(vec![NODE_1]);
     let artifact = fetch_artifact
-        .assemble_message(0, (), None, mock_peers)
+        .assemble_message(0, None, mock_peers)
         .await
         .unwrap();
     assert_eq!(artifact, (U64Artifact::id_to_msg(0, 1024), NODE_1));
@@ -89,23 +89,23 @@ async fn fetch_to_stash_to_fetch() {
     let return_artifact_clone = return_artifact.clone();
     let mut mock_pfn = MockPriorityFnFactory::new();
     let priorities = Arc::new(Mutex::new(vec![
-        Priority::FetchNow,
-        Priority::Stash,
-        Priority::Stash,
-        Priority::Stash,
+        FilterValue::Wants,
+        FilterValue::MaybeWantsLater,
+        FilterValue::MaybeWantsLater,
+        FilterValue::MaybeWantsLater,
     ]));
     mock_pfn.expect_get_priority_function().returning(move |_| {
         let priorities = priorities.clone();
 
         let p = {
             let mut priorities_g = priorities.lock().unwrap();
-            let p = priorities_g.pop().unwrap_or(Priority::FetchNow);
+            let p = priorities_g.pop().unwrap_or(FilterValue::Wants);
             if priorities_g.is_empty() {
                 return_artifact.store(true, Ordering::SeqCst);
             }
             p
         };
-        Box::new(move |_, _| p)
+        Box::new(move |_| p)
     });
     let mut mock_transport = MockTransport::new();
     mock_transport.expect_rpc().returning(move |_, _| {
@@ -137,7 +137,7 @@ async fn fetch_to_stash_to_fetch() {
     let mut mock_peers = MockPeers::default();
     mock_peers.expect_peers().return_const(vec![NODE_1]);
     let artifact = fetch_artifact
-        .assemble_message(0, (), None, mock_peers)
+        .assemble_message(0, None, mock_peers)
         .await
         .unwrap();
     assert_eq!(artifact, (U64Artifact::id_to_msg(0, 1024), NODE_1));
@@ -189,7 +189,7 @@ async fn invalid_artifact_not_accepted() {
     let mut mock_pfn = MockPriorityFnFactory::new();
     mock_pfn
         .expect_get_priority_function()
-        .returning(|_| Box::new(|_, _| Priority::FetchNow));
+        .returning(|_| Box::new(|_| FilterValue::Wants));
     let (fetch_artifact, _router) = FetchArtifact::new(
         no_op_logger(),
         Handle::current(),
@@ -201,7 +201,7 @@ async fn invalid_artifact_not_accepted() {
     let mut mock_peers = MockPeers::default();
     mock_peers.expect_peers().return_const(vec![NODE_1]);
     let artifact = fetch_artifact
-        .assemble_message(0, (), None, mock_peers)
+        .assemble_message(0, None, mock_peers)
         .await
         .unwrap();
     assert_eq!(artifact, (U64Artifact::id_to_msg(0, 1024), NODE_1));
@@ -223,12 +223,12 @@ async fn priority_from_stash_to_drop() {
     mock_pfn
         .expect_get_priority_function()
         .times(1)
-        .returning(|_| Box::new(|_, _| Priority::Stash))
+        .returning(|_| Box::new(|_| FilterValue::MaybeWantsLater))
         .in_sequence(&mut seq);
     mock_pfn
         .expect_get_priority_function()
         .times(1)
-        .returning(|_| Box::new(|_, _| Priority::Drop))
+        .returning(|_| Box::new(|_| FilterValue::Unwanted))
         .in_sequence(&mut seq);
 
     let mut mock_transport = MockTransport::new();
@@ -250,7 +250,7 @@ async fn priority_from_stash_to_drop() {
     let mut mock_peers = MockPeers::default();
     mock_peers.expect_peers().return_const(vec![NODE_1]);
     fetch_artifact
-        .assemble_message(0, (), None, mock_peers)
+        .assemble_message(0, None, mock_peers)
         .await
         .unwrap_err();
 }

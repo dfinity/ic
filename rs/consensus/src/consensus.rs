@@ -26,7 +26,7 @@ mod proptests;
 use crate::consensus::{
     block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker,
     dkg_key_manager::DkgKeyManager, finalizer::Finalizer, metrics::ConsensusMetrics,
-    notary::Notary, payload_builder::PayloadBuilderImpl, priority::get_priority_function,
+    notary::Notary, payload_builder::PayloadBuilderImpl, priority::get_filter_function,
     purger::Purger, random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
     share_aggregator::ShareAggregator, validator::Validator,
 };
@@ -41,7 +41,7 @@ use ic_interfaces::{
     idkg::IDkgPool,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
-    p2p::consensus::{ChangeSetProducer, PriorityFn, PriorityFnFactory},
+    p2p::consensus::{ChangeSetProducer, FilterFn, FilterFnFactory},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
@@ -588,10 +588,10 @@ impl ConsensusGossipImpl {
     }
 }
 
-impl<Pool: ConsensusPool> PriorityFnFactory<ConsensusMessage, Pool> for ConsensusGossipImpl {
+impl<Pool: ConsensusPool> FilterFnFactory<ConsensusMessage, Pool> for ConsensusGossipImpl {
     /// Return a priority function that matches the given consensus pool.
-    fn get_priority_function(&self, pool: &Pool) -> PriorityFn<ConsensusMessageId, ()> {
-        get_priority_function(pool, self.message_routing.expected_batch_height())
+    fn get_filter_function(&self, pool: &Pool) -> FilterFn<ConsensusMessageId> {
+        get_filter_function(pool, self.message_routing.expected_batch_height())
     }
 }
 

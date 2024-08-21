@@ -3,7 +3,7 @@ use axum::http::{Request, Response};
 use bytes::Bytes;
 use ic_interfaces::p2p::{
     consensus::{
-        Aborted, ArtifactAssembler, Peers, PriorityFn, PriorityFnFactory, ValidatedPoolReader,
+        Aborted, ArtifactAssembler, FilterFn, FilterFnFactory, Peers, ValidatedPoolReader,
     },
     state_sync::{AddChunkError, Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient},
 };
@@ -75,10 +75,10 @@ mock! {
 }
 
 mock! {
-    pub PriorityFnFactory<A: IdentifiableArtifact> {}
+    pub FilterFnFactory<A: IdentifiableArtifact> {}
 
-    impl<A: IdentifiableArtifact + Sync> PriorityFnFactory<A, MockValidatedPoolReader<A>> for PriorityFnFactory<A> {
-        fn get_priority_function(&self, pool: &MockValidatedPoolReader<A>) -> PriorityFn<A::Id, A::Attribute>;
+    impl<A: IdentifiableArtifact + Sync> FilterFnFactory<A, MockValidatedPoolReader<A>> for FilterFnFactory<A> {
+        fn get_filter_function(&self, pool: &MockValidatedPoolReader<A>) -> FilterFn<A::Id>;
     }
 }
 
@@ -102,7 +102,6 @@ mock! {
         fn assemble_message<P: Peers + Send + 'static>(
             &self,
             id: u64,
-            attr: (),
             artifact: Option<(U64Artifact, NodeId)>,
             peers: P,
         ) -> impl std::future::Future<Output = Result<(U64Artifact, NodeId), Aborted>> + Send;

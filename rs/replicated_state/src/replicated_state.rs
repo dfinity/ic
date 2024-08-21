@@ -141,7 +141,7 @@ pub enum StateError {
 ///    (e.g. in order to efficiently implement per destination limits).
 #[derive(Debug)]
 struct OutputIterator<'a> {
-    /// Priority queue of non-empty canister iterators. The next message will be
+    /// FilterValue queue of non-empty canister iterators. The next message will be
     /// popped / peeked from the first iterator.
     canister_iterators: VecDeque<CanisterOutputQueuesIterator<'a>>,
 

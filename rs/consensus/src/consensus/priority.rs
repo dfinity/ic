@@ -3,14 +3,14 @@
 
 use ic_consensus_utils::{pool_reader::PoolReader, ACCEPTABLE_VALIDATION_CUP_GAP};
 use ic_interfaces::consensus_pool::ConsensusPool;
-use ic_interfaces::p2p::consensus::{Priority, Priority::*, PriorityFn};
+use ic_interfaces::p2p::consensus::{FilterValue, FilterValue::*, FilterFn};
 use ic_types::{artifact::ConsensusMessageId, consensus::ConsensusMessageHash, Height};
 
 /// Return a priority function that matches the given consensus pool.
-pub fn get_priority_function(
+pub fn get_filter_function(
     pool: &dyn ConsensusPool,
     expected_batch_height: Height,
-) -> PriorityFn<ConsensusMessageId, ()> {
+) -> FilterFn<ConsensusMessageId> {
     let pool_reader = PoolReader::new(pool);
     let cup_height = pool_reader.get_catch_up_height();
     let next_cup_height = pool_reader.get_next_cup_height();
@@ -18,7 +18,7 @@ pub fn get_priority_function(
     let notarized_height = pool_reader.get_notarized_height();
     let beacon_height = pool_reader.get_random_beacon_height();
 
-    Box::new(move |id: &'_ ConsensusMessageId, ()| {
+    Box::new(move |id: &'_ ConsensusMessageId| {
         compute_priority(
             cup_height,
             next_cup_height,
@@ -44,39 +44,39 @@ fn compute_priority(
     notarized_height: Height,
     beacon_height: Height,
     id: &ConsensusMessageId,
-) -> Priority {
+) -> FilterValue {
     let height = id.height;
     // Ignore older than the min of catch-up height and expected_batch_height
     if height < expected_batch_height.min(cup_height) {
-        return Drop;
+        return Unwanted;
     }
     // Stash non-CUP artifacts, as long as they're too far ahead of the next CUP height.
     // This prevents nodes that have fallen behind to exceed their validated pool bounds.
     if !matches!(id.hash, ConsensusMessageHash::CatchUpPackage(_))
         && height > next_cup_height + Height::new(ACCEPTABLE_VALIDATION_CUP_GAP)
     {
-        return Stash;
+        return MaybeWantsLater;
     }
-    // Other decisions depend on type, default is to FetchNow.
+    // Other decisions depend on type, default is to Wants.
     match id.hash {
         ConsensusMessageHash::RandomBeacon(_) | ConsensusMessageHash::RandomBeaconShare(_) => {
             // Ignore old beacon or beacon shares
             if height <= beacon_height {
-                Drop
+                Unwanted
             } else if height <= beacon_height + Height::from(LOOK_AHEAD) {
-                FetchNow
+                Wants
             } else {
-                Stash
+                MaybeWantsLater
             }
         }
         ConsensusMessageHash::NotarizationShare(_) => {
             // Ignore old notarization shares
             if height <= notarized_height {
-                Drop
+                Unwanted
             } else if height <= notarized_height + Height::from(LOOK_AHEAD) {
-                FetchNow
+                Wants
             } else {
-                Stash
+                MaybeWantsLater
             }
         }
         ConsensusMessageHash::Notarization(_)
@@ -86,30 +86,30 @@ fn compute_priority(
         | ConsensusMessageHash::EquivocationProof(_) => {
             // Ignore finalized
             if height <= finalized_height {
-                Drop
+                Unwanted
             } else if height <= notarized_height + Height::from(LOOK_AHEAD) {
-                FetchNow
+                Wants
             } else {
-                Stash
+                MaybeWantsLater
             }
         }
         ConsensusMessageHash::RandomTape(_) | ConsensusMessageHash::RandomTapeShare(_) => {
             if height < expected_batch_height {
-                Drop
+                Unwanted
             } else if height <= finalized_height + Height::from(LOOK_AHEAD) {
-                FetchNow
+                Wants
             } else {
-                Stash
+                MaybeWantsLater
             }
         }
-        ConsensusMessageHash::CatchUpPackage(_) => FetchNow,
+        ConsensusMessageHash::CatchUpPackage(_) => Wants,
         ConsensusMessageHash::CatchUpPackageShare(_) => {
             if height <= cup_height {
-                Drop
+                Unwanted
             } else if height <= finalized_height {
-                FetchNow
+                Wants
             } else {
-                Stash
+                MaybeWantsLater
             }
         }
     }
@@ -153,7 +153,7 @@ mod tests {
             pool.advance_round_normal_operation_no_cup_n(max_validation_height);
 
             let expected_batch_height = Height::from(1);
-            let priority = get_priority_function(&pool, expected_batch_height);
+            let priority = get_filter_function(&pool, expected_batch_height);
 
             // Artifacts at the next height are within look-ahead, but exceed
             // the validator-CUP gap. We should stash them, but not fetch them.
@@ -169,28 +169,28 @@ mod tests {
                 ))),
                 height: block.height(),
             };
-            assert_eq!(priority(&beacon.get_id(), &()), Stash);
-            assert_eq!(priority(&block.get_id(), &()), Stash);
-            assert_eq!(priority(&notarization.get_id(), &()), Stash);
-            assert_eq!(priority(&equivocation_proof_id, &()), Stash);
+            assert_eq!(priority(&beacon.get_id()), Stash);
+            assert_eq!(priority(&block.get_id()), Stash);
+            assert_eq!(priority(&notarization.get_id()), Stash);
+            assert_eq!(priority(&equivocation_proof_id), Stash);
 
             // Regardless of bounds, we should always fetch CUPs.
             let cup_id = ConsensusMessageId {
                 hash: ConsensusMessageHash::CatchUpPackage(CryptoHashOf::new(CryptoHash(vec![]))),
                 height: Height::new(100000000),
             };
-            assert_eq!(priority(&cup_id, &()), FetchNow);
+            assert_eq!(priority(&cup_id), Wants);
 
             // Insert CUP for next summary height and recompute priority function.
             pool.insert_validated(pool.make_catch_up_package(Height::new(dkg_interval + 1)));
-            let priority = get_priority_function(&pool, expected_batch_height);
+            let priority = get_filter_function(&pool, expected_batch_height);
 
             // The artifacts are not outside the validation-CUP gap, and
             // within look-ahead distance. We should fetch them all.
-            assert_eq!(priority(&beacon.get_id(), &()), FetchNow);
-            assert_eq!(priority(&block.get_id(), &()), FetchNow);
-            assert_eq!(priority(&notarization.get_id(), &()), FetchNow);
-            assert_eq!(priority(&equivocation_proof_id, &()), FetchNow);
+            assert_eq!(priority(&beacon.get_id()), Wants);
+            assert_eq!(priority(&block.get_id()), Wants);
+            assert_eq!(priority(&notarization.get_id()), Wants);
+            assert_eq!(priority(&equivocation_proof_id), Wants);
         })
     }
 
@@ -201,11 +201,11 @@ mod tests {
             pool.advance_round_normal_operation_n(2);
 
             let expected_batch_height = Height::from(1);
-            let priority = get_priority_function(&pool, expected_batch_height);
-            // New block ==> FetchNow
+            let priority = get_filter_function(&pool, expected_batch_height);
+            // New block ==> Wants
             pool.insert_validated(pool.make_next_beacon());
             let block = pool.make_next_block();
-            assert_eq!(priority(&block.get_id(), &()), FetchNow);
+            assert_eq!(priority(&block.get_id()), Wants);
 
             // Older than finalized ==> Drop
             let notarization = pool
@@ -214,7 +214,7 @@ mod tests {
                 .get_by_height(Height::from(1))
                 .last()
                 .unwrap();
-            assert_eq!(priority(&notarization.get_id(), &()), Drop);
+            assert_eq!(priority(&notarization.get_id()), Drop);
 
             // Put block into validated pool, notarization in to unvalidated pool
             pool.insert_validated(block.clone());
@@ -224,27 +224,27 @@ mod tests {
             ));
             pool.insert_unvalidated(notarization.clone());
 
-            // Possible duplicate notarization ==> FetchNow
+            // Possible duplicate notarization ==> Wants
             let mut dup_notarization = notarization.clone();
             let dup_notarization_id = dup_notarization.get_id();
             dup_notarization.signature.signers = vec![node_test_id(42)];
             // Move block back to unvalidated after attribute is computed
             pool.purge_validated_below(block.clone());
             pool.insert_unvalidated(block.clone());
-            let priority = get_priority_function(&pool, expected_batch_height);
-            assert_eq!(priority(&dup_notarization_id, &()), FetchNow);
+            let priority = get_filter_function(&pool, expected_batch_height);
+            assert_eq!(priority(&dup_notarization_id), Wants);
 
             // Moving block to validated does not affect result
             pool.remove_unvalidated(block.clone());
             pool.insert_validated(block.clone());
-            let priority = get_priority_function(&pool, expected_batch_height);
-            assert_eq!(priority(&dup_notarization_id, &()), FetchNow);
+            let priority = get_filter_function(&pool, expected_batch_height);
+            assert_eq!(priority(&dup_notarization_id), Wants);
 
-            // Definite duplicate notarization ==> FetchNow but within look ahead window
+            // Definite duplicate notarization ==> Wants but within look ahead window
             pool.insert_validated(notarization.clone());
             pool.remove_unvalidated(notarization);
-            let priority = get_priority_function(&pool, expected_batch_height);
-            assert_eq!(priority(&dup_notarization_id, &()), FetchNow);
+            let priority = get_filter_function(&pool, expected_batch_height);
+            assert_eq!(priority(&dup_notarization_id), Wants);
 
             // Put finalization in the unvalidated pool
             let finalization = Finalization::fake(FinalizationContent::new(
@@ -253,18 +253,18 @@ mod tests {
             ));
             pool.insert_unvalidated(finalization.clone());
 
-            // Possible duplicate finalization ==> FetchNow but within look ahead window
+            // Possible duplicate finalization ==> Wants but within look ahead window
             let mut dup_finalization = finalization.clone();
             let dup_finalization_id = dup_finalization.get_id();
             dup_finalization.signature.signers = vec![node_test_id(42)];
-            let priority = get_priority_function(&pool, expected_batch_height);
-            assert_eq!(priority(&dup_finalization_id, &()), FetchNow);
+            let priority = get_filter_function(&pool, expected_batch_height);
+            assert_eq!(priority(&dup_finalization_id), Wants);
 
             // Once finalized, possible duplicate finalization ==> Drop
             pool.insert_validated(finalization.clone());
             pool.remove_unvalidated(finalization);
-            let priority = get_priority_function(&pool, expected_batch_height);
-            assert_eq!(priority(&dup_finalization_id, &()), Drop);
+            let priority = get_filter_function(&pool, expected_batch_height);
+            assert_eq!(priority(&dup_finalization_id), Unwanted);
 
             // Add notarizations until we reach finalized_height + LOOK_AHEAD.
             for _ in 0..LOOK_AHEAD {
@@ -290,9 +290,9 @@ mod tests {
                     > PoolReader::new(&pool).get_finalized_height().get() + LOOK_AHEAD
             );
             // Recompute priority function since pool content has changed
-            let priority = get_priority_function(&pool, expected_batch_height);
+            let priority = get_filter_function(&pool, expected_batch_height);
             // Still fetch even when notarization is much ahead of finalization
-            assert_eq!(priority(&notarization.get_id(), &()), FetchNow);
+            assert_eq!(priority(&notarization.get_id()), Wants);
         })
     }
 }

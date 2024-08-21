@@ -120,7 +120,6 @@ pub trait ArtifactAssembler<A1: IdentifiableArtifact, A2: PbArtifact>:
     fn assemble_message<P: Peers + Send + 'static>(
         &self,
         id: <A2 as IdentifiableArtifact>::Id,
-        attr: <A2 as IdentifiableArtifact>::Attribute,
         artifact: Option<(A2, NodeId)>,
         peers: P,
     ) -> impl std::future::Future<Output = Result<(A1, NodeId), Aborted>> + Send;
@@ -140,14 +139,12 @@ pub enum FilterValue {
 }
 
 /// Idempotent and non-blocking function which returns a FilterValue for any artifact ID.
-pub type FilterFn<Id, Attribute> =
-    Box<dyn Fn(&Id, &Attribute) -> FilterValue + Send + Sync + 'static>;
-
+pub type FilterFn<Id> = Box<dyn Fn(&Id) -> FilterValue + Send + Sync + 'static>;
 
 /// Since the FilterFn above is defined as idempotent, the factory trait provides a way to refresh 
 /// the filter function.
 /// All the filtering logic should happen inside the implentations of the ArtifactAssembler.
 pub trait FilterFnFactory<Artifact: IdentifiableArtifact, Pool>: Send + Sync {
     /// Returns a priority function for the given pool.
-    fn get_filter_function(&self, pool: &Pool) -> FilterFn<Artifact::Id, Artifact::Attribute>;
+    fn get_filter_function(&self, pool: &Pool) -> FilterFn<Artifact::Id>;
 }

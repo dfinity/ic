@@ -406,9 +406,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "educe": crate.spec(
                 version = "^0.4",
             ),
-            "either": crate.spec(
-                version = "^1.6",
-            ),
             "erased-serde": crate.spec(
                 version = "^0.3.11",
             ),

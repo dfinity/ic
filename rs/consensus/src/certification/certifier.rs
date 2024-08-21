@@ -8,7 +8,7 @@ use ic_consensus_utils::{
 use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, ChangeSet, Verifier, VerifierError},
     consensus_pool::ConsensusPoolCache,
-    p2p::consensus::{ChangeSetProducer, Priority, PriorityFn, PriorityFnFactory},
+    p2p::consensus::{ChangeSetProducer, FilterFn, FilterFnFactory, FilterValue},
     validation::ValidationError,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -60,28 +60,23 @@ struct CertifierMetrics {
     execution_time: Histogram,
 }
 
-impl<Pool: CertificationPool> PriorityFnFactory<CertificationMessage, Pool>
-    for CertifierGossipImpl
-{
+impl<Pool: CertificationPool> FilterFnFactory<CertificationMessage, Pool> for CertifierGossipImpl {
     // The priority function requires just the height of the artifact to decide if
     // it should be fetched or not: if we already have a full certification at
     // that height or this height is below the CUP height, we're not interested in
     // any new artifacts at that height. If it is above the CUP height and we do not
     // have a full certification at that height, we're interested in all artifacts.
-    fn get_priority_function(
-        &self,
-        certification_pool: &Pool,
-    ) -> PriorityFn<CertificationMessageId, ()> {
+    fn get_filter_function(&self, certification_pool: &Pool) -> FilterFn<CertificationMessageId> {
         let certified_heights = certification_pool.certified_heights();
         let cup_height = self.consensus_pool_cache.catch_up_package().height();
-        Box::new(move |id, _| {
+        Box::new(move |id| {
             let height = id.height;
             // We drop all artifacts below the CUP height or those for which we have a full
             // certification already.
             if height < cup_height || certified_heights.contains(&height) {
-                Priority::Drop
+                FilterValue::Unwanted
             } else {
-                Priority::FetchNow
+                FilterValue::Wants
             }
         })
     }
@@ -752,23 +747,20 @@ mod tests {
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
                 cert_pool.apply_changes(change_set);
 
-                let prio_fn = certifier_gossip.get_priority_function(&cert_pool);
+                let prio_fn = certifier_gossip.get_filter_function(&cert_pool);
                 for (height, prio) in &[
-                    (1, Priority::Drop),
-                    (2, Priority::FetchNow),
-                    (3, Priority::Drop),
-                    (4, Priority::FetchNow),
+                    (1, FilterValue::Unwanted),
+                    (2, FilterValue::Wants),
+                    (3, FilterValue::Unwanted),
+                    (4, FilterValue::Wants),
                 ] {
                     assert_eq!(
-                        prio_fn(
-                            &CertificationMessageId {
-                                height: Height::from(*height),
-                                hash: CertificationMessageHash::Certification(CryptoHashOf::from(
-                                    CryptoHash(Vec::new())
-                                )),
-                            },
-                            &()
-                        ),
+                        prio_fn(&CertificationMessageId {
+                            height: Height::from(*height),
+                            hash: CertificationMessageHash::Certification(CryptoHashOf::from(
+                                CryptoHash(Vec::new())
+                            )),
+                        },),
                         *prio
                     );
                 }

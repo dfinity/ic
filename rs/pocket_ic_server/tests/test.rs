@@ -14,6 +14,7 @@ use rcgen::{CertificateParams, KeyPair};
 use reqwest::blocking::Client;
 use reqwest::Client as NonblockingClient;
 use reqwest::{StatusCode, Url};
+use slog::Level;
 use std::io::Read;
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -27,6 +28,7 @@ pub const LOCALHOST: &str = "127.0.0.1";
 fn start_server_helper(
     parent_pid: Option<u32>,
     ttl: Option<u64>,
+    capture_stdout: bool,
     capture_stderr: bool,
 ) -> (Url, Child) {
     let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
@@ -49,6 +51,9 @@ fn start_server_helper(
     }
     if let Some(ttl) = ttl {
         cmd.arg("--ttl").arg(ttl.to_string());
+    }
+    if capture_stdout {
+        cmd.stdout(std::process::Stdio::piped());
     }
     if capture_stderr {
         cmd.stderr(std::process::Stdio::piped());
@@ -74,7 +79,7 @@ fn start_server_helper(
 
 pub fn start_server() -> Url {
     let parent_pid = std::os::unix::process::parent_id();
-    start_server_helper(Some(parent_pid), None, false).0
+    start_server_helper(Some(parent_pid), None, false, false).0
 }
 
 #[test]
@@ -98,6 +103,7 @@ fn test_creation_of_instance_extended() {
         .into(),
         state_dir: None,
         nonmainnet_features: false,
+        log_level: None,
     };
     let response = client
         .post(url.join("instances").unwrap())
@@ -450,7 +456,7 @@ fn test_specified_id() {
 
 #[test]
 fn test_dashboard() {
-    let (server_url, _) = start_server_helper(None, Some(5), true);
+    let (server_url, _) = start_server_helper(None, Some(5), false, false);
     let subnet_config_set = SubnetConfigSet {
         nns: true,
         application: 1,
@@ -510,14 +516,14 @@ const CANISTER_LOGS_WAT: &str = r#"
 "#;
 
 #[test]
-fn canister_logs() {
+fn canister_and_replica_logs() {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
-    let (server_url, mut out) = start_server_helper(None, Some(5), true);
-    let subnet_config_set = SubnetConfigSet {
-        application: 1,
-        ..Default::default()
-    };
-    let pic = PocketIc::from_config_and_server_url(subnet_config_set, server_url);
+    let (server_url, mut out) = start_server_helper(None, Some(5), true, true);
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_server_url(server_url)
+        .with_log_level(Level::Info)
+        .build();
 
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
@@ -525,6 +531,49 @@ fn canister_logs() {
     pic.install_canister(canister_id, canister_logs_wasm, vec![], None);
 
     drop(pic);
+
+    let mut stdout = String::new();
+    out.stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut stdout)
+        .unwrap();
+    assert!(stdout.contains("Finished executing install_code message on canister CanisterId(lxzze-o7777-77777-aaaaa-cai)"));
+
+    let mut stderr = String::new();
+    out.stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr)
+        .unwrap();
+    assert!(stderr.contains("Logging works!"));
+}
+
+#[test]
+fn canister_and_no_replica_logs() {
+    const INIT_CYCLES: u128 = 2_000_000_000_000;
+    let (server_url, mut out) = start_server_helper(None, Some(5), true, true);
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_server_url(server_url)
+        .with_log_level(Level::Error)
+        .build();
+
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    let canister_logs_wasm = wat::parse_str(CANISTER_LOGS_WAT).unwrap();
+    pic.install_canister(canister_id, canister_logs_wasm, vec![], None);
+
+    drop(pic);
+
+    let mut stdout = String::new();
+    out.stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut stdout)
+        .unwrap();
+    assert!(!stdout.contains("Finished executing install_code message on canister CanisterId(lxzze-o7777-77777-aaaaa-cai)"));
+
     let mut stderr = String::new();
     out.stderr
         .take()
@@ -665,7 +714,7 @@ fn canister_state_dir() {
     drop(pic);
 
     // Start a new PocketIC server.
-    let (new_server_url, _) = start_server_helper(None, Some(5), false);
+    let (new_server_url, _) = start_server_helper(None, Some(5), false, false);
 
     // Create a PocketIC instance mounting the state created so far.
     let pic = PocketIcBuilder::new()
@@ -694,7 +743,7 @@ fn canister_state_dir() {
     drop(pic);
 
     // Start a new PocketIC server.
-    let (newest_server_url, _) = start_server_helper(None, Some(5), false);
+    let (newest_server_url, _) = start_server_helper(None, Some(5), false, false);
 
     // Create a PocketIC instance mounting the NNS state created so far.
     let nns_subnet_seed = topology.0.get(&nns_subnet).unwrap().subnet_seed;
@@ -909,5 +958,81 @@ fn test_query_stats_live() {
                 break;
             }
         }
+    })
+}
+
+/// Tests subnet read state requests.
+#[test]
+fn test_subnet_read_state() {
+    const INIT_CYCLES: u128 = 2_000_000_000_000;
+
+    // Create PocketIC instance with one NNS subnet and one app subnet.
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    // Retrieve the app subnet from the topology.
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+
+    // We create a counter canister on the app subnet.
+    let canister_id = pic.create_canister_on_subnet(None, None, app_subnet);
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    let counter_wasm = wat::parse_str(COUNTER_WAT).unwrap();
+    pic.install_canister(canister_id, counter_wasm, vec![], None);
+
+    let endpoint = pic.make_live(None);
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    rt.block_on(async {
+        let agent = ic_agent::Agent::builder()
+            .with_url(endpoint.clone())
+            .build()
+            .unwrap();
+        agent.fetch_root_key().await.unwrap();
+
+        let metrics = agent.read_state_subnet_metrics(app_subnet).await.unwrap();
+        assert_eq!(metrics.num_canisters, 1);
+    })
+}
+
+/// Tests that HTTP gateway can handle requests with IP address hosts.
+#[test]
+fn test_gateway_ip_addr_host() {
+    // Create PocketIC instance with one NNS subnet and one app subnet.
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    // Retrieve the app subnet from the topology.
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+
+    // We create a canister on the app subnet.
+    pic.create_canister_on_subnet(None, None, app_subnet);
+
+    let mut endpoint = pic.make_live(None);
+    endpoint
+        .set_ip_host(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))
+        .unwrap();
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    rt.block_on(async {
+        let agent = ic_agent::Agent::builder()
+            .with_url(endpoint.clone())
+            .build()
+            .unwrap();
+        agent.fetch_root_key().await.unwrap();
+
+        let metrics = agent.read_state_subnet_metrics(app_subnet).await.unwrap();
+        assert_eq!(metrics.num_canisters, 1);
     })
 }

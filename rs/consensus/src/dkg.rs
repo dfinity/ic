@@ -15,7 +15,7 @@ use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     crypto::ErrorReproducibility,
     dkg::{ChangeAction, ChangeSet, DkgPool},
-    p2p::consensus::{ChangeSetProducer, Priority, PriorityFn, PriorityFnFactory},
+    p2p::consensus::{ChangeSetProducer, FilterFn, FilterFnFactory, FilterValue},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
@@ -386,15 +386,15 @@ impl<T: DkgPool> ChangeSetProducer<T> for DkgImpl {
 // If a node happens to disconnect, it would send out dealings based on
 // its previous state after it reconnects, regardless of whether it has sent
 // them before.
-impl<Pool: DkgPool> PriorityFnFactory<Message, Pool> for DkgGossipImpl {
-    fn get_priority_function(&self, dkg_pool: &Pool) -> PriorityFn<DkgMessageId, ()> {
+impl<Pool: DkgPool> FilterFnFactory<Message, Pool> for DkgGossipImpl {
+    fn get_filter_function(&self, dkg_pool: &Pool) -> FilterFn<DkgMessageId> {
         let start_height = dkg_pool.get_current_start_height();
-        Box::new(move |id, _| {
+        Box::new(move |id| {
             use std::cmp::Ordering;
             match id.height.cmp(&start_height) {
-                Ordering::Equal => Priority::FetchNow,
-                Ordering::Greater => Priority::Stash,
-                Ordering::Less => Priority::Drop,
+                Ordering::Equal => FilterValue::Wants,
+                Ordering::Greater => FilterValue::MaybeWantsLater,
+                Ordering::Less => FilterValue::Unwanted,
             }
         })
     }
