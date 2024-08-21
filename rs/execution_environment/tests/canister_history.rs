@@ -903,8 +903,8 @@ fn canister_info_retrieval() {
     assert_eq!(
         res,
         Err(UserError::new(
-            ErrorCode::CanisterContractViolation,
-            format!("{} cannot be called by a user.", Method::CanisterInfo)
+            ErrorCode::CanisterRejectedMessage,
+            "Only canisters can call ic00 method canister_info"
         ))
     );
 
@@ -976,7 +976,7 @@ fn canister_info_retrieval() {
     // update reference canister history
     reference_change_entries.push(CanisterChange::new(
         now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 + 1,
-        19,
+        18,
         CanisterChangeOrigin::from_user(user_id2),
         CanisterChangeDetails::CanisterCodeUninstall,
     ));
