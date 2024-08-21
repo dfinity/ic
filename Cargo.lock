@@ -9425,6 +9425,7 @@ dependencies = [
  "dfn_core",
  "futures",
  "ic-nervous-system-common",
+ "ic-wasm",
  "icp-ledger",
  "icrc-ledger-types",
  "libflate 2.0.0",
