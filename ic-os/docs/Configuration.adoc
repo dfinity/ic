@@ -5,7 +5,7 @@ Each IC-OS has a 100 MB config partition. All IC-OS config partitions are initia
 In production, configuration is propagated from a partition on the USB installer through each of SetupOS, HostOS and GuestOS:
 
 * SetupOS reads and validates its configuration files from `/config/`
-* SetupOS copies its configuration files from `/config/` to `/var/ic/config/`
+* SetupOS copies sanitized configuration files from `/config/` to `/var/ic/config/`
 * SetupOS copies its configuration files from `/var/ic/config/` to the HostOS config partition.
 * HostOS reads the configuration files from `/boot/config`. These files are used to populate the GuestOS config partition through a more complicated process described below.
 
@@ -13,7 +13,14 @@ In production, configuration is propagated from a partition on the USB installer
 
 === SetupOS -> HostOS
 
-SetupOS validates, sanitizes, and copies all of its configuration files to the HostOS config partition. Refer to link:../components/setupos-scripts/config.sh[config.sh] link:../components/setupos-scripts/devices.sh[devices.sh]
+SetupOS validates, sanitizes, and copies all of its configuration files to the HostOS config partition:
+  config.ini                      # Data center-specific network settings
+  ssh_authorized_keys             # SSH private keys
+  node_operator_private_key.pem   # Node Operator private key created in the Node Provider onboarding
+  deployment.json                 # Deployment-specific configurations
+  nns_public_key.pem              # NNS public key
+
+Refer to link:../components/setupos-scripts/config.sh[config.sh] link:../components/setupos-scripts/devices.sh[devices.sh]
 
 === HostOS -> GuestOS
 
