@@ -65,13 +65,13 @@ generate_nns_upgrade_proposal_text() {
     local CANDID_ARGS=${4:-}
     local OUTPUT_FILE=${5:-}
 
+    assert_that_a_prebuilt_sns_wasm_is_available "$CANISTER_NAME" "$NEXT_COMMIT"
+
     PROPOSER=$(git config user.email | sed 's/@/ at /')
 
     SHORT_NEXT_COMMIT="${NEXT_COMMIT:0:7}"
-
-    WASM_GZ=$(get_nns_canister_wasm_gz_for_type "$CANISTER_NAME" "$NEXT_COMMIT")
-
     CAPITALIZED_CANISTER_NAME="$(tr '[:lower:]' '[:upper:]' <<<${CANISTER_NAME:0:1})${CANISTER_NAME:1}"
+
     LAST_WASM_HASH=$(nns_canister_hash ic "$CANISTER_NAME")
 
     IC_REPO=$(repo_root)
@@ -182,11 +182,11 @@ generate_sns_bless_wasm_proposal_text() {
     local CANISTER_TYPE=$3
     local OUTPUT_FILE=${4:-}
 
+    assert_that_a_prebuilt_sns_wasm_is_available "$CANISTER_TYPE" "$NEXT_COMMIT"
+
     PROPOSER=$(git config user.email | sed 's/@/ at /')
 
     SHORT_NEXT_COMMIT="${NEXT_COMMIT:0:7}"
-
-    WASM_GZ=$(download_sns_canister_wasm_gz_for_type "$CANISTER_TYPE" "$NEXT_COMMIT")
     CAPITALIZED_CANISTER_TYPE="$(tr '[:lower:]' '[:upper:]' <<<${CANISTER_TYPE:0:1})${CANISTER_TYPE:1}"
 
     IC_REPO=$(repo_root)
