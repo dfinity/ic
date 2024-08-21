@@ -78,7 +78,7 @@ pub struct ProposalFiles {
 #[derive(Template)]
 #[template(path = "submit_with_ic_admin.shx", escape = "none")]
 // The template uses the extension ".shx" to avoid the automatic linting done by "shfmt" on all ".sh" files.
-// This is necessary because the template contains not-yet-valid shell code, that will only be valid after the template is rendered.
+// This is necessary because the template contains not-yet-valid shell code that will only be valid after the template is rendered.
 pub struct IcAdminTemplate {
     pub args: IcAdminArgs,
 
@@ -88,7 +88,7 @@ pub struct IcAdminTemplate {
     // just a simple enum with 2 variants.
     mode: String,
 
-    /// The ID of the canister to modify
+    /// The ID of the canister to modify.
     pub canister_id: Principal,
 
     /// The file system path to the new wasm module to ship.

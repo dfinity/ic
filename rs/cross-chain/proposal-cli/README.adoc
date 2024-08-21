@@ -2,7 +2,7 @@
 
 == About
 
-This is a command-line tool for to automatically generate install or upgrade proposals for NNS-controlled canisters, like ckBTC or ckETH.
+This is a command-line tool to automatically generate install or upgrade proposals for NNS-controlled canisters, like ckBTC or ckETH.
 
 IMPORTANT: The part about the motivation of the proposal is not automated and must be filled out manually.
 
