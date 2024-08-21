@@ -155,8 +155,12 @@ fn induct_loopback_stream_empty_loopback_stream() {
     );
 }
 
-/// Tests that inducting a loopback stream containing a request to a non-existant canister produces a
-/// corresponding reject response in the loopback stream.
+/// Tests that inducting a loopback stream containing a request to a non-existant canister results
+/// in a reject response addressed to `LOCAL_CANISTER` inducted into the state.
+///
+/// Note that `induct_loopback_stream()` first inducts the loopback stream as a stream slice, which
+/// produces a reject signal for this request. In a second step the loopback stream is gc'ed,
+/// which collects the signal and triggers generating and then inducting a corrsponding reject response.
 #[test]
 fn induct_loopback_stream_reject_response() {
     // A loopback stream with 1 message addressed to an unknown canister.
@@ -168,51 +172,41 @@ fn induct_loopback_stream_reject_response() {
             ..StreamConfig::default()
         }],
         |stream_handler, state, metrics| {
-            let reject_response = generate_reject_response(
-                request_in_stream(state.get_stream(&LOCAL_SUBNET), 21),
-                RejectCode::DestinationInvalid,
-                StateError::CanisterNotFound(*OTHER_LOCAL_CANISTER).to_string(),
-            );
-            let reject_response_count_bytes = reject_response.count_bytes();
-
             let mut expected_state = state.clone();
-            // Expecting a loopback stream with begin advanced and a reject response.
+            // Expecting a state with reject response inducted for the request @21.
+            push_input(
+                &mut expected_state,
+                generate_reject_response_for(
+                    RejectReason::CanisterNotFound,
+                    &request_in_stream(state.get_stream(&LOCAL_SUBNET), 21),
+                ),
+            );
+
+            // Expecting an empty loopback stream with begin advanced.
             let loopback_stream = stream_from_config(StreamConfig {
                 begin: 22,
-                messages: vec![reject_response],
                 signals_end: 22,
                 ..StreamConfig::default()
             });
             expected_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
 
-            let initial_available_guaranteed_response_memory =
-                stream_handler.available_guaranteed_response_memory(&state);
             let mut available_guaranteed_response_memory =
-                initial_available_guaranteed_response_memory;
-
+                stream_handler.available_guaranteed_response_memory(&state);
+            
             let inducted_state = stream_handler
                 .induct_loopback_stream(state, &mut available_guaranteed_response_memory);
 
             assert_eq!(expected_state, inducted_state);
-
-            // One reject response generated.
             assert_eq!(
-                initial_available_guaranteed_response_memory - reject_response_count_bytes as i64,
+                stream_handler.available_guaranteed_response_memory(&inducted_state),
                 available_guaranteed_response_memory
             );
-            // Not equal, because the computed available memory does not account for the
-            // reject response (since it's from a nonexistent canister).
-            assert!(
-                stream_handler.available_guaranteed_response_memory(&inducted_state)
-                    >= available_guaranteed_response_memory
-            );
 
-            metrics.assert_inducted_xnet_messages_eq(&[(
-                LABEL_VALUE_TYPE_REQUEST,
-                LABEL_VALUE_CANISTER_NOT_FOUND,
-                1,
-            )]);
-            assert_eq!(0, metrics.fetch_inducted_payload_sizes_stats().count);
+            metrics.assert_inducted_xnet_messages_eq(&[
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_NOT_FOUND, 1),
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 1),
+            ]);
+            assert_eq!(1, metrics.fetch_inducted_payload_sizes_stats().count);
             // No critical errors raised.
             metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
         },
@@ -223,7 +217,7 @@ fn induct_loopback_stream_reject_response() {
 /// migrated to `CANISTER_MIGRATION_SUBNET`
 /// - are inducted successfully when addressed to the non-migrating canister `LOCAL_CANISTER`.
 /// - requests trigger a reject response when addressed the migrating canister
-///   `OTHER_LOCAL_CANISTER`.
+///   `OTHER_LOCAL_CANISTER` that is inducted into the state.
 /// - responses are rerouted into the stream to `CANISTER_MIGRATION_SUBNET` when addressed to the
 ///   migrating canister `OTHER_LOCAL_CANISTER`.
 #[test]
@@ -260,23 +254,20 @@ fn induct_loopback_stream_reroute_response() {
             let inducted_response_count_bytes = inducted_response.count_bytes();
             push_input(&mut expected_state, inducted_response);
 
-            // The request @23 is expected to trigger a reject response in the loopback stream.
-            let reject_response = generate_reject_response(
-                request_in_stream(state.get_stream(&LOCAL_SUBNET), 23),
-                RejectCode::SysTransient,
-                format!(
-                    "Canister {} is being migrated to/from {}",
-                    *OTHER_LOCAL_CANISTER, CANISTER_MIGRATION_SUBNET
+            // The request @23 is expected to trigger a reject response which is inducted into
+            // the state successfully.
+            push_input(
+                &mut expected_state,
+                generate_reject_response_for(
+                    RejectReason::CanisterMigrating,
+                    request_in_stream(state.get_stream(&LOCAL_SUBNET), 23),
                 ),
             );
-            let reject_response_count_bytes = reject_response.count_bytes();
+
+            // The loopback stream is expected to be empty, with signals advanced.
             let loopback_stream = stream_from_config(StreamConfig {
                 begin: 25,
-                messages: vec![reject_response],
                 signals_end: 25,
-                // The response @24 produces a reject signal, that is immediately consumed and the response
-                // is rerouted.
-                reject_signals: vec![],
                 ..StreamConfig::default()
             });
 
@@ -291,41 +282,27 @@ fn induct_loopback_stream_reroute_response() {
                 CANISTER_MIGRATION_SUBNET => migration_stream,
             ]);
 
-            let initial_available_guaranteed_response_memory =
-                stream_handler.available_guaranteed_response_memory(&state);
             let mut available_guaranteed_response_memory =
-                initial_available_guaranteed_response_memory;
+                stream_handler.available_guaranteed_response_memory(&state);
 
             let inducted_state = stream_handler
                 .induct_loopback_stream(state, &mut available_guaranteed_response_memory);
 
             assert_eq!(expected_state, inducted_state);
-
-            // One request inducted, one response inducted and one reject response produced.
+            // `available_guaranteed_response_memory` does not keep track of gc'ing
+            // the response @22 in the loopback stream after inducting it.
             assert_eq!(
-                initial_available_guaranteed_response_memory
-                    // Inducting a request triggers a new reservation in the output queue.
-                    - MAX_RESPONSE_COUNT_BYTES as i64
-                    // Inducting a response uses memory for the response, but also frees a reservation.
-                    - (inducted_response_count_bytes as i64 - MAX_RESPONSE_COUNT_BYTES as i64)
-                    // The reject response is in the loopback stream, i.e. no reservation is freed.
-                    - reject_response_count_bytes as i64,
-                available_guaranteed_response_memory,
-            );
-            // Not equal, because the computed available memory does not account for the
-            // reject response (since it's from a canister no longer hosted by the subnet).
-            assert!(
-                stream_handler.available_guaranteed_response_memory(&inducted_state)
-                    >= available_guaranteed_response_memory
+                available_guaranteed_response_memory + inducted_response_count_bytes as i64,
+                stream_handler.available_guaranteed_response_memory(&inducted_state),
             );
 
             metrics.assert_inducted_xnet_messages_eq(&[
                 (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SUCCESS, 1),
                 (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_MIGRATED, 1),
-                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 1),
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 2),
                 (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_CANISTER_MIGRATED, 1),
             ]);
-            assert_eq!(2, metrics.fetch_inducted_payload_sizes_stats().count);
+            assert_eq!(3, metrics.fetch_inducted_payload_sizes_stats().count);
             // No critical errors raised.
             metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
         },
@@ -2790,7 +2767,8 @@ fn with_test_setup_and_config(
         let mut messages_from_builders = |builders: Vec<MessageBuilder>| -> Vec<RequestOrResponse> {
             builders
                 .into_iter()
-                .map(|builder| {
+                .enumerate()
+                .map(|(payload_size_bytes, builder)| {
                     let (respondent, originator) = match builder {
                         Request(sender, receiver) => (receiver, sender),
                         Response(respondent, originator) => (respondent, originator),
@@ -2824,11 +2802,11 @@ fn with_test_setup_and_config(
                         // Empty output queues.
                         canister_state.output_into_iter().count();
 
-                        builder.build_with(callback_id)
+                        builder.build_with(callback_id, payload_size_bytes)
                     } else {
                         // Message will not be inducted, use a replacement
                         other_callback_id += 1;
-                        builder.build_with(CallbackId::new(other_callback_id))
+                        builder.build_with(CallbackId::new(other_callback_id), payload_size_bytes)
                     }
                 })
                 .collect()
@@ -3129,18 +3107,20 @@ enum MessageBuilder {
 }
 
 impl MessageBuilder {
-    fn build_with(self, callback_id: CallbackId) -> RequestOrResponse {
+    fn build_with(self, callback_id: CallbackId, payload_size_bytes: usize) -> RequestOrResponse {
         match self {
             Self::Request(sender, receiver) => RequestBuilder::new()
                 .sender(sender)
                 .receiver(receiver)
                 .sender_reply_callback(callback_id)
+                .method_payload(vec![0_u8; payload_size_bytes])
                 .build()
                 .into(),
             Self::Response(respondent, originator) => ResponseBuilder::new()
                 .respondent(respondent)
                 .originator(originator)
                 .originator_reply_callback(callback_id)
+                .response_payload(Payload::Data(vec![0_u8; payload_size_bytes]))
                 .build()
                 .into(),
             Self::RejectResponse(respondent, originator, reason) => generate_reject_response_for(
