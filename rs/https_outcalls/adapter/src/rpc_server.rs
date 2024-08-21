@@ -33,7 +33,7 @@ const HEADER_NAME_VALUE_LIMIT: usize = 8_192;
 /// By default most higher-level http libs like `curl` set some `User-Agent` so we do the same here to avoid getting rejected due to strict server requirements.
 const USER_AGENT_ADAPTER: &str = "ic/1.0";
 
-type CanisterRequestBody = Full<Bytes>;
+pub type CanisterRequestBody = Full<Bytes>;
 
 /// implements RPC
 pub struct CanisterHttp {

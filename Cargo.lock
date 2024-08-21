@@ -635,17 +635,6 @@ dependencies = [
 
 [[package]]
 name = "async-socks5"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77f634add2445eb2c1f785642a67ca1073fedd71e73dc3ca69435ef9b9bdedc7"
-dependencies = [
- "async-trait",
- "thiserror",
- "tokio",
-]
-
-[[package]]
-name = "async-socks5"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8da2537846e16b96d2972ee52a3b355663872a1a687ce6d57a3b6f6b6a181c89"
@@ -4988,29 +4977,15 @@ dependencies = [
 
 [[package]]
 name = "hyper-socks2"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc38166fc2732d450e9372388d269eb38ff0b75a3cfb4c542e65b2f6893629c4"
-dependencies = [
- "async-socks5 0.5.1",
- "futures",
- "http 0.2.12",
- "hyper 0.14.30",
- "hyper-tls",
- "thiserror",
- "tokio",
-]
-
-[[package]]
-name = "hyper-socks2"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51c227614c208f7e7c2e040526912604a1a957fe467c9c2f5b06c5d032337dab"
 dependencies = [
- "async-socks5 0.6.0",
+ "async-socks5",
  "http 1.1.0",
  "hyper 1.4.1",
  "hyper-rustls 0.26.0",
+ "hyper-tls",
  "hyper-util",
  "rustls 0.22.4",
  "rustls-native-certs 0.7.2",
@@ -5033,15 +5008,18 @@ dependencies = [
 
 [[package]]
 name = "hyper-tls"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6183ddfa99b85da61a140bea0efc93fdf56ceaa041b37d553518030827f9905"
+checksum = "70206fc6890eaca9fde8a0bf71caa2ddfc9fe045ac9e5c70df101a7dbde866e0"
 dependencies = [
  "bytes",
- "hyper 0.14.30",
+ "http-body-util",
+ "hyper 1.4.1",
+ "hyper-util",
  "native-tls",
  "tokio",
  "tokio-native-tls",
+ "tower-service",
 ]
 
 [[package]]
@@ -8266,7 +8244,7 @@ dependencies = [
  "http-body-util",
  "hyper 1.4.1",
  "hyper-rustls 0.27.2",
- "hyper-socks2 0.9.1",
+ "hyper-socks2",
  "hyper-util",
  "ic-adapter-metrics-server",
  "ic-async-utils",
@@ -16318,10 +16296,9 @@ dependencies = [
  "hex",
  "http 1.1.0",
  "http-body-util",
- "hyper 0.14.30",
  "hyper 1.4.1",
- "hyper-rustls 0.24.2",
- "hyper-socks2 0.8.0",
+ "hyper-rustls 0.27.2",
+ "hyper-socks2",
  "hyper-util",
  "ic-agent",
  "ic-boundary",
