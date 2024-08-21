@@ -4690,17 +4690,33 @@ impl ProposalRewardStatus {
     }
 }
 
-/// A Request to list minted node provider rewards
+/// A closed range of dates (i.e. includes both start and end dates)
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq)]
-pub struct ListNodeProviderRewardsRequest {}
+#[derive(Debug, Clone, PartialEq)]
+pub struct DateRangeFilter {
+    /// The start date of the range as seconds since epoch.  When not provided,
+    /// no start date is assumed.
+    pub start_timestamp_seconds: Option<u64>,
+    /// The end date of the range as seconds since epoch.  When not provided, no end date is assumed.
+    pub end_timestamp_seconds: Option<u64>,
+}
+
+/// A Request to list minted node provider rewards.  Rewards are listed in descending order of date
+/// minted, meaning that the latest rewards are always returned first.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct ListNodeProviderRewardsRequest {
+    /// Filter for the dates of the rewards
+    pub date_filter: Option<DateRangeFilter>,
+}
 
 /// A Response to list minted node provider rewards.
 /// Includes optional paging information to get next set of results.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ListNodeProviderRewardsResponse {
     /// The list of minted node provider rewards
     pub rewards: Vec<MonthlyNodeProviderRewards>,
