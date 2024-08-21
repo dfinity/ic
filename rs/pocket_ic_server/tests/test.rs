@@ -7,7 +7,8 @@ use ic_management_canister_types::ProvisionalCreateCanisterWithCyclesArgs;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_utils::interfaces::ManagementCanister;
 use pocket_ic::common::rest::{
-    HttpGatewayBackend, HttpGatewayDetails, HttpsConfig, InstanceConfig, SubnetConfigSet,
+    CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
+    HttpsConfig, InstanceConfig, SubnetConfigSet,
 };
 use pocket_ic::{PocketIc, PocketIcBuilder, WasmResult};
 use rcgen::{CertificateParams, KeyPair};
@@ -1035,4 +1036,99 @@ fn test_gateway_ip_addr_host() {
         let metrics = agent.read_state_subnet_metrics(app_subnet).await.unwrap();
         assert_eq!(metrics.num_canisters, 1);
     })
+}
+
+#[test]
+fn test_unresponsive_gateway_backend() {
+    let client = Client::new();
+
+    // Create PocketIC instance with one NNS subnet and one app subnet.
+    let (backend_server_url, mut backend_process) = start_server_helper(None, None, false, false);
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .with_server_url(backend_server_url.clone())
+        .build();
+
+    // Create HTTP gateway on a different gateway server.
+    let (gateway_server_url, _) = start_server_helper(None, None, false, false);
+    let create_gateway_endpoint = gateway_server_url.join("http_gateway").unwrap();
+    let backend_instance_url = backend_server_url
+        .join(&format!("instances/{}/", pic.instance_id()))
+        .unwrap();
+    let http_gateway_config = HttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        forward_to: HttpGatewayBackend::Replica(backend_instance_url.to_string()),
+        domains: None,
+        https_config: None,
+    };
+    let res = client
+        .post(create_gateway_endpoint)
+        .json(&http_gateway_config)
+        .send()
+        .unwrap()
+        .json::<CreateHttpGatewayResponse>()
+        .unwrap();
+    let endpoint = match res {
+        CreateHttpGatewayResponse::Created(info) => {
+            let port = info.port;
+            Url::parse(&format!("http://localhost:{}/", port)).unwrap()
+        }
+        CreateHttpGatewayResponse::Error { message } => {
+            panic!("Failed to crate http gateway: {}", message)
+        }
+    };
+
+    // Query the status endpoint via HTTP gateway.
+    let resp = client
+        .get(endpoint.join("api/v2/status").unwrap())
+        .send()
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Kill the backend server, but keep the HTTP gateway running.
+    drop(pic);
+    backend_process.kill().unwrap();
+
+    // Query the status endpoint via HTTP gateway again.
+    let resp = client
+        .get(endpoint.join("api/v2/status").unwrap())
+        .send()
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
+    assert!(String::from_utf8(resp.bytes().unwrap().as_ref().to_vec())
+        .unwrap()
+        .contains("connection_failure: client error"));
+}
+
+#[test]
+fn test_invalid_gateway_backend() {
+    // Create HTTP gateway with an invalid backend URL
+    let (gateway_server_url, _) = start_server_helper(None, None, false, false);
+    let create_gateway_endpoint = gateway_server_url.join("http_gateway").unwrap();
+    let backend_url = "http://240.0.0.0";
+    let http_gateway_config = HttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        forward_to: HttpGatewayBackend::Replica(backend_url.to_string()),
+        domains: None,
+        https_config: None,
+    };
+    let client = Client::new();
+    let res = client
+        .post(create_gateway_endpoint)
+        .json(&http_gateway_config)
+        .send()
+        .unwrap()
+        .json::<CreateHttpGatewayResponse>()
+        .unwrap();
+    match res {
+        CreateHttpGatewayResponse::Created(_info) => {
+            panic!("Suceeded to create http gateway!")
+        }
+        CreateHttpGatewayResponse::Error { message } => {
+            assert!(message.contains("An error happened during communication with the replica: error sending request for url"));
+        }
+    };
 }
