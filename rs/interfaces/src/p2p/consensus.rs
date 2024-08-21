@@ -129,7 +129,7 @@ pub trait ArtifactAssembler<A1: IdentifiableArtifact, A2: PbArtifact>:
 
 /// The artifact filter function returns a value that defines 3 possible handling logics when 
 /// an artifact or ID is received.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FilterValue {
     /// The client doesn't need the corresponding artifact for making progress so it can safely be dropped.
     Unwanted,
@@ -139,11 +139,14 @@ pub enum FilterValue {
     Wants,
 }
 
-/// The filter function defines if an artifact is
-/// 1. Of no interest to the P2P/replication client and can be safely ignored - 
+/// Idempotent and non-blocking function which returns a FilterValue for any artifact ID.
 pub type FilterFn<Id, Attribute> =
     Box<dyn Fn(&Id, &Attribute) -> FilterValue + Send + Sync + 'static>;
 
+
+/// Since the FilterFn above is defined as idempotent, the factory trait provides a way to refresh 
+/// the filter function.
+/// All the filtering logic should happen inside the implentations of the ArtifactAssembler.
 pub trait FilterFnFactory<Artifact: IdentifiableArtifact, Pool>: Send + Sync {
     /// Returns a priority function for the given pool.
     fn get_filter_function(&self, pool: &Pool) -> FilterFn<Artifact::Id, Artifact::Attribute>;
