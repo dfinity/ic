@@ -1554,7 +1554,6 @@ impl SignedBytesWithoutDomainSeparator for SignedIDkgOpening {
     }
 }
 
-
 impl TryFrom<IDkgMessage> for SignedIDkgDealing {
     type Error = IDkgMessage;
     fn try_from(msg: IDkgMessage) -> Result<Self, Self::Error> {
