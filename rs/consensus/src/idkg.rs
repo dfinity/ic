@@ -495,7 +495,7 @@ impl IDkgPriorityFnArgs {
 
         Self {
             finalized_height: block_reader.tip_height(),
-            certified_height,
+            certified_height: state_reader.latest_certified_height(),
         }
     }
 }
