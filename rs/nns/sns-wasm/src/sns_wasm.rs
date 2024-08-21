@@ -325,7 +325,7 @@ where
         &self,
         #[allow(unused_variables)] get_wasm_metadata_payload: GetWasmMetadataRequestPb,
     ) -> GetWasmMetadataResponsePb {
-        let result = Err("get_wasm_metadata is not implemented yet.".to_string());
+        let result = self.get_wasm_metadata_impl(get_wasm_metadata_payload);
         GetWasmMetadataResponsePb::from(result)
     }
 
