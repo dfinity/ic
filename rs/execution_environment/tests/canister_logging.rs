@@ -149,7 +149,7 @@ fn test_fetch_canister_logs_via_execute_ingress() {
         result,
         Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            "Cannot enqueue management message because fetch_canister_logs method is not allowed to be called via ingress messages.",
+            "ic00 method fetch_canister_logs can not be called via ingress messages",
         ))
     );
 }
