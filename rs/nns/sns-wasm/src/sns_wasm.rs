@@ -325,13 +325,7 @@ where
         &self,
         #[allow(unused_variables)] get_wasm_metadata_payload: GetWasmMetadataRequestPb,
     ) -> GetWasmMetadataResponsePb {
-        // TODO[NNS1-2997]: Enable this feature on mainnet.
-        #[cfg(feature = "test")]
-        let result = self.get_wasm_metadata_impl(get_wasm_metadata_payload);
-
-        #[cfg(not(feature = "test"))]
         let result = Err("get_wasm_metadata is not implemented yet.".to_string());
-
         GetWasmMetadataResponsePb::from(result)
     }
 
@@ -445,7 +439,25 @@ where
             }
         };
 
-        let metadata = metadata.into_iter().map(MetadataSectionPb::from).collect();
+        let metadata = metadata
+            .into_iter()
+            .map(|metadata| {
+                metadata
+                    .validate()
+                    .map(|_| MetadataSectionPb::from(metadata))
+            })
+            .collect::<Result<Vec<_>, _>>();
+
+        let metadata = match metadata {
+            Ok(metadata) => metadata,
+            Err(err) => {
+                return AddWasmResponse {
+                    result: Some(add_wasm_response::Result::Error(SnsWasmError {
+                        message: format!("Cannot validate metadata sections from WASM: {}", err),
+                    })),
+                };
+            }
+        };
 
         let result = match self.stable_memory.write_wasm(wasm) {
             Ok((offset, size)) => {
@@ -1746,12 +1758,12 @@ where
 
     // TODO[NNS1-2997]: Remove this function once the migration is completed.
     pub fn populate_wasm_metadata(&mut self) {
-        // 2. Compute metadata for all marked WASMs.
         let all_wasm_hashes = self.wasm_indexes.keys().cloned().collect::<Vec<_>>();
         for hash in all_wasm_hashes {
             if let Some(index) = self.wasm_indexes.get(&hash) {
                 if index.metadata != vec![] {
-                    // No need to recompute metadata if it's already set.
+                    // No need to recompute metadata if it's already set. This code is unlikely to
+                    // actually be executed as this is a synchronous migration.
                     continue;
                 }
             }
@@ -1765,65 +1777,21 @@ where
                         hash, err
                     )
                 });
+
             let metadata = metadata
                 .into_iter()
-                .map(MetadataSectionPb::from)
+                .map(|metadata| {
+                    metadata
+                        .validate()
+                        .expect("Existing WASMs should have valid metadata.");
+                    MetadataSectionPb::from(metadata)
+                })
                 .collect::<Vec<_>>();
             self.wasm_indexes.entry(hash).and_modify(|index| {
                 index.metadata = metadata;
             });
         }
     }
-
-    // TODO[NNS1-2997]: Remove this function once the migration is completed.
-    // pub async fn populate_wasm_metadata_async(
-    //     thread_safe_sns: &'static LocalKey<RefCell<SnsWasmCanister<M>>>,
-    // ) {
-    //     // 2. Compute metadata for all marked WASMs.
-    //     let all_wasm_hashes = thread_safe_sns.with(|sns_canister| {
-    //         sns_canister
-    //             .borrow()
-    //             .wasm_indexes
-    //             .keys()
-    //             .cloned()
-    //             .collect::<Vec<_>>()
-    //     });
-    //     for hash in all_wasm_hashes {
-    //         ic_cdk_timers::set_timer(std::time::Duration::from_millis(0), move || {
-    //             let future = async move {
-    //                 thread_safe_sns.with(|sns_canister| {
-    //                     if let Some(index) = sns_canister.borrow().wasm_indexes.get(&hash) {
-    //                         if index.metadata == vec![] {
-    //                             let metadata = sns_canister
-    //                                 .borrow()
-    //                                 .get_wasm_metadata_impl(GetWasmMetadataRequestPb {
-    //                                     hash: Some(hash.to_vec()),
-    //                                 })
-    //                                 .unwrap_or_else(|err| {
-    //                                     panic!(
-    //                                         "Cannot obtain metadata for WASM with hash `{:?}`: {}",
-    //                                         hash, err
-    //                                     )
-    //                                 });
-    //                             let metadata = metadata
-    //                                 .into_iter()
-    //                                 .map(MetadataSectionPb::from)
-    //                                 .collect::<Vec<_>>();
-    //                             sns_canister
-    //                                 .borrow_mut()
-    //                                 .wasm_indexes
-    //                                 .entry(hash)
-    //                                 .and_modify(|index| {
-    //                                     index.metadata = metadata;
-    //                                 });
-    //                         }
-    //                     }
-    //                 });
-    //             };
-    //             ic_cdk::spawn(future)
-    //         });
-    //     }
-    // }
 }
 
 /// Converts a vector of u8s to array of length 32 (the size of our sha256 hash)
@@ -5031,8 +4999,6 @@ mod test {
         .await;
     }
 
-    // TODO[NNS1-2997]: remove `#[cfg(feature = "test")]`.
-    #[cfg(feature = "test")]
     mod get_wasm_metadata {
         use super::*;
         use crate::pb::v1::{
