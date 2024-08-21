@@ -31,7 +31,7 @@ strum = { workspace = true }
 tempfile = { workspace = true }
 
 # Support for rocksdb backend on macos
-[target.'cfg(macos)'.dependencies]
+[target.'cfg(target_os = "macos")'.dependencies]
 rocksdb = { version = "0.22.0", default-features = false }
 
 [dev-dependencies]
