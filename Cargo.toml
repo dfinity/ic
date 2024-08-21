@@ -679,4 +679,4 @@ zstd = "0.13.2"
 [workspace.dependencies.ic-wasm]
 default-features = false
 features = ["exe"]
-version = "^0.8.0"
+version = "^0.8.1"
