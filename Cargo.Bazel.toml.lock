@@ -5291,9 +5291,9 @@ dependencies = [
 
 [[package]]
 name = "ic-wasm"
-version = "0.8.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9742ed6640abfc3bd1c8ca82de222e907275d1e851249b13fca7588f13759fc7"
+checksum = "941376953c00628d8edae0adcad4b6e882c01cbfd5416d2ac2bc5fb709927737"
 dependencies = [
  "anyhow",
  "candid",
