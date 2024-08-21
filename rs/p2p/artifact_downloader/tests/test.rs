@@ -38,12 +38,12 @@ async fn priority_from_stash_to_fetch() {
     mock_pfn
         .expect_get_priority_function()
         .times(1)
-        .returning(|_| Box::new(|_, _| Priority::Stash))
+        .returning(|_| Box::new(|_| Priority::Stash))
         .in_sequence(&mut seq);
     mock_pfn
         .expect_get_priority_function()
         .times(1)
-        .returning(|_| Box::new(|_, _| Priority::FetchNow))
+        .returning(|_| Box::new(|_| Priority::FetchNow))
         .in_sequence(&mut seq);
 
     let mut mock_transport = MockTransport::new();
@@ -69,7 +69,7 @@ async fn priority_from_stash_to_fetch() {
     let mut mock_peers = MockPeers::default();
     mock_peers.expect_peers().return_const(vec![NODE_1]);
     let artifact = fetch_artifact
-        .assemble_message(0, (), None, mock_peers)
+        .assemble_message(0, None, mock_peers)
         .await
         .unwrap();
     assert_eq!(artifact, (U64Artifact::id_to_msg(0, 1024), NODE_1));
@@ -105,7 +105,7 @@ async fn fetch_to_stash_to_fetch() {
             }
             p
         };
-        Box::new(move |_, _| p)
+        Box::new(move |_| p)
     });
     let mut mock_transport = MockTransport::new();
     mock_transport.expect_rpc().returning(move |_, _| {
@@ -137,7 +137,7 @@ async fn fetch_to_stash_to_fetch() {
     let mut mock_peers = MockPeers::default();
     mock_peers.expect_peers().return_const(vec![NODE_1]);
     let artifact = fetch_artifact
-        .assemble_message(0, (), None, mock_peers)
+        .assemble_message(0, None, mock_peers)
         .await
         .unwrap();
     assert_eq!(artifact, (U64Artifact::id_to_msg(0, 1024), NODE_1));
@@ -189,7 +189,7 @@ async fn invalid_artifact_not_accepted() {
     let mut mock_pfn = MockPriorityFnFactory::new();
     mock_pfn
         .expect_get_priority_function()
-        .returning(|_| Box::new(|_, _| Priority::FetchNow));
+        .returning(|_| Box::new(|_| Priority::FetchNow));
     let (fetch_artifact, _router) = FetchArtifact::new(
         no_op_logger(),
         Handle::current(),
@@ -201,7 +201,7 @@ async fn invalid_artifact_not_accepted() {
     let mut mock_peers = MockPeers::default();
     mock_peers.expect_peers().return_const(vec![NODE_1]);
     let artifact = fetch_artifact
-        .assemble_message(0, (), None, mock_peers)
+        .assemble_message(0, None, mock_peers)
         .await
         .unwrap();
     assert_eq!(artifact, (U64Artifact::id_to_msg(0, 1024), NODE_1));
@@ -223,12 +223,12 @@ async fn priority_from_stash_to_drop() {
     mock_pfn
         .expect_get_priority_function()
         .times(1)
-        .returning(|_| Box::new(|_, _| Priority::Stash))
+        .returning(|_| Box::new(|_| Priority::Stash))
         .in_sequence(&mut seq);
     mock_pfn
         .expect_get_priority_function()
         .times(1)
-        .returning(|_| Box::new(|_, _| Priority::Drop))
+        .returning(|_| Box::new(|_| Priority::Drop))
         .in_sequence(&mut seq);
 
     let mut mock_transport = MockTransport::new();
@@ -250,7 +250,7 @@ async fn priority_from_stash_to_drop() {
     let mut mock_peers = MockPeers::default();
     mock_peers.expect_peers().return_const(vec![NODE_1]);
     fetch_artifact
-        .assemble_message(0, (), None, mock_peers)
+        .assemble_message(0, None, mock_peers)
         .await
         .unwrap_err();
 }
