@@ -1554,8 +1554,6 @@ impl SignedBytesWithoutDomainSeparator for SignedIDkgOpening {
     }
 }
 
-/// The final output of the transcript creation sequence
-pub type EcdsaTranscript = IDkgTranscript;
 
 impl TryFrom<IDkgMessage> for SignedIDkgDealing {
     type Error = IDkgMessage;
