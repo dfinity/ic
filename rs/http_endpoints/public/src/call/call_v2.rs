@@ -22,6 +22,25 @@ use tower::{util::BoxCloneService, ServiceBuilder};
 
 pub struct CallServiceV2;
 
+struct Accepted;
+
+impl IntoResponse for Accepted {
+    fn into_response(self) -> Response {
+        StatusCode::ACCEPTED.into_response()
+    }
+}
+
+impl IntoResponse for IngressError {
+    fn into_response(self) -> Response {
+        match self {
+            IngressError::UserError(user_error) => CborUserError(user_error).into_response(),
+            IngressError::HttpError(HttpError { status, message }) => {
+                (status, message).into_response()
+            }
+        }
+    }
+}
+
 impl CallServiceV2 {
     pub(crate) fn route() -> &'static str {
         "/api/v2/canister/:effective_canister_id/call"
@@ -49,18 +68,11 @@ async fn call_v2(
     axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
     State(call_handler): State<IngressValidator>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<Accepted, IngressError> {
     call_handler
         .validate_ingress_message(request, effective_canister_id)
-        .await
-        .map_err(|err| match err {
-            IngressError::UserError(user_error) => CborUserError(user_error).into_response(),
-            IngressError::HttpError(HttpError { status, message }) => {
-                (status, message).into_response()
-            }
-        })?
-        .try_submit()
-        .map_err(|HttpError { status, message }| (status, message).into_response())?;
+        .await?
+        .try_submit()?;
 
-    Ok(StatusCode::ACCEPTED)
+    Ok(Accepted)
 }
