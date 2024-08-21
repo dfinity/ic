@@ -654,7 +654,10 @@ type Result_1 = variant { Error : GovernanceError; NeuronId : NeuronId };
 type Result_10 = variant { Ok : Ok_1; Err : GovernanceError };
 type Result_2 = variant { Ok : Neuron; Err : GovernanceError };
 type Result_3 = variant { Ok : GovernanceCachedMetrics; Err : GovernanceError };
-type Result_4 = variant { Ok : RewardNodeProviders; Err : GovernanceError };
+type Result_4 = variant {
+  Ok : MonthlyNodeProviderRewards;
+  Err : GovernanceError;
+};
 type Result_5 = variant { Ok : NeuronInfo; Err : GovernanceError };
 type Result_6 = variant { Ok : Ok; Err : GovernanceError };
 type Result_7 = variant { Ok : NodeProvider; Err : GovernanceError };
