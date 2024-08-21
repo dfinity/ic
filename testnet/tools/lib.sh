@@ -2,16 +2,26 @@ repo_root() {
     git rev-parse --show-toplevel
 }
 
+RED_TEXT='\033[0;31m'
+YELLOW_TEXT='\033[0;33m'
+GREEN_TEXT='\033[0;32m'
+BLUE_TEXT='\033[0;34m'
+NO_COLOR='\033[0m'
+
 print_red() {
-    echo -e "\033[0;31m$*\033[0m" 1>&2
+    echo -e "${RED_TEXT}$*${NO_COLOR}" 1>&2
+}
+
+print_yellow() {
+    echo -e "${YELLOW_TEXT}$*${NO_COLOR}" 1>&2
 }
 
 print_green() {
-    echo -e "\033[0;32m$*\033[0m"
+    echo -e "${GREEN_TEXT}$*${NO_COLOR}"
 }
 
 print_blue() {
-    echo -e "\033[0;34m$*\033[0m"
+    echo -e "${BLUE_TEXT}$*${NO_COLOR}"
 }
 
 info() {
