@@ -76,6 +76,34 @@ impl From<MetadataSection> for MetadataSectionPb {
     }
 }
 
+impl TryFrom<MetadataSectionPb> for MetadataSection {
+    type Error = String;
+
+    fn try_from(src: MetadataSectionPb) -> Result<Self, Self::Error> {
+        let MetadataSectionPb {
+            visibility,
+            name,
+            contents,
+        } = src;
+
+        let Some(visibility) = visibility else {
+            return Err("Required field MetadataSection.visibility is not specified.".to_string());
+        };
+        let Some(name) = name else {
+            return Err("Required field MetadataSection.name is not specified".to_string());
+        };
+        let Some(contents) = contents else {
+            return Err("Required field MetadataSection.contents is not specified".to_string());
+        };
+
+        Ok(Self {
+            visibility,
+            name,
+            contents,
+        })
+    }
+}
+
 impl From<Result<Vec<MetadataSection>, String>> for GetWasmMetadataResponsePb {
     fn from(src: Result<Vec<MetadataSection>, String>) -> Self {
         use get_wasm_metadata_response::{Ok, Result};

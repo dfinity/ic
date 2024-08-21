@@ -335,13 +335,26 @@ where
     ) -> Result<Vec<MetadataSection>, String> {
         let hash = <[u8; 32]>::try_from(get_wasm_metadata_payload)?;
 
-        let Some(wasm) = self.read_wasm(&hash) else {
-            return Err(format!("Cannot find WASM stored under key `{:?}`.", hash));
+        let Some(SnsWasmStableIndex { metadata, .. }) = self.wasm_indexes.get(&hash) else {
+            return Err(format!("Cannot find WASM index for hash `{:?}`.", hash));
         };
-
-        let wasm_metadata = Self::read_wasm_metadata_or_err(&wasm)?;
-
-        Ok(wasm_metadata)
+        let metadata = match metadata
+            .iter()
+            .cloned()
+            .map(MetadataSection::try_from)
+            .collect::<Result<Vec<_>, _>>()
+        {
+            Ok(metadata) => metadata,
+            Err(err) => {
+                let err = format!(
+                    "Inconsistent state detected in WASM metadata for hash `{:?}`: {}",
+                    hash, err
+                );
+                println!("{}{}", LOG_PREFIX, err);
+                return Err(err);
+            }
+        };
+        Ok(metadata)
     }
 
     /// Try reading the metadata sections of a WASM with the given hash from stable memory,
@@ -5087,7 +5100,7 @@ mod test {
                     GetWasmMetadataResponsePb {
                         result: Some(Result::Error(SnsWasmError {
                             message: format!(
-                                "Cannot find WASM stored under key `{:?}`.",
+                                "Cannot find WASM index for hash `{:?}`.",
                                 hash.to_vec()
                             )
                         }))
