@@ -59,7 +59,7 @@ jobs:
         run: |
           # - Query the current rosetta version
           bazel build //rs/rosetta-api/icrc1/rosetta:version
-          readonly ICRC_ROSETTA_RELEASE_VERSION="$(cat "$(bazel cquery --output=files //rs/rosetta-api/icrc1/rosetta:version)")"
+          readonly CURRENT_ROSETTA_VERSION="$(cat "$(bazel cquery --output=files //rs/rosetta-api/icrc1/rosetta:version)")"
 
           # Compare the current Rosetta version with the ICRC_ROSETTA_RELEASE_VERSION
           if [ "$CURRENT_ROSETTA_VERSION" != "${ICRC_ROSETTA_RELEASE_VERSION}" ]; then
