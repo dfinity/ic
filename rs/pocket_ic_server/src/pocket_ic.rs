@@ -14,6 +14,12 @@ use futures::FutureExt;
 use hyper::body::Bytes;
 use hyper::header::{HeaderValue, CONTENT_TYPE};
 use hyper::{Method, StatusCode};
+use hyper_rustls::HttpsConnectorBuilder;
+use hyper_socks2::SocksConnector;
+use hyper_util::{
+    client::legacy::{connect::HttpConnector, Client},
+    rt::TokioExecutor,
+};
 use ic_boundary::{Health, RootKey};
 use ic_config::{
     execution_environment, flag_status::FlagStatus, http_handler, subnet_config::SubnetConfig,
@@ -2418,13 +2424,6 @@ fn new_canister_http_adapter(
     log: ReplicaLogger,
     metrics_registry: &MetricsRegistry,
 ) -> CanisterHttp {
-    use hyper_rustls::HttpsConnectorBuilder;
-    use hyper_socks2::SocksConnector;
-    use hyper_util::{
-        client::legacy::{connect::HttpConnector, Client},
-        rt::TokioExecutor,
-    };
-
     // Socks client setup
     // We don't really use the Socks client in PocketIC as we set `socks_proxy_allowed: false` in the request,
     // but we still have to provide one when constructing the production `CanisterHttp` object

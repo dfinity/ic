@@ -528,16 +528,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "full",
                 ],
             ),
-            "hyper-socks2_0_9_0": crate.spec(
-                package = "hyper-socks2",
-                version = "^0.9.1",
-                default_features = False,
-                features = [
-                    "rustls",
-                ],
-            ),
             "hyper-socks2": crate.spec(
-                version = "^0.8.0",
+                version = "^0.9.1",
                 default_features = False,
                 features = [
                     "rustls",

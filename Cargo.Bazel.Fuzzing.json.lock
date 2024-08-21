@@ -1,5 +1,5 @@
 {
-  "checksum": "2e96eb9fb18d8913ee02200342d4f2a2d26d0062805db50666ff4650587e4b7a",
+  "checksum": "fd242b0f175d2bae28219e6a5fd6e991d75a9493169b723f90eceb7a29bfd8c5",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3604,67 +3604,6 @@
         "MIT"
       ],
       "license_file": null
-    },
-    "async-socks5 0.5.1": {
-      "name": "async-socks5",
-      "version": "0.5.1",
-      "package_url": "https://github.com/ark0f/async-socks5",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/async-socks5/0.5.1/download",
-          "sha256": "77f634add2445eb2c1f785642a67ca1073fedd71e73dc3ca69435ef9b9bdedc7"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "async_socks5",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "async_socks5",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "thiserror 1.0.62",
-              "target": "thiserror"
-            },
-            {
-              "id": "tokio 1.39.2",
-              "target": "tokio"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "async-trait 0.1.81",
-              "target": "async_trait"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.5.1"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE.md"
     },
     "async-socks5 0.6.0": {
       "name": "async-socks5",
@@ -17503,13 +17442,8 @@
               "target": "hyper_rustls"
             },
             {
-              "id": "hyper-socks2 0.8.0",
-              "target": "hyper_socks2"
-            },
-            {
               "id": "hyper-socks2 0.9.1",
-              "target": "hyper_socks2",
-              "alias": "hyper_socks2_0_9_0"
+              "target": "hyper_socks2"
             },
             {
               "id": "hyper-util 0.1.7",
@@ -27244,96 +27178,6 @@
         "MIT"
       ],
       "license_file": "LICENSE"
-    },
-    "hyper-socks2 0.8.0": {
-      "name": "hyper-socks2",
-      "version": "0.8.0",
-      "package_url": "https://github.com/ark0f/hyper-socks2",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/hyper-socks2/0.8.0/download",
-          "sha256": "cc38166fc2732d450e9372388d269eb38ff0b75a3cfb4c542e65b2f6893629c4"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "hyper_socks2",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "hyper_socks2",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "hyper-rustls",
-            "rustls",
-            "rustls-native-certs",
-            "rusttls"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "async-socks5 0.5.1",
-              "target": "async_socks5"
-            },
-            {
-              "id": "futures 0.3.30",
-              "target": "futures"
-            },
-            {
-              "id": "http 0.2.12",
-              "target": "http"
-            },
-            {
-              "id": "hyper 0.14.27",
-              "target": "hyper"
-            },
-            {
-              "id": "hyper-rustls 0.24.2",
-              "target": "hyper_rustls"
-            },
-            {
-              "id": "rustls 0.21.12",
-              "target": "rustls",
-              "alias": "rusttls"
-            },
-            {
-              "id": "rustls-native-certs 0.6.3",
-              "target": "rustls_native_certs"
-            },
-            {
-              "id": "thiserror 1.0.62",
-              "target": "thiserror"
-            },
-            {
-              "id": "tokio 1.39.2",
-              "target": "tokio"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.8.0"
-      },
-      "license": "Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE.md"
     },
     "hyper-socks2 0.9.1": {
       "name": "hyper-socks2",
@@ -78970,7 +78814,6 @@
     "hyper 1.4.1",
     "hyper-rustls 0.24.2",
     "hyper-rustls 0.27.2",
-    "hyper-socks2 0.8.0",
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.7",
     "hyperlocal-next 0.9.0",
