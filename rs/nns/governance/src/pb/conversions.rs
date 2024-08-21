@@ -555,6 +555,16 @@ impl From<pb_api::Proposal> for pb::Proposal {
         }
     }
 }
+impl From<pb_api::MakeProposalRequest> for pb::Proposal {
+    fn from(item: pb_api::MakeProposalRequest) -> Self {
+        Self {
+            title: item.title,
+            summary: item.summary,
+            url: item.url,
+            action: item.action.map(|x| x.into()),
+        }
+    }
+}
 
 impl From<pb::proposal::Action> for pb_api::proposal::Action {
     fn from(item: pb::proposal::Action) -> Self {
@@ -599,6 +609,9 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
             pb::proposal::Action::InstallCode(v) => pb_api::proposal::Action::InstallCode(v.into()),
             pb::proposal::Action::StopOrStartCanister(v) => {
                 pb_api::proposal::Action::StopOrStartCanister(v.into())
+            }
+            pb::proposal::Action::UpdateCanisterSettings(v) => {
+                pb_api::proposal::Action::UpdateCanisterSettings(v.into())
             }
         }
     }
@@ -647,6 +660,61 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             pb_api::proposal::Action::StopOrStartCanister(v) => {
                 pb::proposal::Action::StopOrStartCanister(v.into())
             }
+            pb_api::proposal::Action::UpdateCanisterSettings(v) => {
+                pb::proposal::Action::UpdateCanisterSettings(v.into())
+            }
+        }
+    }
+}
+impl From<pb_api::ProposalActionRequest> for pb::proposal::Action {
+    fn from(item: pb_api::ProposalActionRequest) -> Self {
+        match item {
+            pb_api::ProposalActionRequest::ManageNeuron(v) => {
+                pb::proposal::Action::ManageNeuron(Box::new((*v).into()))
+            }
+            pb_api::ProposalActionRequest::ManageNetworkEconomics(v) => {
+                pb::proposal::Action::ManageNetworkEconomics(v.into())
+            }
+            pb_api::ProposalActionRequest::Motion(v) => pb::proposal::Action::Motion(v.into()),
+            pb_api::ProposalActionRequest::ExecuteNnsFunction(v) => {
+                pb::proposal::Action::ExecuteNnsFunction(v.into())
+            }
+            pb_api::ProposalActionRequest::ApproveGenesisKyc(v) => {
+                pb::proposal::Action::ApproveGenesisKyc(v.into())
+            }
+            pb_api::ProposalActionRequest::AddOrRemoveNodeProvider(v) => {
+                pb::proposal::Action::AddOrRemoveNodeProvider(v.into())
+            }
+            pb_api::ProposalActionRequest::RewardNodeProvider(v) => {
+                pb::proposal::Action::RewardNodeProvider(v.into())
+            }
+            pb_api::ProposalActionRequest::SetDefaultFollowees(v) => {
+                pb::proposal::Action::SetDefaultFollowees(v.into())
+            }
+            pb_api::ProposalActionRequest::RewardNodeProviders(v) => {
+                pb::proposal::Action::RewardNodeProviders(v.into())
+            }
+            pb_api::ProposalActionRequest::RegisterKnownNeuron(v) => {
+                pb::proposal::Action::RegisterKnownNeuron(v.into())
+            }
+            pb_api::ProposalActionRequest::SetSnsTokenSwapOpenTimeWindow(v) => {
+                pb::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v.into())
+            }
+            pb_api::ProposalActionRequest::OpenSnsTokenSwap(v) => {
+                pb::proposal::Action::OpenSnsTokenSwap(v.into())
+            }
+            pb_api::ProposalActionRequest::CreateServiceNervousSystem(v) => {
+                pb::proposal::Action::CreateServiceNervousSystem(v.into())
+            }
+            pb_api::ProposalActionRequest::InstallCode(v) => {
+                pb::proposal::Action::InstallCode(v.into())
+            }
+            pb_api::ProposalActionRequest::StopOrStartCanister(v) => {
+                pb::proposal::Action::StopOrStartCanister(v.into())
+            }
+            pb_api::ProposalActionRequest::UpdateCanisterSettings(v) => {
+                pb::proposal::Action::UpdateCanisterSettings(v.into())
+            }
         }
     }
 }
@@ -673,6 +741,15 @@ impl From<pb::ManageNeuron> for pb_api::ManageNeuron {
 }
 impl From<pb_api::ManageNeuron> for pb::ManageNeuron {
     fn from(item: pb_api::ManageNeuron) -> Self {
+        Self {
+            id: item.id,
+            neuron_id_or_subaccount: item.neuron_id_or_subaccount.map(|x| x.into()),
+            command: item.command.map(|x| x.into()),
+        }
+    }
+}
+impl From<pb_api::ManageNeuronRequest> for pb::ManageNeuron {
+    fn from(item: pb_api::ManageNeuronRequest) -> Self {
         Self {
             id: item.id,
             neuron_id_or_subaccount: item.neuron_id_or_subaccount.map(|x| x.into()),
@@ -1236,6 +1313,48 @@ impl From<pb_api::manage_neuron::Command> for pb::manage_neuron::Command {
             }
             pb_api::manage_neuron::Command::Merge(v) => pb::manage_neuron::Command::Merge(v.into()),
             pb_api::manage_neuron::Command::StakeMaturity(v) => {
+                pb::manage_neuron::Command::StakeMaturity(v.into())
+            }
+        }
+    }
+}
+impl From<pb_api::ManageNeuronCommandRequest> for pb::manage_neuron::Command {
+    fn from(item: pb_api::ManageNeuronCommandRequest) -> Self {
+        match item {
+            pb_api::ManageNeuronCommandRequest::Configure(v) => {
+                pb::manage_neuron::Command::Configure(v.into())
+            }
+            pb_api::ManageNeuronCommandRequest::Disburse(v) => {
+                pb::manage_neuron::Command::Disburse(v.into())
+            }
+            pb_api::ManageNeuronCommandRequest::Spawn(v) => {
+                pb::manage_neuron::Command::Spawn(v.into())
+            }
+            pb_api::ManageNeuronCommandRequest::Follow(v) => {
+                pb::manage_neuron::Command::Follow(v.into())
+            }
+            pb_api::ManageNeuronCommandRequest::MakeProposal(v) => {
+                pb::manage_neuron::Command::MakeProposal(Box::new((*v).into()))
+            }
+            pb_api::ManageNeuronCommandRequest::RegisterVote(v) => {
+                pb::manage_neuron::Command::RegisterVote(v.into())
+            }
+            pb_api::ManageNeuronCommandRequest::Split(v) => {
+                pb::manage_neuron::Command::Split(v.into())
+            }
+            pb_api::ManageNeuronCommandRequest::DisburseToNeuron(v) => {
+                pb::manage_neuron::Command::DisburseToNeuron(v.into())
+            }
+            pb_api::ManageNeuronCommandRequest::ClaimOrRefresh(v) => {
+                pb::manage_neuron::Command::ClaimOrRefresh(v.into())
+            }
+            pb_api::ManageNeuronCommandRequest::MergeMaturity(v) => {
+                pb::manage_neuron::Command::MergeMaturity(v.into())
+            }
+            pb_api::ManageNeuronCommandRequest::Merge(v) => {
+                pb::manage_neuron::Command::Merge(v.into())
+            }
+            pb_api::ManageNeuronCommandRequest::StakeMaturity(v) => {
                 pb::manage_neuron::Command::StakeMaturity(v.into())
             }
         }
@@ -2778,17 +2897,35 @@ impl From<pb_api::create_service_nervous_system::governance_parameters::VotingRe
 
 impl From<pb::InstallCode> for pb_api::InstallCode {
     fn from(item: pb::InstallCode) -> Self {
+        let wasm_module_hash = item
+            .wasm_module
+            .map(|wasm_module| super::calculate_hash(&wasm_module).to_vec());
+        let arg_hash = item.arg.map(|arg| super::calculate_hash(&arg).to_vec());
+
         Self {
             canister_id: item.canister_id,
             install_mode: item.install_mode,
-            wasm_module: item.wasm_module,
-            arg: item.arg,
             skip_stopping_before_installing: item.skip_stopping_before_installing,
+            wasm_module_hash,
+            arg_hash,
         }
     }
 }
 impl From<pb_api::InstallCode> for pb::InstallCode {
     fn from(item: pb_api::InstallCode) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            install_mode: item.install_mode,
+            skip_stopping_before_installing: item.skip_stopping_before_installing,
+            // Note: the api->internal conversion here only happens when decoding from protobuf in
+            // canister_init.
+            wasm_module: None,
+            arg: None,
+        }
+    }
+}
+impl From<pb_api::InstallCodeRequest> for pb::InstallCode {
+    fn from(item: pb_api::InstallCodeRequest) -> Self {
         Self {
             canister_id: item.canister_id,
             install_mode: item.install_mode,
@@ -2885,6 +3022,110 @@ impl From<pb_api::stop_or_start_canister::CanisterAction>
             }
             pb_api::stop_or_start_canister::CanisterAction::Start => {
                 pb::stop_or_start_canister::CanisterAction::Start
+            }
+        }
+    }
+}
+
+impl From<pb::UpdateCanisterSettings> for pb_api::UpdateCanisterSettings {
+    fn from(item: pb::UpdateCanisterSettings) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            settings: item.settings.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<pb_api::UpdateCanisterSettings> for pb::UpdateCanisterSettings {
+    fn from(item: pb_api::UpdateCanisterSettings) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            settings: item.settings.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<pb::update_canister_settings::CanisterSettings>
+    for pb_api::update_canister_settings::CanisterSettings
+{
+    fn from(item: pb::update_canister_settings::CanisterSettings) -> Self {
+        Self {
+            controllers: item.controllers.map(|x| x.into()),
+            compute_allocation: item.compute_allocation,
+            memory_allocation: item.memory_allocation,
+            freezing_threshold: item.freezing_threshold,
+            log_visibility: item.log_visibility,
+            wasm_memory_limit: item.wasm_memory_limit,
+        }
+    }
+}
+
+impl From<pb_api::update_canister_settings::CanisterSettings>
+    for pb::update_canister_settings::CanisterSettings
+{
+    fn from(item: pb_api::update_canister_settings::CanisterSettings) -> Self {
+        Self {
+            controllers: item.controllers.map(|x| x.into()),
+            compute_allocation: item.compute_allocation,
+            memory_allocation: item.memory_allocation,
+            freezing_threshold: item.freezing_threshold,
+            log_visibility: item.log_visibility,
+            wasm_memory_limit: item.wasm_memory_limit,
+        }
+    }
+}
+
+impl From<pb::update_canister_settings::Controllers>
+    for pb_api::update_canister_settings::Controllers
+{
+    fn from(item: pb::update_canister_settings::Controllers) -> Self {
+        Self {
+            controllers: item.controllers,
+        }
+    }
+}
+
+impl From<pb_api::update_canister_settings::Controllers>
+    for pb::update_canister_settings::Controllers
+{
+    fn from(item: pb_api::update_canister_settings::Controllers) -> Self {
+        Self {
+            controllers: item.controllers,
+        }
+    }
+}
+
+impl From<pb::update_canister_settings::LogVisibility>
+    for pb_api::update_canister_settings::LogVisibility
+{
+    fn from(item: pb::update_canister_settings::LogVisibility) -> Self {
+        match item {
+            pb::update_canister_settings::LogVisibility::Unspecified => {
+                pb_api::update_canister_settings::LogVisibility::Unspecified
+            }
+            pb::update_canister_settings::LogVisibility::Controllers => {
+                pb_api::update_canister_settings::LogVisibility::Controllers
+            }
+            pb::update_canister_settings::LogVisibility::Public => {
+                pb_api::update_canister_settings::LogVisibility::Public
+            }
+        }
+    }
+}
+
+impl From<pb_api::update_canister_settings::LogVisibility>
+    for pb::update_canister_settings::LogVisibility
+{
+    fn from(item: pb_api::update_canister_settings::LogVisibility) -> Self {
+        match item {
+            pb_api::update_canister_settings::LogVisibility::Unspecified => {
+                pb::update_canister_settings::LogVisibility::Unspecified
+            }
+            pb_api::update_canister_settings::LogVisibility::Controllers => {
+                pb::update_canister_settings::LogVisibility::Controllers
+            }
+            pb_api::update_canister_settings::LogVisibility::Public => {
+                pb::update_canister_settings::LogVisibility::Public
             }
         }
     }
@@ -3161,6 +3402,7 @@ impl From<pb::governance::GovernanceCachedMetrics> for pb_api::governance::Gover
             non_self_authenticating_controller_neuron_subset_metrics: item
                 .non_self_authenticating_controller_neuron_subset_metrics
                 .map(|x| x.into()),
+            public_neuron_subset_metrics: item.public_neuron_subset_metrics.map(|x| x.into()),
         }
     }
 }
@@ -3217,6 +3459,7 @@ impl From<pb_api::governance::GovernanceCachedMetrics> for pb::governance::Gover
             non_self_authenticating_controller_neuron_subset_metrics: item
                 .non_self_authenticating_controller_neuron_subset_metrics
                 .map(|x| x.into()),
+            public_neuron_subset_metrics: item.public_neuron_subset_metrics.map(|x| x.into()),
         }
     }
 }
@@ -3484,6 +3727,7 @@ impl From<pb::ListNeurons> for pb_api::ListNeurons {
             neuron_ids: item.neuron_ids,
             include_neurons_readable_by_caller: item.include_neurons_readable_by_caller,
             include_empty_neurons_readable_by_caller: item.include_empty_neurons_readable_by_caller,
+            include_public_neurons_in_full_neurons: item.include_public_neurons_in_full_neurons,
         }
     }
 }
@@ -3493,6 +3737,7 @@ impl From<pb_api::ListNeurons> for pb::ListNeurons {
             neuron_ids: item.neuron_ids,
             include_neurons_readable_by_caller: item.include_neurons_readable_by_caller,
             include_empty_neurons_readable_by_caller: item.include_empty_neurons_readable_by_caller,
+            include_public_neurons_in_full_neurons: item.include_public_neurons_in_full_neurons,
         }
     }
 }

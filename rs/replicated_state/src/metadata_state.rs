@@ -47,6 +47,8 @@ use ic_types::{
     },
     CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
 };
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::WasmHash;
 use serde::{Deserialize, Serialize};
 use std::ops::Bound::{Included, Unbounded};
@@ -62,7 +64,7 @@ pub type StreamMap = BTreeMap<SubnetId, Stream>;
 
 /// Replicated system metadata.  Used primarily for inter-canister messaging and
 /// history queries.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
 pub struct SystemMetadata {
     /// History of ingress messages as they traversed through the
     /// system.
@@ -164,6 +166,7 @@ pub struct SystemMetadata {
     /// Responses to `BitcoinGetSuccessors` can be larger than the max inter-canister
     /// response limit. To work around this limitation, large responses are paginated
     /// and are stored here temporarily until they're fetched by the calling canister.
+    #[validate_eq(Ignore)]
     pub bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<BlockBlob>>,
 
     /// Metrics collecting blockmaker stats (block proposed and failures to propose a block)
@@ -415,8 +418,6 @@ pub struct SubnetMetrics {
     pub consumed_cycles_http_outcalls: NominalCycles,
     pub consumed_cycles_ecdsa_outcalls: NominalCycles,
     consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, NominalCycles>,
-    // TODO(CON-1302): Remove once `threshold_signature_agreements` is rolled out.
-    pub ecdsa_signature_agreements: u64,
     pub threshold_signature_agreements: BTreeMap<MasterPublicKeyId, u64>,
     /// The number of canisters that exist on this subnet.
     pub num_canisters: u64,
@@ -486,7 +487,6 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
             ),
             consumed_cycles_http_outcalls: Some((&item.consumed_cycles_http_outcalls).into()),
             consumed_cycles_ecdsa_outcalls: Some((&item.consumed_cycles_ecdsa_outcalls).into()),
-            ecdsa_signature_agreements: Some(item.ecdsa_signature_agreements),
             threshold_signature_agreements: item
                 .threshold_signature_agreements
                 .iter()
@@ -551,7 +551,6 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                 "SubnetMetrics::consumed_cycles_ecdsa_outcalls",
             )
             .unwrap_or_else(|_| NominalCycles::from(0_u128)),
-            ecdsa_signature_agreements: item.ecdsa_signature_agreements.unwrap_or_default(),
             threshold_signature_agreements,
             consumed_cycles_by_use_case,
             num_canisters: try_from_option_field(
@@ -2383,8 +2382,15 @@ pub(crate) mod testing {
         fn modify_streams<F: FnOnce(&mut StreamMap)>(&mut self, f: F) {
             f(&mut self.streams);
 
-            // Recompute stats from scratch.
-            self.responses_size_bytes = Streams::calculate_stats(&self.streams);
+            // Update `responses_size_bytes`, retaining all previous keys with a default
+            // byte size of zero (so that the respective canister's
+            // `transient_stream_responses_size_bytes` is correctly reset to zero).
+            self.responses_size_bytes
+                .values_mut()
+                .for_each(|size| *size = 0);
+            for (canister_id, size_bytes) in Streams::calculate_stats(&self.streams) {
+                self.responses_size_bytes.insert(canister_id, size_bytes);
+            }
         }
     }
 

@@ -1,5 +1,5 @@
 use candid::candid_method;
-use dfn_candid::{candid, candid_one};
+use dfn_candid::{candid, candid_one, candid_one_with_config};
 use dfn_core::{
     api::caller,
     endpoint::{over, over_async},
@@ -38,6 +38,7 @@ use ic_nns_handler_root::{
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
+    UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
 };
 use std::cell::RefCell;
 
@@ -261,10 +262,29 @@ async fn change_canister_controllers_(
     .await
 }
 
+/// Updates the canister settings of a canister controlled by NNS Root. Only callable by NNS
+/// Governance.
+#[export_name = "canister_update update_canister_settings"]
+fn update_canister_settings() {
+    check_caller_is_governance();
+    over_async(candid_one, update_canister_settings_);
+}
+
+#[candid_method(update, rename = "update_canister_settings")]
+async fn update_canister_settings_(
+    update_settings: UpdateCanisterSettingsRequest,
+) -> UpdateCanisterSettingsResponse {
+    canister_management::update_canister_settings(
+        update_settings,
+        &mut new_management_canister_client(),
+    )
+    .await
+}
+
 /// Resources to serve for a given http_request
 #[export_name = "canister_query http_request"]
 fn http_request() {
-    over(candid_one, serve_http)
+    over(candid_one_with_config, serve_http)
 }
 
 /// Serve an HttpRequest made to this canister

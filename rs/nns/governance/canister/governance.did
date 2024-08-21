@@ -2,6 +2,7 @@ type AccountIdentifier = record { hash : blob };
 type Action = variant {
   RegisterKnownNeuron : KnownNeuron;
   ManageNeuron : ManageNeuron;
+  UpdateCanisterSettings : UpdateCanisterSettings;
   InstallCode : InstallCode;
   StopOrStartCanister : StopOrStartCanister;
   CreateServiceNervousSystem : CreateServiceNervousSystem;
@@ -28,6 +29,14 @@ type By = variant {
   Memo : nat64;
 };
 type Canister = record { id : opt principal };
+type CanisterSettings = record {
+  freezing_threshold : opt nat64;
+  controllers : opt Controllers;
+  log_visibility : opt int32;
+  wasm_memory_limit : opt nat64;
+  memory_allocation : opt nat64;
+  compute_allocation : opt nat64;
+};
 type CanisterStatusResultV2 = record {
   status : opt int32;
   freezing_threshold : opt nat64;
@@ -114,6 +123,7 @@ type Committed_1 = record {
   sns_governance_canister_id : opt principal;
 };
 type Configure = record { operation : opt Operation };
+type Controllers = record { controllers : vec principal };
 type Countries = record { iso_codes : vec text };
 type CreateServiceNervousSystem = record {
   url : opt text;
@@ -126,6 +136,10 @@ type CreateServiceNervousSystem = record {
   dapp_canisters : vec Canister;
   swap_parameters : opt SwapParameters;
   initial_token_distribution : opt InitialTokenDistribution;
+};
+type DateRangeFilter = record {
+  start_timestamp_seconds : opt nat64;
+  end_timestamp_seconds : opt nat64;
 };
 type Decimal = record { human_readable : opt text };
 type DerivedProposalInformation = record {
@@ -226,6 +240,7 @@ type GovernanceCachedMetrics = record {
   total_staked_maturity_e8s_equivalent_seed : nat64;
   community_fund_total_staked_e8s : nat64;
   not_dissolving_neurons_e8s_buckets_seed : vec record { nat64; float64 };
+  public_neuron_subset_metrics : opt NeuronSubsetMetrics;
   timestamp_seconds : nat64;
   seed_neuron_count : nat64;
 };
@@ -255,6 +270,13 @@ type InitialTokenDistribution = record {
   swap_distribution : opt SwapDistribution;
 };
 type InstallCode = record {
+  skip_stopping_before_installing : opt bool;
+  wasm_module_hash : opt blob;
+  canister_id : opt principal;
+  arg_hash : opt blob;
+  install_mode : opt int32;
+};
+type InstallCodeRequest = record {
   arg : opt blob;
   wasm_module : opt blob;
   skip_stopping_before_installing : opt bool;
@@ -274,6 +296,7 @@ type LedgerParameters = record {
 };
 type ListKnownNeuronsResponse = record { known_neurons : vec KnownNeuron };
 type ListNeurons = record {
+  include_public_neurons_in_full_neurons : opt bool;
   neuron_ids : vec nat64;
   include_empty_neurons_readable_by_caller : opt bool;
   include_neurons_readable_by_caller : bool;
@@ -281,6 +304,12 @@ type ListNeurons = record {
 type ListNeuronsResponse = record {
   neuron_infos : vec record { nat64; NeuronInfo };
   full_neurons : vec Neuron;
+};
+type ListNodeProviderRewardsRequest = record {
+  date_filter : opt DateRangeFilter;
+};
+type ListNodeProviderRewardsResponse = record {
+  rewards : vec MonthlyNodeProviderRewards;
 };
 type ListNodeProvidersResponse = record { node_providers : vec NodeProvider };
 type ListProposalInfo = record {
@@ -293,6 +322,12 @@ type ListProposalInfo = record {
   include_status : vec int32;
 };
 type ListProposalInfoResponse = record { proposal_info : vec ProposalInfo };
+type MakeProposalRequest = record {
+  url : text;
+  title : opt text;
+  action : opt ProposalActionRequest;
+  summary : text;
+};
 type MakeProposalResponse = record {
   message : opt text;
   proposal_id : opt NeuronId;
@@ -305,6 +340,25 @@ type MakingSnsProposal = record {
 type ManageNeuron = record {
   id : opt NeuronId;
   command : opt Command;
+  neuron_id_or_subaccount : opt NeuronIdOrSubaccount;
+};
+type ManageNeuronCommandRequest = variant {
+  Spawn : Spawn;
+  Split : Split;
+  Follow : Follow;
+  ClaimOrRefresh : ClaimOrRefresh;
+  Configure : Configure;
+  RegisterVote : RegisterVote;
+  Merge : Merge;
+  DisburseToNeuron : DisburseToNeuron;
+  MakeProposal : MakeProposalRequest;
+  StakeMaturity : StakeMaturity;
+  MergeMaturity : MergeMaturity;
+  Disburse : Disburse;
+};
+type ManageNeuronRequest = record {
+  id : opt NeuronId;
+  command : opt ManageNeuronCommandRequest;
   neuron_id_or_subaccount : opt NeuronIdOrSubaccount;
 };
 type ManageNeuronResponse = record { command : opt Command_1 };
@@ -526,6 +580,24 @@ type Proposal = record {
   action : opt Action;
   summary : text;
 };
+type ProposalActionRequest = variant {
+  RegisterKnownNeuron : KnownNeuron;
+  ManageNeuron : ManageNeuronRequest;
+  UpdateCanisterSettings : UpdateCanisterSettings;
+  InstallCode : InstallCodeRequest;
+  StopOrStartCanister : StopOrStartCanister;
+  CreateServiceNervousSystem : CreateServiceNervousSystem;
+  ExecuteNnsFunction : ExecuteNnsFunction;
+  RewardNodeProvider : RewardNodeProvider;
+  OpenSnsTokenSwap : OpenSnsTokenSwap;
+  SetSnsTokenSwapOpenTimeWindow : SetSnsTokenSwapOpenTimeWindow;
+  SetDefaultFollowees : SetDefaultFollowees;
+  RewardNodeProviders : RewardNodeProviders;
+  ManageNetworkEconomics : NetworkEconomics;
+  ApproveGenesisKyc : Principals;
+  AddOrRemoveNodeProvider : AddOrRemoveNodeProvider;
+  Motion : Motion;
+};
 type ProposalData = record {
   id : opt NeuronId;
   failure_reason : opt GovernanceError;
@@ -691,6 +763,10 @@ type TimeWindow = record {
   end_timestamp_seconds : nat64;
 };
 type Tokens = record { e8s : opt nat64 };
+type UpdateCanisterSettings = record {
+  canister_id : opt principal;
+  settings : opt CanisterSettings;
+};
 type UpdateNodeProvider = record { reward_account : opt AccountIdentifier };
 type VotingRewardParameters = record {
   reward_rate_transition_duration : opt Duration;
@@ -733,16 +809,19 @@ service : (Governance) -> {
   get_restore_aging_summary : () -> (RestoreAgingSummary) query;
   list_known_neurons : () -> (ListKnownNeuronsResponse) query;
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;
+  list_node_provider_rewards : (ListNodeProviderRewardsRequest) -> (
+      ListNodeProviderRewardsResponse,
+    ) query;
   list_node_providers : () -> (ListNodeProvidersResponse) query;
   list_proposals : (ListProposalInfo) -> (ListProposalInfoResponse) query;
-  manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
+  manage_neuron : (ManageNeuronRequest) -> (ManageNeuronResponse);
   settle_community_fund_participation : (SettleCommunityFundParticipation) -> (
       Result,
     );
   settle_neurons_fund_participation : (
       SettleNeuronsFundParticipationRequest,
     ) -> (SettleNeuronsFundParticipationResponse);
-  simulate_manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
+  simulate_manage_neuron : (ManageNeuronRequest) -> (ManageNeuronResponse);
   transfer_gtc_neuron : (NeuronId, NeuronId) -> (Result);
   update_node_provider : (UpdateNodeProvider) -> (Result);
 }

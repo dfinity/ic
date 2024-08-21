@@ -1685,7 +1685,7 @@ mod tests {
     async fn register_dapp_canisters_redundant() {
         // Step 1: Prepare the world.
         thread_local! {
-            static DAPP_CANISTER_ID: PrincipalId = PrincipalId::new_user_test_id(4);
+            static DAPP_CANISTER_ID: PrincipalId = const { PrincipalId::new_user_test_id(4) };
             static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(SnsRootCanister {
                 governance_canister_id: Some(PrincipalId::new_user_test_id(1)),
                 ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),

@@ -2,15 +2,12 @@ load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_ic_test")
 
-package(default_visibility = ["//visibility:public"])
-
 BUILD_DEPENDENCIES = []
 
 LIB_DEPENDENCIES = [
     # Keep sorted.
     "//packages/pocket-ic:pocket-ic",
     "//rs/boundary_node/ic_boundary",
-    "//rs/boundary_node/icx_proxy:icx_proxy_dev",
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
     "//rs/crypto/ed25519",
@@ -47,11 +44,15 @@ LIB_DEPENDENCIES = [
     "@crate_index//:axum_server_0_6_0",
     "@crate_index//:backoff",
     "@crate_index//:base64",
+    "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:clap_3_2_25",
     "@crate_index//:flate2",
+    "@crate_index//:form_urlencoded",
+    "@crate_index//:fqdn",
     "@crate_index//:futures",
     "@crate_index//:hex",
+    "@crate_index//:http",
     "@crate_index//:http-body-util",
     "@crate_index//:hyper",
     "@crate_index//:hyper-socks2",
@@ -60,6 +61,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:hyper_rustls_0_24_2",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-http-gateway",
     "@crate_index//:ic-utils",
     "@crate_index//:itertools",
     "@crate_index//:rand",
@@ -92,6 +94,7 @@ TEST_DEPENDENCIES = [
     "@crate_index//:ic-utils",
     "@crate_index//:rcgen",
     "@crate_index//:reqwest",
+    "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:wat",
@@ -102,7 +105,9 @@ SPEC_TEST_DEPENDENCIES = TEST_DEPENDENCIES + [
     "//rs/registry/subnet_type",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
 
 ALIASES = {}
 
@@ -119,6 +124,8 @@ rust_binary(
     testonly = True,
     srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
+    # TODO: restrict the visibility
+    visibility = ["//visibility:public"],
     deps = LIB_DEPENDENCIES + [":pocket-ic-server-lib"],
 )
 
@@ -142,7 +149,7 @@ rust_library(
 
 rust_ic_test(
     name = "pic_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = {
         "@crate_index//:hyper_0_14_27": "hyper_legacy",
     },
@@ -157,9 +164,7 @@ rust_test(
         "tests/common.rs",
         "tests/test.rs",
     ],
-    aliases = {
-        "@crate_index//:ic_agent_call_v3": "ic_agent_call_v3",
-    },
+    aliases = {},
     data = [
         ":pocket-ic-server",
         "@ii_dev_canister//file",
@@ -169,7 +174,7 @@ rust_test(
         "II_WASM": "external/ii_dev_canister/file/internet_identity_dev.wasm.gz",
     },
     tags = ["cpu:8"],
-    deps = TEST_DEPENDENCIES + ["@crate_index//:ic_agent_call_v3"],
+    deps = TEST_DEPENDENCIES,
 )
 
 rust_test(

@@ -48,108 +48,44 @@ func ReadDelimitedProtoMessage(br *bufio.Reader) ([]byte, error) {
 	return msg, nil
 }
 
-func loadEnvVars(runsOnGitHub bool) map[string]interface{} {
-	var want []string
-	if runsOnGitHub {
-		vars := []string{"GITHUB_ACTION",
-			"GITHUB_ACTION_PATH",
-			"GITHUB_ACTION_REPOSITORY",
-			"GITHUB_ACTIONS",
-			"GITHUB_ACTOR",
-			"GITHUB_BASE_REF",
-			"GITHUB_ENV",
-			"GITHUB_EVENT_NAME",
-			"GITHUB_HEAD_REF",
-			"GITHUB_JOB",
-			"GITHUB_OUTPUT",
-			"GITHUB_PATH",
-			"GITHUB_REF",
-			"GITHUB_REF_NAME",
-			"GITHUB_REF_PROTECTED",
-			"GITHUB_REF_TYPE",
-			"GITHUB_REPOSITORY",
-			"GITHUB_REPOSITORY_ID",
-			"GITHUB_REPOSITORY_OWNER",
-			"GITHUB_REPOSITORY_OWNER_ID",
-			"GITHUB_RETENTION_DAYS",
-			"GITHUB_RUN_ATTEMPT",
-			"GITHUB_RUN_NUMBER",
-			"GITHUB_SHA",
-			"GITHUB_STEP_SUMMARY",
-			"GITHUB_TRIGGERING_ACTOR",
-			"GITHUB_WORKFLOW",
-			"GITHUB_WORKFLOW_REF",
-			"GITHUB_WORKFLOW_SHA",
-			"GITHUB_WORKSPACE",
-			"RUNNER_ARCH",
-			"RUNNER_NAME",
-			"RUNNER_OS",
-			"RUNNER_TEMP",
-			"RUNNER_TOOL_CACHE",
-			"CI_JOB_URL",
-		}
-		want = vars[:]
-	} else {
-		vars := []string{"CD_ENV",
-			"CI_COMMIT_AUTHOR",
-			"CI_COMMIT_SHA",
-			"CI_COMMIT_TAG",
-			"CI_COMMIT_TIMESTAMP",
-			"CI_CONCURRENT_ID",
-			"CI_CONCURRENT_PROJECT_ID",
-			"CI_ENVIRONMENT_NAME",
-			"CI_ENVIRONMENT_SLUG",
-			"CI_EXTERNAL_PULL_REQUEST_IID",
-			"CI_EXTERNAL_PULL_REQUEST_SOURCE_BRANCH_NAME",
-			"CI_EXTERNAL_PULL_REQUEST_SOURCE_BRANCH_SHA",
-			"CI_JOB_ID",
-			"CI_JOB_IMAGE",
-			"CI_JOB_MANUAL",
-			"CI_JOB_NAME",
-			"CI_JOB_STAGE",
-			"CI_JOB_STATUS",
-			"CI_JOB_URL",
-			"CI_NODE_INDEX",
-			"CI_NODE_TOTAL",
-			"CI_PIPELINE_ID",
-			"CI_PIPELINE_SOURCE",
-			"CI_RUNNER_DESCRIPTION",
-			"CI_RUNNER_ID",
-			"CI_RUNNER_TAGS",
-			"DEPLOY_FLAVOR",
-			"USER_ID",
-			"USER_LOGIN",
-			"SCHEDULE_NAME",
-			"TESTNET",
-			"STEP_START",
-			"PIPELINE_START_TIME",
-			"job_status",
-			"DISKIMG_BRANCH",
-			"CI_MERGE_REQUEST_APPROVED",
-			"CI_MERGE_REQUEST_ASSIGNEES",
-			"CI_MERGE_REQUEST_ID",
-			"CI_MERGE_REQUEST_IID",
-			"CI_MERGE_REQUEST_LABELS",
-			"CI_MERGE_REQUEST_MILESTONE",
-			"CI_MERGE_REQUEST_PROJECT_ID",
-			"CI_MERGE_REQUEST_PROJECT_PATH",
-			"CI_MERGE_REQUEST_PROJECT_URL",
-			"CI_MERGE_REQUEST_REF_PATH",
-			"CI_MERGE_REQUEST_SOURCE_BRANCH_NAME",
-			"CI_MERGE_REQUEST_SOURCE_BRANCH_SHA",
-			"CI_MERGE_REQUEST_SOURCE_PROJECT_ID",
-			"CI_MERGE_REQUEST_SOURCE_PROJECT_PATH",
-			"CI_MERGE_REQUEST_SOURCE_PROJECT_URL",
-			"CI_MERGE_REQUEST_TARGET_BRANCH_NAME",
-			"CI_MERGE_REQUEST_TARGET_BRANCH_SHA",
-			"CI_MERGE_REQUEST_TITLE",
-			"CI_MERGE_REQUEST_EVENT_TYPE",
-			"CI_MERGE_REQUEST_DIFF_ID",
-			"CI_MERGE_REQUEST_DIFF_BASE_SHA",
-		}
-		want = vars[:]
+func loadEnvVars() map[string]interface{} {
+	want := []string{"GITHUB_ACTION",
+		"GITHUB_ACTION_PATH",
+		"GITHUB_ACTION_REPOSITORY",
+		"GITHUB_ACTIONS",
+		"GITHUB_ACTOR",
+		"GITHUB_BASE_REF",
+		"GITHUB_ENV",
+		"GITHUB_EVENT_NAME",
+		"GITHUB_HEAD_REF",
+		"GITHUB_JOB",
+		"GITHUB_OUTPUT",
+		"GITHUB_PATH",
+		"GITHUB_REF",
+		"GITHUB_REF_NAME",
+		"GITHUB_REF_PROTECTED",
+		"GITHUB_REF_TYPE",
+		"GITHUB_REPOSITORY",
+		"GITHUB_REPOSITORY_ID",
+		"GITHUB_REPOSITORY_OWNER",
+		"GITHUB_REPOSITORY_OWNER_ID",
+		"GITHUB_RETENTION_DAYS",
+		"GITHUB_RUN_ATTEMPT",
+		"GITHUB_RUN_NUMBER",
+		"GITHUB_SHA",
+		"GITHUB_STEP_SUMMARY",
+		"GITHUB_TRIGGERING_ACTOR",
+		"GITHUB_WORKFLOW",
+		"GITHUB_WORKFLOW_REF",
+		"GITHUB_WORKFLOW_SHA",
+		"GITHUB_WORKSPACE",
+		"RUNNER_ARCH",
+		"RUNNER_NAME",
+		"RUNNER_OS",
+		"RUNNER_TEMP",
+		"RUNNER_TOOL_CACHE",
+		"CI_JOB_URL",
 	}
-
 	env_vars := make(map[string]interface{})
 	for _, w := range want {
 		env_vars[w] = os.Getenv(w)
@@ -170,14 +106,7 @@ func main() {
 	debug := flag.Bool("n", false, "Debug mode: Output all the proto in text json text form")
 	flag.Parse()
 
-	runsOnGitHub := os.Getenv("GITHUB_ACTION") != ""
-
-	var dataset string
-	if runsOnGitHub {
-		dataset = "bazel-github"
-	} else {
-		dataset = "bazel"
-	}
+	var dataset string = "bazel-github"
 	log.Printf("Using dataset %s", dataset)
 
 	beeline.Init(beeline.Config{
@@ -193,7 +122,7 @@ func main() {
 	}
 	br := bufio.NewReader(pbfile)
 
-	envVars := loadEnvVars(runsOnGitHub)
+	envVars := loadEnvVars()
 	log.Println("Reading file", pbfile.Name())
 	cnt := 0
 	for ; ; cnt++ {
@@ -241,15 +170,7 @@ func main() {
 		}
 
 		beeline.AddField(spanCtx, "event", jsonMap)
-
-		var field string
-		if runsOnGitHub {
-			field = "github"
-		} else {
-			field = "gitlab"
-		}
-
-		beeline.AddField(spanCtx, field, envVars)
+		beeline.AddField(spanCtx, "github", envVars)
 		eventSpan.Send()
 	}
 	log.Printf("Processed %d protos", cnt)

@@ -71,10 +71,10 @@ impl<Pool: CertificationPool> PriorityFnFactory<CertificationMessage, Pool>
     fn get_priority_function(
         &self,
         certification_pool: &Pool,
-    ) -> PriorityFn<CertificationMessageId, ()> {
+    ) -> PriorityFn<CertificationMessageId> {
         let certified_heights = certification_pool.certified_heights();
         let cup_height = self.consensus_pool_cache.catch_up_package().height();
-        Box::new(move |id, _| {
+        Box::new(move |id| {
             let height = id.height;
             // We drop all artifacts below the CUP height or those for which we have a full
             // certification already.
@@ -124,25 +124,25 @@ pub fn setup(
 /// following algorithm:
 ///
 /// 1. Request a set of (height, hash) tuples from its local StateManager, where
-/// `hash` is the hash of the replicated state after processing the batch at the
-/// specified height. The StateManager is responsible for selecting which parts
-/// of the replicated state are included in the computation of the hash.
+///    `hash` is the hash of the replicated state after processing the batch at the
+///    specified height. The StateManager is responsible for selecting which parts
+///    of the replicated state are included in the computation of the hash.
 ///
 /// 2. Sign the hash-height tuple, resulting in a CertificationShare, and place
-/// the CertificationShare in the certification pool, to be gossiped to other
-/// replicas.
+///    the CertificationShare in the certification pool, to be gossiped to other
+///    replicas.
 ///
 /// 3. On every invocation of `on_state_change`, if sufficiently many
-/// CertificationShares for the same (height, hash) pair were received, combine
-/// them into a full Certification and put it into the certification pool. At
-/// that point, the CertificationShares are not required anymore and can be
-/// purged.
+///    CertificationShares for the same (height, hash) pair were received, combine
+///    them into a full Certification and put it into the certification pool. At
+///    that point, the CertificationShares are not required anymore and can be
+///    purged.
 ///
 /// 4. For every (height, hash) pair with a full Certification, submit
-/// the pair (height, Certification) to the StateManager.
+///    the pair (height, Certification) to the StateManager.
 ///
 /// 5. Whenever the catch-up package height increases, remove all certification
-/// artifacts below this height.
+///    artifacts below this height.
 impl<T: CertificationPool> ChangeSetProducer<T> for CertifierImpl {
     type ChangeSet = ChangeSet;
 
@@ -760,15 +760,12 @@ mod tests {
                     (4, Priority::FetchNow),
                 ] {
                     assert_eq!(
-                        prio_fn(
-                            &CertificationMessageId {
-                                height: Height::from(*height),
-                                hash: CertificationMessageHash::Certification(CryptoHashOf::from(
-                                    CryptoHash(Vec::new())
-                                )),
-                            },
-                            &()
-                        ),
+                        prio_fn(&CertificationMessageId {
+                            height: Height::from(*height),
+                            hash: CertificationMessageHash::Certification(CryptoHashOf::from(
+                                CryptoHash(Vec::new())
+                            )),
+                        },),
                         *prio
                     );
                 }

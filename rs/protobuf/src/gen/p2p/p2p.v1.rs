@@ -46,6 +46,4 @@ pub mod slot_update {
 pub struct Advert {
     #[prost(bytes = "vec", tag = "1")]
     pub id: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "2")]
-    pub attribute: ::prost::alloc::vec::Vec<u8>,
 }

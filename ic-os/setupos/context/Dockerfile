@@ -64,9 +64,6 @@ RUN find /etc -type d -exec chmod 0755 {} \+ && \
 # Regenerate initramfs (config changed after copying in /etc)
 RUN RESUME=none update-initramfs -c -k all
 
-COPY prep /prep
-RUN cd /prep && ./prep.sh && cd / && rm -rf /prep
-
 RUN \
     for SERVICE in /etc/systemd/system/*; do \
     if [ -f "$SERVICE" -a ! -L "$SERVICE" ] && grep -q '^.Install.' "$SERVICE" ; then systemctl enable "${SERVICE#/etc/systemd/system/}" ; fi ; \

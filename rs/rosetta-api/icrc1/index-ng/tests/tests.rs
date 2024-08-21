@@ -54,7 +54,6 @@ fn upgrade_ledger(
         change_fee_collector,
         max_memo_length: None,
         feature_flags: None,
-        maximum_number_of_accounts: None,
         accounts_overflow_trim_quantity: None,
         change_archive_options: None,
     }));
@@ -377,7 +376,10 @@ fn sanity_check_ledger() {
             .map_err(|err| err.code())
         {
             Err(ic_state_machine_tests::ErrorCode::CanisterMethodNotFound) => {}
-            r => panic!("get_blocks not disabled in the Ledger! (call result: {r:?})"),
+            _ => panic!(
+                "{}",
+                "get_blocks not disabled in the Ledger! (call result: {r:?})"
+            ),
         }
     }
     #[cfg(feature = "icrc3_disabled")]
@@ -392,7 +394,10 @@ fn sanity_check_ledger() {
             .map_err(|err| err.code())
         {
             Err(ic_state_machine_tests::ErrorCode::CanisterMethodNotFound) => {}
-            r => panic!("icrc3_get_blocks not disabled in the Ledger! (call result: {r:?})"),
+            _ => panic!(
+                "{}",
+                "icrc3_get_blocks not disabled in the Ledger! (call result: {r:?})"
+            ),
         }
     }
 }

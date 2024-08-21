@@ -1,7 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
-package(default_visibility = ["//visibility:public"])
-
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/async_utils",
@@ -25,5 +23,6 @@ rust_binary(
     name = "systemd-journal-gatewayd-shim",
     srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES,
 )

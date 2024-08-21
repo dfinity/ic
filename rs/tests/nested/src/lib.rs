@@ -106,20 +106,25 @@ pub fn upgrade(env: TestEnv, to: &NestedVersionTarget) {
 
     let (target_version, url, sha256) = match to {
         NestedVersionTarget::Mainnet => (
-            env.get_mainnet_version().unwrap(),
-            env.get_mainnet_hostos_update_img_url().unwrap(),
+            get_mainnet_version().unwrap(),
+            get_mainnet_hostos_update_img_url().unwrap(),
             env.get_mainnet_hostos_update_img_sha256().unwrap(),
         ),
         NestedVersionTarget::Branch(false) => (
-            env.get_branch_version().unwrap(),
-            env.get_hostos_update_img_url().unwrap(),
-            env.get_hostos_update_img_sha256().unwrap(),
+            get_branch_version().unwrap(),
+            get_hostos_update_img_url().unwrap(),
+            get_hostos_update_img_sha256().unwrap(),
         ),
-        NestedVersionTarget::Branch(true) => (
-            format!("{}-test", env.get_branch_version().unwrap()),
-            env.get_hostos_update_img_test_url().unwrap(),
-            env.get_hostos_update_img_test_sha256().unwrap(),
-        ),
+        NestedVersionTarget::Branch(true) => {
+            let original_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
+                .expect("tip-of-branch IC version");
+
+            (
+                format!("{original_version}-test"),
+                get_hostos_update_img_test_url().unwrap(),
+                get_hostos_update_img_test_sha256().unwrap(),
+            )
+        }
         NestedVersionTarget::Published {
             version,
             url,

@@ -26,7 +26,7 @@ use candid::Decode;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SshSession,
+    get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SshSession,
     READY_WAIT_TIMEOUT, RETRY_BACKOFF,
 };
 use ic_system_test_driver::driver::universal_vm::UniversalVms;
@@ -50,7 +50,7 @@ pub fn config(env: TestEnv) {
     // https://en.bitcoinwiki.org/wiki/Running_Bitcoind
 
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_config_img(env.get_dependency_path("rs/tests/btc_uvm_config_image.zst"))
+        .with_config_img(get_dependency_path("rs/tests/btc_uvm_config_image.zst"))
         .start(&env)
         .expect("failed to setup universal VM");
 
@@ -160,7 +160,7 @@ pub fn get_balance(env: TestEnv) {
     let agent = node.with_default_agent(|agent| async move { agent });
     let res = block_on(async {
         let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
-        install_bitcoin_canister(&runtime, &logger, &env).await;
+        install_bitcoin_canister(&runtime, &logger).await;
         let canister =
             UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
                 .await;

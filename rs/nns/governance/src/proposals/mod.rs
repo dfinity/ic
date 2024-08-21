@@ -5,14 +5,15 @@ use ic_nns_constants::{
     CYCLES_LEDGER_INDEX_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID,
     GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, ICP_LEDGER_ARCHIVE_1_CANISTER_ID,
     ICP_LEDGER_ARCHIVE_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID,
-    LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
+    LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
+    SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
 
 pub mod call_canister;
 pub mod create_service_nervous_system;
 pub mod install_code;
-pub mod proposal_submission;
 pub mod stop_or_start_canister;
+pub mod update_canister_settings;
 
 const PROTOCOL_CANISTER_IDS: [&CanisterId; 16] = [
     &REGISTRY_CANISTER_ID,
@@ -33,14 +34,16 @@ const PROTOCOL_CANISTER_IDS: [&CanisterId; 16] = [
     &CYCLES_LEDGER_INDEX_CANISTER_ID,
 ];
 
-pub(crate) fn topic_to_manage_canister(canister_id: &CanisterId) -> Result<Topic, GovernanceError> {
+const SNS_RELATED_CANISTER_IDS: [&CanisterId; 2] =
+    [&SNS_WASM_CANISTER_ID, &SNS_AGGREGATOR_CANISTER_ID];
+
+pub(crate) fn topic_to_manage_canister(canister_id: &CanisterId) -> Topic {
     if PROTOCOL_CANISTER_IDS.contains(&canister_id) {
-        Ok(Topic::ProtocolCanisterManagement)
+        Topic::ProtocolCanisterManagement
+    } else if SNS_RELATED_CANISTER_IDS.contains(&canister_id) {
+        Topic::ServiceNervousSystemManagement
     } else {
-        Err(invalid_proposal_error(&format!(
-            "Canister id {:?} is not a protocol canister",
-            canister_id
-        )))
+        Topic::NetworkCanisterManagement
     }
 }
 

@@ -3,9 +3,9 @@
 use crate::helpers::get_subnet_ids;
 use async_trait::async_trait;
 use candid::CandidType;
-use ic_canister_client::Agent;
-use ic_canister_client::Sender;
+use ic_canister_client::{Agent, Sender};
 use ic_nns_common::types::NeuronId;
+use ic_nns_governance_api::pb::v1::ProposalActionRequest;
 use ic_protobuf::registry::{
     node::v1::IPv4InterfaceConfig,
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
@@ -17,12 +17,13 @@ use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{PrincipalId, SubnetId};
 use indexmap::IndexMap;
-use serde::Serialize;
-use std::str::FromStr;
+use serde::{Deserialize, Serialize};
 use std::{
     convert::{From, TryFrom, TryInto},
     net::{Ipv4Addr, Ipv6Addr},
+    str::FromStr,
 };
+use strum_macros::EnumString;
 
 /// All or part of the registry
 #[derive(Default, Serialize)]
@@ -68,9 +69,6 @@ pub(crate) struct SubnetRecord {
     pub dkg_interval_length: u64,
     pub start_as_nns: bool,
     pub subnet_type: SubnetType,
-    pub max_instructions_per_message: u64,
-    pub max_instructions_per_round: u64,
-    pub max_instructions_per_install_code: u64,
     pub features: SubnetFeatures,
     pub max_number_of_canisters: u64,
     pub ssh_readonly_access: Vec<String>,
@@ -120,9 +118,6 @@ impl From<&SubnetRecordProto> for SubnetRecord {
             dkg_interval_length: value.dkg_interval_length,
             start_as_nns: value.start_as_nns,
             subnet_type: SubnetType::try_from(value.subnet_type).unwrap(),
-            max_instructions_per_message: value.max_instructions_per_message,
-            max_instructions_per_round: value.max_instructions_per_round,
-            max_instructions_per_install_code: value.max_instructions_per_install_code,
             features: value.features.clone().unwrap_or_default().into(),
             max_number_of_canisters: value.max_number_of_canisters,
             ssh_readonly_access: value.ssh_readonly_access.clone(),
@@ -251,9 +246,22 @@ impl SubnetDescriptor {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Eq, EnumString, Copy)]
+pub enum LogVisibility {
+    #[strum(serialize = "controllers")]
+    Controllers,
+    #[strum(serialize = "public")]
+    Public,
+}
+
 /// Trait to extract the payload for each proposal type.
 /// This trait is async as building some payloads requires async calls.
 #[async_trait]
 pub trait ProposalPayload<T: CandidType> {
     async fn payload(&self, agent: &Agent) -> T;
+}
+
+#[async_trait]
+pub trait ProposalAction {
+    async fn action(&self) -> ProposalActionRequest;
 }

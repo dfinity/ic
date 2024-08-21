@@ -10,16 +10,16 @@ documentation.workspace = true
 askama = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
-bytes = { workspace = true }
 byte-unit = "4.0.14"
+bytes = { workspace = true }
 cfg-if = "1.0.0"
 crossbeam = "0.8.4"
+futures = { workspace = true }
+futures-util = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
 http-body = { workspace = true }
 http-body-util = { workspace = true }
-futures = { workspace = true }
-futures-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
 ic-async-utils = { path = "../../async_utils" }
@@ -34,13 +34,13 @@ ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-logger = { path = "../../monitoring/logger" }
-ic-tracing = { path = "../../monitoring/tracing" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-pprof = { path = "../../monitoring/pprof" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-provisional-whitelist = { path = "../../registry/provisional_whitelist" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replicated-state = { path = "../../replicated_state" }
+ic-tracing = { path = "../../monitoring/tracing" }
 ic-types = { path = "../../types/types" }
 ic-validator = { path = "../../validator" }
 inferno = "0.11.19"
@@ -60,11 +60,6 @@ tower-http = { workspace = true }
 tracing-flame = "0.2.0"
 tracing-subscriber = { workspace = true }
 
-
-[target.'cfg(target_os = "linux")'.dependencies]
-# this library uses libunwind, which is only applicable to Linux
-ic-backtrace = { path = "../../monitoring/backtrace" }
-
 [dev-dependencies]
 ic-canister-client = { path = "../../canister_client" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
@@ -82,12 +77,15 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-state = { path = "../../test_utilities/state" }
 ic-test-utilities-time = { path = "../../test_utilities/time" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
-mockall = { workspace = true }
 maplit = "1.0.2"
+mockall = { workspace = true }
 pretty_assertions = { workspace = true }
 proptest = "1.0.0"
+reqwest = { workspace = true }
+rstest = { workspace = true }
 rustls = { workspace = true }
 serde_bytes = { workspace = true }
 tower-test = "0.4.0"
-reqwest = { workspace = true }
-rstest = { workspace = true }
+
+[features]
+fuzzing_code = []

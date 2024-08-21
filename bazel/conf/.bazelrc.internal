@@ -1,15 +1,17 @@
 # A .bazelrc used internally by DFINITY for metrics, cache, etc
 
 # Build event upload configuration
-build:ci --build_event_binary_file=bazel-bep.pb
+build:bes --build_event_binary_file=bazel-bep.pb --profile=profile.json
+build:bes --bes_results_url=https://dash.idx.dfinity.network/invocation/
+build:bes --bes_backend=bes.idx.dfinity.network
+build:bes --bes_upload_mode=wait_for_upload_complete
+build:bes --bes_timeout=180s # Default is no timeout.
+build:bes --experimental_remote_build_event_upload=minimal
 
-build --bes_results_url=https://dash.idx.dfinity.network/invocation/
-build --bes_backend=bes.idx.dfinity.network
-build --bes_timeout=60s # Default is no timeout.
-build --bes_upload_mode=wait_for_upload_complete
-build:ci --bes_timeout=180s # Default is no timeout.
+# by default, only include build event upload on CI
+build:ci --config=bes
+# additionally, upload build events asynchronously on CI
 build:ci --bes_upload_mode=fully_async
-build --experimental_remote_build_event_upload=minimal
 
 # DFINITY internal remote cache setup
 build --remote_cache=bazel-remote.idx.dfinity.network
@@ -31,9 +33,12 @@ build:ci --remote_upload_local_results=true
 
 build:ci --noremote_local_fallback
 
-# Run `bazel build ... --config=local` to build targets without cache (and without build event upload).
+# Run `bazel build ... --config=local` to build targets without cache
 build:local --remote_cache=
-build:local --bes_backend=
+
+# Upload bes by default when running system tests so that e.g. failures can
+# be shared easily without having to rerun a potentially very-long systest
+build:systest --config=bes
 
 build:systest --s3_endpoint=https://s3-upload.idx.dfinity.network
 build:testnet --s3_endpoint=https://s3-upload.idx.dfinity.network

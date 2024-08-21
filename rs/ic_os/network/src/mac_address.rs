@@ -7,6 +7,7 @@ use utils::{get_command_stdout, intersperse};
 
 /// Wrapper types for MAC addresses
 /// - ensure clients cannot modify or construct incorrectly.
+///
 /// Hex alpha digits are turned to lower case to match ipmitool presentation
 /// Construct with `try_from(&str)`
 /// Use `.get()` to get the underlying string

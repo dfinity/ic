@@ -46,7 +46,8 @@ mod gen_dealing_encryption_key_pair_tests {
         );
 
         assert_eq!(
-            csp.current_node_public_keys()
+            csp.csp_vault
+                .current_node_public_keys()
                 .expect("Failed to retrieve node public keys")
                 .dkg_dealing_encryption_public_key
                 .expect("missing key"),
@@ -114,7 +115,7 @@ mod dkg_dealing_encryption_key_id {
     #[test]
     fn should_return_key_not_found_error_when_no_dkg_encryption_key() {
         let csp = Csp::builder_for_test().build();
-        let result = dkg_dealing_encryption_key_id(&csp);
+        let result = dkg_dealing_encryption_key_id(&*csp.csp_vault);
         assert_matches!(
             result,
             Err(DkgDealingEncryptionKeyIdRetrievalError::KeyNotFound)
@@ -153,7 +154,7 @@ mod dkg_dealing_encryption_key_id {
             )
             .build();
 
-        let result = dkg_dealing_encryption_key_id(&csp);
+        let result = dkg_dealing_encryption_key_id(&*csp.csp_vault);
 
         assert_matches!(
             result,
@@ -169,7 +170,7 @@ mod dkg_dealing_encryption_key_id {
             .gen_dealing_encryption_key_pair(NODE_1)
             .expect("no dkg key");
 
-        let result = dkg_dealing_encryption_key_id(&csp);
+        let result = dkg_dealing_encryption_key_id(&*csp.csp_vault);
 
         assert_matches!(result, Ok(key_id) if key_id == KeyId::from(&generated_dkg_pk));
     }

@@ -228,8 +228,8 @@ impl IDkgPayload {
     /// to require ongoing signature requests to finish before we can let nodes
     /// move off a subnet.
     ///
-    /// Note that we do not consider available quadruples here because it would
-    /// prevent nodes from leaving when the quadruples are not consumed.
+    /// Note that we do not consider available pre-signatures here because it would
+    /// prevent nodes from leaving when the pre-signatures are not consumed.
     pub(crate) fn get_oldest_registry_version_in_use(&self) -> Option<RegistryVersion> {
         // Both current key transcript and next_in_creation are considered.
         let idkg_transcripts = &self.idkg_transcripts;
@@ -759,12 +759,8 @@ pub enum IDkgMessage {
 impl IdentifiableArtifact for IDkgMessage {
     const NAME: &'static str = "idkg";
     type Id = IDkgArtifactId;
-    type Attribute = IDkgMessageAttribute;
     fn id(&self) -> Self::Id {
         self.message_id()
-    }
-    fn attribute(&self) -> Self::Attribute {
-        self.into()
     }
 }
 
@@ -773,8 +769,6 @@ impl PbArtifact for IDkgMessage {
     type PbIdError = ProxyDecodeError;
     type PbMessage = ic_protobuf::types::v1::IDkgMessage;
     type PbMessageError = ProxyDecodeError;
-    type PbAttribute = ic_protobuf::types::v1::IDkgMessageAttribute;
-    type PbAttributeError = ProxyDecodeError;
 }
 
 impl IDkgMessage {
@@ -831,28 +825,28 @@ impl TryFrom<pb::IDkgMessage> for IDkgMessage {
 ///
 /// Two kinds of look up are possible with this:
 /// 1. Look up by full key of <prefix + id data>, which would return the matching
-/// artifact if present.
+///    artifact if present.
 /// 2. Look up by prefix match. This can return 0 or more entries, as several artifacts may share
-/// the same prefix. The caller is expected to filter the returned entries as needed. The look up
-/// by prefix makes some frequent queries more efficient (e.g) to know if a node has already
-/// issued a support for a <transcript Id, dealer Id>, we could iterate through all the
-/// entries in the support pool looking for a matching artifact. Instead, we could issue a
-/// single prefix query for prefix = <transcript Id, dealer Id, support signer Id>.
+///    the same prefix. The caller is expected to filter the returned entries as needed. The look up
+///    by prefix makes some frequent queries more efficient (e.g) to know if a node has already
+///    issued a support for a <transcript Id, dealer Id>, we could iterate through all the
+///    entries in the support pool looking for a matching artifact. Instead, we could issue a
+///    single prefix query for prefix = <transcript Id, dealer Id, support signer Id>.
 ///
 /// - The group tag creates an ordering of the messages
-/// We previously identified the messages only by CryptoHash. This loses any ordering
-/// info (e.g) if we want to iterate/process the messages related to older transcripts ahead of
-/// the newer ones, this is not possible with CryptoHash. The group tag automatically
-/// creates an ordering/grouping (e.g) this is set to transcript Id for dealings and support
-/// shares.
+///   We previously identified the messages only by CryptoHash. This loses any ordering
+///   info (e.g) if we want to iterate/process the messages related to older transcripts ahead of
+///   the newer ones, this is not possible with CryptoHash. The group tag automatically
+///   creates an ordering/grouping (e.g) this is set to transcript Id for dealings and support
+///   shares.
 ///
 /// - The meta info hash maps variable length meta info fields into a fixed length
-/// hash, which simplifies the design and easy to work with LMDB keys. Ideally, we would like to
-/// look up by a list of relevant fields (e.g) dealings by <transcript Id, dealer Id>,
-/// support shares by <transcript Id, dealer Id, support signer Id>, complaints by
-/// <transcript Id, dealer Id, complainer Id>, etc. But this requires different way of
-/// indexing for the different sub pools. Instead, mapping these fields to the hash creates an
-/// uniform indexing mechanism for all the sub pools.
+///   hash, which simplifies the design and easy to work with LMDB keys. Ideally, we would like to
+///   look up by a list of relevant fields (e.g) dealings by <transcript Id, dealer Id>,
+///   support shares by <transcript Id, dealer Id, support signer Id>, complaints by
+///   <transcript Id, dealer Id, complainer Id>, etc. But this requires different way of
+///   indexing for the different sub pools. Instead, mapping these fields to the hash creates an
+///   uniform indexing mechanism for all the sub pools.
 ///
 /// On the down side, more than one artifact may map to the same hash value. So the caller
 /// would need to do an exact match to filter as needed. But the collisions are expected to
@@ -1557,87 +1551,6 @@ impl SignedBytesWithoutDomainSeparator for IDkgOpeningContent {
 impl SignedBytesWithoutDomainSeparator for SignedIDkgOpening {
     fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
         serde_cbor::to_vec(&self).unwrap()
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum IDkgMessageAttribute {
-    Dealing(IDkgTranscriptId),
-    DealingSupport(IDkgTranscriptId),
-    EcdsaSigShare(RequestId),
-    SchnorrSigShare(RequestId),
-    Complaint(IDkgTranscriptId),
-    Opening(IDkgTranscriptId),
-}
-
-impl From<IDkgMessageAttribute> for pb::IDkgMessageAttribute {
-    fn from(value: IDkgMessageAttribute) -> Self {
-        use pb::i_dkg_message_attribute::Kind;
-        let kind = match value {
-            IDkgMessageAttribute::Dealing(id) => Kind::SignedDealing((&id).into()),
-            IDkgMessageAttribute::DealingSupport(id) => Kind::DealingSupport((&id).into()),
-            IDkgMessageAttribute::EcdsaSigShare(id) => Kind::EcdsaSigShare(id.into()),
-            IDkgMessageAttribute::SchnorrSigShare(id) => Kind::SchnorrSigShare(id.into()),
-            IDkgMessageAttribute::Complaint(id) => Kind::Complaint((&id).into()),
-            IDkgMessageAttribute::Opening(id) => Kind::Opening((&id).into()),
-        };
-        Self { kind: Some(kind) }
-    }
-}
-
-impl TryFrom<pb::IDkgMessageAttribute> for IDkgMessageAttribute {
-    type Error = ProxyDecodeError;
-    fn try_from(value: pb::IDkgMessageAttribute) -> Result<Self, Self::Error> {
-        use pb::i_dkg_message_attribute::Kind;
-        let Some(kind) = &value.kind else {
-            return Err(ProxyDecodeError::MissingField("IDkgMessageAttribute::kind"));
-        };
-        Ok(match &kind {
-            Kind::SignedDealing(id) => IDkgMessageAttribute::Dealing(id.try_into()?),
-            Kind::DealingSupport(id) => IDkgMessageAttribute::DealingSupport(id.try_into()?),
-            Kind::EcdsaSigShare(id) => IDkgMessageAttribute::EcdsaSigShare(id.try_into()?),
-            Kind::SchnorrSigShare(id) => IDkgMessageAttribute::SchnorrSigShare(id.try_into()?),
-            Kind::Complaint(id) => IDkgMessageAttribute::Complaint(id.try_into()?),
-            Kind::Opening(id) => IDkgMessageAttribute::Opening(id.try_into()?),
-        })
-    }
-}
-
-impl From<&IDkgMessage> for IDkgMessageAttribute {
-    fn from(msg: &IDkgMessage) -> IDkgMessageAttribute {
-        match msg {
-            IDkgMessage::Dealing(dealing) => {
-                IDkgMessageAttribute::Dealing(dealing.content.transcript_id)
-            }
-            IDkgMessage::DealingSupport(support) => {
-                IDkgMessageAttribute::DealingSupport(support.transcript_id)
-            }
-            IDkgMessage::EcdsaSigShare(share) => {
-                IDkgMessageAttribute::EcdsaSigShare(share.request_id.clone())
-            }
-            IDkgMessage::SchnorrSigShare(share) => {
-                IDkgMessageAttribute::SchnorrSigShare(share.request_id.clone())
-            }
-            IDkgMessage::Complaint(complaint) => {
-                IDkgMessageAttribute::Complaint(complaint.content.idkg_complaint.transcript_id)
-            }
-            IDkgMessage::Opening(opening) => {
-                IDkgMessageAttribute::Opening(opening.content.idkg_opening.transcript_id)
-            }
-        }
-    }
-}
-
-impl IDkgMessageAttribute {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Dealing(_) => "signed_dealing",
-            Self::DealingSupport(_) => "dealing_support",
-            Self::EcdsaSigShare(_) => "ecdsa_sig_share",
-            Self::SchnorrSigShare(_) => "schnorr_sig_share",
-            Self::Complaint(_) => "complaint",
-            Self::Opening(_) => "opening",
-        }
     }
 }
 

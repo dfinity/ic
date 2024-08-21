@@ -14,6 +14,7 @@ env:
   CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
+  CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
   DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
   DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
   MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
@@ -21,7 +22,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:26cc347efa50935342742acddfb5d710fae1982d401911013ad8750f0603c590
+    image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
   dind-small-setup: &dind-small-setup
     timeout-minutes: 30
     runs-on:
@@ -71,6 +72,17 @@ jobs:
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}"/bin
           ./build-all-fuzzers.sh --zip
+      - name: Upload bazel-bep
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
 
   lock-generate:
     name: Lock Generate
@@ -118,6 +130,7 @@ jobs:
     <<: *dind-small-setup
     timeout-minutes: 60
     permissions:
+      contents: read
       pull-requests: write
     env:
       SHELL_WRAPPER: "/usr/bin/time"
