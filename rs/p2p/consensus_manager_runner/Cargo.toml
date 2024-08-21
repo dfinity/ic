@@ -1,0 +1,54 @@
+[package]
+name = "ic-consensus-manager-runner"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-trait = "0.1.36"
+either = "1.6.0"
+clap = { version = "4", features = ["derive"] }
+axum = "0.7.0"
+prometheus-client = "0.22.0"
+backoff = { workspace = true }
+bytes = { workspace = true }
+crossbeam-channel = { workspace = true }
+futures = { workspace = true }
+ic-artifact-manager = { path = "../artifact_manager" }
+ic-artifact-downloader = { path = "../artifact_downloader" }
+ic-config = { path = "../../config" }
+ic-async-utils = { path = "../../async_utils" }
+ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-protobuf = { path = "../../protobuf" }
+ic-quic-transport = { path = "../quic_transport" }
+ic-types = { path = "../../types/types" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }
+phantom_newtype = { path = "../../phantom_newtype" }
+prometheus = { workspace = true }
+ic-pprof = { path = "../../monitoring/pprof" }
+rand = "0.8.5"
+rand_chacha = "0.3"
+slog = { workspace = true }
+tokio = { workspace = true }
+ic-crypto-test-utils-tls = { path = "../../crypto/test_utils/tls" }
+tokio-rustls = { version = "0.26.0" }
+tokio-util = { workspace = true }
+libp2p = { version = "0.53.1", features = ["full"]}
+
+[dev-dependencies]
+anyhow = { workspace = true }
+futures = { workspace = true }
+ic-p2p-test-utils = { path = "../test_utils" }
+ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+mockall = { workspace = true }
+tower = { workspace = true }
+turmoil = { workspace = true }
+
+[[bin]]
+name = "aws"
+path = "src/aws.rs"
