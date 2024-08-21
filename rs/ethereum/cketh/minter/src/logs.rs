@@ -26,20 +26,20 @@ impl Sink for PrintProxySink {
 }
 
 #[derive(Clone, serde::Serialize, Deserialize, Debug, Copy)]
-pub enum FilterValue {
+pub enum Priority {
     Info,
     TraceHttp,
     Debug,
 }
 
-impl FromStr for FilterValue {
+impl FromStr for Priority {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "info" => Ok(FilterValue::Info),
-            "trace_http" => Ok(FilterValue::TraceHttp),
-            "debug" => Ok(FilterValue::Debug),
+            "info" => Ok(Priority::Info),
+            "trace_http" => Ok(Priority::TraceHttp),
+            "debug" => Ok(Priority::Debug),
             _ => Err("could not recognize priority".to_string()),
         }
     }
@@ -66,7 +66,7 @@ impl FromStr for Sort {
 #[derive(Clone, serde::Serialize, Deserialize, Debug)]
 pub struct LogEntry {
     pub timestamp: u64,
-    pub priority: FilterValue,
+    pub priority: Priority,
     pub file: String,
     pub line: u32,
     pub message: String,
@@ -79,11 +79,11 @@ pub struct Log {
 }
 
 impl Log {
-    pub fn push_logs(&mut self, priority: FilterValue) {
+    pub fn push_logs(&mut self, priority: Priority) {
         let logs = match priority {
-            FilterValue::Info => export_logs(&INFO_BUF),
-            FilterValue::TraceHttp => export_logs(&TRACE_HTTP_BUF),
-            FilterValue::Debug => export_logs(&DEBUG_BUF),
+            Priority::Info => export_logs(&INFO_BUF),
+            Priority::TraceHttp => export_logs(&TRACE_HTTP_BUF),
+            Priority::Debug => export_logs(&DEBUG_BUF),
         };
         for entry in logs {
             self.entries.push(LogEntry {
@@ -98,9 +98,9 @@ impl Log {
     }
 
     pub fn push_all(&mut self) {
-        self.push_logs(FilterValue::Info);
-        self.push_logs(FilterValue::TraceHttp);
-        self.push_logs(FilterValue::Debug);
+        self.push_logs(Priority::Info);
+        self.push_logs(Priority::TraceHttp);
+        self.push_logs(Priority::Debug);
     }
 
     pub fn serialize_logs(&self, max_body_size: usize) -> String {
@@ -145,13 +145,13 @@ impl Log {
 
 #[cfg(test)]
 mod tests {
-    use crate::logs::{FilterValue, Log, LogEntry, Sort};
+    use crate::logs::{Log, LogEntry, Priority, Sort};
     use proptest::{prop_assert, proptest};
 
     fn info_log_entry_with_timestamp(timestamp: u64) -> LogEntry {
         LogEntry {
             timestamp,
-            priority: FilterValue::Info,
+            priority: Priority::Info,
             file: String::default(),
             line: 0,
             message: String::default(),
@@ -188,7 +188,7 @@ mod tests {
             for _ in 0..number_of_entries {
                 entries.push(LogEntry {
                     timestamp: 0,
-                    priority: FilterValue::Info,
+                    priority: Priority::Info,
                     file: String::default(),
                     line: 0,
                     message: "1".repeat(entry_size),
@@ -228,7 +228,7 @@ mod tests {
         for _ in 0..10 {
             entries.push(LogEntry {
                 timestamp: 0,
-                priority: FilterValue::Info,
+                priority: Priority::Info,
                 file: String::default(),
                 line: 0,
                 message: String::default(),
@@ -242,7 +242,7 @@ mod tests {
 
         entries.push(LogEntry {
             timestamp: 0,
-            priority: FilterValue::Info,
+            priority: Priority::Info,
             file: String::default(),
             line: 0,
             message: "1".repeat(MAX_BODY_SIZE),
@@ -264,7 +264,7 @@ mod tests {
 
         entries.push(LogEntry {
             timestamp: 0,
-            priority: FilterValue::Info,
+            priority: Priority::Info,
             file: String::default(),
             line: 0,
             message: "1".repeat(MAX_BODY_SIZE),
