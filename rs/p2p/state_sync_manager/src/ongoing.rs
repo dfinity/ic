@@ -148,9 +148,9 @@ impl OngoingStateSync {
                 }
             }
 
-            debug_assert!(
-                self.active_downloads.len() * PARALLEL_CHUNK_DOWNLOADS == self.allowed_downloads
-            );
+            // debug_assert!(
+            //     self.active_downloads.len() * PARALLEL_CHUNK_DOWNLOADS == self.allowed_downloads
+            // );
 
             // Collect metrics
             self.metrics

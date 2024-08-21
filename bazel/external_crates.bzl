@@ -114,6 +114,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         cargo_config = "//:bazel/cargo.config",
         annotations = CRATE_ANNOTATIONS,
         packages = {
+            "async-channel": crate.spec(
+                version = "^2.3.1",
+            ),
             "actix-rt": crate.spec(
                 version = "^2.10.0",
             ),
@@ -534,6 +537,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = [
                     "rustls",
                 ],
+            ),
+            "libp2p": crate.spec(
+                version = "^0.53.0",
+                features = ["full"],
             ),
             "hyper-util": crate.spec(
                 version = "^0.1.7",
@@ -957,6 +964,16 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.13.4",
                 features = [
                     "process",
+                ],
+            ),
+            "prometheus-client": crate.spec(
+                version = "^0.22.0",
+            ),
+            "prometheus-http-query": crate.spec(
+                version = "^0.6.6",
+                default_features = False,
+                features = [
+                    "rustls-tls-webpki-roots",
                 ],
             ),
             "proptest": crate.spec(
