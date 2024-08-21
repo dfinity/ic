@@ -9,7 +9,7 @@ use ic_types::{
 pub struct ArtifactWithOpt<T> {
     pub artifact: T,
     /// The value defines the strategy to deliver a message to all peers.
-    /// If true, the artifact will be pushed (send directly to all peers). 
+    /// If true, the artifact will be pushed (send directly to all peers).
     /// This is fast but it can result in significant traffic overhead.
     /// If false, only the ID of the artifact is pushed to the peers and then each
     /// peer can fetch the artifact on demand.
@@ -125,8 +125,7 @@ pub trait ArtifactAssembler<A1: IdentifiableArtifact, A2: PbArtifact>:
     ) -> impl std::future::Future<Output = Result<(A1, NodeId), Aborted>> + Send;
 }
 
-
-/// The artifact filter function returns a value that defines 3 possible handling logics when 
+/// The artifact filter function returns a value that defines 3 possible handling logics when
 /// an artifact or ID is received.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FilterValue {
@@ -141,7 +140,7 @@ pub enum FilterValue {
 /// Idempotent and non-blocking function which returns a FilterValue for any artifact ID.
 pub type FilterFn<Id> = Box<dyn Fn(&Id) -> FilterValue + Send + Sync + 'static>;
 
-/// Since the FilterFn above is defined as idempotent, the factory trait provides a way to refresh 
+/// Since the FilterFn above is defined as idempotent, the factory trait provides a way to refresh
 /// the filter function.
 /// All the filtering logic should happen inside the implentations of the ArtifactAssembler.
 pub trait FilterFnFactory<Artifact: IdentifiableArtifact, Pool>: Send + Sync {

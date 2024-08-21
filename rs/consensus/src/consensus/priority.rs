@@ -3,7 +3,7 @@
 
 use ic_consensus_utils::{pool_reader::PoolReader, ACCEPTABLE_VALIDATION_CUP_GAP};
 use ic_interfaces::consensus_pool::ConsensusPool;
-use ic_interfaces::p2p::consensus::{FilterValue, FilterValue::*, FilterFn};
+use ic_interfaces::p2p::consensus::{FilterFn, FilterValue, FilterValue::*};
 use ic_types::{artifact::ConsensusMessageId, consensus::ConsensusMessageHash, Height};
 
 /// Return a priority function that matches the given consensus pool.
@@ -169,10 +169,10 @@ mod tests {
                 ))),
                 height: block.height(),
             };
-            assert_eq!(priority(&beacon.get_id()), Stash);
-            assert_eq!(priority(&block.get_id()), Stash);
-            assert_eq!(priority(&notarization.get_id()), Stash);
-            assert_eq!(priority(&equivocation_proof_id), Stash);
+            assert_eq!(priority(&beacon.get_id()), MaybeWantsLater);
+            assert_eq!(priority(&block.get_id()), MaybeWantsLater);
+            assert_eq!(priority(&notarization.get_id()), MaybeWantsLater);
+            assert_eq!(priority(&equivocation_proof_id), MaybeWantsLater);
 
             // Regardless of bounds, we should always fetch CUPs.
             let cup_id = ConsensusMessageId {
@@ -207,14 +207,14 @@ mod tests {
             let block = pool.make_next_block();
             assert_eq!(priority(&block.get_id()), Wants);
 
-            // Older than finalized ==> Drop
+            // Older than finalized ==> Unwanted
             let notarization = pool
                 .validated()
                 .notarization()
                 .get_by_height(Height::from(1))
                 .last()
                 .unwrap();
-            assert_eq!(priority(&notarization.get_id()), Drop);
+            assert_eq!(priority(&notarization.get_id()), Unwanted);
 
             // Put block into validated pool, notarization in to unvalidated pool
             pool.insert_validated(block.clone());
