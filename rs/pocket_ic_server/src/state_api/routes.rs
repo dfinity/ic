@@ -6,10 +6,10 @@
 ///
 use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
 use crate::pocket_ic::{
-    AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, DashboardRequest,
-    ExecuteIngressMessage, GetCanisterHttp, GetCyclesBalance, GetStableMemory, GetSubnet, GetTime,
-    GetTopology, MockCanisterHttp, PubKey, Query, QueryRequest, ReadStateRequest, SetStableMemory,
-    SetTime, StatusRequest, SubmitIngressMessage, Tick,
+    AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
+    DashboardRequest, ExecuteIngressMessage, GetCanisterHttp, GetCyclesBalance, GetStableMemory,
+    GetSubnet, GetTime, GetTopology, MockCanisterHttp, PubKey, Query, QueryRequest,
+    SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage, SubnetReadStateRequest, Tick,
 };
 use crate::{async_trait, pocket_ic::PocketIc, BlobStore, InstanceId, OpId, Operation};
 use aide::{
@@ -32,7 +32,7 @@ use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use hyper::header;
 use ic_http_endpoints_public::cors_layer;
-use ic_types::CanisterId;
+use ic_types::{CanisterId, SubnetId};
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
     HttpGatewayDetails, InstanceConfig, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
@@ -128,7 +128,15 @@ where
         )
         .directory_route(
             "/canister/:ecid/read_state",
-            post(handler_read_state)
+            post(handler_canister_read_state)
+                .layer(RequestBodyLimitLayer::new(
+                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
+                ))
+                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+        )
+        .directory_route(
+            "/subnet/:sid/read_state",
+            post(handler_subnet_read_state)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
                 ))
@@ -706,15 +714,24 @@ pub async fn handler_query(
     handle_raw(api_state, instance_id, op).await
 }
 
-pub async fn handler_read_state(
+pub async fn handler_canister_read_state(
     State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    let op = ReadStateRequest {
+    let op = CanisterReadStateRequest {
         effective_canister_id,
         bytes,
     };
+    handle_raw(api_state, instance_id, op).await
+}
+
+pub async fn handler_subnet_read_state(
+    State(AppState { api_state, .. }): State<AppState>,
+    NoApi(Path((instance_id, subnet_id))): NoApi<Path<(InstanceId, SubnetId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = SubnetReadStateRequest { subnet_id, bytes };
     handle_raw(api_state, instance_id, op).await
 }
 
@@ -1032,7 +1049,8 @@ fn contains_unimplemented(config: ExtendedSubnetConfigSet) -> bool {
             .into_iter()
             .flatten()
             .chain(config.system)
-            .chain(config.application),
+            .chain(config.application)
+            .chain(config.verified_application),
         |spec: pocket_ic::common::rest::SubnetSpec| {
             spec.get_subnet_id().is_some() || !spec.is_supported()
         },
