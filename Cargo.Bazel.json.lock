@@ -1,5 +1,5 @@
 {
-  "checksum": "5f0652ce3058e854dc5cc537ada91d3a9fdadcb215a00e5313a54f94abab8618",
+  "checksum": "6c419e9738e9b959a87207723565fd3193751cf0820d7356579d92695f1d69dd",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -9663,7 +9663,7 @@
               "target": "candid"
             },
             {
-              "id": "ic-cdk 0.12.1",
+              "id": "ic-cdk 0.12.2",
               "target": "ic_cdk"
             },
             {
@@ -17093,10 +17093,6 @@
             {
               "id": "ed25519-dalek 2.1.1",
               "target": "ed25519_dalek"
-            },
-            {
-              "id": "either 1.8.1",
-              "target": "either"
             },
             {
               "id": "erased-serde 0.3.28",
@@ -27723,7 +27719,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-cdk 0.14.0",
+              "id": "ic-cdk 0.14.1",
               "target": "ic_cdk"
             },
             {
@@ -27833,14 +27829,14 @@
       ],
       "license_file": null
     },
-    "ic-cdk 0.12.1": {
+    "ic-cdk 0.12.2": {
       "name": "ic-cdk",
-      "version": "0.12.1",
+      "version": "0.12.2",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.12.1/download",
-          "sha256": "9f3d204af0b11c45715169c997858edb58fa8407d08f4fae78a6b415dd39a362"
+          "url": "https://static.crates.io/crates/ic-cdk/0.12.2/download",
+          "sha256": "0e908da565d9e304e83732500069ebb959e3d2cad80f894889ea37207112c7a0"
         }
       },
       "targets": [
@@ -27893,7 +27889,7 @@
           ],
           "selects": {}
         },
-        "version": "0.12.1"
+        "version": "0.12.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -27969,14 +27965,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk 0.14.0": {
+    "ic-cdk 0.14.1": {
       "name": "ic-cdk",
-      "version": "0.14.0",
+      "version": "0.14.1",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.14.0/download",
-          "sha256": "ff384f182459bec490a7f50a58bbdf8f7a6934de4dcc259e30c70641bcbcb917"
+          "url": "https://static.crates.io/crates/ic-cdk/0.14.1/download",
+          "sha256": "9cff1a3c3db565e3384c9c9d6d676b0a3f89a0886f4f787294d9c946d844369f"
         }
       },
       "targets": [
@@ -28029,7 +28025,7 @@
           ],
           "selects": {}
         },
-        "version": "0.14.0"
+        "version": "0.14.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -78223,7 +78219,6 @@
     "dyn-clone 1.0.14",
     "ed25519-dalek 2.1.1",
     "educe 0.4.22",
-    "either 1.8.1",
     "erased-serde 0.3.28",
     "escargot 0.5.7",
     "ethers-core 2.0.8",

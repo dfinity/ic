@@ -1669,7 +1669,7 @@ checksum = "53574f268dbe23dc83f891a4751b118a6ba927c8bc92e839ff108f3aaf151aa9"
 dependencies = [
  "canbench-rs-macros",
  "candid",
- "ic-cdk 0.12.1",
+ "ic-cdk 0.12.2",
  "serde",
 ]
 
@@ -5330,6 +5330,7 @@ dependencies = [
 name = "ic-backup"
 version = "0.9.0"
 dependencies = [
+ "anyhow",
  "chrono",
  "clap 3.2.25",
  "ic-config",
@@ -5827,7 +5828,7 @@ checksum = "5d1fc58d747480967a25810d8a90d460e7e9ea4c669ab0286541a148736513f9"
 dependencies = [
  "candid",
  "hex",
- "ic-cdk 0.14.0",
+ "ic-cdk 0.14.1",
  "ic-certification 2.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-representation-independent-hash 2.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static",
@@ -5930,7 +5931,7 @@ dependencies = [
 [[package]]
 name = "ic-cbor"
 version = "2.6.0"
-source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
+source = "git+https://github.com/dfinity/response-verification#da70db93832f88ecc556ae082612aedec47d3816"
 dependencies = [
  "candid",
  "ic-certification 2.6.0 (git+https://github.com/dfinity/response-verification)",
@@ -5941,9 +5942,9 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk"
-version = "0.12.1"
+version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f3d204af0b11c45715169c997858edb58fa8407d08f4fae78a6b415dd39a362"
+checksum = "0e908da565d9e304e83732500069ebb959e3d2cad80f894889ea37207112c7a0"
 dependencies = [
  "candid",
  "ic-cdk-macros 0.8.4",
@@ -5967,9 +5968,9 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk"
-version = "0.14.0"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff384f182459bec490a7f50a58bbdf8f7a6934de4dcc259e30c70641bcbcb917"
+checksum = "9cff1a3c3db565e3384c9c9d6d676b0a3f89a0886f4f787294d9c946d844369f"
 dependencies = [
  "candid",
  "ic-cdk-macros 0.14.0",
@@ -6070,7 +6071,7 @@ dependencies = [
 [[package]]
 name = "ic-certificate-verification"
 version = "2.6.0"
-source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
+source = "git+https://github.com/dfinity/response-verification#da70db93832f88ecc556ae082612aedec47d3816"
 dependencies = [
  "cached 0.47.0",
  "candid",
@@ -6122,7 +6123,7 @@ dependencies = [
 [[package]]
 name = "ic-certification"
 version = "2.6.0"
-source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
+source = "git+https://github.com/dfinity/response-verification#da70db93832f88ecc556ae082612aedec47d3816"
 dependencies = [
  "hex",
  "sha2 0.10.8",
@@ -7991,7 +7992,7 @@ dependencies = [
  "slog",
  "strum 0.26.2",
  "tempfile",
- "test-strategy",
+ "test-strategy 0.3.1",
  "threadpool",
  "tokio",
  "tower",
@@ -8043,7 +8044,7 @@ dependencies = [
 [[package]]
 name = "ic-http-certification"
 version = "2.6.0"
-source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
+source = "git+https://github.com/dfinity/response-verification#da70db93832f88ecc556ae082612aedec47d3816"
 dependencies = [
  "candid",
  "http 0.2.12",
@@ -10110,7 +10111,6 @@ dependencies = [
  "async-trait",
  "axum 0.7.5",
  "bytes",
- "either",
  "futures",
  "ic-artifact-downloader",
  "ic-artifact-manager",
@@ -10285,7 +10285,6 @@ dependencies = [
  "axum 0.7.5",
  "bytes",
  "criterion",
- "either",
  "futures",
  "ic-async-utils",
  "ic-base-types",
@@ -10302,7 +10301,6 @@ dependencies = [
  "prometheus",
  "prost",
  "quinn",
- "quinn-udp",
  "rustls 0.23.12",
  "slog",
  "socket2 0.5.7",
@@ -10781,7 +10779,6 @@ dependencies = [
 name = "ic-replica-setup-ic-network"
 version = "0.9.0"
 dependencies = [
- "either",
  "ic-artifact-downloader",
  "ic-artifact-manager",
  "ic-artifact-pool",
@@ -10924,6 +10921,7 @@ dependencies = [
  "strum 0.26.2",
  "strum_macros 0.26.2",
  "tempfile",
+ "test-strategy 0.4.0",
  "uuid",
 ]
 
@@ -10940,7 +10938,7 @@ dependencies = [
 [[package]]
 name = "ic-representation-independent-hash"
 version = "2.6.0"
-source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
+source = "git+https://github.com/dfinity/response-verification#da70db93832f88ecc556ae082612aedec47d3816"
 dependencies = [
  "leb128",
  "sha2 0.10.8",
@@ -10973,7 +10971,7 @@ dependencies = [
 [[package]]
 name = "ic-response-verification"
 version = "2.6.0"
-source = "git+https://github.com/dfinity/response-verification#5aa4f1f5533216e9536142c09b249635401999a4"
+source = "git+https://github.com/dfinity/response-verification#da70db93832f88ecc556ae082612aedec47d3816"
 dependencies = [
  "base64 0.21.5",
  "candid",
@@ -11117,7 +11115,7 @@ dependencies = [
 
 [[package]]
 name = "ic-signature-verification"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "assert_matches",
  "hex",
@@ -19078,7 +19076,19 @@ checksum = "78ad9e09554f0456d67a69c1584c9798ba733a5b50349a6c0d0948710523922d"
 dependencies = [
  "proc-macro2 1.0.86",
  "quote 1.0.36",
- "structmeta-derive",
+ "structmeta-derive 0.2.0",
+ "syn 2.0.72",
+]
+
+[[package]]
+name = "structmeta"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e1575d8d40908d70f6fd05537266b90ae71b15dbbe7a8b7dffa2b759306d329"
+dependencies = [
+ "proc-macro2 1.0.86",
+ "quote 1.0.36",
+ "structmeta-derive 0.3.0",
  "syn 2.0.72",
 ]
 
@@ -19087,6 +19097,17 @@ name = "structmeta-derive"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a60bcaff7397072dca0017d1db428e30d5002e00b6847703e2e42005c95fbe00"
+dependencies = [
+ "proc-macro2 1.0.86",
+ "quote 1.0.36",
+ "syn 2.0.72",
+]
+
+[[package]]
+name = "structmeta-derive"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "152a0b65a590ff6c3da95cabe2353ee04e6167c896b28e3b14478c2636c922fc"
 dependencies = [
  "proc-macro2 1.0.86",
  "quote 1.0.36",
@@ -19469,7 +19490,19 @@ checksum = "b8361c808554228ad09bfed70f5c823caf8a3450b6881cc3a38eb57e8c08c1d9"
 dependencies = [
  "proc-macro2 1.0.86",
  "quote 1.0.36",
- "structmeta",
+ "structmeta 0.2.0",
+ "syn 2.0.72",
+]
+
+[[package]]
+name = "test-strategy"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2bf41af45e3f54cc184831d629d41d5b2bda8297e29c81add7ae4f362ed5e01b"
+dependencies = [
+ "proc-macro2 1.0.86",
+ "quote 1.0.36",
+ "structmeta 0.3.0",
  "syn 2.0.72",
 ]
 
