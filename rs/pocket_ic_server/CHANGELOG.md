@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the enumeration type `SubnetKind` has a new variant `VerifiedApplication`.
 - New endpoint `/instances/<instance_id>/api/v2/subnet/...` supporting the IC HTTP subnet read state requests.
 - New endpoint `/api/v2/subnet` of the PocketIC HTTP gateway supporting the IC HTTP subnet read state requests.
+- The argument of the endpoint `/instances/` takes an additional optional field `log_level` specifying the replica log level of the PocketIC instance.
 
 ### Changed
 - The argument `listen_at` of the endpoint `/http_gateway` has been renamed to `port`.
