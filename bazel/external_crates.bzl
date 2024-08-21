@@ -236,14 +236,15 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "bitcoin": crate.spec(
                 version = "^0.28.1",
+		default_features = False,
                 features = [
-                    "default",
-                    "rand",
+                    "no-std",
                     "use-serde",
                 ],
             ),
             "bitcoincore-rpc": crate.spec(
-                version = "^0.15.0",
+                git = "https://github.com/dfinity/rust-bitcoincore-rpc",
+                rev = "ec54de44cca92c34f49723dae757b0d50e738603",
             ),
             "bitcoind": crate.spec(
                 version = "^0.32.0",
