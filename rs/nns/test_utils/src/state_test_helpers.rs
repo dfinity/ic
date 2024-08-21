@@ -361,7 +361,7 @@ pub fn get_canister_status(
 
 pub fn get_root_canister_status(machine: &StateMachine) -> Result<CanisterStatusResultV2, String> {
     machine
-        .canister_status_as(PrincipalId::from(ROOT_CANISTER_ID), ROOT_CANISTER_ID)
+        .canister_status_as(PrincipalId::from(LIFELINE_CANISTER_ID), ROOT_CANISTER_ID)
         .unwrap()
 }
 
