@@ -49,7 +49,7 @@ impl<Pool: CanisterHttpPool> PriorityFnFactory<CanisterHttpResponseShare, Pool>
     fn get_priority_function(
         &self,
         _canister_http_pool: &Pool,
-    ) -> PriorityFn<CanisterHttpResponseId, ()> {
+    ) -> PriorityFn<CanisterHttpResponseId> {
         let finalized_height = self.consensus_cache.finalized_block().height;
         let registry_version =
             registry_version_at_height(self.consensus_cache.as_ref(), finalized_height).unwrap();
@@ -66,7 +66,7 @@ impl<Pool: CanisterHttpPool> PriorityFnFactory<CanisterHttpResponseShare, Pool>
             (known_request_ids, next_callback_id)
         };
         let log = self.log.clone();
-        Box::new(move |id: &'_ CanisterHttpResponseId, _| {
+        Box::new(move |id: &'_ CanisterHttpResponseId| {
             if id.content.registry_version != registry_version {
                 warn!(log, "Dropping canister http response share with callback id: {}, because registry version {} does not match expected version {}", id.content.id, id.content.registry_version, registry_version);
                 return Priority::Drop;
