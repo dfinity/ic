@@ -411,7 +411,9 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
     env.tick();
 
     // Send a normal ingress message while the execution is paused.
-    let err = env.send_ingress_safe(PrincipalId::new_anonymous(), canister_id, "read", vec![]).unwrap_err();
+    let err = env
+        .send_ingress_safe(PrincipalId::new_anonymous(), canister_id, "read", vec![])
+        .unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
     assert_eq!(
         err.description(),
@@ -465,7 +467,9 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
     env.tick();
 
     // Send a normal ingress message while the execution is paused.
-    let err = env.send_ingress_safe(PrincipalId::new_anonymous(), canister_id, "read", vec![]).unwrap_err();
+    let err = env
+        .send_ingress_safe(PrincipalId::new_anonymous(), canister_id, "read", vec![])
+        .unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
     assert_eq!(
         err.description(),
@@ -992,13 +996,24 @@ fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
 
     let canister = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, settings);
 
+    let payload = InstallCodeArgs::new(
+        CanisterInstallMode::Install,
+        canister,
+        binary.clone(),
+        vec![],
+        None,
+        None,
+    );
+    env.execute_ingress_as(user_id, IC_00, Method::InstallCode, payload.encode())
+        .unwrap();
+
     // Enable the checkpoints so that the first install code message is always
     // aborted and doesn't make progress.
     env.set_checkpoints_enabled(true);
 
     let install = {
         let payload = InstallCodeArgs::new(
-            CanisterInstallMode::Install,
+            CanisterInstallMode::Reinstall,
             canister,
             binary,
             vec![],
