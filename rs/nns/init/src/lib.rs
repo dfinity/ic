@@ -151,8 +151,8 @@ pub fn make_hsm_sender(hsm_slot: &str, key_id: &str, pin: &str) -> Sender {
 /// that they can be found later.
 pub fn set_up_env_vars_for_all_canisters<P: AsRef<Path>>(wasm_dir: P) {
     'outer: for canister in &NNS_CANISTER_WASMS {
-        // Can either .wasm or .wasm.gz be found?
-        for ext in &[".wasm", ".wasm.gz"] {
+        // Can either .wasm.gz or .wasm be found?
+        for ext in &[".wasm.gz", ".wasm"] {
             let file_part = format!("{}{}", canister, ext);
             let mut path = wasm_dir.as_ref().to_path_buf();
             path.push(file_part.as_str());
@@ -165,7 +165,7 @@ pub fn set_up_env_vars_for_all_canisters<P: AsRef<Path>>(wasm_dir: P) {
         }
         // if no file is found, panic!
         panic!(
-            "The provided --wasm-dir, '{}', must contain all NNS canister wasms, but it misses {}.wasm or {}.wasm.gz",
+            "The provided --wasm-dir, '{}', must contain all NNS canister wasms, but there is {}.wasm.gz or {}.wasm",
             wasm_dir.as_ref().display(),
             canister,
             canister
