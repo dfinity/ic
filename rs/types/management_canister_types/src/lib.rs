@@ -1065,6 +1065,10 @@ impl DefiniteCanisterSettingsArgs {
     pub fn log_visibility(&self) -> &LogVisibilityV2 {
         &self.log_visibility
     }
+
+    pub fn wasm_memory_limit(&self) -> candid::Nat {
+        self.wasm_memory_limit.clone()
+    }
 }
 
 impl Payload<'_> for DefiniteCanisterSettingsArgs {}

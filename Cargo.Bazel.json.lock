@@ -1,5 +1,5 @@
 {
-  "checksum": "edd1ca0d538601b3971468ea3c3649051fa4f6fd2fcae6fa8bb71d35555876e0",
+  "checksum": "91881768c97b7014a2f327876b238f5d00c0b75f19814d037e654f9efd2948ec",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7481,86 +7481,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "bls12_381 0.7.1": {
-      "name": "bls12_381",
-      "version": "0.7.1",
-      "package_url": "https://github.com/zkcrypto/bls12_381",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bls12_381/0.7.1/download",
-          "sha256": "a3c196a77437e7cc2fb515ce413a6401291578b5afc8ecb29a3c7ab957f05941"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bls12_381",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bls12_381",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "digest",
-            "experimental",
-            "group",
-            "groups",
-            "pairing",
-            "pairings"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "digest 0.9.0",
-              "target": "digest"
-            },
-            {
-              "id": "ff 0.12.1",
-              "target": "ff"
-            },
-            {
-              "id": "group 0.12.1",
-              "target": "group"
-            },
-            {
-              "id": "pairing 0.22.0",
-              "target": "pairing"
-            },
-            {
-              "id": "rand_core 0.6.4",
-              "target": "rand_core"
-            },
-            {
-              "id": "subtle 2.5.0",
-              "target": "subtle"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.7.1"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "borsh 0.10.3": {
       "name": "borsh",
       "version": "0.10.3",
@@ -9782,7 +9702,7 @@
               "target": "candid"
             },
             {
-              "id": "ic-cdk 0.12.1",
+              "id": "ic-cdk 0.12.2",
               "target": "ic_cdk"
             },
             {
@@ -17214,10 +17134,6 @@
               "target": "ed25519_dalek"
             },
             {
-              "id": "either 1.8.1",
-              "target": "either"
-            },
-            {
               "id": "erased-serde 0.3.28",
               "target": "erased_serde"
             },
@@ -17398,7 +17314,7 @@
               "target": "ic_cbor"
             },
             {
-              "id": "ic-cdk 0.13.2",
+              "id": "ic-cdk 0.13.5",
               "target": "ic_cdk"
             },
             {
@@ -17442,7 +17358,7 @@
               "target": "ic_utils"
             },
             {
-              "id": "ic-verify-bls-signature 0.2.0",
+              "id": "ic-verify-bls-signature 0.6.0",
               "target": "ic_verify_bls_signature"
             },
             {
@@ -24172,68 +24088,6 @@
       ],
       "license_file": null
     },
-    "group 0.12.1": {
-      "name": "group",
-      "version": "0.12.1",
-      "package_url": "https://github.com/zkcrypto/group",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/group/0.12.1/download",
-          "sha256": "5dfbfb3a6cfbd390d5c9564ab283a0349b9b9fcd46a706c1eb10e0db70bfbac7"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "group",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "group",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "ff 0.12.1",
-              "target": "ff"
-            },
-            {
-              "id": "rand_core 0.6.4",
-              "target": "rand_core"
-            },
-            {
-              "id": "subtle 2.5.0",
-              "target": "subtle"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.12.1"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "group 0.13.0": {
       "name": "group",
       "version": "0.13.0",
@@ -28073,7 +27927,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-cdk 0.14.0",
+              "id": "ic-cdk 0.14.1",
               "target": "ic_cdk"
             },
             {
@@ -28183,14 +28037,14 @@
       ],
       "license_file": null
     },
-    "ic-cdk 0.12.1": {
+    "ic-cdk 0.12.2": {
       "name": "ic-cdk",
-      "version": "0.12.1",
+      "version": "0.12.2",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.12.1/download",
-          "sha256": "9f3d204af0b11c45715169c997858edb58fa8407d08f4fae78a6b415dd39a362"
+          "url": "https://static.crates.io/crates/ic-cdk/0.12.2/download",
+          "sha256": "0e908da565d9e304e83732500069ebb959e3d2cad80f894889ea37207112c7a0"
         }
       },
       "targets": [
@@ -28243,7 +28097,7 @@
           ],
           "selects": {}
         },
-        "version": "0.12.1"
+        "version": "0.12.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -28251,14 +28105,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk 0.13.2": {
+    "ic-cdk 0.13.5": {
       "name": "ic-cdk",
-      "version": "0.13.2",
+      "version": "0.13.5",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.13.2/download",
-          "sha256": "f8859bc2b863a77750acf199e1fb7e3fc403e1b475855ba13f59cb4e4036d238"
+          "url": "https://static.crates.io/crates/ic-cdk/0.13.5/download",
+          "sha256": "3b1da6a25b045f9da3c9459c0cb2b0700ac368ee16382975a17185a23b9c18ab"
         }
       },
       "targets": [
@@ -28311,7 +28165,7 @@
           ],
           "selects": {}
         },
-        "version": "0.13.2"
+        "version": "0.13.5"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -28319,14 +28173,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk 0.14.0": {
+    "ic-cdk 0.14.1": {
       "name": "ic-cdk",
-      "version": "0.14.0",
+      "version": "0.14.1",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.14.0/download",
-          "sha256": "ff384f182459bec490a7f50a58bbdf8f7a6934de4dcc259e30c70641bcbcb917"
+          "url": "https://static.crates.io/crates/ic-cdk/0.14.1/download",
+          "sha256": "9cff1a3c3db565e3384c9c9d6d676b0a3f89a0886f4f787294d9c946d844369f"
         }
       },
       "targets": [
@@ -28379,7 +28233,7 @@
           ],
           "selects": {}
         },
-        "version": "0.14.0"
+        "version": "0.14.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -28691,7 +28545,7 @@
               "target": "futures"
             },
             {
-              "id": "ic-cdk 0.13.2",
+              "id": "ic-cdk 0.13.5",
               "target": "ic_cdk"
             },
             {
@@ -29588,73 +29442,6 @@
       ],
       "license_file": null
     },
-    "ic-verify-bls-signature 0.2.0": {
-      "name": "ic-verify-bls-signature",
-      "version": "0.2.0",
-      "package_url": null,
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-verify-bls-signature/0.2.0/download",
-          "sha256": "dd0f1f8d75f50002970cc2136f909287bf1d59024fbc80ebffbee871afcbd237"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_verify_bls_signature",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_verify_bls_signature",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bls12_381 0.7.1",
-              "target": "bls12_381"
-            },
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
-            },
-            {
-              "id": "lazy_static 1.4.0",
-              "target": "lazy_static"
-            },
-            {
-              "id": "pairing 0.22.0",
-              "target": "pairing"
-            },
-            {
-              "id": "rand 0.6.5",
-              "target": "rand"
-            },
-            {
-              "id": "sha2 0.9.9",
-              "target": "sha2"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.2.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
     "ic-verify-bls-signature 0.5.0": {
       "name": "ic-verify-bls-signature",
       "version": "0.5.0",
@@ -29725,6 +29512,78 @@
         },
         "edition": "2021",
         "version": "0.5.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
+    "ic-verify-bls-signature 0.6.0": {
+      "name": "ic-verify-bls-signature",
+      "version": "0.6.0",
+      "package_url": null,
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-verify-bls-signature/0.6.0/download",
+          "sha256": "cd6c4261586eb473fe1219de63186a98e554985d5fd6f3488036c8fb82452e27"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_verify_bls_signature",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_verify_bls_signature",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "hex",
+            "lazy_static"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "ic_bls12_381 0.10.0",
+              "target": "ic_bls12_381",
+              "alias": "bls12_381"
+            },
+            {
+              "id": "lazy_static 1.4.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "pairing 0.23.0",
+              "target": "pairing"
+            },
+            {
+              "id": "sha2 0.10.8",
+              "target": "sha2"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.6.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -43320,54 +43179,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "pairing 0.22.0": {
-      "name": "pairing",
-      "version": "0.22.0",
-      "package_url": "https://github.com/zkcrypto/pairing",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/pairing/0.22.0/download",
-          "sha256": "135590d8bdba2b31346f9cd1fb2a912329f5135e832a4f422942eb6ead8b6b3b"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "pairing",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "pairing",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "group 0.12.1",
-              "target": "group"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.22.0"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "pairing 0.23.0": {
       "name": "pairing",
       "version": "0.23.0",
@@ -45884,7 +45695,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-cdk 0.13.2",
+              "id": "ic-cdk 0.13.5",
               "target": "ic_cdk"
             },
             {
@@ -49592,7 +49403,6 @@
         "crate_features": {
           "common": [
             "alloc",
-            "default",
             "rand_os",
             "std"
           ],
@@ -78941,7 +78751,6 @@
     "dyn-clone 1.0.14",
     "ed25519-dalek 2.1.1",
     "educe 0.4.22",
-    "either 1.8.1",
     "erased-serde 0.3.28",
     "escargot 0.5.7",
     "ethers-core 2.0.8",
@@ -78986,7 +78795,7 @@
     "ic-canister-log 0.2.0",
     "ic-canister-sig-creation 1.0.1",
     "ic-cbor 2.6.0",
-    "ic-cdk 0.13.2",
+    "ic-cdk 0.13.5",
     "ic-cdk-macros 0.9.0",
     "ic-cdk-timers 0.7.0",
     "ic-certification 2.6.0",
@@ -78998,7 +78807,7 @@
     "ic-stable-structures 0.6.5",
     "ic-test-state-machine-client 3.0.1",
     "ic-utils 0.37.0",
-    "ic-verify-bls-signature 0.2.0",
+    "ic-verify-bls-signature 0.6.0",
     "ic-wasm 0.7.1",
     "ic-xrc-types 1.2.0",
     "ic0 0.18.11",

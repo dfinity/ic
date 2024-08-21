@@ -2,6 +2,7 @@ use crate::{
     notification_client::NotificationClient,
     util::{block_on, sleep_secs},
 };
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use ic_recovery::{
     command_helper::exec_cmd, error::RecoveryError, file_sync_helper::download_binary,
@@ -29,6 +30,8 @@ const BUCKET_SIZE: u64 = 10000;
 /// For how many days should we keep the states in the hot storage. States older than this number
 /// will be moved to the cold storage.
 const DAYS_TO_KEEP_STATES_IN_HOT_STORAGE: usize = 1;
+
+const TIMESTAMP_FILE_NAME: &str = "archiving_timestamp.txt";
 
 pub(crate) struct BackupHelper {
     pub(crate) subnet_id: SubnetId,
@@ -654,11 +657,7 @@ impl BackupHelper {
         debug!(self.log, "[#{}] State archived!", self.thread_id);
 
         let now: DateTime<Utc> = Utc::now();
-        let now_str = format!("{}\n", now.to_rfc2822());
-        let mut file = File::create(archive_last_dir.join("archiving_timestamp.txt"))
-            .map_err(|err| format!("Error creating timestamp file: {:?}", err))?;
-        file.write_all(now_str.as_bytes())
-            .map_err(|err| format!("Error writing timestamp: {:?}", err))?;
+        write_timestamp(&archive_last_dir, now).map_err(|err| err.to_string())?;
         self.log_disk_stats(true)
     }
 
@@ -807,20 +806,9 @@ impl BackupHelper {
 
     /// Moves some of the states to the cold storage, such that the states from the last
     /// [DAYS_TO_KEEP_STATES_IN_HOT_STORAGE] days remain in the hot storage.
-    ///
-    /// Since we produced [BackupHelper::daily_replays] per day, we will keep at least
-    /// [DAYS_TO_KEEP_STATES_IN_HOT_STORAGE] * [BackupHelper::daily_replays] states in the hot
-    /// storage.
-    ///
-    /// For example if [DAYS_TO_KEEP_STATES_IN_HOT_STORAGE] = 1, [BackupHelper::daily_replays] = 3,
-    /// and the archive comprises of states at heights: 10, 20, 30, 40, 50, 60, 70, 80, 90, 100
-    /// then we will move the states at the heights 30 and 60 to the cold storage; we will delete
-    /// states at heights 10, 20, 40, and 50; and we will keep the states at heights
-    /// 70, 80, 90, and 100 in the hot storage.
     fn maybe_cold_store_states(&self) -> Result<bool, String> {
-        let min_states_to_remain_in_cold_storage =
+        let max_number_of_states_to_remain_in_hot_storage =
             self.daily_replays * DAYS_TO_KEEP_STATES_IN_HOT_STORAGE;
-        let max_number_of_states = min_states_to_remain_in_cold_storage + self.daily_replays - 1;
 
         let states = collect_only_dirs(&self.archive_dir())?;
 
@@ -829,11 +817,11 @@ impl BackupHelper {
             "Number of states in the hot storage: {}. \
             Will move some of them to the cold storage if the number is > {}.",
             states.len(),
-            max_number_of_states
+            max_number_of_states_to_remain_in_hot_storage,
         );
 
         // Nothing to do in this case.
-        if states.len() <= max_number_of_states {
+        if states.len() <= max_number_of_states_to_remain_in_hot_storage {
             return Ok(false);
         }
 
@@ -844,14 +832,8 @@ impl BackupHelper {
 
         heights.sort();
 
-        // We always remove an integer multiple of [BackupHelper::daily_replays] from the hot
-        // storage:
-        // 1) 1 / [BackupHelper::daily_replays] proportion of them are moved to the cold storage;
-        // 2) and the rest is removed from the disk.
-        let number_of_states_to_remove_from_hot_storage = largest_multiple_of(
-            heights.len() - min_states_to_remain_in_cold_storage,
-            self.daily_replays,
-        );
+        let number_of_states_to_remove_from_hot_storage =
+            heights.len() - max_number_of_states_to_remain_in_hot_storage;
 
         let max_height = heights[number_of_states_to_remove_from_hot_storage - 1];
 
@@ -875,28 +857,15 @@ impl BackupHelper {
             }
         });
 
-        if self.do_cold_storage {
-            let mut reversed = old_state_dirs.iter().rev();
-            while let Some(dir) = reversed.next() {
-                info!(self.log, "Will copy to cold storage: {:?}", dir.1);
+        for dir in old_state_dirs.values() {
+            if self.should_cold_store(dir) {
+                info!(self.log, "Will copy to cold storage: {:?}", dir);
                 let mut cmd = Command::new("rsync");
                 cmd.arg("-a");
-                cmd.arg(dir.1).arg(self.cold_storage_states_dir());
+                cmd.arg(dir).arg(self.cold_storage_states_dir());
                 debug!(self.log, "Will execute: {:?}", cmd);
                 exec_cmd(&mut cmd).map_err(|err| format!("Error copying states: {:?}", err))?;
-                // skip some of the states if we replay more than one per day
-                if self.daily_replays > 1 {
-                    // one element is consumed in the next() call above,
-                    // and one in the nth(), hence the subtract 2
-                    reversed.nth(self.daily_replays - 2);
-                }
             }
-            ls_path(
-                &self.log,
-                self.cold_storage_dir
-                    .join(format!("{}", self.subnet_id))
-                    .as_path(),
-            )?;
         }
 
         let trash_dir = self.trash_dir();
@@ -911,6 +880,51 @@ impl BackupHelper {
         remove_dir_all(trash_dir).map_err(|err| format!("Error deleting trash dir: {:?}", err))?;
 
         Ok(())
+    }
+
+    fn should_cold_store(&self, state_dir: &Path) -> bool {
+        if !self.do_cold_storage {
+            return false;
+        }
+
+        let cold_storage_timestamp = match self.cold_storage_newest_state_timestamp() {
+            Ok(timestamp) => timestamp,
+            Err(err) => {
+                error!(
+                    self.log,
+                    "Failed to read the timestamp of the newest state in the cold storage. \
+                    Force cold storing the state: {:?}",
+                    err
+                );
+                return true;
+            }
+        };
+
+        let hot_storage_timestamp = match state_dir_timestamp(state_dir) {
+            Ok(timestamp) => timestamp,
+            Err(err) => {
+                error!(
+                    self.log,
+                    "Failed to read the timestamp of the state in the hot storage. \
+                    Force cold storing the state: {:?}",
+                    err
+                );
+                return true;
+            }
+        };
+
+        // Cold store if the timestamp of the state is at least one day newer than the newest state
+        // in the cold storage.
+        hot_storage_timestamp
+            .signed_duration_since(cold_storage_timestamp)
+            .num_days()
+            >= 1
+    }
+
+    fn cold_storage_newest_state_timestamp(&self) -> anyhow::Result<DateTime<Utc>> {
+        let last_height = last_dir_height(&self.cold_storage_states_dir(), 10);
+
+        state_dir_timestamp(&self.cold_storage_states_dir().join(last_height.to_string()))
     }
 }
 
@@ -1041,9 +1055,24 @@ pub(crate) fn retrieve_replica_version_last_replayed(
     current_replica_version
 }
 
-/// Returns the largest integer multiple of `multiplier` which is at most `upper_bound`
-fn largest_multiple_of(upper_bound: usize, multiplier: usize) -> usize {
-    multiplier * (upper_bound / multiplier)
+fn state_dir_timestamp(dir: &Path) -> anyhow::Result<DateTime<Utc>> {
+    let path = dir.join(TIMESTAMP_FILE_NAME);
+    let timestamp_str =
+        std::fs::read_to_string(&path).context("Failed to read the timestamp file")?;
+    let timestamp = DateTime::parse_from_rfc2822(timestamp_str.trim())
+        .context("Failed to parse the timestamp")?;
+
+    Ok(timestamp.into())
+}
+
+fn write_timestamp(dir: &Path, timestamp: DateTime<Utc>) -> anyhow::Result<()> {
+    let timestamp_str = format!("{}\n", timestamp.to_rfc2822());
+    let mut file =
+        File::create(dir.join(TIMESTAMP_FILE_NAME)).context("Error creating timestamp file")?;
+    file.write_all(timestamp_str.as_bytes())
+        .context("Error writing timestamp")?;
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1158,8 +1187,14 @@ mod tests {
             /*daily_replays=*/ 2,
         );
 
+        let mut fake_timestamp = DateTime::UNIX_EPOCH;
+
         for height in [0, 10, 20, 30, 40, 50] {
-            create_dir_all(backup_helper.archive_dir().join(height.to_string())).unwrap();
+            let dir = backup_helper.archive_dir().join(height.to_string());
+            create_dir_all(&dir).unwrap();
+
+            fake_timestamp += std::time::Duration::from_secs(12 * 60 * 60);
+            write_timestamp(&dir, fake_timestamp).unwrap();
         }
 
         backup_helper
@@ -1174,8 +1209,8 @@ mod tests {
         );
 
         assert_eq!(cold_storage_dirs.len(), 2);
-        assert!(cold_storage_dirs.contains(&"30".to_string()));
-        assert!(cold_storage_dirs.contains(&"10".to_string()));
+        assert!(cold_storage_dirs.contains(&"0".to_string()));
+        assert!(cold_storage_dirs.contains(&"20".to_string()));
 
         let archives_dirs = collect_and_sort_dir_entries(&backup_helper.archive_dir());
 
@@ -1195,8 +1230,13 @@ mod tests {
             /*daily_replays=*/ 2,
         );
 
+        let mut fake_timestamp = DateTime::UNIX_EPOCH;
         for height in [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100] {
-            create_dir_all(backup_helper.archive_dir().join(height.to_string())).unwrap();
+            let dir = backup_helper.archive_dir().join(height.to_string());
+            create_dir_all(&dir).unwrap();
+
+            fake_timestamp += std::time::Duration::from_secs(12 * 60 * 60);
+            write_timestamp(&dir, fake_timestamp).unwrap();
         }
 
         let cold_stored_states = backup_helper
@@ -1215,16 +1255,17 @@ mod tests {
         assert_eq!(
             cold_storage_dirs,
             vec![
-                "10".to_string(),
-                "30".to_string(),
-                "50".to_string(),
-                "70".to_string()
+                "0".to_string(),
+                "20".to_string(),
+                "40".to_string(),
+                "60".to_string(),
+                "80".to_string()
             ]
         );
 
         assert_eq!(
             collect_and_sort_dir_entries(&backup_helper.archive_dir()),
-            vec!["100".to_string(), "80".to_string(), "90".to_string(),]
+            vec!["100".to_string(), "90".to_string(),]
         );
     }
 
@@ -1238,8 +1279,13 @@ mod tests {
             /*daily_replays=*/ 2,
         );
 
-        for height in [0, 10, 20] {
-            create_dir_all(backup_helper.archive_dir().join(height.to_string())).unwrap();
+        let mut fake_timestamp = DateTime::UNIX_EPOCH;
+        for height in [0, 10] {
+            let dir = backup_helper.archive_dir().join(height.to_string());
+            create_dir_all(&dir).unwrap();
+
+            fake_timestamp += std::time::Duration::from_secs(12 * 60 * 60);
+            write_timestamp(&dir, fake_timestamp).unwrap();
         }
 
         let cold_stored_states = backup_helper
@@ -1251,7 +1297,7 @@ mod tests {
         // Assert that all the states remain in the hot storage
         assert_eq!(
             collect_and_sort_dir_entries(&backup_helper.archive_dir()),
-            vec!["0".to_string(), "10".to_string(), "20".to_string(),]
+            vec!["0".to_string(), "10".to_string()]
         );
     }
 
