@@ -179,6 +179,12 @@ fn http_request(
                     "Size of the stable memory allocated by this canister.",
                 )?;
 
+                w.encode_gauge(
+                    "ledger_suite_orchestrator_total_memory_bytes",
+                    total_memory_size_bytes() as f64,
+                    "Total amount of memory (heap and stable memory) that has been allocated by this canister.",
+                )?;
+
                 w.gauge_vec("cycle_balance", "Cycle balance of this canister.")?
                     .value(
                         &[("canister", "ledger-suite-orchestrator")],
@@ -235,6 +241,18 @@ fn http_request(
         }
         _ => HttpResponseBuilder::not_found().build(),
     }
+}
+
+/// Returns the total amount of memory (heap, stable memory, etc) that has been allocated.
+#[cfg(target_arch = "wasm32")]
+pub fn total_memory_size_bytes() -> usize {
+    const WASM_PAGE_SIZE_BYTES: usize = 65536;
+    core::arch::wasm32::memory_size(0) * WASM_PAGE_SIZE_BYTES
+}
+
+#[cfg(not(any(target_arch = "wasm32")))]
+pub fn total_memory_size_bytes() -> usize {
+    0
 }
 
 fn main() {}
