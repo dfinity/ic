@@ -72,6 +72,7 @@ proptest = "1.0"
 prost = { workspace = true }
 scoped_threadpool = "0.1.*"
 serde_cbor = { workspace = true }
+test-strategy = "0.4.0"
 
 [[bench]]
 name = "bench_allocator"
