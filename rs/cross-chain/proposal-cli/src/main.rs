@@ -79,7 +79,8 @@ enum Commands {
 
 #[derive(Debug, Clone, Subcommand)]
 enum SubmitProposal {
-    /// Use `ic-admin` to submit the proposal.
+    /// Generate the `ic-admin` command to submit the proposal.
+    /// The proposal will *not* be automatically submitted.
     IcAdmin(IcAdminArgs),
 }
 
