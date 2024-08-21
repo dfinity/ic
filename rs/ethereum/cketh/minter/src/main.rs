@@ -1046,7 +1046,7 @@ fn check_audit_log() {
     })
 }
 
-/// Returns the total amount of memory (heap, stable memory, etc) that has been allocated.
+/// Returns the total amount of memory (heap and stable memory) that has been allocated.
 #[cfg(target_arch = "wasm32")]
 pub fn total_memory_size_bytes() -> usize {
     const WASM_PAGE_SIZE_BYTES: usize = 65536;
