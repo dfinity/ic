@@ -83,7 +83,7 @@ USER=$(whoami)
 PODMAN_RUN_ARGS=(
     -w "$WORKDIR"
 
-    -u "$(id -u):$(id -g)"
+    -u "ubuntu:ubuntu"
     -e HOSTUSER="$USER"
     -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
     --hostname=devenv-container
@@ -105,37 +105,42 @@ else
     CTR_HOME="/ic"
 fi
 
+trap 'rm -rf "${TEMPDIR}" "${SUBUID_FILE}" "${SUBGID_FILE}"' EXIT
+TEMPDIR=$(mktemp -d --suffix=containerrun)
+SUBUID_FILE=$(mktemp --suffix=containerrun)
+SUBGID_FILE=$(mktemp --suffix=containerrun)
+
+IDMAP="uids=$(id -u)-1000-1;gids=$(id -g)-1000-1"
+
 PODMAN_RUN_ARGS+=(
-    --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"
-    --mount type=bind,source="${HOME}",target="${HOME}"
-    --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="${CTR_HOME}/.cache"
-    --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
-    --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
-    --mount type=bind,source="/var/lib/containers",target="/var/lib/containers"
-    --mount type=bind,source="/tmp",target="/tmp"
-    --mount type=tmpfs,destination=/var/sysimage
+    --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}",idmap="${IDMAP}"
+    --mount type=bind,source="${HOME}",target="${HOME}",idmap="${IDMAP}"
+    --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="${CTR_HOME}/.cache",idmap="${IDMAP}"
+    --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh",idmap="${IDMAP}"
+    --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws",idmap="${IDMAP}"
+    --mount type=bind,source="${TEMPDIR}",target="/tmp"
 )
 
 if [ "$(id -u)" = "1000" ]; then
     if [ -e "${HOME}/.gitconfig" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.gitconfig",target="/home/ubuntu/.gitconfig"
+            --mount type=bind,source="${HOME}/.gitconfig",target="/home/ubuntu/.gitconfig",idmap="${IDMAP}"
         )
     fi
 
     if [ -e "${HOME}/.bash_history" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.bash_history",target="/home/ubuntu/.bash_history"
+            --mount type=bind,source="${HOME}/.bash_history",target="/home/ubuntu/.bash_history",idmap="${IDMAP}"
         )
     fi
     if [ -e "${HOME}/.local/share/fish" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.local/share/fish",target="/home/ubuntu/.local/share/fish"
+            --mount type=bind,source="${HOME}/.local/share/fish",target="/home/ubuntu/.local/share/fish",idmap="${IDMAP}"
         )
     fi
     if [ -e "${HOME}/.zsh_history" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history"
+            --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history",idmap="${IDMAP}"
         )
     fi
 
@@ -153,6 +158,16 @@ if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -e "${SSH_AUTH_SOCK:-}" ]; then
 else
     echo "No ssh-agent to forward."
 fi
+
+# Create dynamic subuid/subgid files for the user to run nested containers
+echo "ubuntu:100000:65536" >$SUBUID_FILE
+chmod +r ${SUBUID_FILE}
+echo "ubuntu:100000:65536" >$SUBGID_FILE
+chmod +r ${SUBGID_FILE}
+PODMAN_RUN_ARGS+=(
+    --mount type=bind,source="${SUBUID_FILE}",target="/etc/subuid"
+    --mount type=bind,source="${SUBGID_FILE}",target="/etc/subgid"
+)
 
 # make sure we have all bind-mounts
 mkdir -p ~/.{aws,ssh,cache,local/share/fish} && touch ~/.{zsh,bash}_history
