@@ -14,7 +14,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::{
     consensus::U64Artifact,
-    mocks::{MockPeers, MockPriorityFnFactory, MockTransport, MockValidatedPoolReader},
+    mocks::{MockFilterFnFactory, MockPeers, MockTransport, MockValidatedPoolReader},
 };
 use ic_protobuf::proxy::ProtoProxy;
 use ic_types::artifact::PbArtifact;
@@ -33,15 +33,15 @@ async fn priority_from_stash_to_fetch() {
         std::process::abort();
     }));
 
-    let mut mock_pfn = MockPriorityFnFactory::new();
+    let mut mock_pfn = MockFilterFnFactory::new();
     let mut seq = Sequence::new();
     mock_pfn
-        .expect_get_priority_function()
+        .expect_get_filter_function()
         .times(1)
         .returning(|_| Box::new(|_| FilterValue::MaybeWantsLater))
         .in_sequence(&mut seq);
     mock_pfn
-        .expect_get_priority_function()
+        .expect_get_filter_function()
         .times(1)
         .returning(|_| Box::new(|_| FilterValue::Wants))
         .in_sequence(&mut seq);
@@ -87,14 +87,14 @@ async fn fetch_to_stash_to_fetch() {
 
     let return_artifact = Arc::new(AtomicBool::default());
     let return_artifact_clone = return_artifact.clone();
-    let mut mock_pfn = MockPriorityFnFactory::new();
+    let mut mock_pfn = MockFilterFnFactory::new();
     let priorities = Arc::new(Mutex::new(vec![
         FilterValue::Wants,
         FilterValue::MaybeWantsLater,
         FilterValue::MaybeWantsLater,
         FilterValue::MaybeWantsLater,
     ]));
-    mock_pfn.expect_get_priority_function().returning(move |_| {
+    mock_pfn.expect_get_filter_function().returning(move |_| {
         let priorities = priorities.clone();
 
         let p = {
@@ -186,9 +186,9 @@ async fn invalid_artifact_not_accepted() {
         .in_sequence(&mut seq);
 
     let pool = MockValidatedPoolReader::default();
-    let mut mock_pfn = MockPriorityFnFactory::new();
+    let mut mock_pfn = MockFilterFnFactory::new();
     mock_pfn
-        .expect_get_priority_function()
+        .expect_get_filter_function()
         .returning(|_| Box::new(|_| FilterValue::Wants));
     let (fetch_artifact, _router) = FetchArtifact::new(
         no_op_logger(),
@@ -218,15 +218,15 @@ async fn priority_from_stash_to_drop() {
         std::process::abort();
     }));
 
-    let mut mock_pfn: MockPriorityFnFactory<U64Artifact> = MockPriorityFnFactory::new();
+    let mut mock_pfn: MockFilterFnFactory<U64Artifact> = MockFilterFnFactory::new();
     let mut seq = Sequence::new();
     mock_pfn
-        .expect_get_priority_function()
+        .expect_get_filter_function()
         .times(1)
         .returning(|_| Box::new(|_| FilterValue::MaybeWantsLater))
         .in_sequence(&mut seq);
     mock_pfn
-        .expect_get_priority_function()
+        .expect_get_filter_function()
         .times(1)
         .returning(|_| Box::new(|_| FilterValue::Unwanted))
         .in_sequence(&mut seq);
