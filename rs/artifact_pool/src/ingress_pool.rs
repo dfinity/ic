@@ -297,12 +297,12 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
         let mut mutations = vec![];
         for change_action in change_set {
             match change_action {
-                ChangeAction::MoveToValidated((message_id, source_node_id)) => {
+                ChangeAction::MoveToValidated(message_id) => {
                     // remove it from unvalidated pool and remove it from peer_index, move it
                     // to the validated pool
                     match self.remove_unvalidated(&message_id) {
                         Some((unvalidated_artifact, size)) => {
-                            if source_node_id == self.node_id {
+                            if unvalidated_artifact.peer_id == self.node_id {
                                 mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
                                     artifact: unvalidated_artifact.message.signed_ingress.clone(),
                                     is_latency_sensitive: false,
@@ -644,7 +644,7 @@ mod tests {
                 );
 
                 let changeset = vec![
-                    ChangeAction::MoveToValidated((message_id0.clone(), node_test_id(0))),
+                    ChangeAction::MoveToValidated(message_id0.clone()),
                     ChangeAction::RemoveFromUnvalidated(message_id1.clone()),
                 ];
                 let result = ingress_pool.apply_changes(changeset);
@@ -707,10 +707,7 @@ mod tests {
                         peer_id: node_test_id(peer_id),
                         timestamp: time_source.get_relative_time(),
                     });
-                    changeset.push(ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(peer_id),
-                    )));
+                    changeset.push(ChangeAction::MoveToValidated(message_id));
                 }
                 assert_eq!(ingress_pool.unvalidated().size(), initial_count);
                 let result = ingress_pool.apply_changes(changeset);
