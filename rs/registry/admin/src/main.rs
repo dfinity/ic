@@ -137,7 +137,7 @@ use registry_canister::mutations::{
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
     do_set_firewall_config::SetFirewallConfigPayload,
-    do_update_api_boundary_nodes_version::DeployGuestOsToSomeApiBoundaryNodes,
+    do_update_api_boundary_nodes_version::DeployGuestosToSomeApiBoundaryNodes,
     do_update_elected_hostos_versions::ReviseElectedHostosVersionsPayload,
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
     do_update_nodes_hostos_version::DeployHostosToSomeNodes,
@@ -3451,11 +3451,11 @@ impl ProposalTitle for ProposeToDeployGuestosToSomeApiBoundaryNodesCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<DeployGuestOsToSomeApiBoundaryNodes>
+impl ProposalPayload<DeployGuestosToSomeApiBoundaryNodes>
     for ProposeToDeployGuestosToSomeApiBoundaryNodesCmd
 {
-    async fn payload(&self, _: &Agent) -> DeployGuestOsToSomeApiBoundaryNodes {
-        DeployGuestOsToSomeApiBoundaryNodes {
+    async fn payload(&self, _: &Agent) -> DeployGuestosToSomeApiBoundaryNodes {
+        DeployGuestosToSomeApiBoundaryNodes {
             node_ids: self.nodes.iter().cloned().map(NodeId::from).collect(),
             version: self.version.clone(),
         }
