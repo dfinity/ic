@@ -18,6 +18,8 @@ from model.security_risk import SecurityRisk
 from model.team import Team
 from model.user import User
 from model.vulnerability import Vulnerability
+from notification.app_owner_msg_subscriber import AppOwnerMsgSubscriber
+from notification.console_logger_app_owner_msg_subscriber import ConsoleLoggerAppOwnerMsgSubscriber
 
 JIRA_SERVER = "https://dfinity.atlassian.net"
 JIRA_USER = "vuln-mgmt@dfinity.org"
@@ -57,19 +59,20 @@ JIRA_SECURITY_RISK_TO_ID = {
     SecurityRisk.CRITICAL: "10594",
 }
 JIRA_OWNER_GROUP_BY_TEAM = {
-    Team.NODE_TEAM : {"name": "dept-Node"},
-    Team.BOUNDARY_NODE_TEAM : {"name": "dept-Boundary Nodes"},
-    Team.TRUST_TEAM : {"name": "dept-Trust"},
-    Team.GIX_TEAM : {"name": "dept-GIX"},
-    Team.SDK_TEAM : {"name": "dept-SDK"},
-    Team.FINANCIAL_INTEGRATIONS_TEAM : {"name": "dept-Financial Integrations"},
-    Team.EXECUTION_TEAM : {"name": "dept-Execution"},
-    Team.NNS_TEAM : {"name": "dept-NNS"},
-    Team.CRYPTO_TEAM : {"name": "dept-Crypto Library"},
+    Team.NODE_TEAM: {"name": "dept-Node"},
+    Team.BOUNDARY_NODE_TEAM: {"name": "dept-Boundary Nodes"},
+    Team.TRUST_TEAM: {"name": "dept-Trust"},
+    Team.GIX_TEAM: {"name": "dept-GIX"},
+    Team.SDK_TEAM: {"name": "dept-SDK"},
+    Team.FINANCIAL_INTEGRATIONS_TEAM: {"name": "dept-Financial Integrations"},
+    Team.EXECUTION_TEAM: {"name": "dept-Execution"},
+    Team.NNS_TEAM: {"name": "dept-NNS"},
+    Team.CRYPTO_TEAM: {"name": "dept-Crypto Library"},
 }
 JIRA_LABEL_PATCH_VULNDEP_PUBLISHED = "patch_published_vulndep"
 JIRA_LABEL_PATCH_ALLDEP_PUBLISHED = "patch_published_alldep"
 JIRA_VULNERABILITY_TABLE_RISK_NOTE_MIGRATION_LABEL = "MIGRATE_ME"
+
 
 class JiraFindingDataSource(FindingDataSource):
     jira: JIRA
@@ -78,8 +81,9 @@ class JiraFindingDataSource(FindingDataSource):
     findings_cached_for_scanner: Set[str]
     deleted_findings_cached: Dict[Tuple[str, str, str], List[Tuple[Finding, Issue]]]
     risk_assessors: List[User]
+    app_owner_msg_subscriber: AppOwnerMsgSubscriber
 
-    def __init__(self, subscribers: List[FindingDataSourceSubscriber], custom_jira: Optional[JIRA] = None):
+    def __init__(self, subscribers: List[FindingDataSourceSubscriber], app_owner_msg_subscriber: AppOwnerMsgSubscriber = ConsoleLoggerAppOwnerMsgSubscriber(), custom_jira: Optional[JIRA] = None):
         logging.debug(f"JiraFindingDataSource({subscribers},{custom_jira})")
         self.subscribers = subscribers
         self.jira = (
@@ -89,6 +93,7 @@ class JiraFindingDataSource(FindingDataSource):
         self.findings_cached_for_scanner = set()
         self.deleted_findings_cached = {}
         self.risk_assessors = []
+        self.app_owner_msg_subscriber = app_owner_msg_subscriber
 
     # Remove the unnecessary text strings from the description of the Linux kernel CNA CVEs
     @staticmethod
@@ -427,7 +432,7 @@ class JiraFindingDataSource(FindingDataSource):
                 "summary"
             ] = f"[{finding_new.repository}][{finding_new.scanner}] Vulnerability in {finding_new.vulnerable_dependency.name} {finding_new.vulnerable_dependency.version}"[
                 :100
-            ]
+                ]
         all_deps: List[Dependency] = [finding_new.vulnerable_dependency] + finding_new.first_level_dependencies
         if dep_update_needed:
             res[
@@ -558,7 +563,7 @@ class JiraFindingDataSource(FindingDataSource):
     ) -> List[Finding]:
         cache_key = (repository, scanner, dependency_id)
         if cache_key in self.deleted_findings_cached:
-            return deepcopy(list(map(lambda x:x[0], self.deleted_findings_cached[cache_key])))
+            return deepcopy(list(map(lambda x: x[0], self.deleted_findings_cached[cache_key])))
 
         logging.debug(f"get_deleted_findings({repository}, {scanner}, {dependency_id})")
         jql_query: str = (
@@ -579,7 +584,7 @@ class JiraFindingDataSource(FindingDataSource):
             if finding.repository == repository and finding.scanner == scanner and finding.vulnerable_dependency.id == dependency_id:
                 result.append((finding, issue))
         self.deleted_findings_cached[cache_key] = result
-        return deepcopy(list(map(lambda x:x[0], result)))
+        return deepcopy(list(map(lambda x: x[0], result)))
 
     def commit_has_block_exception(self, commit_type: CommitType, commit_hash: str) -> bool:
         logging.debug(f"commit_has_block_exception({commit_type}, {commit_hash})")
@@ -606,7 +611,7 @@ class JiraFindingDataSource(FindingDataSource):
                     logging.warning(f"field {field_name} in finding {finding.id()} exceeds character limit with {len(field_value)} characters")
                     does_exceed = True
             except TypeError:
-                pass # some types don't have a length
+                pass  # some types don't have a length
 
         return does_exceed
 
@@ -621,8 +626,10 @@ class JiraFindingDataSource(FindingDataSource):
             fields_to_update = self.__finding_diff_to_jira(finding_old, finding)
             if len(fields_to_update) > 0:
                 if self.__does_exceed_character_limit(finding, fields_to_update):
-                    # in this case we print the whole finding, so we have the updated finding at least in the log
-                    logging.warning(f"skipping update of the following finding because some fields exceed character limit: {finding.id()} ")
+                    # print warning and notify app owners
+                    log_msg = f"skipping update of the following finding because some fields exceed character limit: {finding.id()} "
+                    logging.warning(log_msg)
+                    self.app_owner_msg_subscriber.send_notification_to_app_owners(log_msg)
                 else:
                     logging.debug(f"updating finding fields {fields_to_update}")
                     jira_issue.update(fields_to_update)
@@ -636,8 +643,10 @@ class JiraFindingDataSource(FindingDataSource):
             logging.debug(f"creating finding {finding}")
             fields_to_update = self.__finding_diff_to_jira(None, finding)
             if self.__does_exceed_character_limit(finding, fields_to_update):
-                # in this case we print the whole finding, so we have the new finding at least in the log
-                logging.warning(f"skipping creation of the following finding because some fields exceed character limit: {finding.id()}")
+                # print warning and notify app owners
+                log_msg = f"skipping creation of the following finding because some fields exceed character limit: {finding.id()}"
+                logging.warning(log_msg)
+                self.app_owner_msg_subscriber.send_notification_to_app_owners(log_msg)
             else:
                 logging.debug(f"creating finding fields {fields_to_update}")
                 jira_issue = self.jira.create_issue(fields_to_update)
@@ -674,7 +683,6 @@ class JiraFindingDataSource(FindingDataSource):
         if jira_issue_a and finding_b.id() in self.findings:
             _, jira_issue_b = self.findings[finding_b.id()]
             self.jira.create_issue_link(type="Relates", inwardIssue=jira_issue_a.key, outwardIssue=jira_issue_b.key)
-
 
     def get_risk_assessor(self) -> List[User]:
         logging.debug("get_risk_assessor()")
