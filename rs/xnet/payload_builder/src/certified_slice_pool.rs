@@ -351,14 +351,12 @@ struct Payload {
     messages: Option<Messages>,
 }
 
-/// Mean empty payload byte size: `LabelTree` with `"streams"` and `"header"`
-/// labels; subnet ID; and serialized header (3 variable length encoded
-/// integers).
+/// Mean empty payload byte size: `LabelTree` with subnet ID, `"streams"` and
+/// `"header"`labels; but excluding the header leaf.
 const EMPTY_PAYLOAD_BYTES: usize = 62;
 
-/// Mean non-empty payload byte size excluding messages: `LabelTree` with
-/// `"streams"` and `"header"` labels; subnet ID; serialized header (3 variable
-/// length encoded integers); plus "messages" node.
+/// Mean non-empty payload byte size excluding messages and header leaf: `LabelTree`
+/// with subnet ID, "streams"` and `"header"` labels.
 const NON_EMPTY_PAYLOAD_FIXED_BYTES: usize = 84;
 
 impl Payload {
