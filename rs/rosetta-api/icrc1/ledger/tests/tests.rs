@@ -383,7 +383,6 @@ fn icrc1_test_upgrade_serialization() {
         ledger_mainnet_wasm(),
         ledger_wasm(),
         ledger_wasm_upgradetomemorymanager(),
-        encode_init_args,
     );
 }
 
