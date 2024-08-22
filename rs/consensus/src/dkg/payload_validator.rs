@@ -386,7 +386,7 @@ mod tests {
                 ],
                 /*max_dealings_per_block=*/ 3,
                 SUBNET_1,
-                /*committee=*/ &[NODE_1, NODE_2],
+                /*committee=*/ &[NODE_1, NODE_2, NODE_3],
             ),
             Ok(())
         );
