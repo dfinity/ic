@@ -1169,11 +1169,16 @@ pub async fn create_http_gateway(
     State(AppState { api_state, .. }): State<AppState>,
     extract::Json(http_gateway_config): extract::Json<HttpGatewayConfig>,
 ) -> (StatusCode, Json<rest::CreateHttpGatewayResponse>) {
-    let http_gateway_info = api_state.create_http_gateway(http_gateway_config).await;
-    (
-        StatusCode::CREATED,
-        Json(rest::CreateHttpGatewayResponse::Created(http_gateway_info)),
-    )
+    match api_state.create_http_gateway(http_gateway_config).await {
+        Ok(http_gateway_info) => (
+            StatusCode::CREATED,
+            Json(rest::CreateHttpGatewayResponse::Created(http_gateway_info)),
+        ),
+        Err(e) => (
+            StatusCode::BAD_GATEWAY,
+            Json(rest::CreateHttpGatewayResponse::Error { message: e }),
+        ),
+    }
 }
 
 /// Stops an HTTP gateway instance.

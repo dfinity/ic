@@ -90,15 +90,15 @@ async fn update_handler<Artifact: PbArtifact>(
         commit_id: CommitId::from(pb_slot_update.commit_id),
         slot_number: SlotNumber::from(pb_slot_update.slot_id),
         update: match pb_slot_update.update {
-            Some(pb::slot_update::Update::Advert(advert)) => {
-                let id: Artifact::Id = Artifact::PbId::decode(advert.id.as_slice())
+            Some(pb::slot_update::Update::Id(id)) => {
+                let id: Artifact::Id = Artifact::PbId::decode(id.as_slice())
                     .map_err(|e| UpdateHandlerError::IdDecoding(e))
                     .and_then(|pb_id| {
                         pb_id
                             .try_into()
                             .map_err(|e| UpdateHandlerError::IdPbConversion(e))
                     })?;
-                Update::Advert(id)
+                Update::Id(id)
             }
             Some(pb::slot_update::Update::Artifact(artifact)) => {
                 let message: Artifact = Artifact::PbMessage::decode(artifact.as_slice())
@@ -335,7 +335,7 @@ where
 
         let (id, artifact) = match update {
             Update::Artifact(artifact) => (artifact.id(), Some(artifact)),
-            Update::Advert(id) => (id, None),
+            Update::Id(id) => (id, None),
         };
 
         if artifact.is_some() {
@@ -685,7 +685,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert(0),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -711,7 +711,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(0),
-                update: Update::Advert(0),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -734,7 +734,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(0),
-                update: Update::Advert(0),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(0),
@@ -757,7 +757,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(10),
-                update: Update::Advert(0),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(0),
@@ -780,7 +780,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(0),
-                update: Update::Advert(0),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(0),
@@ -832,7 +832,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert(0),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -859,7 +859,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(0),
-                update: Update::Advert(1),
+                update: Update::Id(1),
             },
             NODE_1,
             ConnId::from(2),
@@ -918,7 +918,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert(0),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -950,7 +950,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(0),
-                update: Update::Advert(1),
+                update: Update::Id(1),
             },
             NODE_1,
             ConnId::from(2),
@@ -1010,7 +1010,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert(0),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1020,7 +1020,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert(0),
+                update: Update::Id(0),
             },
             NODE_2,
             ConnId::from(1),
@@ -1060,7 +1060,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert(0),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1070,7 +1070,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(2),
-                update: Update::Advert(1),
+                update: Update::Id(1),
             },
             NODE_1,
             ConnId::from(1),
@@ -1087,7 +1087,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(3),
-                update: Update::Advert(0),
+                update: Update::Id(0),
             },
             NODE_2,
             ConnId::from(1),
@@ -1118,7 +1118,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert(0),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1127,7 +1127,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert(0),
+                update: Update::Id(0),
             },
             NODE_2,
             ConnId::from(1),
@@ -1202,7 +1202,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert(0),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1258,7 +1258,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert(0),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1268,7 +1268,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(2),
                 commit_id: CommitId::from(2),
-                update: Update::Advert(0),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1278,7 +1278,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(3),
-                update: Update::Advert(1),
+                update: Update::Id(1),
             },
             NODE_1,
             ConnId::from(1),
@@ -1298,7 +1298,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(2),
                 commit_id: CommitId::from(4),
-                update: Update::Advert(1),
+                update: Update::Id(1),
             },
             NODE_1,
             ConnId::from(1),
@@ -1346,7 +1346,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert(0),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1355,7 +1355,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(2),
                 commit_id: CommitId::from(2),
-                update: Update::Advert(1),
+                update: Update::Id(1),
             },
             NODE_1,
             ConnId::from(1),
@@ -1375,7 +1375,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(2),
                 commit_id: CommitId::from(3),
-                update: Update::Advert(0),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1420,7 +1420,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert(0),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1442,7 +1442,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(2),
-                update: Update::Advert(0),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1480,7 +1480,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(3),
-                update: Update::Advert(2),
+                update: Update::Id(2),
             },
             NODE_1,
             ConnId::from(1),

@@ -1,7 +1,7 @@
 import logging
 
 from data_source.jira_finding_data_source import JiraFindingDataSource
-from model.ic import get_ic_repo_ci_pipeline_base_url, get_ic_repo_merge_request_base_url
+from model.ic import get_ic_repo_ci_pipeline_base_url, get_ic_repo_merge_request_base_url, is_env_for_periodic_job
 from model.project import Project
 from model.repository import Repository
 from model.team import Team
@@ -140,8 +140,13 @@ REPOS_TO_SCAN = [
     # ),
 ]
 
-if __name__ == "__main__":
+
+def main():
     logging.basicConfig(level=logging.WARNING)
+    if not is_env_for_periodic_job():
+        logging.warning("skipping periodic NPM job because it is run in the wrong environment")
+        return
+
     scanner_job = ScannerJobType.PERIODIC_SCAN
     notify_on_scan_job_succeeded, notify_on_scan_job_failed = {}, {}
     for job_type in ScannerJobType:
@@ -168,3 +173,7 @@ if __name__ == "__main__":
         NPMDependencyManager(), JiraFindingDataSource(finding_data_source_subscribers, app_owner_msg_subscriber=notifier), scanner_subscribers
     )
     scanner_job.do_periodic_scan(REPOS_TO_SCAN)
+
+
+if __name__ == "__main__":
+    main()
