@@ -1,0 +1,27 @@
+#!/bin/sh
+
+ic-admin \
+    {% if args.use_hsm -%}
+        --use-hsm \
+    {% endif -%}
+    {% if let Some(key_id) = args.key_id -%}
+        --key-id {{key_id}} \
+    {% endif -%}
+    {% if let Some(hsm_slot) = args.hsm_slot -%}
+        --slot {{hsm_slot}} \
+    {% endif -%}
+    {% if let Some(pin) = args.pin -%}
+        --pin {{pin}} \
+    {% endif -%}
+    --nns-url "https://ic0.app" \
+    propose-to-change-nns-canister \
+    --proposer {{args.proposer}} \
+    {% if let Some(title) = args.proposal_title -%}
+        --proposal-title "{{title}}" \
+    {% endif -%}
+    --canister-id {{canister_id}} \
+    --mode {{mode}} \
+    --wasm-module-path "{{wasm_module_path}}" \
+    --wasm-module-sha256 {{wasm_module_sha256}} \
+    --arg "{{arg}}" \
+    --summary-file "{{summary_file}}"
