@@ -166,16 +166,6 @@ fn section_ok<T: AsRef<IngressPoolObject>>(section: &IngressPoolSection<T>) {
     );
 }
 
-//impl<T: AsRef<IngressPoolObject>> Default for IngressPoolSection<T> {
-//    fn default() -> Self {
-//        Self::new(PoolMetrics::new(
-//            MetricsRegistry::new(),
-//            POOL_INGRESS,
-//            "default",
-//        ))
-//    }
-//}
-
 impl<T: AsRef<IngressPoolObject> + HasTimestamp> PoolSection<T> for IngressPoolSection<T> {
     fn get(&self, message_id: &IngressMessageId) -> Option<&T> {
         self.artifacts.get(message_id)
