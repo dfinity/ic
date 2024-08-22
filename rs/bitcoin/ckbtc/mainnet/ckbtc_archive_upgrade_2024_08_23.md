@@ -1,17 +1,17 @@
-# Proposal to upgrade the ckETH archive canister
+# Proposal to upgrade the ckBTC archive canister
 
 Git hash: `3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d`
 
-New compressed Wasm hash: `5bd1f69540bd48493018e13bb5ad25aba75d59403ced1d5958bf718147228d31`
+New compressed Wasm hash: `5c595c2adc7f6d9971298fee2fa666929711e73341192ab70804c783a0eee03f`
 
-Target canister: `xob7s-iqaaa-aaaar-qacra-cai`
+Target canister: `nbsys-saaaa-aaaar-qaaga-cai`
 
-Previous ckETH archive proposal: None (was spawned off by the ckETH ledger with git hash `5ecbd59c6c9f9f874d4340f9fbbd96af07aa2576`)
+Previous ckBTC archive proposal: https://dashboard.internetcomputer.org/proposal/125589
 
 ---
 
 ## Motivation
-Upgrade the ckETH archive canister to the latest version to add support for the [ICRC-21: Canister Call Consent Messages](https://github.com/dfinity/wg-identity-authentication/blob/fd846030109710cab67d9381485a73db424f2b07/topics/ICRC-21/icrc_21_consent_msg.md) standard.
+Upgrade the ckBTC archive canister to the latest version to add support for the [ICRC-21: Canister Call Consent Messages](https://github.com/dfinity/wg-identity-authentication/blob/fd846030109710cab67d9381485a73db424f2b07/topics/ICRC-21/icrc_21_consent_msg.md) standard.
 
 
 ## Upgrade args
@@ -26,7 +26,7 @@ didc encode '()'
 ## Release Notes
 
 ```
-git log --format="%C(auto) %h %s" 5ecbd59c6c9f9f874d4340f9fbbd96af07aa2576..3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d -- rs/rosetta-api/icrc1/archive
+git log --format=%C(auto) %h %s 24fd80082f40de6d0b3cd7876be09ef1aadbde86..3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d -- rs/rosetta-api/icrc1/archive
 576bb8d17 chore: add buildifier sort comment to Bazel files
 f7fe40b7d Merge branch 'mathias-FI-1310-add-heap-memory-usage-metric' into 'master'
 0c16902ca feat(ledger_suite): FI-1310: Add total memory usage metrics for ledger, archive, and index canisters
@@ -48,5 +48,5 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 git fetch
 git checkout 3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d
 ./gitlab-ci/container/build-ic.sh -c
-sha256sum ./artifacts/canisters/ic-icrc1-archive-u256.wasm.gz
+sha256sum ./artifacts/canisters/ic-icrc1-archive.wasm.gz
 ```
