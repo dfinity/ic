@@ -279,10 +279,12 @@ jobs:
         env:
           RUN_ON_DIFF_ONLY: "true"
           BAZEL_COMMAND: "build"
-      - <<: *bazel-upload
-        name: Upload build-ic.tar
+      - name: Upload build-ic.tar
+        uses: actions/upload-artifact@v4
         with:
           name: build-ic
+          retention-days: 1
+          if-no-files-found: error
           path: |
             build-ic.tar
 
