@@ -49,6 +49,7 @@ use ic_cdk::api::management_canister::main::{CanisterId, CanisterStatusResponse}
 use reqwest::Url;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use slog::Level;
 use std::sync::mpsc::channel;
 use std::thread;
 use std::thread::JoinHandle;
@@ -75,6 +76,7 @@ pub struct PocketIcBuilder {
     max_request_time_ms: Option<u64>,
     state_dir: Option<PathBuf>,
     nonmainnet_features: bool,
+    log_level: Option<Level>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -86,6 +88,7 @@ impl PocketIcBuilder {
             max_request_time_ms: Some(DEFAULT_MAX_REQUEST_TIME_MS),
             state_dir: None,
             nonmainnet_features: false,
+            log_level: None,
         }
     }
 
@@ -97,6 +100,7 @@ impl PocketIcBuilder {
             self.max_request_time_ms,
             self.state_dir,
             self.nonmainnet_features,
+            self.log_level,
         )
     }
 
@@ -108,6 +112,7 @@ impl PocketIcBuilder {
             self.max_request_time_ms,
             self.state_dir,
             self.nonmainnet_features,
+            self.log_level,
         )
         .await
     }
@@ -136,6 +141,13 @@ impl PocketIcBuilder {
     pub fn with_nonmainnet_features(self, nonmainnet_features: bool) -> Self {
         Self {
             nonmainnet_features,
+            ..self
+        }
+    }
+
+    pub fn with_log_level(self, log_level: Level) -> Self {
+        Self {
+            log_level: Some(log_level),
             ..self
         }
     }
@@ -304,6 +316,7 @@ impl PocketIc {
             Some(DEFAULT_MAX_REQUEST_TIME_MS),
             None,
             false,
+            None,
         )
     }
 
@@ -315,7 +328,7 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
     ) -> Self {
         let server_url = crate::start_or_reuse_server();
-        Self::from_components(config, server_url, max_request_time_ms, None, false)
+        Self::from_components(config, server_url, max_request_time_ms, None, false, None)
     }
 
     /// Creates a new PocketIC instance with the specified subnet config and server url.
@@ -330,6 +343,7 @@ impl PocketIc {
             Some(DEFAULT_MAX_REQUEST_TIME_MS),
             None,
             false,
+            None,
         )
     }
 
@@ -339,6 +353,7 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
+        log_level: Option<Level>,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -357,6 +372,7 @@ impl PocketIc {
                 max_request_time_ms,
                 state_dir,
                 nonmainnet_features,
+                log_level,
             )
             .await
         });

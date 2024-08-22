@@ -55,10 +55,9 @@ use ic_nns_governance_api::{
         ListNodeProviderRewardsResponse, ListNodeProvidersResponse, ListProposalInfo,
         ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
         ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo,
-        NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent, RewardNodeProvider,
-        RewardNodeProviders, SettleCommunityFundParticipation,
-        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
-        UpdateNodeProvider, Vote,
+        NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
+        SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
+        SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
     },
     subnet_rental::{SubnetRentalProposalPayload, SubnetRentalRequest},
 };
@@ -724,17 +723,10 @@ fn get_monthly_node_provider_rewards() {
 }
 
 #[candid_method(update, rename = "get_monthly_node_provider_rewards")]
-async fn get_monthly_node_provider_rewards_() -> Result<RewardNodeProviders, GovernanceError> {
+async fn get_monthly_node_provider_rewards_() -> Result<MonthlyNodeProviderRewards, GovernanceError>
+{
     let rewards = governance_mut().get_monthly_node_provider_rewards().await?;
-    let rewards = rewards
-        .rewards
-        .into_iter()
-        .map(RewardNodeProvider::from)
-        .collect();
-    Ok(RewardNodeProviders {
-        rewards,
-        use_registry_derived_rewards: Some(true),
-    })
+    Ok(MonthlyNodeProviderRewards::from(rewards))
 }
 
 #[export_name = "canister_query list_node_provider_rewards"]
@@ -745,16 +737,15 @@ fn list_node_provider_rewards() {
 
 #[candid_method(query, rename = "list_node_provider_rewards")]
 fn list_node_provider_rewards_(
-    _req: ListNodeProviderRewardsRequest,
+    req: ListNodeProviderRewardsRequest,
 ) -> ListNodeProviderRewardsResponse {
-    let rewards = governance().list_node_provider_rewards(5);
+    let rewards = governance()
+        .list_node_provider_rewards(req.date_filter.map(|d| d.into()))
+        .into_iter()
+        .map(MonthlyNodeProviderRewards::from)
+        .collect();
 
-    ListNodeProviderRewardsResponse {
-        rewards: rewards
-            .into_iter()
-            .map(MonthlyNodeProviderRewards::from)
-            .collect(),
-    }
+    ListNodeProviderRewardsResponse { rewards }
 }
 
 #[export_name = "canister_query list_known_neurons"]

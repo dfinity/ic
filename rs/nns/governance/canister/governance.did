@@ -137,6 +137,10 @@ type CreateServiceNervousSystem = record {
   swap_parameters : opt SwapParameters;
   initial_token_distribution : opt InitialTokenDistribution;
 };
+type DateRangeFilter = record {
+  start_timestamp_seconds : opt nat64;
+  end_timestamp_seconds : opt nat64;
+};
 type Decimal = record { human_readable : opt text };
 type DerivedProposalInformation = record {
   swap_background_information : opt SwapBackgroundInformation;
@@ -300,6 +304,9 @@ type ListNeurons = record {
 type ListNeuronsResponse = record {
   neuron_infos : vec record { nat64; NeuronInfo };
   full_neurons : vec Neuron;
+};
+type ListNodeProviderRewardsRequest = record {
+  date_filter : opt DateRangeFilter;
 };
 type ListNodeProviderRewardsResponse = record {
   rewards : vec MonthlyNodeProviderRewards;
@@ -647,7 +654,10 @@ type Result_1 = variant { Error : GovernanceError; NeuronId : NeuronId };
 type Result_10 = variant { Ok : Ok_1; Err : GovernanceError };
 type Result_2 = variant { Ok : Neuron; Err : GovernanceError };
 type Result_3 = variant { Ok : GovernanceCachedMetrics; Err : GovernanceError };
-type Result_4 = variant { Ok : RewardNodeProviders; Err : GovernanceError };
+type Result_4 = variant {
+  Ok : MonthlyNodeProviderRewards;
+  Err : GovernanceError;
+};
 type Result_5 = variant { Ok : NeuronInfo; Err : GovernanceError };
 type Result_6 = variant { Ok : Ok; Err : GovernanceError };
 type Result_7 = variant { Ok : NodeProvider; Err : GovernanceError };
@@ -802,7 +812,7 @@ service : (Governance) -> {
   get_restore_aging_summary : () -> (RestoreAgingSummary) query;
   list_known_neurons : () -> (ListKnownNeuronsResponse) query;
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;
-  list_node_provider_rewards : (record {}) -> (
+  list_node_provider_rewards : (ListNodeProviderRewardsRequest) -> (
       ListNodeProviderRewardsResponse,
     ) query;
   list_node_providers : () -> (ListNodeProvidersResponse) query;
