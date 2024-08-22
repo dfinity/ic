@@ -7,17 +7,6 @@ import "registry/subnet/v1/subnet.proto";
 import "types/v1/canister_http.proto";
 import "types/v1/idkg.proto";
 
-message IDkgMessageAttribute {
-  oneof kind {
-    registry.subnet.v1.IDkgTranscriptId signed_dealing = 1;
-    registry.subnet.v1.IDkgTranscriptId dealing_support = 2;
-    types.v1.RequestId ecdsa_sig_share = 3;
-    registry.subnet.v1.IDkgTranscriptId complaint = 4;
-    registry.subnet.v1.IDkgTranscriptId opening = 5;
-    types.v1.RequestId schnorr_sig_share = 6;
-  }
-}
-
 message DkgMessageId {
   bytes hash = 1;
   uint64 height = 2;

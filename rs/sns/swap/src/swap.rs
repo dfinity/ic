@@ -33,7 +33,9 @@ use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
-use ic_nervous_system_common::{i2d, ledger::compute_neuron_staking_subaccount_bytes};
+use ic_nervous_system_common::{
+    i2d, ledger::compute_neuron_staking_subaccount_bytes, MAX_NEURONS_FOR_DIRECT_PARTICIPANTS,
+};
 use ic_nervous_system_proto::pb::v1::Principals;
 use ic_neurons_fund::{MatchedParticipationFunction, PolynomialNeuronsFundParticipation};
 use ic_sns_governance::pb::v1::claim_swap_neurons_request::{
@@ -1159,6 +1161,30 @@ impl Swap {
         let params = &self.params.as_ref().expect("Expected params to be set");
         // Subtraction safe because of the preceding if-statement.
         let max_increment_e8s = self.available_direct_participation_e8s();
+
+        // Check that the maximum number of participants has not been reached yet.
+        {
+            let num_direct_participants = self.buyers.len() as u64;
+            let num_sns_neurons_per_basket = params
+                .neuron_basket_construction_parameters
+                .as_ref()
+                .expect("neuron_basket_construction_parameters must be specified")
+                .count;
+            if (num_direct_participants + 1) * num_sns_neurons_per_basket
+                > MAX_NEURONS_FOR_DIRECT_PARTICIPANTS
+            {
+                return Err(format!(
+                    "The swap has reached the maximum number of direct participants ({}) and does \
+                     not accept new participants; existing participants may still increase their \
+                     ICP participation amount. This constraint ensures that SNS neuron baskets can \
+                     be created for all existing participants (SNS neuron basket size: {}, \
+                     MAX_NEURONS_FOR_DIRECT_PARTICIPANTS: {}).",
+                    num_direct_participants,
+                    num_sns_neurons_per_basket,
+                    MAX_NEURONS_FOR_DIRECT_PARTICIPANTS,
+                ));
+            }
+        }
 
         // Check that the minimum amount has been transferred before
         // actually creating an entry for the buyer.
