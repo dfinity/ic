@@ -16,10 +16,10 @@ use ic_types::{
 };
 use std::{collections::BTreeSet, sync::Arc};
 
-/// The upper bound of how many shares of HTTP outcall requests unknown to the local replica will be
-/// requested via P2P in advance. Since the request ids are strictly increasing, we can simply add
-/// the constant to the latest known request id.
-const MAX_NUMBER_OF_REQUESTS_AHEAD: u64 = 50;
+// We are aiming for about 100 req/s for http outcalls. Assuming that the priority function gets
+// called about once every 3 seconds, we do not expect the number of requests to grow from one call
+// to another by about 100 http outcalls + 15 other management canister calls per second.
+const MAX_NUMBER_OF_REQUESTS_AHEAD: u64 = 3 * (100 + 15);
 
 /// The canonical implementation of [`PriorityFnFactory`]
 pub struct CanisterHttpGossipImpl {
@@ -49,7 +49,7 @@ impl<Pool: CanisterHttpPool> PriorityFnFactory<CanisterHttpResponseShare, Pool>
     fn get_priority_function(
         &self,
         _canister_http_pool: &Pool,
-    ) -> PriorityFn<CanisterHttpResponseId, ()> {
+    ) -> PriorityFn<CanisterHttpResponseId> {
         let finalized_height = self.consensus_cache.finalized_block().height;
         let registry_version =
             registry_version_at_height(self.consensus_cache.as_ref(), finalized_height).unwrap();
@@ -66,12 +66,14 @@ impl<Pool: CanisterHttpPool> PriorityFnFactory<CanisterHttpResponseShare, Pool>
             (known_request_ids, next_callback_id)
         };
         let log = self.log.clone();
-        Box::new(move |id: &'_ CanisterHttpResponseId, _| {
+        Box::new(move |id: &'_ CanisterHttpResponseId| {
             if id.content.registry_version != registry_version {
                 warn!(log, "Dropping canister http response share with callback id: {}, because registry version {} does not match expected version {}", id.content.id, id.content.registry_version, registry_version);
                 return Priority::Drop;
             }
 
+            // We derive the highest accepted request id from the next expected request id, plus the
+            // number of maximal number of new requests we can get between the function calls.
             let highest_accepted_request_id =
                 CallbackId::from(next_callback_id.get() + MAX_NUMBER_OF_REQUESTS_AHEAD);
 

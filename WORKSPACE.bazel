@@ -4,7 +4,6 @@ workspace(
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
-load("//third_party/lmdb-rkv-0.14.99:repository.bzl", "lmdb_rkv_repository")
 load("mainnet-canisters.bzl", "mainnet_ck_canisters", "mainnet_core_nns_canisters", "mainnet_sns_canisters")
 
 http_archive(
@@ -213,15 +212,9 @@ load(
     "container_pull",
 )
 
-# NOTE: in all the `container_pull` below we set a dummy `puller_darwin` which is expected
-# to fail when called. In general we do not expect docker images to have to be downloaded
-# on Darwin. If a docker image is pulled on Darwin (by mistake), this will make the build
-# fail.
-
 container_pull(
     name = "static-file-server",
     digest = "sha256:c21bed6db05fe08f2da128fe96f5f5a06633348fb5bb37bf3581e6501c6b528a",
-    puller_darwin = "@does-not-exist",
     registry = "registry.gitlab.com/dfinity-lab/open/public-docker-registry",
     repository = "halverneus/static-file-server",
 )
@@ -229,7 +222,6 @@ container_pull(
 container_pull(
     name = "bitcoind",
     digest = "sha256:17c7dd21690f3be34630db7389d2f0bff14649e27a964afef03806a6d631e0f1",
-    puller_darwin = "@does-not-exist",
     registry = "registry.gitlab.com/dfinity-lab/open/public-docker-registry",
     repository = "kylemanna/bitcoind",
 )
@@ -237,7 +229,6 @@ container_pull(
 container_pull(
     name = "jaeger",
     digest = "sha256:f421219dbd77248301fc42ac6e8ba5026f4bada9448ab33ac89061e21cfe3fea",
-    puller_darwin = "@does-not-exist",
     registry = "docker.io",
     repository = "jaegertracing/all-in-one",
 )
@@ -245,7 +236,6 @@ container_pull(
 container_pull(
     name = "minica",
     digest = "sha256:c67e2c1885d438b5927176295d41aaab8a72dd9e1272ba85054bfc78191d05b0",
-    puller_darwin = "@does-not-exist",
     registry = "registry.gitlab.com/dfinity-lab/open/public-docker-registry",
     repository = "ryantk/minica",
 )
@@ -253,7 +243,6 @@ container_pull(
 container_pull(
     name = "rust_base",
     digest = "sha256:8e94f031353596c3fc9db6a2499bcc82dacc40cb71e0703476f9fad41677efdf",
-    puller_darwin = "@does-not-exist",
     registry = "gcr.io",
     repository = "distroless/cc-debian11",
 )
@@ -261,7 +250,6 @@ container_pull(
 container_pull(
     name = "ubuntu_base",
     digest = "sha256:965fbcae990b0467ed5657caceaec165018ef44a4d2d46c7cdea80a9dff0d1ea",
-    puller_darwin = "@does-not-exist",
     registry = "docker.io",
     repository = "ubuntu",
 )
@@ -269,7 +257,6 @@ container_pull(
 container_pull(
     name = "coredns",
     digest = "sha256:be7652ce0b43b1339f3d14d9b14af9f588578011092c1f7893bd55432d83a378",
-    puller_darwin = "@does-not-exist",
     registry = "docker.io",
     repository = "coredns/coredns",
     tag = "1.10.1",
@@ -278,7 +265,6 @@ container_pull(
 container_pull(
     name = "pebble",
     digest = "sha256:fc5a537bf8fbc7cc63aa24ec3142283aa9b6ba54529f86eb8ff31fbde7c5b258",
-    puller_darwin = "@does-not-exist",
     registry = "docker.io",
     repository = "letsencrypt/pebble",
     tag = "v2.3.1",
@@ -287,7 +273,6 @@ container_pull(
 container_pull(
     name = "python3",
     digest = "sha256:0a56f24afa1fc7f518aa690cb8c7be661225e40b157d9bb8c6ef402164d9faa7",
-    puller_darwin = "@does-not-exist",
     registry = "docker.io",
     repository = "python",
     tag = "3-alpine",
@@ -296,7 +281,6 @@ container_pull(
 container_pull(
     name = "alpine_openssl",
     digest = "sha256:cf89651f07a33d2faf4499f72e6f8b0ee2542cd40735d51c7e75b8965c17af0e",
-    puller_darwin = "@does-not-exist",
     registry = "docker.io",
     repository = "alpine/openssl",
 )
@@ -316,7 +300,6 @@ container_pull(
 container_pull(
     name = "ubuntu_test_runtime",
     digest = "sha256:d5b2f17ee8fcd45b4f1580893680b78a540f491e647a9f6971bdaab393e372f7",
-    puller_darwin = "@does-not-exist",
     registry = "registry.gitlab.com",
     repository = "dfinity-lab/open/public-docker-registry/ubuntu_test_runtime_image",
 )
@@ -325,7 +308,6 @@ container_pull(
 container_pull(
     name = "nns-dapp-specs",
     digest = "sha256:9e003fe2740f2813bf9e776b9cabd5cdb1fbe15581fc4b78876708fdf3791b3f",
-    puller_darwin = "@does-not-exist",
     registry = "registry.gitlab.com",
     repository = "dfinity-lab/open/public-docker-registry/nns-dapp-specs",
 )
@@ -333,8 +315,6 @@ container_pull(
 # Third party dependencies that require special treatment
 
 lmdb_repository()
-
-lmdb_rkv_repository(name = "lmdb_rkv")
 
 http_archive(
     name = "pigz",
