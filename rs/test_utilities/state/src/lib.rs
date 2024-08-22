@@ -931,9 +931,7 @@ prop_compose! {
             max_size,
             min_signal_count,
             max_signal_count,
-            // TODO: MR-590 Include all `RejectReason` variants once
-            // the canonical representation supports them.
-            vec![RejectReason::CanisterMigrating],
+            RejectReason::iter().collect(),
         )
     ) -> Stream {
         stream

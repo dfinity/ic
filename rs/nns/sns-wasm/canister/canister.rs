@@ -15,7 +15,7 @@ use ic_nervous_system_clients::{
     canister_status::{canister_status, CanisterStatusResultV2, CanisterStatusType},
 };
 use ic_nervous_system_runtime::DfnRuntime;
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_constants::{DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT, GOVERNANCE_CANISTER_ID};
 use ic_nns_handler_root_interface::client::NnsRootCanisterClientImpl;
 use ic_sns_wasm::{
     canister_api::CanisterApi,
@@ -43,11 +43,6 @@ use std::{cell::RefCell, collections::HashMap, convert::TryInto};
 use dfn_core::println;
 
 pub const LOG_PREFIX: &str = "[SNS-WASM] ";
-
-/// The current value is 4 GiB, s.t. the SNS framework canisters never hit the soft memory limit.
-/// This mitigates the risk that an SNS Governance canister runs out of memory and proposals cannot
-/// be passed anymore.
-pub const DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT: u64 = 1 << 32;
 
 thread_local! {
     static SNS_WASM: RefCell<SnsWasmCanister<CanisterStableMemory>> = RefCell::new(SnsWasmCanister::new());

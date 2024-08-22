@@ -78,7 +78,7 @@ mock! {
     pub PriorityFnFactory<A: IdentifiableArtifact> {}
 
     impl<A: IdentifiableArtifact + Sync> PriorityFnFactory<A, MockValidatedPoolReader<A>> for PriorityFnFactory<A> {
-        fn get_priority_function(&self, pool: &MockValidatedPoolReader<A>) -> PriorityFn<A::Id, A::Attribute>;
+        fn get_priority_function(&self, pool: &MockValidatedPoolReader<A>) -> PriorityFn<A::Id>;
     }
 }
 
@@ -102,7 +102,6 @@ mock! {
         fn assemble_message<P: Peers + Send + 'static>(
             &self,
             id: u64,
-            attr: (),
             artifact: Option<(U64Artifact, NodeId)>,
             peers: P,
         ) -> impl std::future::Future<Output = Result<(U64Artifact, NodeId), Aborted>> + Send;
