@@ -11,11 +11,11 @@ use icp_ledger::{
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use mockall::automock;
 
-#[cfg(feature = "test")]
+#[cfg(feature = "tla")]
 use crate::tla::{
     self, account_to_tla, opt_subaccount_to_tla, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
 };
-#[cfg(feature = "test")]
+#[cfg(feature = "tla")]
 use std::collections::BTreeMap;
 
 use crate::{tla_log_request, tla_log_response};

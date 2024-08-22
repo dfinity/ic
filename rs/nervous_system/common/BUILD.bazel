@@ -1,5 +1,6 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load(":feature_flags.bzl", "test_with_tla")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -62,6 +63,17 @@ MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
+# Allows temporarily disabling TLA checks from the command line; 
+# just pass `--define tla_disabled=true` to your Bazel command
+# See feature_flags.bzl for how to disable TLA checks permanently
+# (in the CI)
+config_setting(
+    name = "tla_disabled",
+    values = {
+        "define": "tla_disabled=true"
+    }
+)
+
 cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
@@ -85,7 +97,7 @@ rust_library(
     name = "common--test_feature",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    crate_features = ["test"],
+    crate_features = test_with_tla(),
     crate_name = "ic_nervous_system_common",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
