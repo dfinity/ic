@@ -48,25 +48,26 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
     let e = MINIMUM_CHAIN_LENGTH as usize;
     /*
      * To derive our bounds, we consider a worst-case scenario in which we have
-     * notarizations (or finalizations) for d rounds into the DKG interval i, without
-     * having a CUP for it yet. In this case, we keep all artifacts from the (i-1)-th
-     * interval, including a minimum chain length of `e` from the (i-2)-th interval.
+     * notarizations (or finalizations) for d rounds above the i-th summary
+     * height, without having a CUP for it yet. In this case, we keep all
+     * artifacts from the (i-1)-th interval, including a minimum chain length
+     * of `e` from the (i-2)-th interval.
      *
-     *       [B] Ordinary blocks                            notarized/finalized
+     *       [B] Ordinary blocks                             notarized/finalized
      *       [S] Summary blocks                                   height
      *                                                              |
      *  ..-[B]-[B]-...-[B]-[S]-[B]-[B]-...-[B]-[B]-[S]-[B]-...-[B]-[B] <- chain tip
-     *      |               |                       |               |
-     *      +--- minimum  --+---- DKG interval -----+-- d rounds ---+
-     *      |  chain length           (k)                           |
-     *      |      (e)                                              |
-     *      +------------------- l = e + k + d ---------------------+
+     *      |           |   |                   |   |               |
+     *      +- minimum -+   +-- DKG interval ---+   +- d+1 heights -+
+     *      |chain length           (k)                             |
+     *      |    (e)                                                |
+     *      +--------------- l = e + k + (d + 1) -------------------+
      *
      * In the above scenario, assuming `d` is equal to the maximum notarization/CUP
      * gap, nodes will refuse to notarize any further blocks. So `l` is the maximum
-     * height span we need to consider for placing a bound on the artifact counts.
+     * number of rounds we need to consider for placing a bound on the artifact counts.
      */
-    let l = k + e + d;
+    let l = k + e + (d + 1);
     // The aggregator/validator may produce one CUP in addition to the current CUP.
     // Additionally, if the DKG interval is smaller than the minimum chain length,
     // we can have one CUP for every time a full DKG interval fits into e.
@@ -94,7 +95,7 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
         // We purge finalization shares below finalized height. So we consider
         // at most d heights, for which n replicas may issue a finalization
         // share for a single block.
-        finalization_shares: d * n,
+        finalization_shares: (d + 1) * n,
         // For every height, every replica may submit a random beacon share.
         // Because we don't purge them below the CUP height, we use l.
         random_beacon_shares: (l + 1) * n,
@@ -104,9 +105,9 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
         cup_shares: cups * n,
         cups,
         // We purge equivocation proofs below and at the finalized height.
-        // This means we can have at most D heights, each with a maximum
+        // This means we can have at most D+1 heights, each with a maximum
         // of f + 1 equivocation proofs (one proof per block maker).
-        equivocation_proofs: d * (f + 1),
+        equivocation_proofs: (d + 1) * (f + 1),
     }
 }
 
@@ -174,18 +175,18 @@ mod tests {
     fn test_pool_bounds() {
         // Example for 40-node subnet w/ 499 DKG interval, assuming e=50 and d=70
         let max_counts = ArtifactCounts {
-            block_proposals: 1544,
-            notarizations: 1544,
-            finalization: 620,
-            random_beacon: 621,
-            random_tape: 621,
+            block_proposals: 1545,
+            notarizations: 1545,
+            finalization: 621,
+            random_beacon: 622,
+            random_tape: 622,
             notarization_shares: 39760,
-            finalization_shares: 2800,
-            random_beacon_shares: 24840,
-            random_tape_shares: 24840,
+            finalization_shares: 2840,
+            random_beacon_shares: 24880,
+            random_tape_shares: 24880,
             cup_shares: 80,
             cups: 2,
-            equivocation_proofs: 980,
+            equivocation_proofs: 994,
         };
         assert_eq!(get_maximum_validated_artifacts(40, 499), max_counts);
 
