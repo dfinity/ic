@@ -107,9 +107,8 @@ impl Set {
             .map(|x| Expression::String(x.to_string()))
             .collect::<Vec<_>>();
 
-        #[allow(clippy::clone_on_copy)]
         schema::NfListObject::Element(schema::Element {
-            family: self.family.clone(),
+            family: self.family,
             table: self.table.clone(),
             name: self.name.clone(),
             elem,
