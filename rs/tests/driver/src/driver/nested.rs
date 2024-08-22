@@ -23,6 +23,10 @@ pub const NESTED_VMS_DIR: &str = "nested_vms";
 pub const NESTED_VM_PATH: &str = "vm.json";
 pub const NESTED_CONFIGURED_IMAGE_PATH: &str = "config.img.zst";
 pub const NESTED_NETWORK_PATH: &str = "ips.json";
+pub const SETUPOS_PATH_ENV_VAR: &str = "SETUPOS_PATH";
+pub const HOSTOS_UPDATE_VERSION_ENV_VAR: &str = "HOSTOS_UPDATE_VERSION";
+pub const HOSTOS_UPDATE_URL_ENV_VAR: &str = "HOSTOS_UPDATE_URL";
+pub const HOSTOS_UPDATE_SHA256_ENV_VAR: &str = "HOSTOS_UPDATE_SHA256";
 
 pub struct NestedNode {
     pub name: String,

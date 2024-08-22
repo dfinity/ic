@@ -1,3 +1,4 @@
+use std::process;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -6,7 +7,12 @@ use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        bootstrap::NestedVersionTarget, ic::InternetComputer, nested::NestedVms, test_env::TestEnv,
+        ic::InternetComputer,
+        nested::{
+            NestedVms, HOSTOS_UPDATE_SHA256_ENV_VAR, HOSTOS_UPDATE_URL_ENV_VAR,
+            HOSTOS_UPDATE_VERSION_ENV_VAR,
+        },
+        test_env::TestEnv,
         test_env_api::*,
     },
     nns::add_nodes_to_subnet,
@@ -14,7 +20,7 @@ use ic_system_test_driver::{
 };
 use ic_types::hostos_version::HostosVersion;
 
-use slog::{info, warn};
+use slog::info;
 
 mod util;
 use util::{
@@ -29,9 +35,7 @@ const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS
-pub fn config(env: TestEnv, from: &NestedVersionTarget) {
-    let logger = env.logger();
-
+pub fn config(env: TestEnv, mainnet_version: bool) {
     let principal =
         PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
             .unwrap();
@@ -42,22 +46,8 @@ pub fn config(env: TestEnv, from: &NestedVersionTarget) {
         .with_node_provider(principal)
         .with_node_operator(principal);
 
-    // Handle the initial version for GuestOS. Currently only supports starting from mainnet, malicious, or branch.
-    match from {
-        NestedVersionTarget::Mainnet => ic = ic.with_mainnet_config(),
-        NestedVersionTarget::Branch(false) => (),
-        NestedVersionTarget::Branch(true) => {
-            warn!(
-                logger,
-                "Starting GuestOS VMs from '-test' versions is unsupported. Ignoring."
-            );
-        }
-        NestedVersionTarget::Published { .. } => {
-            warn!(
-                logger,
-                "Starting GuestOS VMs from published versions is unsupported. Ignoring."
-            );
-        }
+    if mainnet_version {
+        ic = ic.with_mainnet_config();
     }
 
     ic.setup_and_start(&env)
@@ -65,7 +55,7 @@ pub fn config(env: TestEnv, from: &NestedVersionTarget) {
 
     install_nns_and_check_progress(env.topology_snapshot());
 
-    setup_nested_vm(env, from, HOST_VM_NAME);
+    setup_nested_vm(env, HOST_VM_NAME);
 }
 
 /// Allow the nested GuestOS to install and launch, and check that it can
@@ -101,37 +91,24 @@ pub fn registration(env: TestEnv) {
 
 /// Upgrade each HostOS VM to the test version, and verify that each is
 /// healthy before and after the upgrade.
-pub fn upgrade(env: TestEnv, to: &NestedVersionTarget) {
+pub fn upgrade(env: TestEnv) {
     let logger = env.logger();
 
-    let (target_version, url, sha256) = match to {
-        NestedVersionTarget::Mainnet => (
-            get_mainnet_version().unwrap(),
-            get_mainnet_hostos_update_img_url().unwrap(),
-            env.get_mainnet_hostos_update_img_sha256().unwrap(),
-        ),
-        NestedVersionTarget::Branch(false) => (
-            get_branch_version().unwrap(),
-            get_hostos_update_img_url().unwrap(),
-            get_hostos_update_img_sha256().unwrap(),
-        ),
-        NestedVersionTarget::Branch(true) => {
-            let original_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
-                .expect("tip-of-branch IC version");
-
-            (
-                format!("{original_version}-test"),
-                get_hostos_update_img_test_url().unwrap(),
-                get_hostos_update_img_test_sha256().unwrap(),
-            )
-        }
-        NestedVersionTarget::Published {
-            version,
-            url,
-            sha256,
-        } => (version.to_owned(), url.to_owned(), sha256.to_owned()),
-    };
-    let target_version = HostosVersion::try_from(target_version).unwrap();
+    let target_version = HostosVersion::try_from(
+        std::env::var(HOSTOS_UPDATE_VERSION_ENV_VAR).unwrap_or_else(|_| {
+            eprintln!("environment variable {HOSTOS_UPDATE_VERSION_ENV_VAR} is not set");
+            process::exit(1);
+        }),
+    )
+    .unwrap();
+    let url = std::env::var(HOSTOS_UPDATE_URL_ENV_VAR).unwrap_or_else(|_| {
+        eprintln!("environment variable {HOSTOS_UPDATE_URL_ENV_VAR} is not set");
+        process::exit(1);
+    });
+    let sha256 = std::env::var(HOSTOS_UPDATE_SHA256_ENV_VAR).unwrap_or_else(|_| {
+        eprintln!("environment variable {HOSTOS_UPDATE_SHA256_ENV_VAR} is not set");
+        process::exit(1);
+    });
 
     let initial_topology = env.topology_snapshot();
     start_nested_vm(env.clone());

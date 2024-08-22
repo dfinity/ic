@@ -5,7 +5,7 @@ use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_K
 use ic_nns_common::types::NeuronId;
 use ic_system_test_driver::{
     driver::{
-        bootstrap::{setup_nested_vms, start_nested_vms, NestedVersionTarget},
+        bootstrap::{setup_nested_vms, start_nested_vms},
         farm::Farm,
         nested::{NestedNode, NestedVm, NestedVms},
         resource::{allocate_resources, get_resource_request_for_nested_nodes},
@@ -91,7 +91,7 @@ pub(crate) async fn update_nodes_hostos_version(
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
 }
 
-pub(crate) fn setup_nested_vm(env: TestEnv, from: &NestedVersionTarget, name: &str) {
+pub(crate) fn setup_nested_vm(env: TestEnv, name: &str) {
     let logger = env.logger();
     info!(logger, "Setup nested VMs ...");
 
@@ -124,7 +124,6 @@ pub(crate) fn setup_nested_vm(env: TestEnv, from: &NestedVersionTarget, name: &s
         &group_name,
         &nns_url,
         &nns_public_key,
-        from,
     )
     .expect("Unable to setup nested VMs.");
 }

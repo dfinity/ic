@@ -1097,19 +1097,6 @@ pub fn get_mainnet_ic_os_update_img_url() -> Result<Url> {
     Ok(Url::parse(&url)?)
 }
 
-pub fn get_hostos_update_img_url() -> Result<Url> {
-    let url =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TAR_ZST_CAS_URL")?;
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_hostos_update_img_sha256() -> Result<String> {
-    let sha256 =
-        read_dependency_from_env_to_string("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TAR_ZST_SHA256")?;
-    bail_if_sha256_invalid(&sha256, "hostos_update_img_sha256")?;
-    Ok(sha256)
-}
-
 pub fn get_hostos_update_img_test_url() -> Result<Url> {
     let url =
         read_dependency_from_env_to_string("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
@@ -1121,26 +1108,6 @@ pub fn get_hostos_update_img_test_sha256() -> Result<String> {
         read_dependency_from_env_to_string("ENV_DEPS__DEV_HOSTOS_UPDATE_IMG_TEST_TAR_ZST_SHA256")?;
     bail_if_sha256_invalid(&sha256, "hostos_update_img_sha256")?;
     Ok(sha256)
-}
-
-pub fn get_mainnet_hostos_update_img_url() -> Result<Url> {
-    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
-    let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/host-os/update-img/update-img.tar.zst");
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_mainnet_setupos_img_url() -> Result<Url> {
-    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
-    let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/setup-os/disk-img/disk-img.tar.zst");
-    Ok(Url::parse(&url)?)
-}
-
-pub fn get_branch_version() -> Result<String> {
-    read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
-}
-
-pub fn get_mainnet_version() -> Result<String> {
-    read_dependency_to_string("testnet/mainnet_nns_revision.txt")
 }
 
 pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);

@@ -3,14 +3,14 @@ use crate::driver::{
     driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
     farm::{AttachImageSpec, Farm, FarmResult, FileId},
     ic::{InternetComputer, Node},
-    nested::{NestedNode, NestedVms, NESTED_CONFIGURED_IMAGE_PATH},
+    nested::{NestedNode, NestedVms, NESTED_CONFIGURED_IMAGE_PATH, SETUPOS_PATH_ENV_VAR},
     node_software_version::NodeSoftwareVersion,
     port_allocator::AddrType,
     resource::AllocatedVm,
     test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
     test_env_api::{
         get_dependency_path, get_elasticsearch_hosts, get_ic_os_update_img_sha256,
-        get_ic_os_update_img_url, get_mainnet_ic_os_update_img_url, get_mainnet_setupos_img_url,
+        get_ic_os_update_img_url, get_mainnet_ic_os_update_img_url,
         get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
         read_dependency_from_env_to_string, read_dependency_to_string, HasIcDependencies,
         HasTopologySnapshot, HasVmName, IcNodeContainer, InitialReplicaVersion, NodesInfo,
@@ -23,7 +23,6 @@ use crate::k8s::tnet::{TNet, TNode};
 use crate::util::block_on;
 use anyhow::{bail, Result};
 use ic_base_types::NodeId;
-use ic_http_utils::file_downloader::FileDownloader;
 use ic_prep_lib::{
     internet_computer::{IcConfig, InitializedIc, TopologyConfig},
     node::{InitializedNode, NodeConfiguration, NodeIndex},
@@ -43,7 +42,8 @@ use std::{
     io,
     io::Write,
     net::{IpAddr, SocketAddr},
-    path::{Path, PathBuf},
+    path::PathBuf,
+    process,
     process::Command,
     thread::{self, JoinHandle},
 };
@@ -519,18 +519,6 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
     }
 }
 
-#[derive(Clone)]
-pub enum NestedVersionTarget {
-    Mainnet,
-    /// When true, use the branch -test variant.
-    Branch(bool),
-    Published {
-        version: String,
-        url: Url,
-        sha256: String,
-    },
-}
-
 // Setup nested VMs. NOTE: This is different from `setup_and_start_vms` in that
 // we need to configure and push a SetupOS image for each node.
 pub fn setup_nested_vms(
@@ -540,7 +528,6 @@ pub fn setup_nested_vms(
     group_name: &str,
     nns_url: &Url,
     nns_public_key: &str,
-    to: &NestedVersionTarget,
 ) -> anyhow::Result<()> {
     let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
     for node in nodes {
@@ -550,10 +537,9 @@ pub fn setup_nested_vms(
         let t_vm_name = node.name.to_owned();
         let t_nns_url = nns_url.to_owned();
         let t_nns_public_key = nns_public_key.to_owned();
-        let t_to = to.to_owned();
         join_handles.push(thread::spawn(move || {
             let configured_image =
-                configure_setupos_image(&t_env, &t_vm_name, &t_nns_url, &t_nns_public_key, &t_to)?;
+                configure_setupos_image(&t_env, &t_vm_name, &t_nns_url, &t_nns_public_key)?;
 
             let configured_image_spec = AttachImageSpec::new(t_farm.upload_file(
                 &t_group_name,
@@ -600,29 +586,14 @@ pub fn configure_setupos_image(
     name: &str,
     nns_url: &Url,
     nns_public_key: &str,
-    to: &NestedVersionTarget,
 ) -> anyhow::Result<PathBuf> {
     let tmp_dir = env.get_path("setupos");
     fs::create_dir_all(&tmp_dir)?;
 
-    let setupos_image = match to {
-        NestedVersionTarget::Branch(false) => {
-            get_dependency_path("ic-os/setupos/envs/dev/disk-img.tar.zst")
-        }
-        NestedVersionTarget::Branch(true) => {
-            bail!("Starting nested VMs from `-test` versions is unsupported.");
-        }
-        NestedVersionTarget::Mainnet => {
-            let url = get_mainnet_setupos_img_url()?;
-
-            download_setupos_image(&tmp_dir, &url, None)?
-        }
-        NestedVersionTarget::Published {
-            version: _,
-            url,
-            sha256,
-        } => download_setupos_image(&tmp_dir, url, Some(sha256.to_owned()))?,
-    };
+    let setupos_image = PathBuf::from(std::env::var(SETUPOS_PATH_ENV_VAR).unwrap_or_else(|_| {
+        eprintln!("environment variable {SETUPOS_PATH_ENV_VAR} is not set");
+        process::exit(1);
+    }));
 
     let setupos_inject_configs =
         get_dependency_path("rs/ic_os/setupos-inject-configuration/setupos-inject-configuration");
@@ -724,16 +695,4 @@ pub fn configure_setupos_image(
     write_stream.flush()?;
 
     Ok(configured_image)
-}
-
-fn download_setupos_image(
-    tmp_dir: &Path,
-    url: &Url,
-    hash: Option<String>,
-) -> anyhow::Result<PathBuf> {
-    let output = tmp_dir.join("setupos_image");
-    let file_downloader = FileDownloader::new(None);
-    block_on(file_downloader.download_file(url.as_str(), &output, hash))?;
-
-    Ok(output)
 }
