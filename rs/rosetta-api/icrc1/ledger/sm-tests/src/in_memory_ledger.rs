@@ -301,7 +301,7 @@ where
         }
     }
 
-    fn prune_expired_allowances(&mut self, now: TimeStamp) {
+    pub fn prune_expired_allowances(&mut self, now: TimeStamp) {
         let expired_allowances: Vec<K> = self
             .allowances
             .iter()
@@ -426,10 +426,6 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
         self.validate_invariants();
     }
 
-    pub fn finish(&mut self, now: TimeStamp) {
-        self.prune_expired_allowances(now);
-    }
-
     pub fn verify_balances(&self, env: &StateMachine, ledger_id: CanisterId) {
         for (account, balance) in self.balances.iter() {
             let actual_balance = Decode!(
@@ -443,11 +439,10 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
             assert_eq!(
                 &Tokens::try_from(actual_balance.clone()).unwrap(),
                 balance,
-                "Mismatch in balance for account {:?} ({} vs {}), principal {}",
+                "Mismatch in balance for account {:?} ({} vs {})",
                 account,
                 balance,
-                actual_balance,
-                account.owner
+                actual_balance
             );
         }
     }
@@ -474,6 +469,41 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
             );
         }
     }
+
+    pub fn verify_balance_count(&self, env: &StateMachine, ledger_id: CanisterId) -> u64 {
+        let actual_num_balances = parse_metric(env, ledger_id, "ledger_balance_store_entries");
+        assert_eq!(
+            self.balances.len() as u64,
+            actual_num_balances,
+            "Mismatch in number of balances ({} vs {})",
+            self.balances.len(),
+            actual_num_balances
+        );
+        actual_num_balances
+    }
+
+    pub fn verify_allowance_count(&self, env: &StateMachine, ledger_id: CanisterId) -> u64 {
+        let actual_num_allowances = parse_metric(env, ledger_id, "ledger_num_approvals");
+        assert_eq!(
+            self.allowances.len() as u64,
+            actual_num_allowances,
+            "Mismatch in number of allowances ({} vs {})",
+            self.allowances.len(),
+            actual_num_allowances
+        );
+        actual_num_allowances
+    }
+
+    pub fn verify_all(&self, env: &StateMachine, ledger_id: CanisterId) {
+        let actual_num_balances = self.verify_balance_count(env, ledger_id);
+        let actual_num_allowances = self.verify_allowance_count(env, ledger_id);
+        println!(
+            "Checking {} balances and {} allowances",
+            actual_num_balances, actual_num_allowances
+        );
+        self.verify_balances(env, ledger_id);
+        self.verify_allowances(env, ledger_id);
+    }
 }
 
 pub fn verify_ledger_state(env: &StateMachine, ledger_id: CanisterId) {
@@ -482,28 +512,7 @@ pub fn verify_ledger_state(env: &StateMachine, ledger_id: CanisterId) {
     println!("retrieved all ledger and archive blocks");
     let expected_ledger_state = InMemoryLedger::new_from_icrc1_ledger_blocks(&blocks);
     println!("recreated expected ledger state");
-    let actual_num_approvals = parse_metric(env, ledger_id, "ledger_num_approvals");
-    let actual_num_balances = parse_metric(env, ledger_id, "ledger_balance_store_entries");
-    assert_eq!(
-        expected_ledger_state.balances.len() as u64,
-        actual_num_balances,
-        "Mismatch in number of balances ({} vs {})",
-        expected_ledger_state.balances.len(),
-        actual_num_balances
-    );
-    assert_eq!(
-        expected_ledger_state.allowances.len() as u64,
-        actual_num_approvals,
-        "Mismatch in number of approvals ({} vs {})",
-        expected_ledger_state.allowances.len(),
-        actual_num_approvals
-    );
-    println!(
-        "Checking {} balances and {} allowances",
-        actual_num_balances, actual_num_approvals
-    );
-    expected_ledger_state.verify_balances(env, ledger_id);
-    expected_ledger_state.verify_allowances(env, ledger_id);
+    expected_ledger_state.verify_all(&env, ledger_id);
     println!("ledger state verified successfully");
 }
 

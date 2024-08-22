@@ -2513,9 +2513,10 @@ pub fn icrc1_test_upgrade_serialization(
                         Some(FEE.into()),
                     );
                 }
-                in_memory_ledger.finish(TimeStamp::from_nanos_since_unix_epoch(
+                in_memory_ledger.prune_expired_allowances(TimeStamp::from_nanos_since_unix_epoch(
                     system_time_to_nanos(env.time()),
                 ));
+                in_memory_ledger.verify_balance_count(&env, ledger_id);
                 in_memory_ledger.verify_balances(&env, ledger_id);
                 in_memory_ledger.verify_allowances(&env, ledger_id);
 
