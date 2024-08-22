@@ -17,18 +17,25 @@ use ic_types::{
     messages::{HttpCallContent, HttpRequestEnvelope},
     CanisterId,
 };
-use std::{convert::Infallible, time::Duration};
+use std::{convert::Infallible, sync::Arc, time::Duration};
+use tokio::sync::Semaphore;
 use tokio_util::time::FutureExt;
 use tower::{util::BoxCloneService, ServiceBuilder};
 
 /// The maximum time we wait for a message to be certified
 /// before recording its certification time.
-const MAX_CERTIFICATION_WAIT_TIME: Duration = Duration::from_secs(30);
+const MAX_CERTIFICATION_WAIT_TIME: Duration = Duration::from_secs(16);
+
+/// Used to bound the number of tokio tasks spawned for tracking the
+/// certification time of messages. 10_000 is chosen as it is roughly
+/// the pool size.
+const MAX_CONCURRENT_TRACKING_TASKS: usize = 10_000;
 
 #[derive(Clone)]
 pub struct CallServiceV2 {
     ingress_watcher_handle: Option<IngressWatcherHandle>,
     ingress_validator: IngressValidator,
+    ingress_tracking_semaphore: Arc<Semaphore>,
 }
 
 impl CallServiceV2 {
@@ -46,6 +53,9 @@ impl CallServiceV2 {
                 .with_state(Self {
                     ingress_validator,
                     ingress_watcher_handle,
+                    ingress_tracking_semaphore: Arc::new(Semaphore::new(
+                        MAX_CONCURRENT_TRACKING_TASKS,
+                    )),
                 })
                 .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
         )
@@ -63,6 +73,7 @@ impl CallServiceV2 {
 async fn call_v2(
     axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
     State(CallServiceV2 {
+        ingress_tracking_semaphore,
         ingress_validator,
         ingress_watcher_handle,
     }): State<CallServiceV2>,
@@ -85,6 +96,13 @@ async fn call_v2(
     // when `wait_for_certification` is called.
     if let Some(ingress_watcher_handle) = ingress_watcher_handle {
         tokio::spawn(async move {
+            // We acquire a permit to bound the number of concurrent tasks. If no permits are available,
+            // we return early to terminate the task.
+            let ingress_tracking_permit = ingress_tracking_semaphore.try_acquire();
+            let Ok(_permit) = ingress_tracking_permit else {
+                return;
+            };
+
             let Ok(certification_tracker) = ingress_watcher_handle
                 .subscribe_for_certification(message_id)
                 .await
