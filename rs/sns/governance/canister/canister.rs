@@ -11,7 +11,7 @@
 
 use async_trait::async_trait;
 use candid::candid_method;
-use dfn_candid::{candid, candid_one, CandidOne};
+use dfn_candid::{candid, candid_one, candid_one_with_config, CandidOne};
 use dfn_core::{
     api::{call_bytes_with_cleanup, caller, id, now, Funds},
     over, over_async, over_init,
@@ -639,7 +639,7 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 /// Resources to serve for a given http_request
 #[export_name = "canister_query http_request"]
 fn http_request() {
-    over(candid_one, serve_http)
+    over(candid_one_with_config, serve_http)
 }
 
 /// Serve an HttpRequest made to this canister

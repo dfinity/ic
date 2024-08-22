@@ -15,6 +15,7 @@ use ic_ledger_core::{
     tokens::Zero,
 };
 use ic_ledger_hash_of::HashOf;
+use ic_rosetta_test_utils::test_http_request_decoding_quota;
 use ic_state_machine_tests::{CanisterId, StateMachine};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
@@ -653,6 +654,15 @@ fn test_index_archived_txs_paging() {
     let actual_txids: Vec<u64> = txs.iter().map(|tx| tx.id.0.to_u64().unwrap()).collect();
     let expected_txids: Vec<u64> = (0..ARCHIVE_TRIGGER_THRESHOLD).rev().collect();
     assert_eq!(expected_txids, actual_txids);
+}
+
+#[test]
+fn test_index_http_request_decoding_quota() {
+    let env = StateMachine::new();
+    let ledger_id = install_ledger(&env, vec![], default_archive_options());
+    let index_id = install_index(&env, ledger_id);
+
+    test_http_request_decoding_quota(&env, index_id);
 }
 
 mod metrics {

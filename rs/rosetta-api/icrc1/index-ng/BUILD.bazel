@@ -125,6 +125,7 @@ rust_test(
             "//rs/rosetta-api/icrc1/tokens_u64",
             "//rs/rosetta-api/ledger_canister_core",
             "//rs/rosetta-api/ledger_core",
+            "//rs/rosetta-api/test_utils",
             "//rs/rust_canisters/http_types",
             "//rs/state_machine_tests",
             "//rs/test_utilities/load_wasm",

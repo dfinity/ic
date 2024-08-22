@@ -80,6 +80,7 @@ rust_test(
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/rosetta-api/icrc1",
             "//rs/rosetta-api/ledger_core",
+            "//rs/rosetta-api/test_utils",
             "//rs/state_machine_tests",
             "//rs/test_utilities/load_wasm",
             "//rs/types/base_types",
