@@ -739,7 +739,7 @@ dependencies = [
  "serde_urlencoded",
  "sync_wrapper 0.1.2",
  "tokio",
- "tower 0.4.13",
+ "tower",
  "tower-layer",
  "tower-service",
 ]
@@ -772,7 +772,7 @@ dependencies = [
  "serde_urlencoded",
  "sync_wrapper 1.0.1",
  "tokio",
- "tower 0.4.13",
+ "tower",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -833,7 +833,7 @@ dependencies = [
  "mime",
  "pin-project-lite",
  "serde",
- "tower 0.4.13",
+ "tower",
  "tower-layer",
  "tower-service",
 ]
@@ -877,7 +877,7 @@ dependencies = [
  "rustls-pemfile 2.1.2",
  "tokio",
  "tokio-rustls 0.24.1",
- "tower 0.4.13",
+ "tower",
  "tower-service",
 ]
 
@@ -1900,7 +1900,7 @@ dependencies = [
  "sha2 0.10.8",
  "thiserror",
  "tokio",
- "tower 0.5.0",
+ "tower",
  "tracing",
  "tracing-subscriber",
  "trust-dns-resolver",
@@ -4817,7 +4817,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-rustls 0.26.0",
- "tower 0.5.0",
+ "tower",
 ]
 
 [[package]]
@@ -5008,7 +5008,7 @@ dependencies = [
  "pin-project-lite",
  "socket2 0.5.7",
  "tokio",
- "tower 0.4.13",
+ "tower",
  "tower-service",
  "tracing",
 ]
@@ -5063,7 +5063,7 @@ dependencies = [
  "slog",
  "tokio",
  "tonic",
- "tower 0.5.0",
+ "tower",
 ]
 
 [[package]]
@@ -5212,7 +5212,7 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
- "tower 0.4.13",
+ "tower",
  "url",
 ]
 
@@ -5514,7 +5514,7 @@ dependencies = [
  "tokio",
  "tokio-rustls 0.24.1",
  "tokio-util",
- "tower 0.5.0",
+ "tower",
  "tower-http 0.4.4",
  "tower_governor",
  "tracing",
@@ -5566,7 +5566,7 @@ dependencies = [
  "tokio",
  "tokio-socks",
  "tonic",
- "tower 0.5.0",
+ "tower",
 ]
 
 [[package]]
@@ -5587,7 +5587,7 @@ dependencies = [
  "slog",
  "tokio",
  "tonic",
- "tower 0.5.0",
+ "tower",
  "tracing",
 ]
 
@@ -6454,7 +6454,7 @@ dependencies = [
  "slog",
  "tokio",
  "tokio-util",
- "tower 0.5.0",
+ "tower",
  "tracing",
  "turmoil",
 ]
@@ -7834,7 +7834,7 @@ dependencies = [
  "slog",
  "slog-term",
  "tokio",
- "tower 0.5.0",
+ "tower",
  "wasmparser 0.201.0",
 ]
 
@@ -7997,7 +7997,7 @@ dependencies = [
  "test-strategy 0.3.1",
  "threadpool",
  "tokio",
- "tower 0.5.0",
+ "tower",
  "tracing",
  "wasmparser 0.201.0",
  "wat",
@@ -8072,7 +8072,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-io-timeout",
- "tower 0.5.0",
+ "tower",
 ]
 
 [[package]]
@@ -8151,7 +8151,7 @@ dependencies = [
  "tokio-io-timeout",
  "tokio-rustls 0.26.0",
  "tokio-util",
- "tower 0.5.0",
+ "tower",
  "tower-http 0.5.2",
  "tower-test",
  "tracing-flame",
@@ -8224,7 +8224,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tonic",
- "tower 0.5.0",
+ "tower",
  "uuid",
  "warp",
 ]
@@ -8253,7 +8253,7 @@ dependencies = [
  "slog",
  "tokio",
  "tonic",
- "tower 0.5.0",
+ "tower",
  "tower-test",
  "tracing",
 ]
@@ -8828,7 +8828,7 @@ dependencies = [
  "strum 0.26.2",
  "strum_macros 0.26.2",
  "thiserror",
- "tower 0.5.0",
+ "tower",
 ]
 
 [[package]]
@@ -9169,7 +9169,7 @@ dependencies = [
  "ic-quic-transport",
  "ic-types",
  "tokio",
- "tower 0.5.0",
+ "tower",
 ]
 
 [[package]]
@@ -10309,7 +10309,7 @@ dependencies = [
  "tokio",
  "tokio-metrics",
  "tokio-util",
- "tower 0.5.0",
+ "tower",
  "tracing",
  "turmoil",
 ]
@@ -10704,7 +10704,7 @@ dependencies = [
  "slog-async",
  "tempfile",
  "tokio",
- "tower 0.5.0",
+ "tower",
  "url",
 ]
 
@@ -10859,7 +10859,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tonic",
- "tower 0.5.0",
+ "tower",
  "tracing-subscriber",
  "wat",
 ]
@@ -11766,7 +11766,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-util",
- "tower 0.5.0",
+ "tower",
  "wat",
 ]
 
@@ -12218,7 +12218,7 @@ dependencies = [
  "socket2 0.5.7",
  "tempfile",
  "tokio",
- "tower 0.5.0",
+ "tower",
  "wasmprinter 0.2.54",
  "wat",
 ]
@@ -13469,7 +13469,7 @@ dependencies = [
  "tokio",
  "tokio-test",
  "tokio-util",
- "tower 0.5.0",
+ "tower",
  "tower-http 0.5.2",
  "tracing",
  "tracing-subscriber",
@@ -13989,7 +13989,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tokio-util",
- "tower 0.4.13",
+ "tower",
  "tower-http 0.4.4",
  "tracing",
 ]
@@ -14477,7 +14477,7 @@ checksum = "856dc94aeafb8a00035e563f6835585f7aa8d0d4e78aae7967a252f61675c535"
 dependencies = [
  "thiserror",
  "tokio",
- "tower 0.4.13",
+ "tower",
 ]
 
 [[package]]
@@ -16331,7 +16331,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tonic",
- "tower 0.5.0",
+ "tower",
  "tower-http 0.5.2",
  "tracing",
  "tracing-appender",
@@ -20135,7 +20135,7 @@ dependencies = [
  "prost",
  "tokio",
  "tokio-stream",
- "tower 0.4.13",
+ "tower",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -20162,31 +20162,12 @@ checksum = "b8fa9be0de6cf49e536ce1851f987bd21a43b771b09473c3549a6c853db37c1c"
 dependencies = [
  "futures-core",
  "futures-util",
+ "hdrhistogram",
  "indexmap 1.9.2",
  "pin-project",
  "pin-project-lite",
  "rand 0.8.5",
  "slab",
- "tokio",
- "tokio-util",
- "tower-layer",
- "tower-service",
- "tracing",
-]
-
-[[package]]
-name = "tower"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36b837f86b25d7c0d7988f00a54e74739be6477f2aac6201b8f429a7569991b7"
-dependencies = [
- "futures-core",
- "futures-util",
- "hdrhistogram",
- "indexmap 2.2.6",
- "pin-project-lite",
- "slab",
- "sync_wrapper 0.1.2",
  "tokio",
  "tokio-util",
  "tower-layer",
@@ -20213,7 +20194,7 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "tokio-util",
- "tower 0.4.13",
+ "tower",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -20236,7 +20217,7 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "tokio-util",
- "tower 0.4.13",
+ "tower",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -20296,7 +20277,7 @@ dependencies = [
  "pin-project",
  "thiserror",
  "tokio",
- "tower 0.4.13",
+ "tower",
  "tower-layer",
  "tracing",
 ]

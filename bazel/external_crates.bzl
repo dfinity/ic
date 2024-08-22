@@ -1359,7 +1359,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.11.0",
             ),
             "tower": crate.spec(
-                version = "^0.5.0",
+                version = "^0.4.3",
                 features = ["full"],
             ),
             "tower_http_0_4_4": crate.spec(
