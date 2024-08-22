@@ -172,8 +172,8 @@ impl From<hex::FromHexError> for Error {
     }
 }
 
-impl From<ic_crypto_ecdsa_secp256k1::KeyDecodingError> for Error {
-    fn from(e: ic_crypto_ecdsa_secp256k1::KeyDecodingError) -> Error {
+impl From<ic_crypto_secp256k1::KeyDecodingError> for Error {
+    fn from(e: ic_crypto_secp256k1::KeyDecodingError) -> Error {
         Error {
             code: 701,
             message: "ecdsa_secp256k1 key could not be decoded!".to_string(),

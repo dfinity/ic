@@ -13,7 +13,7 @@ DEPENDENCIES = [
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//rs/canister_client",
     "//rs/constants",
-    "//rs/crypto/ecdsa_secp256k1",
+    "//rs/crypto/secp256k1",
     "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
