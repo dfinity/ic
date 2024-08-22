@@ -3,7 +3,7 @@ use crate::{consensus_pool::ValidatedArtifact, p2p::consensus::UnvalidatedArtifa
 use ic_types::{
     artifact::IngressMessageId,
     messages::{MessageId, SignedIngress},
-    CountBytes, NodeId, Time,
+    CountBytes, Time,
 };
 
 // tag::interface[]

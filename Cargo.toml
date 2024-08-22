@@ -157,7 +157,6 @@ members = [
     "rs/monitoring/adapter_metrics/client",
     "rs/monitoring/adapter_metrics/server",
     "rs/monitoring/adapter_metrics/service",
-    "rs/monitoring/backtrace",
     "rs/monitoring/logger",
     "rs/monitoring/metrics",
     "rs/monitoring/pprof",
@@ -610,7 +609,10 @@ reqwest = { version = "0.12.5", default-features = false, features = [
     "stream",
 ] }
 rstest = "0.19.0"
-rustls = { version = "0.23.12", default-features = false, features = ["ring"] }
+rustls = { version = "0.23.12", default-features = false, features = [
+    "ring",
+    "std",
+] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"
 serde_cbor = "0.11.2"

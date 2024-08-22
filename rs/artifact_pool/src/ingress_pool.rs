@@ -407,18 +407,14 @@ mod tests {
     use rand::Rng;
     use std::time::Duration;
 
-    fn create_ingress_pool_section<T: AsRef<IngressPoolObject>>() -> IngressPoolSection<T> {
-        IngressPoolSection::new(PoolMetrics::new(
-            MetricsRegistry::new(),
-            POOL_INGRESS,
-            "default",
-        ))
-    }
-
     #[test]
     fn test_insert_in_ingress_pool() {
         with_test_replica_logger(|_log| {
-            let mut ingress_pool = create_ingress_pool_section();
+            let mut ingress_pool = IngressPoolSection::new(PoolMetrics::new(
+                MetricsRegistry::new(),
+                POOL_INGRESS,
+                "default",
+            ));
             let ingress_msg = SignedIngressBuilder::new().build();
             let message_id = IngressMessageId::from(&ingress_msg);
 
