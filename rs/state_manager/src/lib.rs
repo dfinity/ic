@@ -2542,7 +2542,6 @@ impl StateManagerImpl {
                     .inc();
             }
             let elapsed = start.elapsed();
-            info!(self.log, "ValidateEq took {:?}", elapsed);
         }
         {
             let _timer = self
