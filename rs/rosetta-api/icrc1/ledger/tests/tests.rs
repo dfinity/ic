@@ -1574,7 +1574,7 @@ mod verify_written_blocks {
 mod incompatible_token_type_upgrade {
     use super::*;
     use assert_matches::assert_matches;
-    use ic_icrc1_ledger_sm_tests::{metadata, total_supply};
+    use ic_icrc1_ledger_sm_tests::metadata;
     use ic_state_machine_tests::ErrorCode::CanisterCalledTrap;
     use num_bigint::BigUint;
 
