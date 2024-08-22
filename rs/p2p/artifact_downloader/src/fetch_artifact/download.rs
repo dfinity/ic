@@ -75,7 +75,7 @@ async fn rpc_handler<Artifact: PbArtifact>(
 pub struct FetchArtifact<Artifact: PbArtifact> {
     log: ReplicaLogger,
     transport: Arc<dyn Transport>,
-    priority_fn: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
+    priority_fn: watch::Receiver<PriorityFn<Artifact::Id>>,
     metrics: FetchArtifactMetrics,
     jh: Arc<JoinHandle<()>>,
 }
@@ -99,14 +99,12 @@ impl<Artifact: PbArtifact> ArtifactAssembler<Artifact, Artifact> for FetchArtifa
     async fn assemble_message<P: Peers + Send + 'static>(
         &self,
         id: <Artifact as IdentifiableArtifact>::Id,
-        attr: <Artifact as IdentifiableArtifact>::Attribute,
         artifact: Option<(Artifact, NodeId)>,
         peers: P,
     ) -> Result<(Artifact, NodeId), Aborted> {
         Self::download_artifact(
             self.log.clone(),
             id,
-            attr,
             artifact,
             peers,
             self.priority_fn.clone(),
@@ -167,12 +165,11 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
     #[instrument(skip_all)]
     async fn wait_fetch(
         id: &Artifact::Id,
-        attr: &Artifact::Attribute,
         artifact: &mut Option<(Artifact, NodeId)>,
         metrics: &FetchArtifactMetrics,
-        priority_fn_watcher: &mut watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
+        priority_fn_watcher: &mut watch::Receiver<PriorityFn<Artifact::Id>>,
     ) -> Result<(), Aborted> {
-        let mut priority = priority_fn_watcher.borrow_and_update()(id, attr);
+        let mut priority = priority_fn_watcher.borrow_and_update()(id);
 
         // Clear the artifact from memory if it was pushed.
         if let Priority::Stash = priority {
@@ -182,7 +179,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
 
         while let Priority::Stash = priority {
             let _ = priority_fn_watcher.changed().await;
-            priority = priority_fn_watcher.borrow_and_update()(id, attr);
+            priority = priority_fn_watcher.borrow_and_update()(id);
         }
 
         if let Priority::Drop = priority {
@@ -203,23 +200,15 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
     async fn download_artifact(
         log: ReplicaLogger,
         id: Artifact::Id,
-        attr: Artifact::Attribute,
         // Only first peer for specific artifact ID is considered for push
         mut artifact: Option<(Artifact, NodeId)>,
         peer_rx: impl Peers + Send + 'static,
-        mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
+        mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id>>,
         transport: Arc<dyn Transport>,
         metrics: FetchArtifactMetrics,
     ) -> Result<(Artifact, NodeId), Aborted> {
         // Evaluate priority and wait until we should fetch.
-        Self::wait_fetch(
-            &id,
-            &attr,
-            &mut artifact,
-            &metrics,
-            &mut priority_fn_watcher,
-        )
-        .await?;
+        Self::wait_fetch(&id, &mut artifact, &metrics, &mut priority_fn_watcher).await?;
 
         let mut artifact_download_backoff = ExponentialBackoffBuilder::new()
             .with_initial_interval(MIN_ARTIFACT_RPC_TIMEOUT)
@@ -274,14 +263,8 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
 
                     // Wait before checking the priority so we might be able to avoid an unnecessary download.
                     sleep_until(next_request_at).await;
-                    Self::wait_fetch(
-                        &id,
-                        &attr,
-                        &mut artifact,
-                        &metrics,
-                        &mut priority_fn_watcher,
-                    )
-                    .await?;
+                    Self::wait_fetch(&id, &mut artifact, &metrics, &mut priority_fn_watcher)
+                        .await?;
                 };
 
                 timer.stop_and_record();
