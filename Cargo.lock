@@ -5844,6 +5844,7 @@ name = "ic-canisters-http-types"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "dfn_candid",
  "serde",
  "serde_bytes",
 ]
@@ -10994,7 +10995,7 @@ dependencies = [
 
 [[package]]
 name = "ic-rosetta-api"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "actix-rt",
  "actix-web",

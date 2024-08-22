@@ -4,9 +4,6 @@
 
 # [Misc]
 /.devcontainer/           @dfinity/idx
-/.github/                 @dfinity/idx
-/.github/workflows        @dfinity/idx
-/.github/CODEOWNERS       @dfinity/ic-owners-owners
 /buf.yaml                 @dfinity/ic-message-routing-owners
 /cpp/                     @dfinity/node
 /hs/                      @dfinity/utopia
@@ -63,6 +60,12 @@ go_deps.bzl               @dfinity/idx
 
 # [metrics-proxy]
 /ic-os/components/monitoring/metrics-proxy/      @dfinity/dre
+
+# [GitHub-Ci]
+/.github/                                                                @dfinity/idx
+/.github/workflows/                                                      @dfinity/idx
+/.github/workflows/rosetta-release.yml                                   @dfinity/finint
+/.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
 
 # [GitLab-CI]
 /.pre-commit-config.yaml                                                @dfinity/idx
