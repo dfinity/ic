@@ -6,12 +6,12 @@ from model.team import Team
 from scanner.dependency_scanner import PROJECT_ROOT
 
 IS_PRIVATE = PROJECT_ROOT.name == "ic-private"
-GITHUB_REPOSITORY = os.environ.get("GITHUB_REPOSITORY", "dfinity/ic")
+CI_PROJECT_PATH = os.environ.get("CI_PROJECT_PATH", "dfinity/ic")
 GITHUB_REF = os.environ.get("GITHUB_REF", "refs/heads/master")
 
 
 def is_running_in_ic_repo() -> bool:
-    return GITHUB_REPOSITORY == "dfinity/ic"
+    return CI_PROJECT_PATH == "dfinity/ic"
 
 
 def is_running_on_main_branch() -> bool:
