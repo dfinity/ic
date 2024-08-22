@@ -223,6 +223,7 @@ impl MockManagementCanisterClient {
         self.calls.lock().unwrap().clone().into()
     }
 
+    #[track_caller]
     pub fn assert_all_replies_consumed(&self) {
         assert!(self.replies.lock().unwrap().is_empty())
     }

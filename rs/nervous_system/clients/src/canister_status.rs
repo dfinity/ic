@@ -236,6 +236,7 @@ impl CanisterStatusResultV2 {
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
         idle_cycles_burned_per_day: u128,
+        wasm_memory_limit: u64,
     ) -> Self {
         Self {
             status,
@@ -249,6 +250,7 @@ impl CanisterStatusResultV2 {
                 compute_allocation,
                 memory_allocation,
                 freezing_threshold,
+                Some(wasm_memory_limit),
             ),
             idle_cycles_burned_per_day: candid::Nat::from(idle_cycles_burned_per_day),
         }
@@ -294,6 +296,7 @@ impl CanisterStatusResultV2 {
             None,              // memory_allocation
             45,                // freezing_threshold
             46,                // idle_cycles_burned_per_day
+            47,                // wasm_memory_limit
         )
     }
 
@@ -314,6 +317,7 @@ pub struct DefiniteCanisterSettingsArgs {
     pub compute_allocation: candid::Nat,
     pub memory_allocation: candid::Nat,
     pub freezing_threshold: candid::Nat,
+    pub wasm_memory_limit: Option<candid::Nat>,
 }
 
 impl DefiniteCanisterSettingsArgs {
@@ -322,6 +326,7 @@ impl DefiniteCanisterSettingsArgs {
         compute_allocation: u64,
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
+        wasm_memory_limit: Option<u64>,
     ) -> Self {
         let memory_allocation = match memory_allocation {
             None => candid::Nat::from(0_u32),
@@ -332,6 +337,7 @@ impl DefiniteCanisterSettingsArgs {
             compute_allocation: candid::Nat::from(compute_allocation),
             memory_allocation,
             freezing_threshold: candid::Nat::from(freezing_threshold),
+            wasm_memory_limit: wasm_memory_limit.map(candid::Nat::from),
         }
     }
 
@@ -362,6 +368,7 @@ impl From<CanisterStatusResultFromManagementCanister> for CanisterStatusResultV2
                 compute_allocation: value.settings.compute_allocation,
                 memory_allocation: value.settings.memory_allocation,
                 freezing_threshold: value.settings.freezing_threshold,
+                wasm_memory_limit: Some(value.settings.wasm_memory_limit),
             },
             memory_size: value.memory_size,
             cycles: value.cycles,

@@ -2977,6 +2977,154 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_get_sns_canisters_summary_reports_settings() {
+        // Step 1: Prepare the world.
+        thread_local! {
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(SnsRootCanister {
+                governance_canister_id: Some(PrincipalId::new_user_test_id(1)),
+                ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
+                swap_canister_id: Some(PrincipalId::new_user_test_id(3)),
+                dapp_canister_ids: vec![],
+                archive_canister_ids: vec![],
+                latest_ledger_archive_poll_timestamp_seconds: None,
+                index_canister_id: Some(PrincipalId::new_user_test_id(4)),
+                testflight: false,
+            });
+        }
+
+        let root_canister_id = CanisterId::from_u64(4);
+
+        let (governance_canister_id, _, swap_canister_id, _) = SNS_ROOT_CANISTER.with(|sns_root| {
+            let sns_root = sns_root.borrow();
+            (
+                sns_root.governance_canister_id(),
+                sns_root.ledger_canister_id(),
+                sns_root.swap_canister_id(),
+                sns_root.index_canister_id(),
+            )
+        });
+
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            MockManagementCanisterClientReply::CanisterStatus(Ok(
+                CanisterStatusResultFromManagementCanister::dummy_with_controllers(vec![
+                    governance_canister_id,
+                ]),
+            )),
+            MockManagementCanisterClientReply::CanisterStatus(Ok(
+                CanisterStatusResultFromManagementCanister::dummy_with_controllers(vec![
+                    governance_canister_id,
+                ]),
+            )),
+            MockManagementCanisterClientReply::CanisterStatus(Ok(
+                CanisterStatusResultFromManagementCanister::dummy_with_controllers(vec![
+                    governance_canister_id,
+                ]),
+            )),
+            MockManagementCanisterClientReply::CanisterStatus(Ok(
+                CanisterStatusResultFromManagementCanister::dummy_with_controllers(vec![
+                    governance_canister_id,
+                ]),
+            )),
+        ]);
+
+        let ledger_canister_client = MockLedgerCanisterClient::new(vec![]);
+
+        let env = TestEnvironment {
+            calls: Arc::new(Mutex::new(
+                vec![EnvironmentCall::CallCanister {
+                    expected_canister: CanisterId::try_from(swap_canister_id).unwrap(),
+                    expected_method: "get_canister_status".to_string(),
+                    expected_bytes: None,
+                    result: Ok(
+                        Encode!(&CanisterStatusResultV2::dummy_with_controllers(vec![
+                            governance_canister_id
+                        ]))
+                        .unwrap(),
+                    ),
+                }]
+                .into(),
+            )),
+        };
+
+        let result = SnsRootCanister::get_sns_canisters_summary(
+            &SNS_ROOT_CANISTER,
+            &management_canister_client,
+            &ledger_canister_client,
+            &env,
+            false,
+            root_canister_id.into(),
+        )
+        .await;
+
+        let expected_settings =
+            CanisterStatusResultFromManagementCanister::dummy_with_controllers(vec![
+                governance_canister_id,
+            ])
+            .settings;
+
+        for (result, canister_name) in [
+            (result.governance, "governance"),
+            (result.ledger, "ledger"),
+            (result.index, "index"),
+        ] {
+            // compute_allocation
+            assert_eq!(
+                result
+                    .clone()
+                    .unwrap()
+                    .status
+                    .unwrap()
+                    .settings
+                    .compute_allocation,
+                expected_settings.clone().compute_allocation,
+                "{canister_name}'s compute_allocation did not match"
+            );
+            // controllers
+            assert_eq!(
+                result.clone().unwrap().status.unwrap().settings.controllers,
+                expected_settings.clone().controllers,
+                "{canister_name}'s controllers did not match"
+            );
+            // freezing_threshold
+            assert_eq!(
+                result
+                    .clone()
+                    .unwrap()
+                    .status
+                    .unwrap()
+                    .settings
+                    .freezing_threshold,
+                expected_settings.clone().freezing_threshold,
+                "{canister_name}'s freezing_threshold did not match"
+            );
+            // memory_allocation
+            assert_eq!(
+                result
+                    .clone()
+                    .unwrap()
+                    .status
+                    .unwrap()
+                    .settings
+                    .memory_allocation,
+                expected_settings.clone().memory_allocation,
+                "{canister_name}'s memory_allocation did not match"
+            );
+            // wasm_memory_limit
+            assert_eq!(
+                result
+                    .clone()
+                    .unwrap()
+                    .status
+                    .unwrap()
+                    .settings
+                    .wasm_memory_limit,
+                Some(expected_settings.clone().wasm_memory_limit),
+                "{canister_name}'s wasm_memory_limit did not match"
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn test_get_sns_canisters_summary_handles_dapp_status_failures() {
         // Step 1: Prepare the world.
         thread_local! {
