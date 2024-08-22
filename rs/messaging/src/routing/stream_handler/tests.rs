@@ -178,7 +178,7 @@ fn induct_loopback_stream_reject_response() {
                 &mut expected_state,
                 generate_reject_response_for(
                     RejectReason::CanisterNotFound,
-                    &request_in_stream(state.get_stream(&LOCAL_SUBNET), 21),
+                    request_in_stream(state.get_stream(&LOCAL_SUBNET), 21),
                 ),
             );
 
