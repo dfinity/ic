@@ -29,7 +29,7 @@ jobs:
         env:
           MESSAGE: ":github: <${{ github.event.pull_request.html_url }}|${{ github.event.pull_request.title }}>"
       - name: Post to a Slack channel
-        if: steps.get-reviewers.outputs.result != '""' && steps.lookup.channel != 'null'
+        if: steps.get-reviewers.outputs.result != '""' && steps.lookup.outputs.channel != 'null'
         id: slack
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
         with:
