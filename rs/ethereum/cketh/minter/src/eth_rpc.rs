@@ -714,14 +714,6 @@ pub enum ValidationError {
     Custom(String),
     // #[error("invalid hex data: {0}")]
     InvalidHex(String),
-    // #[error("URL parse error: {0}")]
-    UrlParseError(String),
-    // #[error("hostname not allowed: {0}")]
-    HostNotAllowed(String),
-    // #[error("credential path not allowed")]
-    CredentialPathNotAllowed,
-    // #[error("credential header not allowed")]
-    CredentialHeaderNotAllowed,
 }
 
 pub fn are_errors_consistent<T: PartialEq>(
