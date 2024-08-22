@@ -14,7 +14,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::{
     consensus::U64Artifact,
-    mocks::{MockFilterFnFactory, MockPeers, MockTransport, MockValidatedPoolReader},
+    mocks::{MockBouncerFactory, MockPeers, MockTransport, MockValidatedPoolReader},
 };
 use ic_protobuf::proxy::ProtoProxy;
 use ic_types::artifact::PbArtifact;
@@ -33,7 +33,7 @@ async fn priority_from_stash_to_fetch() {
         std::process::abort();
     }));
 
-    let mut mock_pfn = MockFilterFnFactory::new();
+    let mut mock_pfn = MockBouncerFactory::new();
     let mut seq = Sequence::new();
     mock_pfn
         .expect_get_filter_function()
@@ -87,7 +87,7 @@ async fn fetch_to_stash_to_fetch() {
 
     let return_artifact = Arc::new(AtomicBool::default());
     let return_artifact_clone = return_artifact.clone();
-    let mut mock_pfn = MockFilterFnFactory::new();
+    let mut mock_pfn = MockBouncerFactory::new();
     let priorities = Arc::new(Mutex::new(vec![
         BouncerValue::Wants,
         BouncerValue::MaybeWantsLater,
@@ -186,7 +186,7 @@ async fn invalid_artifact_not_accepted() {
         .in_sequence(&mut seq);
 
     let pool = MockValidatedPoolReader::default();
-    let mut mock_pfn = MockFilterFnFactory::new();
+    let mut mock_pfn = MockBouncerFactory::new();
     mock_pfn
         .expect_get_filter_function()
         .returning(|_| Box::new(|_| BouncerValue::Wants));
@@ -218,7 +218,7 @@ async fn priority_from_stash_to_drop() {
         std::process::abort();
     }));
 
-    let mut mock_pfn: MockFilterFnFactory<U64Artifact> = MockFilterFnFactory::new();
+    let mut mock_pfn: MockBouncerFactory<U64Artifact> = MockBouncerFactory::new();
     let mut seq = Sequence::new();
     mock_pfn
         .expect_get_filter_function()
