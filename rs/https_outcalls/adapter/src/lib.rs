@@ -16,7 +16,6 @@ pub use config::{Config, IncomingSource};
 pub use rpc_server::CanisterHttp;
 
 use futures::{Future, Stream};
-
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_socks2::SocksConnector;
 use hyper_util::client::legacy::connect::HttpConnector;
