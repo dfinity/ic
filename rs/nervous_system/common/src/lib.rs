@@ -30,7 +30,7 @@ pub mod ledger;
 pub mod ledger_validation;
 pub mod memory_manager_upgrade_storage;
 
-#[cfg(feature = "test")]
+#[cfg(feature = "tla")]
 pub mod tla;
 
 pub mod tla_macros;

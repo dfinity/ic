@@ -1,10 +1,13 @@
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use icp_ledger::{AccountIdentifier, Subaccount};
 pub use tla_instrumentation::{Destination, InstrumentationState, TlaValue, ToTla, UpdateTrace};
+
+#[cfg(feature = "tla")]
 use tokio::task_local;
 
 use std::sync::RwLock;
 
+#[cfg(feature = "tla")]
 task_local! {
     pub static TLA_INSTRUMENTATION_STATE: InstrumentationState;
 }

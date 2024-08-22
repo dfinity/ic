@@ -79,6 +79,7 @@ where
 
 #[cfg(feature = "test")]
 impl<M: ic_stable_structures::Memory> StableNeuronIndexes<M> {
+    #[allow(dead_code)]
     pub fn subaccounts(&self) -> &NeuronSubaccountIndex<M> {
         &self.subaccount
     }
