@@ -260,6 +260,12 @@ dependencies = [
 
 [[package]]
 name = "ahash"
+version = "0.3.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8fd72866655d1904d6b0997d0b07ba561047d070fbe29de039031c641b61217"
+
+[[package]]
+name = "ahash"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "891477e0c6a8957309ee5c45a6368af3ae14bb510732d2684ffa19af310920f9"
@@ -1162,6 +1168,8 @@ checksum = "d4d30fb43d287492017964a1fd7d3f82e8cc760818471c6ef2d44111e317d5c3"
 dependencies = [
  "bech32 0.8.1",
  "bitcoin_hashes 0.10.0",
+ "core2",
+ "hashbrown 0.8.2",
  "secp256k1 0.22.2",
  "serde",
 ]
@@ -1192,6 +1200,7 @@ version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "006cc91e1a1d99819bc5b8214be3555c1f0611b169f527a1fdc54ed1f2b745b0"
 dependencies = [
+ "core2",
  "serde",
 ]
 
@@ -1208,8 +1217,7 @@ dependencies = [
 [[package]]
 name = "bitcoincore-rpc"
 version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd0e67dbf7a9971e7f4276f6089e9e814ce0f624a03216b7d92d00351ae7fb3e"
+source = "git+https://github.com/dfinity/rust-bitcoincore-rpc?rev=ec54de44cca92c34f49723dae757b0d50e738603#ec54de44cca92c34f49723dae757b0d50e738603"
 dependencies = [
  "bitcoincore-rpc-json",
  "jsonrpc 0.12.1",
@@ -1221,8 +1229,7 @@ dependencies = [
 [[package]]
 name = "bitcoincore-rpc-json"
 version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e2ae16202721ba8c3409045681fac790a5ddc791f05731a2df22c0c6bffc0f1"
+source = "git+https://github.com/dfinity/rust-bitcoincore-rpc?rev=ec54de44cca92c34f49723dae757b0d50e738603#ec54de44cca92c34f49723dae757b0d50e738603"
 dependencies = [
  "bitcoin 0.28.2",
  "serde",
@@ -2227,6 +2234,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "core2"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "239fa3ae9b63c2dc74bd3fa852d4792b8b305ae64eeede946265b6af62f1fff3"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "cpufeatures"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3006,7 +3022,7 @@ dependencies = [
  "ic-http-gateway",
  "ic-metrics-encoder",
  "ic-response-verification 2.6.0",
- "ic-stable-structures",
+ "ic-stable-structures 0.6.5",
  "ic-test-state-machine-client",
  "ic-utils",
  "ic-verify-bls-signature 0.6.0",
@@ -4203,6 +4219,16 @@ checksum = "eabb4a44450da02c90444cf74558da904edde8fb4e9035a9a6a4e15445af0bd7"
 
 [[package]]
 name = "hashbrown"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e91b62f79061a0bc2e046024cb7ba44b08419ed238ecbd9adbd787434b9e8c25"
+dependencies = [
+ "ahash 0.3.8",
+ "autocfg 1.1.0",
+]
+
+[[package]]
+name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
@@ -4777,8 +4803,7 @@ dependencies = [
 [[package]]
 name = "ic-btc-interface"
 version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0152e14e697b0e988dbfdcb3f7e352d1c76a65b7d2d75c5d76bad22c3aca10d"
+source = "git+https://github.com/ninegua/bitcoin-canister?rev=1fb797f555360485e31b8f235a54fbfa39bd49cf#1fb797f555360485e31b8f235a54fbfa39bd49cf"
 dependencies = [
  "candid",
  "serde",
@@ -4788,17 +4813,31 @@ dependencies = [
 [[package]]
 name = "ic-btc-test-utils"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be8e0a43145188ba239150f8460d314b0dd6e0ddf7d753c0ef99296103c622dd"
+source = "git+https://github.com/ninegua/bitcoin-canister?rev=1fb797f555360485e31b8f235a54fbfa39bd49cf#1fb797f555360485e31b8f235a54fbfa39bd49cf"
 dependencies = [
  "bitcoin 0.28.2",
+ "ic-btc-types",
+]
+
+[[package]]
+name = "ic-btc-types"
+version = "0.1.0"
+source = "git+https://github.com/ninegua/bitcoin-canister?rev=1fb797f555360485e31b8f235a54fbfa39bd49cf#1fb797f555360485e31b8f235a54fbfa39bd49cf"
+dependencies = [
+ "bitcoin 0.28.2",
+ "candid",
+ "hex",
+ "ic-btc-interface",
+ "ic-btc-validation",
+ "ic-stable-structures 0.5.6",
+ "serde",
+ "serde_bytes",
 ]
 
 [[package]]
 name = "ic-btc-validation"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e73b5f400b954d3ddb64706bd4392ef0b5829976606c2baa49e692181192761"
+source = "git+https://github.com/ninegua/bitcoin-canister?rev=1fb797f555360485e31b8f235a54fbfa39bd49cf#1fb797f555360485e31b8f235a54fbfa39bd49cf"
 dependencies = [
  "bitcoin 0.28.2",
 ]
@@ -5152,6 +5191,12 @@ dependencies = [
  "thiserror",
  "urlencoding",
 ]
+
+[[package]]
+name = "ic-stable-structures"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95dce29e3ceb0e6da3e78b305d95365530f2efd2146ca18590c0ef3aa6038568"
 
 [[package]]
 name = "ic-stable-structures"

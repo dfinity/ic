@@ -1,5 +1,5 @@
 {
-  "checksum": "6c419e9738e9b959a87207723565fd3193751cf0820d7356579d92695f1d69dd",
+  "checksum": "addd56eb2f4b51bdb6cc1cab94427226fd7e7083ec0b76be012304a000d2b97b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1335,6 +1335,45 @@
         },
         "edition": "2021",
         "version": "0.5.2"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "ahash 0.3.8": {
+      "name": "ahash",
+      "version": "0.3.8",
+      "package_url": "https://github.com/tkaitchuck/ahash",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ahash/0.3.8/download",
+          "sha256": "e8fd72866655d1904d6b0997d0b07ba561047d070fbe29de039031c641b61217"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ahash",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ahash",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.3.8"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -5787,12 +5826,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "std"
-          ],
-          "selects": {}
-        },
         "edition": "2015",
         "version": "0.8.1"
       },
@@ -6659,11 +6692,11 @@
         ],
         "crate_features": {
           "common": [
-            "default",
+            "core2",
+            "hashbrown",
+            "no-std",
             "rand",
-            "secp-recovery",
             "serde",
-            "std",
             "use-serde"
           ],
           "selects": {}
@@ -6677,6 +6710,14 @@
             {
               "id": "bitcoin_hashes 0.10.0",
               "target": "bitcoin_hashes"
+            },
+            {
+              "id": "core2 0.3.3",
+              "target": "core2"
+            },
+            {
+              "id": "hashbrown 0.8.2",
+              "target": "hashbrown"
             },
             {
               "id": "secp256k1 0.22.2",
@@ -6902,13 +6943,18 @@
         ],
         "crate_features": {
           "common": [
-            "serde",
-            "std"
+            "alloc",
+            "core2",
+            "serde"
           ],
           "selects": {}
         },
         "deps": {
           "common": [
+            {
+              "id": "core2 0.3.3",
+              "target": "core2"
+            },
             {
               "id": "serde 1.0.203",
               "target": "serde"
@@ -6990,9 +7036,12 @@
       "version": "0.15.0",
       "package_url": "https://github.com/rust-bitcoin/rust-bitcoincore-rpc/",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bitcoincore-rpc/0.15.0/download",
-          "sha256": "dd0e67dbf7a9971e7f4276f6089e9e814ce0f624a03216b7d92d00351ae7fb3e"
+        "Git": {
+          "remote": "https://github.com/dfinity/rust-bitcoincore-rpc",
+          "commitish": {
+            "Rev": "ec54de44cca92c34f49723dae757b0d50e738603"
+          },
+          "strip_prefix": "client"
         }
       },
       "targets": [
@@ -7053,9 +7102,12 @@
       "version": "0.15.0",
       "package_url": "https://github.com/rust-bitcoin/rust-bitcoincore-rpc/",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bitcoincore-rpc-json/0.15.0/download",
-          "sha256": "2e2ae16202721ba8c3409045681fac790a5ddc791f05731a2df22c0c6bffc0f1"
+        "Git": {
+          "remote": "https://github.com/dfinity/rust-bitcoincore-rpc",
+          "commitish": {
+            "Rev": "ec54de44cca92c34f49723dae757b0d50e738603"
+          },
+          "strip_prefix": "json"
         }
       },
       "targets": [
@@ -12925,6 +12977,60 @@
         "CC0-1.0"
       ],
       "license_file": "LICENSE"
+    },
+    "core2 0.3.3": {
+      "name": "core2",
+      "version": "0.3.3",
+      "package_url": "https://github.com/bbqsrc/core2",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/core2/0.3.3/download",
+          "sha256": "239fa3ae9b63c2dc74bd3fa852d4792b8b305ae64eeede946265b6af62f1fff3"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "core2",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "core2",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "memchr 2.7.4",
+              "target": "memchr"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.3.3"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
     },
     "cpufeatures 0.2.9": {
       "name": "cpufeatures",
@@ -24156,6 +24262,92 @@
       ],
       "license_file": "LICENSE"
     },
+    "hashbrown 0.8.2": {
+      "name": "hashbrown",
+      "version": "0.8.2",
+      "package_url": "https://github.com/rust-lang/hashbrown",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/hashbrown/0.8.2/download",
+          "sha256": "e91b62f79061a0bc2e046024cb7ba44b08419ed238ecbd9adbd787434b9e8c25"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hashbrown",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "hashbrown",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "ahash",
+            "default",
+            "inline-more"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "ahash 0.3.8",
+              "target": "ahash"
+            },
+            {
+              "id": "hashbrown 0.8.2",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.8.2"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "autocfg 1.1.0",
+              "target": "autocfg"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "Apache-2.0/MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "hashbrown 0.12.3": {
       "name": "hashbrown",
       "version": "0.12.3",
@@ -27488,9 +27680,12 @@
       "version": "0.2.2",
       "package_url": "https://github.com/dfinity/bitcoin-canister",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-btc-interface/0.2.2/download",
-          "sha256": "b0152e14e697b0e988dbfdcb3f7e352d1c76a65b7d2d75c5d76bad22c3aca10d"
+        "Git": {
+          "remote": "https://github.com/ninegua/bitcoin-canister",
+          "commitish": {
+            "Rev": "1fb797f555360485e31b8f235a54fbfa39bd49cf"
+          },
+          "strip_prefix": "interface"
         }
       },
       "targets": [
@@ -27543,9 +27738,12 @@
       "version": "0.1.0",
       "package_url": "https://github.com/dfinity/bitcoin-canister",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-btc-test-utils/0.1.0/download",
-          "sha256": "be8e0a43145188ba239150f8460d314b0dd6e0ddf7d753c0ef99296103c622dd"
+        "Git": {
+          "remote": "https://github.com/ninegua/bitcoin-canister",
+          "commitish": {
+            "Rev": "1fb797f555360485e31b8f235a54fbfa39bd49cf"
+          },
+          "strip_prefix": "test-utils"
         }
       },
       "targets": [
@@ -27572,6 +27770,10 @@
             {
               "id": "bitcoin 0.28.2",
               "target": "bitcoin"
+            },
+            {
+              "id": "ic-btc-types 0.1.0",
+              "target": "ic_btc_types"
             }
           ],
           "selects": {}
@@ -27585,14 +27787,93 @@
       ],
       "license_file": null
     },
+    "ic-btc-types 0.1.0": {
+      "name": "ic-btc-types",
+      "version": "0.1.0",
+      "package_url": null,
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/ninegua/bitcoin-canister",
+          "commitish": {
+            "Rev": "1fb797f555360485e31b8f235a54fbfa39bd49cf"
+          },
+          "strip_prefix": "types"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_btc_types",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_btc_types",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bitcoin 0.28.2",
+              "target": "bitcoin"
+            },
+            {
+              "id": "candid 0.10.6",
+              "target": "candid"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "ic-btc-interface 0.2.2",
+              "target": "ic_btc_interface"
+            },
+            {
+              "id": "ic-btc-validation 0.1.0",
+              "target": "ic_btc_validation"
+            },
+            {
+              "id": "ic-stable-structures 0.5.6",
+              "target": "ic_stable_structures"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.0"
+      },
+      "license": null,
+      "license_ids": [],
+      "license_file": null
+    },
     "ic-btc-validation 0.1.0": {
       "name": "ic-btc-validation",
       "version": "0.1.0",
       "package_url": "https://github.com/dfinity/bitcoin-canister",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-btc-validation/0.1.0/download",
-          "sha256": "3e73b5f400b954d3ddb64706bd4392ef0b5829976606c2baa49e692181192761"
+        "Git": {
+          "remote": "https://github.com/ninegua/bitcoin-canister",
+          "commitish": {
+            "Rev": "1fb797f555360485e31b8f235a54fbfa39bd49cf"
+          },
+          "strip_prefix": "validation"
         }
       },
       "targets": [
@@ -28933,6 +29214,44 @@
         "Apache-2.0"
       ],
       "license_file": null
+    },
+    "ic-stable-structures 0.5.6": {
+      "name": "ic-stable-structures",
+      "version": "0.5.6",
+      "package_url": "https://github.com/dfinity/stable-structures",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-stable-structures/0.5.6/download",
+          "sha256": "95dce29e3ceb0e6da3e78b305d95365530f2efd2146ca18590c0ef3aa6038568"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_stable_structures",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_stable_structures",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "0.5.6"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
     },
     "ic-stable-structures 0.6.5": {
       "name": "ic-stable-structures",
@@ -56007,11 +56326,10 @@
         ],
         "crate_features": {
           "common": [
+            "alloc",
             "rand",
             "rand-std",
-            "recovery",
-            "serde",
-            "std"
+            "serde"
           ],
           "selects": {}
         },
@@ -56200,13 +56518,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "recovery",
-            "std"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
