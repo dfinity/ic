@@ -58,7 +58,7 @@ impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
             .map(|artifact| {
                 let ingress_object = &artifact.message;
 
-                match self.validate_ingress_(
+                match self.validate_ingress_pool_object(
                     ingress_object,
                     &ingress_message_settings,
                     get_status.as_ref(),
@@ -137,7 +137,7 @@ impl std::fmt::Display for IngressMessageValidationError {
 }
 
 impl IngressManager {
-    fn validate_ingress_(
+    fn validate_ingress_pool_object(
         &self,
         ingress_object: &IngressPoolObject,
         settings: &IngressMessageSettings,
