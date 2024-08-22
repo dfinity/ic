@@ -2520,24 +2520,34 @@ pub fn icrc1_test_upgrade_serialization(
                 in_memory_ledger.verify_balances(&env, ledger_id);
                 in_memory_ledger.verify_allowances(&env, ledger_id);
 
+                let test_upgrade = |ledger_wasm: Vec<u8>| {
+                    env.upgrade_canister(
+                        ledger_id,
+                        ledger_wasm,
+                        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+                    )
+                    .unwrap();
+
+                    in_memory_ledger.verify_all(&env, ledger_id);
+                };
+
+                // Test if the old serialized approvals and balances are correctly deserialized
+                test_upgrade(ledger_wasm_current.clone());
+                // Test the new wasm serialization
+                test_upgrade(ledger_wasm_current.clone());
+                // Test serializing to the memory manager
+                test_upgrade(ledger_wasm_upgradetomemorymanager.clone());
+                // Test upgrade to memory manager again
+                test_upgrade(ledger_wasm_upgradetomemorymanager.clone());
+                // Test deserializing from memory manager
+                test_upgrade(ledger_wasm_current.clone());
+                // // Test downgrade to mainnet wasm
+                // test_upgrade(ledger_wasm_mainnet);
+
                 Ok(())
             },
         )
         .unwrap();
-
-    // // Test if the old serialized approvals and balances are correctly deserialized
-    // test_upgrade(ledger_wasm_current.clone(), balances.clone());
-    // // Test the new wasm serialization
-    // test_upgrade(ledger_wasm_current.clone(), balances.clone());
-    // // Test serializing to the memory manager
-    // test_upgrade(ledger_wasm_upgradetomemorymanager.clone(), balances.clone());
-    // // Test upgrade to memory manager again
-    // test_upgrade(ledger_wasm_upgradetomemorymanager, balances.clone());
-    // // Test deserializing from memory manager
-    // test_upgrade(ledger_wasm_current, balances.clone());
-
-    // // Test downgrade to mainnet wasm
-    // test_upgrade(ledger_wasm_mainnet, balances);
 }
 
 pub fn default_approve_args(spender: impl Into<Account>, amount: u64) -> ApproveArgs {
