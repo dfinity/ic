@@ -842,9 +842,9 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 )?;
 
                 w.encode_gauge(
-                    "cketh_minter_total_memory_bytes",
-                    total_memory_size_bytes() as f64,
-                    "Total amount of memory (heap and stable memory) that has been allocated by this canister.",
+                    "cketh_minter_heap_memory_bytes",
+                    heap_memory_size_bytes() as f64,
+                    "Size of the heap memory allocated by this canister.",
                 )?;
 
                 w.gauge_vec("cycle_balance", "Cycle balance of this canister.")?
@@ -1046,15 +1046,15 @@ fn check_audit_log() {
     })
 }
 
-/// Returns the total amount of memory (heap and stable memory) that has been allocated.
+/// Returns the amount of heap memory in bytes that has been allocated.
 #[cfg(target_arch = "wasm32")]
-pub fn total_memory_size_bytes() -> usize {
+pub fn heap_memory_size_bytes() -> usize {
     const WASM_PAGE_SIZE_BYTES: usize = 65536;
     core::arch::wasm32::memory_size(0) * WASM_PAGE_SIZE_BYTES
 }
 
 #[cfg(not(any(target_arch = "wasm32")))]
-pub fn total_memory_size_bytes() -> usize {
+pub fn heap_memory_size_bytes() -> usize {
     0
 }
 
