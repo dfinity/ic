@@ -12,8 +12,7 @@ pub(super) fn get_dealers_from_chain(
 ) -> HashSet<(NiDkgId, NodeId)> {
     get_dkg_dealings(pool_reader, block)
         .into_iter()
-        .map(|(dkg_id, dealings)| dealings.into_keys().map(move |node_id| (dkg_id, node_id)))
-        .flatten()
+        .flat_map(|(dkg_id, dealings)| dealings.into_keys().map(move |node_id| (dkg_id, node_id)))
         .collect()
 }
 
