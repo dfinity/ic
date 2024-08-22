@@ -18,7 +18,9 @@ ALLOWED_UNDECLARED_DEPENDENCIES = {
     }
 }
 
+# Check file patterns /opt/ic/...
 COMPONENT_FILE_PATTERN = r"/opt/ic/[^\s'\"},)]+"
+# Exclude patterns that include $ since we don't support substitution.
 EXCLUDE_FILE_PATTERN = r".*[$].*"
 
 
