@@ -226,6 +226,13 @@ fn get_key_family<T: prost::Message + Default>(
     registry: &Registry,
     prefix: &str,
 ) -> Vec<(String, T)> {
+    get_key_family_iter(registry, prefix).collect()
+}
+
+pub(crate) fn get_key_family_iter<'a, T: prost::Message + Default>(
+    registry: &'a Registry,
+    prefix: &'a str,
+) -> impl Iterator<Item = (String, T)> + 'a {
     let prefix_bytes = prefix.as_bytes();
     let start = prefix_bytes.to_vec();
 
@@ -247,5 +254,4 @@ fn get_key_family<T: prost::Message + Default>(
 
             (id, value)
         })
-        .collect()
 }
