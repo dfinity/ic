@@ -120,7 +120,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         log: ReplicaLogger,
         rt: Handle,
         pool: Arc<RwLock<Pool>>,
-        pfn_producer: Arc<dyn FilterFnFactory<Artifact, Pool>>,
+        filter_fn: Arc<dyn FilterFnFactory<Artifact, Pool>>,
         metrics_registry: MetricsRegistry,
     ) -> (impl Fn(Arc<dyn Transport>) -> Self, Router)
     where
@@ -131,11 +131,11 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
             move |transport: Arc<dyn Transport>| {
                 let pfn = {
                     let p = pool.read().unwrap();
-                    pfn_producer.get_filter_function(&p)
+                    filter_fn.get_filter_function(&p)
                 };
                 let (pfn_tx, pfn_rx) = watch::channel(pfn);
                 let pool_clone = pool.clone();
-                let pfn_producer_clone = pfn_producer.clone();
+                let pfn_producer_clone = filter_fn.clone();
                 let log_clone = log.clone();
                 let jh = rt.spawn(async move {
                     loop {
