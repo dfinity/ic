@@ -1,4 +1,4 @@
-use dfn_http::types::{HttpRequest, HttpResponse};
+use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use serde_bytes::ByteBuf;
 
 /// Implements an HTTP endpoint that handles /metrics requests and return 404
@@ -7,8 +7,8 @@ pub fn serve_metrics(
     encode_metrics: impl FnOnce(&mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()>,
 ) {
     dfn_core::over(
-        dfn_candid::candid,
-        |(req,): (HttpRequest,)| -> HttpResponse {
+        dfn_candid::candid_one_with_config,
+        |req: HttpRequest| -> HttpResponse {
             let path = match req.url.find('?') {
                 None => &req.url[..],
                 Some(index) => &req.url[..index],
@@ -32,14 +32,12 @@ pub fn serve_metrics(
                                 ("Content-Length".to_string(), body.len().to_string()),
                             ],
                             body: ByteBuf::from(body),
-                            streaming_strategy: None,
                         }
                     }
                     Err(err) => HttpResponse {
                         status_code: 500,
                         headers: vec![],
                         body: ByteBuf::from(format!("Failed to encode metrics: {}", err)),
-                        streaming_strategy: None,
                     },
                 }
             } else {
@@ -47,7 +45,6 @@ pub fn serve_metrics(
                     status_code: 404,
                     headers: vec![],
                     body: ByteBuf::from("not found"),
-                    streaming_strategy: None,
                 }
             }
         },

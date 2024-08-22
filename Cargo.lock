@@ -3293,6 +3293,7 @@ dependencies = [
  "dfn_candid",
  "dfn_core",
  "dfn_http",
+ "ic-canisters-http-types",
  "ic-metrics-encoder",
  "serde_bytes",
 ]
@@ -14155,6 +14156,7 @@ dependencies = [
  "dfn_http_metrics",
  "dfn_protobuf",
  "ic-base-types",
+ "ic-canisters-http-types",
  "ic-cdk 0.13.5",
  "ic-ledger-canister-core",
  "ic-ledger-core",
@@ -14165,6 +14167,7 @@ dependencies = [
  "lazy_static",
  "pocket-ic",
  "serde",
+ "serde_bytes",
 ]
 
 [[package]]

@@ -25,5 +25,7 @@ serde = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
+ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-ledger-test-utils = { path = "../test_utils" }
 pocket-ic = { path = "../../../../packages/pocket-ic" }
+serde_bytes = { workspace = true }
