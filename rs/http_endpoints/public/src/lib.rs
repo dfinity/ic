@@ -14,7 +14,6 @@ mod pprof;
 mod query;
 mod read_state;
 mod status;
-mod threads;
 mod tracing_flamegraph;
 
 cfg_if::cfg_if! {

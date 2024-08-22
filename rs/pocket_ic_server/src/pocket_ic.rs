@@ -43,6 +43,7 @@ use ic_registry_keys::make_routing_table_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
+use ic_state_machine_tests::Level;
 use ic_state_machine_tests::{
     finalize_registry, IngressState, IngressStatus, RejectCode, StateMachine, StateMachineBuilder,
     StateMachineConfig, StateMachineStateDir, SubmitIngressError, Time,
@@ -169,6 +170,7 @@ pub struct PocketIc {
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     runtime: Arc<Runtime>,
     nonmainnet_features: bool,
+    log_level: Option<Level>,
 }
 
 impl Drop for PocketIc {
@@ -258,6 +260,7 @@ impl PocketIc {
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         time: SystemTime,
         nonmainnet_features: bool,
+        log_level: Option<Level>,
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
@@ -304,6 +307,7 @@ impl PocketIc {
             .with_time(time)
             .with_state_machine_state_dir(state_machine_state_dir)
             .with_registry_data_provider(registry_data_provider.clone())
+            .with_log_level(log_level)
     }
 
     pub(crate) fn new(
@@ -311,6 +315,7 @@ impl PocketIc {
         subnet_configs: ExtendedSubnetConfigSet,
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
+        log_level: Option<Level>,
     ) -> Self {
         let mut range_gen = RangeGen::new();
         let mut routing_table = RoutingTable::new();
@@ -445,6 +450,7 @@ impl PocketIc {
                 registry_data_provider.clone(),
                 time,
                 nonmainnet_features,
+                log_level,
             );
 
             if let DtsFlag::Disabled = dts_flag {
@@ -574,6 +580,7 @@ impl PocketIc {
             registry_data_provider,
             runtime,
             nonmainnet_features,
+            log_level,
         }
     }
 
@@ -674,6 +681,7 @@ impl Default for PocketIc {
             },
             None,
             false,
+            None,
         )
     }
 }
@@ -2277,6 +2285,7 @@ fn route(
                         pic.registry_data_provider.clone(),
                         time,
                         pic.nonmainnet_features,
+                        pic.log_level,
                     );
                     let sm = builder.build_with_subnets(pic.subnets.clone());
                     // We insert the new subnet into the routing table.
@@ -2615,6 +2624,7 @@ mod tests {
             },
             None,
             false,
+            None,
         );
         let canister_id = pic.any_subnet().create_canister(None);
 
