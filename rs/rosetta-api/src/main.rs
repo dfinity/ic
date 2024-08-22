@@ -10,8 +10,8 @@ use std::{path::Path, path::PathBuf, str::FromStr, sync::Arc};
 use tracing::level_filters::LevelFilter;
 use tracing::{error, info, warn, Level};
 use tracing_appender::non_blocking::WorkerGuard;
-use tracing_subscriber::filter::Bouncer;
 use tracing_subscriber::filter::FilterExt;
+use tracing_subscriber::filter::FilterFn;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{Layer, Registry};
@@ -99,7 +99,7 @@ fn init_logging(level: Level) -> std::io::Result<WorkerGuard> {
             || module.starts_with("ic_ledger_canister_blocks_synchronizer")
     }
     let rosetta_filter =
-        Bouncer::new(|metadata| metadata.module_path().map_or(true, rosetta_filter));
+        FilterFn::new(|metadata| metadata.module_path().map_or(true, rosetta_filter));
     let stdout_filter = LevelFilter::from_level(level).and(rosetta_filter);
     let stdout_layer = tracing_subscriber::fmt::Layer::default()
         .with_target(false) // instead include file and lines in the next lines
