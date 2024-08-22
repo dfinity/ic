@@ -8,7 +8,7 @@ use ic_consensus_utils::{
 use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, ChangeSet, Verifier, VerifierError},
     consensus_pool::ConsensusPoolCache,
-    p2p::consensus::{ChangeSetProducer, Bouncer, BouncerFactory, BouncerValue},
+    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, ChangeSetProducer},
     validation::ValidationError,
 };
 use ic_interfaces_registry::RegistryClient;

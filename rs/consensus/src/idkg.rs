@@ -194,7 +194,7 @@ use ic_interfaces::{
     consensus_pool::ConsensusBlockCache,
     crypto::IDkgProtocol,
     idkg::{IDkgChangeSet, IDkgPool},
-    p2p::consensus::{ChangeSetProducer, Bouncer, BouncerFactory, BouncerValue},
+    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, ChangeSetProducer},
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};

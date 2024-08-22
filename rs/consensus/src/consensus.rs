@@ -26,8 +26,8 @@ mod proptests;
 use crate::consensus::{
     block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker,
     dkg_key_manager::DkgKeyManager, finalizer::Finalizer, metrics::ConsensusMetrics,
-    notary::Notary, payload_builder::PayloadBuilderImpl, priority::get_bouncer,
-    purger::Purger, random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
+    notary::Notary, payload_builder::PayloadBuilderImpl, priority::get_bouncer, purger::Purger,
+    random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
     share_aggregator::ShareAggregator, validator::Validator,
 };
 use ic_consensus_utils::{
@@ -41,7 +41,7 @@ use ic_interfaces::{
     idkg::IDkgPool,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
-    p2p::consensus::{ChangeSetProducer, Bouncer, BouncerFactory},
+    p2p::consensus::{Bouncer, BouncerFactory, ChangeSetProducer},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };

@@ -16,7 +16,7 @@ use ic_interfaces::{
     idkg::IDkgChangeSet,
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
-    p2p::consensus::{ChangeSetProducer, Bouncer, BouncerFactory, BouncerValue},
+    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, ChangeSetProducer},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
