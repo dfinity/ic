@@ -195,7 +195,7 @@ impl std::iter::Iterator for OutputIterator<'_> {
     /// for that canister, the canister iterator is moved to the back of the
     /// iteration order.
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(mut canister_iterator) = self.canister_iterators.pop_front() {
+        if let Some(mut canister_iterator) = self.canister_iterators.pop_front() {
             // `next()` may consume an arbitrary number of stale references.
             self.size -= canister_iterator.size();
             let next = canister_iterator.next();

@@ -1030,7 +1030,7 @@ fn test_empty_queue_in_input_schedule() {
 fn test_gced_queue_in_input_schedule() {
     let mut queues = fixture_with_empty_queues_in_input_schedules();
 
-    // Garbage collect the empty queue paurs.
+    // Garbage collect the empty queue pairs.
     queues.garbage_collect();
     // Only 2 queue pairs should be left.
     assert_eq!(2, queues.canister_queues.len());

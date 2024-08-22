@@ -270,6 +270,10 @@ impl CanisterQueues {
     /// All messages that `f` returned `Ok` for, are popped. Messages that `f`
     /// returned `Err` for and all those following them in the respective output
     /// queue are retained.
+    ///
+    /// Do note that because a queue can only be skipped over if `f` returns `Err`
+    /// on a non-stale message, queues are always either fully consumed or left with
+    /// a non-stale reference at the front.
     pub(crate) fn output_queues_for_each<F>(&mut self, mut f: F)
     where
         F: FnMut(&CanisterId, &RequestOrResponse) -> Result<(), ()>,
