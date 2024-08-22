@@ -10664,6 +10664,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-registry-node-provider-rewards"
+version = "0.9.0"
+dependencies = [
+ "ic-base-types",
+ "ic-protobuf",
+]
+
+[[package]]
 name = "ic-registry-proto-data-provider"
 version = "0.9.0"
 dependencies = [
@@ -17419,6 +17427,7 @@ dependencies = [
  "ic-registry-client-fake",
  "ic-registry-keys",
  "ic-registry-nns-data-provider",
+ "ic-registry-node-provider-rewards",
  "ic-registry-proto-data-provider",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
