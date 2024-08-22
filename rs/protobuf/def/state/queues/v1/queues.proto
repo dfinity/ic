@@ -39,13 +39,13 @@ message StreamFlags {
 }
 
 message Stream {
-  reserved 3, 4, 6;
-  reserved "signals_begin", "signals", "deprecated_reject_signals";
   uint64 messages_begin = 1;
   repeated RequestOrResponse messages = 2;
   uint64 signals_end = 5;
   repeated RejectSignal reject_signals = 8;
   StreamFlags reverse_stream_flags = 7;
+  reserved 3, 4, 6;
+  reserved "signals_begin", "signals", "deprecated_reject_signals";
 }
 
 message StreamEntry {
