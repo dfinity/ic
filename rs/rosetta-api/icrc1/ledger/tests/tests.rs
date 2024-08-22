@@ -1574,6 +1574,7 @@ mod verify_written_blocks {
 mod incompatible_token_type_upgrade {
     use super::*;
     use assert_matches::assert_matches;
+    use ic_icrc1_ledger_sm_tests::{metadata, total_supply};
     use ic_state_machine_tests::ErrorCode::CanisterCalledTrap;
     use num_bigint::BigUint;
 
@@ -1632,26 +1633,69 @@ mod incompatible_token_type_upgrade {
         );
         assert_eq!(approval_result, Ok(BlockIndex::from(1u64)));
         balance -= FEE;
+        let initial_total_supply = icrc1_total_supply(&env, ledger_id);
+        assert_eq!(initial_total_supply.to_u64(), Some(u64::MAX - FEE));
+        let initial_blocks = icrc3_get_blocks(
+            &env,
+            ledger_id,
+            vec![GetBlocksRequest {
+                start: Nat::from(0u64),
+                length: Nat::from(u64::MAX),
+            }],
+        );
+        assert_eq!(initial_blocks.log_length, Nat::from(2u64));
+        assert_eq!(initial_blocks.blocks.len(), 2);
+        assert_eq!(initial_blocks.archived_blocks.len(), 0);
+        let initial_metadata = metadata(&env, ledger_id);
+        assert!(!initial_metadata.is_empty());
 
         // Try to upgrade the ledger from using a u64 wasm to a u256 wasm
         let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
         env.upgrade_canister(ledger_id, ledger_mainnet_u256_wasm(), upgrade_args)
             .expect("Unable to upgrade the ledger canister");
 
-        // The balance and allowance should not change
-        assert_eq!(balance, balance_of(&env, ledger_id, account(1)));
-        let allowance = get_allowance(&env, ledger_id, account(1), account(2));
-        assert_eq!(allowance.allowance, Nat::from(u64::MAX));
+        // The balance, allowance, total supply, and blocks should not change
+        let verify_state = || {
+            assert_eq!(balance, balance_of(&env, ledger_id, account(1)));
+            let allowance = get_allowance(&env, ledger_id, account(1), account(2));
+            assert_eq!(allowance.allowance, Nat::from(u64::MAX));
+            assert_eq!(
+                initial_blocks,
+                icrc3_get_blocks(
+                    &env,
+                    ledger_id,
+                    vec![GetBlocksRequest {
+                        start: Nat::from(0u64),
+                        length: Nat::from(u64::MAX),
+                    }]
+                )
+            );
+            assert_eq!(initial_metadata, metadata(&env, ledger_id));
+        };
+        verify_state();
+        // The total supply is calculated based on the token type, so this actually changes (even though it should not)
+        assert_ne!(initial_total_supply, icrc1_total_supply(&env, ledger_id));
 
         // Try to upgrade the ledger back to a u64 wasm
         let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
         env.upgrade_canister(ledger_id, ledger_mainnet_u64_wasm(), upgrade_args)
             .expect("Unable to upgrade the ledger canister");
 
-        // The balance and allowance should not change
-        assert_eq!(balance, balance_of(&env, ledger_id, account(1)));
-        let allowance = get_allowance(&env, ledger_id, account(1), account(2));
-        assert_eq!(allowance.allowance, Nat::from(u64::MAX));
+        // The balance, allowance, and blocks should not change
+        verify_state();
+        // The total supply should be back to what it was originally
+        assert_eq!(initial_total_supply, icrc1_total_supply(&env, ledger_id));
+    }
+
+    fn icrc1_total_supply(env: &StateMachine, ledger_id: CanisterId) -> BigUint {
+        Decode!(
+            &env.query(ledger_id, "icrc1_total_supply", Encode!().unwrap())
+                .expect("failed to query total supply")
+                .bytes(),
+            Nat
+        )
+        .expect("failed to decode totalSupply response")
+        .0
     }
 
     #[test]
