@@ -13,7 +13,7 @@ use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::consensus::{
-    Aborted, ArtifactAssembler, FilterFn, FilterFnFactory, FilterValue, Peers, ValidatedPoolReader,
+    Aborted, ArtifactAssembler, Bouncer, BouncerFactory, BouncerValue, Peers, ValidatedPoolReader,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -75,7 +75,7 @@ async fn rpc_handler<Artifact: PbArtifact>(
 pub struct FetchArtifact<Artifact: PbArtifact> {
     log: ReplicaLogger,
     transport: Arc<dyn Transport>,
-    filter_fn: watch::Receiver<FilterFn<Artifact::Id>>,
+    filter_fn: watch::Receiver<Bouncer<Artifact::Id>>,
     metrics: FetchArtifactMetrics,
     jh: Arc<JoinHandle<()>>,
 }
@@ -120,7 +120,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         log: ReplicaLogger,
         rt: Handle,
         pool: Arc<RwLock<Pool>>,
-        filter_fn: Arc<dyn FilterFnFactory<Artifact, Pool>>,
+        filter_fn: Arc<dyn BouncerFactory<Artifact, Pool>>,
         metrics_registry: MetricsRegistry,
     ) -> (impl Fn(Arc<dyn Transport>) -> Self, Router)
     where
@@ -131,7 +131,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
             move |transport: Arc<dyn Transport>| {
                 let pfn = {
                     let p = pool.read().unwrap();
-                    filter_fn.get_filter_function(&p)
+                    filter_fn.get_bouncer(&p)
                 };
                 let (pfn_tx, pfn_rx) = watch::channel(pfn);
                 let pool_clone = pool.clone();
@@ -141,7 +141,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
                     loop {
                         let pfn = {
                             let p = pool_clone.read().unwrap();
-                            pfn_producer_clone.get_filter_function(&p)
+                            pfn_producer_clone.get_bouncer(&p)
                         };
                         if pfn_tx.send(pfn).is_err() {
                             break;
@@ -167,22 +167,22 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         id: &Artifact::Id,
         artifact: &mut Option<(Artifact, NodeId)>,
         metrics: &FetchArtifactMetrics,
-        priority_fn_watcher: &mut watch::Receiver<FilterFn<Artifact::Id>>,
+        priority_fn_watcher: &mut watch::Receiver<Bouncer<Artifact::Id>>,
     ) -> Result<(), Aborted> {
         let mut priority = priority_fn_watcher.borrow_and_update()(id);
 
         // Clear the artifact from memory if it was pushed.
-        if let FilterValue::MaybeWantsLater = priority {
+        if let BouncerValue::MaybeWantsLater = priority {
             artifact.take();
             metrics.download_task_stashed_total.inc();
         }
 
-        while let FilterValue::MaybeWantsLater = priority {
+        while let BouncerValue::MaybeWantsLater = priority {
             let _ = priority_fn_watcher.changed().await;
             priority = priority_fn_watcher.borrow_and_update()(id);
         }
 
-        if let FilterValue::Unwanted = priority {
+        if let BouncerValue::Unwanted = priority {
             return Err(Aborted);
         }
         Ok(())
@@ -193,7 +193,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
     /// The download will be scheduled based on the given priority function, `priority_fn_watcher`.
     ///
     /// The download fails iff:
-    /// - The priority function evaluates the advert to [`FilterValue::Unwanted`] -> [`DownloadStopped::PriorityIsDrop`]
+    /// - The priority function evaluates the advert to [`BouncerValue::Unwanted`] -> [`DownloadStopped::PriorityIsDrop`]
     /// - The set of peers advertising the artifact, `peer_rx`, becomes empty -> [`DownloadStopped::AllPeersDeletedTheArtifact`]
     /// and the failure condition is reported in the error variant of the returned result.
     #[instrument(skip_all)]
@@ -203,7 +203,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         // Only first peer for specific artifact ID is considered for push
         mut artifact: Option<(Artifact, NodeId)>,
         peer_rx: impl Peers + Send + 'static,
-        mut priority_fn_watcher: watch::Receiver<FilterFn<Artifact::Id>>,
+        mut priority_fn_watcher: watch::Receiver<Bouncer<Artifact::Id>>,
         transport: Arc<dyn Transport>,
         metrics: FetchArtifactMetrics,
     ) -> Result<(Artifact, NodeId), Aborted> {

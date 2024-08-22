@@ -16,7 +16,7 @@ use ic_interfaces::{
     idkg::IDkgChangeSet,
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
-    p2p::consensus::{ChangeSetProducer, FilterFn, FilterFnFactory, FilterValue},
+    p2p::consensus::{ChangeSetProducer, Bouncer, BouncerFactory, BouncerValue},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
@@ -61,7 +61,7 @@ pub const UNIT_TIME_STEP: u64 = 1;
 /// Polling interval is 100 millisecond.
 pub const POLLING_INTERVAL: u64 = 100;
 
-/// FilterValue function refresh interval, default is 3s.
+/// BouncerValue function refresh interval, default is 3s.
 pub const PRIORITY_FN_REFRESH_INTERVAL: Duration = Duration::from_secs(3);
 
 /// Messages from a consensus instance are either artifacts to be
@@ -266,33 +266,33 @@ impl fmt::Display for ConsensusInstance<'_> {
 pub type StopPredicate = Box<dyn Fn(&ConsensusInstance<'_>) -> bool>;
 
 pub(crate) struct PriorityFnState<Artifact: IdentifiableArtifact> {
-    filter_fn: FilterFn<Artifact::Id>,
+    filter_fn: Bouncer<Artifact::Id>,
     pub last_updated: Time,
 }
 
 impl<Artifact: IdentifiableArtifact> PriorityFnState<Artifact> {
-    pub fn new<Pool, Producer: FilterFnFactory<Artifact, Pool>>(
+    pub fn new<Pool, Producer: BouncerFactory<Artifact, Pool>>(
         producer: &Producer,
         pool: &Pool,
     ) -> RefCell<Self> {
         RefCell::new(PriorityFnState {
-            filter_fn: producer.get_filter_function(pool),
+            filter_fn: producer.get_bouncer(pool),
             last_updated: UNIX_EPOCH,
         })
     }
     /// Return the priority of the given message
-    pub fn get_priority(&self, msg: &Artifact) -> FilterValue {
+    pub fn get_priority(&self, msg: &Artifact) -> BouncerValue {
         (self.filter_fn)(&msg.id())
     }
 
     /// Compute a new priority function
-    pub fn refresh<Pool, Producer: FilterFnFactory<Artifact, Pool>>(
+    pub fn refresh<Pool, Producer: BouncerFactory<Artifact, Pool>>(
         &mut self,
         producer: &Producer,
         pool: &Pool,
         now: Time,
     ) {
-        self.filter_fn = producer.get_filter_function(pool);
+        self.filter_fn = producer.get_bouncer(pool);
         self.last_updated = now;
     }
 }

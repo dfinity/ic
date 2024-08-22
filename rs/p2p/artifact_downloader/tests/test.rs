@@ -9,7 +9,7 @@ use std::{
 use axum::http::{Response, StatusCode};
 use bytes::Bytes;
 use ic_artifact_downloader::FetchArtifact;
-use ic_interfaces::p2p::consensus::{ArtifactAssembler, FilterValue};
+use ic_interfaces::p2p::consensus::{ArtifactAssembler, BouncerValue};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::{
@@ -38,12 +38,12 @@ async fn priority_from_stash_to_fetch() {
     mock_pfn
         .expect_get_filter_function()
         .times(1)
-        .returning(|_| Box::new(|_| FilterValue::MaybeWantsLater))
+        .returning(|_| Box::new(|_| BouncerValue::MaybeWantsLater))
         .in_sequence(&mut seq);
     mock_pfn
         .expect_get_filter_function()
         .times(1)
-        .returning(|_| Box::new(|_| FilterValue::Wants))
+        .returning(|_| Box::new(|_| BouncerValue::Wants))
         .in_sequence(&mut seq);
 
     let mut mock_transport = MockTransport::new();
@@ -89,17 +89,17 @@ async fn fetch_to_stash_to_fetch() {
     let return_artifact_clone = return_artifact.clone();
     let mut mock_pfn = MockFilterFnFactory::new();
     let priorities = Arc::new(Mutex::new(vec![
-        FilterValue::Wants,
-        FilterValue::MaybeWantsLater,
-        FilterValue::MaybeWantsLater,
-        FilterValue::MaybeWantsLater,
+        BouncerValue::Wants,
+        BouncerValue::MaybeWantsLater,
+        BouncerValue::MaybeWantsLater,
+        BouncerValue::MaybeWantsLater,
     ]));
     mock_pfn.expect_get_filter_function().returning(move |_| {
         let priorities = priorities.clone();
 
         let p = {
             let mut priorities_g = priorities.lock().unwrap();
-            let p = priorities_g.pop().unwrap_or(FilterValue::Wants);
+            let p = priorities_g.pop().unwrap_or(BouncerValue::Wants);
             if priorities_g.is_empty() {
                 return_artifact.store(true, Ordering::SeqCst);
             }
@@ -189,7 +189,7 @@ async fn invalid_artifact_not_accepted() {
     let mut mock_pfn = MockFilterFnFactory::new();
     mock_pfn
         .expect_get_filter_function()
-        .returning(|_| Box::new(|_| FilterValue::Wants));
+        .returning(|_| Box::new(|_| BouncerValue::Wants));
     let (fetch_artifact, _router) = FetchArtifact::new(
         no_op_logger(),
         Handle::current(),
@@ -223,12 +223,12 @@ async fn priority_from_stash_to_drop() {
     mock_pfn
         .expect_get_filter_function()
         .times(1)
-        .returning(|_| Box::new(|_| FilterValue::MaybeWantsLater))
+        .returning(|_| Box::new(|_| BouncerValue::MaybeWantsLater))
         .in_sequence(&mut seq);
     mock_pfn
         .expect_get_filter_function()
         .times(1)
-        .returning(|_| Box::new(|_| FilterValue::Unwanted))
+        .returning(|_| Box::new(|_| BouncerValue::Unwanted))
         .in_sequence(&mut seq);
 
     let mut mock_transport = MockTransport::new();

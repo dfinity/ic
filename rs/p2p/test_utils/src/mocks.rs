@@ -2,9 +2,7 @@ use async_trait::async_trait;
 use axum::http::{Request, Response};
 use bytes::Bytes;
 use ic_interfaces::p2p::{
-    consensus::{
-        Aborted, ArtifactAssembler, FilterFn, FilterFnFactory, Peers, ValidatedPoolReader,
-    },
+    consensus::{Aborted, ArtifactAssembler, Bouncer, BouncerFactory, Peers, ValidatedPoolReader},
     state_sync::{AddChunkError, Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient},
 };
 use ic_quic_transport::{ConnId, Transport};
@@ -75,10 +73,10 @@ mock! {
 }
 
 mock! {
-    pub FilterFnFactory<A: IdentifiableArtifact> {}
+    pub BouncerFactory<A: IdentifiableArtifact> {}
 
-    impl<A: IdentifiableArtifact + Sync> FilterFnFactory<A, MockValidatedPoolReader<A>> for FilterFnFactory<A> {
-        fn get_filter_function(&self, pool: &MockValidatedPoolReader<A>) -> FilterFn<A::Id>;
+    impl<A: IdentifiableArtifact + Sync> BouncerFactory<A, MockValidatedPoolReader<A>> for BouncerFactory<A> {
+        fn get_bouncer(&self, pool: &MockValidatedPoolReader<A>) -> Bouncer<A::Id>;
     }
 }
 

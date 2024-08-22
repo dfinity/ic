@@ -1,7 +1,7 @@
 use super::types::*;
 use ic_consensus::consensus::bounds::validated_pool_within_bounds;
 use ic_consensus_utils::pool_reader::PoolReader;
-use ic_interfaces::p2p::consensus::{FilterValue, MutablePool, UnvalidatedArtifact};
+use ic_interfaces::p2p::consensus::{BouncerValue, MutablePool, UnvalidatedArtifact};
 use ic_logger::{trace, ReplicaLogger};
 use ic_test_utilities_types::ids::node_test_id;
 use ic_types::time::Time;
@@ -39,15 +39,15 @@ fn execute_instance(
                             .borrow()
                             .get_priority(&msg)
                         {
-                            FilterValue::Unwanted => return Some(timestamp),
-                            FilterValue::MaybeWantsLater => {
+                            BouncerValue::Unwanted => return Some(timestamp),
+                            BouncerValue::MaybeWantsLater => {
                                 instance
                                     .buffered
                                     .borrow_mut()
                                     .push(InputMessage::Consensus(msg));
                                 return Some(timestamp);
                             }
-                            FilterValue::Wants => (),
+                            BouncerValue::Wants => (),
                         };
                     }
                     let mut pool = instance.driver.consensus_pool.write().unwrap();

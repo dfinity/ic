@@ -194,7 +194,7 @@ use ic_interfaces::{
     consensus_pool::ConsensusBlockCache,
     crypto::IDkgProtocol,
     idkg::{IDkgChangeSet, IDkgPool},
-    p2p::consensus::{ChangeSetProducer, FilterFn, FilterFnFactory, FilterValue},
+    p2p::consensus::{ChangeSetProducer, Bouncer, BouncerFactory, BouncerValue},
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
@@ -473,8 +473,8 @@ impl IDkgPriorityFnArgs {
     }
 }
 
-impl<Pool: IDkgPool> FilterFnFactory<IDkgMessage, Pool> for IDkgGossipImpl {
-    fn get_filter_function(&self, _idkg_pool: &Pool) -> FilterFn<IDkgMessageId> {
+impl<Pool: IDkgPool> BouncerFactory<IDkgMessage, Pool> for IDkgGossipImpl {
+    fn get_bouncer(&self, _idkg_pool: &Pool) -> Bouncer<IDkgMessageId> {
         let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;
         let args = IDkgPriorityFnArgs::new(&block_reader, self.state_reader.as_ref());
@@ -486,17 +486,17 @@ fn compute_priority(
     id: &IDkgMessageId,
     subnet_id: SubnetId,
     args: &IDkgPriorityFnArgs,
-) -> FilterValue {
+) -> BouncerValue {
     match id {
         IDkgMessageId::Dealing(_, data) => {
             if data.get_ref().subnet_id != subnet_id {
-                return FilterValue::Wants;
+                return BouncerValue::Wants;
             }
 
             if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
-                FilterValue::Wants
+                BouncerValue::Wants
             } else {
-                FilterValue::MaybeWantsLater
+                BouncerValue::MaybeWantsLater
             }
         }
         IDkgMessageId::DealingSupport(_, data) => {
@@ -504,41 +504,41 @@ fn compute_priority(
             // as the source_height from different subnet cannot be compared
             // anyways.
             if data.get_ref().subnet_id != subnet_id {
-                return FilterValue::Wants;
+                return BouncerValue::Wants;
             }
 
             if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
-                FilterValue::Wants
+                BouncerValue::Wants
             } else {
-                FilterValue::MaybeWantsLater
+                BouncerValue::MaybeWantsLater
             }
         }
         IDkgMessageId::EcdsaSigShare(_, data) => {
             if data.get_ref().height <= args.certified_height + Height::from(LOOK_AHEAD) {
-                FilterValue::Wants
+                BouncerValue::Wants
             } else {
-                FilterValue::MaybeWantsLater
+                BouncerValue::MaybeWantsLater
             }
         }
         IDkgMessageId::SchnorrSigShare(_, data) => {
             if data.get_ref().height <= args.certified_height + Height::from(LOOK_AHEAD) {
-                FilterValue::Wants
+                BouncerValue::Wants
             } else {
-                FilterValue::MaybeWantsLater
+                BouncerValue::MaybeWantsLater
             }
         }
         IDkgMessageId::Complaint(_, data) => {
             if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
-                FilterValue::Wants
+                BouncerValue::Wants
             } else {
-                FilterValue::MaybeWantsLater
+                BouncerValue::MaybeWantsLater
             }
         }
         IDkgMessageId::Opening(_, data) => {
             if data.get_ref().height <= args.finalized_height + Height::from(LOOK_AHEAD) {
-                FilterValue::Wants
+                BouncerValue::Wants
             } else {
-                FilterValue::MaybeWantsLater
+                BouncerValue::MaybeWantsLater
             }
         }
     }
@@ -631,28 +631,28 @@ mod tests {
                     dealing_prefix(&xnet_transcript_id, &NODE_1),
                     get_fake_artifact_id_data(xnet_transcript_id).into(),
                 ),
-                FilterValue::Wants,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::Dealing(
                     dealing_prefix(&transcript_id_fetch_1, &NODE_1),
                     get_fake_artifact_id_data(transcript_id_fetch_1).into(),
                 ),
-                FilterValue::Wants,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::Dealing(
                     dealing_prefix(&transcript_id_fetch_2, &NODE_1),
                     get_fake_artifact_id_data(transcript_id_fetch_2).into(),
                 ),
-                FilterValue::Wants,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::Dealing(
                     dealing_prefix(&transcript_id_stash, &NODE_1),
                     get_fake_artifact_id_data(transcript_id_stash).into(),
                 ),
-                FilterValue::MaybeWantsLater,
+                BouncerValue::MaybeWantsLater,
             ),
             // Dealing support
             (
@@ -660,28 +660,28 @@ mod tests {
                     dealing_support_prefix(&xnet_transcript_id, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(xnet_transcript_id).into(),
                 ),
-                FilterValue::Wants,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::DealingSupport(
                     dealing_support_prefix(&transcript_id_fetch_1, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_fetch_1).into(),
                 ),
-                FilterValue::Wants,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::DealingSupport(
                     dealing_support_prefix(&transcript_id_fetch_2, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_fetch_2).into(),
                 ),
-                FilterValue::Wants,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::DealingSupport(
                     dealing_support_prefix(&transcript_id_stash, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_stash).into(),
                 ),
-                FilterValue::MaybeWantsLater,
+                BouncerValue::MaybeWantsLater,
             ),
         ];
 
@@ -721,42 +721,42 @@ mod tests {
                     ecdsa_sig_share_prefix(&request_id_fetch_1, &NODE_1),
                     get_fake_share_id_data(&request_id_fetch_1).into(),
                 ),
-                FilterValue::Wants,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::SchnorrSigShare(
                     schnorr_sig_share_prefix(&request_id_fetch_1, &NODE_1),
                     get_fake_share_id_data(&request_id_fetch_1).into(),
                 ),
-                FilterValue::Wants,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::EcdsaSigShare(
                     ecdsa_sig_share_prefix(&request_id_fetch_2, &NODE_1),
                     get_fake_share_id_data(&request_id_fetch_2).into(),
                 ),
-                FilterValue::Wants,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::SchnorrSigShare(
                     schnorr_sig_share_prefix(&request_id_fetch_2, &NODE_1),
                     get_fake_share_id_data(&request_id_fetch_2).into(),
                 ),
-                FilterValue::Wants,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::EcdsaSigShare(
                     ecdsa_sig_share_prefix(&request_id_stash, &NODE_1),
                     get_fake_share_id_data(&request_id_stash).into(),
                 ),
-                FilterValue::MaybeWantsLater,
+                BouncerValue::MaybeWantsLater,
             ),
             (
                 IDkgMessageId::SchnorrSigShare(
                     schnorr_sig_share_prefix(&request_id_stash, &NODE_1),
                     get_fake_share_id_data(&request_id_stash).into(),
                 ),
-                FilterValue::MaybeWantsLater,
+                BouncerValue::MaybeWantsLater,
             ),
         ];
 
@@ -786,28 +786,28 @@ mod tests {
                     complaint_prefix(&transcript_id_fetch_1, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_fetch_1).into(),
                 ),
-                FilterValue::Wants,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::Complaint(
                     complaint_prefix(&transcript_id_fetch_2, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_fetch_2).into(),
                 ),
-                FilterValue::Wants,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::Complaint(
                     complaint_prefix(&transcript_id_stash, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_stash).into(),
                 ),
-                FilterValue::MaybeWantsLater,
+                BouncerValue::MaybeWantsLater,
             ),
             (
                 IDkgMessageId::Complaint(
                     complaint_prefix(&transcript_id_fetch_3, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_fetch_3).into(),
                 ),
-                FilterValue::Wants,
+                BouncerValue::Wants,
             ),
             // Openings
             (
@@ -815,28 +815,28 @@ mod tests {
                     opening_prefix(&transcript_id_fetch_1, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_fetch_1).into(),
                 ),
-                FilterValue::Wants,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::Opening(
                     opening_prefix(&transcript_id_fetch_2, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_fetch_2).into(),
                 ),
-                FilterValue::Wants,
+                BouncerValue::Wants,
             ),
             (
                 IDkgMessageId::Opening(
                     opening_prefix(&transcript_id_stash, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_stash).into(),
                 ),
-                FilterValue::MaybeWantsLater,
+                BouncerValue::MaybeWantsLater,
             ),
             (
                 IDkgMessageId::Opening(
                     opening_prefix(&transcript_id_fetch_3, &NODE_1, &NODE_2),
                     get_fake_artifact_id_data(transcript_id_fetch_3).into(),
                 ),
-                FilterValue::Wants,
+                BouncerValue::Wants,
             ),
         ];
 

@@ -128,7 +128,7 @@ pub trait ArtifactAssembler<A1: IdentifiableArtifact, A2: PbArtifact>:
 /// The artifact filter function returns a value that defines 3 possible handling logics when
 /// an artifact or ID is received.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FilterValue {
+pub enum BouncerValue {
     /// The client doesn't need the corresponding artifact for making progress so it can safely be dropped.
     Unwanted,
     /// The client may need later the artifact.
@@ -137,13 +137,14 @@ pub enum FilterValue {
     Wants,
 }
 
-/// Idempotent and non-blocking function which returns a FilterValue for any artifact ID.
-pub type FilterFn<Id> = Box<dyn Fn(&Id) -> FilterValue + Send + Sync + 'static>;
+/// Idempotent and non-blocking function which returns a BouncerValue for any artifact ID.
+/// Think of this closure as guarding access to the unvalidated pool (similar to a bouncer in a night club).
+pub type Bouncer<Id> = Box<dyn Fn(&Id) -> BouncerValue + Send + Sync + 'static>;
 
-/// Since the FilterFn above is defined as idempotent, the factory trait provides a way to refresh
+/// Since the Bouncer above is defined as idempotent, the factory trait provides a way to refresh
 /// the filter function.
 /// All the filtering logic should happen inside the implentations of the ArtifactAssembler.
-pub trait FilterFnFactory<Artifact: IdentifiableArtifact, Pool>: Send + Sync {
+pub trait BouncerFactory<Artifact: IdentifiableArtifact, Pool>: Send + Sync {
     /// Returns a priority function for the given pool.
-    fn get_filter_function(&self, pool: &Pool) -> FilterFn<Artifact::Id>;
+    fn get_bouncer(&self, pool: &Pool) -> Bouncer<Artifact::Id>;
 }
