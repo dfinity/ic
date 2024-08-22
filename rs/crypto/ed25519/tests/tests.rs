@@ -185,7 +185,7 @@ fn batch_verification_works() {
 
         // Corrupt a random public key and check that the batch fails:
         let corrupted_pk_idx = rng.gen::<usize>() % batch_size;
-        let correct_pk = pk[corrupted_pk_idx].clone();
+        let correct_pk = pk[corrupted_pk_idx];
         let wrong_pk = PrivateKey::generate_using_rng(rng).public_key();
         assert_ne!(correct_pk, wrong_pk);
         pk[corrupted_pk_idx] = wrong_pk;
