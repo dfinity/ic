@@ -28,18 +28,29 @@ pub trait ChangeSetProducer<Pool>: Send {
     fn on_state_change(&self, pool: &Pool) -> Self::ChangeSet;
 }
 
+/// The enum specifies if a given artifact should be replicated.
+/// In other words, this specifies an addition or removal
+/// to the outbound set of messages that is replicated.
+#[derive(Debug, PartialEq)]
+pub enum ArtifactMutation<T: IdentifiableArtifact> {
+    Insert(ArtifactWithOpt<T>),
+    Remove(T::Id),
+}
+
 /// Ids of validated artifacts that were purged during the pool mutation, and adverts
 /// of artifacts that were validated during the pool mutation. As some changes (i.e.
 /// to the unvalidated section) might not generate adverts or purged IDs, `changed`
 /// indicates if the mutation changed the pool's state at all.
 pub struct ChangeResult<T: IdentifiableArtifact> {
-    pub purged: Vec<T::Id>,
-    pub artifacts_with_opt: Vec<ArtifactWithOpt<T>>,
+    /// The list of replication mutations returned by the client. Mutations are applied in order by P2P-replication.
+    pub mutations: Vec<ArtifactMutation<T>>,
     /// The field instructs the polling component (the one that calls `on_state_change` + `apply_changes`)
     /// that polling immediately can be benefitial. For example, polling consensus when the field is set to
     /// true results in lower consensus latencies.
     pub poll_immediately: bool,
 }
+
+#[derive(Debug, PartialEq)]
 pub struct ArtifactWithOpt<T> {
     pub artifact: T,
     pub is_latency_sensitive: bool,
@@ -73,12 +84,11 @@ pub enum Priority {
 }
 
 /// Priority function used by `ArtifactClient`.
-pub type PriorityFn<Id, Attribute> =
-    Box<dyn Fn(&Id, &Attribute) -> Priority + Send + Sync + 'static>;
+pub type PriorityFn<Id> = Box<dyn Fn(&Id) -> Priority + Send + Sync + 'static>;
 
 pub trait PriorityFnFactory<Artifact: IdentifiableArtifact, Pool>: Send + Sync {
     /// Returns a priority function for the given pool.
-    fn get_priority_function(&self, pool: &Pool) -> PriorityFn<Artifact::Id, Artifact::Attribute>;
+    fn get_priority_function(&self, pool: &Pool) -> PriorityFn<Artifact::Id>;
 }
 
 /// ValidatedPoolReader trait is the generic interface used by P2P to interact
@@ -131,7 +141,6 @@ pub trait ArtifactAssembler<A1: IdentifiableArtifact, A2: PbArtifact>:
     fn assemble_message<P: Peers + Send + 'static>(
         &self,
         id: <A2 as IdentifiableArtifact>::Id,
-        attr: <A2 as IdentifiableArtifact>::Attribute,
         artifact: Option<(A2, NodeId)>,
         peers: P,
     ) -> impl std::future::Future<Output = Result<(A1, NodeId), Aborted>> + Send;
