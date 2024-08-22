@@ -75,7 +75,7 @@ async fn rpc_handler<Artifact: PbArtifact>(
 pub struct FetchArtifact<Artifact: PbArtifact> {
     log: ReplicaLogger,
     transport: Arc<dyn Transport>,
-    priority_fn: watch::Receiver<FilterFn<Artifact::Id>>,
+    filter_fn: watch::Receiver<FilterFn<Artifact::Id>>,
     metrics: FetchArtifactMetrics,
     jh: Arc<JoinHandle<()>>,
 }
@@ -85,7 +85,7 @@ impl<Artifact: PbArtifact> Clone for FetchArtifact<Artifact> {
         Self {
             log: self.log.clone(),
             transport: self.transport.clone(),
-            priority_fn: self.priority_fn.clone(),
+            filter_fn: self.filter_fn.clone(),
             metrics: self.metrics.clone(),
             jh: self.jh.clone(),
         }
@@ -107,7 +107,7 @@ impl<Artifact: PbArtifact> ArtifactAssembler<Artifact, Artifact> for FetchArtifa
             id,
             artifact,
             peers,
-            self.priority_fn.clone(),
+            self.filter_fn.clone(),
             self.transport.clone(),
             self.metrics.clone(),
         )
@@ -153,7 +153,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
                 Self {
                     log: log_clone,
                     transport,
-                    priority_fn: pfn_rx,
+                    filter_fn: pfn_rx,
                     metrics: FetchArtifactMetrics::new::<Artifact>(&metrics_registry),
                     jh: Arc::new(jh),
                 }
