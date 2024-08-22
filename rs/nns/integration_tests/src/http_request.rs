@@ -47,12 +47,7 @@ fn test_http_request_decoding_quota_for_canister(
     let err = state_machine
         .execute_ingress(canister_id, "http_request", large_http_request_bytes)
         .unwrap_err();
-    assert!(
-        err.description().contains("Deserialization Failed")
-            || err
-                .description()
-                .contains("Decoding cost exceeds the limit")
-    );
+    assert!(err.description().contains("Deserialization Failed"));
 }
 
 #[test]
