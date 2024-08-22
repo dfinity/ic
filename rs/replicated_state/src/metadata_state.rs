@@ -1257,7 +1257,6 @@ impl Default for Stream {
 
 impl From<&Stream> for pb_queues::Stream {
     fn from(item: &Stream) -> Self {
-        // TODO: MR-577 Remove `deprecated_reject_signals` once all replicas are updated.
         let reject_signals = item
             .reject_signals()
             .iter()
@@ -1274,7 +1273,6 @@ impl From<&Stream> for pb_queues::Stream {
                 .map(|(_, req_or_resp)| req_or_resp.into())
                 .collect(),
             signals_end: item.signals_end.get(),
-            deprecated_reject_signals: Vec::new(),
             reject_signals,
             reverse_stream_flags: Some(pb_queues::StreamFlags {
                 deprecated_responses_only: item.reverse_stream_flags.deprecated_responses_only,
@@ -1294,42 +1292,18 @@ impl TryFrom<pb_queues::Stream> for Stream {
         let messages_size_bytes = Self::size_bytes(&messages);
 
         let signals_end = item.signals_end.into();
-        // TODO: MR-577 Remove `deprecated_reject_signals` cases once all replicas are updated.
-        let reject_signals = match (
-            item.reject_signals.as_slice(),
-            item.deprecated_reject_signals.as_slice(),
-        ) {
-            // No reject signals.
-            ([], []) => VecDeque::new(),
-
-            // Only contemporary reject signals.
-            (reject_signals, []) => reject_signals
-                .iter()
-                .map(|signal| {
-                    Ok(RejectSignal {
-                        reason: pb_queues::RejectReason::try_from(signal.reason)
-                            .map_err(ProxyDecodeError::DecodeError)?
-                            .try_into()?,
-                        index: signal.index.into(),
-                    })
+        let reject_signals = item
+            .reject_signals
+            .iter()
+            .map(|signal| {
+                Ok(RejectSignal {
+                    reason: pb_queues::RejectReason::try_from(signal.reason)
+                        .map_err(ProxyDecodeError::DecodeError)?
+                        .try_into()?,
+                    index: signal.index.into(),
                 })
-                .collect::<Result<VecDeque<_>, ProxyDecodeError>>()?,
-
-            // Only deprecated reject signals.
-            ([], deprecated_reject_signals) => deprecated_reject_signals
-                .iter()
-                .map(|index| RejectSignal::new(RejectReason::CanisterMigrating, (*index).into()))
-                .collect(),
-
-            // Both contemporary and deprecated reject signals.
-            ([_, ..], [_, ..]) => {
-                return Err(ProxyDecodeError::Other(format!(
-                    "both contemporary and deprecated signals are populated \
-                    got `reject_signals` {:?}, `deprecated_reject_signals` {:?}",
-                    item.reject_signals, item.deprecated_reject_signals,
-                )));
-            }
-        };
+            })
+            .collect::<Result<VecDeque<_>, ProxyDecodeError>>()?;
 
         // Check reject signals are sorted and below `signals_end`.
         let iter = reject_signals.iter().map(|signal| signal.index);
