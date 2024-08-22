@@ -1761,7 +1761,8 @@ fn check_stream_handler_generated_reject_response_queue_full() {
         &|state| {
             let mut callback_id = 2;
             while let Ok(()) = state.push_input(
-                Request(*LOCAL_CANISTER, *LOCAL_CANISTER).build_with(CallbackId::new(callback_id)),
+                Request(*LOCAL_CANISTER, *LOCAL_CANISTER)
+                    .build_with(CallbackId::new(callback_id), 0),
                 &mut (i64::MAX / 2),
             ) {
                 callback_id += 1;
@@ -2939,7 +2940,8 @@ fn with_test_setup_and_config(
         let mut messages_from_builders = |builders: Vec<MessageBuilder>| -> Vec<RequestOrResponse> {
             builders
                 .into_iter()
-                .map(|builder| {
+                .enumerate()
+                .map(|(payload_size_bytes, builder)| {
                     let (respondent, originator) = match builder {
                         Request(sender, receiver) => (receiver, sender),
                         Response(respondent, originator) => (respondent, originator),
@@ -2973,11 +2975,11 @@ fn with_test_setup_and_config(
                         // Empty output queues.
                         canister_state.output_into_iter().count();
 
-                        builder.build_with(callback_id)
+                        builder.build_with(callback_id, payload_size_bytes)
                     } else {
                         // Message will not be inducted, use a replacement
                         other_callback_id += 1;
-                        builder.build_with(CallbackId::new(other_callback_id))
+                        builder.build_with(CallbackId::new(other_callback_id), payload_size_bytes)
                     }
                 })
                 .collect()
@@ -3278,18 +3280,20 @@ enum MessageBuilder {
 }
 
 impl MessageBuilder {
-    fn build_with(self, callback_id: CallbackId) -> RequestOrResponse {
+    fn build_with(self, callback_id: CallbackId, payload_size_bytes: usize) -> RequestOrResponse {
         match self {
             Self::Request(sender, receiver) => RequestBuilder::new()
                 .sender(sender)
                 .receiver(receiver)
                 .sender_reply_callback(callback_id)
+                .method_payload(vec![0_u8; payload_size_bytes])
                 .build()
                 .into(),
             Self::Response(respondent, originator) => ResponseBuilder::new()
                 .respondent(respondent)
                 .originator(originator)
                 .originator_reply_callback(callback_id)
+                .response_payload(Payload::Data(vec![0_u8; payload_size_bytes]))
                 .build()
                 .into(),
             Self::RejectResponse(respondent, originator, reason) => generate_reject_response_for(
