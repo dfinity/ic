@@ -17,7 +17,7 @@ use std::{
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IngressPayload {
     /// Pairs of MessageId and its serialized byte position in the buffer.
-    pub id_and_pos: Vec<(IngressMessageId, u64)>,
+    id_and_pos: Vec<(IngressMessageId, u64)>,
     /// All messages are serialized in a single byte buffer, so individual
     /// deserialization is delayed. This allows faster deserialization of
     /// IngressPayload when individual message is not needed (e.g. in
@@ -79,7 +79,6 @@ pub enum IngressPayloadError {
     IngressPositionOutOfBound(IngressIndex, BufferPosition),
     DeserializationFailure(String),
     MismatchedMessageIdAtIndex(IngressIndex),
-    IdNotFound(IngressMessageId),
 }
 
 impl IngressPayload {
@@ -104,17 +103,17 @@ impl IngressPayload {
     pub fn get_by_id(
         &self,
         ingress_message_id: &IngressMessageId,
-    ) -> Result<SignedIngress, IngressPayloadError> {
+    ) -> Option<SignedIngress> {
         let Some((index, _)) = self
             .id_and_pos
             .iter()
             .enumerate()
             .find(|(_, (id, _))| id == ingress_message_id)
         else {
-            return Err(IngressPayloadError::IdNotFound(ingress_message_id.clone()));
+            return None
         };
 
-        self.get(index).map(|(_, ingress_message)| ingress_message)
+        self.get(index).map(|(_, ingress_message)| ingress_message).ok()
     }
 
     /// Return the ingress message at a given index, which is expected to be

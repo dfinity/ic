@@ -17,7 +17,6 @@ use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::Transport;
 use ic_types::{
     artifact::{ConsensusMessageId, IngressMessageId},
-    batch::IngressPayloadError,
     consensus::{BlockPayload, ConsensusMessage},
     messages::SignedIngress,
     NodeId,
@@ -49,7 +48,6 @@ enum PoolsAccessError {
     NotABlockProposal,
     /// The requested block proposal is a summary block. Summary blocks do not contain ingresses.
     SummaryBlock,
-    Internal,
 }
 
 impl Pools {
@@ -85,10 +83,7 @@ impl Pools {
             .batch
             .ingress
             .get_by_id(ingress_message_id)
-            .map_err(|err| match err {
-                IngressPayloadError::IdNotFound(_) => PoolsAccessError::IngressMessageNotFound,
-                _ => PoolsAccessError::Internal,
-            })
+            .ok_or(PoolsAccessError::IngressMessageNotFound)
     }
 }
 
@@ -120,7 +115,6 @@ async fn rpc_handler(State(pools): State<Pools>, payload: Bytes) -> Result<Bytes
             Err(PoolsAccessError::NotABlockProposal | PoolsAccessError::SummaryBlock) => {
                 Err(StatusCode::BAD_REQUEST)
             }
-            Err(PoolsAccessError::Internal) => Err(StatusCode::INTERNAL_SERVER_ERROR),
         }
     });
 
