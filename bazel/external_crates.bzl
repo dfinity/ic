@@ -585,15 +585,15 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-btc-interface": crate.spec(
               git = "https://github.com/ninegua/bitcoin-canister",
-              rev = "7e7ff150a357c4dc90f8806169dba6760d27f68d",
+              rev = "1fb797f555360485e31b8f235a54fbfa39bd49cf",
             ),
             "ic-btc-validation": crate.spec(
               git = "https://github.com/ninegua/bitcoin-canister",
-              rev = "7e7ff150a357c4dc90f8806169dba6760d27f68d",
+              rev = "1fb797f555360485e31b8f235a54fbfa39bd49cf",
             ),
             "ic-btc-test-utils": crate.spec(
               git = "https://github.com/ninegua/bitcoin-canister",
-              rev = "7e7ff150a357c4dc90f8806169dba6760d27f68d",
+              rev = "1fb797f555360485e31b8f235a54fbfa39bd49cf",
             ),
             "ic-canister-log": crate.spec(
                 version = "^0.2.0",
