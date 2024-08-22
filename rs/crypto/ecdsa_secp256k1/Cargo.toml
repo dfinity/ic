@@ -17,7 +17,7 @@ pem = "1.1.0"
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 simple_asn1 = { workspace = true }
-zeroize = { version = "1.5", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 bip32 = "0.5"

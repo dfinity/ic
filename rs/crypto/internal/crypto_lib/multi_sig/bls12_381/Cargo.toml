@@ -18,7 +18,7 @@ ic-types = { path = "../../../../../types/types" }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }

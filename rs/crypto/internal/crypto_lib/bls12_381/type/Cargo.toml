@@ -19,7 +19,7 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 sha2 = { workspace = true }
 subtle = "2.4"
-zeroize = { version = "1", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }

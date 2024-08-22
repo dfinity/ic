@@ -14,7 +14,7 @@ rand = { workspace = true }
 rcgen = { workspace = true }
 serde = { workspace = true }
 time = { workspace = true }
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

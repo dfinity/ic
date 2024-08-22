@@ -31,7 +31,7 @@ serde_cbor = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 subtle = "2.4"
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

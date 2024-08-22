@@ -1,5 +1,5 @@
 {
-  "checksum": "6c419e9738e9b959a87207723565fd3193751cf0820d7356579d92695f1d69dd",
+  "checksum": "f7ff7ef7431544176dd2f541801ea4bbeb8a2f97a6bfa09c5a4e08f6174e5d95",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18012,7 +18012,7 @@
               "target": "tonic_build"
             },
             {
-              "id": "tower 0.4.13",
+              "id": "tower 0.5.0",
               "target": "tower"
             },
             {
@@ -65805,26 +65805,18 @@
             "default",
             "discover",
             "filter",
-            "full",
             "futures-core",
             "futures-util",
-            "hdrhistogram",
-            "hedge",
             "indexmap",
             "limit",
             "load",
-            "load-shed",
             "log",
             "make",
             "pin-project",
             "pin-project-lite",
             "rand",
             "ready-cache",
-            "reconnect",
-            "retry",
             "slab",
-            "spawn-ready",
-            "steer",
             "timeout",
             "tokio",
             "tokio-util",
@@ -65842,10 +65834,6 @@
             {
               "id": "futures-util 0.3.30",
               "target": "futures_util"
-            },
-            {
-              "id": "hdrhistogram 7.5.2",
-              "target": "hdrhistogram"
             },
             {
               "id": "indexmap 1.9.3",
@@ -65892,6 +65880,130 @@
         },
         "edition": "2018",
         "version": "0.4.13"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "tower 0.5.0": {
+      "name": "tower",
+      "version": "0.5.0",
+      "package_url": "https://github.com/tower-rs/tower",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tower/0.5.0/download",
+          "sha256": "36b837f86b25d7c0d7988f00a54e74739be6477f2aac6201b8f429a7569991b7"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tower",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tower",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "__common",
+            "balance",
+            "buffer",
+            "discover",
+            "filter",
+            "full",
+            "futures-core",
+            "futures-util",
+            "hdrhistogram",
+            "hedge",
+            "indexmap",
+            "limit",
+            "load",
+            "load-shed",
+            "make",
+            "pin-project-lite",
+            "ready-cache",
+            "reconnect",
+            "retry",
+            "slab",
+            "spawn-ready",
+            "steer",
+            "sync_wrapper",
+            "timeout",
+            "tokio",
+            "tokio-util",
+            "tracing",
+            "util"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "futures-core 0.3.30",
+              "target": "futures_core"
+            },
+            {
+              "id": "futures-util 0.3.30",
+              "target": "futures_util"
+            },
+            {
+              "id": "hdrhistogram 7.5.2",
+              "target": "hdrhistogram"
+            },
+            {
+              "id": "indexmap 2.2.6",
+              "target": "indexmap"
+            },
+            {
+              "id": "pin-project-lite 0.2.13",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "slab 0.4.8",
+              "target": "slab"
+            },
+            {
+              "id": "sync_wrapper 0.1.2",
+              "target": "sync_wrapper"
+            },
+            {
+              "id": "tokio 1.39.2",
+              "target": "tokio"
+            },
+            {
+              "id": "tokio-util 0.7.11",
+              "target": "tokio_util"
+            },
+            {
+              "id": "tower-layer 0.3.2",
+              "target": "tower_layer"
+            },
+            {
+              "id": "tower-service 0.3.2",
+              "target": "tower_service"
+            },
+            {
+              "id": "tracing 0.1.40",
+              "target": "tracing"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.5.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -78455,7 +78567,7 @@
     "toml 0.5.11",
     "tonic 0.11.0",
     "tonic-build 0.11.0",
-    "tower 0.4.13",
+    "tower 0.5.0",
     "tower-http 0.4.4",
     "tower-http 0.5.2",
     "tower-request-id 0.3.0",
