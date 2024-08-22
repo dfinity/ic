@@ -7,7 +7,9 @@ use ic_nervous_system_integration_tests::{
         add_wasm_via_nns_proposal, nns, sns, upgrade_nns_canister_to_tip_of_master_or_panic,
     },
 };
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_nns_constants::{
+    DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT, GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID,
+};
 use ic_nns_test_utils::sns_wasm::{
     build_archive_sns_wasm, build_governance_sns_wasm, build_index_ng_sns_wasm,
     build_ledger_sns_wasm, build_root_sns_wasm, build_swap_sns_wasm, create_modified_sns_wasm,
@@ -194,12 +196,14 @@ fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
         governance_canister_id: Some(sns_governance_canister_id),
         ledger_canister_id: Some(sns_ledger_canister_id),
         swap_canister_id: Some(swap_canister_id),
+        root_canister_id: Some(root_canister_id),
         ..
     } = deployed_sns
     else {
         panic!("Cannot find some SNS canister IDs in {:#?}", deployed_sns);
     };
 
+    // Upgrade the SNS canisters
     for canister_type in &sns_canisters_to_upgrade {
         let wasm = match canister_type {
             SnsCanisterType::Root => build_root_sns_wasm(),
@@ -265,6 +269,42 @@ fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
         sns::governance::propose_to_upgrade_sns_to_next_version_and_wait(
             &pocket_ic,
             sns_governance_canister_id,
+        );
+    }
+
+    // Check the SNS canisters' wasm_memory_limits
+    // TODO(NNS1-3278): Move this check to before upgrading the canisters in the
+    // non-release-qualification tests.
+    check_memory_limits_set(pocket_ic, root_canister_id);
+}
+
+fn check_memory_limits_set(pocket_ic: pocket_ic::PocketIc, root_canister_id: PrincipalId) {
+    // Get the SNS canisters summary
+    let sns_canisters_summary = sns::root::get_sns_canisters_summary(&pocket_ic, root_canister_id);
+    // Check the SNS canisters' wasm_memory_limits
+    for (canister_summary, canister_name) in [
+        (sns_canisters_summary.governance, "governance"),
+        (sns_canisters_summary.root, "root"),
+        // TODO(NNS1-3277): also check swap by uncommenting the following line:
+        // (sns_canisters_summary.swap, "swap"),
+        (sns_canisters_summary.index, "index"),
+        (sns_canisters_summary.ledger, "ledger"),
+    ] {
+        assert_eq!(
+            u64::try_from(
+                canister_summary
+                    .clone()
+                    .unwrap()
+                    .status
+                    .unwrap()
+                    .settings
+                    .wasm_memory_limit
+                    .unwrap_or_else(|| panic!("memory limit not set for canister {canister_name}"))
+                    .0
+            )
+            .unwrap(),
+            DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT,
+            "canister memory limit was not at the expected value for canister {canister_name}"
         );
     }
 }
