@@ -1,3 +1,4 @@
+use crate::in_memory_ledger::empty_icrc1_in_memory_ledger;
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
 use ic_agent::identity::Identity;
 use ic_base_types::PrincipalId;
@@ -12,6 +13,7 @@ use ic_icrc1_test_utils::{
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType};
+use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_hash_of::HashOf;
 use ic_management_canister_types::{
     self as ic00, CanisterInfoRequest, CanisterInfoResponse, Method, Payload,
@@ -2466,12 +2468,12 @@ fn apply_arg_with_caller(
 ) -> BlockIndex {
     match &arg.arg {
         LedgerEndpointArg::ApproveArg(approve_arg) => {
-            send_approval(env, ledger_id, arg.caller.sender().unwrap(), &approve_arg)
+            send_approval(env, ledger_id, arg.caller.sender().unwrap(), approve_arg)
                 .expect("approval failed")
         }
         LedgerEndpointArg::TransferArg(transfer_arg) => {
-            send_transfer(env, ledger_id, arg.caller.sender().unwrap(), &transfer_arg)
-                .expect("failed to transfer tokens")
+            send_transfer(env, ledger_id, arg.caller.sender().unwrap(), transfer_arg)
+                .expect("transfer failed")
         }
     }
 }
@@ -2485,6 +2487,7 @@ pub fn icrc1_test_upgrade_serialization(
     let now = SystemTime::now();
     let minter = Arc::new(minter_identity());
     let minter_principal: Principal = minter.sender().unwrap();
+    println!("minter_principal {}", minter_principal);
     runner
         .run(
             &(valid_transactions_strategy(minter, FEE, 100, now),),
@@ -2499,9 +2502,22 @@ pub fn icrc1_test_upgrade_serialization(
                     .install_canister(ledger_wasm_mainnet.clone(), args, None)
                     .unwrap();
 
+                let mut in_memory_ledger = empty_icrc1_in_memory_ledger();
+
                 for arg_with_caller in &transactions {
                     apply_arg_with_caller(&env, ledger_id, arg_with_caller);
+                    in_memory_ledger.apply_arg_with_caller(
+                        arg_with_caller,
+                        TimeStamp::from_nanos_since_unix_epoch(system_time_to_nanos(env.time())),
+                        minter_principal,
+                        Some(FEE.into()),
+                    );
                 }
+                in_memory_ledger.finish(TimeStamp::from_nanos_since_unix_epoch(
+                    system_time_to_nanos(env.time()),
+                ));
+                in_memory_ledger.verify_balances(&env, ledger_id);
+                in_memory_ledger.verify_allowances(&env, ledger_id);
 
                 Ok(())
             },
