@@ -1,17 +1,17 @@
-# Proposal to upgrade the ckETH index canister
+# Proposal to upgrade the ckBTC index canister
 
 Git hash: `3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d`
 
-New compressed Wasm hash: `eb3096906bf9a43996d2ca9ca9bfec333a402612f132876c8ed1b01b9844112a`
+New compressed Wasm hash: `5177e0dede340042a3917665195a76fa26a1c3b3de314a9a52b97dfadd228be0`
 
-Target canister: `s3zol-vqaaa-aaaar-qacpa-cai`
+Target canister: `n5wcd-faaaa-aaaar-qaaea-cai`
 
-Previous ckETH index proposal: https://dashboard.internetcomputer.org/proposal/126173
+Previous ckBTC index proposal: https://dashboard.internetcomputer.org/proposal/125590
 
 ---
 
 ## Motivation
-Upgrade the ckETH index canister to the latest version to add support for the [ICRC-21: Canister Call Consent Messages](https://github.com/dfinity/wg-identity-authentication/blob/fd846030109710cab67d9381485a73db424f2b07/topics/ICRC-21/icrc_21_consent_msg.md) standard.
+Upgrade the ckBTC index canister to the latest version to add support for the [ICRC-21: Canister Call Consent Messages](https://github.com/dfinity/wg-identity-authentication/blob/fd846030109710cab67d9381485a73db424f2b07/topics/ICRC-21/icrc_21_consent_msg.md) standard.
 
 
 ## Upgrade args
@@ -20,13 +20,13 @@ Upgrade the ckETH index canister to the latest version to add support for the [I
 git fetch
 git checkout 3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d
 cd rs/rosetta-api/icrc1/index-ng
-didc encode -d index-ng.did -t '(opt IndexArg)' '(null)'
+didc encode '()'
 ```
 
 ## Release Notes
 
 ```
-git log --format="%C(auto) %h %s" 5ecbd59c6c9f9f874d4340f9fbbd96af07aa2576..3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d -- rs/rosetta-api/icrc1/index-ng
+git log --format=%C(auto) %h %s 24fd80082f40de6d0b3cd7876be09ef1aadbde86..3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d -- rs/rosetta-api/icrc1/index-ng
 b4be567dc chore: Bump rust version to 1.80 (#642)
 eec6107fa chore: remove obsolete cost scaling feature flag (#502)
 18243444a fix(ICRC-Index): FI-1382: remove comment on removing 0 balance accounts (#341)
@@ -55,6 +55,7 @@ b835f6ebb chore: bump Rust version to 1.75
 6e9c3da68 fix(index-ng): Simplify the timer structure
 dced7733d feat(FI-1074) [ICRC-1 Rosetta] converted principal based valid blockchain strategy to basicidentity
 c603a7f14 feat(icrc_index_ng): read ledger_id from old index state in post_upgrade
+5ae303770 chore: bump rust to 1.73
  ```
 
 ## Wasm Verification
@@ -65,5 +66,5 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 git fetch
 git checkout 3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d
 ./gitlab-ci/container/build-ic.sh -c
-sha256sum ./artifacts/canisters/ic-icrc1-index-ng-u256.wasm.gz
+sha256sum ./artifacts/canisters/ic-icrc1-index.wasm.gz
 ```
