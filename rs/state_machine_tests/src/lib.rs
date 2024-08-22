@@ -1,4 +1,6 @@
 use candid::Decode;
+use ic_interfaces::ingress_pool::IngressPoolObject;
+use ic_test_utilities_types::ids::NODE_1;
 use core::sync::atomic::Ordering;
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_config::{
@@ -496,12 +498,13 @@ impl PocketIngressPool {
             validated: btreemap![],
         }
     }
+
     /// Pushes a received ingress message into the pool.
     fn push(&mut self, m: SignedIngress, timestamp: Time) {
         self.validated.insert(
             IngressMessageId::new(m.expiry_time(), m.id()),
             ValidatedIngressArtifact {
-                msg: m.into(),
+                msg: IngressPoolObject::new(NODE_1, m),
                 timestamp,
             },
         );

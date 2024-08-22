@@ -19,25 +19,30 @@ pub struct IngressPoolObject {
     /// The MessageId of the RawIngress message
     pub message_id: MessageId,
 
+    /// Which peer the node has received the ingress message from.
+    pub peer_id: NodeId,
+
     /// Byte size of the ingress message.
     byte_size: usize,
+}
+
+impl IngressPoolObject {
+    pub fn new(peer_id: NodeId, signed_ingress: SignedIngress) -> Self {
+        let message_id = signed_ingress.id();
+        let byte_size = signed_ingress.count_bytes();
+
+        Self {
+            signed_ingress,
+            message_id,
+            peer_id,
+            byte_size,
+        }
+    }
 }
 
 impl CountBytes for IngressPoolObject {
     fn count_bytes(&self) -> usize {
         self.byte_size
-    }
-}
-
-impl From<SignedIngress> for IngressPoolObject {
-    fn from(signed_ingress: SignedIngress) -> Self {
-        let message_id = signed_ingress.id();
-        let byte_size = signed_ingress.count_bytes();
-        Self {
-            signed_ingress,
-            message_id,
-            byte_size,
-        }
     }
 }
 
@@ -56,14 +61,12 @@ pub type UnvalidatedIngressArtifact = UnvalidatedArtifact<IngressPoolObject>;
 /// Change set for processing unvalidated ingress messages
 pub type ChangeSet = Vec<ChangeAction>;
 
-pub type IngressChangeArtifact = (IngressMessageId, NodeId);
-
 /// Change actions applicable to the ingress pool.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[allow(clippy::large_enum_variant)]
 pub enum ChangeAction {
     /// Moves an artifact from the unvalidated to validated section of the pool
-    MoveToValidated(IngressChangeArtifact),
+    MoveToValidated(IngressMessageId),
     /// Removes an artifact from the unvalidated pool section.
     RemoveFromUnvalidated(IngressMessageId),
     /// Removes an artifact from the validated pool section.
@@ -105,6 +108,10 @@ pub trait PoolSection<T> {
 pub trait IngressPool: Send + Sync {
     /// Validated Ingress Pool Section
     fn validated(&self) -> &dyn PoolSection<ValidatedIngressArtifact>;
+
+    fn exceeds_limit(&self, _peer_id: &NodeId) -> bool {
+        false
+    }
 
     /// Unvalidated Ingress Pool Section
     fn unvalidated(&self) -> &dyn PoolSection<UnvalidatedIngressArtifact>;
