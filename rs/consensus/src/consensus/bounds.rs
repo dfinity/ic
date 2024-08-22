@@ -93,7 +93,7 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
         // different blocks.
         notarization_shares: (d + 1) * (f + 1) * n,
         // We purge finalization shares below finalized height. So we consider
-        // at most d heights, for which n replicas may issue a finalization
+        // at most d+1 heights, for which n replicas may issue a finalization
         // share for a single block.
         finalization_shares: (d + 1) * n,
         // For every height, every replica may submit a random beacon share.
@@ -105,7 +105,7 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
         cup_shares: cups * n,
         cups,
         // We purge equivocation proofs below and at the finalized height.
-        // This means we can have at most D+1 heights, each with a maximum
+        // This means we can have at most d+1 heights, each with a maximum
         // of f + 1 equivocation proofs (one proof per block maker).
         equivocation_proofs: (d + 1) * (f + 1),
     }
