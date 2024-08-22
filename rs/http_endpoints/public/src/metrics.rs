@@ -182,7 +182,7 @@ impl HttpHandlerMetrics {
 
                     buckets = add_bucket(14.0, buckets);
                     buckets = add_bucket(16.0, buckets);
-                    
+
                     buckets
                 },
 
