@@ -1591,7 +1591,7 @@ impl XNetClient for XNetClientImpl {
                 http_body_util::Limited::new(response.into_body(), 5 * POOL_SLICE_BYTE_SIZE_MAX)
                     .collect()
                     .await
-                    .map(|col| col.to_bytes())
+                    .map(|collected| collected.to_bytes())
                     .map_err(XNetClientError::BodyReadError)?;
 
             Ok((status, content))

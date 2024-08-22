@@ -28,6 +28,8 @@ fn box_err(e: impl std::error::Error + Send + Sync + 'static) -> BoxError {
     Box::new(e) as Box<_>
 }
 
+/// Binds a TCP listener to the specified address with `SO_REUSEADDR`
+/// and `SO_REUSEPORT` set.
 pub fn bind_listener(
     addr: &SocketAddr,
     runtime_handle: Handle,

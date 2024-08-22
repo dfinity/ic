@@ -140,6 +140,7 @@ impl Drop for XNetEndpoint {
 const API_URL_STREAMS: &str = "/api/v1/streams";
 const API_URL_STREAM_PREFIX: &str = "/api/v1/stream/";
 
+/// Struct passed to each request handled by `enqueue_task`.
 #[derive(Clone)]
 struct Context {
     request_sender: crossbeam_channel::Sender<WorkerMessage>,
@@ -150,6 +151,8 @@ fn ok<T>(t: T) -> Result<T, Infallible> {
     Ok(t)
 }
 
+/// Function that receives all requests made to the server. Each request is
+/// transformed in a `WorkerMessage` and forwarded to a background worker for processing.
 async fn enqueue_task(State(ctx): State<Context>, request: Request<Body>) -> impl IntoResponse {
     let (response_sender, response_receiver) = oneshot::channel();
     let task = WorkerMessage::HandleRequest {
@@ -186,7 +189,11 @@ fn start_server(
     shutdown_notify: Arc<Notify>,
 ) -> SocketAddr {
     let _guard = runtime_handle.enter();
+
+    // Create a router that handles all requests by calling `enqueue_task`
+    // and attaches the `Context` as state.
     let router = any(enqueue_task).with_state(ctx);
+
     let hyper_service =
         hyper::service::service_fn(move |request: Request<Incoming>| router.clone().call(request));
 
@@ -208,8 +215,10 @@ fn start_server(
 
                     #[cfg(test)]
                     {
+                        // TLS is not used in tests.
                         let _ = tls;
                         let _ = registry_client;
+
                         let io = TokioIo::new(stream);
                         let conn = http.serve_connection(io, hyper_service);
                         let wrapped = graceful_shutdown.watch(conn);
@@ -222,6 +231,7 @@ fn start_server(
 
                     #[cfg(not(test))]
                     {
+                        // Creates a new TLS server config and uses it to accept the request.
                         let registry_version = registry_client.get_latest_version();
                         let server_config = match tls.server_config(
                             ic_crypto_tls_interfaces::SomeOrAllNodes::All,
