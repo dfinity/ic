@@ -71,6 +71,7 @@ jobs:
 
       - name: Build and publish rosetta image
         if: ${{ github.event.inputs.rosetta_release_version }}
+        shell: bash
         run: |
           set -euo pipefail
           ROSETTA_API_DATE=$(date +"%Y%m%d")
@@ -82,6 +83,7 @@ jobs:
 
       - name: Build and publish icrc rosetta image
         if: ${{ github.event.inputs.icrc_rosetta_release_version  }}
+        shell: bash
         run: |
           set -euo pipefail
           for tag in "v${ROSETTA_RELEASE_VERSION}" latest; do
