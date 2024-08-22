@@ -11,7 +11,7 @@ pub(super) struct PeerCounters {
 }
 
 impl PeerCounters {
-    /// Created a new [`PeerCounters`] without any limits on the number/size of messages.
+    /// Create a new [`PeerCounters`] without any limits on the number/size of messages.
     pub(super) fn new() -> Self {
         Self {
             bytes_counters: PeerCounter::new(),
@@ -19,7 +19,7 @@ impl PeerCounters {
         }
     }
 
-    /// Created a new [`PeerCounters`] with the provided limits on the number/size of messages.
+    /// Create a new [`PeerCounters`] with the provided limits on the number/size of messages.
     pub(super) fn new_with_limits(max_bytes: usize, max_count: usize) -> Self {
         Self {
             bytes_counters: PeerCounter::new_with_limit(max_bytes),
