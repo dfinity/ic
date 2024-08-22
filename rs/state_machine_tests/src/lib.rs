@@ -1,6 +1,4 @@
 use candid::Decode;
-use ic_interfaces::ingress_pool::IngressPoolObject;
-use ic_test_utilities_types::ids::NODE_1;
 use core::sync::atomic::Ordering;
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_config::{
@@ -23,6 +21,7 @@ use ic_http_endpoints_public::{metrics::HttpHandlerMetrics, IngressWatcher, Ingr
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::batch_payload::BatchPayloadBuilder;
+use ic_interfaces::ingress_pool::IngressPoolObject;
 use ic_interfaces::{
     batch_payload::{IntoMessages, PastPayload, ProposalContext},
     canister_http::{CanisterHttpChangeAction, CanisterHttpPool},
@@ -102,6 +101,7 @@ use ic_test_utilities_registry::{
     add_single_subnet_record, add_subnet_key_record, add_subnet_list_record, SubnetRecordBuilder,
 };
 use ic_test_utilities_time::FastForwardTimeSource;
+use ic_test_utilities_types::ids::NODE_1;
 use ic_types::{
     artifact::IngressMessageId,
     batch::{
@@ -489,6 +489,10 @@ impl PoolSection<ValidatedIngressArtifact> for PocketIngressPool {
 
     fn size(&self) -> usize {
         self.validated.len()
+    }
+
+    fn exceeds_limit(&self, _peer_id: &NodeId) -> bool {
+        false
     }
 }
 

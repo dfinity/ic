@@ -196,6 +196,10 @@ impl<T: AsRef<IngressPoolObject> + HasTimestamp> PoolSection<T> for IngressPoolS
     fn size(&self) -> usize {
         self.artifacts.len()
     }
+
+    fn exceeds_limit(&self, peer_id: &NodeId) -> bool {
+        self.peer_counters.exceeds_limit(peer_id)
+    }
 }
 
 #[derive(Clone)]
@@ -246,10 +250,6 @@ impl IngressPool for IngressPoolImpl {
     /// Unvalidated Ingress Pool
     fn unvalidated(&self) -> &dyn PoolSection<UnvalidatedIngressArtifact> {
         &self.unvalidated
-    }
-
-    fn exceeds_limit(&self, peer_id: &NodeId) -> bool {
-        self.validated.peer_counters.exceeds_limit(peer_id)
     }
 }
 
