@@ -13,6 +13,7 @@ use axum::{
 };
 use http::Request;
 use hyper::StatusCode;
+use ic_logger::warn;
 use ic_types::{
     messages::{HttpCallContent, HttpRequestEnvelope},
     CanisterId,
@@ -79,6 +80,8 @@ async fn call_v2(
     }): State<CallServiceV2>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
 ) -> Result<impl IntoResponse, Response> {
+    let logger = ingress_validator.log.clone();
+
     let ingress_submitter = ingress_validator
         .validate_ingress_message(request, effective_canister_id)
         .await
@@ -100,6 +103,10 @@ async fn call_v2(
             // we return early to terminate the task.
             let ingress_tracking_permit = ingress_tracking_semaphore.try_acquire();
             let Ok(_permit) = ingress_tracking_permit else {
+                warn!(
+                    logger,
+                    "Failed to acquire permit for tracking certification time of message."
+                );
                 return;
             };
 
