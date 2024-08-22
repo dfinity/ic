@@ -280,6 +280,11 @@ jobs:
           RUN_ON_DIFF_ONLY: "true"
           BAZEL_COMMAND: "build"
       - <<: *bazel-upload
+        name: Upload build-ic.tar
+        with:
+          name: build-ic
+          path: |
+            build-ic.tar
 
   build-determinism:
     name: Build Determinism
