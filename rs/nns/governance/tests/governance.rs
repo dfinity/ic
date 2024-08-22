@@ -12226,7 +12226,6 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_sns_w_fail
     );
 
     // Inspect the proposal fields related to the Neurons' Fund
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(proposal.neurons_fund_data, *NEURONS_FUND_DATA_BEFORE_SETTLE);
 }
 
@@ -12360,7 +12359,6 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_ledger_fai
     );
 
     // Inspect the proposal fields related to the Neurons' Fund
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(proposal.neurons_fund_data, *NEURONS_FUND_DATA_BEFORE_SETTLE);
 }
 
@@ -12448,7 +12446,6 @@ async fn test_create_service_nervous_system_failure_due_to_swap_deployment_error
     assert_matches!(proposal.failure_reason, Some(_), "{:#?}", proposal);
     assert_eq!(proposal.derived_proposal_information, None);
 
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(
         proposal.neurons_fund_data,
         *NEURONS_FUND_DATA_WITH_EARLY_REFUNDS
@@ -12553,7 +12550,6 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
     assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);
     assert_eq!(proposal.derived_proposal_information, None);
 
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(proposal.neurons_fund_data, *NEURONS_FUND_DATA_BEFORE_SETTLE);
 
     // Assert some of the maturity has been decremented and is held in escrow
@@ -12701,7 +12697,6 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
     assert_eq!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
     assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);
     assert_eq!(proposal.derived_proposal_information, None);
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(proposal.neurons_fund_data, *NEURONS_FUND_DATA_BEFORE_SETTLE);
 
     // Assert some of the maturity has been decremented and is held in escrow
@@ -12847,7 +12842,6 @@ async fn test_create_service_nervous_system_proposal_execution_fails() {
     );
     assert_eq!(proposal.sns_token_swap_lifecycle, None);
     assert_eq!(proposal.executed_timestamp_seconds, 0, "{:#?}", proposal);
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(
         proposal.neurons_fund_data,
         *NEURONS_FUND_DATA_WITH_EARLY_REFUNDS
@@ -12996,7 +12990,6 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
         Some(sns_swap_pb::Lifecycle::Committed as i32)
     );
     // Inspect the proposal fields related to the Neurons' Fund
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(
         proposal.neurons_fund_data,
         *NEURONS_FUND_DATA_AFTER_SETTLE_COMMIT
@@ -13040,7 +13033,6 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
         Some(sns_swap_pb::Lifecycle::Committed as i32)
     );
     // Inspect the proposal fields related to the Neurons' Fund
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(
         proposal.neurons_fund_data,
         *NEURONS_FUND_DATA_AFTER_SETTLE_COMMIT
