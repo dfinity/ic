@@ -231,7 +231,9 @@ fn write_to_disk<P: Into<ProposalTemplate>>(
             wasm: artifact,
             arg: bin_args_file_path,
             summary: proposal_summary,
-        };
+        }
+        .strip_prefix(&output_dir)
+        .unwrap();
         let command = submit.render_command(&proposal, proposal_files);
         let submit_script = output_dir.join("submit.sh");
         let mut submit_file = fs::OpenOptions::new()
