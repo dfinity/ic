@@ -337,14 +337,12 @@ jobs:
         env:
           RUN_ON_DIFF_ONLY: "true"
           BAZEL_COMMAND: "build"
-      - name: Upload bazel-targets
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
+        name: Upload build-ic.tar
         with:
-          name: bazel-targets
-          retention-days: 14
-          if-no-files-found: error
+          name: build-ic
           path: |
-            bazel-targets
+            build-ic.tar
   build-determinism:
     name: Build Determinism
     runs-on: ubuntu-latest
