@@ -51,13 +51,13 @@ use ic_nns_governance_api::{
         manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
         ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
         GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
-        ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProvidersResponse,
-        ListProposalInfo, ListProposalInfoResponse, ManageNeuronCommandRequest,
-        ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
-        Neuron, NeuronInfo, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
-        RewardNodeProvider, RewardNodeProviders, SettleCommunityFundParticipation,
-        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
-        UpdateNodeProvider, Vote,
+        ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProviderRewardsRequest,
+        ListNodeProviderRewardsResponse, ListNodeProvidersResponse, ListProposalInfo,
+        ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
+        ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo,
+        NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
+        SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
+        SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
     },
     subnet_rental::{SubnetRentalProposalPayload, SubnetRentalRequest},
 };
@@ -723,17 +723,29 @@ fn get_monthly_node_provider_rewards() {
 }
 
 #[candid_method(update, rename = "get_monthly_node_provider_rewards")]
-async fn get_monthly_node_provider_rewards_() -> Result<RewardNodeProviders, GovernanceError> {
+async fn get_monthly_node_provider_rewards_() -> Result<MonthlyNodeProviderRewards, GovernanceError>
+{
     let rewards = governance_mut().get_monthly_node_provider_rewards().await?;
-    let rewards = rewards
-        .rewards
+    Ok(MonthlyNodeProviderRewards::from(rewards))
+}
+
+#[export_name = "canister_query list_node_provider_rewards"]
+fn list_node_provider_rewards() {
+    debug_log("list_node_provider_rewards");
+    over(candid_one, list_node_provider_rewards_)
+}
+
+#[candid_method(query, rename = "list_node_provider_rewards")]
+fn list_node_provider_rewards_(
+    req: ListNodeProviderRewardsRequest,
+) -> ListNodeProviderRewardsResponse {
+    let rewards = governance()
+        .list_node_provider_rewards(req.date_filter.map(|d| d.into()))
         .into_iter()
-        .map(RewardNodeProvider::from)
+        .map(MonthlyNodeProviderRewards::from)
         .collect();
-    Ok(RewardNodeProviders {
-        rewards,
-        use_registry_derived_rewards: Some(true),
-    })
+
+    ListNodeProviderRewardsResponse { rewards }
 }
 
 #[export_name = "canister_query list_known_neurons"]

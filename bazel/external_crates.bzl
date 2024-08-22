@@ -406,9 +406,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "educe": crate.spec(
                 version = "^0.4",
             ),
-            "either": crate.spec(
-                version = "^1.6",
-            ),
             "erased-serde": crate.spec(
                 version = "^0.3.11",
             ),
@@ -604,7 +601,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "2.6.0",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.13.1",
+                version = "^0.13.5",
             ),
             "ic-cdk-timers": crate.spec(
                 version = "^0.7.0",
@@ -1081,9 +1078,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "rsa": crate.spec(
                 version = "^0.9.2",
                 features = ["sha2"],
-            ),
-            "rstack-self": crate.spec(
-                version = "^0.3",
             ),
             "rstest": crate.spec(
                 version = "^0.19",

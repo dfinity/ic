@@ -18,7 +18,10 @@ use crate::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
         PolynomialNeuronsFundParticipation, SwapParticipationLimits,
     },
-    node_provider_rewards::{latest_node_provider_rewards, record_node_provider_rewards},
+    node_provider_rewards::{
+        latest_node_provider_rewards, list_node_provider_rewards, record_node_provider_rewards,
+        DateRangeFilter,
+    },
     pb::v1::{
         add_or_remove_node_provider::Change,
         archived_monthly_node_provider_rewards,
@@ -185,6 +188,8 @@ pub const MAX_NUMBER_OF_NEURONS: usize = 350_000;
 
 /// The maximum number results returned by the method `list_proposals`.
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
+
+const MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS: usize = 24;
 
 /// The number of e8s per ICP;
 const E8S_PER_ICP: u64 = TOKEN_SUBDIVIDABLE_BY;
@@ -4306,6 +4311,21 @@ impl Governance {
     ) {
         record_node_provider_rewards(most_recent_rewards.clone());
         self.heap_data.most_recent_monthly_node_provider_rewards = Some(most_recent_rewards);
+    }
+
+    pub fn list_node_provider_rewards(
+        &self,
+        date_filter: Option<DateRangeFilter>,
+    ) -> Vec<MonthlyNodeProviderRewards> {
+        list_node_provider_rewards(MAX_LIST_NODE_PROVIDER_REWARDS_RESULTS, date_filter)
+            .into_iter()
+            .map(|archived| match archived.version {
+                Some(archived_monthly_node_provider_rewards::Version::Version1(v1)) => {
+                    v1.rewards.unwrap()
+                }
+                _ => panic!("Should not be possible!"),
+            })
+            .collect()
     }
 
     pub fn get_most_recent_monthly_node_provider_rewards(
