@@ -4,6 +4,7 @@ load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
+load("//rs/nervous_system/common:feature_flags.bzl", "test_with_tla")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -167,7 +168,7 @@ rust_library(
     name = "governance--test_feature",
     srcs = LIB_SRCS,
     aliases = ALIASES,
-    crate_features = ["test"],
+    crate_features = test_with_tla(),
     crate_name = "ic_nns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES + [
         "@crate_index//:tla_instrumentation_proc_macros"
@@ -230,7 +231,7 @@ rust_canister(
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/governance_test.did"],
-    crate_features = ["test"],
+    crate_features = test_with_tla(),
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance_test.did",
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [
@@ -276,7 +277,7 @@ rust_test(
     name = "canister_test_unit_test",
     srcs = glob(["canister/**/*.rs"]),
     compile_data = ["canister/governance_test.did"],
-    crate_features = ["test"],
+    crate_features = test_with_tla(),
     crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [
@@ -304,7 +305,7 @@ rust_test(
     name = "governance_test-test_feature",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
-    crate_features = ["test"],
+    crate_features = test_with_tla(),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [
         ":build_script",
@@ -340,7 +341,7 @@ rust_test_suite_with_extra_srcs(
         ],
     ),
     aliases = ALIASES,
-    crate_features = ["test"],
+    crate_features = test_with_tla(),
     data = ["tests/neurons.csv", "@tla_apalache//:contents", ":tla_models"],
     env = {
         "NEURON_CSV_PATH": "rs/nns/governance/tests/neurons.csv",

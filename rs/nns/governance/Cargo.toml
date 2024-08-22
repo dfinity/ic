@@ -114,3 +114,4 @@ tokio-test = "0.4.2"
 [features]
 test = ["ic-sns-swap/test"]
 canbench-rs = ["dep:canbench-rs", "dep:ic-cdk"]
+tla = []

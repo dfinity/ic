@@ -125,6 +125,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+#[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla;
 
 /// The 'fake' module is the old scheme for providing NNS test fixtures, aka
@@ -5097,6 +5098,7 @@ fn test_neuron_split_fails() {
     //  There is still only one ledger account.
     driver.assert_num_neuron_accounts_exist(1);
 
+    #[cfg(feature = "tla")]
     tla::check_traces();
 }
 
@@ -5202,6 +5204,7 @@ fn test_neuron_split() {
     expected_neuron_ids.sort_unstable();
     assert_eq!(neuron_ids, expected_neuron_ids);
 
+    #[cfg(feature = "tla")]
     tla::check_traces();
 }
 

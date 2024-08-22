@@ -128,10 +128,10 @@ pub mod test_data;
 #[cfg(test)]
 mod tests;
 
-#[cfg(feature = "test")]
+#[cfg(feature = "tla")]
 #[macro_use]
 pub mod tla;
-#[cfg(feature = "test")]
+#[cfg(feature = "tla")]
 use tla::{
     split_neuron_desc, tla_update_method, InstrumentationState, ToTla, TLA_INSTRUMENTATION_STATE,
     TLA_TRACES,
@@ -2557,7 +2557,7 @@ impl Governance {
     ///   stake.
     /// - The amount to split minus the transfer fee is more than the minimum
     ///   stake.
-    #[cfg_attr(feature = "test", tla_update_method(split_neuron_desc()))]
+    #[cfg_attr(feature = "tla", tla_update_method(split_neuron_desc()))]
     pub async fn split_neuron(
         &mut self,
         id: &NeuronId,

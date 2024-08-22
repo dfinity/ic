@@ -40,9 +40,10 @@ use std::{
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 pub const NODE_PROVIDER_REWARD: u64 = 10_000;
 
+use ic_nervous_system_common::{tla_log_request, tla_log_response};
+#[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{
-    account_to_tla, tla_log_request, tla_log_response, Destination, ToTla,
-    TLA_INSTRUMENTATION_STATE,
+    self, account_to_tla, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
 };
 
 lazy_static! {
@@ -253,8 +254,6 @@ impl IcpLedger for FakeDriver {
         to_account: AccountIdentifier,
         _: u64,
     ) -> Result<u64, NervousSystemError> {
-        #[cfg(feature = "test")]
-        use ic_nns_governance::governance::tla;
         // Minting operations (sending ICP from Gov main account) should just create ICP.
         let is_minting_operation = from_subaccount.is_none();
 
