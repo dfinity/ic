@@ -131,8 +131,8 @@ jobs:
           # run on diff only if it is a pull request, otherwise run all targets
           RUN_ON_DIFF_ONLY: ${{ contains(github.event_name, 'pull_request') && 'true' || 'false'}}
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
-       - <<: *bazel-upload
-       - <<: *bazel-bep
+      - <<: *bazel-upload
+      - <<: *bazel-bep
 
   bazel-build-all-config-check:
     <<: *dind-large-setup
