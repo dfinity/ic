@@ -92,7 +92,6 @@ anchors:
     with:
       name: ${{ github.job }}-bep
       retention-days: 14
-      # we don't always run bazel test (e.g. README changes only)
       if-no-files-found: ignore
       compression-level: 9
       path: |
