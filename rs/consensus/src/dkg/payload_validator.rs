@@ -373,11 +373,20 @@ mod tests {
     fn validate_dealings_payload_when_valid_passes_test() {
         assert_eq!(
             validate_payload_test_case(
-                /*dealings_to_validate=*/ vec![fake_dkg_message(SUBNET_1, NODE_1)],
-                /*parents_dealings=*/ vec![],
-                /*max_dealings_per_block=*/ 1,
+                /*dealings_to_validate=*/
+                vec![
+                    fake_dkg_message_with_dkg_tag(SUBNET_1, NODE_1, NiDkgTag::LowThreshold),
+                    fake_dkg_message_with_dkg_tag(SUBNET_1, NODE_1, NiDkgTag::HighThreshold),
+                    fake_dkg_message_with_dkg_tag(SUBNET_1, NODE_2, NiDkgTag::HighThreshold),
+                ],
+                /*parents_dealings=*/ vec![
+                    fake_dkg_message_with_dkg_tag(SUBNET_1, NODE_2, NiDkgTag::LowThreshold),
+                    fake_dkg_message_with_dkg_tag(SUBNET_1, NODE_3, NiDkgTag::LowThreshold),
+                    fake_dkg_message_with_dkg_tag(SUBNET_1, NODE_3, NiDkgTag::HighThreshold),
+                ],
+                /*max_dealings_per_block=*/ 3,
                 SUBNET_1,
-                /*committee=*/ &[NODE_1],
+                /*committee=*/ &[NODE_1, NODE_2],
             ),
             Ok(())
         );
@@ -556,13 +565,21 @@ mod tests {
     }
 
     fn fake_dkg_message(subnet_id: SubnetId, dealer_id: NodeId) -> Message {
+        fake_dkg_message_with_dkg_tag(subnet_id, dealer_id, NiDkgTag::HighThreshold)
+    }
+
+    fn fake_dkg_message_with_dkg_tag(
+        subnet_id: SubnetId,
+        dealer_id: NodeId,
+        dkg_tag: NiDkgTag,
+    ) -> Message {
         let content = DealingContent::new(
             NiDkgDealing::dummy_dealing_for_tests(0),
             NiDkgId {
                 start_block_height: Height::from(0),
                 dealer_subnet: subnet_id,
-                dkg_tag: NiDkgTag::HighThreshold,
                 target_subnet: NiDkgTargetSubnet::Local,
+                dkg_tag,
             },
         );
 
