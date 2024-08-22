@@ -72,7 +72,7 @@ TESTONLY_BINARIES = [
     "sns-test-feature",
     "types-test",
     "replicated-state-test",
-    "from-config-binary"
+    "from-config-binary",
 ]
 
 # We don't strip the more complex binaries
