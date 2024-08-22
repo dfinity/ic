@@ -137,8 +137,13 @@ class SlackApi:
         def include_message(message: any) -> bool:
             if author and ("user" not in message or message["user"] != author):
                 return False
-            if prefix and ("text" not in message or not message["text"].startswith(prefix)):
-                return False
+            if prefix:
+                has_text_prefix = "text" in message and message["text"].startswith(prefix)
+                if not has_text_prefix:
+                    # text parsing of block messages isn't reliable -> check if the prefix is in the first block
+                    has_one_block = "blocks" in message and len(message["blocks"]) > 0
+                    if not (has_one_block and prefix in str(message["blocks"][0])):
+                        return False
             if ignore_reaction and "reactions" in message:
                 for reaction in message["reactions"]:
                     if "name" in reaction and reaction["name"] == ignore_reaction:

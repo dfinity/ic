@@ -10,7 +10,7 @@ use ic_types::{artifact::ConsensusMessageId, consensus::ConsensusMessageHash, He
 pub fn get_priority_function(
     pool: &dyn ConsensusPool,
     expected_batch_height: Height,
-) -> PriorityFn<ConsensusMessageId, ()> {
+) -> PriorityFn<ConsensusMessageId> {
     let pool_reader = PoolReader::new(pool);
     let cup_height = pool_reader.get_catch_up_height();
     let next_cup_height = pool_reader.get_next_cup_height();
@@ -18,7 +18,7 @@ pub fn get_priority_function(
     let notarized_height = pool_reader.get_notarized_height();
     let beacon_height = pool_reader.get_random_beacon_height();
 
-    Box::new(move |id: &'_ ConsensusMessageId, ()| {
+    Box::new(move |id: &'_ ConsensusMessageId| {
         compute_priority(
             cup_height,
             next_cup_height,
@@ -169,17 +169,17 @@ mod tests {
                 ))),
                 height: block.height(),
             };
-            assert_eq!(priority(&beacon.get_id(), &()), Stash);
-            assert_eq!(priority(&block.get_id(), &()), Stash);
-            assert_eq!(priority(&notarization.get_id(), &()), Stash);
-            assert_eq!(priority(&equivocation_proof_id, &()), Stash);
+            assert_eq!(priority(&beacon.get_id()), Stash);
+            assert_eq!(priority(&block.get_id()), Stash);
+            assert_eq!(priority(&notarization.get_id()), Stash);
+            assert_eq!(priority(&equivocation_proof_id), Stash);
 
             // Regardless of bounds, we should always fetch CUPs.
             let cup_id = ConsensusMessageId {
                 hash: ConsensusMessageHash::CatchUpPackage(CryptoHashOf::new(CryptoHash(vec![]))),
                 height: Height::new(100000000),
             };
-            assert_eq!(priority(&cup_id, &()), FetchNow);
+            assert_eq!(priority(&cup_id), FetchNow);
 
             // Insert CUP for next summary height and recompute priority function.
             pool.insert_validated(pool.make_catch_up_package(Height::new(dkg_interval + 1)));
@@ -187,10 +187,10 @@ mod tests {
 
             // The artifacts are not outside the validation-CUP gap, and
             // within look-ahead distance. We should fetch them all.
-            assert_eq!(priority(&beacon.get_id(), &()), FetchNow);
-            assert_eq!(priority(&block.get_id(), &()), FetchNow);
-            assert_eq!(priority(&notarization.get_id(), &()), FetchNow);
-            assert_eq!(priority(&equivocation_proof_id, &()), FetchNow);
+            assert_eq!(priority(&beacon.get_id()), FetchNow);
+            assert_eq!(priority(&block.get_id()), FetchNow);
+            assert_eq!(priority(&notarization.get_id()), FetchNow);
+            assert_eq!(priority(&equivocation_proof_id), FetchNow);
         })
     }
 
@@ -205,7 +205,7 @@ mod tests {
             // New block ==> FetchNow
             pool.insert_validated(pool.make_next_beacon());
             let block = pool.make_next_block();
-            assert_eq!(priority(&block.get_id(), &()), FetchNow);
+            assert_eq!(priority(&block.get_id()), FetchNow);
 
             // Older than finalized ==> Drop
             let notarization = pool
@@ -214,7 +214,7 @@ mod tests {
                 .get_by_height(Height::from(1))
                 .last()
                 .unwrap();
-            assert_eq!(priority(&notarization.get_id(), &()), Drop);
+            assert_eq!(priority(&notarization.get_id()), Drop);
 
             // Put block into validated pool, notarization in to unvalidated pool
             pool.insert_validated(block.clone());
@@ -232,19 +232,19 @@ mod tests {
             pool.purge_validated_below(block.clone());
             pool.insert_unvalidated(block.clone());
             let priority = get_priority_function(&pool, expected_batch_height);
-            assert_eq!(priority(&dup_notarization_id, &()), FetchNow);
+            assert_eq!(priority(&dup_notarization_id), FetchNow);
 
             // Moving block to validated does not affect result
             pool.remove_unvalidated(block.clone());
             pool.insert_validated(block.clone());
             let priority = get_priority_function(&pool, expected_batch_height);
-            assert_eq!(priority(&dup_notarization_id, &()), FetchNow);
+            assert_eq!(priority(&dup_notarization_id), FetchNow);
 
             // Definite duplicate notarization ==> FetchNow but within look ahead window
             pool.insert_validated(notarization.clone());
             pool.remove_unvalidated(notarization);
             let priority = get_priority_function(&pool, expected_batch_height);
-            assert_eq!(priority(&dup_notarization_id, &()), FetchNow);
+            assert_eq!(priority(&dup_notarization_id), FetchNow);
 
             // Put finalization in the unvalidated pool
             let finalization = Finalization::fake(FinalizationContent::new(
@@ -258,13 +258,13 @@ mod tests {
             let dup_finalization_id = dup_finalization.get_id();
             dup_finalization.signature.signers = vec![node_test_id(42)];
             let priority = get_priority_function(&pool, expected_batch_height);
-            assert_eq!(priority(&dup_finalization_id, &()), FetchNow);
+            assert_eq!(priority(&dup_finalization_id), FetchNow);
 
             // Once finalized, possible duplicate finalization ==> Drop
             pool.insert_validated(finalization.clone());
             pool.remove_unvalidated(finalization);
             let priority = get_priority_function(&pool, expected_batch_height);
-            assert_eq!(priority(&dup_finalization_id, &()), Drop);
+            assert_eq!(priority(&dup_finalization_id), Drop);
 
             // Add notarizations until we reach finalized_height + LOOK_AHEAD.
             for _ in 0..LOOK_AHEAD {
@@ -292,7 +292,7 @@ mod tests {
             // Recompute priority function since pool content has changed
             let priority = get_priority_function(&pool, expected_batch_height);
             // Still fetch even when notarization is much ahead of finalization
-            assert_eq!(priority(&notarization.get_id(), &()), FetchNow);
+            assert_eq!(priority(&notarization.get_id()), FetchNow);
         })
     }
 }
