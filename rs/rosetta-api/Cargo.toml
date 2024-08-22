@@ -1,6 +1,6 @@
 [package]
 name = "ic-rosetta-api"
-version = "2.0.0"
+version = "2.1.0"
 authors = ["The Internet Computer Project Developers"]
 description = "Build Once. Integrate Your Blockchain Everywhere. "
 edition = "2021"
