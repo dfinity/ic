@@ -1,17 +1,17 @@
-# Proposal to upgrade the ckETH ledger canister
+# Proposal to upgrade the ckBTC ledger canister
 
 Git hash: `3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d`
 
-New compressed Wasm hash: `8457289d3b3179aa83977ea21bfa2fc85e402e1f64101ecb56a4b963ed33a1e6`
+New compressed Wasm hash: `e8942f56f9439b89b13bd8037f357126e24f1e7932cf03018243347505959fd4`
 
-Target canister: `ss2fx-dyaaa-aaaar-qacoq-cai`
+Target canister: `mxzaz-hqaaa-aaaar-qaada-cai`
 
-Previous ckETH ledger proposal: https://dashboard.internetcomputer.org/proposal/126397
+Previous ckBTC ledger proposal: https://dashboard.internetcomputer.org/proposal/126394
 
 ---
 
 ## Motivation
-Upgrade the ckETH ledger canister to the latest version to add support for the [ICRC-21: Canister Call Consent Messages](https://github.com/dfinity/wg-identity-authentication/blob/fd846030109710cab67d9381485a73db424f2b07/topics/ICRC-21/icrc_21_consent_msg.md) standard.
+Upgrade the ckBTC ledger canister to the latest version to add support for the [ICRC-21: Canister Call Consent Messages](https://github.com/dfinity/wg-identity-authentication/blob/fd846030109710cab67d9381485a73db424f2b07/topics/ICRC-21/icrc_21_consent_msg.md) standard.
 
 
 ## Upgrade args
@@ -20,13 +20,13 @@ Upgrade the ckETH ledger canister to the latest version to add support for the [
 git fetch
 git checkout 3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d
 cd rs/rosetta-api/icrc1/ledger
-didc encode -d ledger.did -t '(LedgerArg)' '(variant {Upgrade = null})'
+didc encode '()'
 ```
 
 ## Release Notes
 
 ```
-git log --format="%C(auto) %h %s" 6a8e5fca2c6b4e12966638c444e994e204b42989..3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d -- rs/rosetta-api/icrc1/ledger
+git log --format=%C(auto) %h %s 6a8e5fca2c6b4e12966638c444e994e204b42989..3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d -- rs/rosetta-api/icrc1/ledger
 f2f408333 test(ICRC-Ledger): FI-1377: Add tests for upgrading ICRC ledger with WASMs with different token types (#388)
 14836b59d chore(ICP/ICRC-Ledger): FI-1373: refactor approvals library to allow using regular and stable allowance storage (#382)
 33187dbe8 fix(ICRC-21): FI-1386: add e 8 s to icrc 21 (#340)
@@ -89,5 +89,5 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 git fetch
 git checkout 3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d
 ./gitlab-ci/container/build-ic.sh -c
-sha256sum ./artifacts/canisters/ic-icrc1-ledger-u256.wasm.gz
+sha256sum ./artifacts/canisters/ic-icrc1-ledger.wasm.gz
 ```
