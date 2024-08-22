@@ -379,7 +379,8 @@ mod tests {
                     fake_dkg_message_with_dkg_tag(SUBNET_1, NODE_1, NiDkgTag::HighThreshold),
                     fake_dkg_message_with_dkg_tag(SUBNET_1, NODE_2, NiDkgTag::HighThreshold),
                 ],
-                /*parents_dealings=*/ vec![
+                /*parents_dealings=*/
+                vec![
                     fake_dkg_message_with_dkg_tag(SUBNET_1, NODE_2, NiDkgTag::LowThreshold),
                     fake_dkg_message_with_dkg_tag(SUBNET_1, NODE_3, NiDkgTag::LowThreshold),
                     fake_dkg_message_with_dkg_tag(SUBNET_1, NODE_3, NiDkgTag::HighThreshold),
