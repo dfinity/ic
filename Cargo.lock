@@ -8323,6 +8323,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-test-utils",
  "ic-metrics-encoder",
+ "ic-rosetta-test-utils",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
@@ -11057,9 +11058,12 @@ name = "ic-rosetta-test-utils"
 version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
+ "candid",
  "hex",
+ "ic-canisters-http-types",
  "ic-icrc1-test-utils",
  "ic-rosetta-api",
+ "ic-state-machine-tests",
  "ic-types",
  "icp-ledger",
  "nix 0.24.3",
@@ -11067,6 +11071,7 @@ dependencies = [
  "reqwest 0.12.5",
  "rosetta-core",
  "serde",
+ "serde_bytes",
  "serde_json",
  "slog",
  "tempfile",

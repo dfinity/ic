@@ -1,6 +1,5 @@
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
     GetAccountIdentifierTransactionsResult, SettledTransaction, SettledTransactionWithId,
@@ -12,7 +11,8 @@ use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::Tokens;
 use ic_ledger_test_utils::state_machine_helpers::index::wait_until_sync_is_completed;
 use ic_ledger_test_utils::state_machine_helpers::ledger::{icp_get_blocks, icp_query_blocks};
-use ic_state_machine_tests::{StateMachine, WasmResult};
+use ic_rosetta_test_utils::test_http_request_decoding_quota;
+use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
     AccountIdentifier, Transaction, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST,
     MAX_BLOCKS_PER_REQUEST,
@@ -1655,7 +1655,7 @@ fn check_block_endpoint_limits() {
 }
 
 #[test]
-fn test_http_request_decoding_quota() {
+fn test_index_http_request_decoding_quota() {
     // check that the index canister rejects large http requests.
 
     let mut initial_balances = HashMap::new();
@@ -1669,33 +1669,7 @@ fn test_http_request_decoding_quota() {
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
-    // The anonymous end-user sends a small HTTP request. This should succeed.
-    let http_request = HttpRequest {
-        method: "GET".to_string(),
-        url: "/metrics".to_string(),
-        headers: vec![],
-        body: ByteBuf::from(vec![42; 1_000]),
-    };
-    let http_request_bytes = Encode!(&http_request).unwrap();
-    let response = match env
-        .execute_ingress(index_id, "http_request", http_request_bytes)
-        .unwrap()
-    {
-        WasmResult::Reply(bytes) => Decode!(&bytes, HttpResponse).unwrap(),
-        WasmResult::Reject(reason) => panic!("Unexpected reject: {}", reason),
-    };
-    assert_eq!(response.status_code, 200);
-
-    // The anonymous end-user sends a large HTTP request. This should be rejected.
-    let mut large_http_request = http_request;
-    large_http_request.body = ByteBuf::from(vec![42; 1_000_000]);
-    let large_http_request_bytes = Encode!(&large_http_request).unwrap();
-    let err = env
-        .execute_ingress(index_id, "http_request", large_http_request_bytes)
-        .unwrap_err();
-    assert!(err
-        .description()
-        .contains("Decoding cost exceeds the limit"));
+    test_http_request_decoding_quota(env, index_id);
 }
 
 mod metrics {
