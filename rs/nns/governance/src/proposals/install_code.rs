@@ -32,6 +32,7 @@ impl InstallCode {
         let _ = self.valid_canister_id()?;
         let _ = self.valid_install_mode()?;
         let _ = self.valid_wasm_module()?;
+        let _ = self.valid_arg()?;
         let _ = self.valid_topic()?;
         let _ = self.canister_and_function()?;
 
@@ -75,6 +76,12 @@ impl InstallCode {
             .ok_or(invalid_proposal_error("Wasm module is required"))
     }
 
+    fn valid_arg(&self) -> Result<&Vec<u8>, GovernanceError> {
+        self.arg
+            .as_ref()
+            .ok_or(invalid_proposal_error("Argument is required"))
+    }
+
     pub fn valid_topic(&self) -> Result<Topic, GovernanceError> {
         let canister_id = self.valid_canister_id()?;
         Ok(topic_to_manage_canister(&canister_id))
@@ -98,7 +105,7 @@ impl InstallCode {
         let mode = self.valid_install_mode()?;
         let canister_id = self.valid_canister_id()?;
         let wasm_module = self.valid_wasm_module()?.clone();
-        let arg = self.arg.clone().unwrap_or_default();
+        let arg = self.valid_arg()?.clone();
         let compute_allocation = None;
         let memory_allocation = None;
 
@@ -255,6 +262,14 @@ mod tests {
                 ..valid_install_code.clone()
             },
             vec!["wasm module", "required"],
+        );
+
+        is_invalid_proposal_with_keywords(
+            InstallCode {
+                arg: None,
+                ..valid_install_code.clone()
+            },
+            vec!["argument", "required"],
         );
 
         is_invalid_proposal_with_keywords(
