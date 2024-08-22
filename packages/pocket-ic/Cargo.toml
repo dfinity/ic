@@ -23,13 +23,14 @@ edition.workspace = true
 base64 = "^0.13.1"
 candid = "^0.10.2"
 hex = { workspace = true }
-ic-cdk = "0.13.2"
+ic-cdk = "0.13.5"
 reqwest = { workspace = true }
 schemars = "0.8.16"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
+slog = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-appender = { workspace = true }

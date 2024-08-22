@@ -157,7 +157,6 @@ members = [
     "rs/monitoring/adapter_metrics/client",
     "rs/monitoring/adapter_metrics/server",
     "rs/monitoring/adapter_metrics/service",
-    "rs/monitoring/backtrace",
     "rs/monitoring/logger",
     "rs/monitoring/metrics",
     "rs/monitoring/pprof",
@@ -524,7 +523,7 @@ ic-btc-interface = "0.2.2"
 ic-btc-test-utils = "0.1.0"
 ic-btc-validation = "0.1.0"
 ic-cbor = "2.3.0"
-ic-cdk = "0.13.2"
+ic-cdk = "0.13.5"
 ic-cdk-macros = "0.9.0"
 ic-cdk-timers = "0.7.0"
 ic-certification = "2.3.0"

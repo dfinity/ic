@@ -83,3 +83,4 @@ wat = "1.0.52"
 rcgen = { workspace = true }
 reqwest = { workspace = true }
 spec-compliance = { path = "../tests/testing_verification/spec_compliance" }
+slog = { workspace = true }
