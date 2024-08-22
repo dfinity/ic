@@ -41,6 +41,9 @@ rust_decimal = "1.25"
 serde = { workspace = true }
 serde_json = { workspace = true }
 
+tla-instrumentation = { git = "https://github.com/oggy-dfin/tla-instrumentation.git", rev = "67939aae6e35f71564d5f12590bbff8716619451", package = "tla_instrumentation" }
+tla-instrumentation-proc-macros = { git = "https://github.com/oggy-dfin/tla-instrumentation.git", rev = "67939aae6e35f71564d5f12590bbff8716619451", package = "tla_instrumentation_proc_macros" }
+
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 assert_matches = { workspace = true }
 
