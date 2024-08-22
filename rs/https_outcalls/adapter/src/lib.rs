@@ -13,17 +13,13 @@ mod metrics;
 
 pub use cli::Cli;
 pub use config::{Config, IncomingSource};
-pub use rpc_server::{CanisterHttp, CanisterRequestBody};
+pub use rpc_server::CanisterHttp;
 
 use futures::{Future, Stream};
-use http_body_util::Full;
-use hyper::body::Bytes;
+
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_socks2::SocksConnector;
-use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
-    rt::TokioExecutor,
-};
+use hyper_util::client::legacy::connect::HttpConnector;
 use ic_https_outcalls_service::canister_http_service_server::CanisterHttpServiceServer;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -55,14 +51,12 @@ impl AdapterServer {
             auth: None,
             connector: http_connector.clone(),
         };
-        let https_connector = HttpsConnectorBuilder::new()
+        let proxied_https_connector = HttpsConnectorBuilder::new()
             .with_native_roots()
             .expect("Failed to set native roots")
             .https_only()
             .enable_http1()
             .wrap_connector(proxy_connector);
-        let socks_client =
-            Client::builder(TokioExecutor::new()).build::<_, Full<Bytes>>(https_connector);
 
         // Https client setup.
         let builder = HttpsConnectorBuilder::new()
@@ -74,9 +68,12 @@ impl AdapterServer {
         let builder = builder.https_or_http();
 
         let builder = builder.enable_http1();
-        let https_client = Client::builder(TokioExecutor::new())
-            .build::<_, Full<Bytes>>(builder.wrap_connector(http_connector));
-        let canister_http = CanisterHttp::new(https_client, socks_client, logger, metrics);
+        let canister_http = CanisterHttp::new(
+            builder.wrap_connector(http_connector),
+            proxied_https_connector,
+            logger,
+            metrics,
+        );
 
         Self(
             Server::builder()
