@@ -203,7 +203,7 @@ fn start_server(
     let graceful_shutdown = GracefulShutdown::new();
 
     let listener = start_tcp_listener(address, &runtime_handle);
-    let address = listener.local_addr().unwrap();
+    let address = listener.local_addr().expect("Failed to get local addr.");
 
     let logger = log.clone();
 
