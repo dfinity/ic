@@ -2,23 +2,44 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/rosetta-api",
+    "//rs/rosetta-api:ic-rosetta-api",
+    "//rs/rosetta-api/rosetta_core:rosetta-core",
+    "@crate_index//:anyhow",
+    "@crate_index//:candid",
+    "@crate_index//:clap",  # no clap because feature derive
+    "@crate_index//:hex",
+    "@crate_index//:ic-agent",
+    "@crate_index//:num-bigint",
+    "@crate_index//:reqwest",
+    "@crate_index//:serde",
+    "@crate_index//:tokio",
+    "@crate_index//:url",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    ":ic-icp-rosetta-client",
+    "//packages/pocket-ic:pocket-ic",
+    "//rs/rosetta-api/icp_ledger",
+    "//rs/rosetta-api/icp_ledger/test_utils",
+    "//rs/rosetta-api/runner:ic-icp-rosetta-runner",
+    "@crate_index//:candid",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+]
+
 rust_library(
-    name = "ic-icp-rosetta-runner",
-    srcs = glob(["src/*.rs"]),
-    crate_name = "ic_icp_rosetta_runner",
-    deps = [
-        # Keep sorted.
-        "//packages/icrc-ledger-types:icrc_ledger_types",
-        "@crate_index//:anyhow",
-        "@crate_index//:candid",
-        "@crate_index//:reqwest",
-        "@crate_index//:tempfile",
-        "@crate_index//:tokio",
-    ],
+    name = "ic-icp-rosetta-client",
+    srcs = ["src/lib.rs"],
+    crate_name = "ic_icp_rosetta_client",
+    deps = DEPENDENCIES,
 )
 
 rust_test(
-    name = "ic-icp-rosetta-runner-tests",
+    name = "ic-icp-rosetta-client-tests",
     srcs = ["tests/tests.rs"],
     data = [
         "//rs/canister_sandbox",
@@ -36,15 +57,5 @@ rust_test(
         "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
     },
-    deps = [
-        # Keep sorted.
-        ":ic-icp-rosetta-runner",
-        "//packages/pocket-ic",
-        "//rs/rosetta-api/icp_ledger",
-        "//rs/rosetta-api/icp_ledger/test_utils",
-        "@crate_index//:candid",
-        "@crate_index//:reqwest",
-        "@crate_index//:tempfile",
-        "@crate_index//:tokio",
-    ],
+    deps = DEV_DEPENDENCIES,
 )
