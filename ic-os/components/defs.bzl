@@ -1,6 +1,4 @@
-load("//ic-os/components:guestos.bzl", "component_files")
-
-# todo: add comment
+# help: args, inputs, outputs necessary?
 def _check_unused_components_test_impl(ctx):
     args = []
     inputs = []
