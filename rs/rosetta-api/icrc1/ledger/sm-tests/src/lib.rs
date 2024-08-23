@@ -2487,9 +2487,17 @@ pub fn icrc1_test_upgrade_serialization(
     let now = SystemTime::now();
     let minter = Arc::new(minter_identity());
     let minter_principal: Principal = minter.sender().unwrap();
+    const INITIAL_TX_BATCH_SIZE: usize = 100;
+    const ADDITIONAL_TX_BATCH_SIZE: usize = 15;
+    const TOTAL_TX_COUNT: usize = INITIAL_TX_BATCH_SIZE + 5 * ADDITIONAL_TX_BATCH_SIZE;
     runner
         .run(
-            &(valid_transactions_strategy(minter, FEE, 100, now),),
+            &(valid_transactions_strategy(
+                minter,
+                FEE,
+                TOTAL_TX_COUNT,
+                now,
+            ),),
             |(transactions,)| {
                 let env = StateMachine::new();
                 env.set_time(now);
@@ -2503,15 +2511,21 @@ pub fn icrc1_test_upgrade_serialization(
 
                 let mut in_memory_ledger = empty_icrc1_in_memory_ledger();
 
-                for arg_with_caller in &transactions {
-                    apply_arg_with_caller(&env, ledger_id, arg_with_caller);
+                let mut tx_index = 0;
+                let mut tx_index_target = INITIAL_TX_BATCH_SIZE;
+
+                while tx_index < tx_index_target {
+                    apply_arg_with_caller(&env, ledger_id, &transactions[tx_index]);
                     in_memory_ledger.apply_arg_with_caller(
-                        arg_with_caller,
+                        &transactions[tx_index],
                         TimeStamp::from_nanos_since_unix_epoch(system_time_to_nanos(env.time())),
                         minter_principal,
                         Some(FEE.into()),
                     );
+                    tx_index += 1;
                 }
+                tx_index_target += ADDITIONAL_TX_BATCH_SIZE;
+
                 in_memory_ledger.prune_expired_allowances(TimeStamp::from_nanos_since_unix_epoch(
                     system_time_to_nanos(env.time()),
                 ));
@@ -2519,13 +2533,27 @@ pub fn icrc1_test_upgrade_serialization(
                 in_memory_ledger.verify_balances(&env, ledger_id);
                 in_memory_ledger.verify_allowances(&env, ledger_id);
 
-                let test_upgrade = |ledger_wasm: Vec<u8>| {
+                let mut test_upgrade = |ledger_wasm: Vec<u8>| {
                     env.upgrade_canister(
                         ledger_id,
                         ledger_wasm,
                         Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
                     )
                     .unwrap();
+
+                    while tx_index < tx_index_target {
+                        apply_arg_with_caller(&env, ledger_id, &transactions[tx_index]);
+                        in_memory_ledger.apply_arg_with_caller(
+                            &transactions[tx_index],
+                            TimeStamp::from_nanos_since_unix_epoch(system_time_to_nanos(
+                                env.time(),
+                            )),
+                            minter_principal,
+                            Some(FEE.into()),
+                        );
+                        tx_index += 1;
+                    }
+                    tx_index_target += ADDITIONAL_TX_BATCH_SIZE;
 
                     in_memory_ledger.verify_all(&env, ledger_id);
                 };
