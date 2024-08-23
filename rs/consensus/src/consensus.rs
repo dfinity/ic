@@ -26,7 +26,7 @@ mod proptests;
 use crate::consensus::{
     block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker,
     dkg_key_manager::DkgKeyManager, finalizer::Finalizer, metrics::ConsensusMetrics,
-    notary::Notary, payload_builder::PayloadBuilderImpl, priority::get_bouncer, purger::Purger,
+    notary::Notary, payload_builder::PayloadBuilderImpl, priority::new_bouncer, purger::Purger,
     random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
     share_aggregator::ShareAggregator, validator::Validator,
 };
@@ -589,9 +589,9 @@ impl ConsensusGossipImpl {
 }
 
 impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessage, Pool> for ConsensusGossipImpl {
-    /// Return a priority function that matches the given consensus pool.
-    fn get_bouncer(&self, pool: &Pool) -> Bouncer<ConsensusMessageId> {
-        get_bouncer(pool, self.message_routing.expected_batch_height())
+    /// Return a bouncer function that matches the given consensus pool.
+    fn new_bouncer(&self, pool: &Pool) -> Bouncer<ConsensusMessageId> {
+        new_bouncer(pool, self.message_routing.expected_batch_height())
     }
 }
 

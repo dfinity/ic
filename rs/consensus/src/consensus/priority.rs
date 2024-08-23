@@ -7,7 +7,7 @@ use ic_interfaces::p2p::consensus::{Bouncer, BouncerValue, BouncerValue::*};
 use ic_types::{artifact::ConsensusMessageId, consensus::ConsensusMessageHash, Height};
 
 /// Return a priority function that matches the given consensus pool.
-pub fn get_bouncer(
+pub fn new_bouncer(
     pool: &dyn ConsensusPool,
     expected_batch_height: Height,
 ) -> Bouncer<ConsensusMessageId> {
@@ -19,7 +19,7 @@ pub fn get_bouncer(
     let beacon_height = pool_reader.get_random_beacon_height();
 
     Box::new(move |id: &'_ ConsensusMessageId| {
-        compute_priority(
+        compute_bouncer(
             cup_height,
             next_cup_height,
             expected_batch_height,
@@ -36,7 +36,7 @@ const LOOK_AHEAD: u64 = 10;
 
 /// The actual priority computation utilizing cached BlockSets instead of
 /// having to read from the pool every time when it is called.
-fn compute_priority(
+fn compute_bouncer(
     cup_height: Height,
     next_cup_height: Height,
     expected_batch_height: Height,
@@ -153,7 +153,7 @@ mod tests {
             pool.advance_round_normal_operation_no_cup_n(max_validation_height);
 
             let expected_batch_height = Height::from(1);
-            let priority = get_bouncer(&pool, expected_batch_height);
+            let bouncer = new_bouncer(&pool, expected_batch_height);
 
             // Artifacts at the next height are within look-ahead, but exceed
             // the validator-CUP gap. We should stash them, but not fetch them.
@@ -169,28 +169,28 @@ mod tests {
                 ))),
                 height: block.height(),
             };
-            assert_eq!(priority(&beacon.get_id()), MaybeWantsLater);
-            assert_eq!(priority(&block.get_id()), MaybeWantsLater);
-            assert_eq!(priority(&notarization.get_id()), MaybeWantsLater);
-            assert_eq!(priority(&equivocation_proof_id), MaybeWantsLater);
+            assert_eq!(bouncer(&beacon.get_id()), MaybeWantsLater);
+            assert_eq!(bouncer(&block.get_id()), MaybeWantsLater);
+            assert_eq!(bouncer(&notarization.get_id()), MaybeWantsLater);
+            assert_eq!(bouncer(&equivocation_proof_id), MaybeWantsLater);
 
             // Regardless of bounds, we should always fetch CUPs.
             let cup_id = ConsensusMessageId {
                 hash: ConsensusMessageHash::CatchUpPackage(CryptoHashOf::new(CryptoHash(vec![]))),
                 height: Height::new(100000000),
             };
-            assert_eq!(priority(&cup_id), Wants);
+            assert_eq!(bouncer(&cup_id), Wants);
 
             // Insert CUP for next summary height and recompute priority function.
             pool.insert_validated(pool.make_catch_up_package(Height::new(dkg_interval + 1)));
-            let priority = get_bouncer(&pool, expected_batch_height);
+            let bouncer = new_bouncer(&pool, expected_batch_height);
 
             // The artifacts are not outside the validation-CUP gap, and
             // within look-ahead distance. We should fetch them all.
-            assert_eq!(priority(&beacon.get_id()), Wants);
-            assert_eq!(priority(&block.get_id()), Wants);
-            assert_eq!(priority(&notarization.get_id()), Wants);
-            assert_eq!(priority(&equivocation_proof_id), Wants);
+            assert_eq!(bouncer(&beacon.get_id()), Wants);
+            assert_eq!(bouncer(&block.get_id()), Wants);
+            assert_eq!(bouncer(&notarization.get_id()), Wants);
+            assert_eq!(bouncer(&equivocation_proof_id), Wants);
         })
     }
 
@@ -201,11 +201,11 @@ mod tests {
             pool.advance_round_normal_operation_n(2);
 
             let expected_batch_height = Height::from(1);
-            let priority = get_bouncer(&pool, expected_batch_height);
+            let bouncer = new_bouncer(&pool, expected_batch_height);
             // New block ==> Wants
             pool.insert_validated(pool.make_next_beacon());
             let block = pool.make_next_block();
-            assert_eq!(priority(&block.get_id()), Wants);
+            assert_eq!(bouncer(&block.get_id()), Wants);
 
             // Older than finalized ==> Unwanted
             let notarization = pool
@@ -214,7 +214,7 @@ mod tests {
                 .get_by_height(Height::from(1))
                 .last()
                 .unwrap();
-            assert_eq!(priority(&notarization.get_id()), Unwanted);
+            assert_eq!(bouncer(&notarization.get_id()), Unwanted);
 
             // Put block into validated pool, notarization in to unvalidated pool
             pool.insert_validated(block.clone());
@@ -231,20 +231,20 @@ mod tests {
             // Move block back to unvalidated after attribute is computed
             pool.purge_validated_below(block.clone());
             pool.insert_unvalidated(block.clone());
-            let priority = get_bouncer(&pool, expected_batch_height);
-            assert_eq!(priority(&dup_notarization_id), Wants);
+            let bouncer = new_bouncer(&pool, expected_batch_height);
+            assert_eq!(bouncer(&dup_notarization_id), Wants);
 
             // Moving block to validated does not affect result
             pool.remove_unvalidated(block.clone());
             pool.insert_validated(block.clone());
-            let priority = get_bouncer(&pool, expected_batch_height);
-            assert_eq!(priority(&dup_notarization_id), Wants);
+            let bouncer = new_bouncer(&pool, expected_batch_height);
+            assert_eq!(bouncer(&dup_notarization_id), Wants);
 
             // Definite duplicate notarization ==> Wants but within look ahead window
             pool.insert_validated(notarization.clone());
             pool.remove_unvalidated(notarization);
-            let priority = get_bouncer(&pool, expected_batch_height);
-            assert_eq!(priority(&dup_notarization_id), Wants);
+            let bouncer = new_bouncer(&pool, expected_batch_height);
+            assert_eq!(bouncer(&dup_notarization_id), Wants);
 
             // Put finalization in the unvalidated pool
             let finalization = Finalization::fake(FinalizationContent::new(
@@ -257,14 +257,14 @@ mod tests {
             let mut dup_finalization = finalization.clone();
             let dup_finalization_id = dup_finalization.get_id();
             dup_finalization.signature.signers = vec![node_test_id(42)];
-            let priority = get_bouncer(&pool, expected_batch_height);
-            assert_eq!(priority(&dup_finalization_id), Wants);
+            let bouncer = new_bouncer(&pool, expected_batch_height);
+            assert_eq!(bouncer(&dup_finalization_id), Wants);
 
             // Once finalized, possible duplicate finalization ==> Drop
             pool.insert_validated(finalization.clone());
             pool.remove_unvalidated(finalization);
-            let priority = get_bouncer(&pool, expected_batch_height);
-            assert_eq!(priority(&dup_finalization_id), Unwanted);
+            let bouncer = new_bouncer(&pool, expected_batch_height);
+            assert_eq!(bouncer(&dup_finalization_id), Unwanted);
 
             // Add notarizations until we reach finalized_height + LOOK_AHEAD.
             for _ in 0..LOOK_AHEAD {
@@ -290,9 +290,9 @@ mod tests {
                     > PoolReader::new(&pool).get_finalized_height().get() + LOOK_AHEAD
             );
             // Recompute priority function since pool content has changed
-            let priority = get_bouncer(&pool, expected_batch_height);
+            let bouncer = new_bouncer(&pool, expected_batch_height);
             // Still fetch even when notarization is much ahead of finalization
-            assert_eq!(priority(&notarization.get_id()), Wants);
+            assert_eq!(bouncer(&notarization.get_id()), Wants);
         })
     }
 }

@@ -46,7 +46,7 @@ impl CanisterHttpGossipImpl {
 impl<Pool: CanisterHttpPool> BouncerFactory<CanisterHttpResponseShare, Pool>
     for CanisterHttpGossipImpl
 {
-    fn get_bouncer(&self, _canister_http_pool: &Pool) -> Bouncer<CanisterHttpResponseId> {
+    fn new_bouncer(&self, _canister_http_pool: &Pool) -> Bouncer<CanisterHttpResponseId> {
         let finalized_height = self.consensus_cache.finalized_block().height;
         let registry_version =
             registry_version_at_height(self.consensus_cache.as_ref(), finalized_height).unwrap();

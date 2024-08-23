@@ -131,7 +131,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
             move |transport: Arc<dyn Transport>| {
                 let bouncer = {
                     let p = pool.read().unwrap();
-                    bouncer_factory.get_bouncer(&p)
+                    bouncer_factory.new_bouncer(&p)
                 };
                 let (bouncer_tx, bouncer_rx) = watch::channel(bouncer);
                 let pool_clone = pool.clone();
@@ -141,7 +141,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
                     loop {
                         let bouncer = {
                             let p = pool_clone.read().unwrap();
-                            bouncer_factory_clone.get_bouncer(&p)
+                            bouncer_factory_clone.new_bouncer(&p)
                         };
                         if bouncer_tx.send(bouncer).is_err() {
                             break;

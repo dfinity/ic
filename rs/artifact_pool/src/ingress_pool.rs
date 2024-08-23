@@ -373,7 +373,7 @@ impl IngressPrioritizer {
 }
 
 impl BouncerFactory<SignedIngress, IngressPoolImpl> for IngressPrioritizer {
-    fn get_bouncer(&self, pool: &IngressPoolImpl) -> Bouncer<IngressMessageId> {
+    fn new_bouncer(&self, pool: &IngressPoolImpl) -> Bouncer<IngressMessageId> {
         // EXPLANATION: Because ingress messages are included in blocks, consensus
         // does not rely on ingress gossip for correctness. Ingress gossip exists to
         // reduce latency in cases where replicas don't have enough ingress messages

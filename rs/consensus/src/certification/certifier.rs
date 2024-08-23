@@ -66,7 +66,7 @@ impl<Pool: CertificationPool> BouncerFactory<CertificationMessage, Pool> for Cer
     // that height or this height is below the CUP height, we're not interested in
     // any new artifacts at that height. If it is above the CUP height and we do not
     // have a full certification at that height, we're interested in all artifacts.
-    fn get_bouncer(&self, certification_pool: &Pool) -> Bouncer<CertificationMessageId> {
+    fn new_bouncer(&self, certification_pool: &Pool) -> Bouncer<CertificationMessageId> {
         let certified_heights = certification_pool.certified_heights();
         let cup_height = self.consensus_pool_cache.catch_up_package().height();
         Box::new(move |id| {
@@ -747,7 +747,7 @@ mod tests {
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
                 cert_pool.apply_changes(change_set);
 
-                let prio_fn = certifier_gossip.get_bouncer(&cert_pool);
+                let prio_fn = certifier_gossip.new_bouncer(&cert_pool);
                 for (height, prio) in &[
                     (1, BouncerValue::Unwanted),
                     (2, BouncerValue::Wants),

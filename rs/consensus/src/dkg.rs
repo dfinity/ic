@@ -387,7 +387,7 @@ impl<T: DkgPool> ChangeSetProducer<T> for DkgImpl {
 // its previous state after it reconnects, regardless of whether it has sent
 // them before.
 impl<Pool: DkgPool> BouncerFactory<Message, Pool> for DkgGossipImpl {
-    fn get_bouncer(&self, dkg_pool: &Pool) -> Bouncer<DkgMessageId> {
+    fn new_bouncer(&self, dkg_pool: &Pool) -> Bouncer<DkgMessageId> {
         let start_height = dkg_pool.get_current_start_height();
         Box::new(move |id| {
             use std::cmp::Ordering;

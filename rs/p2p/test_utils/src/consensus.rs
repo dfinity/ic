@@ -284,7 +284,7 @@ impl ValidatedPoolReader<U64Artifact> for TestConsensus<U64Artifact> {
 }
 
 impl BouncerFactory<U64Artifact, TestConsensus<U64Artifact>> for TestConsensus<U64Artifact> {
-    fn get_bouncer(
+    fn new_bouncer(
         &self,
         _pool: &TestConsensus<U64Artifact>,
     ) -> ic_interfaces::p2p::consensus::Bouncer<<U64Artifact as IdentifiableArtifact>::Id> {

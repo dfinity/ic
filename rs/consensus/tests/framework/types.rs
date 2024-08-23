@@ -276,7 +276,7 @@ impl<Artifact: IdentifiableArtifact> PriorityFnState<Artifact> {
         pool: &Pool,
     ) -> RefCell<Self> {
         RefCell::new(PriorityFnState {
-            filter_fn: producer.get_bouncer(pool),
+            filter_fn: producer.new_bouncer(pool),
             last_updated: UNIX_EPOCH,
         })
     }
@@ -292,7 +292,7 @@ impl<Artifact: IdentifiableArtifact> PriorityFnState<Artifact> {
         pool: &Pool,
         now: Time,
     ) {
-        self.filter_fn = producer.get_bouncer(pool);
+        self.filter_fn = producer.new_bouncer(pool);
         self.last_updated = now;
     }
 }

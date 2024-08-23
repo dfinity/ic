@@ -125,8 +125,11 @@ pub trait ArtifactAssembler<A1: IdentifiableArtifact, A2: PbArtifact>:
     ) -> impl std::future::Future<Output = Result<(A1, NodeId), Aborted>> + Send;
 }
 
-/// The artifact filter function returns a value that defines 3 possible handling logics when
-/// an artifact or ID is received.
+/// Idempotent and non-blocking function which returns a BouncerValue for any artifact ID.
+/// Think of this closure as guarding access to the unvalidated pool (similar to a bouncer in a night club).
+pub type Bouncer<Id> = Box<dyn Fn(&Id) -> BouncerValue + Send + Sync + 'static>;
+
+/// The Bouncer function returns a value that defines 3 possible handling logics when an artifact or ID is received.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BouncerValue {
     /// The client doesn't need the corresponding artifact for making progress so it can safely be dropped.
@@ -137,14 +140,9 @@ pub enum BouncerValue {
     Wants,
 }
 
-/// Idempotent and non-blocking function which returns a BouncerValue for any artifact ID.
-/// Think of this closure as guarding access to the unvalidated pool (similar to a bouncer in a night club).
-pub type Bouncer<Id> = Box<dyn Fn(&Id) -> BouncerValue + Send + Sync + 'static>;
-
-/// Since the Bouncer above is defined as idempotent, the factory trait provides a way to refresh
-/// the filter function.
-/// All the filtering logic should happen inside the implentations of the ArtifactAssembler.
+/// Since the Bouncer above is defined as idempotent, the factory trait provides a way to refresh to a newer function.
+/// Invocations of the bouncer closure and factory should happen inside the implentations of the ArtifactAssembler.
 pub trait BouncerFactory<Artifact: IdentifiableArtifact, Pool>: Send + Sync {
-    /// Returns a bouncer function for the given pool.
-    fn get_bouncer(&self, pool: &Pool) -> Bouncer<Artifact::Id>;
+    /// Returns a new bouncer function for the given pool.
+    fn new_bouncer(&self, pool: &Pool) -> Bouncer<Artifact::Id>;
 }

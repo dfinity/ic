@@ -474,15 +474,15 @@ impl IDkgPriorityFnArgs {
 }
 
 impl<Pool: IDkgPool> BouncerFactory<IDkgMessage, Pool> for IDkgGossipImpl {
-    fn get_bouncer(&self, _idkg_pool: &Pool) -> Bouncer<IDkgMessageId> {
+    fn new_bouncer(&self, _idkg_pool: &Pool) -> Bouncer<IDkgMessageId> {
         let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;
         let args = IDkgPriorityFnArgs::new(&block_reader, self.state_reader.as_ref());
-        Box::new(move |id| compute_priority(id, subnet_id, &args))
+        Box::new(move |id| compute_bouncer(id, subnet_id, &args))
     }
 }
 
-fn compute_priority(
+fn compute_bouncer(
     id: &IDkgMessageId,
     subnet_id: SubnetId,
     args: &IDkgPriorityFnArgs,
@@ -686,7 +686,7 @@ mod tests {
         ];
 
         for (id, expected) in tests {
-            assert_eq!(compute_priority(&id, local_subnet_id, &args), expected);
+            assert_eq!(compute_bouncer(&id, local_subnet_id, &args), expected);
         }
     }
 
@@ -761,7 +761,7 @@ mod tests {
         ];
 
         for (id, expected) in tests {
-            assert_eq!(compute_priority(&id, local_subnet_id, &args), expected);
+            assert_eq!(compute_bouncer(&id, local_subnet_id, &args), expected);
         }
     }
 
@@ -841,7 +841,7 @@ mod tests {
         ];
 
         for (id, expected) in tests {
-            assert_eq!(compute_priority(&id, local_subnet_id, &args), expected);
+            assert_eq!(compute_bouncer(&id, local_subnet_id, &args), expected);
         }
     }
 }
