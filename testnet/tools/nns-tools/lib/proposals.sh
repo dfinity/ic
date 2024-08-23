@@ -65,7 +65,7 @@ generate_nns_upgrade_proposal_text() {
     local CANDID_ARGS=${4:-}
     local OUTPUT_FILE=${5:-}
 
-    assert_that_a_prebuilt_sns_wasm_is_available "$CANISTER_NAME" "$NEXT_COMMIT"
+    assert_that_a_prebuilt_nns_wasm_is_available "$CANISTER_NAME" "$NEXT_COMMIT"
 
     PROPOSER=$(git config user.email | sed 's/@/ at /')
 
