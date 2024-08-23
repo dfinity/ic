@@ -142,12 +142,14 @@ rust_test(
 
 rust_test(
     name = "canister_unit_test",
-    crate = ":_wasm_sns-swap-canister",
-    data = ["canister/swap.did"],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/sns/swap",
-    },
-    deps = ["@crate_index//:tokio"],
+    srcs = glob(["canister/**/*.rs"]),
+    compile_data = ["canister/swap.did"],
+    crate_root = "canister/canister.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+        ":swap",
+    ],
 )
 
 rust_test_suite_with_extra_srcs(

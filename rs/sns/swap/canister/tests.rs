@@ -1,4 +1,5 @@
 use super::*;
+use candid_parser::utils::{service_equal, CandidSource};
 use ic_nervous_system_clients::{
     canister_status::{
         CanisterStatusResultFromManagementCanister, CanisterStatusResultV2, CanisterStatusType,
@@ -8,27 +9,20 @@ use ic_nervous_system_clients::{
     management_canister_client::{MockManagementCanisterClient, MockManagementCanisterClientReply},
 };
 
-/// A test that fails if the API was updated but the candid definition was not.
+/// See analogous comments in registry/canister/canister/tests.rs (yes, canister occurs twice).
 #[test]
-fn check_swap_candid_file() {
-    let did_path = format!(
-        "{}/canister/swap.did",
-        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set")
-    );
-    let did_contents = String::from_utf8(std::fs::read(did_path).unwrap()).unwrap();
+fn test_implemented_interface_matches_declared_interface_exactly() {
+    let declared_interface = CandidSource::Text(include_str!("swap.did"));
 
-    // See comments in main above
+    // The line below generates did types and service definition from the
+    // methods annotated with `candid_method` above. The definition is then
+    // obtained with `__export_service()`.
     candid::export_service!();
-    let expected = __export_service();
+    let implemented_interface_str = __export_service();
+    let implemented_interface = CandidSource::Text(&implemented_interface_str);
 
-    if did_contents != expected {
-        panic!(
-            "Generated candid definition does not match canister/swap.did. \
-             Run `bazel run :generate_did > canister/swap.did` (no nix and/or direnv) or \
-             `cargo run --bin sns-swap-canister > canister/swap.did` in \
-             rs/sns/swap to update canister/swap.did."
-        )
-    }
+    let result = service_equal(declared_interface, implemented_interface);
+    assert!(result.is_ok(), "{:?}\n\n", result.unwrap_err());
 }
 
 #[tokio::test]

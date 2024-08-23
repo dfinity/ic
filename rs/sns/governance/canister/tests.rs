@@ -1,51 +1,26 @@
 use super::*;
+use candid_parser::utils::{service_equal, CandidSource};
 use ic_sns_governance::pb::v1::{DisburseMaturityInProgress, Neuron};
 use maplit::btreemap;
 
-/// A test that fails if the API was updated but the candid definition was not.
-#[cfg(not(feature = "test"))]
+/// See analogous comments in registry/canister/canister/tests.rs (yes, canister occurs twice).
 #[test]
-fn check_governance_candid_file() {
-    let did_path = format!(
-        "{}/canister/governance.did",
-        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set")
-    );
-    let did_contents = String::from_utf8(std::fs::read(did_path).unwrap()).unwrap();
+fn test_implemented_interface_matches_declared_interface_exactly() {
+    #[cfg(feature = "test")]
+    let declared_interface = include_str!("governance_test.did");
+    #[cfg(not(feature = "test"))]
+    let declared_interface = include_str!("governance.did");
+    let declared_interface = CandidSource::Text(declared_interface);
 
-    // See comments in main above
+    // The line below generates did types and service definition from the
+    // methods annotated with `candid_method` above. The definition is then
+    // obtained with `__export_service()`.
     candid::export_service!();
-    let expected = __export_service();
+    let implemented_interface_str = __export_service();
+    let implemented_interface = CandidSource::Text(&implemented_interface_str);
 
-    if did_contents != expected {
-        panic!(
-            "Generated candid definition does not match canister/governance.did. \
-            Run `bazel run :generate_did > canister/governance.did` (no nix and/or direnv) or \
-            `cargo run --bin sns-governance-canister > canister/governance.did` in \
-            rs/sns/governance to update canister/governance.did."
-        )
-    }
-}
-
-#[cfg(feature = "test")]
-#[test]
-fn check_governance_candid_file() {
-    let did_path = format!(
-        "{}/canister/governance_test.did",
-        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set")
-    );
-    let did_contents = String::from_utf8(std::fs::read(did_path).unwrap()).unwrap();
-
-    // See comments in main above
-    candid::export_service!();
-    let expected = __export_service();
-
-    if did_contents != expected {
-        panic!(
-            "Generated candid definition does not match canister/governance_test.did. \
-            Run `bazel run :generate_test_did > canister/governance_test.did` (no nix and/or direnv) in \
-            rs/sns/governance to update canister/governance_test.did."
-        )
-    }
+    let result = service_equal(declared_interface, implemented_interface);
+    assert!(result.is_ok(), "{:?}\n\n", result.unwrap_err());
 }
 
 /// A test that checks that set_time_warp advances time correctly.

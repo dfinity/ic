@@ -101,6 +101,7 @@ generated_files_check(
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/sns/root/protobuf_generator:lib",
+    "@crate_index//:candid_parser",
     "@crate_index//:maplit",
     "@crate_index//:tokio",
 ]
@@ -124,10 +125,14 @@ rust_test(
 
 rust_test(
     name = "canister_unit_test",
-    crate = ":_wasm_sns-root-canister",
-    data = ["canister/root.did"],
-    env = {"CARGO_MANIFEST_DIR": "rs/sns/root"},
-    deps = ["@crate_index//:candid_parser"],
+    srcs = glob(["canister/**/*.rs"]),
+    compile_data = ["canister/root.did"],
+    crate_root = "canister/canister.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+        ":root",
+    ],
 )
 
 rust_test_suite(
