@@ -28,7 +28,6 @@ use ic_rosetta_api::MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST;
 use ic_rosetta_api::{models, API_VERSION, NODE_VERSION};
 use icp_ledger::{self, AccountIdentifier, Block, BlockIndex, Tokens};
 use rosetta_core::objects::ObjectMap;
-use rosetta_core::request_types::MetadataRequest;
 use rosetta_core::response_types::{MempoolResponse, NetworkListResponse};
 use std::collections::BTreeMap;
 use std::sync::Arc;
