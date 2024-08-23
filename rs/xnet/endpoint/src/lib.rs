@@ -202,7 +202,7 @@ fn start_server(
 
     let graceful_shutdown = GracefulShutdown::new();
 
-    let listener = start_tcp_listener(address, runtime_handle);
+    let listener = start_tcp_listener(address, &runtime_handle);
     let address = listener.local_addr().unwrap();
 
     let logger = log.clone();
