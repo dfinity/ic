@@ -654,7 +654,7 @@ fn canister_state_dir() {
     let state_dir = TempDir::new().unwrap();
     let state_dir_path_buf = state_dir.path().to_path_buf();
 
-    // Create a PocketIC instance with NNS and app subets.
+    // Create a PocketIC instance with NNS and app subnets.
     let pic = PocketIcBuilder::new()
         .with_state_dir(state_dir_path_buf.clone())
         .with_nns_subnet()
@@ -1161,7 +1161,7 @@ fn registry_canister() {
     let state_dir = TempDir::new().unwrap();
     let state_dir_path_buf = state_dir.path().to_path_buf();
 
-    // Create a PocketIC instance with NNS and app subets.
+    // Create a PocketIC instance with NNS, II and two app subnets.
     let pic = PocketIcBuilder::new()
         .with_state_dir(state_dir_path_buf.clone())
         .with_nns_subnet()
