@@ -6,6 +6,7 @@ mod tests;
 use axum::{body::Body, extract::State, response::IntoResponse, routing::any};
 use hyper::{body::Incoming, Request, Response, StatusCode};
 use hyper_util::{rt::TokioIo, server::graceful::GracefulShutdown};
+use ic_async_utils::start_tcp_listener;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
@@ -201,8 +202,8 @@ fn start_server(
 
     let graceful_shutdown = GracefulShutdown::new();
 
-    let (listener, address) =
-        ic_xnet_hyper::bind_listener(&address, runtime_handle).expect("Failed to bind listener");
+    let listener = start_tcp_listener(address, runtime_handle);
+    let address = listener.local_addr().unwrap();
 
     let logger = log.clone();
 
