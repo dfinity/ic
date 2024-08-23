@@ -11,7 +11,7 @@ name = "ic-btc-kyt-canister"
 path = "src/main.rs"
 
 [dependencies]
-bitcoin = { version = "0.32.2", default-features = false }
+bitcoin = { git = "https://github.com/ninegua/rust-bitcoin", rev = "f1e732c9afe38caae7275fd38864dd44a2542988", default-features = false }
 candid = { workspace = true }
 futures = { workspace = true }
 ic-cdk = { workspace = true }
