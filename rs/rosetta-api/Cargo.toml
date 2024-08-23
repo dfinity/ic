@@ -65,3 +65,7 @@ rand_chacha = { workspace = true }
 
 [features]
 rosetta-blocks = []
+
+[[test]]
+name = "system_tests"
+path = "tests/system_tests/system_tests.rs"
