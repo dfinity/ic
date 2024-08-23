@@ -10,6 +10,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/rosetta-api/ledger_core",
+    "//rs/rosetta-api/test_utils",
     "//rs/rust_canisters/http_types",
     "//rs/state_machine_tests",
     "//rs/types/base_types",
