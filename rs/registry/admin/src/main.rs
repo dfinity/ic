@@ -52,6 +52,7 @@ use ic_nns_governance_api::{
             SwapParameters,
         },
         install_code::CanisterInstallMode as GovernanceInstallMode,
+        proposal::Action,
         stop_or_start_canister::CanisterAction as GovernanceCanisterAction,
         update_canister_settings::{
             CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
@@ -5122,7 +5123,7 @@ where
 
     let action = cmd.action().await;
 
-    print_proposal(&action, &cmd);
+    print_proposal(&Action::from(action.clone()), &cmd);
 
     if cmd.is_dry_run() {
         return;
