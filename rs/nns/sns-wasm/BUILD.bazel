@@ -173,7 +173,6 @@ rust_ic_test_suite_with_extra_srcs(
     aliases = ALIASES,
     data = [
         ":sns-wasm-canister",
-        "@mainnet_nns_sns-wasm-canister//file",
         "//rs/nns/cmc:cycles-minting-canister",
         "//rs/nns/governance:governance-canister-test",
         "//rs/nns/gtc:genesis-token-canister",
@@ -189,6 +188,7 @@ rust_ic_test_suite_with_extra_srcs(
         "//rs/sns/governance:sns-governance-canister",
         "//rs/sns/root:sns-root-canister",
         "//rs/sns/swap:sns-swap-canister",
+        "@mainnet_nns_sns-wasm-canister//file",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/nns/sns-wasm",
