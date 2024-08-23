@@ -140,7 +140,6 @@ pub struct BatchMessages {
 /// Error type that can occur during an `BatchPayload::into_messages` call
 #[derive(Debug)]
 pub enum IntoMessagesError {
-    IngressPayloadError(IngressPayloadError),
     QueryStatsPayloadError(ProxyDecodeError),
 }
 

@@ -1298,7 +1298,7 @@ impl From<&Block> for pb::Block {
             (
                 pb::DkgPayload::from(&payload.as_data().dealings),
                 Some(pb::XNetPayload::from(&batch.xnet)),
-                Some(pb::IngressPayload::from(batch.ingress.clone())),
+                Some(pb::IngressPayload::from(&batch.ingress)),
                 Some(pb::SelfValidatingPayload::from(&batch.self_validating)),
                 batch.canister_http.clone(),
                 batch.query_stats.clone(),

@@ -27,12 +27,13 @@ fn ingress_to_proto(ingress: SignedIngress) -> pb::IngressMessage {
     }
 }
 
-impl From<IngressPayload> for pb::IngressPayload {
-    fn from(ingress_payload: IngressPayload) -> Self {
+impl From<&IngressPayload> for pb::IngressPayload {
+    fn from(ingress_payload: &IngressPayload) -> Self {
         Self {
             ingress_messages: ingress_payload
                 .ingress_messages
-                .into_iter()
+                .iter()
+                .cloned()
                 .map(ingress_to_proto)
                 .collect(),
         }

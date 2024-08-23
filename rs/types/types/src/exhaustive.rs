@@ -1,6 +1,5 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
-use crate::messages::{Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedDelegation, SignedIngress};
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::{QuadrupleInCreation, ThresholdEcdsaSigInputsRef};
@@ -27,6 +26,10 @@ use crate::crypto::{
     crypto_hash, AlgorithmId, BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf,
     CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, CryptoHashable,
     IndividualMultiSig, IndividualMultiSigOf, Signed, ThresholdSigShare, ThresholdSigShareOf,
+};
+use crate::messages::{
+    Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedDelegation,
+    SignedIngress,
 };
 use crate::signature::{
     BasicSignature, BasicSignatureBatch, MultiSignature, MultiSignatureShare, ThresholdSignature,
@@ -909,8 +912,8 @@ fn replace_by_singleton_if_empty<
 }
 
 impl ExhaustiveSet for SignedIngress {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-		let ingress_expiry = UNIX_EPOCH;
+    fn exhaustive_set<R: RngCore + CryptoRng>(_rng: &mut R) -> Vec<Self> {
+        let ingress_expiry = UNIX_EPOCH;
         let content = HttpCallContent::Call {
             update: HttpCanisterUpdate {
                 canister_id: Blob(vec![42; 8]),
@@ -944,12 +947,11 @@ impl ExhaustiveSet for SignedIngress {
                 )]),
             },
         ];
-        let signed_ingresses: Vec<SignedIngress> = update_messages
+
+        update_messages
             .into_iter()
             .map(|msg| SignedIngress::try_from(msg).unwrap())
-            .collect();
-
-		vec![]
+            .collect()
     }
 }
 
