@@ -398,6 +398,7 @@ fn icrc1_test_upgrade_serialization() {
         init_args,
         upgrade_args,
         minter,
+        true,
     );
 }
 

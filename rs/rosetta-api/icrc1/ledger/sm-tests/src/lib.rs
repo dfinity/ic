@@ -1,4 +1,4 @@
-use crate::in_memory_ledger::empty_icrc1_in_memory_ledger;
+use crate::in_memory_ledger::{empty_icrc1_in_memory_ledger, verify_ledger_state};
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
 use ic_agent::identity::{BasicIdentity, Identity};
 use ic_base_types::PrincipalId;
@@ -2481,6 +2481,7 @@ pub fn test_upgrade_serialization(
     init_args: Vec<u8>,
     upgrade_args: Vec<u8>,
     minter: Arc<BasicIdentity>,
+    verify_blocks: bool,
 ) {
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     let now = SystemTime::now();
@@ -2571,10 +2572,14 @@ pub fn test_upgrade_serialization(
                 }
                 // Test deserializing from memory manager
                 test_upgrade(ledger_wasm_current.clone());
-                // This will also verify the ledger blocks.
-                // verify_ledger_state(&env, ledger_id);
                 // Test downgrade to mainnet wasm
                 test_upgrade(ledger_wasm_mainnet.clone());
+                if verify_blocks {
+                    // This will also verify the ledger blocks.
+                    // The current implementation of the InMemoryLedger cannot get blocks
+                    // for the ICP ledger. This part of the test runs only for the ICRC1 ledger.
+                    verify_ledger_state(&env, ledger_id);
+                }
 
                 Ok(())
             },
