@@ -58,7 +58,6 @@ MACRO_DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/certification/test-utils",
-    "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/ecdsa_secp256r1",
     "//rs/crypto/ed25519",
     "//rs/crypto/for_verification_only",
@@ -73,6 +72,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/internal/test_vectors",
     "//rs/crypto/node_key_generation",
     "//rs/crypto/node_key_validation",
+    "//rs/crypto/secp256k1",
     "//rs/crypto/sha2",
     "//rs/crypto/temp_crypto",
     "//rs/crypto/test_utils",

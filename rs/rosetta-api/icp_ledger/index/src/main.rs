@@ -658,7 +658,7 @@ fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransa
 }
 
 #[candid_method(query)]
-#[query]
+#[query(decoding_quota = 10000)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =

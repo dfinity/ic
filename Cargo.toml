@@ -56,7 +56,6 @@ members = [
     "rs/constants",
     "rs/criterion_time",
     "rs/crypto",
-    "rs/crypto/ecdsa_secp256k1",
     "rs/crypto/ecdsa_secp256r1",
     "rs/crypto/ed25519",
     "rs/crypto/extended_bip32",
@@ -75,6 +74,7 @@ members = [
     "rs/crypto/internal/crypto_lib/multi_sig/bls12_381",
     "rs/crypto/internal/crypto_lib/seed",
     "rs/crypto/internal/crypto_lib/sha2",
+    "rs/crypto/secp256k1",
     "rs/crypto/secrets_containers",
     "rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
@@ -609,7 +609,10 @@ reqwest = { version = "0.12.5", default-features = false, features = [
     "stream",
 ] }
 rstest = "0.19.0"
-rustls = { version = "0.23.12", default-features = false, features = ["ring"] }
+rustls = { version = "0.23.12", default-features = false, features = [
+    "ring",
+    "std",
+] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"
 serde_cbor = "0.11.2"
