@@ -459,8 +459,13 @@ pub fn start_consensus_manager(
         rt_handle.clone(),
         MetricsRegistry::default(),
     );
-    let downloader =
-        FetchArtifact::new(log, rt_handle, pool, bouncer_factory, MetricsRegistry::default());
+    let downloader = FetchArtifact::new(
+        log,
+        rt_handle,
+        pool,
+        bouncer_factory,
+        MetricsRegistry::default(),
+    );
     cm1.add_client(artifact_manager_event_rx, artifact_sender, downloader);
     (artifact_processor_jh, cm1)
 }
