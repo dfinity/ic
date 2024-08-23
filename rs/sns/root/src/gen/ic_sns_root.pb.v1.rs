@@ -43,6 +43,10 @@ pub struct SnsRootCanister {
     /// controllers beyond SNS root are allowed when registering a dapp.
     #[prost(bool, tag = "8")]
     pub testflight: bool,
+    /// Set to `true` if the framework canisters' memory limit doesn't need to be changed
+    /// TODO(NNS1-3286): remove
+    #[prost(bool, optional, tag = "9")]
+    pub updated_framework_canisters_memory_limit: ::core::option::Option<bool>,
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
