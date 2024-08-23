@@ -512,7 +512,7 @@ pub fn verify_ledger_state(env: &StateMachine, ledger_id: CanisterId) {
     println!("retrieved all ledger and archive blocks");
     let expected_ledger_state = InMemoryLedger::new_from_icrc1_ledger_blocks(&blocks);
     println!("recreated expected ledger state");
-    expected_ledger_state.verify_all(&env, ledger_id);
+    expected_ledger_state.verify_all(env, ledger_id);
     println!("ledger state verified successfully");
 }
 
