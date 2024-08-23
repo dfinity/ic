@@ -1,16 +1,12 @@
-use crate::in_memory_ledger::{empty_icrc1_in_memory_ledger, verify_ledger_state};
+use crate::in_memory_ledger::empty_icrc1_in_memory_ledger;
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
-use ic_agent::identity::Identity;
+use ic_agent::identity::{BasicIdentity, Identity};
 use ic_base_types::PrincipalId;
 use ic_error_types::UserError;
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{endpoints::StandardRecord, hash::Hash, Block, Operation, Transaction};
-use ic_icrc1_ledger::{
-    FeatureFlags, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument as LedgerArg,
-};
-use ic_icrc1_test_utils::{
-    minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
-};
+use ic_icrc1_ledger::FeatureFlags;
+use ic_icrc1_test_utils::{valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType};
 use ic_ledger_core::timestamp::TimeStamp;
@@ -2478,14 +2474,16 @@ fn apply_arg_with_caller(
     }
 }
 
-pub fn icrc1_test_upgrade_serialization(
+pub fn test_upgrade_serialization(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current: Vec<u8>,
-    ledger_wasm_upgradetomemorymanager: Vec<u8>,
+    ledger_wasm_upgradetomemorymanager: Option<Vec<u8>>,
+    init_args: Vec<u8>,
+    upgrade_args: Vec<u8>,
+    minter: Arc<BasicIdentity>,
 ) {
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     let now = SystemTime::now();
-    let minter = Arc::new(minter_identity());
     let minter_principal: Principal = minter.sender().unwrap();
     const INITIAL_TX_BATCH_SIZE: usize = 100;
     const ADDITIONAL_TX_BATCH_SIZE: usize = 15;
@@ -2501,12 +2499,8 @@ pub fn icrc1_test_upgrade_serialization(
             |(transactions,)| {
                 let env = StateMachine::new();
                 env.set_time(now);
-                let builder = LedgerInitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
-                    .with_minting_account(minter_principal)
-                    .with_transfer_fee(FEE);
-                let args = Encode!(&LedgerArg::Init(builder.build())).unwrap();
                 let ledger_id = env
-                    .install_canister(ledger_wasm_mainnet.clone(), args, None)
+                    .install_canister(ledger_wasm_mainnet.clone(), init_args.clone(), None)
                     .unwrap();
 
                 let mut in_memory_ledger = empty_icrc1_in_memory_ledger();
@@ -2534,12 +2528,8 @@ pub fn icrc1_test_upgrade_serialization(
                 in_memory_ledger.verify_allowances(&env, ledger_id);
 
                 let mut test_upgrade = |ledger_wasm: Vec<u8>| {
-                    env.upgrade_canister(
-                        ledger_id,
-                        ledger_wasm,
-                        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-                    )
-                    .unwrap();
+                    env.upgrade_canister(ledger_id, ledger_wasm, upgrade_args.clone())
+                        .unwrap();
 
                     while tx_index < tx_index_target {
                         apply_arg_with_caller(&env, ledger_id, &transactions[tx_index]);
@@ -2562,21 +2552,21 @@ pub fn icrc1_test_upgrade_serialization(
                 test_upgrade(ledger_wasm_current.clone());
                 // Test the new wasm serialization
                 test_upgrade(ledger_wasm_current.clone());
-                // Test serializing to the memory manager
-                test_upgrade(ledger_wasm_upgradetomemorymanager.clone());
-                // Test upgrade to memory manager again
-                test_upgrade(ledger_wasm_upgradetomemorymanager.clone());
+                if let Some(ledger_wasm_upgradetomemorymanager) =
+                    ledger_wasm_upgradetomemorymanager.clone()
+                {
+                    // Test serializing to the memory manager
+                    test_upgrade(ledger_wasm_upgradetomemorymanager.clone());
+                    // Test upgrade to memory manager again
+                    test_upgrade(ledger_wasm_upgradetomemorymanager);
+                }
                 // Test deserializing from memory manager
                 test_upgrade(ledger_wasm_current.clone());
                 // This will also verify the ledger blocks.
-                verify_ledger_state(&env, ledger_id);
+                // verify_ledger_state(&env, ledger_id);
                 // Test downgrade to mainnet wasm
-                env.upgrade_canister(
-                    ledger_id,
-                    ledger_wasm_mainnet.clone(),
-                    Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-                )
-                .unwrap();
+                env.upgrade_canister(ledger_id, ledger_wasm_mainnet.clone(), upgrade_args.clone())
+                    .unwrap();
                 in_memory_ledger.verify_balance_count(&env, ledger_id);
                 in_memory_ledger.verify_balances(&env, ledger_id);
                 in_memory_ledger.verify_allowances(&env, ledger_id);

@@ -2,11 +2,13 @@ use candid::Principal;
 use candid::{Decode, Encode, Nat};
 use dfn_candid::CandidOne;
 use dfn_protobuf::ProtoBuf;
+use ic_agent::identity::Identity;
 use ic_base_types::CanisterId;
 use ic_icrc1_ledger_sm_tests::{
     balance_of, default_approve_args, default_transfer_from_args, expect_icrc2_disabled,
     get_allowance, send_approval, send_transfer_from, supported_standards, transfer, MINTER,
 };
+use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_core::{block::BlockType, Tokens};
 use ic_state_machine_tests::{ErrorCode, PrincipalId, StateMachine, UserError};
 use icp_ledger::{
@@ -27,7 +29,8 @@ use num_traits::cast::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
 use std::collections::{HashMap, HashSet};
-use std::time::{Duration, SystemTime};
+use std::sync::Arc;
+use std::time::SystemTime;
 
 fn system_time_to_nanos(t: SystemTime) -> u64 {
     t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
@@ -969,66 +972,31 @@ fn test_block_transformation() {
 }
 
 #[test]
-fn test_approval_upgrade() {
+fn test_upgrade_serialization() {
     let ledger_wasm_mainnet =
         std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
     let ledger_wasm_current = ledger_wasm();
 
-    let p1 = PrincipalId::new_user_test_id(1);
-    let p2 = PrincipalId::new_user_test_id(2);
-    let p3 = PrincipalId::new_user_test_id(3);
-
-    let env = StateMachine::new();
-    let mut initial_balances = HashMap::new();
-    initial_balances.insert(Account::from(p1.0).into(), Tokens::from_e8s(10_000_000));
-
+    let minter = Arc::new(minter_identity());
+    let minter_principal = minter.sender().unwrap();
     let payload = LedgerCanisterInitPayload::builder()
-        .minting_account(MINTER.into())
-        .icrc1_minting_account(MINTER)
-        .initial_values(initial_balances)
+        .minting_account(minter_principal.into())
+        .icrc1_minting_account(minter_principal.into())
         .transfer_fee(Tokens::from_e8s(10_000))
         .token_symbol_and_name("ICP", "Internet Computer")
         .build()
         .unwrap();
-    let canister_id = env
-        .install_canister(
-            ledger_wasm_mainnet.clone(),
-            CandidOne(payload).into_bytes().unwrap(),
-            None,
-        )
-        .expect("Unable to install the Ledger canister with the new init");
 
-    let approve_args = default_approve_args(p2.0, 120_000);
-    send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");
-    let mut approve_args = default_approve_args(p3.0, 130_000);
-    let expiration =
-        system_time_to_nanos(env.time()) + Duration::from_secs(5 * 3600).as_nanos() as u64;
-    approve_args.expires_at = Some(expiration);
-    send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");
-
-    let test_upgrade = |ledger_wasm: Vec<u8>| {
-        env.upgrade_canister(
-            canister_id,
-            ledger_wasm,
-            Encode!(&LedgerCanisterPayload::Upgrade(None)).unwrap(),
-        )
-        .unwrap();
-
-        let allowance = get_allowance(&env, canister_id, p1.0, p2.0);
-        assert_eq!(allowance.allowance.0.to_u64().unwrap(), 120_000);
-        assert_eq!(allowance.expires_at, None);
-
-        let allowance = get_allowance(&env, canister_id, p1.0, p3.0);
-        assert_eq!(allowance.allowance.0.to_u64().unwrap(), 130_000);
-        assert_eq!(allowance.expires_at, Some(expiration));
-    };
-
-    // Test if the old serialized approvals are correctly deserialized
-    test_upgrade(ledger_wasm_current.clone());
-    // Test if new approvals serialization also works
-    test_upgrade(ledger_wasm_current);
-    // Test if downgrade works
-    test_upgrade(ledger_wasm_mainnet);
+    let init_args = CandidOne(payload).into_bytes().unwrap();
+    let upgrade_args = Encode!(&LedgerCanisterPayload::Upgrade(None)).unwrap();
+    ic_icrc1_ledger_sm_tests::test_upgrade_serialization(
+        ledger_wasm_mainnet,
+        ledger_wasm_current,
+        None,
+        init_args,
+        upgrade_args,
+        minter,
+    );
 }
 
 #[test]
