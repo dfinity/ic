@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result}; // Make sure to include anyhow in your dependencies
+use anyhow::{anyhow, Result};
 use candid::{Decode, Encode, Principal};
 use ic_agent::Agent;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
@@ -11,7 +11,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::io::BufWriter;
 use tokio::process::Command;
 
-pub(crate) async fn query_sns_upgrade_steps(agent: &Agent) -> Result<ListUpgradeStepsResponse> {
+pub async fn query_sns_upgrade_steps(agent: &Agent) -> Result<ListUpgradeStepsResponse> {
     let sns_wasm_canister_id = Principal::from(SNS_WASM_CANISTER_ID);
     let request = ListUpgradeStepsRequest {
         limit: 0,
@@ -28,7 +28,7 @@ pub(crate) async fn query_sns_upgrade_steps(agent: &Agent) -> Result<ListUpgrade
     Decode!(&response_bytes, ListUpgradeStepsResponse).map_err(|e| anyhow!(e))
 }
 
-pub(crate) async fn get_git_version_for_sns_hash(
+pub async fn get_git_version_for_sns_hash(
     agent: &Agent,
     ic_wasm_path: &Path,
     hash: &[u8],

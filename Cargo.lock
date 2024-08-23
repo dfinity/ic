@@ -9475,6 +9475,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-interaction"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-agent",
+ "ic-nns-constants",
+ "ic-sns-wasm",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "ic-nervous-system-lock"
 version = "0.0.1"
 dependencies = [
@@ -19252,6 +19265,7 @@ dependencies = [
  "ic-base-types",
  "ic-nervous-system-clients",
  "ic-nervous-system-common-test-keys",
+ "ic-nervous-system-interaction",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",

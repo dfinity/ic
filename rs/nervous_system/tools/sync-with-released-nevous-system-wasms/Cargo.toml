@@ -25,6 +25,7 @@ ic-nns-governance = { path = "../../../nns/governance" }
 ic-sns-governance = { path = "../../../sns/governance" }
 ic-sns-swap = { path = "../../../sns/swap" }
 ic-sns-wasm = { path = "../../../nns/sns-wasm" }
+ic-nervous-system-interaction = { path = "../../interaction" }
 rgb = "0.8.37"
 serde = { workspace = true }
 tempfile = { workspace = true }
