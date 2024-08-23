@@ -2541,7 +2541,6 @@ impl StateManagerImpl {
                     .replicated_state_altered_after_checkpoint
                     .inc();
             }
-            let elapsed = start.elapsed();
         }
         {
             let _timer = self
