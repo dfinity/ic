@@ -234,6 +234,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "bit-vec": crate.spec(
                 version = "^0.6.3",
             ),
+            "bitcoin-0-32": crate.spec(
+                package = "bitcoin",
+		git = "https://github.com/ninegua/rust-bitcoin",
+		rev = "f1e732c9afe38caae7275fd38864dd44a2542988",
+	        default_features = False,
+            ),
             "bitcoin": crate.spec(
                 version = "^0.28.1",
                 features = [
