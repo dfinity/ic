@@ -152,7 +152,7 @@ impl MetricsHttpEndpoint {
 
         let mut addr = "[::]:9090".parse::<SocketAddr>().unwrap();
         addr.set_port(address.port());
-        let tcp_listener = start_tcp_listener(addr, &self.rt_handle );
+        let tcp_listener = start_tcp_listener(addr, &self.rt_handle);
         let _enter: tokio::runtime::EnterGuard = self.rt_handle.enter();
         let metrics_service = get(metrics_endpoint)
             .layer(
