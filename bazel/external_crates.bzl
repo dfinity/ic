@@ -716,7 +716,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "kube": crate.spec(
-                version = "^0.87.2",
+                version = "^0.93.1",
                 features = [
                     "runtime",
                     "derive",
