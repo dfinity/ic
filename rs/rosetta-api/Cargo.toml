@@ -20,7 +20,7 @@ hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-canister-client = { path = "../canister_client" }
 ic-constants = { path = "../constants" }
-ic-crypto-ecdsa-secp256k1 = { path = "../crypto/ecdsa_secp256k1" }
+ic-crypto-secp256k1 = { path = "../crypto/secp256k1" }
 ic-crypto-sha2 = { path = "../crypto/sha2/" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }

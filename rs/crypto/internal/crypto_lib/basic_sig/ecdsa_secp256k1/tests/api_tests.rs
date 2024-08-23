@@ -17,7 +17,7 @@ fn new_keypair(
     rng: &mut (impl rand::RngCore + rand::CryptoRng),
 ) -> (types::SecretKeyBytes, types::PublicKeyBytes) {
     let (sk, pk) = {
-        let sk = ic_crypto_ecdsa_secp256k1::PrivateKey::generate_using_rng(rng);
+        let sk = ic_crypto_secp256k1::PrivateKey::generate_using_rng(rng);
 
         let serialized_sk = sk.serialize_sec1();
         let serialized_pk = sk.public_key().serialize_sec1(false);
