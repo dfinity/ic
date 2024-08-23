@@ -1057,17 +1057,8 @@ fn http_request() {
     dfn_http_metrics::serve_metrics(encode_metrics);
 }
 
-/// Deprecated: The blessed way to get this information is to do (the equivalent
-/// of) `dfx canister metadata $CANISTER 'candid:service'`.
-///
-/// This makes this Candid service self-describing, so that for example Candid
-/// UI, but also other tools, can seamlessly integrate with it.
-/// The concrete interface (__get_candid_interface_tmp_hack) is provisional, but
-/// works.
-///
-/// We include the .did file as committed, as means it is included verbatim in
-/// the .wasm; using `candid::export_service` here would involve unnecessary
-/// runtime computation
+/// Deprecated: The blessed alternative is to do (the equivalent of)
+/// `dfx canister metadata $CANISTER 'candid:service'`.
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]
 fn expose_candid() {
     over(candid, |_: ()| include_str!("registry.did").to_string())

@@ -1168,26 +1168,17 @@ fn add_proposal_id_to_add_wasm_request(
     Ok(payload)
 }
 
-// This makes this Candid service self-describing, so that for example Candid
-// UI, but also other tools, can seamlessly integrate with it.
-// The concrete interface (__get_candid_interface_tmp_hack) is provisional, but
-// works.
-//
-// We include the .did file as committed, as means it is included verbatim in
-// the .wasm; using `candid::export_service` here would involve unnecessary
-// runtime computation
-
-#[cfg(not(feature = "test"))]
-#[export_name = "canister_query __get_candid_interface_tmp_hack"]
-fn expose_candid() {
-    over(candid, |_: ()| include_str!("governance.did").to_string())
-}
-
-#[cfg(feature = "test")]
+/// Deprecated: The blessed alternative is to do (the equivalent of)
+/// `dfx canister metadata $CANISTER 'candid:service'`.
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]
 fn expose_candid() {
     over(candid, |_: ()| {
-        include_str!("governance_test.did").to_string()
+        #[cfg(not(feature = "test"))]
+        let declared_interface = include_str!("governance.did");
+        #[cfg(feature = "test")]
+        let declared_interface = include_str!("governance_test.did");
+
+        declared_interface.to_string()
     })
 }
 
