@@ -1,4 +1,4 @@
-use crate::in_memory_ledger::empty_icrc1_in_memory_ledger;
+use crate::in_memory_ledger::{empty_icrc1_in_memory_ledger, verify_ledger_state};
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
 use ic_agent::identity::Identity;
 use ic_base_types::PrincipalId;
@@ -2487,7 +2487,6 @@ pub fn icrc1_test_upgrade_serialization(
     let now = SystemTime::now();
     let minter = Arc::new(minter_identity());
     let minter_principal: Principal = minter.sender().unwrap();
-    println!("minter_principal {}", minter_principal);
     runner
         .run(
             &(valid_transactions_strategy(minter, FEE, 100, now),),
@@ -2541,8 +2540,18 @@ pub fn icrc1_test_upgrade_serialization(
                 test_upgrade(ledger_wasm_upgradetomemorymanager.clone());
                 // Test deserializing from memory manager
                 test_upgrade(ledger_wasm_current.clone());
-                // // Test downgrade to mainnet wasm
-                // test_upgrade(ledger_wasm_mainnet);
+                // This will also verify the ledger blocks.
+                verify_ledger_state(&env, ledger_id);
+                // Test downgrade to mainnet wasm
+                env.upgrade_canister(
+                    ledger_id,
+                    ledger_wasm_mainnet.clone(),
+                    Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+                )
+                .unwrap();
+                in_memory_ledger.verify_balance_count(&env, ledger_id);
+                in_memory_ledger.verify_balances(&env, ledger_id);
+                in_memory_ledger.verify_allowances(&env, ledger_id);
 
                 Ok(())
             },
