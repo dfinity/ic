@@ -142,7 +142,7 @@ pub enum BouncerValue {
 
 /// Since the Bouncer above is defined as idempotent, the factory trait provides a way to refresh to a newer function.
 /// Invocations of the bouncer closure and factory should happen inside the implentations of the ArtifactAssembler.
-pub trait BouncerFactory<Id, Pool>: Send + Sync {
+pub trait BouncerFactory<Artifact: IdentifiableArtifact, Pool>: Send + Sync {
     /// Returns a new bouncer function for the given pool.
-    fn new_bouncer(&self, pool: &Pool) -> Bouncer<Id>;
+    fn new_bouncer(&self, pool: &Pool) -> Bouncer<Artifact::Id>;
 }
