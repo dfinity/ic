@@ -24,7 +24,7 @@ pub async fn get_inputs_internal(tx_id: String) -> Result<Vec<String>, BitcoinTx
     for (index, input_tx) in input_txs.iter().enumerate() {
         let output = &input_tx.output[vouts[index]];
         let address =
-            Address::from_script(&output.script_pubkey, Network::Bitcoin).ok_or(BitcoinTxError)?;
+            Address::from_script(&output.script_pubkey, Network::Bitcoin).map_err(|_| BitcoinTxError)?;
         addresses.push(address.to_string());
     }
 
@@ -73,7 +73,7 @@ async fn get_tx(tx_id: String) -> Result<Transaction, BitcoinTxError> {
             let tx = Transaction::consensus_decode(&mut response.body.as_slice())
                 .map_err(|_| BitcoinTxError)?;
             // Verify the correctness of the transaction by recomputing the transaction ID.
-            if tx.txid().to_string() != *tx_id {
+            if tx.compute_txid().to_string() != *tx_id {
                 return Err(BitcoinTxError);
             }
             Ok(tx)
