@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
-ic-crypto-ecdsa-secp256k1 = { path = "../../../../ecdsa_secp256k1" }
+ic-crypto-secp256k1 = { path = "../../../../secp256k1" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
 ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }

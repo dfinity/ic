@@ -1400,10 +1400,8 @@ message ProposalData {
   // This is populated when an OpenSnsTokenSwap proposal is first made.
   optional uint64 original_total_community_fund_maturity_e8s_equivalent = 17;
 
-  // This is populated when OpenSnsTokenSwap is executed. It is used when our
-  // conclude_community_fund_participation Candid method is called to either
-  // mint ICP, or restore CF neuron maturity.
-  repeated ic_sns_swap.pb.v1.CfParticipant cf_participants = 18;
+  reserved "cf_participants";
+  reserved 18;
 
   // This gets set to one of the terminal values (i.e. Committed or Aborted)
   // when the swap canister calls our conclude_community_fund_participation

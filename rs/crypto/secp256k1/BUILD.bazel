@@ -31,32 +31,32 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 rust_library(
-    name = "ecdsa_secp256k1",
+    name = "secp256k1",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    crate_name = "ic_crypto_ecdsa_secp256k1",
+    crate_name = "ic_crypto_secp256k1",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
     deps = DEPENDENCIES,
 )
 
 rust_doc(
-    name = "ecdsa_secp256k1_doc",
-    crate = ":ecdsa_secp256k1",
+    name = "secp256k1_doc",
+    crate = ":secp256k1",
 )
 
 rust_test(
-    name = "ecdsa_secp256k1_test",
+    name = "secp256k1_test",
     aliases = ALIASES,
-    crate = ":ecdsa_secp256k1",
+    crate = ":secp256k1",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test_suite(
-    name = "ecdsa_secp256k1_integration",
+    name = "secp256k1_integration",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":ecdsa_secp256k1"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [":secp256k1"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

@@ -151,7 +151,6 @@ impl CallServiceV3 {
         )
     }
 
-    #[allow(dead_code)]
     pub fn new_service(
         call_handler: IngressValidator,
         ingress_watcher_handle: IngressWatcherHandle,

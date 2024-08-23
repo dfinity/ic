@@ -14,7 +14,6 @@ mod pprof;
 mod query;
 mod read_state;
 mod status;
-mod threads;
 mod tracing_flamegraph;
 
 cfg_if::cfg_if! {
@@ -337,7 +336,6 @@ pub fn start_server(
     .with_malicious_flags(malicious_flags.clone())
     .build();
 
-    let call_router = call::CallServiceV2::new_router(call_handler.clone());
     let (ingress_watcher_handle, _) = IngressWatcher::start(
         rt_handle.clone(),
         log.clone(),
@@ -346,6 +344,9 @@ pub fn start_server(
         completed_execution_messages_rx,
         CancellationToken::new(),
     );
+
+    let call_router =
+        call::CallServiceV2::new_router(call_handler.clone(), Some(ingress_watcher_handle.clone()));
 
     let call_v3_router = call::CallServiceV3::new_router(
         call_handler,

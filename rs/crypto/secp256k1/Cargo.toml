@@ -1,5 +1,5 @@
 [package]
-name = "ic-crypto-ecdsa-secp256k1"
+name = "ic-crypto-secp256k1"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
