@@ -3293,6 +3293,7 @@ dependencies = [
  "dfn_candid",
  "dfn_core",
  "dfn_http",
+ "ic-canisters-http-types",
  "ic-metrics-encoder",
  "serde_bytes",
 ]
@@ -8322,6 +8323,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-test-utils",
  "ic-metrics-encoder",
+ "ic-rosetta-test-utils",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
@@ -8688,6 +8690,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-hash-of",
  "ic-management-canister-types",
+ "ic-rosetta-test-utils",
  "ic-state-machine-tests",
  "ic-types",
  "ic-universal-canister",
@@ -11056,9 +11059,12 @@ name = "ic-rosetta-test-utils"
 version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
+ "candid",
  "hex",
+ "ic-canisters-http-types",
  "ic-icrc1-test-utils",
  "ic-rosetta-api",
+ "ic-state-machine-tests",
  "ic-types",
  "icp-ledger",
  "nix 0.24.3",
@@ -11066,6 +11072,7 @@ dependencies = [
  "reqwest 0.12.5",
  "rosetta-core",
  "serde",
+ "serde_bytes",
  "serde_json",
  "slog",
  "tempfile",
@@ -12842,9 +12849,11 @@ dependencies = [
 name = "ic-xnet-endpoint"
 version = "0.9.0"
 dependencies = [
+ "axum 0.7.5",
  "bytes",
  "crossbeam-channel",
- "hyper 0.14.26",
+ "hyper 1.4.1",
+ "hyper-util",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
  "ic-interfaces-certified-stream-store",
@@ -12872,6 +12881,8 @@ dependencies = [
  "slog",
  "threadpool",
  "tokio",
+ "tokio-rustls 0.26.0",
+ "tower",
  "url",
 ]
 
@@ -12879,7 +12890,9 @@ dependencies = [
 name = "ic-xnet-hyper"
 version = "0.9.0"
 dependencies = [
- "hyper 0.14.26",
+ "hyper 1.4.1",
+ "hyper-rustls 0.27.2",
+ "hyper-util",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-tls",
  "ic-interfaces-registry",
@@ -12887,6 +12900,7 @@ dependencies = [
  "socket2 0.5.7",
  "tokio",
  "tokio-rustls 0.26.0",
+ "tower",
 ]
 
 [[package]]
@@ -12896,7 +12910,9 @@ dependencies = [
  "assert_matches",
  "async-trait",
  "axum 0.7.5",
- "hyper 0.14.26",
+ "http-body-util",
+ "hyper 1.4.1",
+ "hyper-util",
  "ic-async-utils",
  "ic-base-types",
  "ic-canonical-state",
@@ -12941,6 +12957,7 @@ dependencies = [
  "reqwest 0.12.5",
  "slog",
  "tempfile",
+ "thiserror",
  "tokio",
  "url",
 ]
@@ -12949,7 +12966,7 @@ dependencies = [
 name = "ic-xnet-uri"
 version = "0.9.0"
 dependencies = [
- "http 0.2.12",
+ "http 1.1.0",
  "ic-types",
 ]
 
@@ -14156,6 +14173,7 @@ dependencies = [
  "dfn_http_metrics",
  "dfn_protobuf",
  "ic-base-types",
+ "ic-canisters-http-types",
  "ic-cdk 0.13.5",
  "ic-ledger-canister-core",
  "ic-ledger-core",
@@ -14166,6 +14184,7 @@ dependencies = [
  "lazy_static",
  "pocket-ic",
  "serde",
+ "serde_bytes",
 ]
 
 [[package]]
