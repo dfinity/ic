@@ -296,6 +296,21 @@ fn debug_log(s: &str) {
     }
 }
 
+fn panic_with_probability(probability: f64, message: &str) {
+    // We cannot use the `CanisterEnv::random_u64` method here, since panicking rolls back the
+    // state, which makes sure that the next time still panics, unless some other operation modifies
+    // the `rng` successfully, such as spawning a neuron.
+    let now_seconds = now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("Could not get the duration.")
+        .as_secs();
+    let random = ChaCha20Rng::seed_from_u64(now_seconds).next_u64();
+    let should_panic = (random as f64) / (u64::MAX as f64) < probability;
+    if should_panic {
+        panic!("{}", message);
+    }
+}
+
 #[export_name = "canister_init"]
 fn canister_init() {
     dfn_core::printer::hook();
@@ -847,6 +862,10 @@ fn canister_heartbeat() {
 #[export_name = "canister_update manage_neuron_pb"]
 fn manage_neuron_pb() {
     debug_log("manage_neuron_pb");
+    panic_with_probability(
+        0.1,
+        "manage_neuron_pb is deprecated. Please use manage_neuron instead.",
+    );
     over_async(protobuf, manage_neuron_)
 }
 
@@ -865,6 +884,10 @@ fn list_proposals_pb() {
 #[export_name = "canister_query list_neurons_pb"]
 fn list_neurons_pb() {
     debug_log("list_neurons_pb");
+    panic_with_probability(
+        0.1,
+        "list_neurons_pb is deprecated. Please use list_neurons instead.",
+    );
     over(protobuf, list_neurons_)
 }
 
