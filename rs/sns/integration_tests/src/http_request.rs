@@ -44,7 +44,7 @@ async fn test_http_request_decoding_quota_for_canister(canister: &Canister<'_>) 
 }
 
 #[test]
-fn test_motion_proposal_execution() {
+fn test_http_request_decoding_quota() {
     local_test_on_sns_subnet(|runtime| async move {
         let system_params = NervousSystemParameters {
             neuron_claimer_permissions: Some(NeuronPermissionList {
