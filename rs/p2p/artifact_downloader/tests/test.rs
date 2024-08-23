@@ -22,7 +22,7 @@ use ic_types_test_utils::ids::NODE_1;
 use mockall::Sequence;
 use tokio::runtime::Handle;
 
-/// Check that an advert for which the priority changes from stash to fetch is downloaded.
+/// Check that an update with ID for which the bouncer value changes from MaybeWantsLater to Wants is downloaded.
 #[tokio::test]
 async fn priority_from_stash_to_fetch() {
     // Abort process if a thread panics. This catches detached tokio tasks that panic.

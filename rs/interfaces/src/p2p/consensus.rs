@@ -145,6 +145,6 @@ pub type Bouncer<Id> = Box<dyn Fn(&Id) -> BouncerValue + Send + Sync + 'static>;
 /// the filter function.
 /// All the filtering logic should happen inside the implentations of the ArtifactAssembler.
 pub trait BouncerFactory<Artifact: IdentifiableArtifact, Pool>: Send + Sync {
-    /// Returns a priority function for the given pool.
+    /// Returns a bouncer function for the given pool.
     fn get_bouncer(&self, pool: &Pool) -> Bouncer<Artifact::Id>;
 }
