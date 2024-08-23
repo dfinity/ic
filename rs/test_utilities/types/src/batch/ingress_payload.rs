@@ -42,7 +42,6 @@ mod tests {
     use super::*;
     use crate::messages::SignedIngressBuilder;
     use ic_types::time::expiry_time_from_now;
-    use std::convert::TryFrom;
     use std::time::Duration;
 
     #[test]
@@ -81,6 +80,6 @@ mod tests {
 
         assert_eq!(payload.as_ref(), msgs);
         // Converting back to messages should match original
-        assert_eq!(msgs, <Vec<SignedIngress>>::try_from(payload).unwrap());
+        assert_eq!(msgs, <Vec<SignedIngress>>::from(payload));
     }
 }

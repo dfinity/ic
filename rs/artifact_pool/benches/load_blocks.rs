@@ -15,6 +15,7 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::consensus::{BlockPayload, DataPayload};
+use ic_types::messages::SignedIngress;
 use ic_types::{
     batch::{BatchPayload, IngressPayload},
     consensus::{dkg, Block, BlockProposal, ConsensusMessageHashable, HasHeight, Payload, Rank},
@@ -43,6 +44,21 @@ where
     })
 }
 
+fn fake_ingress_payload(count: usize, size: usize) -> IngressPayload {
+    let mut ingress_messages = Vec::new();
+
+    for nonce in 0..count {
+        let ingress =  SignedIngressBuilder::new()
+            .method_payload(vec![0; size])
+            .nonce(nonce as u64)
+            .build();
+
+        ingress_messages.push(ingress);
+    }
+
+    IngressPayload::from(ingress_messages)
+}
+
 fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
     let cup = pool
         .validated()
@@ -55,9 +71,7 @@ fn prepare(pool: &mut ConsensusPoolImpl, num: usize) {
     for i in 0..num {
         let mut block = Block::from_parent(parent);
         block.rank = Rank(i as u64);
-        let ingress = IngressPayload::from(vec![SignedIngressBuilder::new()
-            .method_payload(vec![0; 128 * 1024])
-            .build()]);
+        let ingress = fake_ingress_payload(100, 128 * 1024);
         block.payload = Payload::new(
             ic_types::crypto::crypto_hash,
             BlockPayload::Data(DataPayload {
@@ -100,6 +114,21 @@ fn sum_ingress_counts(pool: &dyn ConsensusPool) -> usize {
         .sum::<usize>()
 }
 
+fn sum_ingress_nonces(pool: &dyn ConsensusPool) -> usize {
+    pool.validated()
+        .block_proposal()
+        .get_all()
+        .flat_map(|proposal| {
+            let block: Block = proposal.into();
+            let batch = &block.payload.as_ref().as_data().batch;
+            let ingresses: Vec<SignedIngress> = batch.ingress.clone().try_into().unwrap();
+
+            ingresses
+        })
+        .map(|ingress| ingress.nonce().map(|x| x.len()).unwrap_or_default())
+        .sum::<usize>()
+}
+
 /// Speed test for loading and copying block proposals.
 fn load_blocks(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("block_loading");
@@ -113,6 +142,11 @@ fn load_blocks(criterion: &mut Criterion) {
         group.bench_function("Load blocks and sum their ingress counts", |bench| {
             bench.iter(|| {
                 sum_ingress_counts(pool);
+            })
+        });
+        group.bench_function("Load blocks and sum their ingress nonces", |bench| {
+            bench.iter(|| {
+                sum_ingress_nonces(pool);
             })
         });
     })
