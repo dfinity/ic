@@ -1,10 +1,9 @@
-# Boundary GuestOS
-exports_files(
-    glob(["boundary-guestos/**"]),
-    ["//ic-os/boundary-guestos:__subpackages__"],
-)
+load(":defs.bzl", "check_unused_components_test")
+load("//ic-os/components:guestos.bzl", guestos_component_files = "component_files")
+load("//ic-os/components:hostos.bzl", hostos_component_files = "component_files")
+load("//ic-os/components:setupos.bzl", setupos_component_files = "component_files")
+load("//ic-os/components:boundary-guestos.bzl", boundaryos_component_files = "component_files")
 
-# GuestOS
 PUBLIC_GUESTOS_EXPORTS = [
     "ic/ic.json5.template",
     "networking/dev-certs/canister_http_test_ca.cert",
@@ -12,40 +11,21 @@ PUBLIC_GUESTOS_EXPORTS = [
     "hostos-scripts/build-bootstrap-config-image.sh",
 ]
 
-exports_files(
-    glob(["guestos/**"]),
-    ["//ic-os/guestos:__subpackages__"],
-)
-
 exports_files(PUBLIC_GUESTOS_EXPORTS)
 
-# HostOS
-exports_files(
-    glob(["hostos/**"]),
-    ["//ic-os/hostos:__subpackages__"],
+used_components = dict()
+used_components.update(boundaryos_component_files)
+used_components.update(guestos_component_files)
+used_components.update(hostos_component_files)
+used_components.update(setupos_component_files)
+
+REPO_COMPONENTS = glob(
+    ["**/*"],
+    exclude = ["**/BUILD.bazel", "**/*.bzl", "**/*.md", "**/*.adoc"]
 )
 
-# SetupOS
-exports_files(
-    glob(["setupos/**"]),
-    ["//ic-os/setupos:__subpackages__"],
-)
-
-# Common
-exports_files(
-    glob(
-        ["**"],
-        exclude = [
-            "boundary-guestos/**",
-            "guestos/**",
-            "hostos/**",
-            "setupos/**",
-        ] + PUBLIC_GUESTOS_EXPORTS,
-    ),
-    [
-        "//ic-os/boundary-guestos:__subpackages__",
-        "//ic-os/guestos:__subpackages__",
-        "//ic-os/hostos:__subpackages__",
-        "//ic-os/setupos:__subpackages__",
-    ],
+check_unused_components_test(
+    name = "check_unused_components_test",
+    repo_components = REPO_COMPONENTS,
+    used_components = used_components.keys(),
 )
