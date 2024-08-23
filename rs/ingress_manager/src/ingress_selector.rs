@@ -334,14 +334,12 @@ impl IngressSelector for IngressManager {
 
         // Tracks the sum of cycles needed per canister.
         let mut cycles_needed: BTreeMap<CanisterId, Cycles> = BTreeMap::new();
-        for i in 0..payload.message_count() {
-            let (ingress_id, ingress) = payload
-                .get(i)
-                .map_err(InvalidIngressPayloadReason::IngressPayloadError)?;
+        for ingress_message in payload.as_ref() {
+            let ingress_id = IngressMessageId::from(ingress_message);
 
             self.validate_ingress(
-                ingress_id.clone(),
-                &ingress,
+                ingress_id,
+                ingress_message,
                 &state,
                 context,
                 &settings,

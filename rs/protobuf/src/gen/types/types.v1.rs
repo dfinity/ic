@@ -1257,12 +1257,8 @@ pub struct IngressIdOffset {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressMessage {
-    #[prost(uint64, tag = "1")]
-    pub expiry: u64,
-    #[prost(bytes = "vec", tag = "2")]
-    pub message_id: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "3")]
-    pub ingress_message: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "1")]
+    pub content: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

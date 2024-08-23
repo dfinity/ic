@@ -151,10 +151,7 @@ impl BatchPayload {
     #[allow(clippy::result_large_err)]
     pub fn into_messages(self) -> Result<BatchMessages, IntoMessagesError> {
         Ok(BatchMessages {
-            signed_ingress_msgs: self
-                .ingress
-                .try_into()
-                .map_err(IntoMessagesError::IngressPayloadError)?,
+            signed_ingress_msgs: self.ingress.into(),
             certified_stream_slices: self.xnet.stream_slices,
             bitcoin_adapter_responses: self.self_validating.0,
             query_stats: QueryStatsPayload::deserialize(&self.query_stats)

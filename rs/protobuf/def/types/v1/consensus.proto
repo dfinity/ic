@@ -204,9 +204,7 @@ message IngressIdOffset {
 }
 
 message IngressMessage {
-  uint64 expiry = 1;
-  bytes message_id = 2;
-  bytes ingress_message = 3;
+  bytes content = 1;
 }
 
 message IngressPayload {
