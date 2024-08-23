@@ -2559,6 +2559,20 @@ pub fn test_upgrade_serialization(
                     test_upgrade(ledger_wasm_upgradetomemorymanager.clone());
                     // Test upgrade to memory manager again
                     test_upgrade(ledger_wasm_upgradetomemorymanager);
+
+                    // Current mainnet wasm cannot deserialize from memory manager
+                    match env.upgrade_canister(
+                        ledger_id,
+                        ledger_wasm_mainnet.clone(),
+                        upgrade_args.clone(),
+                    ) {
+                        Ok(_) => {
+                            panic!("Upgrade from memory manager directly to mainnet should fail!")
+                        }
+                        Err(e) => {
+                            assert!(e.description().contains("failed to decode ledger state"))
+                        }
+                    };
                 }
                 // Test deserializing from memory manager
                 test_upgrade(ledger_wasm_current.clone());

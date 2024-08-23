@@ -1,4 +1,4 @@
-use crate::common::{ledger_wasm, ledger_wasm_upgradetomemorymanager, load_wasm_using_env_var};
+use crate::common::{ledger_wasm, load_wasm_using_env_var};
 use candid::{Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg, UpgradeArg as IndexUpgradeArg};
@@ -83,59 +83,6 @@ fn should_upgrade_and_downgrade_ledger_canister_suite() {
         Encode!(&ledger_upgrade_arg).unwrap(),
     )
     .unwrap();
-}
-
-#[test]
-fn should_upgrade_and_downgrade_with_memory_manager() {
-    let now = SystemTime::now();
-    let env = &StateMachineBuilder::new()
-        .with_subnet_type(SubnetType::Application)
-        .with_subnet_size(28)
-        .build();
-    env.set_time(now);
-
-    let ledger_id = install_ledger(
-        env,
-        vec![],
-        default_archive_options(),
-        None,
-        MINTER_PRINCIPAL,
-    );
-
-    env.advance_time(Duration::from_secs(60));
-    env.tick();
-
-    let test_upgrade = |ledger_wasm: Vec<u8>| {
-        env.upgrade_canister(
-            ledger_id,
-            ledger_wasm,
-            Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-        )
-        .unwrap();
-
-        env.advance_time(Duration::from_secs(60));
-        env.tick();
-    };
-
-    test_upgrade(ledger_wasm());
-    test_upgrade(ledger_wasm_upgradetomemorymanager());
-
-    // Current mainnet wasm cannot deserialize from memory manager
-    match env.upgrade_canister(
-        ledger_id,
-        ledger_mainnet_wasm(),
-        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-    ) {
-        Ok(_) => panic!("Upgrade from memory manager directly to mainnet should fail!"),
-        Err(e) => assert!(e.description().contains("failed to decode ledger state")),
-    };
-
-    env.advance_time(Duration::from_secs(60));
-    env.tick();
-
-    // We have to go through current wasm to downgrade to mainnet wasm
-    test_upgrade(ledger_wasm());
-    test_upgrade(ledger_mainnet_wasm());
 }
 
 fn default_archive_options() -> ArchiveOptions {
