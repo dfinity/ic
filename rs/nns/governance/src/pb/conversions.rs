@@ -1897,7 +1897,6 @@ impl From<pb::ProposalData> for pb_api::ProposalData {
             wait_for_quiet_state: item.wait_for_quiet_state.map(|x| x.into()),
             original_total_community_fund_maturity_e8s_equivalent: item
                 .original_total_community_fund_maturity_e8s_equivalent,
-            cf_participants: item.cf_participants,
             sns_token_swap_lifecycle: item.sns_token_swap_lifecycle,
             derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
             neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
@@ -1926,7 +1925,6 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
             wait_for_quiet_state: item.wait_for_quiet_state.map(|x| x.into()),
             original_total_community_fund_maturity_e8s_equivalent: item
                 .original_total_community_fund_maturity_e8s_equivalent,
-            cf_participants: item.cf_participants,
             sns_token_swap_lifecycle: item.sns_token_swap_lifecycle,
             derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
             neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
