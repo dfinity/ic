@@ -6,7 +6,7 @@ New compressed Wasm hash: `fedd6d09b477eb6f79a682fc1868c97de04fe4469817374a8ddf8
 
 Target canister: `vxkom-oyaaa-aaaar-qafda-cai`
 
-Previous ledger suite orchestrator proposal: https://dashboard.internetcomputer.org/proposal/TODO
+Previous ledger suite orchestrator proposal: https://dashboard.internetcomputer.org/proposal/132130
 
 ---
 
