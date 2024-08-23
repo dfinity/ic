@@ -5,9 +5,9 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{File, OpenOptions},
     io::Write,
-    ops::Range,
+    ops::{Deref, Range},
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, OnceLock},
 };
 
 use crate::page_map::{
@@ -152,14 +152,67 @@ impl BaseFile {
 /// from the newest overlay containing the page.
 /// The contents of pages that appear in no overlay file are read from `base`.
 #[derive(Default, Clone)]
-pub(crate) struct Storage {
+pub(crate) struct StorageImpl {
     /// The lowest level data we mmap during loading.
     base: BaseFile,
     /// Stack of overlay files, newest file last.
     overlays: Vec<OverlayFile>,
 }
 
+#[derive(Default, Clone)]
+pub(crate) struct Storage {
+    storage_layout: Option<Arc<dyn StorageLayout + Send + Sync>>,
+    imp: OnceLock<StorageImpl>,
+}
+
 impl Storage {
+    fn init(&self) -> &StorageImpl {
+        self.imp.get_or_init(|| match self.storage_layout.as_ref() {
+            None => Default::default(),
+            Some(storage_layout) => {
+                StorageImpl::load(storage_layout.deref()).expect("Failed to load storage layout")
+            }
+        })
+    }
+
+    pub fn load(
+        storage_layout: Arc<dyn StorageLayout + Send + Sync>,
+    ) -> Result<Self, PersistenceError> {
+        Ok(Storage {
+            storage_layout: Some(storage_layout),
+            imp: OnceLock::default(),
+        })
+    }
+    pub fn get_page(&self, page_index: PageIndex) -> &PageBytes {
+        self.init().get_page(page_index)
+    }
+    pub fn get_base_memory_instructions(&self) -> MemoryInstructions {
+        self.init().get_base_memory_instructions()
+    }
+    pub fn get_memory_instructions(
+        &self,
+        range: Range<PageIndex>,
+        filter: &mut BitVec,
+    ) -> MemoryInstructions {
+        self.init().get_memory_instructions(range, filter)
+    }
+    pub fn num_logical_pages(&self) -> usize {
+        self.init().num_logical_pages()
+    }
+    pub fn serialize(&self) -> StorageSerialization {
+        self.init().serialize()
+    }
+    pub fn deserialize(serialized_storage: StorageSerialization) -> Result<Self, PersistenceError> {
+        let imp = OnceLock::new();
+        let _ = imp.set(StorageImpl::deserialize(serialized_storage)?);
+        Ok(Self {
+            storage_layout: None,
+            imp,
+        })
+    }
+}
+
+impl StorageImpl {
     pub fn load(storage_layout: &dyn StorageLayout) -> Result<Self, PersistenceError> {
         // For each shard, the oldest (i.e. lowest height) overlay belongs to `BaseFile` if it
         // consists of a single range.

@@ -2451,7 +2451,7 @@ impl StateMachine {
         let tip_canister_layout = tip
             .canister(&canister_id)
             .expect("failed to obtain canister layout");
-        std::fs::create_dir_all(tip_canister_layout.raw_path())
+        std::fs::create_dir_all(&tip_canister_layout.raw_path())
             .expect("Failed to create checkpoint dir");
 
         fn copy_as_writeable(src: &Path, dst: &Path) {
