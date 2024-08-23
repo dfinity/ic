@@ -6,7 +6,6 @@ use futures_util::{
 use http_body_util::{BodyExt, Full};
 use hyper::{body::Bytes, header::CONTENT_TYPE, Method, StatusCode, Uri as HyperUri};
 use hyper_rustls::{HttpsConnector as HyperTlsConnector, HttpsConnectorBuilder};
-// use hyper_util::client::legacy::Client;
 use hyper_util::{
     client::legacy::{
         connect::{
@@ -18,7 +17,6 @@ use hyper_util::{
     rt::TokioExecutor,
 };
 use itertools::Either;
-use rustls::ClientConfig;
 use serde_cbor::Value;
 use std::sync::Arc;
 use std::{
@@ -188,34 +186,6 @@ impl HttpClient {
             https_connector.enable_http1().enable_http2()
         };
         let https_connector = https_connector.wrap_connector(http_connector);
-
-        let hyper = HyperClient::builder(TokioExecutor::new())
-            .pool_idle_timeout(config.pool_idle_timeout)
-            .pool_max_idle_per_host(config.pool_max_idle_per_host)
-            .http2_only(config.http2_only)
-            .build::<_, Full<Bytes>>(https_connector);
-
-        Self { hyper }
-    }
-
-    pub fn new_with_tls_config(tls_config: ClientConfig) -> Self {
-        let config = HttpClientConfig::default();
-
-        let mut http_connector =
-            HyperConnector::new_with_resolver(DnsResolverWithOverrides::new(config.overrides));
-        http_connector.enforce_http(false);
-
-        let https_connector = HttpsConnectorBuilder::new()
-            .with_tls_config(tls_config)
-            .https_only();
-
-        let https_connector = if config.http2_only {
-            https_connector.enable_http2()
-        } else {
-            https_connector.enable_http1().enable_http2()
-        };
-        let https_connector: HyperTlsConnector<HyperConnector<DnsResolverWithOverrides>> =
-            https_connector.wrap_connector(http_connector);
 
         let hyper = HyperClient::builder(TokioExecutor::new())
             .pool_idle_timeout(config.pool_idle_timeout)

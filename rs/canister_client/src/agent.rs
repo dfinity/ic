@@ -123,11 +123,6 @@ impl Agent {
         Self::build_agent(url, http_client, sender)
     }
 
-    pub fn new_with_tls_config(url: Url, sender: Sender, tls_config: rustls::ClientConfig) -> Self {
-        let http_client = Arc::new(HttpClient::new_with_tls_config(tls_config));
-        Self::build_agent(url, http_client, sender)
-    }
-
     pub fn new_with_http_client_config(
         url: Url,
         sender: Sender,
