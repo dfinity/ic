@@ -2521,24 +2521,7 @@ pub fn test_upgrade_serialization(
                 let mut tx_index = 0;
                 let mut tx_index_target = INITIAL_TX_BATCH_SIZE;
 
-                while tx_index < tx_index_target {
-                    apply_arg_with_caller(&env, ledger_id, &transactions[tx_index]);
-                    in_memory_ledger.apply_arg_with_caller(
-                        &transactions[tx_index],
-                        TimeStamp::from_nanos_since_unix_epoch(system_time_to_nanos(env.time())),
-                        minter_principal,
-                        Some(FEE.into()),
-                    );
-                    tx_index += 1;
-                }
-                tx_index_target += ADDITIONAL_TX_BATCH_SIZE;
-
-                in_memory_ledger.verify_balances_and_allowances(&env, ledger_id);
-
-                let mut test_upgrade = |ledger_wasm: Vec<u8>| {
-                    env.upgrade_canister(ledger_id, ledger_wasm, upgrade_args.clone())
-                        .unwrap();
-
+                let mut add_tx_and_verify = || {
                     while tx_index < tx_index_target {
                         apply_arg_with_caller(&env, ledger_id, &transactions[tx_index]);
                         in_memory_ledger.apply_arg_with_caller(
@@ -2552,8 +2535,14 @@ pub fn test_upgrade_serialization(
                         tx_index += 1;
                     }
                     tx_index_target += ADDITIONAL_TX_BATCH_SIZE;
-
                     in_memory_ledger.verify_balances_and_allowances(&env, ledger_id);
+                };
+                add_tx_and_verify();
+
+                let mut test_upgrade = |ledger_wasm: Vec<u8>| {
+                    env.upgrade_canister(ledger_id, ledger_wasm, upgrade_args.clone())
+                        .unwrap();
+                    add_tx_and_verify();
                 };
 
                 // Test if the old serialized approvals and balances are correctly deserialized
