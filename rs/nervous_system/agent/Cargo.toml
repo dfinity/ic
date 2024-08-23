@@ -13,5 +13,6 @@ candid = { workspace = true }
 ic-agent = { workspace = true }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-sns-wasm = { path = "../../nns/sns-wasm" }
+serde = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
