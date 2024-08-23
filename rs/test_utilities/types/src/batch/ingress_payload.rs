@@ -41,8 +41,7 @@ impl IngressPayloadBuilder {
 mod tests {
     use super::*;
     use crate::messages::SignedIngressBuilder;
-    use assert_matches::assert_matches;
-    use ic_types::{batch::IngressPayloadError, time::expiry_time_from_now};
+    use ic_types::time::expiry_time_from_now;
     use std::convert::TryFrom;
     use std::time::Duration;
 
@@ -62,7 +61,6 @@ mod tests {
             .method_name("m1".to_string())
             .expiry_time(time + Duration::from_secs(1))
             .build();
-        let m1_id = m1.id();
         let m2 = SignedIngressBuilder::new()
             .method_name("m2".to_string())
             .expiry_time(time + Duration::from_secs(2))
@@ -75,38 +73,14 @@ mod tests {
         let msgs = vec![m1, m2, m3];
         let payload = IngressPayload::from(msgs.clone());
         // Serialization/deserialization works.
-        let mut bytes = bincode::serialize(&payload).unwrap();
+        let bytes = bincode::serialize(&payload).unwrap();
         assert_eq!(
             bincode::deserialize::<IngressPayload>(&bytes).unwrap(),
             payload
         );
-        // Individual lookup works.
-        assert_matches!(payload.get(0).unwrap(), (_, msg) if msg == msgs[0]);
-        assert_matches!(payload.get(1).unwrap(), (_, msg) if msg == msgs[1]);
-        assert_matches!(payload.get(2).unwrap(), (_, msg) if msg == msgs[2]);
-        // Test IndexOutOfBound.
-        assert_matches!(payload.get(3), Err(IngressPayloadError::IndexOutOfBound(3)));
+
+        assert_eq!(payload.as_ref(), msgs);
         // Converting back to messages should match original
         assert_eq!(msgs, <Vec<SignedIngress>>::try_from(payload).unwrap());
-
-        // A sub-sequence search function
-        fn find(array: &[u8], subseq: &[u8]) -> Option<usize> {
-            (0..array.len() - subseq.len() + 1).find(|&i| array[i..i + subseq.len()] == subseq[..])
-        }
-
-        // Mutate some byte, deserialization works, but casting back to messages fail.
-        let pos = find(&bytes, m1_id.as_bytes()).unwrap();
-        // `+= 1` may overflow in debug mode.
-        bytes[pos] ^= 1;
-        let payload = bincode::deserialize::<IngressPayload>(&bytes);
-        assert!(payload.is_ok());
-        let payload = payload.unwrap();
-        // get(0) should return error.
-        assert_matches!(
-            payload.get(0),
-            Err(IngressPayloadError::MismatchedMessageIdAtIndex(0))
-        );
-        // Conversion should also fail.
-        assert!(<Vec<_>>::try_from(payload).is_err());
     }
 }
