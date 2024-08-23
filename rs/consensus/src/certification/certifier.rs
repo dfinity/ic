@@ -747,7 +747,7 @@ mod tests {
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
                 cert_pool.apply_changes(change_set);
 
-                let prio_fn = certifier_gossip.new_bouncer(&cert_pool);
+                let bouncer = certifier_gossip.new_bouncer(&cert_pool);
                 for (height, prio) in &[
                     (1, BouncerValue::Unwanted),
                     (2, BouncerValue::Wants),
@@ -755,7 +755,7 @@ mod tests {
                     (4, BouncerValue::Wants),
                 ] {
                     assert_eq!(
-                        prio_fn(&CertificationMessageId {
+                        bouncer(&CertificationMessageId {
                             height: Height::from(*height),
                             hash: CertificationMessageHash::Certification(CryptoHashOf::from(
                                 CryptoHash(Vec::new())
