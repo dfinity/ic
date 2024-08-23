@@ -11572,7 +11572,6 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-cdk 0.13.5",
- "ic-cdk-timers",
  "ic-crypto-sha2",
  "ic-icrc1",
  "ic-icrc1-ledger",
