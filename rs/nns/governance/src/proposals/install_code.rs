@@ -374,7 +374,7 @@ mod tests {
             canister_id: Some(LIFELINE_CANISTER_ID.get()),
             wasm_module: Some(vec![1, 2, 3]),
             install_mode: Some(CanisterInstallMode::Reinstall as i32),
-            arg: None,
+            arg: Some(vec![]),
             skip_stopping_before_installing: Some(true),
         };
 
