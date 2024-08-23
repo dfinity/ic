@@ -86,7 +86,7 @@ use ic_replicated_state::{
     page_map::Buffer,
     CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
 };
-use ic_state_layout::{CheckpointLayout, RwPolicy};
+use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::crypto::CryptoReturningOk;
 use ic_test_utilities_consensus::FakeConsensusPoolCache;
@@ -1995,14 +1995,16 @@ impl StateMachine {
             canister_directory.display()
         );
 
-        let tip: CheckpointLayout<RwPolicy<()>> = CheckpointLayout::new_untracked(
+        let tip: CheckpointLayout<ReadOnly> = CheckpointLayout::new_untracked(
             self.state_manager.state_layout().raw_path().join("tip"),
             ic_types::Height::new(0),
         )
         .expect("failed to obtain tip");
         let tip_canister_layout = tip
             .canister(&canister_id)
-            .expect("failed to obtain writeable canister layout");
+            .expect("failed to obtain canister layout");
+        std::fs::create_dir_all(&tip_canister_layout.raw_path())
+            .expect("Failed to create checkpoint dir");
 
         fn copy_as_writeable(src: &Path, dst: &Path) {
             assert!(

@@ -485,7 +485,7 @@ impl PageMap {
     ///
     /// Note that the file is assumed to be read-only.
     pub fn open(
-        storage_layout: &dyn StorageLayout,
+        storage_layout: Arc<dyn StorageLayout + Send + Sync>,
         base_height: Height,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Result<Self, PersistenceError> {

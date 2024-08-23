@@ -4,6 +4,7 @@ use std::{
     io::Write,
     os::{fd::FromRawFd, unix::prelude::FileExt},
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use crate::page_map::{
@@ -356,11 +357,11 @@ fn storage_files(dir: &Path) -> StorageFiles {
 
 /// Verify that the storage in the `dir` directory is equivalent to `expected`.
 fn verify_storage(dir: &Path, expected: &PageDelta) {
-    let storage = Storage::load(&ShardedTestStorageLayout {
+    let storage = Storage::load(Arc::new(ShardedTestStorageLayout {
         dir_path: dir.to_path_buf(),
         base: dir.join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
-    })
+    }))
     .unwrap();
 
     let expected_num_pages = if let Some(max) = expected.max_page_index() {
@@ -1365,22 +1366,22 @@ fn overlapping_shards_is_an_error() {
             tempdir.path().join("000000_010_vmemory_0.overlay"),
         ]
     );
-    assert!(Storage::load(&ShardedTestStorageLayout {
+    assert!(Storage::load(Arc::new(ShardedTestStorageLayout {
         dir_path: tempdir.path().to_path_buf(),
         base: tempdir.path().join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
-    })
+    }))
     .is_ok());
     std::fs::copy(
         tempdir.path().join("000000_010_vmemory_0.overlay"),
         tempdir.path().join("000000_011_vmemory_0.overlay"),
     )
     .unwrap();
-    assert!(Storage::load(&ShardedTestStorageLayout {
+    assert!(Storage::load(Arc::new(ShardedTestStorageLayout {
         dir_path: tempdir.path().to_path_buf(),
         base: tempdir.path().join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
-    })
+    }))
     .is_err());
 }
 #[test]
@@ -1392,11 +1393,11 @@ fn sharded_base_file() {
         &lsmt_config_sharded(),
         &dir,
     );
-    let storage = Storage::load(&ShardedTestStorageLayout {
+    let storage = Storage::load(Arc::new(ShardedTestStorageLayout {
         dir_path: dir.path().to_path_buf(),
         base: dir.path().join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
-    })
+    }))
     .unwrap();
     let full_range = PageIndex::new(0)..PageIndex::new(11);
     let filter = BitVec::from_elem(
@@ -1425,11 +1426,11 @@ fn sharded_base_file() {
         &lsmt_config_sharded(),
         &dir,
     );
-    let storage = Storage::load(&ShardedTestStorageLayout {
+    let storage = Storage::load(Arc::new(ShardedTestStorageLayout {
         dir_path: dir.path().to_path_buf(),
         base: dir.path().join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
-    })
+    }))
     .unwrap();
     assert!(!storage
         .get_memory_instructions(full_range, &mut filter.clone())
