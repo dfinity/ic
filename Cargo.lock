@@ -11985,7 +11985,6 @@ dependencies = [
  "humantime",
  "humantime-serde",
  "hyper 0.14.26",
- "hyper-rustls 0.27.2",
  "ic-agent",
  "ic-artifact-pool",
  "ic-base-types",
