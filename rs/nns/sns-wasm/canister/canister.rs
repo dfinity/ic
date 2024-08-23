@@ -78,7 +78,9 @@ impl CanisterApi for CanisterApiImpl {
                 settings: Some(
                     CanisterSettingsArgsBuilder::new()
                         .with_controllers(vec![controller_id])
-                        .with_wasm_memory_limit(DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT)
+                        .with_wasm_memory_limit(
+                            DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT / 4,
+                        )
                         .build(),
                 ),
                 sender_canister_version: Some(dfn_core::api::canister_version()),

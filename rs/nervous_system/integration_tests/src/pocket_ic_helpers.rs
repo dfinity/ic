@@ -20,7 +20,7 @@ use ic_nns_test_utils::{
     common::{
         build_governance_wasm, build_ledger_wasm, build_lifeline_wasm,
         build_mainnet_governance_wasm, build_mainnet_ledger_wasm, build_mainnet_lifeline_wasm,
-        build_mainnet_registry_wasm, build_mainnet_root_wasm, build_mainnet_sns_wasms_wasm,
+        build_mainnet_registry_wasm, build_mainnet_root_wasm,
         build_registry_wasm, build_root_wasm, build_sns_wasms_wasm, NnsInitPayloadsBuilder,
     },
     governance::UpgradeRootProposal,
@@ -298,7 +298,7 @@ pub fn install_nns_canisters(
                 build_mainnet_ledger_wasm(),
                 build_mainnet_root_wasm(),
                 build_mainnet_lifeline_wasm(),
-                build_mainnet_sns_wasms_wasm(),
+                build_sns_wasms_wasm(),
                 build_mainnet_registry_wasm(),
             )
         } else {

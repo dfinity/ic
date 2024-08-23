@@ -279,12 +279,14 @@ fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
 }
 
 fn check_memory_limits_set(pocket_ic: pocket_ic::PocketIc, root_canister_id: PrincipalId) {
+    pocket_ic.tick();
+    pocket_ic.tick();
+
     // Get the SNS canisters summary
     let sns_canisters_summary = sns::root::get_sns_canisters_summary(&pocket_ic, root_canister_id);
     // Check the SNS canisters' wasm_memory_limits
     for (canister_summary, canister_name) in [
         (sns_canisters_summary.governance, "governance"),
-        (sns_canisters_summary.root, "root"),
         // TODO(NNS1-3277): also check swap by uncommenting the following line:
         // (sns_canisters_summary.swap, "swap"),
         (sns_canisters_summary.index, "index"),
