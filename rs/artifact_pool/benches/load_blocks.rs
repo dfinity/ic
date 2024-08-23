@@ -48,7 +48,7 @@ fn fake_ingress_payload(count: usize, size: usize) -> IngressPayload {
     let mut ingress_messages = Vec::new();
 
     for nonce in 0..count {
-        let ingress =  SignedIngressBuilder::new()
+        let ingress = SignedIngressBuilder::new()
             .method_payload(vec![0; size])
             .nonce(nonce as u64)
             .build();
