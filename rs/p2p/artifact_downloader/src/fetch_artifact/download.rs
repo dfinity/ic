@@ -120,7 +120,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         log: ReplicaLogger,
         rt: Handle,
         pool: Arc<RwLock<Pool>>,
-        bouncer_factory: Arc<dyn BouncerFactory<Artifact::Id, Pool>>,
+        bouncer_factory: Arc<dyn BouncerFactory<Artifact, Pool>>,
         metrics_registry: MetricsRegistry,
     ) -> (impl Fn(Arc<dyn Transport>) -> Self, Router)
     where
