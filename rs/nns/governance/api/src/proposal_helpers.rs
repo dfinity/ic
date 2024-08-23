@@ -80,7 +80,9 @@ pub fn decode_make_proposal_response(response: Vec<u8>) -> Result<ProposalId, St
 // being `prost::Message`. The API types still are `prost::Message` because we have some legacy pb
 // endpoints. The conversions make it possible for ic-admin to print the proposal in the format of
 // the response API types.
-// TODO: Remove this after de
+//
+// TODO: Remove this after defining the `Debug` trait in the API types and using them to print
+// proposals in ic-admin.
 fn calculate_hash(bytes: &[u8]) -> [u8; 32] {
     let mut wasm_sha = Sha256::new();
     wasm_sha.write(bytes);
@@ -91,31 +93,25 @@ impl From<ProposalActionRequest> for Action {
     fn from(action: ProposalActionRequest) -> Self {
         match action {
             ProposalActionRequest::ManageNeuron(v) => Action::ManageNeuron(Box::new((*v).into())),
-            ProposalActionRequest::ManageNetworkEconomics(v) => {
-                Action::ManageNetworkEconomics(v.into())
-            }
-            ProposalActionRequest::Motion(v) => Action::Motion(v.into()),
-            ProposalActionRequest::ExecuteNnsFunction(v) => Action::ExecuteNnsFunction(v.into()),
-            ProposalActionRequest::ApproveGenesisKyc(v) => Action::ApproveGenesisKyc(v.into()),
-            ProposalActionRequest::AddOrRemoveNodeProvider(v) => {
-                Action::AddOrRemoveNodeProvider(v.into())
-            }
-            ProposalActionRequest::RewardNodeProvider(v) => Action::RewardNodeProvider(v.into()),
-            ProposalActionRequest::SetDefaultFollowees(v) => Action::SetDefaultFollowees(v.into()),
-            ProposalActionRequest::RewardNodeProviders(v) => Action::RewardNodeProviders(v.into()),
-            ProposalActionRequest::RegisterKnownNeuron(v) => Action::RegisterKnownNeuron(v.into()),
+            ProposalActionRequest::ManageNetworkEconomics(v) => Action::ManageNetworkEconomics(v),
+            ProposalActionRequest::Motion(v) => Action::Motion(v),
+            ProposalActionRequest::ExecuteNnsFunction(v) => Action::ExecuteNnsFunction(v),
+            ProposalActionRequest::ApproveGenesisKyc(v) => Action::ApproveGenesisKyc(v),
+            ProposalActionRequest::AddOrRemoveNodeProvider(v) => Action::AddOrRemoveNodeProvider(v),
+            ProposalActionRequest::RewardNodeProvider(v) => Action::RewardNodeProvider(v),
+            ProposalActionRequest::SetDefaultFollowees(v) => Action::SetDefaultFollowees(v),
+            ProposalActionRequest::RewardNodeProviders(v) => Action::RewardNodeProviders(v),
+            ProposalActionRequest::RegisterKnownNeuron(v) => Action::RegisterKnownNeuron(v),
             ProposalActionRequest::SetSnsTokenSwapOpenTimeWindow(v) => {
-                Action::SetSnsTokenSwapOpenTimeWindow(v.into())
+                Action::SetSnsTokenSwapOpenTimeWindow(v)
             }
-            ProposalActionRequest::OpenSnsTokenSwap(v) => Action::OpenSnsTokenSwap(v.into()),
+            ProposalActionRequest::OpenSnsTokenSwap(v) => Action::OpenSnsTokenSwap(v),
             ProposalActionRequest::CreateServiceNervousSystem(v) => {
-                Action::CreateServiceNervousSystem(v.into())
+                Action::CreateServiceNervousSystem(v)
             }
             ProposalActionRequest::InstallCode(v) => Action::InstallCode(v.into()),
-            ProposalActionRequest::StopOrStartCanister(v) => Action::StopOrStartCanister(v.into()),
-            ProposalActionRequest::UpdateCanisterSettings(v) => {
-                Action::UpdateCanisterSettings(v.into())
-            }
+            ProposalActionRequest::StopOrStartCanister(v) => Action::StopOrStartCanister(v),
+            ProposalActionRequest::UpdateCanisterSettings(v) => Action::UpdateCanisterSettings(v),
         }
     }
 }
@@ -124,9 +120,7 @@ impl From<ManageNeuronRequest> for ManageNeuron {
     fn from(manage_neuron_request: ManageNeuronRequest) -> Self {
         Self {
             id: manage_neuron_request.id,
-            neuron_id_or_subaccount: manage_neuron_request
-                .neuron_id_or_subaccount
-                .map(|x| x.into()),
+            neuron_id_or_subaccount: manage_neuron_request.neuron_id_or_subaccount,
             command: manage_neuron_request.command.map(|x| x.into()),
         }
     }
@@ -135,20 +129,20 @@ impl From<ManageNeuronRequest> for ManageNeuron {
 impl From<ManageNeuronCommandRequest> for Command {
     fn from(item: ManageNeuronCommandRequest) -> Self {
         match item {
-            ManageNeuronCommandRequest::Configure(v) => Command::Configure(v.into()),
-            ManageNeuronCommandRequest::Disburse(v) => Command::Disburse(v.into()),
-            ManageNeuronCommandRequest::Spawn(v) => Command::Spawn(v.into()),
-            ManageNeuronCommandRequest::Follow(v) => Command::Follow(v.into()),
+            ManageNeuronCommandRequest::Configure(v) => Command::Configure(v),
+            ManageNeuronCommandRequest::Disburse(v) => Command::Disburse(v),
+            ManageNeuronCommandRequest::Spawn(v) => Command::Spawn(v),
+            ManageNeuronCommandRequest::Follow(v) => Command::Follow(v),
             ManageNeuronCommandRequest::MakeProposal(v) => {
                 Command::MakeProposal(Box::new((*v).into()))
             }
-            ManageNeuronCommandRequest::RegisterVote(v) => Command::RegisterVote(v.into()),
-            ManageNeuronCommandRequest::Split(v) => Command::Split(v.into()),
-            ManageNeuronCommandRequest::DisburseToNeuron(v) => Command::DisburseToNeuron(v.into()),
-            ManageNeuronCommandRequest::ClaimOrRefresh(v) => Command::ClaimOrRefresh(v.into()),
-            ManageNeuronCommandRequest::MergeMaturity(v) => Command::MergeMaturity(v.into()),
-            ManageNeuronCommandRequest::Merge(v) => Command::Merge(v.into()),
-            ManageNeuronCommandRequest::StakeMaturity(v) => Command::StakeMaturity(v.into()),
+            ManageNeuronCommandRequest::RegisterVote(v) => Command::RegisterVote(v),
+            ManageNeuronCommandRequest::Split(v) => Command::Split(v),
+            ManageNeuronCommandRequest::DisburseToNeuron(v) => Command::DisburseToNeuron(v),
+            ManageNeuronCommandRequest::ClaimOrRefresh(v) => Command::ClaimOrRefresh(v),
+            ManageNeuronCommandRequest::MergeMaturity(v) => Command::MergeMaturity(v),
+            ManageNeuronCommandRequest::Merge(v) => Command::Merge(v),
+            ManageNeuronCommandRequest::StakeMaturity(v) => Command::StakeMaturity(v),
         }
     }
 }
