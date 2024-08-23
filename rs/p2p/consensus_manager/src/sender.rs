@@ -234,9 +234,7 @@ impl<
                 {
                     pb::slot_update::Update::Artifact(pb_artifact.encode_to_vec())
                 } else {
-                    pb::slot_update::Update::Advert(pb::Advert {
-                        id: WireArtifact::PbId::proxy_encode(id),
-                    })
+                    pb::slot_update::Update::Id(WireArtifact::PbId::proxy_encode(id))
                 }
             }),
         };

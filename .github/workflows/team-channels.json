@@ -10,7 +10,6 @@
     "ic-interface-owners": "interface-owners",
     "ic-message-routing-owners": "eng-message-routing-mr",
     "ic-owners-owners": "owners-owners",
-    "idx": "eng-idx-bots",
     "InfraSec": "eng-infrasec",
     "languages": "eng-motoko",
     "networking": "eng-networking",

@@ -14,6 +14,7 @@ use ic_ledger_hash_of::HashOf;
 use ic_management_canister_types::{
     self as ic00, CanisterInfoRequest, CanisterInfoResponse, Method, Payload,
 };
+use ic_rosetta_test_utils::test_http_request_decoding_quota;
 use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine, WasmResult};
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -793,6 +794,17 @@ where
     let canister_id = install_ledger(&env, ledger_wasm, encode_init_args, initial_balances);
 
     (env, canister_id)
+}
+
+pub fn test_ledger_http_request_decoding_quota<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let (env, canister_id) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
+
+    test_http_request_decoding_quota(&env, canister_id);
 }
 
 pub fn test_balance_of<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)

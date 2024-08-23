@@ -56,7 +56,6 @@ members = [
     "rs/constants",
     "rs/criterion_time",
     "rs/crypto",
-    "rs/crypto/ecdsa_secp256k1",
     "rs/crypto/ecdsa_secp256r1",
     "rs/crypto/ed25519",
     "rs/crypto/extended_bip32",
@@ -75,6 +74,7 @@ members = [
     "rs/crypto/internal/crypto_lib/multi_sig/bls12_381",
     "rs/crypto/internal/crypto_lib/seed",
     "rs/crypto/internal/crypto_lib/sha2",
+    "rs/crypto/secp256k1",
     "rs/crypto/secrets_containers",
     "rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
@@ -157,7 +157,6 @@ members = [
     "rs/monitoring/adapter_metrics/client",
     "rs/monitoring/adapter_metrics/server",
     "rs/monitoring/adapter_metrics/service",
-    "rs/monitoring/backtrace",
     "rs/monitoring/logger",
     "rs/monitoring/metrics",
     "rs/monitoring/pprof",
@@ -510,9 +509,7 @@ hyper-rustls = { version = "0.27.2", default-features = false, features = [
     "ring",
     "tls12",
 ] }
-hyper-socks2 = { version = "0.8.0", default-features = false, features = [
-    "rustls",
-] }
+hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.7", features = ["full"] }
 ic-agent = { version = "0.37.1", features = [
     "experimental_sync_call",
@@ -610,7 +607,10 @@ reqwest = { version = "0.12.5", default-features = false, features = [
     "stream",
 ] }
 rstest = "0.19.0"
-rustls = { version = "0.23.12", default-features = false, features = ["ring"] }
+rustls = { version = "0.23.12", default-features = false, features = [
+    "ring",
+    "std",
+] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"
 serde_cbor = "0.11.2"

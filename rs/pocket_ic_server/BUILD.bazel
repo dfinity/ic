@@ -55,10 +55,9 @@ LIB_DEPENDENCIES = [
     "@crate_index//:http",
     "@crate_index//:http-body-util",
     "@crate_index//:hyper",
+    "@crate_index//:hyper-rustls",
     "@crate_index//:hyper-socks2",
     "@crate_index//:hyper-util",
-    "@crate_index//:hyper_0_14_27",
-    "@crate_index//:hyper_rustls_0_24_2",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-http-gateway",
@@ -138,9 +137,6 @@ rust_library(
     ] + glob([
         "src/state_api/**/*.rs",
     ]),
-    aliases = {
-        "@crate_index//:hyper_0_14_27": "hyper_legacy",
-    },
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "5.0.0",
@@ -150,9 +146,6 @@ rust_library(
 rust_ic_test(
     name = "pic_test",
     srcs = glob(["src/**/*.rs"]),
-    aliases = {
-        "@crate_index//:hyper_0_14_27": "hyper_legacy",
-    },
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = LIB_DEPENDENCIES + [":build_script"],
 )

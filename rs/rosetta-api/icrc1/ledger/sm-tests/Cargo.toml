@@ -25,6 +25,7 @@ ic-icrc1-tokens-u64 = { path = "../../tokens_u64" }
 ic-ledger-canister-core = { path = "../../../ledger_canister_core" }
 ic-ledger-core = { path = "../../../ledger_core" }
 ic-ledger-hash-of = { path = "../../../../../packages/ic-ledger-hash-of" }
+ic-rosetta-test-utils = { path = "../../../test_utils" }
 ic-management-canister-types = { path = "../../../../types/management_canister_types" }
 ic-state-machine-tests = { path = "../../../../state_machine_tests" }
 ic-types = { path = "../../../../types/types" }
