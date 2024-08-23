@@ -22,7 +22,7 @@ use candid_parser::utils::{service_equal, CandidSource};
 /// to registry.did.
 #[test]
 fn test_implemented_interface_matches_declared_interface_exactly() {
-    let declared_interface = CandidSource::Text(include_str!("registry.did"));
+    let declared_interface = CandidSource::Text(include_str!("root.did"));
 
     // The line below generates did types and service definition from the
     // methods annotated with `candid_method` above. The definition is then

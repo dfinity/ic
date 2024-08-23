@@ -1,5 +1,5 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
@@ -114,6 +114,7 @@ DEV_DEPENDENCIES = [
     "//rs/nns/governance/protobuf_generator:lib",
     "//rs/sns/swap/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
+    "@crate_index//:candid_parser",
     "@crate_index//:futures",
     "@crate_index//:prometheus-parse",
     "@crate_index//:proptest",
@@ -205,29 +206,6 @@ rust_canbench(
     ],
 )
 
-rust_binary(
-    name = "generate_did",
-    srcs = ["canister/canister.rs"],
-    compile_data = ["canister/governance.did"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [
-        ":build_script",
-        ":governance",
-    ],
-)
-
-rust_binary(
-    name = "generate_test_did",
-    srcs = ["canister/canister.rs"],
-    compile_data = ["canister/governance_test.did"],
-    crate_features = ["test"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES_WITH_TEST_FEATURES + [
-        ":build_script",
-        ":governance--test_feature",
-    ],
-)
-
 rust_canister(
     name = "governance-canister",
     srcs = ["canister/canister.rs"],
@@ -278,23 +256,27 @@ generated_files_check(
 
 rust_test(
     name = "canister_unit_test",
-    crate = ":_wasm_governance-canister",
-    data = ["canister/governance.did"],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/nns/governance",
-    },
+    crate_root = "canister/canister.rs",
+    srcs = glob(["canister/**/*.rs"]),
+    compile_data = ["canister/governance.did"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+        ":governance",
+    ],
 )
 
 rust_test(
     name = "canister_test_unit_test",
-    crate = ":_wasm_governance-canister-test",
+    crate_root = "canister/canister.rs",
+    srcs = glob(["canister/**/*.rs"]),
+    compile_data = ["canister/governance_test.did"],
     crate_features = ["test"],
-    data = ["canister/governance_test.did"],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/nns/governance",
-    },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [
+        ":build_script",
+        ":governance--test_feature",
+    ],
 )
 
 rust_test(

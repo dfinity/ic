@@ -133,14 +133,7 @@ rust_ic_test(
     name = "registry_canister_canister_test",
     srcs = glob(["canister/*.rs"]),
     crate_root = "canister/canister.rs",
-    data = [
-        "canister/registry.did",
-        ":registry-canister",
-        "//rs/nns/cmc:cycles-minting-canister",
-    ],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/registry/canister",
-    },
+    compile_data = ["canister/registry.did"],
     proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES + [":canister"] + [":build_script"],
 )

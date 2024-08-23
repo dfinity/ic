@@ -84,5 +84,4 @@ ic-nns-test-utils-macros = { path = "../../nns/test_utils_macros" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 itertools = { workspace = true }
 registry-canister-protobuf-generator = { path = "./protobuf_generator" }
-tempfile = { workspace = true }
 tokio = { workspace = true }

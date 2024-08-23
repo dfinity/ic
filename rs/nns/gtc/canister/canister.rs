@@ -183,43 +183,10 @@ async fn forward_whitelisted_unclaimed_accounts_(_: ()) -> Result<(), String> {
     gtc_mut().forward_whitelisted_unclaimed_accounts().await
 }
 
-// When run on native this prints the candid service definition of this
-// canister, from the methods annotated with `candid_method` above.
-//
-// Note that `cargo test` calls `main`, and `export_service` (which defines
-// `__export_service` in the current scope) needs to be called exactly once. So
-// in addition to `not(target_arch = "wasm32")` we have a `not(test)` guard here
-// to avoid calling `export_service`, which we need to call in the test below.
-#[cfg(not(any(target_arch = "wasm32", test)))]
 fn main() {
-    // The line below generates did types and service definition from the
-    // methods annotated with `candid_method` above. The definition is then
-    // obtained with `__export_service()`.
-    candid::export_service!();
-    std::print!("{}", __export_service());
+    // This block is intentionally left blank.
 }
 
-#[cfg(any(target_arch = "wasm32", test))]
-fn main() {}
-
-#[test]
-fn check_gtc_candid_file() {
-    let did_path = std::path::PathBuf::from(
-        std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env var undefined"),
-    )
-    .join("canister/gtc.did");
-    let did_contents = String::from_utf8(std::fs::read(did_path).unwrap()).unwrap();
-
-    // See comments in main above
-    candid::export_service!();
-    let expected = __export_service();
-
-    if did_contents != expected {
-        panic!(
-            "Generated candid definition does not match canister/gtc.did. \
-            Run `bazel run :generate_did > canister/gtc.did` (no nix and/or direnv) or \
-            `cargo run --bin genesis-token-canister > canister/gtc.did` in \
-            rs/nns/gtc to update canister/gtc.did."
-        )
-    }
-}
+// In order for some of the test(s) within this mod, this MUST occur at the end.
+#[cfg(test)]
+mod tests;
