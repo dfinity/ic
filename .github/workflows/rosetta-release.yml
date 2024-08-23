@@ -19,7 +19,10 @@ env:
 
 jobs:
   rosetta-release:
-    runs-on: ubuntu-latest
+    runs-on:
+      labels: dind-large
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,9 +33,6 @@ jobs:
           registry: docker.io
           username: ${{ secrets.DOCKER_HUB_USER}}
           password: ${{ secrets.DOCKER_HUB_PASSWORD }}
-
-      - name: Set up Bazel
-        uses: bazel-contrib/setup-bazel@0.8.5
 
       - name: Configure Git
         run: |
@@ -71,6 +71,7 @@ jobs:
 
       - name: Build and publish rosetta image
         if: ${{ github.event.inputs.rosetta_release_version }}
+        shell: bash
         run: |
           set -euo pipefail
           ROSETTA_API_DATE=$(date +"%Y%m%d")
@@ -82,6 +83,7 @@ jobs:
 
       - name: Build and publish icrc rosetta image
         if: ${{ github.event.inputs.icrc_rosetta_release_version  }}
+        shell: bash
         run: |
           set -euo pipefail
           for tag in "v${ROSETTA_RELEASE_VERSION}" latest; do

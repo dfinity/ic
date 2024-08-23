@@ -1,5 +1,6 @@
 use candid::{Decode, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::Tokens;
@@ -7,6 +8,7 @@ use ic_ledger_test_utils::build_ledger_archive_wasm;
 use icp_ledger::Operation::Mint;
 use icp_ledger::{AccountIdentifier, Block, Memo, Transaction};
 use pocket_ic::{PocketIcBuilder, WasmResult};
+use serde_bytes::ByteBuf;
 
 const GENESIS_IN_NANOS_SINCE_UNIX_EPOCH: u64 = 1_620_328_630_000_000_000;
 
@@ -140,4 +142,48 @@ fn should_successfully_append_block_when_capacity_matches_block_size() {
     let encoded_block_size = encoded_block.size_bytes();
     assert_eq!(encoded_block_size, archive_memory_size as usize);
     setup.append_block(encoded_block);
+}
+
+#[test]
+fn large_http_request() {
+    let archive_memory_size = valid_encoded_block().size_bytes() as u64;
+    let setup = Setup::new(archive_memory_size);
+
+    // The anonymous end-user sends a small HTTP request. This should succeed.
+    let http_request = HttpRequest {
+        method: "GET".to_string(),
+        url: "/metrics".to_string(),
+        headers: vec![],
+        body: ByteBuf::from(vec![42; 1_000]),
+    };
+    let http_request_bytes = Encode!(&http_request).unwrap();
+    let response = match setup
+        .pocket_ic
+        .update_call(
+            setup.archive_canister_id.into(),
+            Principal::anonymous(),
+            "http_request",
+            http_request_bytes,
+        )
+        .unwrap()
+    {
+        WasmResult::Reply(bytes) => Decode!(&bytes, HttpResponse).unwrap(),
+        WasmResult::Reject(reason) => panic!("Unexpected reject: {}", reason),
+    };
+    assert_eq!(response.status_code, 200);
+
+    // The anonymous end-user sends a large HTTP request. This should be rejected.
+    let mut large_http_request = http_request;
+    large_http_request.body = ByteBuf::from(vec![42; 1_000_000]);
+    let large_http_request_bytes = Encode!(&large_http_request).unwrap();
+    let err = setup
+        .pocket_ic
+        .update_call(
+            setup.archive_canister_id.into(),
+            Principal::anonymous(),
+            "http_request",
+            large_http_request_bytes,
+        )
+        .unwrap_err();
+    assert!(err.description.contains("Deserialization Failed"));
 }
