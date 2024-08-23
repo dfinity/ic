@@ -3935,7 +3935,9 @@ async fn main() {
         SubCommand::ProposeToChangeSubnetMembership(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             if !opts.silence_notices {
-                println!("Notice: invoking this command can undesirably worsen the decentralization.");
+                println!(
+                    "Notice: invoking this command can undesirably worsen the decentralization."
+                );
                 println!(
                     "Notice: Consider using instead the DRE tool https://dfinity.github.io/dre/ to submit this proposal"
                 )
