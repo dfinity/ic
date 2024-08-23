@@ -9483,6 +9483,7 @@ dependencies = [
  "ic-agent",
  "ic-nns-constants",
  "ic-sns-wasm",
+ "serde",
  "tempfile",
  "tokio",
 ]
