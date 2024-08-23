@@ -137,12 +137,10 @@ use registry_canister::mutations::{
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
     do_set_firewall_config::SetFirewallConfigPayload,
-    do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
-    do_update_elected_hostos_versions::{
-        ReviseElectedHostosVersionsPayload, UpdateElectedHostosVersionsPayload,
-    },
+    do_update_api_boundary_nodes_version::DeployGuestosToSomeApiBoundaryNodes,
+    do_update_elected_hostos_versions::ReviseElectedHostosVersionsPayload,
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
-    do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
+    do_update_nodes_hostos_version::DeployHostosToSomeNodes,
     do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
     firewall::{
         add_firewall_rules_compute_entries, compute_firewall_ruleset_hash,
@@ -3255,20 +3253,17 @@ impl ProposalTitle for ProposeToReviseElectedHostosVersionsCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<UpdateElectedHostosVersionsPayload>
+impl ProposalPayload<ReviseElectedHostosVersionsPayload>
     for ProposeToReviseElectedHostosVersionsCmd
 {
-    async fn payload(&self, _: &Agent) -> UpdateElectedHostosVersionsPayload {
-        let payload = UpdateElectedHostosVersionsPayload {
+    async fn payload(&self, _: &Agent) -> ReviseElectedHostosVersionsPayload {
+        let payload = ReviseElectedHostosVersionsPayload {
             hostos_version_to_elect: self.hostos_version_to_elect.clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: self.release_package_urls.clone(),
             hostos_versions_to_unelect: self.hostos_versions_to_unelect.clone(),
         };
-        // TODO[NNS1-3000]: Use new Registry naming convention once NNS Governance supports it.
-        ReviseElectedHostosVersionsPayload::from(payload.clone())
-            .validate()
-            .expect("Failed to validate payload");
+        payload.validate().expect("Failed to validate payload");
         payload
     }
 }
@@ -3335,8 +3330,8 @@ impl ProposalTitle for ProposeToDeployHostosToSomeNodesCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<UpdateNodesHostosVersionPayload> for ProposeToDeployHostosToSomeNodesCmd {
-    async fn payload(&self, _: &Agent) -> UpdateNodesHostosVersionPayload {
+impl ProposalPayload<DeployHostosToSomeNodes> for ProposeToDeployHostosToSomeNodesCmd {
+    async fn payload(&self, _: &Agent) -> DeployHostosToSomeNodes {
         let node_ids = self
             .node_ids
             .clone()
@@ -3344,7 +3339,7 @@ impl ProposalPayload<UpdateNodesHostosVersionPayload> for ProposeToDeployHostosT
             .map(NodeId::from)
             .collect();
 
-        UpdateNodesHostosVersionPayload {
+        DeployHostosToSomeNodes {
             node_ids,
             hostos_version_id: self.hostos_version_flag.simplify().clone(),
         }
@@ -3456,11 +3451,11 @@ impl ProposalTitle for ProposeToDeployGuestosToSomeApiBoundaryNodesCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<UpdateApiBoundaryNodesVersionPayload>
+impl ProposalPayload<DeployGuestosToSomeApiBoundaryNodes>
     for ProposeToDeployGuestosToSomeApiBoundaryNodesCmd
 {
-    async fn payload(&self, _: &Agent) -> UpdateApiBoundaryNodesVersionPayload {
-        UpdateApiBoundaryNodesVersionPayload {
+    async fn payload(&self, _: &Agent) -> DeployGuestosToSomeApiBoundaryNodes {
+        DeployGuestosToSomeApiBoundaryNodes {
             node_ids: self.nodes.iter().cloned().map(NodeId::from).collect(),
             version: self.version.clone(),
         }

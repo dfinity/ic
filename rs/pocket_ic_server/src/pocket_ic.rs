@@ -26,7 +26,7 @@ use ic_http_endpoints_public::{
     metrics::HttpHandlerMetrics, CallServiceV2, CallServiceV3, CanisterReadStateServiceBuilder,
     IngressValidatorBuilder, QueryServiceBuilder, SubnetReadStateServiceBuilder,
 };
-use ic_https_outcalls_adapter::CanisterHttp;
+use ic_https_outcalls_adapter::{CanisterHttp, CanisterRequestBody};
 use ic_https_outcalls_adapter_client::CanisterHttpAdapterClientImpl;
 use ic_https_outcalls_service::canister_http_service_server::CanisterHttpService;
 use ic_https_outcalls_service::canister_http_service_server::CanisterHttpServiceServer;
