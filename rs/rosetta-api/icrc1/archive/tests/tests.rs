@@ -8,7 +8,6 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc3::blocks::{
     ArchivedBlocks, BlockWithId, GetBlocksRequest, GetBlocksResult,
 };
-
 use std::{path::PathBuf, time::UNIX_EPOCH};
 
 #[cfg(not(feature = "u256-tokens"))]
