@@ -16228,7 +16228,6 @@ dependencies = [
  "http 1.1.0",
  "http-body-util",
  "hyper 1.4.1",
- "hyper-rustls 0.27.2",
  "hyper-util",
  "ic-agent",
  "ic-boundary",

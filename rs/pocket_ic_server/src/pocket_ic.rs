@@ -14,7 +14,6 @@ use futures::FutureExt;
 use hyper::body::Bytes;
 use hyper::header::{HeaderValue, CONTENT_TYPE};
 use hyper::{Method, StatusCode};
-use hyper_rustls::HttpsConnectorBuilder;
 use ic_boundary::{Health, RootKey};
 use ic_config::{
     execution_environment, flag_status::FlagStatus, http_handler, subnet_config::SubnetConfig,
@@ -2426,7 +2425,7 @@ fn new_canister_http_adapter(
     let config = HttpsOutcallsConfig {
         http_connect_timeout_secs: 2,
         http_request_timeout_secs: 2,
-        socks_proxy: "http://240.0.0.0:8080",
+        socks_proxy: "http://240.0.0.0:8080".to_string(),
         ..Default::default()
     };
 
