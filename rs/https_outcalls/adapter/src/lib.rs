@@ -13,7 +13,7 @@ mod metrics;
 
 pub use cli::Cli;
 pub use config::{Config, IncomingSource};
-pub use rpc_server::{CanisterHttp, CanisterRequestBody};
+pub use rpc_server::CanisterHttp;
 
 use futures::{Future, Stream};
 use hyper_rustls::HttpsConnectorBuilder;

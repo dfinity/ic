@@ -14,6 +14,7 @@ use hyper::{
 use hyper_rustls::HttpsConnector;
 use hyper_socks2::SocksConnector;
 use hyper_util::client::legacy::{connect::HttpConnector, Client};
+use hyper_util::rt::TokioExecutor;
 use ic_https_outcalls_service::{
     canister_http_service_server::CanisterHttpService, CanisterHttpSendRequest,
     CanisterHttpSendResponse, HttpHeader, HttpMethod,
@@ -33,20 +34,20 @@ const HEADER_NAME_VALUE_LIMIT: usize = 8_192;
 /// By default most higher-level http libs like `curl` set some `User-Agent` so we do the same here to avoid getting rejected due to strict server requirements.
 const USER_AGENT_ADAPTER: &str = "ic/1.0";
 
-pub type CanisterRequestBody = Full<Bytes>;
+type OutboundRequestBody = Full<Bytes>;
 
 /// implements RPC
 pub struct CanisterHttp {
-    client: Client<HttpsConnector<HttpConnector>, CanisterRequestBody>,
-    socks_client: Client<HttpsConnector<SocksConnector<HttpConnector>>, CanisterRequestBody>,
+    client: Client<HttpsConnector<HttpConnector>, OutboundRequestBody>,
+    socks_client: Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>,
     logger: ReplicaLogger,
     metrics: AdapterMetrics,
 }
 
 impl CanisterHttp {
     pub fn new(
-        client: Client<HttpsConnector<HttpConnector>, CanisterRequestBody>,
-        socks_client: Client<HttpsConnector<SocksConnector<HttpConnector>>, CanisterRequestBody>,
+        direct_https_connector: HttpsConnector<HttpConnector>,
+        proxied_https_connector: HttpsConnector<SocksConnector<HttpConnector>>,
         logger: ReplicaLogger,
         metrics: &MetricsRegistry,
     ) -> Self {
