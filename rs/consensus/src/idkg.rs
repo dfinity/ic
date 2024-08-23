@@ -433,7 +433,7 @@ impl<T: IDkgPool> ChangeSetProducer<T> for IDkgImpl {
     }
 }
 
-/// `IDkgGossipImpl` implements the priority function and other gossip related
+/// `IDkgGossipImpl` implements the bouncer function and other gossip related
 /// functionality
 pub struct IDkgGossipImpl {
     subnet_id: SubnetId,
@@ -456,12 +456,12 @@ impl IDkgGossipImpl {
     }
 }
 
-struct IDkgPriorityFnArgs {
+struct IDkgBouncerArgs {
     finalized_height: Height,
     certified_height: Height,
 }
 
-impl IDkgPriorityFnArgs {
+impl IDkgBouncerArgs {
     fn new(
         block_reader: &dyn IDkgBlockReader,
         state_reader: &dyn StateReader<State = ReplicatedState>,
@@ -477,7 +477,7 @@ impl<Pool: IDkgPool> BouncerFactory<IDkgMessage, Pool> for IDkgGossipImpl {
     fn new_bouncer(&self, _idkg_pool: &Pool) -> Bouncer<IDkgMessageId> {
         let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;
-        let args = IDkgPriorityFnArgs::new(&block_reader, self.state_reader.as_ref());
+        let args = IDkgBouncerArgs::new(&block_reader, self.state_reader.as_ref());
         Box::new(move |id| compute_bouncer(id, subnet_id, &args))
     }
 }
@@ -485,7 +485,7 @@ impl<Pool: IDkgPool> BouncerFactory<IDkgMessage, Pool> for IDkgGossipImpl {
 fn compute_bouncer(
     id: &IDkgMessageId,
     subnet_id: SubnetId,
-    args: &IDkgPriorityFnArgs,
+    args: &IDkgBouncerArgs,
 ) -> BouncerValue {
     match id {
         IDkgMessageId::Dealing(_, data) => {
@@ -591,7 +591,7 @@ mod tests {
         );
 
         // Only the context with matched quadruple should be in "requested"
-        let args = IDkgPriorityFnArgs::new(&block_reader, state_manager.as_ref());
+        let args = IDkgBouncerArgs::new(&block_reader, state_manager.as_ref());
         assert_eq!(args.certified_height, height);
     }
 
@@ -610,7 +610,7 @@ mod tests {
         }
     }
 
-    // Tests the priority computation for dealings/support.
+    // Tests the bouncer computation for dealings/support.
     #[test]
     fn test_idkg_priority_fn_dealing_support() {
         let xnet_transcript_id = IDkgTranscriptId::new(SUBNET_1, 1, Height::from(1000));
@@ -619,7 +619,7 @@ mod tests {
         let transcript_id_fetch_2 = IDkgTranscriptId::new(local_subnet_id, 3, Height::from(102));
         let transcript_id_stash = IDkgTranscriptId::new(local_subnet_id, 4, Height::from(200));
 
-        let args = IDkgPriorityFnArgs {
+        let args = IDkgBouncerArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
         };
@@ -690,7 +690,7 @@ mod tests {
         }
     }
 
-    // Tests the priority computation for sig shares.
+    // Tests the bouncer computation for sig shares.
     #[test]
     fn test_idkg_priority_fn_sig_shares() {
         let local_subnet_id = SUBNET_2;
@@ -710,7 +710,7 @@ mod tests {
             pseudo_random_id: [4; 32],
             height: Height::from(200),
         };
-        let args = IDkgPriorityFnArgs {
+        let args = IDkgBouncerArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
         };
@@ -774,7 +774,7 @@ mod tests {
         let transcript_id_stash = IDkgTranscriptId::new(local_subnet_id, 4, Height::from(200));
         let transcript_id_fetch_3 = IDkgTranscriptId::new(local_subnet_id, 5, Height::from(80));
 
-        let args = IDkgPriorityFnArgs {
+        let args = IDkgBouncerArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),
         };

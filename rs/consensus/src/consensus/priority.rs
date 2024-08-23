@@ -1,12 +1,9 @@
-//! This module provides two public interfaces, compute_attribute and
-//! get_priority_function.
-
 use ic_consensus_utils::{pool_reader::PoolReader, ACCEPTABLE_VALIDATION_CUP_GAP};
 use ic_interfaces::consensus_pool::ConsensusPool;
 use ic_interfaces::p2p::consensus::{Bouncer, BouncerValue, BouncerValue::*};
 use ic_types::{artifact::ConsensusMessageId, consensus::ConsensusMessageHash, Height};
 
-/// Return a priority function that matches the given consensus pool.
+/// Return a bouncer function that matches the given consensus pool.
 pub fn new_bouncer(
     pool: &dyn ConsensusPool,
     expected_batch_height: Height,
@@ -34,7 +31,7 @@ pub fn new_bouncer(
 /// We do not need to request artifacts that are too far ahead.
 const LOOK_AHEAD: u64 = 10;
 
-/// The actual priority computation utilizing cached BlockSets instead of
+/// The actual bouncer computation utilizing cached BlockSets instead of
 /// having to read from the pool every time when it is called.
 fn compute_bouncer(
     cup_height: Height,
@@ -181,7 +178,7 @@ mod tests {
             };
             assert_eq!(bouncer(&cup_id), Wants);
 
-            // Insert CUP for next summary height and recompute priority function.
+            // Insert CUP for next summary height and recompute bouncer function.
             pool.insert_validated(pool.make_catch_up_package(Height::new(dkg_interval + 1)));
             let bouncer = new_bouncer(&pool, expected_batch_height);
 
@@ -289,7 +286,7 @@ mod tests {
                 block.height().get()
                     > PoolReader::new(&pool).get_finalized_height().get() + LOOK_AHEAD
             );
-            // Recompute priority function since pool content has changed
+            // Recompute bouncer function since pool content has changed
             let bouncer = new_bouncer(&pool, expected_batch_height);
             // Still fetch even when notarization is much ahead of finalization
             assert_eq!(bouncer(&notarization.get_id()), Wants);
