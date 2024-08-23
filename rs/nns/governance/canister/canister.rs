@@ -1186,5 +1186,7 @@ fn main() {
     // This block is intentionally left blank.
 }
 
+// In order for some of the test(s) within this mod to work,
+// this MUST occur at the end.
 #[cfg(test)]
 mod tests;
