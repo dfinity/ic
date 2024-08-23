@@ -8310,6 +8310,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-icp-rosetta-runner"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-ledger-test-utils",
+ "icp-ledger",
+ "icrc-ledger-types",
+ "pocket-ic",
+ "reqwest 0.12.5",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "ic-icrc-rosetta"
 version = "1.1.1"
 dependencies = [
