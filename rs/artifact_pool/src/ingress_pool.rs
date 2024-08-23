@@ -13,8 +13,8 @@ use ic_interfaces::{
         UnvalidatedIngressArtifact, ValidatedIngressArtifact,
     },
     p2p::consensus::{
-        ArtifactMutation, ArtifactWithOpt, ChangeResult, MutablePool, Priority, PriorityFn,
-        PriorityFnFactory, UnvalidatedArtifact, ValidatedPoolReader,
+        ArtifactMutation, ArtifactWithOpt, Bouncer, BouncerFactory, BouncerValue, ChangeResult,
+        MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
     },
     time_source::TimeSource,
 };
@@ -372,8 +372,8 @@ impl IngressPrioritizer {
     }
 }
 
-impl PriorityFnFactory<SignedIngress, IngressPoolImpl> for IngressPrioritizer {
-    fn get_priority_function(&self, pool: &IngressPoolImpl) -> PriorityFn<IngressMessageId> {
+impl BouncerFactory<SignedIngress, IngressPoolImpl> for IngressPrioritizer {
+    fn new_bouncer(&self, pool: &IngressPoolImpl) -> Bouncer<IngressMessageId> {
         // EXPLANATION: Because ingress messages are included in blocks, consensus
         // does not rely on ingress gossip for correctness. Ingress gossip exists to
         // reduce latency in cases where replicas don't have enough ingress messages
@@ -382,16 +382,16 @@ impl PriorityFnFactory<SignedIngress, IngressPoolImpl> for IngressPrioritizer {
         // Please note that all P2P ingress messages will be dropped if 'exceeds_threshold'
         // returns true until the next invocation of 'get_priority_function'.
         if pool.exceeds_threshold() {
-            return Box::new(move |_| Priority::Drop);
+            return Box::new(move |_| BouncerValue::Unwanted);
         }
         let time_source = self.time_source.clone();
         Box::new(move |ingress_id| {
             let start = time_source.get_relative_time();
             let range = start..=start + MAX_INGRESS_TTL;
             if range.contains(&ingress_id.expiry()) {
-                Priority::FetchNow
+                BouncerValue::Wants
             } else {
-                Priority::Drop
+                BouncerValue::Unwanted
             }
         })
     }
