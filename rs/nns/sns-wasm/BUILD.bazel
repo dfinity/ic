@@ -135,7 +135,7 @@ rust_test(
     compile_data = ["canister/sns-wasm.did"],
     crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = [":sns-wasm"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":sns-wasm"],
 )
 
 rust_test(
