@@ -66,7 +66,9 @@ rust_ic_test(
         "//rs/rosetta-api/icp_ledger",
         "//rs/rosetta-api/icp_ledger/test_utils",
         "//rs/rosetta-api/ledger_core",
+        "//rs/rust_canisters/http_types",
         "//rs/types/base_types",
         "@crate_index//:candid",
+        "@crate_index//:serde_bytes",
     ],
 )

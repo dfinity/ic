@@ -28,6 +28,10 @@ struct CanisterQueuesFixture {
     pub queues: CanisterQueues,
     pub this: CanisterId,
     pub other: CanisterId,
+
+    /// The last callback ID used for outbound requests / inbound responses. Ensures
+    /// that all inbound responses have unique callback IDs.
+    last_callback_id: u64,
 }
 
 impl CanisterQueuesFixture {
@@ -36,6 +40,7 @@ impl CanisterQueuesFixture {
             queues: CanisterQueues::default(),
             this: canister_test_id(13),
             other: canister_test_id(11),
+            last_callback_id: 0,
         }
     }
 
@@ -44,6 +49,7 @@ impl CanisterQueuesFixture {
             queues: CanisterQueues::default(),
             this,
             other,
+            last_callback_id: 0,
         }
     }
 
@@ -59,10 +65,12 @@ impl CanisterQueuesFixture {
     }
 
     fn push_input_response(&mut self) -> Result<(), (StateError, RequestOrResponse)> {
+        self.last_callback_id += 1;
         self.queues.push_input(
             ResponseBuilder::default()
                 .originator(self.this)
                 .respondent(self.other)
+                .originator_reply_callback(CallbackId::from(self.last_callback_id))
                 .build()
                 .into(),
             LocalSubnet,
@@ -74,11 +82,13 @@ impl CanisterQueuesFixture {
     }
 
     fn push_output_request(&mut self) -> Result<(), (StateError, Arc<Request>)> {
+        self.last_callback_id += 1;
         self.queues.push_output_request(
             Arc::new(
                 RequestBuilder::default()
                     .sender(self.this)
                     .receiver(self.other)
+                    .sender_reply_callback(CallbackId::from(self.last_callback_id))
                     .build(),
             ),
             UNIX_EPOCH,
@@ -452,6 +462,10 @@ fn test_message_picking_ingress_only() {
 struct CanisterQueuesMultiFixture {
     pub queues: CanisterQueues,
     pub this: CanisterId,
+
+    /// The last callback ID used for outbound requests / inbound responses. Ensures
+    /// that all inbound responses have unique callback IDs.
+    last_callback_id: u64,
 }
 
 impl CanisterQueuesMultiFixture {
@@ -459,6 +473,7 @@ impl CanisterQueuesMultiFixture {
         CanisterQueuesMultiFixture {
             queues: CanisterQueues::default(),
             this: canister_test_id(13),
+            last_callback_id: 0,
         }
     }
 
@@ -499,10 +514,12 @@ impl CanisterQueuesMultiFixture {
         other: CanisterId,
         input_queue_type: InputQueueType,
     ) -> Result<(), (StateError, RequestOrResponse)> {
+        self.last_callback_id += 1;
         self.queues.push_input(
             ResponseBuilder::default()
                 .originator(self.this)
                 .respondent(other)
+                .originator_reply_callback(CallbackId::from(self.last_callback_id))
                 .build()
                 .into(),
             input_queue_type,
@@ -534,11 +551,13 @@ impl CanisterQueuesMultiFixture {
     }
 
     fn push_output_request(&mut self, other: CanisterId) -> Result<(), (StateError, Arc<Request>)> {
+        self.last_callback_id += 1;
         self.queues.push_output_request(
             Arc::new(
                 RequestBuilder::default()
                     .sender(self.this)
                     .receiver(other)
+                    .sender_reply_callback(CallbackId::from(self.last_callback_id))
                     .build(),
             ),
             UNIX_EPOCH,
@@ -2695,6 +2714,7 @@ mod mainnet_compatibility_tests {
                 queues,
                 this: CANISTER_ID,
                 other: OTHER_CANISTER_ID,
+                last_callback_id: 0,
             };
             assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Request(_));
             assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Response(_));

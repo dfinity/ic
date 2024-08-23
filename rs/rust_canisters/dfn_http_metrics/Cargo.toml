@@ -10,5 +10,6 @@ documentation.workspace = true
 dfn_candid = { path = "../dfn_candid" }
 dfn_core = { path = "../dfn_core" }
 dfn_http = { path = "../dfn_http" }
+ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-metrics-encoder = "1"
 serde_bytes = { workspace = true }
