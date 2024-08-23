@@ -8,7 +8,6 @@ load("//ic-os/setupos:defs.bzl", "image_deps")
 #    or //ic-os/defs.bzl for the full list of targets.
 icos_build(
     name = "dev",
-    build_local_base_image = True,
     ic_version = "//bazel:rc_only_version.txt",
     image_deps_func = image_deps,
     upgrades = False,

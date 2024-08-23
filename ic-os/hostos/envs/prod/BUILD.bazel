@@ -7,7 +7,6 @@ load("//ic-os/hostos:defs.bzl", "image_deps")
 #    or //ic-os/defs.bzl for the full list of targets.
 icos_build(
     name = "prod",
-    build_local_base_image = True,
     image_deps_func = image_deps,
     upload_prefix = "host-os",
     visibility = ["//rs:ic-os-pkg"],

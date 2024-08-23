@@ -5,14 +5,13 @@
 # image only.
 
 # Need kernel to boot anything
-linux-image-generic-hwe-24.04
+linux-image-generic-hwe-20.04
 initramfs-tools
 
 # Need systemd for boot process
 systemd
 systemd-sysv
 systemd-journal-remote
-systemd-resolved
 
 # Third-party services we will be running
 chrony
@@ -76,7 +75,7 @@ xxd
 # QEMU required dependencies for version 6.2
 ipxe-qemu
 ipxe-qemu-256k-compat-efi-roms
-libaio1t64
+libaio1
 libatomic1
 libc6
 libfdt1
