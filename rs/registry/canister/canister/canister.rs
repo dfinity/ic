@@ -1057,8 +1057,8 @@ fn http_request() {
     dfn_http_metrics::serve_metrics(encode_metrics);
 }
 
-/// Deprecated: The right way to get this information is to do (the equivalent of)
-/// `dfx canister metadata $CANISTER 'candid:service'`.
+/// Deprecated: The blessed way to get this information is to do (the equivalent
+/// of) `dfx canister metadata $CANISTER 'candid:service'`.
 ///
 /// This makes this Candid service self-describing, so that for example Candid
 /// UI, but also other tools, can seamlessly integrate with it.
