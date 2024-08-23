@@ -1056,8 +1056,7 @@ mod tests {
 
                 // we should not get it again because it is part of past payloads
                 let mut hash_set = HashSet::new();
-                for i in 0..first_ingress_payload.message_count() {
-                    let (id, _) = first_ingress_payload.get(i).unwrap();
+                for id in first_ingress_payload.message_ids() {
                     hash_set.insert(id);
                 }
                 let second_ingress_payload = ingress_manager.get_ingress_payload(
