@@ -38,6 +38,7 @@ pub struct HttpGatewayConfig {
     pub forward_to: HttpGatewayBackend,
     pub domains: Option<Vec<String>>,
     pub https_config: Option<HttpsConfig>,
+    pub api_only: Option<bool>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]

@@ -375,6 +375,7 @@ impl PocketIc {
             forward_to: HttpGatewayBackend::PocketIcInstance(self.instance_id),
             domains: domains.clone(),
             https_config: https_config.clone(),
+            api_only: None,
         };
         let res = self
             .reqwest_client

@@ -921,18 +921,21 @@ impl ApiState {
                         .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
                 .route("/status", get(handler_status))
-                .fallback(|| async { (StatusCode::NOT_FOUND, "") });
+                .fallback(|| async { (StatusCode::NOT_FOUND, "Not Found") });
             let router_api_v3 = Router::new()
                 .route(
                     "/canister/:ecid/call",
                     post(handler_call_v3)
                         .layer(axum::middleware::from_fn(verify_cbor_content_header)),
                 )
-                .fallback(|| async { (StatusCode::NOT_FOUND, "") });
-            let router = Router::new()
+                .fallback(|| async { (StatusCode::NOT_FOUND, "Not Found") });
+            let mut router = Router::new()
                 .nest("/api/v2", router_api_v2)
-                .nest("/api/v3", router_api_v3)
-                .fallback(
+                .nest("/api/v3", router_api_v3);
+            if let Some(true) = http_gateway_config.api_only {
+                router = router.fallback(|| async { (StatusCode::NOT_FOUND, "Not Found") });
+            } else {
+                router = router.fallback(
                     post(handler)
                         .get(handler)
                         .put(handler)
@@ -946,6 +949,8 @@ impl ApiState {
                         ]))
                         .with_state(state_handler),
                 )
+            }
+            let router = router
                 .layer(DefaultBodyLimit::disable())
                 .layer(cors_layer())
                 .with_state(replica_url.trim_end_matches('/').to_string())

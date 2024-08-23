@@ -234,9 +234,9 @@ fn test_port_file() {
     }
 }
 
-async fn test_gateway(server_url: Url, https: bool) {
+async fn test_gateway(server_url: Url, https: bool, api_only: Option<bool>) {
     // create PocketIC instance
-    let mut pic = PocketIcBuilder::new()
+    let pic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_application_subnet()
         .build_async()
@@ -277,7 +277,10 @@ async fn test_gateway(server_url: Url, https: bool) {
         .write_all(root_key_pair.serialize_pem().as_bytes())
         .unwrap();
 
-    // make PocketIc instance live with an HTTP gateway
+    // make PocketIC instance auto progress
+    pic.auto_progress().await;
+
+    // create (api only) HTTP gateway
     let domains = Some(vec![localhost.to_string(), alt_domain.to_string()]);
     let https_config = if https {
         Some(HttpsConfig {
@@ -287,15 +290,34 @@ async fn test_gateway(server_url: Url, https: bool) {
     } else {
         None
     };
-    let port = pic
-        .make_live_with_params(None, domains.clone(), https_config.clone())
+    let create_gateway_endpoint = server_url.join("http_gateway").unwrap();
+    let http_gateway_config = HttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        forward_to: HttpGatewayBackend::PocketIcInstance(pic.instance_id),
+        domains: domains.clone(),
+        https_config: https_config.clone(),
+        api_only,
+    };
+    let client = NonblockingClient::new();
+    let res = client
+        .post(create_gateway_endpoint)
+        .json(&http_gateway_config)
+        .send()
         .await
-        .port_or_known_default()
+        .unwrap()
+        .json::<CreateHttpGatewayResponse>()
+        .await
         .unwrap();
+    let (port, gateway_id) = match res {
+        CreateHttpGatewayResponse::Created(info) => (info.port, info.instance_id),
+        CreateHttpGatewayResponse::Error { message } => {
+            panic!("Unexpected error: {}", message);
+        }
+    };
 
     // check that an HTTP gateway with the matching port is returned when listing all HTTP gateways
     // and its details are set properly
-    let client = NonblockingClient::new();
     let http_gateways: Vec<HttpGatewayDetails> = client
         .get(server_url.join("http_gateway").unwrap())
         .send()
@@ -315,7 +337,7 @@ async fn test_gateway(server_url: Url, https: bool) {
     assert_eq!(http_gateway_details.domains, domains);
     assert_eq!(http_gateway_details.https_config, https_config);
 
-    // create a non-blocking reqwest client resolving localhost/example.com and <canister-id>.localhost/example.com to [::1]
+    // create a non-blocking reqwest client resolving localhost/example.com and <canister-id>.localhost/example.com to 127.0.0.1
     let mut builder = NonblockingClient::builder()
         .resolve(
             localhost,
@@ -379,17 +401,44 @@ async fn test_gateway(server_url: Url, https: bool) {
         proto, localhost, port, canister_id
     );
     let res = client.get(canister_url).send().await.unwrap();
+    let status = res.status();
     let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
-    assert!(page.contains("<title>Internet Identity</title>"));
+    if let Some(true) = api_only {
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert!(page.contains("Not Found"));
+    } else {
+        assert_eq!(status, StatusCode::OK);
+        assert!(page.contains("<title>Internet Identity</title>"));
+    }
 
     // perform frontend asset request for the title page at http(s)://<canister-id>.example.com:<port>
     let canister_url = format!("{}://{}.{}:{}", proto, canister_id, alt_domain, port);
     let res = client.get(canister_url.clone()).send().await.unwrap();
+    let status = res.status();
     let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
-    assert!(page.contains("<title>Internet Identity</title>"));
+    if let Some(true) = api_only {
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert!(page.contains("Not Found"));
+    } else {
+        assert_eq!(status, StatusCode::OK);
+        assert!(page.contains("<title>Internet Identity</title>"));
+    }
 
-    // stop HTTP gateway and disable auto progress
-    pic.stop_live().await;
+    // stop HTTP gateway
+    let stop_http_gateway_url = server_url
+        .join(&format!("http_gateway/{}/stop", gateway_id))
+        .unwrap();
+    client
+        .post(stop_http_gateway_url)
+        .send()
+        .await
+        .unwrap()
+        .json::<()>()
+        .await
+        .unwrap();
+
+    // disable auto progress
+    pic.stop_progress().await;
 
     // HTTP gateway should eventually stop and requests to it fail
     loop {
@@ -403,13 +452,19 @@ async fn test_gateway(server_url: Url, https: bool) {
 #[tokio::test]
 async fn test_http_gateway() {
     let server_url = start_server();
-    test_gateway(server_url, false).await;
+    test_gateway(server_url, false, None).await;
 }
 
 #[tokio::test]
 async fn test_https_gateway() {
     let server_url = start_server();
-    test_gateway(server_url, true).await;
+    test_gateway(server_url, true, None).await;
+}
+
+#[tokio::test]
+async fn test_api_only_gateway() {
+    let server_url = start_server();
+    test_gateway(server_url, false, Some(true)).await;
 }
 
 #[test]
@@ -1062,6 +1117,7 @@ fn test_unresponsive_gateway_backend() {
         forward_to: HttpGatewayBackend::Replica(backend_instance_url.to_string()),
         domains: None,
         https_config: None,
+        api_only: None,
     };
     let res = client
         .post(create_gateway_endpoint)
@@ -1114,6 +1170,7 @@ fn test_invalid_gateway_backend() {
         forward_to: HttpGatewayBackend::Replica(backend_url.to_string()),
         domains: None,
         https_config: None,
+        api_only: None,
     };
     let client = Client::new();
     let res = client
