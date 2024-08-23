@@ -25,3 +25,4 @@
 . https://dashboard.internetcomputer.org/proposal/131664[131664]: upgrade the ckERC20 ledger suite orchestrator to add ckUNI
 . https://dashboard.internetcomputer.org/proposal/131755[131755]: upgrade the ckERC20 ledger suite orchestrator to add ckEURC
 . https://dashboard.internetcomputer.org/proposal/131798[131798], https://dashboard.internetcomputer.org/proposal/131799[131799] and https://dashboard.internetcomputer.org/proposal/131800[131800]: upgrade the ckETH ledger suite (index, ledger and archive, respectively) to add support for the ICRC-21 standard.
+. https://dashboard.internetcomputer.org/proposal/132130[132130]: upgrade the ckERC20 ledger suite orchestrator to add ckXAUT
