@@ -1,5 +1,5 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
@@ -118,16 +118,6 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [":build_script"],
-)
-
-rust_binary(
-    name = "generate_did",
-    srcs = ["canister/canister.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [
-        ":build_script",
-        ":swap",
-    ],
 )
 
 rust_canister(
