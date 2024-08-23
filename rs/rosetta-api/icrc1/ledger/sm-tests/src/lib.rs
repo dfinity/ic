@@ -2487,7 +2487,7 @@ pub fn test_upgrade_serialization(
     let minter_principal: Principal = minter.sender().unwrap();
     const INITIAL_TX_BATCH_SIZE: usize = 100;
     const ADDITIONAL_TX_BATCH_SIZE: usize = 15;
-    const TOTAL_TX_COUNT: usize = INITIAL_TX_BATCH_SIZE + 5 * ADDITIONAL_TX_BATCH_SIZE;
+    const TOTAL_TX_COUNT: usize = INITIAL_TX_BATCH_SIZE + 6 * ADDITIONAL_TX_BATCH_SIZE;
     runner
         .run(
             &(valid_transactions_strategy(
@@ -2520,12 +2520,7 @@ pub fn test_upgrade_serialization(
                 }
                 tx_index_target += ADDITIONAL_TX_BATCH_SIZE;
 
-                in_memory_ledger.prune_expired_allowances(TimeStamp::from_nanos_since_unix_epoch(
-                    system_time_to_nanos(env.time()),
-                ));
-                in_memory_ledger.verify_balance_count(&env, ledger_id);
-                in_memory_ledger.verify_balances(&env, ledger_id);
-                in_memory_ledger.verify_allowances(&env, ledger_id);
+                in_memory_ledger.verify_balances_and_allowances(&env, ledger_id);
 
                 let mut test_upgrade = |ledger_wasm: Vec<u8>| {
                     env.upgrade_canister(ledger_id, ledger_wasm, upgrade_args.clone())
@@ -2545,7 +2540,7 @@ pub fn test_upgrade_serialization(
                     }
                     tx_index_target += ADDITIONAL_TX_BATCH_SIZE;
 
-                    in_memory_ledger.verify_all(&env, ledger_id);
+                    in_memory_ledger.verify_balances_and_allowances(&env, ledger_id);
                 };
 
                 // Test if the old serialized approvals and balances are correctly deserialized
@@ -2579,11 +2574,7 @@ pub fn test_upgrade_serialization(
                 // This will also verify the ledger blocks.
                 // verify_ledger_state(&env, ledger_id);
                 // Test downgrade to mainnet wasm
-                env.upgrade_canister(ledger_id, ledger_wasm_mainnet.clone(), upgrade_args.clone())
-                    .unwrap();
-                in_memory_ledger.verify_balance_count(&env, ledger_id);
-                in_memory_ledger.verify_balances(&env, ledger_id);
-                in_memory_ledger.verify_allowances(&env, ledger_id);
+                test_upgrade(ledger_wasm_mainnet.clone());
 
                 Ok(())
             },
