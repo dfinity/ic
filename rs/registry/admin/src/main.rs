@@ -213,7 +213,7 @@ struct Opts {
     #[clap(
         long = "slot",
         help = "Only required if use-hsm is set. Ignored otherwise.",
-        global = true,
+        global = true
     )]
     hsm_slot: Option<String>,
 
@@ -221,7 +221,7 @@ struct Opts {
     #[clap(
         long = "key-id",
         help = "Only required if use-hsm is set. Ignored otherwise.",
-        global = true,
+        global = true
     )]
     key_id: Option<String>,
 
@@ -229,14 +229,14 @@ struct Opts {
     #[clap(
         long = "pin",
         help = "Only required if use-hsm is set. Ignored otherwise.",
-        global = true,
+        global = true
     )]
     pin: Option<String>,
 
     /// Verify NNS responses against NNS public key.
     #[clap(
         long = "verify-nns-responses",
-        help = "Verify responses against NNS public key. If --nns-public-key-pem-file is not specified the mainnet NNS public key is used. Requests to ic0.app are always verified with the mainnet NNS public key. ",
+        help = "Verify responses against NNS public key. If --nns-public-key-pem-file is not specified the mainnet NNS public key is used. Requests to ic0.app are always verified with the mainnet NNS public key. "
     )]
     verify_nns_responses: bool,
 
@@ -244,7 +244,7 @@ struct Opts {
     #[clap(
         long = "nns-public-key-pem-file",
         help = "PEM file to overwrite the mainnet NNS public key. Requires --verify-nns-responses.",
-        requires = "verify-nns-responses",
+        requires = "verify-nns-responses"
     )]
     nns_public_key_pem_file: Option<PathBuf>,
 
@@ -3936,7 +3936,9 @@ async fn main() {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             if !opts.silence_notices {
                 println!("Notice: invoking this command can undesirably worsen the decentralization.");
-                println!("Notice: Consider using instead the DRE tool https://dfinity.github.io/dre/ to submit this proposal")
+                println!(
+                    "Notice: Consider using instead the DRE tool https://dfinity.github.io/dre/ to submit this proposal"
+                )
             }
             propose_external_proposal_from_command(
                 cmd,
