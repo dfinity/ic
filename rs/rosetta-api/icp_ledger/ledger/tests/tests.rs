@@ -247,6 +247,14 @@ fn check_transfer_model() {
 }
 
 #[test]
+fn test_ledger_http_request_decoding_quota() {
+    ic_icrc1_ledger_sm_tests::test_ledger_http_request_decoding_quota(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn check_old_init() {
     let env = StateMachine::new();
     let old_init = Encode!(&InitArgs {

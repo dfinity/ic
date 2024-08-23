@@ -35,9 +35,6 @@ pub struct Stream {
     pub messages: ::prost::alloc::vec::Vec<RequestOrResponse>,
     #[prost(uint64, tag = "5")]
     pub signals_end: u64,
-    /// TODO: MR-577 Remove `deprecated_reject_signals` once all replicas are updated.
-    #[prost(uint64, repeated, tag = "6")]
-    pub deprecated_reject_signals: ::prost::alloc::vec::Vec<u64>,
     #[prost(message, repeated, tag = "8")]
     pub reject_signals: ::prost::alloc::vec::Vec<RejectSignal>,
     #[prost(message, optional, tag = "7")]

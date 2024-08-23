@@ -1,5 +1,5 @@
 use candid::candid_method;
-use dfn_candid::{candid, candid_one};
+use dfn_candid::{candid, candid_one, candid_one_with_config};
 use dfn_core::{
     api::caller,
     endpoint::{over, over_async},
@@ -284,7 +284,7 @@ async fn update_canister_settings_(
 /// Resources to serve for a given http_request
 #[export_name = "canister_query http_request"]
 fn http_request() {
-    over(candid_one, serve_http)
+    over(candid_one_with_config, serve_http)
 }
 
 /// Serve an HttpRequest made to this canister

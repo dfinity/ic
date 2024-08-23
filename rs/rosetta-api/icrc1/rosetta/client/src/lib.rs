@@ -89,7 +89,7 @@ impl RosettaClient {
                     };
                 }
                 CurveType::Secp256K1 => {
-                    let verification_key = ic_crypto_ecdsa_secp256k1::PublicKey::deserialize_sec1(
+                    let verification_key = ic_crypto_secp256k1::PublicKey::deserialize_sec1(
                         &signer_keypair.get_pb_key(),
                     )
                     .with_context(|| {

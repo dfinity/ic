@@ -43,6 +43,9 @@ mod governance_get_build_metadata_test;
 mod gtc;
 
 #[cfg(test)]
+mod http_request;
+
+#[cfg(test)]
 mod ledger;
 
 #[cfg(test)]
