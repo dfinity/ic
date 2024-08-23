@@ -36,12 +36,12 @@ async fn priority_from_stash_to_fetch() {
     let mut mock_pfn = MockBouncerFactory::new();
     let mut seq = Sequence::new();
     mock_pfn
-        .expect_get_bouncer()
+        .expect_new_bouncer()
         .times(1)
         .returning(|_| Box::new(|_| BouncerValue::MaybeWantsLater))
         .in_sequence(&mut seq);
     mock_pfn
-        .expect_get_bouncer()
+        .expect_new_bouncer()
         .times(1)
         .returning(|_| Box::new(|_| BouncerValue::Wants))
         .in_sequence(&mut seq);
@@ -94,7 +94,7 @@ async fn fetch_to_stash_to_fetch() {
         BouncerValue::MaybeWantsLater,
         BouncerValue::MaybeWantsLater,
     ]));
-    mock_pfn.expect_get_bouncer().returning(move |_| {
+    mock_pfn.expect_new_bouncer().returning(move |_| {
         let priorities = priorities.clone();
 
         let p = {
@@ -188,7 +188,7 @@ async fn invalid_artifact_not_accepted() {
     let pool = MockValidatedPoolReader::default();
     let mut mock_pfn = MockBouncerFactory::new();
     mock_pfn
-        .expect_get_bouncer()
+        .expect_new_bouncer()
         .returning(|_| Box::new(|_| BouncerValue::Wants));
     let (fetch_artifact, _router) = FetchArtifact::new(
         no_op_logger(),
@@ -221,12 +221,12 @@ async fn priority_from_stash_to_drop() {
     let mut mock_pfn: MockBouncerFactory<U64Artifact> = MockBouncerFactory::new();
     let mut seq = Sequence::new();
     mock_pfn
-        .expect_get_bouncer()
+        .expect_new_bouncer()
         .times(1)
         .returning(|_| Box::new(|_| BouncerValue::MaybeWantsLater))
         .in_sequence(&mut seq);
     mock_pfn
-        .expect_get_bouncer()
+        .expect_new_bouncer()
         .times(1)
         .returning(|_| Box::new(|_| BouncerValue::Unwanted))
         .in_sequence(&mut seq);
