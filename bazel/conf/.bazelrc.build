@@ -119,3 +119,10 @@ build:afl --run_under="/ic/bin/afl_wrapper.sh"
 # Suppress all additional output to make it more convenient in scripts
 query --ui_event_filters=-info,-debug --noshow_progress
 cquery --ui_event_filters=-info,-debug --noshow_progress
+
+
+common  --noenable_bzlmod
+
+
+build --noincompatible_enable_cc_toolchain_resolution
+build --remote_download_all
