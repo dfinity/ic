@@ -9840,7 +9840,6 @@ dependencies = [
  "ic-nervous-system-runtime",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
  "ic-nns-handler-root-interface",
  "ic-nns-handler-root-protobuf-generator",
  "ic-nns-test-utils",
