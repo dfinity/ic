@@ -170,34 +170,9 @@ mod tests {
 
     use crate::pb::v1::governance_error::ErrorType;
 
+    use candid::Decode;
     use ic_nns_constants::REGISTRY_CANISTER_ID;
 
-    #[cfg(feature = "test")]
-    use candid::Decode;
-
-    #[cfg(not(feature = "test"))]
-    #[test]
-    fn test_install_code_disabled() {
-        let install_code = InstallCode {
-            canister_id: Some(REGISTRY_CANISTER_ID.get()),
-            wasm_module: Some(vec![1, 2, 3]),
-            install_mode: Some(CanisterInstallMode::Upgrade as i32),
-            arg: None,
-            skip_stopping_before_installing: None,
-        };
-
-        assert_eq!(
-            install_code.validate(),
-            Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "Proposal invalid because of InstallCode proposal is not yet \
-                 supported"
-                    .to_string(),
-            ))
-        );
-    }
-
-    #[cfg(feature = "test")]
     #[test]
     fn test_invalid_install_code_proposal() {
         let valid_install_code = InstallCode {
@@ -299,7 +274,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "test")]
     #[test]
     fn test_upgrade_non_root_protocol_canister() {
         let install_code = InstallCode {
@@ -335,7 +309,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "test")]
     #[test]
     fn test_upgrade_root_protocol_canister() {
         let install_code = InstallCode {
@@ -367,7 +340,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "test")]
     #[test]
     fn test_reinstall_code_non_root_protocol_canister() {
         let install_code = InstallCode {
@@ -403,7 +375,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "test")]
     #[test]
     fn test_upgrade_canisters_topic_mapping() {
         use ic_base_types::CanisterId;
