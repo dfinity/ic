@@ -131,8 +131,7 @@ async fn smoke_test() {
         Some(block_id(scribe.blockchain.get(expected_first_block).unwrap()).unwrap())
     );
 
-    let msg = MetadataRequest::new();
-    let res = req_handler.network_list(msg).await;
+    let res = req_handler.network_list().await;
     assert_eq!(
         res,
         Ok(NetworkListResponse::new(vec![req_handler.network_id()]))
