@@ -1,12 +1,28 @@
-use bitcoin::{consensus::Decodable, Address, Network, Transaction};
+use bitcoin::{
+    address::FromScriptError,
+    consensus::{encode, Decodable},
+    Address, Network, Transaction,
+};
 use futures::future::try_join_all;
+use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::http_request::{
     http_request, CanisterHttpRequestArgument, HttpHeader, HttpMethod, TransformContext,
     TransformFunc,
 };
 
-#[derive(Debug, Clone)]
-pub struct BitcoinTxError;
+#[derive(Debug)]
+pub enum BitcoinTxError {
+    Address(FromScriptError),
+    Encoding(encode::Error),
+    TxIdMismatch {
+        expected: String,
+        decoded: String,
+    },
+    Rejected {
+        code: RejectionCode,
+        message: String,
+    },
+}
 
 pub async fn get_inputs_internal(tx_id: String) -> Result<Vec<String>, BitcoinTxError> {
     let tx = get_tx(tx_id).await?;
@@ -71,9 +87,9 @@ async fn get_tx(tx_id: String) -> Result<Transaction, BitcoinTxError> {
         Ok((response,)) => {
             // TODO(XC-158): ensure response is 200 before decoding
             let tx = Transaction::consensus_decode(&mut response.body.as_slice())
-                .map_err(|_| BitcoinTxError)?;
+                .map_err(BitcoinTxError::Encoding)?;
             // Verify the correctness of the transaction by recomputing the transaction ID.
-            if tx.txid().to_string() != *tx_id {
+            if tx.txid().to_string() != tx_id {
                 return Err(BitcoinTxError);
             }
             Ok(tx)
@@ -81,7 +97,10 @@ async fn get_tx(tx_id: String) -> Result<Transaction, BitcoinTxError> {
         Err((r, m)) => {
             // TODO(XC-158): maybe try other providers and also log the error.
             println!("The http_request resulted into error. RejectionCode: {r:?}, Error: {m}");
-            Err(BitcoinTxError)
+            Err(BitcoinTxError::Rejected {
+                code: r,
+                message: m,
+            })
         }
     }
 }
