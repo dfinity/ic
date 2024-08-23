@@ -50,17 +50,6 @@ type CanisterSummary = record {
   status : opt CanisterStatusResultV2;
   canister_id : opt principal;
 };
-type CfNeuron = record {
-  has_created_neuron_recipes : opt bool;
-  hotkeys : opt Principals;
-  nns_neuron_id : nat64;
-  amount_icp_e8s : nat64;
-};
-type CfParticipant = record {
-  controller : opt principal;
-  hotkey_principal : text;
-  cf_neurons : vec CfNeuron;
-};
 type Change = variant { ToRemove : NodeProvider; ToAdd : NodeProvider };
 type ChangeAutoStakeMaturity = record {
   requested_setting_for_auto_stake_maturity : bool;
@@ -601,7 +590,6 @@ type ProposalActionRequest = variant {
 type ProposalData = record {
   id : opt NeuronId;
   failure_reason : opt GovernanceError;
-  cf_participants : vec CfParticipant;
   ballots : vec record { nat64; Ballot };
   proposal_timestamp_seconds : nat64;
   reward_event_round : nat64;

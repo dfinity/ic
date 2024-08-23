@@ -109,6 +109,7 @@ type DefaultFollowees = record { followees : vec record { nat64; Followees } };
 type DefiniteCanisterSettingsArgs = record {
   freezing_threshold : nat;
   controllers : vec principal;
+  wasm_memory_limit : opt nat;
   memory_allocation : nat;
   compute_allocation : nat;
 };

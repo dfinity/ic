@@ -20,6 +20,7 @@ use ic_nervous_system_clients::{
     update_settings::{CanisterSettings, LogVisibility, UpdateSettings},
 };
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
+use ic_nns_constants::DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT;
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
 use std::{
     cell::RefCell,
@@ -704,9 +705,74 @@ impl SnsRootCanister {
         }
     }
 
+    pub async fn maybe_update_framework_canisters_memory_limit(
+        self_ref: &'static LocalKey<RefCell<Self>>,
+        management_canister_client: &impl ManagementCanisterClient,
+    ) {
+        // Get Some(canisters) if state.updated_framework_canisters_memory_limit != Some(true).
+        // or None otherwise
+        let canisters = self_ref.with(|state: &RefCell<SnsRootCanister>| {
+            let mut state = state.borrow_mut();
+            // If we have not updated the framework canisters' memory limit
+            if !state
+                .updated_framework_canisters_memory_limit
+                .unwrap_or_default()
+            {
+                state.updated_framework_canisters_memory_limit = Some(true);
+
+                // Since root doesn't own itself, we can't update root automatically
+                // We also can't upgrade Swap as it's owned by the NNS
+                let governance = state.governance_canister_id();
+                let ledger = state.ledger_canister_id();
+                let archives = state.archive_canister_ids.clone();
+                let index = state.index_canister_id();
+
+                Some(
+                    vec![governance, ledger, index]
+                        .into_iter()
+                        .chain(archives.into_iter())
+                        .collect::<Vec<_>>(),
+                )
+            } else {
+                None
+            }
+        });
+        // Update the canisters' settings
+        if let Some(canisters) = canisters {
+            for canister_id in canisters {
+                // Update their settings to set wasm_memory_limit to 4GiB
+                let settings = CanisterSettings {
+                    wasm_memory_limit: Some(Nat::from(
+                        DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT,
+                    )),
+                    ..Default::default()
+                };
+                if let Err(error) = management_canister_client
+                    .update_settings(UpdateSettings {
+                        canister_id,
+                        settings,
+                        sender_canister_version: management_canister_client.canister_version(),
+                    })
+                    .await
+                {
+                    log!(
+                        ERROR,
+                        "Failed to update memory limit for canister {canister_id}: {error:?}"
+                    );
+                } else {
+                    log!(
+                        INFO,
+                        "Successfully changed memory limit for canister {canister_id}"
+                    );
+                }
+            }
+        }
+    }
+
     /// Runs periodic tasks that are not directly triggered by user input.
     pub async fn heartbeat(
         self_ref: &'static LocalKey<RefCell<Self>>,
+        management_canister_client: &impl ManagementCanisterClient,
         ledger_client: &impl LedgerCanisterClient,
         current_timestamp_seconds: u64,
     ) {
@@ -726,6 +792,10 @@ impl SnsRootCanister {
             )
             .await;
         }
+
+        // TODO(NNS1-3286): Remove once root with this code has been released
+        Self::maybe_update_framework_canisters_memory_limit(self_ref, management_canister_client)
+            .await;
     }
 
     /// Polls for new archives canisters from the
@@ -1021,6 +1091,7 @@ mod tests {
             latest_ledger_archive_poll_timestamp_seconds: None,
             index_canister_id: Some(PrincipalId::new_user_test_id(4)),
             testflight,
+            updated_framework_canisters_memory_limit: Some(true),
         }
     }
 
@@ -2676,6 +2747,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_maybe_update_framework_canisters_memory_limit() {
+        // Step 1: Prepare the world.
+        thread_local! {
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(
+                SnsRootCanister {
+                    updated_framework_canisters_memory_limit: Some(false),
+                    ..build_test_sns_root_canister(false)
+                }
+            );
+        }
+
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
+            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
+            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
+        ]);
+
+        SnsRootCanister::maybe_update_framework_canisters_memory_limit(
+            &SNS_ROOT_CANISTER,
+            &management_canister_client,
+        )
+        .await;
+
+        management_canister_client.assert_all_replies_consumed();
+
+        // If we call it again it shouldn't send any messages, and therefore not require any replies
+        SnsRootCanister::maybe_update_framework_canisters_memory_limit(
+            &SNS_ROOT_CANISTER,
+            &management_canister_client,
+        )
+        .await;
+    }
+
+    #[tokio::test]
     async fn test_heartbeat() {
         // Step 1: Prepare the world.
         thread_local! {
@@ -2710,7 +2815,13 @@ mod tests {
         ]);
 
         // Step 2: Call the code under test.
-        SnsRootCanister::heartbeat(&SNS_ROOT_CANISTER, &ledger_canister_client, NOW).await;
+        SnsRootCanister::heartbeat(
+            &SNS_ROOT_CANISTER,
+            &MockManagementCanisterClient::new(vec![]),
+            &ledger_canister_client,
+            NOW,
+        )
+        .await;
 
         // Step 3: Inspect results.
         assert_archive_poll_state_change(
@@ -2721,7 +2832,13 @@ mod tests {
 
         // Running periodic tasks one second in the future should
         // result in no change to state.
-        SnsRootCanister::heartbeat(&SNS_ROOT_CANISTER, &ledger_canister_client, NOW + 1).await;
+        SnsRootCanister::heartbeat(
+            &SNS_ROOT_CANISTER,
+            &MockManagementCanisterClient::new(vec![]),
+            &ledger_canister_client,
+            NOW + 1,
+        )
+        .await;
 
         assert_archive_poll_state_change(
             &SNS_ROOT_CANISTER,
@@ -2733,6 +2850,7 @@ mod tests {
         // result in a new poll.
         SnsRootCanister::heartbeat(
             &SNS_ROOT_CANISTER,
+            &MockManagementCanisterClient::new(vec![]),
             &ledger_canister_client,
             NOW + ONE_DAY_SECONDS,
         )
@@ -2879,7 +2997,13 @@ mod tests {
             };
 
         // Step 2: Call the code under test.
-        SnsRootCanister::heartbeat(&SNS_ROOT_CANISTER, &ledger_canister_client, NOW).await;
+        SnsRootCanister::heartbeat(
+            &SNS_ROOT_CANISTER,
+            &MockManagementCanisterClient::new(vec![]),
+            &ledger_canister_client,
+            NOW,
+        )
+        .await;
 
         // We should now have a single Archive canister registered.
         assert_archive_poll_state_change(
@@ -2977,6 +3101,155 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_get_sns_canisters_summary_reports_settings() {
+        // Step 1: Prepare the world.
+        thread_local! {
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(SnsRootCanister {
+                governance_canister_id: Some(PrincipalId::new_user_test_id(1)),
+                ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
+                swap_canister_id: Some(PrincipalId::new_user_test_id(3)),
+                dapp_canister_ids: vec![],
+                archive_canister_ids: vec![],
+                latest_ledger_archive_poll_timestamp_seconds: None,
+                index_canister_id: Some(PrincipalId::new_user_test_id(4)),
+                testflight: false,
+                updated_framework_canisters_memory_limit: Some(true),
+            });
+        }
+
+        let root_canister_id = CanisterId::from_u64(4);
+
+        let (governance_canister_id, _, swap_canister_id, _) = SNS_ROOT_CANISTER.with(|sns_root| {
+            let sns_root = sns_root.borrow();
+            (
+                sns_root.governance_canister_id(),
+                sns_root.ledger_canister_id(),
+                sns_root.swap_canister_id(),
+                sns_root.index_canister_id(),
+            )
+        });
+
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            MockManagementCanisterClientReply::CanisterStatus(Ok(
+                CanisterStatusResultFromManagementCanister::dummy_with_controllers(vec![
+                    governance_canister_id,
+                ]),
+            )),
+            MockManagementCanisterClientReply::CanisterStatus(Ok(
+                CanisterStatusResultFromManagementCanister::dummy_with_controllers(vec![
+                    governance_canister_id,
+                ]),
+            )),
+            MockManagementCanisterClientReply::CanisterStatus(Ok(
+                CanisterStatusResultFromManagementCanister::dummy_with_controllers(vec![
+                    governance_canister_id,
+                ]),
+            )),
+            MockManagementCanisterClientReply::CanisterStatus(Ok(
+                CanisterStatusResultFromManagementCanister::dummy_with_controllers(vec![
+                    governance_canister_id,
+                ]),
+            )),
+        ]);
+
+        let ledger_canister_client = MockLedgerCanisterClient::new(vec![]);
+
+        let env = TestEnvironment {
+            calls: Arc::new(Mutex::new(
+                vec![EnvironmentCall::CallCanister {
+                    expected_canister: CanisterId::try_from(swap_canister_id).unwrap(),
+                    expected_method: "get_canister_status".to_string(),
+                    expected_bytes: None,
+                    result: Ok(
+                        Encode!(&CanisterStatusResultV2::dummy_with_controllers(vec![
+                            governance_canister_id
+                        ]))
+                        .unwrap(),
+                    ),
+                }]
+                .into(),
+            )),
+        };
+
+        let result = SnsRootCanister::get_sns_canisters_summary(
+            &SNS_ROOT_CANISTER,
+            &management_canister_client,
+            &ledger_canister_client,
+            &env,
+            false,
+            root_canister_id.into(),
+        )
+        .await;
+
+        let expected_settings =
+            CanisterStatusResultFromManagementCanister::dummy_with_controllers(vec![
+                governance_canister_id,
+            ])
+            .settings;
+
+        for (result, canister_name) in [
+            (result.governance, "governance"),
+            (result.ledger, "ledger"),
+            (result.index, "index"),
+        ] {
+            // compute_allocation
+            assert_eq!(
+                result
+                    .clone()
+                    .unwrap()
+                    .status
+                    .unwrap()
+                    .settings
+                    .compute_allocation,
+                expected_settings.clone().compute_allocation,
+                "{canister_name}'s compute_allocation did not match"
+            );
+            // controllers
+            assert_eq!(
+                result.clone().unwrap().status.unwrap().settings.controllers,
+                expected_settings.clone().controllers,
+                "{canister_name}'s controllers did not match"
+            );
+            // freezing_threshold
+            assert_eq!(
+                result
+                    .clone()
+                    .unwrap()
+                    .status
+                    .unwrap()
+                    .settings
+                    .freezing_threshold,
+                expected_settings.clone().freezing_threshold,
+                "{canister_name}'s freezing_threshold did not match"
+            );
+            // memory_allocation
+            assert_eq!(
+                result
+                    .clone()
+                    .unwrap()
+                    .status
+                    .unwrap()
+                    .settings
+                    .memory_allocation,
+                expected_settings.clone().memory_allocation,
+                "{canister_name}'s memory_allocation did not match"
+            );
+            // wasm_memory_limit
+            assert_eq!(
+                result
+                    .clone()
+                    .unwrap()
+                    .status
+                    .unwrap()
+                    .settings
+                    .wasm_memory_limit,
+                Some(expected_settings.clone().wasm_memory_limit),
+                "{canister_name}'s wasm_memory_limit did not match"
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn test_get_sns_canisters_summary_handles_dapp_status_failures() {
         // Step 1: Prepare the world.
         thread_local! {
@@ -2993,6 +3266,7 @@ mod tests {
                 latest_ledger_archive_poll_timestamp_seconds: None,
                 index_canister_id: Some(PrincipalId::new_user_test_id(4)),
                 testflight: false,
+                updated_framework_canisters_memory_limit: Some(true),
             });
         }
 
@@ -3222,6 +3496,7 @@ mod tests {
                 latest_ledger_archive_poll_timestamp_seconds: None,
                 index_canister_id: Some(PrincipalId::new_user_test_id(4)),
                 testflight: false,
+                updated_framework_canisters_memory_limit: Some(true),
             });
         }
 
