@@ -1,5 +1,5 @@
 {
-  "checksum": "357116d31d9165b2acd043379b69843a0fba9fcfb4ca1075583849170942ce18",
+  "checksum": "f8e420e5c4cfcdb33f4377297337cc215943ba667e247e798aabb1dc886b3316",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17631,7 +17631,7 @@
               "target": "k256"
             },
             {
-              "id": "k8s-openapi 0.20.0",
+              "id": "k8s-openapi 0.22.0",
               "target": "k8s_openapi"
             },
             {
@@ -33602,101 +33602,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "k8s-openapi 0.20.0": {
-      "name": "k8s-openapi",
-      "version": "0.20.0",
-      "package_url": "https://github.com/Arnavion/k8s-openapi",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/k8s-openapi/0.20.0/download",
-          "sha256": "edc3606fd16aca7989db2f84bb25684d0270c6d6fa1dbcd0025af7b4130523a6"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "k8s_openapi",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "k8s_openapi",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "v1_22"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "base64 0.21.4",
-              "target": "base64"
-            },
-            {
-              "id": "bytes 1.7.1",
-              "target": "bytes"
-            },
-            {
-              "id": "chrono 0.4.38",
-              "target": "chrono"
-            },
-            {
-              "id": "k8s-openapi 0.20.0",
-              "target": "build_script_build"
-            },
-            {
-              "id": "serde 1.0.203",
-              "target": "serde"
-            },
-            {
-              "id": "serde-value 0.7.0",
-              "target": "serde_value"
-            },
-            {
-              "id": "serde_json 1.0.108",
-              "target": "serde_json"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.20.0"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "links": "k8s-openapi-0.20.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "k8s-openapi 0.22.0": {
       "name": "k8s-openapi",
       "version": "0.22.0",
@@ -33738,6 +33643,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "v1_24"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -78695,7 +78606,7 @@
     "json-patch 0.2.7",
     "json5 0.4.1",
     "k256 0.13.3",
-    "k8s-openapi 0.20.0",
+    "k8s-openapi 0.22.0",
     "kube 0.93.1",
     "lazy_static 1.4.0",
     "leb128 0.2.5",

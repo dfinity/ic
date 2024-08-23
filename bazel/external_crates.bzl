@@ -710,9 +710,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "k8s-openapi": crate.spec(
-                version = "^0.20.0",
+                version = "^0.22.0",
                 features = [
-                    "v1_22",
+                    "v1_24",
                 ],
             ),
             "kube": crate.spec(

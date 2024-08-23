@@ -101,7 +101,7 @@ icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
 json5 = "0.4.1"
 k256 = { workspace = true }
-k8s-openapi = { version = "0.20.0", features = ["v1_22"] }
+k8s-openapi = { version = "0.22.0", features = ["v1_24"] }
 kube = { version = "0.93.1", features = ["runtime", "derive", "ws"] }
 lazy_static = { workspace = true }
 leb128 = "0.2.5"

@@ -12133,7 +12133,7 @@ dependencies = [
  "itertools 0.12.0",
  "json5",
  "k256",
- "k8s-openapi 0.20.0",
+ "k8s-openapi 0.22.0",
  "kube 0.93.1",
  "lazy_static",
  "leb128",
