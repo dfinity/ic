@@ -3692,6 +3692,100 @@ pub mod test {
         });
     }
 
+    /// A proposal with a rank that doesn't match the signer must fail
+    /// verification, and not be able to create an equivocation proof.
+    #[test]
+    fn test_cannot_disqualify_with_incorrect_rank() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let ValidatorAndDependencies {
+                validator,
+                mut pool,
+                ..
+            } = setup_dependencies(pool_config, &subnet_members);
+
+            let block = pool.make_next_block();
+            let mut block_with_malicious_signer = block.clone();
+            block_with_malicious_signer.content.as_mut().context.time += Duration::from_nanos(1);
+            block_with_malicious_signer.update_content();
+            block_with_malicious_signer.signature.signer =
+                pool.get_block_maker_by_rank(block.height(), Rank(1));
+
+            pool.insert_validated(block.clone());
+            pool.insert_unvalidated(block_with_malicious_signer.clone());
+
+            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            assert_matches!(
+                changeset[..],
+                [ChangeAction::HandleInvalid(
+                    ConsensusMessage::BlockProposal(_),
+                    _
+                )]
+            );
+        });
+    }
+
+    /// A node might see two different, legitimate proposals of another node,
+    /// that were created from a different replica version during an upgrade.
+    /// In this case, we should not create an equivocation proof.
+    #[test]
+    fn test_cannot_disqualify_with_proposal_from_different_version() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let dkg_interval = 9;
+            let ValidatorAndDependencies {
+                validator,
+                mut pool,
+                replica_config,
+                ..
+            } = ValidatorAndDependencies::new(dependencies_with_subnet_params(
+                pool_config,
+                subnet_test_id(0),
+                vec![
+                    (
+                        1,
+                        SubnetRecordBuilder::from(&subnet_members)
+                            .with_dkg_interval_length(9)
+                            .build(),
+                    ),
+                    (
+                        10,
+                        SubnetRecordBuilder::from(&subnet_members)
+                            .with_dkg_interval_length(9)
+                            .with_replica_version("new_version")
+                            .build(),
+                    ),
+                ],
+            ));
+
+            // Move to the end of the DKG interval where we switch versions
+            pool.advance_round_normal_operation_n(dkg_interval + 1);
+            assert!(pool.get_cache().finalized_block().payload.is_summary());
+
+            // An empty block created before the update
+            let block = pool.make_next_block();
+            assert!(block.signature.signer != replica_config.node_id);
+            pool.insert_validated(block.clone());
+
+            // A post-upgrade block
+            let mut block_with_new_version = block;
+            block_with_new_version.content.as_mut().version =
+                ReplicaVersion::try_from("new_version").unwrap();
+            block_with_new_version.update_content();
+
+            // Block proposals with replica version mismatches are simply removed
+            // No equivocation proof is generated.
+            pool.insert_unvalidated(block_with_new_version);
+            let changeset = validator.on_state_change(&PoolReader::new(&pool));
+            assert_matches!(
+                changeset[..],
+                [ChangeAction::RemoveFromUnvalidated(
+                    ConsensusMessage::BlockProposal(_)
+                )]
+            );
+        });
+    }
+
     #[test]
     fn test_ignore_disqualified_ranks() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
