@@ -26,7 +26,7 @@ use ic_http_endpoints_public::{
     metrics::HttpHandlerMetrics, CallServiceV2, CallServiceV3, CanisterReadStateServiceBuilder,
     IngressValidatorBuilder, QueryServiceBuilder, SubnetReadStateServiceBuilder,
 };
-use ic_https_outcalls_adapter::{CanisterHttp, CanisterRequestBody};
+use ic_https_outcalls_adapter::{CanisterHttp, Config as HttpsOutcallsConfig};
 use ic_https_outcalls_adapter_client::CanisterHttpAdapterClientImpl;
 use ic_https_outcalls_service::canister_http_service_server::CanisterHttpService;
 use ic_https_outcalls_service::canister_http_service_server::CanisterHttpServiceServer;
@@ -2425,36 +2425,14 @@ fn new_canister_http_adapter(
     // We don't really use the Socks client in PocketIC as we set `socks_proxy_allowed: false` in the request,
     // but we still have to provide one when constructing the production `CanisterHttp` object
     // and thus we use a reserved (and invalid) proxy IP address.
-    let mut http_connector = HttpConnector::new();
-    http_connector.enforce_http(false);
-    http_connector.set_connect_timeout(Some(Duration::from_secs(2)));
-    let proxy_connector = SocksConnector {
-        proxy_addr: "http://240.0.0.0:8080"
-            .parse()
-            .expect("Failed to parse socks url."),
-        auth: None,
-        connector: http_connector.clone(),
+    let config = HttpsOutcallsConfig {
+        http_connect_timeout_secs: 2,
+        http_request_timeout_secs: 2,
+        socks_proxy: "http://240.0.0.0:8080",
+        ..Default::default()
     };
-    let proxied_https_connector = HttpsConnectorBuilder::new()
-        .with_native_roots()
-        .expect("Failed to set native roots.")
-        .https_only()
-        .enable_http1()
-        .wrap_connector(proxy_connector);
 
-    // Https client setup.
-    let builder = HttpsConnectorBuilder::new()
-        .with_native_roots()
-        .expect("Failed to set native roots.")
-        .https_or_http()
-        .enable_http1();
-
-    CanisterHttp::new(
-        builder.wrap_connector(http_connector),
-        proxied_https_connector,
-        log,
-        metrics_registry,
-    )
+    CanisterHttp::new(config, log, metrics_registry)
 }
 
 #[cfg(test)]
