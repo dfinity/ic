@@ -157,7 +157,7 @@ This should match \`wasm_module\` field of this proposal.$(if [ ! -z "$CANDID_AR
 [latest-didc]: https://github.com/dfinity/candid/releases/latest
 
 \`\`\`
-didc encode '$CANDID_ARGS' | sha256sum
+didc encode '$CANDID_ARGS'
 \`\`\`
 
 This should match the \`arg_hex\` field of this proposal.
@@ -197,7 +197,7 @@ generate_sns_bless_wasm_proposal_text() {
 
     OUTPUT=$(
         cat <<++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-# Publish SNS $CAPITALIZED_CANISTER_TYPE Upgrade to Commit $SHORT_NEXT_COMMIT
+# Publish SNS $CAPITALIZED_CANISTER_TYPE WASM Built at $SHORT_NEXT_COMMIT
 
 __Proposer__: $PROPOSER\\
 __Source Code__: [$NEXT_COMMIT][new-commit]
