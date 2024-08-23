@@ -301,8 +301,8 @@ impl CanisterQueues {
                 }
             }
         }
-        debug_assert!(self.stats_ok());
-        debug_assert_eq!(Ok(()), self.canister_queues_ok());
+
+        debug_assert_eq!(Ok(()), self.test_invariants());
     }
 
     /// Returns an iterator that loops over output queues, popping one message
@@ -399,8 +399,7 @@ impl CanisterQueues {
             }
         }
 
-        debug_assert!(self.stats_ok());
-
+        debug_assert_eq!(Ok(()), self.test_invariants());
         Ok(())
     }
 
@@ -434,15 +433,13 @@ impl CanisterQueues {
                 assert!(self.input_schedule_canisters.remove(&sender));
             }
 
-            debug_assert_eq!(
-                Ok(()),
-                canister_queues_ok(&self.canister_queues, &self.pool)
-            );
             if let Some(msg) = msg {
+                debug_assert_eq!(Ok(()), self.test_invariants());
                 return Some(msg.into());
             }
         }
 
+        debug_assert_eq!(Ok(()), self.test_invariants());
         None
     }
 
@@ -472,6 +469,7 @@ impl CanisterQueues {
                     .pool
                     .get(item.id())
                     .expect("stale reference at the head of input queue");
+                debug_assert_eq!(Ok(()), self.test_invariants());
                 return Some(msg.clone().into());
             }
 
@@ -479,6 +477,7 @@ impl CanisterQueues {
             input_schedule.pop_front();
         }
 
+        debug_assert_eq!(Ok(()), self.test_invariants());
         None
     }
 
@@ -496,6 +495,7 @@ impl CanisterQueues {
                 assert!(self.input_schedule_canisters.remove(&sender));
             }
         }
+        debug_assert_eq!(Ok(()), self.test_invariants());
     }
 
     /// Returns `true` if `ingress_queue` or at least one of the canister input
@@ -635,8 +635,7 @@ impl CanisterQueues {
         let id = self.pool.insert_outbound_request(request, time);
         output_queue.push_request(id);
 
-        debug_assert!(self.stats_ok());
-
+        debug_assert_eq!(Ok(()), self.test_invariants());
         Ok(())
     }
 
@@ -665,7 +664,7 @@ impl CanisterQueues {
         input_queue.try_reserve_response_slot()?;
         self.queue_stats
             .on_push_request(&request, Context::Outbound);
-        debug_assert!(self.stats_ok());
+        debug_assert_eq!(Ok(()), self.test_invariants());
 
         let response = RequestOrResponse::Response(Arc::new(Response {
             originator: request.sender,
@@ -720,7 +719,7 @@ impl CanisterQueues {
         let id = self.pool.insert_outbound_response(response);
         output_queue.push_response(id);
 
-        debug_assert!(self.stats_ok());
+        debug_assert_eq!(Ok(()), self.test_invariants());
     }
 
     /// Returns a reference to the (non-stale) message at the head of the respective
@@ -750,8 +749,7 @@ impl CanisterQueues {
         pop_and_advance(queue, &mut self.pool)
             .expect("Message peeked above so pop should not fail.");
 
-        debug_assert_eq!(Ok(()), self.canister_queues_ok());
-
+        debug_assert_eq!(Ok(()), self.test_invariants());
         Ok(())
     }
 
@@ -906,23 +904,7 @@ impl CanisterQueues {
             .retain(|_canister_id, (input_queue, output_queue)| {
                 input_queue.has_used_slots() || output_queue.has_used_slots()
             });
-        debug_assert!(self.stats_ok());
-    }
-
-    /// Helper function to concisely validate stats adjustments in debug builds,
-    /// by writing `debug_assert!(self.stats_ok())`.
-    fn stats_ok(&self) -> bool {
-        let mut calculated_stats = Self::calculate_queue_stats(
-            &self.canister_queues,
-            self.queue_stats.guaranteed_response_memory_reservations,
-        );
-        // We must assume that `transient_stream_guaranteed_responses_size_bytes` is
-        // correct because there is no way to calculate it based on `self`.
-        calculated_stats.transient_stream_guaranteed_responses_size_bytes = self
-            .queue_stats
-            .transient_stream_guaranteed_responses_size_bytes;
-        debug_assert_eq!(calculated_stats, self.queue_stats);
-        true
+        debug_assert_eq!(Ok(()), self.test_invariants());
     }
 
     /// Queries whether the deadline of any message in the pool has expired.
@@ -951,10 +933,8 @@ impl CanisterQueues {
             self.on_message_dropped(*id, msg, own_canister_id, local_canisters);
         }
 
-        debug_assert!(self.stats_ok());
-        debug_assert_eq!(Ok(()), self.canister_queues_ok());
+        debug_assert_eq!(Ok(()), self.test_invariants());
         debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters));
-
         expired_messages.len()
     }
 
@@ -972,10 +952,8 @@ impl CanisterQueues {
         if let Some((id, msg)) = self.pool.shed_largest_message() {
             self.on_message_dropped(id, &msg, own_canister_id, local_canisters);
 
-            debug_assert!(self.stats_ok());
-            debug_assert_eq!(Ok(()), self.canister_queues_ok());
+            debug_assert_eq!(Ok(()), self.test_invariants());
             debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters));
-
             return true;
         }
 
@@ -1025,7 +1003,6 @@ impl CanisterQueues {
             (Inbound, RequestOrResponse::Request(request)) => {
                 reverse_queue.release_reserved_response_slot();
                 self.queue_stats.on_drop_input_request(request);
-                return;
             }
 
             // Outbound request: produce a `SYS_TRANSIENT` timeout reject response.
@@ -1054,8 +1031,8 @@ impl CanisterQueues {
             //
             // TODO(MR-603): Recall the `Id` -> `CallbackId` of shed inbound responses and
             // generate a reject response on the fly when the respective `Id` is popped.
-            (_, RequestOrResponse::Response(_)) => return,
-        };
+            (_, RequestOrResponse::Response(_)) => {}
+        }
     }
 
     /// Re-partitions `self.local_subnet_input_schedule` and
@@ -1090,7 +1067,7 @@ impl CanisterQueues {
 
     /// Helper function to concisely validate `CanisterQueues`' input schedules
     /// during deserialization; or in debug builds, by writing
-    /// `debug_assert_eq!(Ok(()), self.schedules_ok(own_canister_id, local_canisters)`.
+    /// `debug_assert_eq!(self.schedules_ok(own_canister_id, local_canisters).is_ok())`.
     ///
     /// Checks that all canister IDs of input queues that contain at least one message
     /// are found exactly once in either the input schedule for the local subnet or the
@@ -1158,24 +1135,47 @@ impl CanisterQueues {
         Ok(())
     }
 
-    /// Helper function for concisely validating the hard invariant that all
-    /// canister queues (input or output) are either empty of start with a non-stale
-    /// reference, by writing `debug_assert_eq!(Ok(()), self.canister_queues_ok()`.
+    /// Helper function for concisely validating invariants other than those of
+    /// input queue schedules (no stale references at queue front, valid stats)
+    /// during deserialization; or in debug builds, by writing
+    /// `debug_assert_eq!(Ok(()), self.test_invariants())`.
     ///
     /// Time complexity: `O(n * log(n))`.
-    fn canister_queues_ok(&self) -> Result<(), String> {
-        canister_queues_ok(&self.canister_queues, &self.pool)
+    fn test_invariants(&self) -> Result<(), String> {
+        // Invariant: all canister queues (input or output) are either empty or start
+        // with a non-stale reference.
+        for (canister_id, (input_queue, output_queue)) in self.canister_queues.iter() {
+            canister_queue_ok(input_queue, &self.pool, canister_id)?;
+            canister_queue_ok(output_queue, &self.pool, canister_id)?;
+        }
+
+        // Reserved slot stats match the actual number of reserved slots.
+        let calculated_stats = Self::calculate_queue_stats(
+            &self.canister_queues,
+            self.queue_stats.guaranteed_response_memory_reservations,
+            self.queue_stats
+                .transient_stream_guaranteed_responses_size_bytes,
+        );
+        if self.queue_stats != calculated_stats {
+            return Err(format!(
+                "Inconsistent stats:\n  expected: {:?}\n  actual: {:?}",
+                calculated_stats, self.queue_stats
+            ));
+        }
+
+        Ok(())
     }
 
     /// Computes stats for the given canister queues. Used when deserializing and in
     /// `debug_assert!()` checks. Takes the number of memory reservations from the
     /// caller, as the queues have no need to track memory reservations, so it
-    /// cannot be computed.
+    /// cannot be computed. Same with the size of guaranteed responses in streams.
     ///
     /// Time complexity: `O(canister_queues.len())`.
     fn calculate_queue_stats(
         canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
         guaranteed_response_memory_reservations: usize,
+        transient_stream_guaranteed_responses_size_bytes: usize,
     ) -> QueueStats {
         let (input_queues_reserved_slots, output_queues_reserved_slots) = canister_queues
             .values()
@@ -1187,7 +1187,7 @@ impl CanisterQueues {
             guaranteed_response_memory_reservations,
             input_queues_reserved_slots,
             output_queues_reserved_slots,
-            transient_stream_guaranteed_responses_size_bytes: 0,
+            transient_stream_guaranteed_responses_size_bytes,
         }
     }
 }
@@ -1201,24 +1201,6 @@ fn pop_and_advance(queue: &mut CanisterQueue, pool: &mut MessagePool) -> Option<
     let msg = pool.take(item.id());
     assert!(msg.is_some(), "stale reference at the head of queue");
     msg
-}
-
-/// Helper function for concisely validating the hard invariant that all
-/// canister queues (input or output) are either empty of start with a non-stale
-/// reference, by writing
-/// `debug_assert_eq!(Ok(()), canister_queues_ok(&queues, &pool)`.
-///
-/// Time complexity: `O(n * log(n))`.
-fn canister_queues_ok(
-    queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
-    pool: &MessagePool,
-) -> Result<(), String> {
-    for (canister_id, (input_queue, output_queue)) in queues.iter() {
-        canister_queue_ok(input_queue, pool, canister_id)?;
-        canister_queue_ok(output_queue, pool, canister_id)?;
-    }
-
-    Ok(())
 }
 
 /// Helper function for concisely validating the hard invariant that a canister
@@ -1395,11 +1377,10 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
             }
         }
 
-        canister_queues_ok(&canister_queues, &pool).map_err(ProxyDecodeError::Other)?;
-
         let queue_stats = Self::calculate_queue_stats(
             &canister_queues,
             item.guaranteed_response_memory_reservations as usize,
+            0,
         );
 
         let next_input_queue = NextInputQueue::from(
@@ -1439,6 +1420,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
         ) {
             metrics.observe_broken_soft_invariant(e.to_string());
         }
+        queues.test_invariants().map_err(ProxyDecodeError::Other)?;
 
         Ok(queues)
     }

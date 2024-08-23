@@ -987,7 +987,7 @@ fn fixture_with_empty_queues_in_input_schedules() -> CanisterQueues {
 
     // Time out the messages from `other_1`, `other_3`, `other_4` and `other_6`.
     queues.time_out_all_messages_with_deadlines();
-    assert!(queues.queues.stats_ok());
+    assert_eq!(Ok(()), queues.queues.test_invariants());
     assert_eq!(
         Ok(()),
         queues
@@ -1130,7 +1130,7 @@ fn test_push_into_empty_queue_in_input_schedule() {
 
     // Time out all messages.
     queues.time_out_all_messages_with_deadlines();
-    assert!(queues.queues.stats_ok());
+    assert_eq!(Ok(()), queues.queues.test_invariants());
     assert_eq!(
         Ok(()),
         queues
@@ -1584,6 +1584,7 @@ fn decode_backward_compatibility() {
     expected_queues.queue_stats = CanisterQueues::calculate_queue_stats(
         &expected_queues.canister_queues,
         queues_proto.guaranteed_response_memory_reservations as usize,
+        0,
     );
 
     let queues = (
