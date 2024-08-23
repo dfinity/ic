@@ -16229,7 +16229,6 @@ dependencies = [
  "http-body-util",
  "hyper 1.4.1",
  "hyper-rustls 0.27.2",
- "hyper-socks2",
  "hyper-util",
  "ic-agent",
  "ic-boundary",

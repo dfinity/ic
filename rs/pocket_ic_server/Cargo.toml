@@ -24,7 +24,6 @@ http = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-rustls = { workspace = true }
-hyper-socks2 = { workspace = true }
 hyper-util = { workspace = true }
 ic-agent = { workspace = true }
 ic-boundary = { path = "../boundary_node/ic_boundary" }

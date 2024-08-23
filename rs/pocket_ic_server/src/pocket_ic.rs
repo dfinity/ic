@@ -15,8 +15,6 @@ use hyper::body::Bytes;
 use hyper::header::{HeaderValue, CONTENT_TYPE};
 use hyper::{Method, StatusCode};
 use hyper_rustls::HttpsConnectorBuilder;
-use hyper_socks2::SocksConnector;
-use hyper_util::client::legacy::connect::HttpConnector;
 use ic_boundary::{Health, RootKey};
 use ic_config::{
     execution_environment, flag_status::FlagStatus, http_handler, subnet_config::SubnetConfig,
