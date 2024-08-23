@@ -20,9 +20,10 @@ use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
     GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetSnsSubnetIdsRequest,
-    GetSnsSubnetIdsResponse, GetWasmRequest, GetWasmResponse, InsertUpgradePathEntriesRequest,
-    ListDeployedSnsesRequest, ListDeployedSnsesResponse, SnsCanisterType, SnsUpgrade, SnsVersion,
-    SnsWasm, UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
+    GetSnsSubnetIdsResponse, GetWasmMetadataRequest, GetWasmMetadataResponse, GetWasmRequest,
+    GetWasmResponse, InsertUpgradePathEntriesRequest, ListDeployedSnsesRequest,
+    ListDeployedSnsesResponse, SnsCanisterType, SnsUpgrade, SnsVersion, SnsWasm,
+    UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
 };
 use ic_state_machine_tests::StateMachine;
 use maplit::btreemap;
@@ -85,6 +86,26 @@ pub fn add_wasm(
 
     // Ensure we get the expected response
     Decode!(&response, AddWasmResponse).unwrap()
+}
+
+pub fn get_wasm_metadata(
+    env: &StateMachine,
+    sns_wasm_canister_id: CanisterId,
+    hash: &[u8; 32],
+) -> GetWasmMetadataResponse {
+    let response = update(
+        env,
+        sns_wasm_canister_id,
+        "get_wasm_metadata",
+        Encode!(&GetWasmMetadataRequest {
+            hash: Some(hash.to_vec()),
+        })
+        .unwrap(),
+    )
+    .unwrap();
+
+    // Ensure we get the expected response
+    Decode!(&response, GetWasmMetadataResponse).unwrap()
 }
 
 /// Make add_wasm request to a canister in the StateMachine

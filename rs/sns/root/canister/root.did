@@ -44,6 +44,7 @@ type DefiniteCanisterSettings = record {
 type DefiniteCanisterSettingsArgs = record {
   freezing_threshold : nat;
   controllers : vec principal;
+  wasm_memory_limit : opt nat;
   memory_allocation : nat;
   compute_allocation : nat;
 };
@@ -97,6 +98,7 @@ type SnsRootCanister = record {
   index_canister_id : opt principal;
   swap_canister_id : opt principal;
   ledger_canister_id : opt principal;
+  updated_framework_canisters_memory_limit : opt bool;
 };
 service : (SnsRootCanister) -> {
   canister_status : (CanisterIdRecord) -> (CanisterStatusResult);

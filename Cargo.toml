@@ -56,7 +56,6 @@ members = [
     "rs/constants",
     "rs/criterion_time",
     "rs/crypto",
-    "rs/crypto/ecdsa_secp256k1",
     "rs/crypto/ecdsa_secp256r1",
     "rs/crypto/ed25519",
     "rs/crypto/extended_bip32",
@@ -75,6 +74,7 @@ members = [
     "rs/crypto/internal/crypto_lib/multi_sig/bls12_381",
     "rs/crypto/internal/crypto_lib/seed",
     "rs/crypto/internal/crypto_lib/sha2",
+    "rs/crypto/secp256k1",
     "rs/crypto/secrets_containers",
     "rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
@@ -509,9 +509,7 @@ hyper-rustls = { version = "0.27.2", default-features = false, features = [
     "ring",
     "tls12",
 ] }
-hyper-socks2 = { version = "0.8.0", default-features = false, features = [
-    "rustls",
-] }
+hyper-socks2 = { version = "0.9.1", default-features = false }
 hyper-util = { version = "0.1.7", features = ["full"] }
 ic-agent = { version = "0.37.1", features = [
     "experimental_sync_call",

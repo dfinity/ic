@@ -323,38 +323,34 @@ where
 
     pub fn get_wasm_metadata(
         &self,
-        #[allow(unused_variables)] get_wasm_metadata_payload: GetWasmMetadataRequestPb,
-    ) -> GetWasmMetadataResponsePb {
-        let result = self.get_wasm_metadata_impl(get_wasm_metadata_payload);
-        GetWasmMetadataResponsePb::from(result)
-    }
-
-    pub fn get_wasm_metadata_impl(
-        &self,
         get_wasm_metadata_payload: GetWasmMetadataRequestPb,
-    ) -> Result<Vec<MetadataSection>, String> {
-        let hash = <[u8; 32]>::try_from(get_wasm_metadata_payload)?;
+    ) -> GetWasmMetadataResponsePb {
+        let get_wasm_metadata_impl = move || {
+            let hash = <[u8; 32]>::try_from(get_wasm_metadata_payload)?;
 
-        let Some(SnsWasmStableIndex { metadata, .. }) = self.wasm_indexes.get(&hash) else {
-            return Err(format!("Cannot find WASM index for hash `{:?}`.", hash));
+            let Some(SnsWasmStableIndex { metadata, .. }) = self.wasm_indexes.get(&hash) else {
+                return Err(format!("Cannot find WASM index for hash `{:?}`.", hash));
+            };
+            let metadata = match metadata
+                .iter()
+                .cloned()
+                .map(MetadataSection::try_from)
+                .collect::<Result<Vec<_>, _>>()
+            {
+                Ok(metadata) => metadata,
+                Err(err) => {
+                    let err = format!(
+                        "Inconsistent state detected in WASM metadata for hash `{:?}`: {}",
+                        hash, err
+                    );
+                    println!("{}{}", LOG_PREFIX, err);
+                    return Err(err);
+                }
+            };
+            Ok(metadata)
         };
-        let metadata = match metadata
-            .iter()
-            .cloned()
-            .map(MetadataSection::try_from)
-            .collect::<Result<Vec<_>, _>>()
-        {
-            Ok(metadata) => metadata,
-            Err(err) => {
-                let err = format!(
-                    "Inconsistent state detected in WASM metadata for hash `{:?}`: {}",
-                    hash, err
-                );
-                println!("{}{}", LOG_PREFIX, err);
-                return Err(err);
-            }
-        };
-        Ok(metadata)
+        let result = get_wasm_metadata_impl();
+        GetWasmMetadataResponsePb::from(result)
     }
 
     /// Try reading the metadata sections of a WASM with the given hash from stable memory,
@@ -1780,16 +1776,17 @@ where
                     continue;
                 }
             }
-            let metadata = self
-                .get_wasm_metadata_impl(GetWasmMetadataRequestPb {
-                    hash: Some(hash.to_vec()),
-                })
-                .unwrap_or_else(|err| {
+            let metadata = {
+                let Some(wasm) = self.read_wasm(&hash) else {
+                    panic!("Cannot find WASM stored under key `{:?}`.", hash);
+                };
+                Self::read_wasm_metadata_or_err(&wasm).unwrap_or_else(|err| {
                     panic!(
                         "Cannot obtain metadata for WASM with hash `{:?}`: {}",
                         hash, err
-                    )
-                });
+                    );
+                })
+            };
 
             let metadata = metadata
                 .into_iter()

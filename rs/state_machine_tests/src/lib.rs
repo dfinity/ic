@@ -707,8 +707,8 @@ impl From<u64> for StateMachineNode {
 
 #[allow(clippy::large_enum_variant)]
 enum SignatureSecretKey {
-    EcdsaSecp256k1(ic_crypto_ecdsa_secp256k1::PrivateKey),
-    SchnorrBip340(ic_crypto_ecdsa_secp256k1::PrivateKey),
+    EcdsaSecp256k1(ic_crypto_secp256k1::PrivateKey),
+    SchnorrBip340(ic_crypto_secp256k1::PrivateKey),
     Ed25519(ic_crypto_ed25519::DerivedPrivateKey),
 }
 
@@ -1292,7 +1292,7 @@ impl StateMachine {
                 if let Some(SignatureSecretKey::EcdsaSecp256k1(k)) =
                     self.idkg_subnet_secret_keys.get(&ecdsa_context.key_id())
                 {
-                    let path = ic_crypto_ecdsa_secp256k1::DerivationPath::from_canister_id_and_path(
+                    let path = ic_crypto_secp256k1::DerivationPath::from_canister_id_and_path(
                         ecdsa_context.request.sender.get().as_slice(),
                         &ecdsa_context.derivation_path,
                     );
@@ -1554,7 +1554,7 @@ impl StateMachine {
                     )
                     .unwrap();
 
-                    let private_key = ic_crypto_ecdsa_secp256k1::PrivateKey::deserialize_sec1(
+                    let private_key = ic_crypto_secp256k1::PrivateKey::deserialize_sec1(
                         private_key_bytes.as_slice(),
                     )
                     .unwrap();
@@ -1569,7 +1569,7 @@ impl StateMachine {
                     (public_key, private_key)
                 }
                 MasterPublicKeyId::Ecdsa(id) => {
-                    use ic_crypto_ecdsa_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
+                    use ic_crypto_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
 
                     let path =
                         DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
@@ -1587,9 +1587,7 @@ impl StateMachine {
                 }
                 MasterPublicKeyId::Schnorr(id) => match id.algorithm {
                     SchnorrAlgorithm::Bip340Secp256k1 => {
-                        use ic_crypto_ecdsa_secp256k1::{
-                            DerivationIndex, DerivationPath, PrivateKey,
-                        };
+                        use ic_crypto_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
 
                         let path =
                             DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
@@ -2024,7 +2022,7 @@ impl StateMachine {
         if let Some(SignatureSecretKey::EcdsaSecp256k1(k)) =
             self.idkg_subnet_secret_keys.get(&context.key_id())
         {
-            let path = ic_crypto_ecdsa_secp256k1::DerivationPath::from_canister_id_and_path(
+            let path = ic_crypto_secp256k1::DerivationPath::from_canister_id_and_path(
                 context.request.sender.get().as_slice(),
                 &context.derivation_path,
             );
@@ -2046,7 +2044,7 @@ impl StateMachine {
 
         let signature = match self.idkg_subnet_secret_keys.get(&context.key_id()) {
             Some(SignatureSecretKey::SchnorrBip340(k)) => {
-                let path = ic_crypto_ecdsa_secp256k1::DerivationPath::from_canister_id_and_path(
+                let path = ic_crypto_secp256k1::DerivationPath::from_canister_id_and_path(
                     context.request.sender.get().as_slice(),
                     &context.derivation_path[..],
                 );
