@@ -1022,15 +1022,6 @@ impl Validator {
                 // proposals proceed to be checked normally.
             }
 
-            // Skip block proposals with a disqualified rank. We do this after
-            // checking for a fast-path validation, to avoid getting stuck.
-            if disqualified_ranks
-                .get(proposal.height(), proposal.rank())
-                .is_some()
-            {
-                continue;
-            }
-
             // Skip validation if proposal has a higher rank than a known
             // valid block. We skip the block instead of removing it because
             // a higher-rank proposal might still be notarized in the future.
@@ -1047,6 +1038,30 @@ impl Validator {
                     }
                     continue;
                 }
+            }
+
+            // We only validate blocks from a block maker of a certain rank after a
+            // rank-based delay. If this time has not elapsed yet, we ignore the block for
+            // now.
+            if !is_time_to_make_block(
+                &self.log,
+                self.registry_client.as_ref(),
+                self.replica_config.subnet_id,
+                pool_reader,
+                proposal.height(),
+                proposal.rank(),
+                self.time_source.as_ref(),
+            ) {
+                continue;
+            }
+
+            // Skip block proposals with a disqualified rank. We do this after
+            // checking for a fast-path validation, to avoid getting stuck.
+            if disqualified_ranks
+                .get(proposal.height(), proposal.rank())
+                .is_some()
+            {
+                continue;
             }
 
             // Disqualify rank if equivocation was found. If there already
@@ -1077,21 +1092,6 @@ impl Validator {
                     // Blocks from disqualified ranks can be ignored at this point
                     continue;
                 }
-            }
-
-            // We only validate blocks from a block maker of a certain rank after a
-            // rank-based delay. If this time has not elapsed yet, we ignore the block for
-            // now.
-            if !is_time_to_make_block(
-                &self.log,
-                self.registry_client.as_ref(),
-                self.replica_config.subnet_id,
-                pool_reader,
-                proposal.height(),
-                proposal.rank(),
-                self.time_source.as_ref(),
-            ) {
-                continue;
             }
 
             // The artifact was already verified at this point, so we can do
@@ -3815,6 +3815,9 @@ pub mod test {
             let mut third_block = block.clone();
             third_block.content.as_mut().context.time += Duration::from_nanos(2);
             third_block.update_content();
+            time_source
+                .set_time(third_block.content.as_ref().context.time)
+                .ok();
 
             pool.insert_validated(block.clone());
             pool.insert_unvalidated(second_block.clone());
