@@ -50,7 +50,7 @@ pub async fn shutdown_signal(log: Logger) {
 /// handled by the caller.
 pub fn start_tcp_listener(
     local_addr: std::net::SocketAddr,
-    runtime_handle: tokio::runtime::Handle,
+    runtime_handle: &tokio::runtime::Handle,
 ) -> tokio::net::TcpListener {
     let _enter = runtime_handle.enter();
     let err_msg = format!("Could not start TCP listener at addr = {}", local_addr);

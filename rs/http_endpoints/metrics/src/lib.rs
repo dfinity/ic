@@ -149,11 +149,11 @@ impl MetricsHttpEndpoint {
     fn start_http(&self, address: SocketAddr) {
         // we need to enter the tokio context in order to create the timeout layer and the tcp
         // socket
-        let _enter = self.rt_handle.enter();
 
         let mut addr = "[::]:9090".parse::<SocketAddr>().unwrap();
         addr.set_port(address.port());
-        let tcp_listener = start_tcp_listener(addr);
+        let tcp_listener = start_tcp_listener(addr, &self.rt_handle );
+        let _enter: tokio::runtime::EnterGuard = self.rt_handle.enter();
         let metrics_service = get(metrics_endpoint)
             .layer(
                 ServiceBuilder::new()
