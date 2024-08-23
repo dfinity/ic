@@ -197,7 +197,7 @@ generate_sns_bless_wasm_proposal_text() {
 
     OUTPUT=$(
         cat <<++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-# Publish SNS $CAPITALIZED_CANISTER_TYPE WASM Built at $SHORT_NEXT_COMMIT
+# Publish SNS $CAPITALIZED_CANISTER_TYPE WASM Built at Commit $SHORT_NEXT_COMMIT
 
 __Proposer__: $PROPOSER\\
 __Source Code__: [$NEXT_COMMIT][new-commit]
