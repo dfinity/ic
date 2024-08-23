@@ -9,7 +9,7 @@ rust_library(
     srcs = ["src/lib.rs"],
     crate_name = "ic_btc_kyt",
     deps = [
-        "@crate_index//:bitcoin-0-32",
+        "@crate_index//:bitcoin_0_32",
         "@crate_index//:candid",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
@@ -25,7 +25,7 @@ rust_canister(
     service_file = "btc_kyt_canister.did",
     deps = [
         ":btc_kyt",
-        "@crate_index//:bitcoin-0-32",
+        "@crate_index//:bitcoin_0_32",
         "@crate_index//:candid",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
