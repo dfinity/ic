@@ -131,11 +131,11 @@ rust_canister(
 
 rust_test(
     name = "canister_unit_test",
-    crate_root = "canister/canister.rs",
     srcs = glob(["canister/**/*.rs"]),
-    deps = [":sns-wasm"] + DEPENDENCIES + DEV_DEPENDENCIES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     compile_data = ["canister/sns-wasm.did"],
+    crate_root = "canister/canister.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [":sns-wasm"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test(

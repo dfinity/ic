@@ -163,10 +163,10 @@ rust_canister(
 
 rust_test(
     name = "canister_unit_test",
-    crate_root = "canister/canister.rs",
     srcs = glob(["canister/**/*.rs"]),
-    proc_macro_deps = MACRO_DEPENDENCIES,
     compile_data = ["canister/root.did"],
+    crate_root = "canister/canister.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
         ":root",

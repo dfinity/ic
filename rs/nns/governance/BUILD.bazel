@@ -256,9 +256,9 @@ generated_files_check(
 
 rust_test(
     name = "canister_unit_test",
-    crate_root = "canister/canister.rs",
     srcs = glob(["canister/**/*.rs"]),
     compile_data = ["canister/governance.did"],
+    crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
@@ -268,10 +268,10 @@ rust_test(
 
 rust_test(
     name = "canister_test_unit_test",
-    crate_root = "canister/canister.rs",
     srcs = glob(["canister/**/*.rs"]),
     compile_data = ["canister/governance_test.did"],
     crate_features = ["test"],
+    crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [
         ":build_script",

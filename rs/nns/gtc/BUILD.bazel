@@ -138,11 +138,14 @@ rust_test(
 
 rust_test(
     name = "canister_unit_test",
-    crate_root = "canister/canister.rs",
     srcs = glob(["canister/**/*.rs"]),
     compile_data = ["canister/gtc.did"],
-    deps = [":build_script", ":gtc"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+        ":gtc",
+    ],
 )
 
 rust_ic_test_suite(
