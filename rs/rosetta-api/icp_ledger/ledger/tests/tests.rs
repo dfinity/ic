@@ -1009,6 +1009,11 @@ fn test_upgrade_serialization() {
 }
 
 #[test]
+fn test_approve_smoke() {
+    ic_icrc1_ledger_sm_tests::test_approve_smoke(ledger_wasm(), encode_init_args);
+}
+
+#[test]
 fn test_approve_expiration() {
     ic_icrc1_ledger_sm_tests::test_approve_expiration(ledger_wasm(), encode_init_args);
 }
@@ -1018,6 +1023,7 @@ fn test_approve_self() {
     ic_icrc1_ledger_sm_tests::test_approve_self(ledger_wasm(), encode_init_args);
 }
 
+#[test]
 fn test_approve_expected_allowance() {
     ic_icrc1_ledger_sm_tests::test_approve_expected_allowance(ledger_wasm(), encode_init_args);
 }
