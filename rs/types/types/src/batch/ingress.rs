@@ -172,7 +172,7 @@ mod tests {
             .map(|msg| SignedIngress::try_from(msg).unwrap())
             .collect();
         let ingress_payload = IngressPayload::from(signed_ingresses.clone());
-        let signed_ingresses1 = Vec::<SignedIngress>::try_from(ingress_payload).unwrap();
+        let signed_ingresses1 = Vec::<SignedIngress>::from(ingress_payload);
         assert_eq!(signed_ingresses, signed_ingresses1);
     }
 }
