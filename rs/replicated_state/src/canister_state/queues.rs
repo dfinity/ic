@@ -1018,17 +1018,36 @@ impl CanisterQueues {
             queue.pop_while(|item| self.pool.get(item.id()).is_none());
         }
 
-        // Generate reject response, iff this was an outbound request. Or release the
-        // response slot iff this was an inbound request.
-        let request = match (context, msg) {
-            // Outbound request: produce a `SYS_TRANSIENT` timeout response.
-            (Outbound, RequestOrResponse::Request(request)) => request,
-
+        // Release the response slot, generate reject responses or remember shed inbound
+        // responses, as necessary.
+        match (context, msg) {
             // Inbound request: release the outbound response slot and return.
             (Inbound, RequestOrResponse::Request(request)) => {
                 reverse_queue.release_reserved_response_slot();
                 self.queue_stats.on_drop_input_request(request);
                 return;
+            }
+
+            // Outbound request: produce a `SYS_TRANSIENT` timeout reject response.
+            (Outbound, RequestOrResponse::Request(request)) => {
+                let response = generate_timeout_response(request);
+                let destination = &request.receiver;
+                let (input_queue, _) = self.canister_queues.get_mut(destination).unwrap();
+
+                // Update stats for the generated response.
+                self.queue_stats.on_push_response(&response, Inbound);
+
+                let id = self.pool.insert_inbound(response.into());
+                input_queue.push_response(id);
+
+                // If the input queue is not already in an input schedule, add it.
+                if input_queue.len() == 1 && self.input_schedule_canisters.insert(remote) {
+                    if &remote == own_canister_id || local_canisters.contains_key(&remote) {
+                        self.local_subnet_input_schedule.push_back(remote)
+                    } else {
+                        self.remote_subnet_input_schedule.push_back(remote)
+                    }
+                }
             }
 
             // Inbound or outbound response, nothing left to do.
@@ -1037,24 +1056,6 @@ impl CanisterQueues {
             // generate a reject response on the fly when the respective `Id` is popped.
             (_, RequestOrResponse::Response(_)) => return,
         };
-        let response = generate_timeout_response(request);
-        let destination = &request.receiver;
-        let (input_queue, _) = self.canister_queues.get_mut(destination).unwrap();
-
-        // Update stats for the generated response.
-        self.queue_stats.on_push_response(&response, Inbound);
-
-        let id = self.pool.insert_inbound(response.into());
-        input_queue.push_response(id);
-
-        // If the input queue is not already in an input schedule, add it.
-        if input_queue.len() == 1 && self.input_schedule_canisters.insert(remote) {
-            if &remote == own_canister_id || local_canisters.contains_key(&remote) {
-                self.local_subnet_input_schedule.push_back(remote)
-            } else {
-                self.remote_subnet_input_schedule.push_back(remote)
-            }
-        }
     }
 
     /// Re-partitions `self.local_subnet_input_schedule` and
