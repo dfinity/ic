@@ -2528,7 +2528,7 @@ impl StateManagerImpl {
                 .make_checkpoint_step_duration
                 .with_label_values(&["validate_eq"])
                 .start_timer();
-            if let Err(err) = checkpointed_state.validate_eq(&state) {
+            if let Err(err) = checkpointed_state.validate_eq(state) {
                 error!(
                     self.log,
                     "{}: Replicated state altered: {}",
