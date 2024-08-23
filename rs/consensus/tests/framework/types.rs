@@ -243,7 +243,7 @@ pub struct ConsensusInstance<'a> {
     pub driver: ConsensusDriver<'a>,
     pub deps: &'a ConsensusDependencies,
     pub(crate) in_queue: Queue<Input>,
-    // Input messages that should be re-tried when priority function changes
+    // Input messages that should be re-tried when bouncer function changes
     pub(crate) buffered: RefCell<Vec<InputMessage>>,
     pub(crate) out_queue: Queue<Output>,
     pub(crate) clock: RefCell<Time>,
@@ -265,34 +265,34 @@ impl fmt::Display for ConsensusInstance<'_> {
 /// instances at every time step.
 pub type StopPredicate = Box<dyn Fn(&ConsensusInstance<'_>) -> bool>;
 
-pub(crate) struct PriorityFnState<Artifact: IdentifiableArtifact> {
-    filter_fn: Bouncer<Artifact::Id>,
+pub(crate) struct BouncerState<Artifact: IdentifiableArtifact> {
+    bouncer: Bouncer<Artifact::Id>,
     pub last_updated: Time,
 }
 
-impl<Artifact: IdentifiableArtifact> PriorityFnState<Artifact> {
+impl<Artifact: IdentifiableArtifact> BouncerState<Artifact> {
     pub fn new<Pool, Producer: BouncerFactory<Artifact, Pool>>(
         producer: &Producer,
         pool: &Pool,
     ) -> RefCell<Self> {
-        RefCell::new(PriorityFnState {
-            filter_fn: producer.new_bouncer(pool),
+        RefCell::new(BouncerState {
+            bouncer: producer.new_bouncer(pool),
             last_updated: UNIX_EPOCH,
         })
     }
     /// Return the priority of the given message
     pub fn get_priority(&self, msg: &Artifact) -> BouncerValue {
-        (self.filter_fn)(&msg.id())
+        (self.bouncer)(&msg.id())
     }
 
-    /// Compute a new priority function
+    /// Compute a new bouncer function
     pub fn refresh<Pool, Producer: BouncerFactory<Artifact, Pool>>(
         &mut self,
         producer: &Producer,
         pool: &Pool,
         now: Time,
     ) {
-        self.filter_fn = producer.new_bouncer(pool);
+        self.bouncer = producer.new_bouncer(pool);
         self.last_updated = now;
     }
 }
@@ -358,7 +358,7 @@ pub struct ConsensusDriver<'a> {
     pub ingress_pool: RefCell<TestIngressPool>,
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
     pub idkg_pool: Arc<RwLock<idkg_pool::IDkgPoolImpl>>,
-    pub(crate) consensus_priority: RefCell<PriorityFnState<ConsensusMessage>>,
+    pub(crate) consensus_priority: RefCell<BouncerState<ConsensusMessage>>,
 }
 
 /// An execution strategy picks the next instance to execute, and execute a
