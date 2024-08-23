@@ -20,12 +20,10 @@ use tower::{BoxError, Service};
 #[derive(Debug, Clone, Copy, Default)]
 enum ConnectionType {
     /// Only accept TLS connections.
-    #[allow(dead_code)]
     #[default]
     Tls,
     /// Only accept raw unencrypted connections. Should only be used for
     /// testing.
-    #[allow(dead_code)]
     Raw,
 }
 
