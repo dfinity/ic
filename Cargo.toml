@@ -253,6 +253,7 @@ members = [
     "rs/replicated_state",
     "rs/rosetta-api",
     "rs/rosetta-api/rosetta_core",
+    "rs/rosetta-api/runner",
     "rs/rosetta-api/icp_ledger",
     "rs/rosetta-api/icp_ledger/archive",
     "rs/rosetta-api/icp_ledger/ledger",
