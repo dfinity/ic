@@ -1,15 +1,12 @@
 pub mod constants;
 use crate::constants::{NUM_TRIES, WAIT_BETWEEN_ATTEMPTS};
-use candid::Nat;
 use candid::Principal;
-use reqwest::Url;
-use std::default::Default;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::str::FromStr;
 use tempfile::TempDir;
-use tokio::time::{sleep, Duration};
+use tokio::time::sleep;
 
 struct KillOnDrop(Child);
 
@@ -115,7 +112,7 @@ pub async fn start_rosetta(
 
     let mut cmd = Command::new(rosetta_bin);
     cmd.arg("--ic-url")
-        .arg(arguments.ic_url.to_string())
+        .arg(&arguments.ic_url)
         .arg("--port-file")
         .arg(port_file.clone())
         .arg("--store-type")
@@ -164,12 +161,10 @@ pub async fn start_rosetta(
         }
     }
 
-    let context = RosettaContext {
+    RosettaContext {
         _proc,
         _tempdir,
         state_directory,
         port,
-    };
-
-    context
+    }
 }
