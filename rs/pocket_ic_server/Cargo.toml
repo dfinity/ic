@@ -79,7 +79,10 @@ tracing-subscriber = { workspace = true }
 wat = "1.0.52"
 
 [dev-dependencies]
+ic-registry-transport = { path = "../registry/transport" }
+ic-interfaces-registry = { path = "../interfaces/registry" }
 rcgen = { workspace = true }
+registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
 spec-compliance = { path = "../tests/testing_verification/spec_compliance" }
 slog = { workspace = true }

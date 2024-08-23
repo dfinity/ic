@@ -62,6 +62,7 @@ ic-types = { path = "../types/types" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
 maplit = "1.0.2"
 rand = { workspace = true }
+rcgen = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
