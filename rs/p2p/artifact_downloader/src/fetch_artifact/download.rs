@@ -120,7 +120,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         log: ReplicaLogger,
         rt: Handle,
         pool: Arc<RwLock<Pool>>,
-        bouncer_factory: Arc<dyn BouncerFactory<Artifact, Pool>>,
+        bouncer_factory: Arc<dyn BouncerFactory<Artifact::Id, Pool>>,
         metrics_registry: MetricsRegistry,
     ) -> (impl Fn(Arc<dyn Transport>) -> Self, Router)
     where
@@ -167,9 +167,9 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         id: &Artifact::Id,
         artifact: &mut Option<(Artifact, NodeId)>,
         metrics: &FetchArtifactMetrics,
-        boucer_watcher: &mut watch::Receiver<Bouncer<Artifact::Id>>,
+        bouncer_watcher: &mut watch::Receiver<Bouncer<Artifact::Id>>,
     ) -> Result<(), Aborted> {
-        let mut bouncer_value = boucer_watcher.borrow_and_update()(id);
+        let mut bouncer_value = bouncer_watcher.borrow_and_update()(id);
 
         // Clear the artifact from memory if it was pushed.
         if let BouncerValue::MaybeWantsLater = bouncer_value {
@@ -178,8 +178,8 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         }
 
         while let BouncerValue::MaybeWantsLater = bouncer_value {
-            let _ = boucer_watcher.changed().await;
-            bouncer_value = boucer_watcher.borrow_and_update()(id);
+            let _ = bouncer_watcher.changed().await;
+            bouncer_value = bouncer_watcher.borrow_and_update()(id);
         }
 
         if let BouncerValue::Unwanted = bouncer_value {
@@ -190,7 +190,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
 
     /// Downloads a given artifact.
     ///
-    /// The download will be scheduled based on the given bouncer function, `boucer_watcher`.
+    /// The download will be scheduled based on the given bouncer function, `bouncer_watcher`.
     ///
     /// The download fails iff:
     /// - The bouncer function evaluates the advert to [`BouncerValue::Unwanted`] -> [`DownloadStopped::PriorityIsDrop`]
@@ -203,12 +203,12 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         // Only first peer for specific artifact ID is considered for push
         mut artifact: Option<(Artifact, NodeId)>,
         peer_rx: impl Peers + Send + 'static,
-        mut boucer_watcher: watch::Receiver<Bouncer<Artifact::Id>>,
+        mut bouncer_watcher: watch::Receiver<Bouncer<Artifact::Id>>,
         transport: Arc<dyn Transport>,
         metrics: FetchArtifactMetrics,
     ) -> Result<(Artifact, NodeId), Aborted> {
         // Evaluate bouncer and wait until we should fetch.
-        Self::wait_fetch(&id, &mut artifact, &metrics, &mut boucer_watcher).await?;
+        Self::wait_fetch(&id, &mut artifact, &metrics, &mut bouncer_watcher).await?;
 
         let mut artifact_download_backoff = ExponentialBackoffBuilder::new()
             .with_initial_interval(MIN_ARTIFACT_RPC_TIMEOUT)
@@ -263,7 +263,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
 
                     // Wait before checking the bouncer so we might be able to avoid an unnecessary download.
                     sleep_until(next_request_at).await;
-                    Self::wait_fetch(&id, &mut artifact, &metrics, &mut boucer_watcher).await?;
+                    Self::wait_fetch(&id, &mut artifact, &metrics, &mut bouncer_watcher).await?;
                 };
 
                 timer.stop_and_record();
