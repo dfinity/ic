@@ -289,8 +289,8 @@ impl<'a> Module<'a> {
                     }
                     if !enable_multi_memory
                         && instructions.iter().any(|i| match i {
-                            Operator::MemoryGrow { mem, .. } | Operator::MemorySize { mem, .. } => {
-                                *mem != 0
+                            Operator::MemoryGrow { mem } | Operator::MemorySize { mem } => {
+                                mem.to_le_bytes()[0] != 0
                             }
                             _ => false,
                         })
