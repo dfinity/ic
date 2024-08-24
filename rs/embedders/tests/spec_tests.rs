@@ -72,7 +72,9 @@ mod convert {
             WastArg::Core(WastArgCore::RefExtern(n)) => {
                 Some(wasmtime::ExternRef::new(store, n).unwrap().into())
             }
-            WastArg::Core(WastArgCore::RefHost(_)) => todo!(),
+            WastArg::Core(WastArgCore::RefHost(n)) => {
+                Some(unsafe { wasmtime::AnyRef::from_raw(store, n).unwrap().into() })
+            }
             WastArg::Component(_) => {
                 println!(
                     "Component feature not enabled. Can't handle WastArg {:?}",
