@@ -17,6 +17,7 @@ colored = "2.0.0"
 futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
+ic-nervous-system-agent = { path = "../../agent" }
 ic-nervous-system-clients = { path = "../../clients" }
 ic-nervous-system-common-test-keys = { path = "../../common/test_keys" }
 ic-nns-common = { path = "../../../nns/common" }

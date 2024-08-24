@@ -9266,6 +9266,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b5c7628eac357aecda461130f8074468be5aa4d258a002032d82d817f79f1f8"
 
 [[package]]
+name = "ic-nervous-system-agent"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-agent",
+ "ic-nns-constants",
+ "ic-sns-wasm",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "ic-nervous-system-clients"
 version = "0.0.1"
 dependencies = [
@@ -19221,6 +19234,7 @@ dependencies = [
  "futures",
  "ic-agent",
  "ic-base-types",
+ "ic-nervous-system-agent",
  "ic-nervous-system-clients",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
