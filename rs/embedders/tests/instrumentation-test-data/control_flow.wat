@@ -5,7 +5,7 @@
 
     (func (export "loop")
         (local $i i64)
-        (set_local $i (i64.const 0))
+        (local.set $i (i64.const 0))
         (block $end
             (loop $start
                 (br_if $end
@@ -17,7 +17,7 @@
                 (call $cycles_add
                     (local.get $i)
                 )
-                (set_local $i
+                (local.set $i
                     (i64.add
                         (local.get $i)
                         (i64.const 1)
@@ -32,14 +32,14 @@
     (func (export "countTo") (param $max i64)
         ;; define variable $c and initialize it to 0
         (local $c i64)
-        (set_local $c (i64.const 0))
+        (local.set $c (i64.const 0))
 
         ;; start a loop
         (loop $counting
             ;; call with current value of $c
             (call $cycles_add (local.get $c))
             ;; increment $c by 1
-            (set_local $c (i64.add (local.get $c) (i64.const 1)))
+            (local.set $c (i64.add (local.get $c) (i64.const 1)))
             ;; repeat loop if $c is not equal to $max
             (br_if $counting (i64.ne (local.get $max) (local.get $c)))
         )

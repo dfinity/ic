@@ -1,7 +1,7 @@
 (module
   (func $fac (param i64) (result i64)
     (i64.add (local.get 0) (local.get 0))
-    (set_local 0)
+    (local.set 0)
     (if (result i64)
       (i64.lt_s (local.get 0) (i64.const 1))
       (then (i64.const 1))

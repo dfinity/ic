@@ -10,8 +10,8 @@
         (local $tmp i32)
         (local $adr i32)
 
-        (set_local $c (i32.const 1)) ;; start counting at 1
-        (set_local $max (i32.add (local.get $max) (i32.const 1))) ;; adjust max, so we include the number provided by user
+        (local.set $c (i32.const 1)) ;; start counting at 1
+        (local.set $max (i32.add (local.get $max) (i32.const 1))) ;; adjust max, so we include the number provided by user
 
         (loop $loop
             (if (i32.eqz (i32.rem_u (local.get $c) (i32.const 3)))
@@ -25,8 +25,8 @@
                     (if (i32.eqz (i32.rem_u (local.get $c) (i32.const 5)))
                         (then (call $println (i32.const 4) (i32.const 4))) ;; buzz
                         (else
-                            (set_local $adr (i32.const 16))
-                            (set_local $tmp (local.get $c))
+                            (local.set $adr (i32.const 16))
+                            (local.set $tmp (local.get $c))
 
                             ;; if 10 or larger, put number of 10s in first memory position
                             (if (i32.gt_u (local.get $c) (i32.const 9))
@@ -40,7 +40,7 @@
                                     )
 
                                     ;; move address pointer to where next digit will be written
-                                    (set_local $adr (i32.add (local.get $adr) (i32.const 1)))
+                                    (local.set $adr (i32.add (local.get $adr) (i32.const 1)))
                                 )
                             )
 
@@ -61,7 +61,7 @@
             )
 
             ;; increment counter
-            (set_local $c (i32.add (local.get $c) (i32.const 1)))
+            (local.set $c (i32.add (local.get $c) (i32.const 1)))
 
             ;; loop until counter reaches max
             (br_if $loop (i32.lt_u (local.get $c) (local.get $max)))
