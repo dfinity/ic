@@ -459,6 +459,7 @@ pub struct InstanceConfig {
     pub subnet_config_set: ExtendedSubnetConfigSet,
     pub state_dir: Option<PathBuf>,
     pub nonmainnet_features: bool,
+    pub log_level: Option<String>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]

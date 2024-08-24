@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 # See rs/nervous_system/feature_test.md
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/nervous_system/agent",
     "//rs/nervous_system/clients",
     "//rs/nns/common",
     "//rs/nns/constants",
@@ -30,7 +31,6 @@ rust_binary(
     name = "sync-with-released-nevous-system-wasms",
     srcs = [
         "src/main.rs",
-        "src/sns_wasm_utils.rs",
     ],
     args = ["$(location //:mainnet-canisters.bzl) $(location @crate_index//:ic-wasm__ic-wasm)"],
     data = [

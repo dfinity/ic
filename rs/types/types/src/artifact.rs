@@ -29,9 +29,7 @@ use std::{
 pub trait IdentifiableArtifact: Send + 'static {
     const NAME: &'static str;
     type Id: Hash + Clone + PartialEq + Eq + Send + Sync + 'static;
-    type Attribute: Hash + Clone + PartialEq + Eq + Send + Sync + 'static;
     fn id(&self) -> Self::Id;
-    fn attribute(&self) -> Self::Attribute;
 }
 
 pub trait PbArtifact: IdentifiableArtifact + Send + Sized + 'static {
@@ -48,13 +46,6 @@ pub trait PbArtifact: IdentifiableArtifact + Send + Sized + 'static {
         + TryInto<Self, Error = Self::PbMessageError>
         + Default;
     type PbMessageError: std::error::Error + Into<ProxyDecodeError>;
-
-    type PbAttribute: prost::Message
-        + From<Self::Attribute>
-        + TryInto<Self::Attribute, Error = Self::PbAttributeError>
-        + Default;
-    /// Protobuf to rust conversion error
-    type PbAttributeError: std::error::Error + Into<ProxyDecodeError>;
 }
 
 #[derive(Debug, Eq, PartialEq)]

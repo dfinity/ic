@@ -406,9 +406,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "educe": crate.spec(
                 version = "^0.4",
             ),
-            "either": crate.spec(
-                version = "^1.6",
-            ),
             "erased-serde": crate.spec(
                 version = "^0.3.11",
             ),
@@ -532,11 +529,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "hyper-socks2": crate.spec(
-                version = "^0.8.0",
+                version = "^0.9.1",
                 default_features = False,
-                features = [
-                    "rustls",
-                ],
             ),
             "hyper-util": crate.spec(
                 version = "^0.1.7",
@@ -653,7 +647,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "ic-wasm": crate.spec(
-                version = "^0.7.1",
+                version = "^0.8.1",
                 features = [
                     "exe",
                 ],
@@ -754,7 +748,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.155",
             ),
             "libflate": crate.spec(
-                version = "^1.1.2",
+                version = "^2.0.0",
             ),
             "libfuzzer-sys": crate.spec(
                 version = "^0.4.7",
@@ -1096,9 +1090,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "rsa": crate.spec(
                 version = "^0.9.2",
                 features = ["sha2"],
-            ),
-            "rstack-self": crate.spec(
-                version = "^0.3",
             ),
             "rstest": crate.spec(
                 version = "^0.19",

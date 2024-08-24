@@ -460,16 +460,6 @@ impl PrivateKey {
         pem_encode(&self.serialize_rfc5915_der(), PEM_HEADER_RFC5915)
     }
 
-    /// Deprecated alias of sign_message_with_ecdsa
-    pub fn sign_message(&self, message: &[u8]) -> [u8; 64] {
-        self.sign_message_with_ecdsa(message)
-    }
-
-    /// Deprecated alias of sign_digest_with_ecdsa
-    pub fn sign_digest(&self, message: &[u8]) -> Option<[u8; 64]> {
-        Some(self.sign_digest_with_ecdsa(message))
-    }
-
     /// Sign a message with ECDSA
     ///
     /// The message is hashed with SHA-256 and the signature is

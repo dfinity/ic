@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the enumeration type `SubnetKind` has a new variant `VerifiedApplication`.
 - New endpoint `/instances/<instance_id>/api/v2/subnet/...` supporting the IC HTTP subnet read state requests.
 - New endpoint `/api/v2/subnet` of the PocketIC HTTP gateway supporting the IC HTTP subnet read state requests.
+- The argument of the endpoint `/instances/` takes an additional optional field `log_level` specifying the replica log level of the PocketIC instance.
 - ECDSA support (IC mainnet-like): there are three ECDSA keys with names `dfx_test_key1`, `test_key_1`, and `key_1` on the II and fiduciary subnet.
 - tSchnorr support (IC mainnet-like): there are three Schnorr keys with names `dfx_test_key1`, `test_key_1`, and `key_1` and algorithm BIP340 as well as three Schnorr keys with names `dfx_test_key1`, `test_key_1`, and `key_1` and algorithm Ed25519 on the II and fiduciary subnet. The messages to sign with tSchnorr must be of length 32 bytes.
 

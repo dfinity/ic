@@ -14,6 +14,12 @@ use futures::FutureExt;
 use hyper::body::Bytes;
 use hyper::header::{HeaderValue, CONTENT_TYPE};
 use hyper::{Method, StatusCode};
+use hyper_rustls::HttpsConnectorBuilder;
+use hyper_socks2::SocksConnector;
+use hyper_util::{
+    client::legacy::{connect::HttpConnector, Client},
+    rt::TokioExecutor,
+};
 use ic_boundary::{Health, RootKey};
 use ic_config::{
     execution_environment, flag_status::FlagStatus, http_handler, subnet_config::SubnetConfig,
@@ -23,7 +29,7 @@ use ic_http_endpoints_public::{
     metrics::HttpHandlerMetrics, CallServiceV2, CallServiceV3, CanisterReadStateServiceBuilder,
     IngressValidatorBuilder, QueryServiceBuilder, SubnetReadStateServiceBuilder,
 };
-use ic_https_outcalls_adapter::CanisterHttp;
+use ic_https_outcalls_adapter::{CanisterHttp, CanisterRequestBody};
 use ic_https_outcalls_adapter_client::CanisterHttpAdapterClientImpl;
 use ic_https_outcalls_service::canister_http_service_server::CanisterHttpService;
 use ic_https_outcalls_service::canister_http_service_server::CanisterHttpServiceServer;
@@ -43,6 +49,7 @@ use ic_registry_keys::make_routing_table_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
+use ic_state_machine_tests::Level;
 use ic_state_machine_tests::{
     finalize_registry, IngressState, IngressStatus, RejectCode, StateMachine, StateMachineBuilder,
     StateMachineConfig, StateMachineStateDir, SubmitIngressError, Time,
@@ -169,6 +176,7 @@ pub struct PocketIc {
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     runtime: Arc<Runtime>,
     nonmainnet_features: bool,
+    log_level: Option<Level>,
 }
 
 impl Drop for PocketIc {
@@ -258,6 +266,7 @@ impl PocketIc {
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         time: SystemTime,
         nonmainnet_features: bool,
+        log_level: Option<Level>,
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
@@ -304,6 +313,7 @@ impl PocketIc {
             .with_time(time)
             .with_state_machine_state_dir(state_machine_state_dir)
             .with_registry_data_provider(registry_data_provider.clone())
+            .with_log_level(log_level)
     }
 
     pub(crate) fn new(
@@ -311,6 +321,7 @@ impl PocketIc {
         subnet_configs: ExtendedSubnetConfigSet,
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
+        log_level: Option<Level>,
     ) -> Self {
         let mut range_gen = RangeGen::new();
         let mut routing_table = RoutingTable::new();
@@ -445,6 +456,7 @@ impl PocketIc {
                 registry_data_provider.clone(),
                 time,
                 nonmainnet_features,
+                log_level,
             );
 
             if let DtsFlag::Disabled = dts_flag {
@@ -579,6 +591,7 @@ impl PocketIc {
             registry_data_provider,
             runtime,
             nonmainnet_features,
+            log_level,
         }
     }
 
@@ -679,6 +692,7 @@ impl Default for PocketIc {
             },
             None,
             false,
+            None,
         )
     }
 }
@@ -2282,6 +2296,7 @@ fn route(
                         pic.registry_data_provider.clone(),
                         time,
                         pic.nonmainnet_features,
+                        pic.log_level,
                     );
                     let sm = builder.build_with_subnets(pic.subnets.clone());
                     // We insert the new subnet into the routing table.
@@ -2414,10 +2429,6 @@ fn new_canister_http_adapter(
     log: ReplicaLogger,
     metrics_registry: &MetricsRegistry,
 ) -> CanisterHttp {
-    use hyper_legacy::{client::connect::HttpConnector, Client};
-    use hyper_rustls::HttpsConnectorBuilder;
-    use hyper_socks2::SocksConnector;
-
     // Socks client setup
     // We don't really use the Socks client in PocketIC as we set `socks_proxy_allowed: false` in the request,
     // but we still have to provide one when constructing the production `CanisterHttp` object
@@ -2427,25 +2438,28 @@ fn new_canister_http_adapter(
     http_connector.set_connect_timeout(Some(Duration::from_secs(2)));
     let proxy_connector = SocksConnector {
         proxy_addr: "http://240.0.0.0:8080"
-            .parse::<tonic::transport::Uri>()
+            .parse()
             .expect("Failed to parse socks url."),
         auth: None,
         connector: http_connector.clone(),
     };
     let https_connector = HttpsConnectorBuilder::new()
         .with_native_roots()
+        .expect("Failed to set native roots.")
         .https_only()
         .enable_http1()
         .wrap_connector(proxy_connector);
-    let socks_client = Client::builder().build::<_, hyper_legacy::Body>(https_connector);
+    let socks_client =
+        Client::builder(TokioExecutor::new()).build::<_, CanisterRequestBody>(https_connector);
 
     // Https client setup.
     let builder = HttpsConnectorBuilder::new()
         .with_native_roots()
+        .expect("Failed to set native roots.")
         .https_or_http()
         .enable_http1();
-    let https_client =
-        Client::builder().build::<_, hyper_legacy::Body>(builder.wrap_connector(http_connector));
+    let https_client = Client::builder(TokioExecutor::new())
+        .build::<_, CanisterRequestBody>(builder.wrap_connector(http_connector));
 
     CanisterHttp::new(https_client, socks_client, log, metrics_registry)
 }
@@ -2620,6 +2634,7 @@ mod tests {
             },
             None,
             false,
+            None,
         );
         let canister_id = pic.any_subnet().create_canister(None);
 
