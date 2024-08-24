@@ -38,7 +38,6 @@ ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
-ic-nns-governance = { path = "../governance" }
 ic-nns-governance-api = { path = "../governance/api" }
 ic-nns-governance-init = { path = "../governance/init" }
 ic-nns-gtc = { path = "../gtc" }
