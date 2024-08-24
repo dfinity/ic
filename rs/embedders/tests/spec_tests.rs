@@ -20,21 +20,37 @@ const FILES_TO_SKIP: &[&str] = &["names.wast"];
 mod convert {
     use wasmtime::Store;
     use wast::{
-        core::{HeapType, NanPattern, V128Pattern, WastArgCore},
-        token::{Float32, Float64},
+        core::{AbstractHeapType, HeapType, NanPattern, V128Pattern, WastArgCore},
+        token::{F32, F64},
         WastArg, WastRet,
     };
 
     fn heap_type(heap_type: HeapType) -> wasmtime::Val {
         match heap_type {
-            HeapType::Func => wasmtime::Val::FuncRef(None),
-            HeapType::Extern => wasmtime::Val::ExternRef(None),
-            HeapType::Any
-            | HeapType::Eq
-            | HeapType::Array
-            | HeapType::I31
-            | HeapType::Index(_)
-            | HeapType::Struct => {
+            HeapType::Abstract { shared: _, ty } => match ty {
+                AbstractHeapType::Func => wasmtime::Val::FuncRef(None),
+                AbstractHeapType::Extern => wasmtime::Val::ExternRef(None),
+                AbstractHeapType::Any
+                | AbstractHeapType::Eq
+                | AbstractHeapType::Struct
+                | AbstractHeapType::Array
+                | AbstractHeapType::I31
+                | AbstractHeapType::NoFunc
+                | AbstractHeapType::NoExtern
+                | AbstractHeapType::None => {
+                    panic!(
+                        "Unable to handle heap type {:?}. The GC proposal isn't supported",
+                        heap_type
+                    )
+                }
+                AbstractHeapType::Exn | AbstractHeapType::NoExn => {
+                    panic!(
+                        "Unable to handle heap type {:?}. The exceptions proposal isn't supported",
+                        heap_type
+                    )
+                }
+            },
+            HeapType::Concrete(_) => {
                 panic!(
                     "Unable to handle heap type {:?}. The GC proposal isn't supported",
                     heap_type
@@ -56,6 +72,7 @@ mod convert {
             WastArg::Core(WastArgCore::RefExtern(n)) => {
                 Some(wasmtime::ExternRef::new(store, n).unwrap().into())
             }
+            WastArg::Core(WastArgCore::RefHost(_)) => todo!(),
             WastArg::Component(_) => {
                 println!(
                     "Component feature not enabled. Can't handle WastArg {:?}",
@@ -69,7 +86,7 @@ mod convert {
     /// Comparison of a Wasmtime f32 result with the expected Wast value. Copied
     /// from
     /// https://github.com/bytecodealliance/wasmtime/blob/main/crates/wast/src/core.rs#L106.
-    fn f32_equal(actual: u32, expected: &NanPattern<Float32>) -> bool {
+    fn f32_equal(actual: u32, expected: &NanPattern<F32>) -> bool {
         match expected {
             // Check if an f32 (as u32 bits to avoid possible quieting when moving values in registers, e.g.
             // https://developer.arm.com/documentation/ddi0344/i/neon-and-vfp-programmers-model/modes-of-operation/default-nan-mode?lang=en)
@@ -102,7 +119,7 @@ mod convert {
     /// Comparison of a Wasmtime f64 result with the expected Wast value. Copied
     /// from
     /// https://github.com/bytecodealliance/wasmtime/blob/main/crates/wast/src/core.rs#L171.
-    pub fn f64_equal(actual: u64, expected: &NanPattern<Float64>) -> bool {
+    pub fn f64_equal(actual: u64, expected: &NanPattern<F64>) -> bool {
         match expected {
             // Check if an f64 (as u64 bits to avoid possible quieting when moving values in registers, e.g.
             // https://developer.arm.com/documentation/ddi0344/i/neon-and-vfp-programmers-model/modes-of-operation/default-nan-mode?lang=en)
@@ -203,7 +220,7 @@ mod convert {
             (V::V128(l), C(R::V128(r))) => v128_equal(l.as_u128(), r),
             (V::ExternRef(None), C(R::RefExtern(_))) => false,
             // `WastArgCore::RefExtern` always stores a `u32`.
-            (V::ExternRef(Some(l)), C(R::RefExtern(r))) => {
+            (V::ExternRef(Some(l)), C(R::RefExtern(Some(r)))) => {
                 let l = l.data(store).unwrap().downcast_ref::<u32>().unwrap();
                 l == r
             }
@@ -692,6 +709,7 @@ fn run_directive<'a>(
                 }
             }
         }
+        WastDirective::Thread(_) | WastDirective::Wait { .. } => todo!(),
     }
 }
 

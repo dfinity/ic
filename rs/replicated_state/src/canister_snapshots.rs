@@ -103,7 +103,7 @@ impl CanisterSnapshots {
 
                 // The snapshot ID if present in the `self.snapshots`,
                 // must also be present in the `self.snapshot_ids`.
-                debug_assert!(self.snapshot_ids.contains_key(&canister_id));ππ
+                debug_assert!(self.snapshot_ids.contains_key(&canister_id));
                 let snapshot_ids = self.snapshot_ids.get_mut(&canister_id).unwrap();
                 debug_assert!(snapshot_ids.contains(&snapshot_id));
                 snapshot_ids.remove(&snapshot_id);
