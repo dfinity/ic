@@ -4,6 +4,7 @@ use crate::common::{
 };
 use candid::{Encode, Principal};
 use ic_agent::Identity;
+use ic_icp_rosetta_client::RosettaClient;
 use ic_icp_rosetta_runner::{start_rosetta, RosettaContext, RosettaOptionsBuilder};
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_test_utils::build_ledger_wasm;
@@ -16,8 +17,9 @@ use std::collections::HashMap;
 use tempfile::TempDir;
 
 pub struct RosettaTestingEnvironment {
-    pub pocket_ic: PocketIc,
-    pub rosetta_context: RosettaContext,
+    pub _pocket_ic: PocketIc,
+    pub _rosetta_context: RosettaContext,
+    pub rosetta_client: RosettaClient,
 }
 
 impl RosettaTestingEnvironment {
@@ -58,7 +60,7 @@ impl RosettaTestingEnviornmentBuilder {
 
     pub async fn build(self) -> RosettaTestingEnvironment {
         let mut pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
-        pocket_ic.make_live(None).await;
+        let replica_url = pocket_ic.make_live(None).await;
 
         let ledger_canister_id = Principal::from(LEDGER_CANISTER_ID);
         let canister_id = pocket_ic
@@ -101,9 +103,7 @@ impl RosettaTestingEnviornmentBuilder {
             pocket_ic.get_subnet(ledger_canister_id).await.unwrap()
         );
 
-        let replica_url = pocket_ic.make_live(None).await;
         let rosetta_bin = path_from_env("ROSETTA_BIN_PATH");
-
         let rosetta_state_directory =
             TempDir::new().expect("failed to create a temporary directory");
         let rosetta_context = start_rosetta(
@@ -113,9 +113,14 @@ impl RosettaTestingEnviornmentBuilder {
         )
         .await;
 
+        let rosetta_client =
+            RosettaClient::from_str_url(&format!("http://localhost:{}", rosetta_context.port))
+                .expect("Unable to parse url");
+
         RosettaTestingEnvironment {
-            pocket_ic,
-            rosetta_context,
+            _pocket_ic: pocket_ic,
+            _rosetta_context: rosetta_context,
+            rosetta_client,
         }
     }
 }
