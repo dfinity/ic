@@ -26,6 +26,7 @@ serde = { workspace = true }
 [dev-dependencies]
 candid_parser = { workspace = true }
 ic-ledger-core = { path = "../../ledger_core" }
+ic-rosetta-test-utils = { path = "../../test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 

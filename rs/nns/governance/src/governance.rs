@@ -996,11 +996,6 @@ impl Action {
                 }
                 Action::ExecuteNnsFunction(execute_nns_function)
             }
-            Action::InstallCode(mut install_code) => {
-                install_code.wasm_module = None;
-                install_code.arg = None;
-                Action::InstallCode(install_code)
-            }
             action => action,
         }
     }
@@ -3696,11 +3691,7 @@ impl Governance {
         let proposal = if multi_query {
             if let Some(
                 proposal @ Proposal {
-                    action:
-                        Some(
-                            proposal::Action::ExecuteNnsFunction(_)
-                            | proposal::Action::InstallCode(_),
-                        ),
+                    action: Some(proposal::Action::ExecuteNnsFunction(_)),
                     ..
                 },
             ) = data.proposal.clone()
