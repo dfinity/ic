@@ -1,3 +1,5 @@
+use candid::{Decode, Encode};
+use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_rosetta_api::convert::{
     from_hex, from_model_account_identifier, operations_to_requests, to_hex,
@@ -22,7 +24,8 @@ use ic_rosetta_api::request_types::{
 };
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
 use ic_rosetta_api::{convert, errors, errors::ApiError, DEFAULT_TOKEN_SYMBOL};
-use ic_types::{messages::Blob, time, PrincipalId};
+use ic_state_machine_tests::{StateMachine, WasmResult};
+use ic_types::{messages::Blob, time, CanisterId, PrincipalId};
 use icp_ledger::{AccountIdentifier, BlockIndex, Operation, Tokens};
 use rand::{seq::SliceRandom, thread_rng};
 use rosetta_api_serv::RosettaApiHandle;
@@ -30,6 +33,7 @@ use rosetta_core::convert::principal_id_from_public_key;
 pub use rosetta_core::models::Ed25519KeyPair as EdKeypair;
 use rosetta_core::models::RosettaSupportedKeyPair;
 use rosetta_core::models::Secp256k1KeyPair;
+use serde_bytes::ByteBuf;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -698,6 +702,41 @@ fn compare_accounts(
     let xx = (&x.address, x.sub_account.as_ref().map(|s| &s.address));
     let yy = (&y.address, y.sub_account.as_ref().map(|s| &s.address));
     xx.cmp(&yy)
+}
+
+/// Tests that `http_request` endpoint of a given canister rejects overly large HTTP requests
+/// (exceeding the candid decoding quota of 10,000, corresponding to roughly 10 KB of decoded data).
+pub fn test_http_request_decoding_quota(env: &StateMachine, canister_id: CanisterId) {
+    // The anonymous end-user sends a small HTTP request. This should succeed.
+    let http_request = HttpRequest {
+        method: "GET".to_string(),
+        url: "/metrics".to_string(),
+        headers: vec![],
+        body: ByteBuf::from(vec![42; 1_000]),
+    };
+    let http_request_bytes = Encode!(&http_request).unwrap();
+    let response = match env
+        .execute_ingress(canister_id, "http_request", http_request_bytes)
+        .unwrap()
+    {
+        WasmResult::Reply(bytes) => Decode!(&bytes, HttpResponse).unwrap(),
+        WasmResult::Reject(reason) => panic!("Unexpected reject: {}", reason),
+    };
+    assert_eq!(response.status_code, 200);
+
+    // The anonymous end-user sends a large HTTP request. This should be rejected.
+    let mut large_http_request = http_request;
+    large_http_request.body = ByteBuf::from(vec![42; 1_000_000]);
+    let large_http_request_bytes = Encode!(&large_http_request).unwrap();
+    let err = env
+        .execute_ingress(canister_id, "http_request", large_http_request_bytes)
+        .unwrap_err();
+    assert!(
+        err.description().contains("Deserialization Failed")
+            || err
+                .description()
+                .contains("Decoding cost exceeds the limit")
+    );
 }
 
 #[test]

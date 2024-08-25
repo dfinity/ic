@@ -453,7 +453,7 @@ pub fn start_consensus_manager(
     let pool = Arc::new(RwLock::new(processor));
     let (artifact_processor_jh, artifact_manager_event_rx, artifact_sender) =
         start_test_processor(pool.clone(), pool.clone().read().unwrap().clone());
-    let pfn_producer = Arc::new(pool.clone().read().unwrap().clone());
+    let bouncer_factory = Arc::new(pool.clone().read().unwrap().clone());
     let mut cm1 = ic_consensus_manager::ConsensusManagerBuilder::new(
         log.clone(),
         rt_handle.clone(),
@@ -463,7 +463,7 @@ pub fn start_consensus_manager(
         log,
         rt_handle,
         pool,
-        pfn_producer,
+        bouncer_factory,
         MetricsRegistry::default(),
     );
     cm1.add_client(artifact_manager_event_rx, artifact_sender, downloader);
