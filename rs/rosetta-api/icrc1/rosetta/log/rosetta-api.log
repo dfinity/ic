@@ -1,4 +1,0 @@
-[2m2024-08-14T07:31:01.541806Z[0m [32m INFO[0m [2mrs/rosetta-api/icrc1/rosetta/src/main.rs[0m[2m:[0m[2m320:[0m ICRC Rosetta is connected to the ICRC-1 ledger: mxzaz-hqaaa-aaaar-qaada-cai
-[2m2024-08-14T07:31:01.541942Z[0m [32m INFO[0m [2mrs/rosetta-api/icrc1/rosetta/src/main.rs[0m[2m:[0m[2m321:[0m The token symbol of the ICRC-1 ledger is: ckBTC
-[2m2024-08-14T07:31:01.543731Z[0m [32m INFO[0m [2mrs/rosetta-api/icrc1/rosetta/src/main.rs[0m[2m:[0m[2m424:[0m Starting Rosetta server
-[2m2024-08-14T07:31:01.543770Z[0m [32m INFO[0m [2mrs/rosetta-api/icrc1/rosetta/src/main.rs[0m[2m:[0m[2m425:[0m Rosetta server is listening at: 0.0.0.0:8093
