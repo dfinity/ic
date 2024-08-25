@@ -1305,7 +1305,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.36",
             ),
             "tokio": crate.spec(
-                version = "^1.39.2",
+                version = "^1.39.3",
                 features = ["full"],
             ),
             "tokio-io-timeout": crate.spec(
@@ -1359,7 +1359,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.11.0",
             ),
             "tower": crate.spec(
-                version = "^0.4.3",
+                version = "^0.4.13",
                 features = ["full"],
             ),
             "tower_http_0_4_4": crate.spec(
