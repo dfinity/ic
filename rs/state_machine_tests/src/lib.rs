@@ -361,7 +361,7 @@ fn make_nodes_registry(
                 .unwrap();
         }
         let root_key_pair = KeyPair::generate().unwrap();
-        let root_cert = CertificateParams::new(vec![])
+        let root_cert = CertificateParams::new(vec![node.node_id.to_string()])
             .unwrap()
             .self_signed(&root_key_pair)
             .unwrap();
