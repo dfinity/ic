@@ -1,0 +1,20 @@
+[package]
+name = "ic-icp-rosetta-runner"
+version = "0.1.0"
+authors = ["The Internet Computer Project Developers"]
+description = "Build Once. Integrate Your Blockchain Everywhere. "
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+
+[dev-dependencies]
+pocket-ic = { path = "../../../packages/pocket-ic" }
+reqwest = { workspace = true }
+ic-ledger-test-utils = { path = "../icp_ledger/test_utils" }
+icp-ledger = { path = "../icp_ledger" }

@@ -14,8 +14,8 @@ filegroup(
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/getrandom_for_wasm",
+    "//rs/crypto/secp256k1",
     "//rs/crypto/sha2",
     "//rs/nervous_system/common",
     "//rs/nns/common",
