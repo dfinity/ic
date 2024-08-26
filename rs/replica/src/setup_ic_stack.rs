@@ -45,6 +45,10 @@ use tokio::sync::{
 /// the message id and height of messages that complete execution.
 const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 
+/// If enable traffic to `api/v3/call` will be routed to the v3 call handler.
+/// Otherwise requests will be routed to the v2 call handler.
+const ENABLE_V3_CALL_HANDLER: bool = false;
+
 /// Create the consensus pool directory (if none exists)
 fn create_consensus_pool_dir(config: &Config) {
     std::fs::create_dir_all(&config.artifact_pool.consensus_pool_path).unwrap_or_else(|err| {
@@ -349,6 +353,7 @@ pub fn construct_ic_stack(
         tracing_handle,
         max_certified_height_rx,
         finalized_ingress_height_rx,
+        ENABLE_V3_CALL_HANDLER,
     );
 
     Ok((
