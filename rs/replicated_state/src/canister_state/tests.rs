@@ -674,12 +674,6 @@ fn compatibility_for_log_visibility() {
             .collect::<Vec<i32>>(),
         [1, 2]
     );
-}
-
-#[test]
-fn compatibility_for_log_visibility_v2() {
-    // If this fails, you are making a potentially incompatible change to `LogVisibilityV2`.
-    // See note [Handling changes to Enums in Replicated State] for how to proceed.
     assert_eq!(
         LogVisibilityV2::iter().collect::<Vec<_>>(),
         [
