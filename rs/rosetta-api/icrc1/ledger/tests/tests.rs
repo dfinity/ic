@@ -1615,6 +1615,10 @@ mod incompatible_token_type_upgrade {
         // Create a large balance
         transfer(&env, ledger_id, MINTER, account(1), u64::MAX);
         let mut balance = balance_of(&env, ledger_id, account(1));
+        let initial_allowance = Allowance {
+            allowance: Nat::from(u64::MAX),
+            expires_at: Some(u64::MAX - 1u64),
+        };
         // Create a large allowance
         let approval_result = send_approval(
             &env,
@@ -1623,9 +1627,9 @@ mod incompatible_token_type_upgrade {
             &ApproveArgs {
                 from_subaccount: None,
                 spender: account(2),
-                amount: Nat::from(u64::MAX),
+                amount: initial_allowance.allowance.clone(),
                 expected_allowance: None,
-                expires_at: None,
+                expires_at: initial_allowance.expires_at,
                 fee: None,
                 memo: None,
                 created_at_time: None,
@@ -1657,8 +1661,8 @@ mod incompatible_token_type_upgrade {
         // The balance, allowance, total supply, and blocks should not change
         let verify_state = || {
             assert_eq!(balance, balance_of(&env, ledger_id, account(1)));
-            let allowance = get_allowance(&env, ledger_id, account(1), account(2));
-            assert_eq!(allowance.allowance, Nat::from(u64::MAX));
+            let actual_allowance = get_allowance(&env, ledger_id, account(1), account(2));
+            assert_eq!(actual_allowance, initial_allowance);
             assert_eq!(
                 initial_blocks,
                 icrc3_get_blocks(
@@ -1685,6 +1689,20 @@ mod incompatible_token_type_upgrade {
         verify_state();
         // The total supply should be back to what it was originally
         assert_eq!(initial_total_supply, icrc1_total_supply(&env, ledger_id));
+    }
+
+    #[test]
+    #[should_panic(expected = "failed to decode ledger state")]
+    fn should_trap_when_upgrading_a_ledger_installed_as_u256_to_u64_wasm() {
+        let env = StateMachine::new();
+        let ledger_id = env
+            .install_canister(ledger_mainnet_u256_wasm(), default_init_args(), None)
+            .unwrap();
+
+        // Try to upgrade the ledger from using a u256 wasm to a u64 wasm
+        let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
+        env.upgrade_canister(ledger_id, ledger_mainnet_u64_wasm(), upgrade_args)
+            .expect("Unable to upgrade the ledger canister");
     }
 
     fn icrc1_total_supply(env: &StateMachine, ledger_id: CanisterId) -> BigUint {
