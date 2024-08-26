@@ -16,7 +16,7 @@ use crate::certified_slice_pool::{
 use async_trait::async_trait;
 use http_body_util::BodyExt;
 use hyper::{Request, StatusCode, Uri};
-use hyper_util::{client::legacy::Client, rt::TokioExecutor};
+use hyper_util::{client::legacy::Client, rt::TokioExecutor, rt::TokioTimer};
 use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
@@ -1539,6 +1539,7 @@ impl XNetClientImpl {
         let http_client: Client<TlsConnector, Request<XNetRequestBody>> =
             Client::builder(TokioExecutor::new())
                 .pool_idle_timeout(Some(Duration::from_secs(600)))
+                .pool_timer(TokioTimer::new())
                 // TODO(NET-1747): don't decrease before the ticket is resolved
                 .pool_max_idle_per_host(100)
                 .build(https);
