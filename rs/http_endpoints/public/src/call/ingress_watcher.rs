@@ -1,6 +1,6 @@
 use crate::metrics::HttpHandlerMetrics;
 use ic_async_utils::JoinMap;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{info, ReplicaLogger};
 use ic_types::{messages::MessageId, Height};
 use std::{
     cmp::max,
@@ -247,7 +247,7 @@ impl IngressWatcher {
                 }
 
                 _ = self.cancellation_token.cancelled() => {
-                    error!(
+                    info!(
                         self.log,
                         "Ingress watcher event loop cancelled.",
                     );
