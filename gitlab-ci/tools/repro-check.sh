@@ -251,7 +251,7 @@ if [ -n "$proposal_id" ]; then
     if [ "${guestos_proposal:-}" == "true" ]; then
         expected_url="https://download.dfinity.systems/ic/$git_hash/guest-os/update-img/update-img.tar.zst"
     else
-        expected_url="https://download.dfinity.systems/ic/$git_hash/host-os/update-img/update-img.tar.gz"
+        expected_url="https://download.dfinity.systems/ic/$git_hash/host-os/update-img/update-img.tar.zst"
     fi
 
     if [ "$proposal_package_url" != "$expected_url" ]; then
@@ -265,7 +265,7 @@ if [ -n "$proposal_id" ]; then
     pushd "$proposal_out"
 
     log "Check the hash of the artifacts is the correct one"
-    echo "$proposal_package_sha256_hex  $(basename $expected_url)" | shasum -a256 -c- >/dev/null
+    echo "$proposal_package_sha256_hex  update-img.tar.zst" | shasum -a256 -c- >/dev/null
 
     log_success "The proposal's artifacts and hash match"
     popd
@@ -282,7 +282,7 @@ download_ci_files() {
     local sha_url="${BASE_URL}/${os_type}/update-img/SHA256SUMS"
 
     if [ "$os_type" == "host-os" ]; then
-        os_url="${BASE_URL}/${os_type}/update-img/update-img.tar.gz"
+        os_url="${BASE_URL}/${os_type}/update-img/update-img.tar.zst"
         sha_url="${BASE_URL}/${os_type}/update-img/SHA256SUMS"
     fi
 
@@ -322,7 +322,7 @@ check_ci_hash() {
 log "Validating that uploaded image hashes match the provided proposal hashes"
 
 check_ci_hash "guestos" "update-img.tar.zst" "ci_package_guestos_sha256_hex"
-check_ci_hash "hostos" "update-img.tar.gz" "ci_package_hostos_sha256_hex"
+check_ci_hash "hostos" "update-img.tar.zst" "ci_package_hostos_sha256_hex"
 check_ci_hash "setupos" "disk-img.tar.zst" "ci_package_setupos_sha256_hex"
 
 log_success "The CI's artifacts and hash match"
@@ -338,7 +338,7 @@ if [ -n "$proposal_id" ]; then
         fi
     else
         if [ "$proposal_package_sha256_hex" != "$ci_package_hostos_sha256_hex" ]; then
-            error "The sha256 sum from the proposal does not match the one from the CDN storage for hostOS update-img.tar.gz. The hostos sha256 sum from the proposal: $proposal_package_sha256_hex The hostos sha256 sum from the CDN storage: $ci_package_hostos_sha256_hex."
+            error "The sha256 sum from the proposal does not match the one from the CDN storage for hostOS update-img.tar.zst. The hostos sha256 sum from the proposal: $proposal_package_sha256_hex The hostos sha256 sum from the CDN storage: $ci_package_hostos_sha256_hex."
         else
             log_success "The guestos shasum from the proposal and CDN match"
         fi
@@ -378,7 +378,7 @@ log "Build IC-OS"
 log_success "Built IC-OS successfully"
 
 mv artifacts/icos/guestos/update-img.tar.zst "$dev_out/guestos"
-mv artifacts/icos/hostos/update-img.tar.gz "$dev_out/hostos"
+mv artifacts/icos/hostos/update-img.tar.zst "$dev_out/hostos"
 mv artifacts/icos/setupos/disk-img.tar.zst "$dev_out/setupos"
 
 compute_dev_hash() {
@@ -394,7 +394,7 @@ compute_dev_hash() {
 }
 
 compute_dev_hash "guestos" "update-img.tar.zst" "dev_package_guestos_sha256_hex"
-compute_dev_hash "hostos" "update-img.tar.gz" "dev_package_hostos_sha256_hex"
+compute_dev_hash "hostos" "update-img.tar.zst" "dev_package_hostos_sha256_hex"
 compute_dev_hash "setupos" "disk-img.tar.zst" "dev_package_setupos_sha256_hex"
 
 compare_hashes() {
