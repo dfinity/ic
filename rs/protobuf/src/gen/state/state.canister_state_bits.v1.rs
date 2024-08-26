@@ -841,39 +841,6 @@ impl CyclesUseCase {
         }
     }
 }
-/// TODO(EXC-1670): Migrate to pb_canister_state_bits::LogVisibilityV2.
-/// The current enum only supports i32 values, which limits the
-/// storage of allowed_viewers principals. LogVisibilityV2 will
-/// support both enum values and a list of principals.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum LogVisibility {
-    Unspecified = 0,
-    Controllers = 1,
-    Public = 2,
-}
-impl LogVisibility {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            LogVisibility::Unspecified => "LOG_VISIBILITY_UNSPECIFIED",
-            LogVisibility::Controllers => "LOG_VISIBILITY_CONTROLLERS",
-            LogVisibility::Public => "LOG_VISIBILITY_PUBLIC",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "LOG_VISIBILITY_UNSPECIFIED" => Some(Self::Unspecified),
-            "LOG_VISIBILITY_CONTROLLERS" => Some(Self::Controllers),
-            "LOG_VISIBILITY_PUBLIC" => Some(Self::Public),
-            _ => None,
-        }
-    }
-}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum LongExecutionMode {
