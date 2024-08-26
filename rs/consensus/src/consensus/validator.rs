@@ -594,6 +594,9 @@ fn get_notarized_parent(
         .map_err(|_| ValidationFailure::BlockNotFound(parent.clone(), height).into())
 }
 
+/// Returns rank map of disqualified ranks in the given range. A rank is
+/// considered disqualified at height h, if there exists an equivocation
+/// proof for it at that height.
 fn get_disqualified_ranks(
     pool: &PoolReader<'_>,
     membership: &Membership,
@@ -938,9 +941,10 @@ impl Validator {
             self.replica_config.clone(),
             range.clone(),
         );
-        // Collect all validated, non-disqualified block proposal ranks and
-        // hashes for the relevant range.
-        let mut valid_qualified_ranks = RankMap::new(self.replica_config.clone());
+
+        // Contains ranks of validated block proposals that don't have an
+        // equivocation proof. Disqualified and valid ranks are disjoint.
+        let mut valid_ranks = RankMap::new(self.replica_config.clone());
         pool_reader
             .pool()
             .validated()
@@ -951,7 +955,7 @@ impl Validator {
                     .get(proposal.height(), proposal.rank())
                     .is_none()
             })
-            .for_each(|proposal| valid_qualified_ranks.add(&proposal));
+            .for_each(|proposal| valid_ranks.add(&proposal));
 
         // It is necessary to traverse all the proposals and not only the ones with min
         // rank per height; because proposals for which there is an unvalidated
@@ -1005,11 +1009,19 @@ impl Validator {
                     ));
                 } else if verification.is_ok() {
                     if get_notarized_parent(pool_reader, &proposal).is_ok() {
-                        change_set.push(ChangeAction::MoveToValidated(notarization.into_message()));
                         // A successful verification is enough to validate this block,
                         // because from the notarization we know that the block validity
                         // was already checked.
-                        valid_qualified_ranks.add(&proposal);
+
+                        // Only add proposal's rank to the set of valid ranks if
+                        // it's not already disqualified.
+                        if disqualified_ranks
+                            .get(proposal.height(), proposal.rank())
+                            .is_none()
+                        {
+                            valid_ranks.add(&proposal);
+                        }
+                        change_set.push(ChangeAction::MoveToValidated(notarization.into_message()));
                         change_set.push(ChangeAction::MoveToValidated(proposal.into_message()));
                     }
                     // If the parent is notarized, this block and its notarization are
@@ -1025,7 +1037,7 @@ impl Validator {
             // Skip validation if proposal has a higher rank than a known
             // valid block. We skip the block instead of removing it because
             // a higher-rank proposal might still be notarized in the future.
-            if let Some(min_rank) = valid_qualified_ranks.get_lowest_rank(proposal.height()) {
+            if let Some(min_rank) = valid_ranks.get_lowest_rank(proposal.height()) {
                 if proposal.rank() > min_rank {
                     let id = proposal.get_id();
                     if self.unvalidated_for_too_long(pool_reader, &id) {
@@ -1067,9 +1079,8 @@ impl Validator {
             // Disqualify rank if equivocation was found. If there already
             // exists a validated block of the same rank as the current
             // proposal, we must generate an equivocation proof.
-            if let Some(existing_metadata) = valid_qualified_ranks
-                .get(proposal.height(), proposal.rank())
-                .cloned()
+            if let Some(existing_metadata) =
+                valid_ranks.get(proposal.height(), proposal.rank()).cloned()
             {
                 // Ensure the proposal has a different hash from the validated
                 // block of same rank. Then we can construct the proof.
@@ -1087,7 +1098,7 @@ impl Validator {
                         }),
                         timestamp: self.time_source.get_relative_time(),
                     }));
-                    valid_qualified_ranks.remove(proposal.height(), proposal.rank());
+                    valid_ranks.remove(proposal.height(), proposal.rank());
                     disqualified_ranks.add(&proposal);
                     // Blocks from disqualified ranks can be ignored at this point
                     continue;
@@ -1105,7 +1116,7 @@ impl Validator {
                 if let ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal)) =
                     &action
                 {
-                    valid_qualified_ranks.add(proposal);
+                    valid_ranks.add(proposal);
                 }
                 change_set.push(action);
             }
