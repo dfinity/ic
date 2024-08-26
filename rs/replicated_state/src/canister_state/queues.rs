@@ -79,7 +79,13 @@ pub struct CanisterQueues {
 
     /// Per remote canister input and output queues. Queues hold references into the
     /// message pool, some of which may be stale due to expiration or load shedding.
+    ///
     /// The item at the head of each queue, if any, is guaranteed to be non-stale.
+    /// This is because we want to avoid a live lock, where a canister's output
+    /// queue(s) are filled to capcity with stale references, preventing any more
+    /// messages from being enqueued; but at the same time the canister is never
+    /// included in an `OutputIterator` (the only way of consuming the stale
+    /// references).
     #[validate_eq(CompareWithValidateEq)]
     canister_queues: BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
 
@@ -115,6 +121,11 @@ pub struct CanisterQueues {
     /// Set of all canisters enqueued in either `local_subnet_input_schedule` or
     /// `remote_subnet_input_schedule`, to ensure that a canister is scheduled at
     /// most once.
+    ///
+    /// We cannot rely on the input queue going from empty to non-empty as the only
+    /// condition for whether to enqueue a canister, because the contents of the
+    /// queue may have been dropped (due to expiration or load shedding) with the
+    /// canister already in one of the schedules.
     input_schedule_canisters: BTreeSet<CanisterId>,
 
     /// Round-robin across ingress and cross-net input queues for `pop_input()`.

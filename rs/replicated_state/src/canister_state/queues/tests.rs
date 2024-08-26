@@ -172,13 +172,28 @@ fn can_push_output_request() {
     queues.push_output_request().unwrap();
 }
 
-/// Cannot push response to output queues without pushing an input request
-/// first.
+/// Cannot push guaranteed response to output queues without having pushed an
+/// input request first.
 #[test]
 #[should_panic(expected = "assertion failed: self.guaranteed_response_memory_reservations > 0")]
-fn cannot_push_output_response_without_input_request() {
+fn cannot_push_output_response_guaranteed_without_input_request() {
     let mut queues = CanisterQueuesFixture::new();
     queues.push_output_response();
+}
+
+/// Cannot push best-effort response to output queues without having pushed an
+/// input request first.
+#[test]
+#[should_panic(expected = "assertion failed: self.output_queues_reserved_slots > 0")]
+fn cannot_push_output_response_best_effort_without_input_request() {
+    let mut queues = CanisterQueues::default();
+    queues.push_output_response(Arc::new(
+        ResponseBuilder::default()
+            .originator(canister_test_id(11))
+            .respondent(canister_test_id(13))
+            .deadline(coarse_time(1000))
+            .build(),
+    ));
 }
 
 #[test]
