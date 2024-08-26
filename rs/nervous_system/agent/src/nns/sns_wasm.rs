@@ -12,7 +12,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::io::BufWriter;
 use tokio::process::Command;
 
-use crate::request::call;
+use crate::call;
 
 pub async fn query_sns_upgrade_steps(agent: &Agent) -> Result<ListUpgradeStepsResponse> {
     let request = ListUpgradeStepsRequest {
