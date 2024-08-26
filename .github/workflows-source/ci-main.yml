@@ -202,6 +202,7 @@ jobs:
       # Build and test, excluding 'upload' jobs that are not required on macOS (used in reproducibility tests)
       - name: Test
         env:
+          # Only run test_macos_slow on protected branches (not on PRs or merge queues)
           TEST_TAG_FILTERS: ${{ github.ref_protected && 'test_macos,test_macos_slow,-upload' || 'test_macos,-upload' }}
         run: |
           bazel \
