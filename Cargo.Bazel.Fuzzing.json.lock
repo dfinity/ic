@@ -1,5 +1,5 @@
 {
-  "checksum": "f76e880d294ea285036b8ef99f8cae79985141b85bc86836eec420d9ba9695a4",
+  "checksum": "c3b49317a8fa6c0a88bf72a827cd00a0116ad5a42ddfa42ec52f624a28b48fe3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -56134,6 +56134,12 @@
           "selects": {}
         },
         "edition": "2015",
+        "rustc_flags": {
+          "common": [
+            "--cfg=rust_secp_no_symbol_renaming"
+          ],
+          "selects": {}
+        },
         "version": "0.5.2"
       },
       "build_script_attrs": {
@@ -56216,6 +56222,12 @@
           "selects": {}
         },
         "edition": "2018",
+        "rustc_flags": {
+          "common": [
+            "--cfg=rust_secp_no_symbol_renaming"
+          ],
+          "selects": {}
+        },
         "version": "0.8.1"
       },
       "build_script_attrs": {
@@ -56290,6 +56302,12 @@
           "selects": {}
         },
         "edition": "2018",
+        "rustc_flags": {
+          "common": [
+            "--cfg=rust_secp_no_symbol_renaming"
+          ],
+          "selects": {}
+        },
         "version": "0.9.2"
       },
       "build_script_attrs": {
