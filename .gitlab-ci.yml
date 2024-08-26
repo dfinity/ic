@@ -9,14 +9,14 @@
 # two seperate MRs.
 # 1.  Rename/remove the reference to the file from this file
 # 2.  Rename/remove the file from the repository
-# Failure to do so will cause the `gitlab-ci/config/zz-generated-gitlab-ci.yaml`
+# Failure to do so will cause the `ci/config/zz-generated-gitlab-ci.yaml`
 # file not to get generated.
 
 
 include:
-  - local: /gitlab-ci/config/rosetta.yml
-  - local: /gitlab-ci/config/main.yml
-  - local: /gitlab-ci/config/common.yml
-  - local: /gitlab-ci/config/container-image-autobuild.yml
-  - local: /gitlab-ci/config/dependencies.yml
-  - local: /gitlab-ci/config/base-images-build.yml
+  - local: /ci/config/rosetta.yml
+  - local: /ci/config/main.yml
+  - local: /ci/config/common.yml
+  - local: /ci/config/container-image-autobuild.yml
+  - local: /ci/config/dependencies.yml
+  - local: /ci/config/base-images-build.yml
