@@ -16,7 +16,7 @@ use ic_base_types::NumSeconds;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
     BoundedAllowedViewers, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
-    CanisterLogRecord, LogVisibility, LogVisibilityV2,
+    CanisterLogRecord, LogVisibilityV2,
 };
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities_types::{
@@ -666,14 +666,8 @@ fn long_execution_mode_decoding() {
 
 #[test]
 fn compatibility_for_log_visibility() {
-    // If this fails, you are making a potentially incompatible change to `LogVisibility`.
+    // If this fails, you are making a potentially incompatible change to `LogVisibilityV2`.
     // See note [Handling changes to Enums in Replicated State] for how to proceed.
-    assert_eq!(
-        LogVisibility::iter()
-            .map(|x| x as i32)
-            .collect::<Vec<i32>>(),
-        [1, 2]
-    );
     assert_eq!(
         LogVisibilityV2::iter().collect::<Vec<_>>(),
         [
