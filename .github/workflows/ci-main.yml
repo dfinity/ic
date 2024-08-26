@@ -6,8 +6,6 @@ on:
   push:
     branches:
       - master
-      - 'hotfix-*'
-      - 'rc--*'
       - 'dev-gh-*'
   pull_request:
   # Used as reusable workflow within release-testing workflow
