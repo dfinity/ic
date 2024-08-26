@@ -16,7 +16,7 @@ def run_with_icos_build_wrapper(command, escape_dollars = False):
 
     wrapper = """
         tmpdir=$(mktemp -d "/tmp/icosbuildXXXX") &&
-        chmod =rw "$tmpdir" &&
+        chmod ug=xrw "$tmpdir" &&
         trap 'sudo rm -rf "$tmpdir"' INT TERM EXIT &&
         ICOS_TEMP_DIR="$tmpdir" %s "$@" """
 
