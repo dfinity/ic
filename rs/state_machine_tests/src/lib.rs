@@ -39,14 +39,14 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
-    self as ic00, CanisterIdRecord, InstallCodeArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
-    Method, Payload,
+    self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
 };
 pub use ic_management_canister_types::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
-    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, EcdsaCurve, EcdsaKeyId,
-    HttpHeader, HttpMethod, SchnorrAlgorithm, SchnorrKeyId, SignWithECDSAReply,
-    SignWithSchnorrReply, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
+    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, ClearChunkStoreArgs,
+    EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, InstallChunkedCodeArgs,
+    LoadCanisterSnapshotArgs, SchnorrAlgorithm, SignWithECDSAReply, SignWithSchnorrReply,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
@@ -2778,6 +2778,7 @@ impl StateMachine {
         .map(|_| ())
     }
 
+    /// Create a canister snapshot.
     pub fn take_canister_snapshot(
         &self,
         args: TakeCanisterSnapshotArgs,
@@ -2801,12 +2802,18 @@ impl StateMachine {
         })?
     }
 
+    /// Load the canister state from a canister snapshot.
     pub fn load_canister_snapshot(
         &self,
         args: LoadCanisterSnapshotArgs,
     ) -> Result<Vec<u8>, UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.get_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
         self.execute_ingress_as(
-            PrincipalId::new_anonymous(),
+            sender,
             ic00::IC_00,
             Method::LoadCanisterSnapshot,
             args.encode(),
@@ -2817,6 +2824,57 @@ impl StateMachine {
                 panic!("load_canister_snapshot call rejected: {}", reason)
             }
         })?
+    }
+
+    /// Upload a chunk to the wasm chunk store.
+    pub fn upload_chunk(&self, args: UploadChunkArgs) -> Result<UploadChunkReply, UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.get_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
+        self.execute_ingress_as(sender, ic00::IC_00, Method::UploadChunk, args.encode())
+            .map(|res| match res {
+                WasmResult::Reply(data) => UploadChunkReply::decode(&data),
+                WasmResult::Reject(reason) => {
+                    panic!("upload_chunk call rejected: {}", reason)
+                }
+            })?
+    }
+
+    /// Install code from the wasm chunk store.
+    pub fn install_chunked_code(&self, args: InstallChunkedCodeArgs) -> Result<(), UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.target_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::InstallChunkedCode,
+            args.encode(),
+        )
+        .map(|_| ())
+    }
+
+    /// Clear the wasm chunk store.
+    pub fn clear_chunk_store(&self, canister_id: CanisterId) -> Result<(), UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&canister_id)
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::ClearChunkStore,
+            ClearChunkStoreArgs {
+                canister_id: canister_id.into(),
+            }
+            .encode(),
+        )
+        .map(|_| ())
     }
 
     /// Returns true if the canister with the specified id exists.
