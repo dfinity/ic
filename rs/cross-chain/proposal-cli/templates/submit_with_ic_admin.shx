@@ -1,5 +1,10 @@
 #!/bin/sh
 
+if grep --ignore-case --line-number "TODO" "{{summary_file}}"; then
+    echo "Found some TODOs in the summary file, aborting!!"
+    exit 1
+fi
+
 ic-admin \
     {% if args.use_hsm -%}
         --use-hsm \

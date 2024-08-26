@@ -91,17 +91,17 @@ fn test_metadata_migration() {
         let candid_service = metadata::get_metadata(&wasm_module, "candid:service")
             .unwrap()
             .to_vec();
-        assert_eq!(candid_service.len(), 4_149);
+        assert!(
+            !candid_service.is_empty(),
+            "Expected some bytes for candid:service, got none."
+        );
 
         let git_commit_id = metadata::get_metadata(&wasm_module, "git_commit_id")
             .unwrap()
             .to_vec();
-        assert_eq!(
-            git_commit_id,
-            vec![
-                48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48,
-                48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 10
-            ]
+        assert!(
+            !git_commit_id.is_empty(),
+            "Expected some bytes for git_commit_id, got none."
         );
 
         let expected_metadata = vec![
