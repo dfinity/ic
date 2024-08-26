@@ -8,17 +8,17 @@ use ic_system_test_driver::{
 use ic_tests::networking::p2p_performance_workload::{config, test};
 
 // Test parameters
-const RPS: usize = 10;
+const RPS: usize = 0;
 const PAYLOAD_SIZE_BYTES: usize = 1024 * 1024;
-const WORKLOAD_RUNTIME: Duration = Duration::from_secs(30 * 60);
+const WORKLOAD_RUNTIME: Duration = Duration::from_secs(20 * 60);
 const NNS_SUBNET_MAX_SIZE: usize = 1;
-const APP_SUBNET_MAX_SIZE: usize = 13;
+const APP_SUBNET_MAX_SIZE: usize = 40;
 const DOWNLOAD_PROMETHEUS_DATA: bool = true;
 // Timeout parameters
 const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 const OVERALL_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 // Network topology
-const NETWORK_SIMULATION: Option<ProductionSubnetTopology> = Some(ProductionSubnetTopology::IO67);
+const NETWORK_SIMULATION: Option<ProductionSubnetTopology> = Some(ProductionSubnetTopology::TDB26);
 
 fn main() -> Result<()> {
     let per_task_timeout: Duration = WORKLOAD_RUNTIME + TASK_TIMEOUT_DELTA;
