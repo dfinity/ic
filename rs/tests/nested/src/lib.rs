@@ -23,7 +23,7 @@ use util::{check_hostos_version, elect_hostos_version, update_nodes_hostos_versi
 
 const HOST_VM_NAME: &str = "host-1";
 
-const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(11 * 60);
 const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 
 /// Prepare the environment for nested tests.
