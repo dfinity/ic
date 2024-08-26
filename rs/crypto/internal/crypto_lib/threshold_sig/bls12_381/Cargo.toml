@@ -25,7 +25,7 @@ serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 strum_macros = { workspace = true }
 subtle = "2.4"
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }

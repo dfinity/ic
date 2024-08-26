@@ -9,7 +9,7 @@ Target canister: `{{canister_id}}`
 ---
 
 ## Motivation
-THIS MUST BE FILLED OUT
+TODO: THIS MUST BE FILLED OUT
 
 
 ## Install args
