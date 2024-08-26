@@ -331,7 +331,7 @@ fn test_removal_when_last_dropped() {
         for _ in 0..1000000 {
             clones.push(_cp3.clone());
         }
-        panic!("Elapsed: {:#?}", start.elapsed());
+        panic!("Elapsed: {:#?}", start.elapsed()); // Benchmark
     });
 }
 

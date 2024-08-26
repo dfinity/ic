@@ -398,7 +398,7 @@ impl TipHandler {
                 CopyInstruction::Skip
             } else if path.extension() == Some(OsStr::new("bin"))
                 && lsmt_storage == FlagStatus::Disabled
-                && !path.starts_with(cp.root.join(SNAPSHOTS_DIR))
+                && !path.starts_with(cp.raw_path().join(SNAPSHOTS_DIR))
             {
                 // PageMap files need to be modified in the tip,
                 // but only with non-LSMT storage layer that modifies these files.
@@ -1478,7 +1478,7 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
     }
 
     pub fn unverified_checkpoint_marker(&self) -> PathBuf {
-        self.root.join(UNVERIFIED_CHECKPOINT_MARKER)
+        self.0.root.join(UNVERIFIED_CHECKPOINT_MARKER)
     }
 
     pub fn canister_ids(&self) -> Result<Vec<CanisterId>, LayoutError> {
@@ -1502,7 +1502,7 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
 
     /// Lists all snapshots in the checkpoint.
     pub fn snapshot_ids(&self) -> Result<Vec<SnapshotId>, LayoutError> {
-        let snapshots_dir = self.root.join(SNAPSHOTS_DIR);
+        let snapshots_dir = self.0.root.join(SNAPSHOTS_DIR);
         Permissions::check_dir(&snapshots_dir)?;
         collect_subdirs(snapshots_dir.as_path(), 1, parse_snapshot_id)
     }
@@ -1515,7 +1515,8 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         snapshot_id: &SnapshotId,
     ) -> Result<SnapshotLayout<Permissions>, LayoutError> {
         SnapshotLayout::new(
-            self.root
+            self.0
+                .root
                 .join(SNAPSHOTS_DIR)
                 .join(hex::encode(
                     snapshot_id.get_canister_id().get_ref().as_slice(),
@@ -1553,8 +1554,8 @@ where
             return Ok(());
         }
         open_for_write(&marker)?;
-        sync_path(&self.root).map_err(|err| LayoutError::IoError {
-            path: self.root.clone(),
+        sync_path(&self.0.root).map_err(|err| LayoutError::IoError {
+            path: self.0.root.clone(),
             message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
             io_err: err,
         })
@@ -1586,8 +1587,8 @@ impl CheckpointLayout<ReadOnly> {
 
         // Sync the directory to make sure the marker is removed from disk.
         // This is strict prerequisite for the manifest computation.
-        sync_path(&self.root).map_err(|err| LayoutError::IoError {
-            path: self.root.clone(),
+        sync_path(&self.0.root).map_err(|err| LayoutError::IoError {
+            path: self.0.root.clone(),
             message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
             io_err: err,
         })
@@ -1898,6 +1899,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
             root: self.snapshot_root.clone(),
             name_stem: "vmemory_0".into(),
             permissions_tag: PhantomData,
+            _checkpoint: None, // FIXME
         }
     }
 
@@ -1906,6 +1908,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
             root: self.snapshot_root.clone(),
             name_stem: "stable_memory".into(),
             permissions_tag: PhantomData,
+            _checkpoint: None, // FIXME
         }
     }
 
@@ -1914,6 +1917,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
             root: self.snapshot_root.clone(),
             name_stem: "wasm_chunk_store".into(),
             permissions_tag: PhantomData,
+            _checkpoint: None, // FIXME
         }
     }
 }

@@ -19,7 +19,7 @@ use ic_replicated_state::{
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{
     CanisterLayout, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, ReadOnly,
-    ReadPolicy, SnapshotLayout,
+    SnapshotLayout,
 };
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
@@ -539,8 +539,8 @@ fn load_canister_state_from_checkpoint(
     )
 }
 
-pub fn load_snapshot<P: ReadPolicy>(
-    snapshot_layout: &SnapshotLayout<P>,
+pub fn load_snapshot(
+    snapshot_layout: &SnapshotLayout<ReadOnly>,
     snapshot_id: &SnapshotId,
     height: Height,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
@@ -570,7 +570,11 @@ pub fn load_snapshot<P: ReadPolicy>(
         let starting_time = Instant::now();
         let wasm_memory_layout = snapshot_layout.vmemory_0();
         let wasm_memory = PageMemory {
-            page_map: PageMap::open(&wasm_memory_layout, height, Arc::clone(&fd_factory))?,
+            page_map: PageMap::open(
+                Arc::new(wasm_memory_layout),
+                height,
+                Arc::clone(&fd_factory),
+            )?,
             size: canister_snapshot_bits.wasm_memory_size,
         };
         durations.insert("snapshot_wasm_memory", starting_time.elapsed());
@@ -578,7 +582,11 @@ pub fn load_snapshot<P: ReadPolicy>(
         let starting_time = Instant::now();
         let stable_memory_layout = snapshot_layout.stable_memory();
         let stable_memory = PageMemory {
-            page_map: PageMap::open(&stable_memory_layout, height, Arc::clone(&fd_factory))?,
+            page_map: PageMap::open(
+                Arc::new(stable_memory_layout),
+                height,
+                Arc::clone(&fd_factory),
+            )?,
             size: canister_snapshot_bits.stable_memory_size,
         };
         durations.insert("snapshot_stable_memory", starting_time.elapsed());
@@ -598,8 +606,11 @@ pub fn load_snapshot<P: ReadPolicy>(
 
     let starting_time = Instant::now();
     let wasm_chunk_store_layout = snapshot_layout.wasm_chunk_store();
-    let wasm_chunk_store_data =
-        PageMap::open(&wasm_chunk_store_layout, height, Arc::clone(&fd_factory))?;
+    let wasm_chunk_store_data = PageMap::open(
+        Arc::new(wasm_chunk_store_layout),
+        height,
+        Arc::clone(&fd_factory),
+    )?;
     let wasm_chunk_store = WasmChunkStore::from_checkpoint(
         wasm_chunk_store_data,
         canister_snapshot_bits.wasm_chunk_store_metadata,
@@ -621,13 +632,13 @@ pub fn load_snapshot<P: ReadPolicy>(
     Ok((canister_snapshot, metrics))
 }
 
-fn load_snapshot_from_checkpoint<P: ReadPolicy>(
-    checkpoint_layout: &CheckpointLayout<P>,
+fn load_snapshot_from_checkpoint(
+    checkpoint_layout: &CheckpointLayout<ReadOnly>,
     snapshot_id: &SnapshotId,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<(CanisterSnapshot, LoadCanisterMetrics), CheckpointError> {
     let snapshot_layout = checkpoint_layout.snapshot(snapshot_id)?;
-    load_snapshot::<P>(
+    load_snapshot(
         &snapshot_layout,
         snapshot_id,
         checkpoint_layout.height(),
