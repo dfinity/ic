@@ -14,11 +14,21 @@ signatures. Currently, we support threshold ECDSA and threshold Schnorr.
 
 Each subnet may have several threshold master keys, indexed by a key ID.
 However, the process for each key individually is largely the same. Therefore 
-for now, we will assume just a single key.
-From this key, we will derive per-canister keys. A canister can via a system API request an ECDSA or Schnorr signature, and this request is stored in the replicated state. Consensus will observe these requests and begin working on them as soon as the context is "completed" and the corresponding state containing it is certified.
-By "completed" we mean that the context was matched to a "pre-signature" and assigned
-a random nonce. This is done by the DSM, which updates signature request contexts
-with pre-signatures delivered by consensus.
+for now, we will assume just a single key. From this key, we will derive per-canister keys. 
+
+A canister can via a system API request an ECDSA or Schnorr signature.
+The correpsonding request context is stored in the replicated state. 
+Consensus will observe the new request context and begin working on it as soon as the context is "completed".
+By "completed" we mean that the context was matched to a "pre-signature" and assigned a random nonce. 
+This is done by the DSM, which updates signature request contexts with pre-signatures that were delivered by consensus.
+
+Once the request context contains the pre-signature and the random nonce,
+the IDKG client of consensus will broadcast signature shares for the request. 
+As soon as enough signature shares exist, a blockmaker will combine the signature shares,
+and include the aggregated signature in the block.
+
+The block (batch) containing the aggregated signature is subsequently delivered to execution,
+where the request context is removed and a response to the requesting canister is inducted.
 
 ### Distributed Key Generation & Transcripts
 To create threshold signatures we need a *transcript* that gives all
