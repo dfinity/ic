@@ -1,16 +1,17 @@
 [package]
-name = "saturating-subnet-memory-test"
+name = "subnet-memory-test"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "saturating-subnet-memory-test-canister"
+name = "subnet-memory-test-canister"
 path = "src/main.rs"
 
 [dependencies]
 candid = { workspace = true }
 dfn_core = { path = "../dfn_core" }
 ic-base-types = { path = "../../types/base_types" }
+ic-types = { path = "../../types/types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 serde = { workspace = true }

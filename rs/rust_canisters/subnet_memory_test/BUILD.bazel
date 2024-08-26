@@ -7,6 +7,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",
+    "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
     "@crate_index//:serde",
@@ -18,17 +19,17 @@ MACRO_DEPENDENCIES = [
 ]
 
 rust_library(
-    name = "saturating_subnet_memory_test",
+    name = "subnet_memory_test",
     srcs = ["src/lib.rs"],
-    crate_name = "saturating_subnet_memory_test",
+    crate_name = "subnet_memory_test",
     version = "0.1.0",
     deps = DEPENDENCIES,
 )
 
 rust_canister(
-    name = "saturating-subnet-memory-test-canister",
+    name = "subnet-memory-test-canister",
     srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
-    service_file = ":saturating_subnet_memory_test.did",
-    deps = DEPENDENCIES + [":saturating_subnet_memory_test"],
+    service_file = ":subnet_memory_test.did",
+    deps = DEPENDENCIES + [":subnet_memory_test"],
 )

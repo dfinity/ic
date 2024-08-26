@@ -67,6 +67,7 @@ pretty_assertions = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }
+subnet-memory-test = { path = "../rust_canisters/subnet_memory_test" }
 tempfile = { workspace = true }
 xnet-test = { path = "../rust_canisters/xnet_test" }
 

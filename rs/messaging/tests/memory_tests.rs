@@ -1,14 +1,13 @@
-use candid::{Decode, Encode};
 use canister_test::Project;
-use ic_base_types::{CanisterId, SubnetId};
+use ic_base_types::{CanisterId, SubnetId, NumBytes};
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
-use ic_types::Cycles;
+use ic_types::{Cycles, NumInstructions};
 use proptest::prelude::*;
-use saturating_subnet_memory_test::{
-    Config as CanisterConfig, Metrics as CanisterMetrics, RequestConfig, ResponseConfig,
+use subnet_memory_test::{
+    Config as CanisterConfig, Record,
 };
 use std::ops::RangeInclusive;
 use std::sync::Arc;
@@ -34,7 +33,7 @@ fn new_fixture(
     routing_table_insert_subnet(&mut routing_table, LOCAL_SUBNET_ID).unwrap();
     routing_table_insert_subnet(&mut routing_table, REMOTE_SUBNET_ID).unwrap();
     let wasm =
-        Project::cargo_bin_maybe_from_env("saturating-subnet-memory-test-canister", &[]).bytes();
+        Project::cargo_bin_maybe_from_env("subnet-memory-test-canister", &[]).bytes();
 
     // Generate local environment and install canisters.
     let local_env = StateMachineBuilder::new()
@@ -67,9 +66,9 @@ fn new_fixture(
 /// Installs a 'saturating-subnet-memory-test-canister' in `env`.
 fn install_canister(env: &StateMachine, wasm: Vec<u8>) -> CanisterId {
     env.install_canister_with_cycles(wasm, Vec::new(), None, Cycles::new(u128::MAX / 2))
-        .expect("Installing saturating-subnet-memory-test-canister failed")
+        .expect("Installing subnet-memory-test-canister failed")
 }
-
+/*
 /// Queries the metrics from `canister` on the subnet `env`.
 fn query_metrics(env: &StateMachine, canister: CanisterId) -> CanisterMetrics {
     let reply = env.query(canister, "metrics", vec![]).unwrap();
@@ -82,7 +81,7 @@ fn call_start(env: &StateMachine, canister: CanisterId, config: CanisterConfig) 
     let reply = env.execute_ingress(canister, "start", msg).unwrap();
     Decode!(&reply.bytes(), String).unwrap()
 }
-
+*/
 prop_compose! {
     fn arb_test_fixture(
         local_env_canister_count_range: RangeInclusive<usize>,
@@ -95,6 +94,69 @@ prop_compose! {
     }
 }
 
+
+prop_compose! {
+    fn arb_inter_canister_traffic(
+        count: RangeInclusive<usize>,
+        request_payload_bytes: RangeInclusive<u64>,
+        response_payload_bytes: RangeInclusive<u64>,
+        response_num_instructions: RangeInclusive<u64>,
+    )(
+        (request_payload_bytes, response_payload_bytes, response_num_instructions) in count
+        .prop_flat_map(move |count| {
+            (
+                proptest::collection::vec(request_payload_bytes.clone(), count),
+                proptest::collection::vec(response_payload_bytes.clone(), count),
+                proptest::collection::vec(response_num_instructions.clone(), count),
+            )
+        })
+    ) -> (Vec<NumBytes>, Vec<(NumBytes, NumInstructions)>) {
+        (
+            request_payload_bytes.into_iter().map(|bytes| bytes.into()).collect(),
+            response_payload_bytes
+                .into_iter()
+                .zip(response_num_instructions.into_iter())
+                .map(|(bytes, instructions)| (bytes.into(), instructions.into()))
+                .collect(),
+        )
+    }
+}
+
+prop_compose! {
+    fn arb_canister_configs(
+        canister_ids: Vec<CanisterId>,
+        count: RangeInclusive<usize>,
+        request_payload_bytes: RangeInclusive<u64>,
+        response_payload_bytes: RangeInclusive<u64>,
+        response_num_instructions: RangeInclusive<u64>,
+    )(
+        configs in Just((canister_ids.clone(), canister_ids.clone()))
+        .prop_flat_map(move |(senders, receivers)| {
+            let mut request_payloads = Vec::<(NumBytes, CanisterId)>::new();
+            for sender in senders {
+                for receivers in receivers {
+                    (request_payloads, response_payloads) in arb_inter_canister_traffic(
+                        count.clone(),
+                        request_payload_bytes.clone(),
+                        response_payload_bytes.clone(),
+                        response_num_instructions.clone(),
+                    )
+                }
+            }
+        })
+
+            for _ in 0..count {
+                
+            }
+            for receiver in receivers {
+                
+            }
+        })
+}
+
+
+
+/*
 prop_compose! {
     fn arb_canister_config(
         receivers: Vec<CanisterId>,
@@ -185,7 +247,7 @@ fn manual() {
     let metrics = query_metrics(&local_env, local_canister_ids[0]);
     assert_eq!(None, Some(metrics));
 }
-
+*/
 /*
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(1))]
