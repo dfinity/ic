@@ -15,7 +15,7 @@ The previous proposal [132128](https://dashboard.internetcomputer.org/proposal/1
 This can be seen by verifying that the currently deployed wasm module (e.g. with `dfx canister --ic info n5wcd-faaaa-aaaar-qaaea-cai`) is still `0x340eb880fb50cb7f437d284f2dc70d796cc86859cb990e39f1c4981e2b52dab5`, which corresponds to the version from the last successfully executed proposal [125590](https://dashboard.internetcomputer.org/proposal/125590).
 The reason for the failure was that the wrong wasm was used (`ic-icrc1-index.wasm.gz` instead of `ic-icrc1-index-ng.wasm.gz`).
 
-Similarly [132128](https://dashboard.internetcomputer.org/proposal/132128), this proposal is meant to upgrade the ckBTC index canister to the latest version to add support for the [ICRC-21: Canister Call Consent Messages](https://github.com/dfinity/wg-identity-authentication/blob/fd846030109710cab67d9381485a73db424f2b07/topics/ICRC-21/icrc_21_consent_msg.md) standard.
+Similarly to [132128](https://dashboard.internetcomputer.org/proposal/132128), this proposal is meant to upgrade the ckBTC index canister to the latest version to add support for the [ICRC-21: Canister Call Consent Messages](https://github.com/dfinity/wg-identity-authentication/blob/fd846030109710cab67d9381485a73db424f2b07/topics/ICRC-21/icrc_21_consent_msg.md) standard.
 
 
 ## Upgrade args
