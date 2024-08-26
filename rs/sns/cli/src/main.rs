@@ -1,5 +1,6 @@
 //! A command-line tool to initialize, deploy and interact with a SNS (Service Nervous System)
 
+use anyhow::{bail, Result};
 use clap::Parser;
 
 use ic_sns_cli::{
@@ -7,12 +8,11 @@ use ic_sns_cli::{
     prepare_canisters, propose, CliArgs, SubCommand,
 };
 
-fn main() {
+fn main() -> Result<()> {
     let args = match CliArgs::try_parse_from(std::env::args()) {
         Ok(args) => args,
         Err(e) => {
-            eprintln!("{}", e);
-            std::process::exit(1);
+            bail!("{}", e);
         }
     };
 

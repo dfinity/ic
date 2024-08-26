@@ -1,4 +1,4 @@
-use ic_crypto_ecdsa_secp256k1::PublicKey;
+use ic_crypto_secp256k1::PublicKey;
 use ic_ethereum_types::Address;
 use std::fmt;
 use std::fmt::{Display, Formatter};

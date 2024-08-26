@@ -17,6 +17,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_http",
+    "//rs/rust_canisters/http_types",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:serde_bytes",
 ]

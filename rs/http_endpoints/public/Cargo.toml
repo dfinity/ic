@@ -60,11 +60,6 @@ tower-http = { workspace = true }
 tracing-flame = "0.2.0"
 tracing-subscriber = { workspace = true }
 
-
-[target.'cfg(target_os = "linux")'.dependencies]
-# this library uses libunwind, which is only applicable to Linux
-ic-backtrace = { path = "../../monitoring/backtrace" }
-
 [dev-dependencies]
 ic-canister-client = { path = "../../canister_client" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }

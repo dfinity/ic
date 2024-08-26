@@ -19,11 +19,9 @@ pub type Message = BasicSigned<DealingContent>;
 impl IdentifiableArtifact for Message {
     const NAME: &'static str = "dkg";
     type Id = DkgMessageId;
-    type Attribute = ();
     fn id(&self) -> Self::Id {
         self.into()
     }
-    fn attribute(&self) -> Self::Attribute {}
 }
 
 impl PbArtifact for Message {
@@ -31,8 +29,6 @@ impl PbArtifact for Message {
     type PbIdError = ProxyDecodeError;
     type PbMessage = ic_protobuf::types::v1::DkgMessage;
     type PbMessageError = ProxyDecodeError;
-    type PbAttribute = ();
-    type PbAttributeError = Infallible;
 }
 
 /// Identifier of a DKG message.

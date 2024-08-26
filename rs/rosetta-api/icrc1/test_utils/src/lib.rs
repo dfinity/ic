@@ -1,8 +1,8 @@
 use candid::{Nat, Principal};
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
-use ic_crypto_ecdsa_secp256k1::PrivateKey as Secp256k1PrivateKey;
 use ic_crypto_ed25519::{PrivateKey as Ed25519SecretKey, PrivateKeyFormat};
+use ic_crypto_secp256k1::PrivateKey as Secp256k1PrivateKey;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_icrc1::{Block, Operation, Transaction};
 use ic_ledger_core::block::BlockType;

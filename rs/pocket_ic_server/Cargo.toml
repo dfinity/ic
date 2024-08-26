@@ -23,9 +23,8 @@ hex = { workspace = true }
 http = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
-hyper-legacy = { package = "hyper", version = "0.14.18", features = ["full"] }
-hyper-rustls = { version = "0.24.2", features = ["http2"] }
-hyper-socks2 = "^0.8.0"
+hyper-rustls = { workspace = true }
+hyper-socks2 = { workspace = true }
 hyper-util = { workspace = true }
 ic-agent = { workspace = true }
 ic-boundary = { path = "../boundary_node/ic_boundary" }
@@ -83,3 +82,4 @@ wat = "1.0.52"
 rcgen = { workspace = true }
 reqwest = { workspace = true }
 spec-compliance = { path = "../tests/testing_verification/spec_compliance" }
+slog = { workspace = true }

@@ -39,14 +39,14 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
-    self as ic00, CanisterIdRecord, InstallCodeArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
-    Method, Payload,
+    self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
 };
 pub use ic_management_canister_types::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
-    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, EcdsaCurve, EcdsaKeyId,
-    HttpHeader, HttpMethod, SchnorrAlgorithm, SchnorrKeyId, SignWithECDSAReply,
-    SignWithSchnorrReply, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
+    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, ClearChunkStoreArgs,
+    EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, InstallChunkedCodeArgs,
+    LoadCanisterSnapshotArgs, SchnorrAlgorithm, SignWithECDSAReply, SignWithSchnorrReply,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
@@ -384,11 +384,12 @@ fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
     ser.into_inner()
 }
 
-fn replica_logger() -> ReplicaLogger {
+fn replica_logger(log_level: Option<Level>) -> ReplicaLogger {
     use slog::Drain;
-    let log_level = std::env::var("RUST_LOG")
-        .ok()
-        .and_then(|level| Level::from_str(&level).ok())
+    let log_level = log_level
+        .or(std::env::var("RUST_LOG")
+            .ok()
+            .and_then(|level| Level::from_str(&level).ok()))
         .unwrap_or(Level::Warning);
 
     let writer: Box<dyn io::Write + Sync + Send> = if std::env::var("LOG_TO_STDERR").is_ok() {
@@ -706,8 +707,8 @@ impl From<u64> for StateMachineNode {
 
 #[allow(clippy::large_enum_variant)]
 enum SignatureSecretKey {
-    EcdsaSecp256k1(ic_crypto_ecdsa_secp256k1::PrivateKey),
-    SchnorrBip340(ic_crypto_ecdsa_secp256k1::PrivateKey),
+    EcdsaSecp256k1(ic_crypto_secp256k1::PrivateKey),
+    SchnorrBip340(ic_crypto_secp256k1::PrivateKey),
     Ed25519(ic_crypto_ed25519::DerivedPrivateKey),
 }
 
@@ -731,7 +732,7 @@ pub struct StateMachine {
         tower::buffer::Buffer<IngressFilterService, (ProvisionalWhitelist, SignedIngressContent)>,
     payload_builder: Arc<RwLock<Option<PayloadBuilderImpl>>>,
     message_routing: SyncMessageRouting,
-    metrics_registry: MetricsRegistry,
+    pub metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     pub query_handler:
         tower::buffer::Buffer<QueryExecutionService, (Query, Option<CertificateDelegation>)>,
@@ -742,7 +743,7 @@ pub struct StateMachine {
     time: AtomicU64,
     idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     idkg_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
-    replica_logger: ReplicaLogger,
+    pub replica_logger: ReplicaLogger,
     pub nodes: Vec<StateMachineNode>,
     pub batch_summary: Option<BatchSummary>,
     time_source: Arc<FastForwardTimeSource>,
@@ -826,6 +827,7 @@ pub struct StateMachineBuilder {
     seed: [u8; 32],
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
     dts: bool,
+    log_level: Option<Level>,
 }
 
 impl StateMachineBuilder {
@@ -858,6 +860,7 @@ impl StateMachineBuilder {
             seed: [42; 32],
             with_extra_canister_range: None,
             dts: true,
+            log_level: None,
         }
     }
 
@@ -1039,6 +1042,10 @@ impl StateMachineBuilder {
         Self { dts: false, ..self }
     }
 
+    pub fn with_log_level(self, log_level: Option<Level>) -> Self {
+        Self { log_level, ..self }
+    }
+
     pub fn build_internal(self) -> StateMachine {
         StateMachine::setup_from_dir(
             self.state_dir,
@@ -1067,6 +1074,7 @@ impl StateMachineBuilder {
             self.is_root_subnet,
             self.seed,
             self.dts,
+            self.log_level,
         )
     }
 
@@ -1284,7 +1292,7 @@ impl StateMachine {
                 if let Some(SignatureSecretKey::EcdsaSecp256k1(k)) =
                     self.idkg_subnet_secret_keys.get(&ecdsa_context.key_id())
                 {
-                    let path = ic_crypto_ecdsa_secp256k1::DerivationPath::from_canister_id_and_path(
+                    let path = ic_crypto_secp256k1::DerivationPath::from_canister_id_and_path(
                         ecdsa_context.request.sender.get().as_slice(),
                         &ecdsa_context.derivation_path,
                     );
@@ -1360,12 +1368,13 @@ impl StateMachine {
         is_root_subnet: bool,
         seed: [u8; 32],
         dts: bool,
+        log_level: Option<Level>,
     ) -> Self {
         let checkpoint_interval_length = checkpoint_interval_length.unwrap_or(match subnet_type {
             SubnetType::Application | SubnetType::VerifiedApplication => 499,
             SubnetType::System => 199,
         });
-        let replica_logger = replica_logger();
+        let replica_logger = replica_logger(log_level);
 
         let metrics_registry = MetricsRegistry::new();
 
@@ -1545,7 +1554,7 @@ impl StateMachine {
                     )
                     .unwrap();
 
-                    let private_key = ic_crypto_ecdsa_secp256k1::PrivateKey::deserialize_sec1(
+                    let private_key = ic_crypto_secp256k1::PrivateKey::deserialize_sec1(
                         private_key_bytes.as_slice(),
                     )
                     .unwrap();
@@ -1560,7 +1569,7 @@ impl StateMachine {
                     (public_key, private_key)
                 }
                 MasterPublicKeyId::Ecdsa(id) => {
-                    use ic_crypto_ecdsa_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
+                    use ic_crypto_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
 
                     let path =
                         DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
@@ -1578,9 +1587,7 @@ impl StateMachine {
                 }
                 MasterPublicKeyId::Schnorr(id) => match id.algorithm {
                     SchnorrAlgorithm::Bip340Secp256k1 => {
-                        use ic_crypto_ecdsa_secp256k1::{
-                            DerivationIndex, DerivationPath, PrivateKey,
-                        };
+                        use ic_crypto_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
 
                         let path =
                             DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
@@ -2015,7 +2022,7 @@ impl StateMachine {
         if let Some(SignatureSecretKey::EcdsaSecp256k1(k)) =
             self.idkg_subnet_secret_keys.get(&context.key_id())
         {
-            let path = ic_crypto_ecdsa_secp256k1::DerivationPath::from_canister_id_and_path(
+            let path = ic_crypto_secp256k1::DerivationPath::from_canister_id_and_path(
                 context.request.sender.get().as_slice(),
                 &context.derivation_path,
             );
@@ -2037,7 +2044,7 @@ impl StateMachine {
 
         let signature = match self.idkg_subnet_secret_keys.get(&context.key_id()) {
             Some(SignatureSecretKey::SchnorrBip340(k)) => {
-                let path = ic_crypto_ecdsa_secp256k1::DerivationPath::from_canister_id_and_path(
+                let path = ic_crypto_secp256k1::DerivationPath::from_canister_id_and_path(
                     context.request.sender.get().as_slice(),
                     &context.derivation_path[..],
                 );
@@ -2147,14 +2154,11 @@ impl StateMachine {
     }
 
     /// Checks critical error counters and panics if a critical error occurred.
-    /// We ignore `execution_environment_unfiltered_ingress` for now.
     pub fn check_critical_errors(&self) {
         let error_counter_vec = fetch_counter_vec(&self.metrics_registry, "critical_errors");
         if let Some((metric, _)) = error_counter_vec.into_iter().find(|(_, v)| *v != 0.0) {
             let err: String = metric.get("error").unwrap().to_string();
-            if err != *"execution_environment_unfiltered_ingress" {
-                panic!("Critical error {} occurred.", err);
-            }
+            panic!("Critical error {} occurred.", err);
         }
     }
 
@@ -2774,6 +2778,7 @@ impl StateMachine {
         .map(|_| ())
     }
 
+    /// Create a canister snapshot.
     pub fn take_canister_snapshot(
         &self,
         args: TakeCanisterSnapshotArgs,
@@ -2797,12 +2802,18 @@ impl StateMachine {
         })?
     }
 
+    /// Load the canister state from a canister snapshot.
     pub fn load_canister_snapshot(
         &self,
         args: LoadCanisterSnapshotArgs,
     ) -> Result<Vec<u8>, UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.get_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
         self.execute_ingress_as(
-            PrincipalId::new_anonymous(),
+            sender,
             ic00::IC_00,
             Method::LoadCanisterSnapshot,
             args.encode(),
@@ -2813,6 +2824,57 @@ impl StateMachine {
                 panic!("load_canister_snapshot call rejected: {}", reason)
             }
         })?
+    }
+
+    /// Upload a chunk to the wasm chunk store.
+    pub fn upload_chunk(&self, args: UploadChunkArgs) -> Result<UploadChunkReply, UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.get_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
+        self.execute_ingress_as(sender, ic00::IC_00, Method::UploadChunk, args.encode())
+            .map(|res| match res {
+                WasmResult::Reply(data) => UploadChunkReply::decode(&data),
+                WasmResult::Reject(reason) => {
+                    panic!("upload_chunk call rejected: {}", reason)
+                }
+            })?
+    }
+
+    /// Install code from the wasm chunk store.
+    pub fn install_chunked_code(&self, args: InstallChunkedCodeArgs) -> Result<(), UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.target_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::InstallChunkedCode,
+            args.encode(),
+        )
+        .map(|_| ())
+    }
+
+    /// Clear the wasm chunk store.
+    pub fn clear_chunk_store(&self, canister_id: CanisterId) -> Result<(), UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&canister_id)
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::ClearChunkStore,
+            ClearChunkStoreArgs {
+                canister_id: canister_id.into(),
+            }
+            .encode(),
+        )
+        .map(|_| ())
     }
 
     /// Returns true if the canister with the specified id exists.
@@ -2914,7 +2976,7 @@ impl StateMachine {
         // Largest single message is 1T for system subnet install messages
         // Considered with 2B instruction slices, this gives us 500 ticks
         const MAX_TICKS: usize = 500;
-        let msg_id = self.send_ingress(sender, canister_id, method, payload);
+        let msg_id = self.send_ingress_safe(sender, canister_id, method, payload)?;
         self.await_ingress(msg_id, MAX_TICKS)
     }
 
@@ -2931,6 +2993,62 @@ impl StateMachine {
     ///
     /// This function is asynchronous. It returns the ID of the ingress message
     /// that can be awaited later with [await_ingress].
+    pub fn send_ingress_safe(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        method: impl ToString,
+        payload: Vec<u8>,
+    ) -> Result<MessageId, UserError> {
+        // Build `SignedIngress` with maximum ingress expiry and unique nonce,
+        // omitting delegations and signatures.
+        let ingress_expiry = (self.get_time() + MAX_INGRESS_TTL).as_nanos_since_unix_epoch();
+        let nonce = self.nonce.fetch_add(1, Ordering::Relaxed) + 1;
+        let nonce_blob = Some(nonce.to_le_bytes().into());
+        let msg = SignedIngress::try_from(HttpRequestEnvelope::<HttpCallContent> {
+            content: HttpCallContent::Call {
+                update: HttpCanisterUpdate {
+                    canister_id: Blob(canister_id.get().into_vec()),
+                    method_name: method.to_string(),
+                    arg: Blob(payload.clone()),
+                    sender: sender.into(),
+                    ingress_expiry,
+                    nonce: nonce_blob,
+                },
+            },
+            sender_pubkey: None,
+            sender_sig: None,
+            sender_delegation: None,
+        })
+        .unwrap();
+
+        // Fetch ingress validation settings from the registry.
+        let registry_version = self.registry_client.get_latest_version();
+        let provisional_whitelist = self
+            .registry_client
+            .get_provisional_whitelist(registry_version)
+            .unwrap()
+            .unwrap();
+
+        // Run `IngressFilter` on the ingress message.
+        let ingress_filter = self.ingress_filter.clone();
+        self.runtime
+            .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone().into())))
+            .unwrap()?;
+
+        let builder = PayloadBuilder::new()
+            .with_max_expiry_time_from_now(self.time())
+            .with_nonce(nonce)
+            .ingress(sender, canister_id, method, payload);
+        let msg_id = builder.ingress_ids().pop().unwrap();
+        self.execute_payload(builder);
+        Ok(msg_id)
+    }
+
+    /// Sends an ingress message to the canister with the specified ID.
+    ///
+    /// This function is asynchronous. It returns the ID of the ingress message
+    /// that can be awaited later with [await_ingress].
     pub fn send_ingress(
         &self,
         sender: PrincipalId,
@@ -2938,16 +3056,8 @@ impl StateMachine {
         method: impl ToString,
         payload: Vec<u8>,
     ) -> MessageId {
-        // increment the global nonce and use it as the current nonce.
-        let nonce = self.nonce.fetch_add(1, Ordering::Relaxed) + 1;
-        let builder = PayloadBuilder::new()
-            .with_max_expiry_time_from_now(self.time())
-            .with_nonce(nonce)
-            .ingress(sender, canister_id, method, payload);
-
-        let msg_id = builder.ingress_ids().pop().unwrap();
-        self.execute_payload(builder);
-        msg_id
+        self.send_ingress_safe(sender, canister_id, method, payload)
+            .unwrap()
     }
 
     /// Returns the status of the ingress message with the specified ID.
