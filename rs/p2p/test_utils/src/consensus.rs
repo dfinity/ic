@@ -6,8 +6,8 @@ use std::{
 };
 
 use ic_interfaces::p2p::consensus::{
-    ArtifactMutation, ArtifactWithOpt, ChangeResult, ChangeSetProducer, MutablePool, Priority,
-    PriorityFnFactory, UnvalidatedArtifact, ValidatedPoolReader,
+    ArtifactMutation, ArtifactWithOpt, BouncerFactory, BouncerValue, ChangeResult,
+    ChangeSetProducer, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
 };
 use ic_logger::ReplicaLogger;
 use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
@@ -283,11 +283,11 @@ impl ValidatedPoolReader<U64Artifact> for TestConsensus<U64Artifact> {
     }
 }
 
-impl PriorityFnFactory<U64Artifact, TestConsensus<U64Artifact>> for TestConsensus<U64Artifact> {
-    fn get_priority_function(
+impl BouncerFactory<U64Artifact, TestConsensus<U64Artifact>> for TestConsensus<U64Artifact> {
+    fn new_bouncer(
         &self,
         _pool: &TestConsensus<U64Artifact>,
-    ) -> ic_interfaces::p2p::consensus::PriorityFn<<U64Artifact as IdentifiableArtifact>::Id> {
-        Box::new(|_| Priority::FetchNow)
+    ) -> ic_interfaces::p2p::consensus::Bouncer<<U64Artifact as IdentifiableArtifact>::Id> {
+        Box::new(|_| BouncerValue::Wants)
     }
 }

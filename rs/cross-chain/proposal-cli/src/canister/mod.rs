@@ -90,7 +90,6 @@ impl TargetCanister {
                     PathBuf::from("packages/icrc-ledger_types"),
                     PathBuf::from("rs/rosetta-api/icp_ledger/index"),
                     PathBuf::from("rs/rosetta-api/icp_ledger/src"),
-                    PathBuf::from("rs/rosetta-api/icrc1/index-ng"),
                     PathBuf::from("rs/rosetta-api/ledger_canister_core/src"),
                     PathBuf::from("rs/rosetta-api/ledger_core"),
                     PathBuf::from("rs/rust_canisters/http_types"),

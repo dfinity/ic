@@ -47,13 +47,9 @@ BASE_DEPENDENCIES = [
 
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
-DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nns/governance",
-]
+DEPENDENCIES = BASE_DEPENDENCIES
 
-DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nns/governance:governance--test_feature",
-]
+DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.

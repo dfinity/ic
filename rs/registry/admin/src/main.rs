@@ -52,6 +52,7 @@ use ic_nns_governance_api::{
             SwapParameters,
         },
         install_code::CanisterInstallMode as GovernanceInstallMode,
+        proposal::Action,
         stop_or_start_canister::CanisterAction as GovernanceCanisterAction,
         update_canister_settings::{
             CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
@@ -1046,7 +1047,11 @@ impl ProposalAction for ProposeToChangeNnsCanisterCmd {
             )
             .await,
         );
-        let arg = self.arg.as_ref().map(|path| read_file_fully(path));
+        let arg = Some(
+            self.arg
+                .as_ref()
+                .map_or(vec![], |path| read_file_fully(path)),
+        );
         let skip_stopping_before_installing = Some(self.skip_stopping_before_installing);
         let install_mode = match self.mode {
             CanisterInstallMode::Install => Some(GovernanceInstallMode::Install as i32),
@@ -5118,7 +5123,7 @@ where
 
     let action = cmd.action().await;
 
-    print_proposal(&action, &cmd);
+    print_proposal(&Action::from(action.clone()), &cmd);
 
     if cmd.is_dry_run() {
         return;

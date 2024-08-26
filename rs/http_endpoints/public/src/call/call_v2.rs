@@ -39,6 +39,25 @@ pub struct CallServiceV2 {
     ingress_tracking_semaphore: Arc<Semaphore>,
 }
 
+struct Accepted;
+
+impl IntoResponse for Accepted {
+    fn into_response(self) -> Response {
+        StatusCode::ACCEPTED.into_response()
+    }
+}
+
+impl IntoResponse for IngressError {
+    fn into_response(self) -> Response {
+        match self {
+            IngressError::UserError(user_error) => CborUserError(user_error).into_response(),
+            IngressError::HttpError(HttpError { status, message }) => {
+                (status, message).into_response()
+            }
+        }
+    }
+}
+
 impl CallServiceV2 {
     pub(crate) fn route() -> &'static str {
         "/api/v2/canister/:effective_canister_id/call"
@@ -79,20 +98,16 @@ async fn call_v2(
         ingress_watcher_handle,
     }): State<CallServiceV2>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
-) -> Result<impl IntoResponse, Response> {
+) -> Result<Accepted, IngressError> {
     let logger = ingress_validator.log.clone();
 
     let ingress_submitter = ingress_validator
         .validate_ingress_message(request, effective_canister_id)
-        .await
-        .map_err(|err| match err {
-            IngressError::UserError(user_error) => CborUserError(user_error).into_response(),
-            IngressError::HttpError(HttpError { status, message }) => {
-                (status, message).into_response()
-            }
-        })?;
+        .await?;
 
     let message_id = ingress_submitter.message_id();
+
+    ingress_submitter.try_submit()?;
 
     // We spawn a task to register the certification time of the message.
     // The subscriber in the spawned task records the certification time of the message
@@ -124,9 +139,5 @@ async fn call_v2(
         });
     }
 
-    ingress_submitter
-        .try_submit()
-        .map_err(|HttpError { status, message }| (status, message).into_response())?;
-
-    Ok(StatusCode::ACCEPTED)
+    Ok(Accepted)
 }
