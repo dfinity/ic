@@ -119,7 +119,7 @@ impl TargetCanister {
     pub fn artifact_file_name(&self) -> &str {
         match &self {
             TargetCanister::CkBtcArchive => "ic-icrc1-archive.wasm.gz",
-            TargetCanister::CkBtcIndex => "ic-icrc1-index.wasm.gz",
+            TargetCanister::CkBtcIndex => "ic-icrc1-index-ng.wasm.gz",
             TargetCanister::CkBtcKyt => "ic-ckbtc-kyt.wasm.gz",
             TargetCanister::CkBtcLedger => "ic-icrc1-ledger.wasm.gz",
             TargetCanister::CkBtcMinter => "ic-ckbtc-minter.wasm.gz",
