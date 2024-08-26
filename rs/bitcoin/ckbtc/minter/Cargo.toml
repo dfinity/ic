@@ -24,7 +24,7 @@ ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-ckbtc-kyt = { path = "../kyt" }
-ic-crypto-ecdsa-secp256k1 = { path = "../../../crypto/ecdsa_secp256k1" }
+ic-crypto-secp256k1 = { path = "../../../crypto/secp256k1" }
 ic-crypto-getrandom-for-wasm = { path = "../../../crypto/getrandom_for_wasm" }
 ic-crypto-sha2 = { path = "../../../crypto/sha2" }
 ic-icrc1 = { path = "../../../rosetta-api/icrc1" }

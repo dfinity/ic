@@ -99,7 +99,7 @@ pub fn derivation_path(account: &Account) -> Vec<ByteBuf> {
 
 /// Returns a valid extended BIP-32 derivation path from an Account (Principal + subaccount)
 pub fn derive_public_key(ecdsa_public_key: &ECDSAPublicKey, account: &Account) -> ECDSAPublicKey {
-    use ic_crypto_ecdsa_secp256k1::{DerivationIndex, DerivationPath, PublicKey};
+    use ic_crypto_secp256k1::{DerivationIndex, DerivationPath, PublicKey};
 
     let path = DerivationPath::new(
         derivation_path(account)
