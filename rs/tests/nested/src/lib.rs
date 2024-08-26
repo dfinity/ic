@@ -107,10 +107,11 @@ pub fn upgrade(env: TestEnv) {
         process::exit(1);
     });
 
-    let sha256 = read_dependency_from_env_to_string(HOSTOS_UPDATE_SHA256_ENV_VAR).unwrap_or_else(|_| {
-        eprintln!("environment variable {HOSTOS_UPDATE_SHA256_ENV_VAR} is not set");
-        process::exit(1);
-    });
+    let sha256 =
+        read_dependency_from_env_to_string(HOSTOS_UPDATE_SHA256_ENV_VAR).unwrap_or_else(|_| {
+            eprintln!("environment variable {HOSTOS_UPDATE_SHA256_ENV_VAR} is not set");
+            process::exit(1);
+        });
 
     let initial_topology = env.topology_snapshot();
     start_nested_vm(env.clone());

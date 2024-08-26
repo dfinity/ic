@@ -537,16 +537,16 @@ pub fn setup_nested_vms(
             join_handles.push(s.spawn(|| {
                 let vm_name = &node.name;
                 let configured_image =
-                    configure_setupos_image(&env, &vm_name, &nns_url, &nns_public_key)?;
+                    configure_setupos_image(env, vm_name, nns_url, nns_public_key)?;
 
                 let configured_image_spec = AttachImageSpec::new(farm.upload_file(
-                    &group_name,
+                    group_name,
                     configured_image,
                     NESTED_CONFIGURED_IMAGE_PATH,
                 )?);
                 farm.attach_disk_images(
-                    &group_name,
-                    &vm_name,
+                    group_name,
+                    vm_name,
                     "usb-storage",
                     vec![configured_image_spec],
                 )?;
