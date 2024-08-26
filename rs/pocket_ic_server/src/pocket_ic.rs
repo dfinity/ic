@@ -92,7 +92,7 @@ use std::{
 use tempfile::TempDir;
 use tokio::{
     runtime::Runtime,
-    sync::{mpsc, OnceCell},
+    sync::{mpsc, Mutex as TokioMutex, OnceCell},
 };
 use tonic::transport::{Channel, Server};
 use tonic::transport::{Endpoint, Uri};
@@ -1873,7 +1873,7 @@ impl Operation for SubnetReadStateRequest {
                 let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
                 subnet.certify_latest_state();
                 let svc = SubnetReadStateServiceBuilder::builder(
-                    Arc::new(RwLock::new(delegation)),
+                    Arc::new(OnceCell::new_with(delegation)),
                     subnet.state_manager.clone(),
                 )
                 .build_service();
