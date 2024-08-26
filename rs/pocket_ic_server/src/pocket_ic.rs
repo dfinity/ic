@@ -26,10 +26,8 @@ use ic_config::{
 };
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_public::{
-    call::{call_v2, call_v3},
-    metrics::HttpHandlerMetrics,
-    CanisterReadStateServiceBuilder, IngressValidatorBuilder, QueryServiceBuilder,
-    SubnetReadStateServiceBuilder,
+    call_v2, call_v3, metrics::HttpHandlerMetrics, CanisterReadStateServiceBuilder,
+    IngressValidatorBuilder, QueryServiceBuilder, SubnetReadStateServiceBuilder,
 };
 use ic_https_outcalls_adapter::{CanisterHttp, CanisterRequestBody};
 use ic_https_outcalls_adapter_client::CanisterHttpAdapterClientImpl;
