@@ -1459,9 +1459,9 @@ dependencies = [
 
 [[package]]
 name = "bumpalo"
-version = "3.12.0"
+version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d261e256854913907f67ed06efbc3338dfe6179796deefc1ff763fc1aee5535"
+checksum = "79296716171880943b8470b5f8d03aa55eb2e645a4874bdbb28adb49162e012c"
 
 [[package]]
 name = "by_address"
@@ -1776,7 +1776,7 @@ dependencies = [
  "on_wire",
  "rand 0.8.5",
  "tokio",
- "wasmprinter 0.2.54",
+ "wasmprinter",
  "wat",
 ]
 
@@ -2600,7 +2600,7 @@ dependencies = [
  "itertools 0.12.0",
  "log",
  "smallvec",
- "wasmparser 0.212.0",
+ "wasmparser",
  "wasmtime-types",
 ]
 
@@ -7807,7 +7807,7 @@ dependencies = [
  "slog-term",
  "tokio",
  "tower",
- "wasmparser 0.201.0",
+ "wasmparser",
 ]
 
 [[package]]
@@ -7860,12 +7860,12 @@ dependencies = [
  "serde_bytes",
  "slog",
  "slog-term",
- "wasm-encoder 0.201.0",
- "wasmparser 0.201.0",
- "wasmprinter 0.2.54",
+ "wasm-encoder",
+ "wasmparser",
+ "wasmprinter",
  "wasmtime",
  "wasmtime-environ",
- "wast 53.0.0",
+ "wast",
  "wat",
 ]
 
@@ -7971,7 +7971,7 @@ dependencies = [
  "tokio",
  "tower",
  "tracing",
- "wasmparser 0.201.0",
+ "wasmparser",
  "wat",
 ]
 
@@ -8310,6 +8310,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-icp-rosetta-client"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "clap 4.4.6",
+ "hex",
+ "ic-agent",
+ "ic-icp-rosetta-runner",
+ "ic-ledger-test-utils",
+ "ic-rosetta-api",
+ "icp-ledger",
+ "num-bigint 0.4.6",
+ "pocket-ic",
+ "reqwest 0.12.5",
+ "rosetta-core",
+ "serde",
+ "tempfile",
+ "tokio",
+ "url",
+]
+
+[[package]]
+name = "ic-icp-rosetta-runner"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-ledger-test-utils",
+ "icp-ledger",
+ "icrc-ledger-types",
+ "pocket-ic",
+ "reqwest 0.12.5",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "ic-icrc-rosetta"
 version = "1.1.1"
 dependencies = [
@@ -8463,6 +8501,7 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-metrics-encoder",
+ "ic-rosetta-test-utils",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
@@ -8555,6 +8594,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-hash-of",
  "ic-metrics-encoder",
+ "ic-rosetta-test-utils",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "icrc-ledger-types",
@@ -8592,6 +8632,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-metrics-encoder",
  "ic-registry-subnet-type",
+ "ic-rosetta-test-utils",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
@@ -9248,6 +9289,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b5c7628eac357aecda461130f8074468be5aa4d258a002032d82d817f79f1f8"
 
 [[package]]
+name = "ic-nervous-system-agent"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-agent",
+ "ic-nns-constants",
+ "ic-sns-wasm",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "ic-nervous-system-clients"
 version = "0.0.1"
 dependencies = [
@@ -9359,8 +9413,10 @@ dependencies = [
  "dfn_core",
  "futures",
  "ic-nervous-system-common",
+ "ic-wasm",
  "icp-ledger",
  "icrc-ledger-types",
+ "libflate 2.0.0",
  "prometheus-parse",
 ]
 
@@ -9695,6 +9751,7 @@ dependencies = [
  "candid",
  "comparable",
  "ic-base-types",
+ "ic-crypto-sha2",
  "ic-nervous-system-clients",
  "ic-nervous-system-proto",
  "ic-nns-common",
@@ -9819,7 +9876,6 @@ dependencies = [
  "ic-nervous-system-runtime",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
  "ic-nns-handler-root-interface",
  "ic-nns-handler-root-protobuf-generator",
  "ic-nns-test-utils",
@@ -10021,10 +10077,10 @@ dependencies = [
  "ic-nervous-system-clients",
  "ic-nervous-system-common",
  "ic-nervous-system-common-test-keys",
+ "ic-nervous-system-common-test-utils",
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
  "ic-nns-governance-api",
  "ic-nns-governance-init",
  "ic-nns-gtc",
@@ -10058,7 +10114,7 @@ dependencies = [
  "registry-canister",
  "serde",
  "tokio",
- "walrus 0.19.0",
+ "walrus",
 ]
 
 [[package]]
@@ -11347,6 +11403,7 @@ dependencies = [
  "dfn_core",
  "ic-base-types",
  "ic-canister-client-sender",
+ "ic-canisters-http-types",
  "ic-crypto",
  "ic-crypto-sha2",
  "ic-icrc1",
@@ -11389,6 +11446,7 @@ dependencies = [
  "rand 0.8.5",
  "rust_decimal",
  "rust_decimal_macros",
+ "serde_bytes",
  "serde_yaml",
  "tokio",
  "wat",
@@ -11577,6 +11635,7 @@ dependencies = [
  "ic-metrics-encoder",
  "ic-nervous-system-clients",
  "ic-nervous-system-common",
+ "ic-nervous-system-common-test-utils",
  "ic-nervous-system-proto",
  "ic-nervous-system-runtime",
  "ic-nns-constants",
@@ -11598,7 +11657,6 @@ dependencies = [
  "ic-wasm",
  "icp-ledger",
  "icrc-ledger-types",
- "libflate 1.3.0",
  "maplit",
  "pretty_assertions",
  "prost",
@@ -11738,6 +11796,7 @@ dependencies = [
  "maplit",
  "proptest",
  "rand 0.8.5",
+ "rcgen",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -11795,6 +11854,7 @@ dependencies = [
  "ic-types",
  "ic-utils 0.9.0",
  "ic-utils-thread",
+ "ic-validate-eq",
  "ic-wasm-types",
  "maplit",
  "nix 0.24.3",
@@ -12200,7 +12260,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tower",
- "wasmprinter 0.2.54",
+ "wasmprinter",
  "wat",
 ]
 
@@ -12744,9 +12804,9 @@ dependencies = [
 
 [[package]]
 name = "ic-wasm"
-version = "0.7.2"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1f3f1ec63f08807d176691225de0b993e832b1fff71c631ed897df5888c7be4"
+checksum = "941376953c00628d8edae0adcad4b6e882c01cbfd5416d2ac2bc5fb709927737"
 dependencies = [
  "anyhow",
  "candid",
@@ -12756,16 +12816,16 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
- "walrus 0.20.3",
+ "walrus",
 ]
 
 [[package]]
 name = "ic-wasm-transform"
 version = "0.9.0"
 dependencies = [
- "wasm-encoder 0.201.0",
- "wasmparser 0.201.0",
- "wasmprinter 0.201.0",
+ "wasm-encoder",
+ "wasmparser",
+ "wasmprinter",
  "wat",
 ]
 
@@ -12827,6 +12887,7 @@ dependencies = [
  "crossbeam-channel",
  "hyper 1.4.1",
  "hyper-util",
+ "ic-async-utils",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
  "ic-interfaces-certified-stream-store",
@@ -12844,7 +12905,6 @@ dependencies = [
  "ic-test-utilities-metrics",
  "ic-test-utilities-types",
  "ic-types",
- "ic-xnet-hyper",
  "maplit",
  "prometheus",
  "prost",
@@ -12867,10 +12927,7 @@ dependencies = [
  "hyper-rustls 0.27.2",
  "hyper-util",
  "ic-crypto-tls-interfaces",
- "ic-crypto-utils-tls",
- "ic-interfaces-registry",
  "ic-xnet-uri",
- "socket2 0.5.7",
  "tokio",
  "tokio-rustls 0.26.0",
  "tower",
@@ -12886,7 +12943,6 @@ dependencies = [
  "http-body-util",
  "hyper 1.4.1",
  "hyper-util",
- "ic-async-utils",
  "ic-base-types",
  "ic-canonical-state",
  "ic-config",
@@ -14420,7 +14476,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-test-utils",
- "wasmprinter 0.2.54",
+ "wasmprinter",
 ]
 
 [[package]]
@@ -16247,6 +16303,7 @@ dependencies = [
  "ic-https-outcalls-service",
  "ic-interfaces",
  "ic-interfaces-adapter-client",
+ "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-logger",
  "ic-management-canister-types",
@@ -16256,6 +16313,7 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
+ "ic-registry-transport",
  "ic-replicated-state",
  "ic-starter",
  "ic-state-machine-tests",
@@ -16269,6 +16327,7 @@ dependencies = [
  "pocket-ic",
  "rand 0.8.5",
  "rcgen",
+ "registry-canister",
  "reqwest 0.12.5",
  "serde",
  "serde_cbor",
@@ -19199,6 +19258,7 @@ dependencies = [
  "futures",
  "ic-agent",
  "ic-base-types",
+ "ic-nervous-system-agent",
  "ic-nervous-system-clients",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
@@ -19876,9 +19936,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.39.2"
+version = "1.39.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "daa4fb1bc778bd6f04cbfc4bb2d06a7396a8f299dc33ea1900cedaa316f467b1"
+checksum = "9babc99b9923bfa4804bd74722ff02c0381021eafa4db9949217e3be8e84fff5"
 dependencies = [
  "backtrace",
  "bytes",
@@ -20803,23 +20863,9 @@ dependencies = [
 
 [[package]]
 name = "walrus"
-version = "0.19.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4eb08e48cde54c05f363d984bb54ce374f49e242def9468d2e1b6c2372d291f8"
-dependencies = [
- "anyhow",
- "id-arena",
- "leb128",
- "log",
- "walrus-macro",
- "wasmparser 0.77.0",
-]
-
-[[package]]
-name = "walrus"
-version = "0.20.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c03529cd0c4400a2449f640d2f27cd1b48c3065226d15e26d98e4429ab0adb7"
+checksum = "467611cafbc8a84834b77d2b4bb191fd2f5769752def8340407e924390c6883b"
 dependencies = [
  "anyhow",
  "gimli 0.26.2",
@@ -20827,8 +20873,8 @@ dependencies = [
  "leb128",
  "log",
  "walrus-macro",
- "wasm-encoder 0.29.0",
- "wasmparser 0.80.2",
+ "wasm-encoder",
+ "wasmparser",
 ]
 
 [[package]]
@@ -20965,48 +21011,12 @@ checksum = "ca6ad05a4870b2bf5fe995117d3728437bd27d7cd5f06f13c17443ef369775a1"
 
 [[package]]
 name = "wasm-encoder"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c3e4bc09095436c8e7584d86d33e6c3ee67045af8fb262cbb9cc321de553428"
-dependencies = [
- "leb128",
-]
-
-[[package]]
-name = "wasm-encoder"
-version = "0.25.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4eff853c4f09eec94d76af527eddad4e9de13b11d6286a1ef7134bc30135a2b7"
-dependencies = [
- "leb128",
-]
-
-[[package]]
-name = "wasm-encoder"
-version = "0.29.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18c41dbd92eaebf3612a39be316540b8377c871cb9bde6b064af962984912881"
-dependencies = [
- "leb128",
-]
-
-[[package]]
-name = "wasm-encoder"
-version = "0.201.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9c7d2731df60006819b013f64ccc2019691deccf6e11a1804bc850cd6748f1a"
-dependencies = [
- "leb128",
- "wasmparser 0.201.0",
-]
-
-[[package]]
-name = "wasm-encoder"
 version = "0.212.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "501940df4418b8929eb6d52f1aade1fdd15a5b86c92453cb696e3c906bd3fc33"
 dependencies = [
  "leb128",
+ "wasmparser",
 ]
 
 [[package]]
@@ -21020,39 +21030,6 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
-]
-
-[[package]]
-name = "wasmparser"
-version = "0.77.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b35c86d22e720a07d954ebbed772d01180501afe7d03d464f413bb5f8914a8d6"
-
-[[package]]
-name = "wasmparser"
-version = "0.80.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "449167e2832691a1bff24cde28d2804e90e09586a448c8e76984792c44334a6b"
-
-[[package]]
-name = "wasmparser"
-version = "0.102.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48134de3d7598219ab9eaf6b91b15d8e50d31da76b8519fe4ecfcec2cf35104b"
-dependencies = [
- "indexmap 1.9.2",
- "url",
-]
-
-[[package]]
-name = "wasmparser"
-version = "0.201.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84e5df6dba6c0d7fafc63a450f1738451ed7a0b52295d83e868218fa286bf708"
-dependencies = [
- "bitflags 2.6.0",
- "indexmap 2.2.6",
- "semver",
 ]
 
 [[package]]
@@ -21071,33 +21048,13 @@ dependencies = [
 
 [[package]]
 name = "wasmprinter"
-version = "0.2.54"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2dc17ae63836d010a2bf001c26a5fedbb9a05e5f71117fb63e0ab878bfbe1ca3"
-dependencies = [
- "anyhow",
- "wasmparser 0.102.0",
-]
-
-[[package]]
-name = "wasmprinter"
-version = "0.201.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a67e66da702706ba08729a78e3c0079085f6bfcb1a62e4799e97bbf728c2c265"
-dependencies = [
- "anyhow",
- "wasmparser 0.201.0",
-]
-
-[[package]]
-name = "wasmprinter"
 version = "0.212.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dfac65326cc561112af88c3028f6dfdb140acff67ede33a8e86be2dc6b8956f7"
 dependencies = [
  "anyhow",
  "termcolor",
- "wasmparser 0.212.0",
+ "wasmparser",
 ]
 
 [[package]]
@@ -21130,7 +21087,7 @@ dependencies = [
  "smallvec",
  "sptr",
  "target-lexicon",
- "wasmparser 0.212.0",
+ "wasmparser",
  "wasmtime-asm-macros",
  "wasmtime-component-macro",
  "wasmtime-cranelift",
@@ -21190,7 +21147,7 @@ dependencies = [
  "object 0.36.1",
  "target-lexicon",
  "thiserror",
- "wasmparser 0.212.0",
+ "wasmparser",
  "wasmtime-environ",
  "wasmtime-versioned-export-macros",
 ]
@@ -21212,9 +21169,9 @@ dependencies = [
  "serde",
  "serde_derive",
  "target-lexicon",
- "wasm-encoder 0.212.0",
- "wasmparser 0.212.0",
- "wasmprinter 0.212.0",
+ "wasm-encoder",
+ "wasmparser",
+ "wasmprinter",
  "wasmtime-types",
 ]
 
@@ -21247,7 +21204,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "smallvec",
- "wasmparser 0.212.0",
+ "wasmparser",
 ]
 
 [[package]]
@@ -21275,35 +21232,24 @@ dependencies = [
 
 [[package]]
 name = "wast"
-version = "53.0.0"
+version = "212.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8244fa24196b1d8fd3ca4a96a3a164c40f846498c5deab6caf414c67340ca4af"
+checksum = "4606a05fb0aae5d11dd7d8280a640d88a63ee019360ba9be552da3d294b8d1f5"
 dependencies = [
+ "bumpalo",
  "leb128",
  "memchr",
  "unicode-width",
- "wasm-encoder 0.23.0",
-]
-
-[[package]]
-name = "wast"
-version = "55.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4984d3e1406571f4930ba5cf79bd70f75f41d0e87e17506e0bd19b0e5d085f05"
-dependencies = [
- "leb128",
- "memchr",
- "unicode-width",
- "wasm-encoder 0.25.0",
+ "wasm-encoder",
 ]
 
 [[package]]
 name = "wat"
-version = "1.0.61"
+version = "1.212.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af2b53f4da14db05d32e70e9c617abdf6620c575bd5dd972b7400037b4df2091"
+checksum = "c74ca7f93f11a5d6eed8499f2a8daaad6e225cab0151bc25a091fff3b987532f"
 dependencies = [
- "wast 55.0.0",
+ "wast",
 ]
 
 [[package]]
@@ -21711,7 +21657,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "unicode-xid 0.2.4",
- "wasmparser 0.212.0",
+ "wasmparser",
 ]
 
 [[package]]
