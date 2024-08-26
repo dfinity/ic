@@ -1,5 +1,29 @@
 #!/bin/bash
 
+assert_that_a_prebuilt_nns_wasm_is_available() {
+    local CANISTER_TYPE=$1
+    local VERSION=$2
+
+    DOWNLOAD_NAME=$(_canister_download_name_for_nns_canister_type "$CANISTER_TYPE")
+    DOWNLOAD_URL="https://download.dfinity.systems/ic/${GIT_HASH}/canisters/${DOWNLOAD_NAME}.wasm.gz"
+    if ! curl "${DOWNLOAD_URL}" --head --fail --silent &>/dev/null; then
+        print_red "There is no pre-built NNS $CANISTER_TYPE WASM at commit $VERSION."
+        exit 1
+    fi
+}
+
+assert_that_a_prebuilt_sns_wasm_is_available() {
+    local CANISTER_TYPE=$1
+    local VERSION=$2
+
+    DOWNLOAD_NAME=$(_canister_download_name_for_sns_canister_type "$CANISTER_TYPE")
+    DOWNLOAD_URL="https://download.dfinity.systems/ic/${VERSION}/canisters/${DOWNLOAD_NAME}.wasm.gz"
+    if ! curl "${DOWNLOAD_URL}" --head --fail --silent &>/dev/null; then
+        print_red "There is no pre-built SNS $CANISTER_TYPE WASM at commit $VERSION."
+        exit 1
+    fi
+}
+
 download_sns_canister_wasm_gz_for_type() {
     local CANISTER_TYPE=$1
     local VERSION=$2
@@ -57,6 +81,8 @@ _canister_download_name_for_nns_canister_type() {
         echo "ledger-canister_notify-method"
     elif [ "$CANISTER_TYPE" == "icp-ledger-archive" ] || [ "$CANISTER_TYPE" == "icp-ledger-archive-1" ]; then
         echo "ledger-archive-node-canister"
+    elif [ "$CANISTER_TYPE" == "icp-index" ]; then
+        echo "ic-icp-index-canister"
     else
         echo "$CANISTER_TYPE"-canister
     fi

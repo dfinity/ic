@@ -18,9 +18,8 @@ ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-utils = { path = "../consensus/utils" }
 ic-constants = { path = "../constants" }
-ic-crypto-ecdsa-secp256k1 = { path = "../crypto/ecdsa_secp256k1" }
+ic-crypto-secp256k1 = { path = "../crypto/secp256k1" }
 ic-crypto-ed25519 = { path = "../crypto/ed25519" }
-ic-crypto-extended-bip32 = { path = "../crypto/extended_bip32" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
@@ -77,7 +76,6 @@ wat = "1.0.52"
 
 [dev-dependencies]
 ic-base-types = { path = "../types/base_types" }
-ic-crypto-utils-canister-threshold-sig = { path = "../crypto/utils/canister_threshold_sig" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 proptest = "1.0"

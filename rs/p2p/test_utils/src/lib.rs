@@ -1,7 +1,6 @@
 use axum::{http::Request, Router};
 use bytes::Bytes;
 use consensus::{TestConsensus, U64Artifact};
-use either::Either;
 use futures::{
     future::{join_all, BoxFuture},
     FutureExt,
@@ -19,7 +18,7 @@ use ic_protobuf::registry::{
     node::v1::{ConnectionEndpoint, NodeRecord},
     subnet::v1::SubnetRecord,
 };
-use ic_quic_transport::{ConnId, DummyUdpSocket, QuicTransport, SubnetTopology, Transport};
+use ic_quic_transport::{create_udp_socket, ConnId, QuicTransport, SubnetTopology, Transport};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_node_record_key;
 use ic_registry_local_registry::LocalRegistry;
@@ -211,7 +210,7 @@ pub fn fully_connected_localhost_subnet(
             registry_handler.registry_client.clone(),
             node,
             topology_watcher.clone(),
-            Either::Left::<_, DummyUdpSocket>(socket),
+            create_udp_socket(rt, socket),
             router,
         )) as Arc<_>;
         registry_handler.add_node(
@@ -454,7 +453,7 @@ pub fn start_consensus_manager(
     let pool = Arc::new(RwLock::new(processor));
     let (artifact_processor_jh, artifact_manager_event_rx, artifact_sender) =
         start_test_processor(pool.clone(), pool.clone().read().unwrap().clone());
-    let pfn_producer = Arc::new(pool.clone().read().unwrap().clone());
+    let bouncer_factory = Arc::new(pool.clone().read().unwrap().clone());
     let mut cm1 = ic_consensus_manager::ConsensusManagerBuilder::new(
         log.clone(),
         rt_handle.clone(),
@@ -464,7 +463,7 @@ pub fn start_consensus_manager(
         log,
         rt_handle,
         pool,
-        pfn_producer,
+        bouncer_factory,
         MetricsRegistry::default(),
     );
     cm1.add_client(artifact_manager_event_rx, artifact_sender, downloader);

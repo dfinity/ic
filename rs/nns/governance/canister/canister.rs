@@ -33,31 +33,35 @@ use ic_nns_common::{
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     decoder_config, encode_metrics,
-    governance::{
-        BitcoinNetwork, BitcoinSetConfigProposal, Environment, Governance, HeapGrowthPotential,
-        SubnetRentalProposalPayload, SubnetRentalRequest, TimeWarp,
-    },
+    governance::{Environment, Governance, HeapGrowthPotential, TimeWarp as GovTimeWarp},
     neuron_data_validation::NeuronDataValidationSummary,
     pb::{v1 as gov_pb, v1::Governance as InternalGovernanceProto},
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
 };
-use ic_nns_governance_api::pb::v1::{
-    claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
-    governance::{GovernanceCachedMetrics, Migrations},
-    governance_error::ErrorType,
-    manage_neuron::{
-        claim_or_refresh::{By, MemoAndController},
-        ClaimOrRefresh, Command, NeuronIdOrSubaccount, RegisterVote,
+#[cfg(feature = "test")]
+use ic_nns_governance_api::test_api::TimeWarp;
+use ic_nns_governance_api::{
+    bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
+    pb::v1::{
+        claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
+        governance::{GovernanceCachedMetrics, Migrations},
+        governance_error::ErrorType,
+        manage_neuron::{
+            claim_or_refresh::{By, MemoAndController},
+            ClaimOrRefresh, NeuronIdOrSubaccount, RegisterVote,
+        },
+        manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
+        ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
+        GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
+        ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProviderRewardsRequest,
+        ListNodeProviderRewardsResponse, ListNodeProvidersResponse, ListProposalInfo,
+        ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
+        ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo,
+        NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
+        SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
+        SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
     },
-    manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
-    ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
-    GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
-    ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProvidersResponse,
-    ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
-    MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo, NodeProvider, Proposal,
-    ProposalInfo, RestoreAgingSummary, RewardEvent, RewardNodeProvider, RewardNodeProviders,
-    SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
-    SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
+    subnet_rental::{SubnetRentalProposalPayload, SubnetRentalRequest},
 };
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
 use prost::Message;
@@ -156,7 +160,7 @@ fn set_governance(gov: Governance) {
 
 struct CanisterEnv {
     rng: ChaCha20Rng,
-    time_warp: TimeWarp,
+    time_warp: GovTimeWarp,
 }
 
 impl CanisterEnv {
@@ -182,7 +186,7 @@ impl CanisterEnv {
                 ChaCha20Rng::from_seed(seed)
             },
 
-            time_warp: TimeWarp { delta_s: 0 },
+            time_warp: GovTimeWarp { delta_s: 0 },
         }
     }
 }
@@ -198,7 +202,7 @@ impl Environment for CanisterEnv {
         )
     }
 
-    fn set_time_warp(&mut self, new_time_warp: TimeWarp) {
+    fn set_time_warp(&mut self, new_time_warp: GovTimeWarp) {
         self.time_warp = new_time_warp;
     }
 
@@ -395,7 +399,7 @@ fn set_time_warp() {
 
 #[cfg(feature = "test")]
 fn set_time_warp_(new_time_warp: TimeWarp) {
-    governance_mut().set_time_warp(new_time_warp);
+    governance_mut().set_time_warp(GovTimeWarp::from(new_time_warp));
 }
 
 /// DEPRECATED: Use manage_neuron directly instead.
@@ -405,9 +409,9 @@ fn vote() {
     over_async(
         candid,
         |(neuron_id, proposal_id, vote): (NeuronId, ProposalId, Vote)| async move {
-            manage_neuron_(ManageNeuron {
+            manage_neuron_(ManageNeuronRequest {
                 id: Some(NeuronIdProto::from(neuron_id)),
-                command: Some(Command::RegisterVote(RegisterVote {
+                command: Some(ManageNeuronCommandRequest::RegisterVote(RegisterVote {
                     proposal: Some(ProposalIdProto::from(proposal_id)),
                     vote: vote as i32,
                 })),
@@ -446,9 +450,9 @@ fn claim_or_refresh_neuron_from_account() {
 async fn claim_or_refresh_neuron_from_account_(
     claim_or_refresh: ClaimOrRefreshNeuronFromAccount,
 ) -> ClaimOrRefreshNeuronFromAccountResponse {
-    let manage_neuron_response = manage_neuron_(ManageNeuron {
+    let manage_neuron_response = manage_neuron_(ManageNeuronRequest {
         id: None,
-        command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+        command: Some(ManageNeuronCommandRequest::ClaimOrRefresh(ClaimOrRefresh {
             by: Some(By::MemoAndController(MemoAndController {
                 memo: claim_or_refresh.memo,
                 controller: claim_or_refresh.controller,
@@ -523,7 +527,7 @@ fn manage_neuron() {
 }
 
 #[candid_method(update, rename = "manage_neuron")]
-async fn manage_neuron_(manage_neuron: ManageNeuron) -> ManageNeuronResponse {
+async fn manage_neuron_(manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     let response = governance_mut()
         .manage_neuron(&caller(), &(gov_pb::ManageNeuron::from(manage_neuron)))
         .await;
@@ -555,7 +559,7 @@ fn simulate_manage_neuron() {
 }
 
 #[candid_method(update, rename = "simulate_manage_neuron")]
-fn simulate_manage_neuron_(manage_neuron: ManageNeuron) -> ManageNeuronResponse {
+fn simulate_manage_neuron_(manage_neuron: ManageNeuronRequest) -> ManageNeuronResponse {
     let response =
         governance().simulate_manage_neuron(&caller(), gov_pb::ManageNeuron::from(manage_neuron));
     ManageNeuronResponse::from(response)
@@ -721,17 +725,29 @@ fn get_monthly_node_provider_rewards() {
 }
 
 #[candid_method(update, rename = "get_monthly_node_provider_rewards")]
-async fn get_monthly_node_provider_rewards_() -> Result<RewardNodeProviders, GovernanceError> {
+async fn get_monthly_node_provider_rewards_() -> Result<MonthlyNodeProviderRewards, GovernanceError>
+{
     let rewards = governance_mut().get_monthly_node_provider_rewards().await?;
-    let rewards = rewards
-        .rewards
+    Ok(MonthlyNodeProviderRewards::from(rewards))
+}
+
+#[export_name = "canister_query list_node_provider_rewards"]
+fn list_node_provider_rewards() {
+    debug_log("list_node_provider_rewards");
+    over(candid_one, list_node_provider_rewards_)
+}
+
+#[candid_method(query, rename = "list_node_provider_rewards")]
+fn list_node_provider_rewards_(
+    req: ListNodeProviderRewardsRequest,
+) -> ListNodeProviderRewardsResponse {
+    let rewards = governance()
+        .list_node_provider_rewards(req.date_filter.map(|d| d.into()))
         .into_iter()
-        .map(RewardNodeProvider::from)
+        .map(MonthlyNodeProviderRewards::from)
         .collect();
-    Ok(RewardNodeProviders {
-        rewards,
-        use_registry_derived_rewards: Some(true),
-    })
+
+    ListNodeProviderRewardsResponse { rewards }
 }
 
 #[export_name = "canister_query list_known_neurons"]
@@ -1254,7 +1270,7 @@ fn test_set_time_warp() {
     let mut environment = CanisterEnv::new();
 
     let start = environment.now();
-    environment.set_time_warp(TimeWarp { delta_s: 1_000 });
+    environment.set_time_warp(GovTimeWarp { delta_s: 1_000 });
     let delta_s = environment.now() - start;
 
     assert!(delta_s >= 1000, "delta_s = {}", delta_s);

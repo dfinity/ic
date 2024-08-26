@@ -63,6 +63,7 @@ impl BatchPayloadSectionBuilder {
         proposal_context: &ProposalContext,
         max_size: NumBytes,
         past_payloads: &[(Height, Time, Payload)],
+        payload_priority: usize,
         metrics: &PayloadBuilderMetrics,
         logger: &ReplicaLogger,
     ) -> NumBytes {
@@ -162,6 +163,7 @@ impl BatchPayloadSectionBuilder {
                     proposal_context.validation_context,
                     &past_payloads,
                     max_size,
+                    payload_priority,
                 );
 
                 // As a safety measure, the payload is validated, before submitting it.
@@ -432,6 +434,7 @@ mod tests {
             &proposal_context,
             NumBytes::new(4 * 1024 * 1024),
             &[],
+            0,
             &metrics,
             &no_op_logger(),
         );
@@ -450,6 +453,7 @@ mod tests {
             &proposal_context,
             NumBytes::new(20_000),
             &[],
+            0,
             &metrics,
             &no_op_logger(),
         );

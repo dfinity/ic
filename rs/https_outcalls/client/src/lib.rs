@@ -21,15 +21,12 @@ use tokio::{net::UnixStream, sync::OnceCell};
 use tonic::transport::{Endpoint, Uri};
 use tower::service_fn;
 
-/// To support 100 req/s with a worst case request latency of 30s the queue size needs buffer 100 req/s * 30s = 3000 req.
-/// The worst case request latency used here should be equivalent to the request timeout in the adapter.
-const CANISTER_HTTP_CLIENT_CHANNEL_CAPACITY: usize = 3000;
-
 pub fn setup_canister_http_client(
     rt_handle: tokio::runtime::Handle,
     metrics_registry: &MetricsRegistry,
     adapter_config: AdaptersConfig,
     query_handler: QueryExecutionService,
+    max_canister_http_requests_in_flight: usize,
     log: ReplicaLogger,
     subnet_type: SubnetType,
     delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
@@ -72,7 +69,7 @@ pub fn setup_canister_http_client(
                         rt_handle,
                         channel,
                         query_handler,
-                        CANISTER_HTTP_CLIENT_CHANNEL_CAPACITY,
+                        max_canister_http_requests_in_flight,
                         metrics_registry.clone(),
                         subnet_type,
                         delegation_from_nns,

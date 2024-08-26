@@ -3,6 +3,7 @@ import json
 import logging
 import re
 import typing
+from html import unescape
 from pathlib import Path
 
 from model.dependency import Dependency
@@ -18,6 +19,7 @@ TRIVY_SCANNER_ID = "BAZEL_TRIVY_CS"
 RE_SHA256_HASH = re.compile(r"^[\da-fA-F]{64}$")
 RE_ROOTFS_FILE = re.compile(r"^/tmp/tmp\.\w+/tmp_rootfs/(.+)$")
 RE_VULNERABLE_DEPENDENCY_ID_REPLACEMENTS = [re.compile(r"^(?P<dependency_id>linux-modules-[^-]+).*$")]
+
 
 class TrivyResultParser(abc.ABC):
     """Base class for helper classes for converting different trivy results to findings."""
@@ -46,10 +48,16 @@ class TrivyResultParser(abc.ABC):
 
     @staticmethod
     def __score(vulnerability: typing.Dict[str, typing.Any]) -> int:
+        scores = []
         if "CVSS" in vulnerability:
             if "nvd" in vulnerability["CVSS"]:
                 if "V3Score" in vulnerability["CVSS"]["nvd"]:
-                    return round(vulnerability["CVSS"]["nvd"]["V3Score"])
+                    scores.append(round(vulnerability["CVSS"]["nvd"]["V3Score"]))
+            if "redhat" in vulnerability["CVSS"]:
+                if "V3Score" in vulnerability["CVSS"]["redhat"]:
+                    scores.append(round(vulnerability["CVSS"]["redhat"]["V3Score"]))
+        if len(scores) > 0:
+            return max(scores)
         return -1
 
     @staticmethod
@@ -89,7 +97,7 @@ class TrivyResultParser(abc.ABC):
                     Vulnerability(
                         id=vulnerability_id,
                         name=trivy_vulnerability["VulnerabilityID"],
-                        description=trivy_vulnerability["Title"] if "Title" in trivy_vulnerability else "n/a",
+                        description=unescape(trivy_vulnerability["Title"]) if "Title" in trivy_vulnerability else "n/a",
                         score=TrivyResultParser.__score(trivy_vulnerability),
                     )
                 )
@@ -324,7 +332,7 @@ class BazelTrivyContainer(DependencyManager):
         raise NotImplementedError
 
     def get_findings(
-        self, repository_name: str, project: Project, engine_version: typing.Optional[int]
+        self, repository_name: str, project: Project, engine_version: typing.Optional[str]
     ) -> typing.List[Finding]:
         path = self.root.parent / project.path
 

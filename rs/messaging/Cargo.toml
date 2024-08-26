@@ -63,6 +63,7 @@ ic-test-utilities-types = { path = "../test_utilities/types" }
 lazy_static = { workspace = true }
 maplit = "1.0.2"
 mockall = { workspace = true }
+pretty_assertions = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }

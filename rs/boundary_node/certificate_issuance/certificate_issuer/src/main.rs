@@ -429,6 +429,7 @@ async fn main() -> Result<(), Error> {
         (Some(id), Some(path)) => {
             let key =
                 std::fs::read_to_string(path).context("failed to open acme account key file")?;
+
             let acme_credentials: AccountCredentials = serde_json::from_str(&format!(
                 r#"{{
                     "id": "{acme_provider_url}/acme/acct/{id}",
@@ -442,25 +443,31 @@ async fn main() -> Result<(), Error> {
             ))?;
 
             Account::from_credentials(acme_credentials)
-                .context("failed to create acme account from credentials")
+                .await
+                .context("failed to create acme account from credentials")?
         }
-        (Some(_), None) | (None, Some(_)) => Err(anyhow!(
-            "must provide both acme_account_id and acme_account_key"
-        )),
+        (Some(_), None) | (None, Some(_)) => {
+            return Err(anyhow!(
+                "must provide both acme_account_id and acme_account_key"
+            ))
+        }
 
         // Create new ACME cccount
-        _ => Account::create(
-            &NewAccount {
-                contact: &[],
-                terms_of_service_agreed: true,
-                only_return_existing: false,
-            },
-            &acme_provider_url,
-            None,
-        )
-        .await
-        .context("failed to create acme account"),
-    }?;
+        _ => {
+            Account::create(
+                &NewAccount {
+                    contact: &[],
+                    terms_of_service_agreed: true,
+                    only_return_existing: false,
+                },
+                &acme_provider_url,
+                None,
+            )
+            .await
+            .context("failed to create acme account")?
+            .0
+        }
+    };
 
     let acme_client = Acme::new(acme_account);
 

@@ -4,8 +4,14 @@ use crate::{
     HttpError, ReplicaHealthStatus,
 };
 
-use axum::{extract::State, response::IntoResponse, Router};
+use axum::{
+    body::Body,
+    extract::State,
+    response::{IntoResponse, Response},
+    Router,
+};
 use crossbeam::atomic::AtomicCell;
+use http::Request;
 use hyper::StatusCode;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_interfaces_state_manager::StateReader;
@@ -17,12 +23,22 @@ use ic_types::{
     },
     CanisterId, PrincipalId,
 };
-use std::{convert::TryFrom, sync::Arc};
+use std::{
+    convert::{Infallible, TryFrom},
+    sync::Arc,
+};
 use tokio::sync::OnceCell;
+use tower::util::BoxCloneService;
 
 #[derive(Clone)]
 pub(crate) struct SubnetReadStateService {
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+}
+
+pub struct SubnetReadStateServiceBuilder {
+    health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 }
@@ -33,22 +49,43 @@ impl SubnetReadStateService {
     }
 }
 
-impl SubnetReadStateService {
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new_router(
-        health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
+impl SubnetReadStateServiceBuilder {
+    pub fn builder(
         delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    ) -> Router {
-        let state = Self {
-            health_status,
+    ) -> Self {
+        Self {
+            health_status: None,
             delegation_from_nns,
             state_reader,
+        }
+    }
+
+    pub fn with_health_status(
+        mut self,
+        health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
+    ) -> Self {
+        self.health_status = Some(health_status);
+        self
+    }
+
+    pub(crate) fn build_router(self) -> Router {
+        let state = SubnetReadStateService {
+            health_status: self
+                .health_status
+                .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
+            delegation_from_nns: self.delegation_from_nns,
+            state_reader: self.state_reader,
         };
         Router::new().route_service(
-            Self::route(),
+            SubnetReadStateService::route(),
             axum::routing::post(read_state_subnet).with_state(state),
         )
+    }
+
+    pub fn build_service(self) -> BoxCloneService<Request<Body>, Response, Infallible> {
+        let router = self.build_router();
+        BoxCloneService::new(router.into_service())
     }
 }
 

@@ -1,6 +1,10 @@
 # Darwin tests on runners from https://namespace.so
 name: test-namespace
-on: [push]
+on:
+  push:
+    branches:
+      - master
+  pull_request:
 
 # Ensure there's only one instance of this workflow for any PR/branch/tag, and
 # cancel the previous one if necessary; except on master where we want to build

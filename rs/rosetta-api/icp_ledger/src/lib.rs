@@ -454,9 +454,6 @@ pub struct LedgerCanisterUpgradePayload(pub LedgerCanisterPayload);
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct UpgradeArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub maximum_number_of_accounts: Option<usize>,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icrc1_minting_account: Option<Account>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -643,7 +640,6 @@ impl LedgerCanisterInitPayloadBuilder {
 }
 
 pub struct LedgerCanisterUpgradePayloadBuilder {
-    maximum_number_of_accounts: Option<usize>,
     icrc1_minting_account: Option<Account>,
     feature_flags: Option<FeatureFlags>,
 }
@@ -651,15 +647,9 @@ pub struct LedgerCanisterUpgradePayloadBuilder {
 impl LedgerCanisterUpgradePayloadBuilder {
     fn new() -> Self {
         Self {
-            maximum_number_of_accounts: None,
             icrc1_minting_account: None,
             feature_flags: None,
         }
-    }
-
-    pub fn maximum_number_of_accounts(mut self, maximum_number_of_accounts: usize) -> Self {
-        self.maximum_number_of_accounts = Some(maximum_number_of_accounts);
-        self
     }
 
     pub fn icrc1_minting_account(mut self, minting_account: Account) -> Self {
@@ -670,7 +660,6 @@ impl LedgerCanisterUpgradePayloadBuilder {
     pub fn build(self) -> Result<LedgerCanisterUpgradePayload, String> {
         Ok(LedgerCanisterUpgradePayload(
             LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
-                maximum_number_of_accounts: self.maximum_number_of_accounts,
                 icrc1_minting_account: self.icrc1_minting_account,
                 feature_flags: self.feature_flags,
             })),

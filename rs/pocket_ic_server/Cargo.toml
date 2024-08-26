@@ -6,21 +6,25 @@ edition = "2021"
 [dependencies]
 aide = { version = "^0.13.0", features = ["axum"] }
 askama = { workspace = true }
+async-trait = { workspace = true }
 axum = { workspace = true }
 axum-extra = { version = "^0.9", features = ["typed-header"] }
 axum-server = { version = "0.6.0", features = ["tls-rustls"] }
 backoff = { workspace = true }
 base64 = { workspace = true }
+bytes = { workspace = true }
 candid = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 flate2 = { workspace = true }
+form_urlencoded = "1"
+fqdn = "0.3.11"
 futures = { workspace = true }
 hex = { workspace = true }
+http = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
-hyper-legacy = { package = "hyper", version = "0.14.18", features = ["full"] }
-hyper-rustls = { version = "0.24.2", features = ["http2"] }
-hyper-socks2 = "^0.8.0"
+hyper-rustls = { workspace = true }
+hyper-socks2 = { workspace = true }
 hyper-util = { workspace = true }
 ic-agent = { workspace = true }
 ic-boundary = { path = "../boundary_node/ic_boundary" }
@@ -31,6 +35,7 @@ ic-crypto-ed25519 = { path = "../crypto/ed25519" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
+ic-http-gateway = { git = "https://github.com/dfinity/http-gateway", rev = "a1f63eb17b0a89f7fadcab67b3a0afe1720ef9b3" }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-https-outcalls-adapter = { path = "../https_outcalls/adapter" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
@@ -55,7 +60,6 @@ ic-types = { path = "../types/types" }
 ic-utils = { workspace = true }
 ic-utils-thread = { path = "../utils/thread" }
 ic-validator-ingress-message = { path = "../validator/ingress_message" }
-icx-proxy = { path = "../boundary_node/icx_proxy", features = ["dev_proxy"] }
 itertools = { workspace = true }
 pocket-ic = { path = "../../packages/pocket-ic" }
 rand = { workspace = true }
@@ -78,3 +82,4 @@ wat = "1.0.52"
 rcgen = { workspace = true }
 reqwest = { workspace = true }
 spec-compliance = { path = "../tests/testing_verification/spec_compliance" }
+slog = { workspace = true }

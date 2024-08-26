@@ -688,7 +688,7 @@ impl Default for SchedulerTestBuilder {
             idkg_keys: vec![],
             metrics_registry: MetricsRegistry::new(),
             round_summary: None,
-            canister_snapshot_flag: false,
+            canister_snapshot_flag: true,
         }
     }
 }

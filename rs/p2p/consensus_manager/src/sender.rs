@@ -12,10 +12,7 @@ use axum::http::Request;
 use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::{
-    artifact_manager::ArtifactProcessorEvent,
-    consensus::{ArtifactAssembler, ArtifactWithOpt},
-};
+use ic_interfaces::p2p::consensus::{ArtifactAssembler, ArtifactMutation, ArtifactWithOpt};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, Shutdown, Transport};
@@ -65,7 +62,7 @@ pub(crate) struct ConsensusManagerSender<Artifact: IdentifiableArtifact, WireArt
     metrics: ConsensusManagerMetrics,
     rt_handle: Handle,
     transport: Arc<dyn Transport>,
-    adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
+    adverts_to_send: Receiver<ArtifactMutation<Artifact>>,
     slot_manager: AvailableSlotSet,
     current_commit_id: CommitId,
     active_adverts: HashMap<Artifact::Id, (CancellationToken, AvailableSlot)>,
@@ -85,7 +82,7 @@ impl<
         metrics: ConsensusManagerMetrics,
         rt_handle: Handle,
         transport: Arc<dyn Transport>,
-        adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
+        adverts_to_send: Receiver<ArtifactMutation<Artifact>>,
         assembler: Assembler,
     ) -> Shutdown {
         let slot_manager = AvailableSlotSet::new(log.clone(), metrics.clone(), WireArtifact::NAME);
@@ -123,8 +120,8 @@ impl<
                 }
                 Some(advert) = self.adverts_to_send.recv() => {
                     match advert {
-                        ArtifactProcessorEvent::Artifact(new_artifact) => self.handle_send_advert(new_artifact, cancellation_token.clone()),
-                        ArtifactProcessorEvent::Purge(id) => self.handle_purge_advert(&id),
+                        ArtifactMutation::Insert(new_artifact) => self.handle_send_advert(new_artifact, cancellation_token.clone()),
+                        ArtifactMutation::Remove(id) => self.handle_purge_advert(&id),
                     }
 
                     self.current_commit_id.inc_assign();
@@ -182,7 +179,6 @@ impl<
         let id = new_artifact.artifact.id();
         let wire_artifact = self.assembler.disassemble_message(new_artifact.artifact);
         let wire_artifact_id = wire_artifact.id();
-        let wire_artifact_attribute = wire_artifact.attribute();
         let entry = self.active_adverts.entry(id.clone());
 
         if let Entry::Vacant(entry) = entry {
@@ -203,7 +199,6 @@ impl<
                     is_latency_sensitive: new_artifact.is_latency_sensitive,
                 },
                 wire_artifact_id,
-                wire_artifact_attribute,
                 child_token_clone,
             );
 
@@ -227,7 +222,6 @@ impl<
             is_latency_sensitive,
         }: ArtifactWithOpt<WireArtifact>,
         id: WireArtifact::Id,
-        attribute: WireArtifact::Attribute,
         cancellation_token: CancellationToken,
     ) {
         let pb_slot_update = pb::SlotUpdate {
@@ -240,10 +234,7 @@ impl<
                 {
                     pb::slot_update::Update::Artifact(pb_artifact.encode_to_vec())
                 } else {
-                    pb::slot_update::Update::Advert(pb::Advert {
-                        id: WireArtifact::PbId::proxy_encode(id),
-                        attribute: WireArtifact::PbAttribute::proxy_encode(attribute),
-                    })
+                    pb::slot_update::Update::Id(WireArtifact::PbId::proxy_encode(id))
                 }
             }),
         };
@@ -431,7 +422,6 @@ mod tests {
         async fn assemble_message<P: Peers + Send + 'static>(
             &self,
             _id: <U64Artifact as IdentifiableArtifact>::Id,
-            _attr: <U64Artifact as IdentifiableArtifact>::Attribute,
             _artifact: Option<(U64Artifact, NodeId)>,
             _peers: P,
         ) -> Result<(U64Artifact, NodeId), Aborted> {
@@ -467,7 +457,7 @@ mod tests {
                 IdentityAssembler,
             );
 
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -529,7 +519,7 @@ mod tests {
                 IdentityAssembler,
             );
 
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -588,7 +578,7 @@ mod tests {
                 IdentityAssembler,
             );
 
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -634,7 +624,7 @@ mod tests {
                 IdentityAssembler,
             );
             // Send advert and verify commit it.
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -643,7 +633,7 @@ mod tests {
             assert_eq!(commit_id_rx.recv().await.unwrap(), 0);
 
             // Send second advert and observe commit id bump.
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(2, 1024),
                 is_latency_sensitive: false,
             }))
@@ -651,8 +641,8 @@ mod tests {
             .unwrap();
             assert_eq!(commit_id_rx.recv().await.unwrap(), 1);
             // Send purge and new advert and observe commit id increase by 2.
-            tx.send(ArtifactProcessorEvent::Purge(2)).await.unwrap();
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactMutation::Remove(2)).await.unwrap();
+            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(3, 1024),
                 is_latency_sensitive: false,
             }))
@@ -698,7 +688,7 @@ mod tests {
             );
 
             // Send advert and verify commit id.
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -707,7 +697,7 @@ mod tests {
             assert_eq!(commit_id_rx.recv().await.unwrap(), 0);
 
             // Send same advert again. This should be noop.
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -715,7 +705,7 @@ mod tests {
             .unwrap();
 
             // Check that new advert is advertised with correct commit id.
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(2, 1024),
                 is_latency_sensitive: false,
             }))
@@ -764,7 +754,7 @@ mod tests {
                 IdentityAssembler,
             );
 
-        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+        tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
             artifact: U64Artifact::id_to_msg(1, 1024),
             is_latency_sensitive: false,
         }))

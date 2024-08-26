@@ -103,6 +103,7 @@ fn take_canister_snapshot_request_rejected_because_feature_is_disabled() {
         .with_own_subnet_id(own_subnet)
         .with_manual_execution()
         .with_caller(own_subnet, caller_canister)
+        .with_snapshots(FlagStatus::Disabled)
         .build();
 
     // Inject a take_canister_snapshot request.

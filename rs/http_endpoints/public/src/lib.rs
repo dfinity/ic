@@ -14,7 +14,6 @@ mod pprof;
 mod query;
 mod read_state;
 mod status;
-mod threads;
 mod tracing_flamegraph;
 
 cfg_if::cfg_if! {
@@ -31,6 +30,7 @@ pub use call::{
 pub use common::cors_layer;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
+pub use read_state::subnet::SubnetReadStateServiceBuilder;
 
 use crate::{
     catch_up_package::CatchUpPackageService,
@@ -46,7 +46,6 @@ use crate::{
         STATUS_SUCCESS,
     },
     pprof::{PprofFlamegraphService, PprofHomeService, PprofProfileService},
-    read_state::subnet::SubnetReadStateService,
     status::StatusService,
     tracing_flamegraph::TracingFlamegraphService,
 };
@@ -308,14 +307,13 @@ pub fn start_server(
     let listen_addr = config.listen_addr;
     info!(log, "Starting HTTP server...");
 
-    let _enter = rt_handle.enter();
     // TODO(OR4-60): temporarily listen on [::] so that we accept both IPv4 and
     // IPv6 connections. This requires net.ipv6.bindv6only = 0. Revert this once
     // we have rolled out IPv6 in prometheus and ic_p8s_service_discovery.
     let mut addr = "[::]:8080".parse::<SocketAddr>().unwrap();
     addr.set_port(listen_addr.port());
-    let tcp_listener = start_tcp_listener(addr);
-
+    let tcp_listener = start_tcp_listener(addr, &rt_handle);
+    let _enter = rt_handle.enter();
     if !AtomicCell::<ReplicaHealthStatus>::is_lock_free() {
         error!(log, "Replica health status uses locks instead of atomics.");
     }
@@ -326,6 +324,7 @@ pub fn start_server(
     let ingress_filter = Arc::new(Mutex::new(ingress_filter));
 
     let call_handler = IngressValidatorBuilder::builder(
+        log.clone(),
         node_id,
         subnet_id,
         registry_client.clone(),
@@ -334,11 +333,9 @@ pub fn start_server(
         ingress_throttler.clone(),
         ingress_tx.clone(),
     )
-    .with_logger(log.clone())
     .with_malicious_flags(malicious_flags.clone())
     .build();
 
-    let call_router = call::CallServiceV2::new_router(call_handler.clone());
     let (ingress_watcher_handle, _) = IngressWatcher::start(
         rt_handle.clone(),
         log.clone(),
@@ -347,6 +344,9 @@ pub fn start_server(
         completed_execution_messages_rx,
         CancellationToken::new(),
     );
+
+    let call_router =
+        call::CallServiceV2::new_router(call_handler.clone(), Some(ingress_watcher_handle.clone()));
 
     let call_v3_router = call::CallServiceV3::new_router(
         call_handler,
@@ -358,6 +358,7 @@ pub fn start_server(
     );
 
     let query_router = QueryServiceBuilder::builder(
+        log.clone(),
         node_id,
         query_signer,
         registry_client.clone(),
@@ -365,27 +366,25 @@ pub fn start_server(
         delegation_from_nns.clone(),
         query_execution_service,
     )
-    .with_logger(log.clone())
     .with_health_status(health_status.clone())
     .with_malicious_flags(malicious_flags.clone())
     .build_router();
 
     let canister_read_state_router = CanisterReadStateServiceBuilder::builder(
+        log.clone(),
         state_reader.clone(),
         registry_client.clone(),
         ingress_verifier,
         delegation_from_nns.clone(),
     )
-    .with_logger(log.clone())
     .with_health_status(health_status.clone())
     .with_malicious_flags(malicious_flags)
     .build_router();
 
-    let subnet_read_state_router = SubnetReadStateService::new_router(
-        Arc::clone(&health_status),
-        Arc::clone(&delegation_from_nns),
-        state_reader.clone(),
-    );
+    let subnet_read_state_router =
+        SubnetReadStateServiceBuilder::builder(delegation_from_nns.clone(), state_reader.clone())
+            .with_health_status(health_status.clone())
+            .build_router();
     let status_router = StatusService::build_router(
         log.clone(),
         nns_subnet_id,
@@ -1092,6 +1091,7 @@ async fn get_random_node_from_nns_subnet(
 
 #[cfg(test)]
 mod tests {
+    use crate::read_state::subnet::SubnetReadStateService;
     use bytes::Bytes;
     use futures_util::{future::select_all, stream::pending, FutureExt};
     use http::{

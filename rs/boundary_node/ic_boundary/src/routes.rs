@@ -122,6 +122,12 @@ pub enum RequestType {
     ReadStateSubnet,
 }
 
+impl RequestType {
+    pub fn is_call(&self) -> bool {
+        matches!(self, Self::Call | Self::CallV3)
+    }
+}
+
 #[derive(Debug, Clone, Display)]
 #[strum(serialize_all = "snake_case")]
 pub enum RateLimitCause {
@@ -671,14 +677,13 @@ pub async fn lookup_subnet(
     mut request: Request<Body>,
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let subnet: Arc<RouteSubnet> =
-        if let Some(canister_id) = request.extensions().get::<CanisterId>() {
-            lk.lookup_subnet_by_canister_id(canister_id)?
-        } else if let Some(subnet_id) = request.extensions().get::<SubnetId>() {
-            lk.lookup_subnet_by_id(subnet_id)?
-        } else {
-            panic!("canister_id and subnet_id can't be both empty for a request")
-        };
+    let subnet = if let Some(canister_id) = request.extensions().get::<CanisterId>() {
+        lk.lookup_subnet_by_canister_id(canister_id)?
+    } else if let Some(subnet_id) = request.extensions().get::<SubnetId>() {
+        lk.lookup_subnet_by_id(subnet_id)?
+    } else {
+        panic!("canister_id and subnet_id can't be both empty for a request")
+    };
 
     // Inject subnet into request
     request.extensions_mut().insert(Arc::clone(&subnet));

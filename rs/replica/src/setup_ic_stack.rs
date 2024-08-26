@@ -190,6 +190,8 @@ pub fn construct_ic_stack(
 
     let (completed_execution_messages_tx, finalized_ingress_height_rx) =
         channel(COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE);
+    let max_canister_http_requests_in_flight =
+        config.hypervisor.max_canister_http_requests_in_flight;
 
     let execution_services = ExecutionServices::setup_execution(
         log.clone(),
@@ -282,6 +284,7 @@ pub fn construct_ic_stack(
         metrics_registry,
         config.adapters_config,
         execution_services.query_execution_service.clone(),
+        max_canister_http_requests_in_flight,
         log.clone(),
         subnet_type,
         delegation_from_nns.clone(),

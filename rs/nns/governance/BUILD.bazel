@@ -233,7 +233,6 @@ rust_canister(
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/governance.did"],
-    opt = "z",  # TODO: undo once dfx-extensions do not ungzip canister modules
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance.did",
     deps = DEPENDENCIES + [
@@ -248,7 +247,6 @@ rust_canister(
     aliases = ALIASES,
     compile_data = ["canister/governance_test.did"],
     crate_features = ["test"],
-    opt = "z",  # TODO: undo once dfx-extensions do not ungzip canister modules
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance_test.did",
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [

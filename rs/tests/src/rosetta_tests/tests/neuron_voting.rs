@@ -9,7 +9,10 @@ use crate::rosetta_tests::{
 };
 use ic_agent::Identity;
 use ic_nns_common::pb::v1::ProposalId;
-use ic_nns_governance_api::pb::v1::{neuron::DissolveState, proposal, Motion, Neuron, Proposal};
+use ic_nns_governance_api::pb::v1::{
+    neuron::DissolveState, proposal::Action, MakeProposalRequest, Motion, Neuron, Proposal,
+    ProposalActionRequest,
+};
 use ic_rosetta_api::{
     convert::neuron_subaccount_bytes_from_public_key,
     ledger_client::proposal_info_response::ProposalInfoResponse,
@@ -67,10 +70,10 @@ pub fn test(env: TestEnv) {
     let neuron3 = neurons.create(neuron_setup);
     let neurons = neurons.get_neurons();
 
-    let proposal = Proposal {
+    let proposal = MakeProposalRequest {
         title: Some("dummy title".to_string()),
         summary: "test".to_string(),
-        action: Some(proposal::Action::Motion(Motion {
+        action: Some(ProposalActionRequest::Motion(Motion {
             motion_text: "dummy text".to_string(),
         })),
         ..Default::default()
@@ -93,7 +96,16 @@ pub fn test(env: TestEnv) {
         );
         let proposal_info =
             ProposalInfoResponse::try_from(Some(proposal_info_response.result)).unwrap();
-        assert_eq!(proposal_info.0.proposal.unwrap(), proposal);
+
+        let expected_proposal = Proposal {
+            title: Some("dummy title".to_string()),
+            summary: "test".to_string(),
+            action: Some(Action::Motion(Motion {
+                motion_text: "dummy text".to_string(),
+            })),
+            ..Default::default()
+        };
+        assert_eq!(proposal_info.0.proposal.unwrap(), expected_proposal);
         info!(_logger, "Test Register Vote with Vote: Yes");
         test_register_proposal(&client, &neuron2, &first_proposal, &1).await;
         info!(_logger, "Test Register Vote with Vote: No");
@@ -110,7 +122,7 @@ pub fn test(env: TestEnv) {
         );
 
         // Number of pending proposals should be 2 since the first proposal was already voted for
-        assert_eq!(pending_proposals, vec![proposal.clone(); 2]);
+        assert_eq!(pending_proposals, vec![expected_proposal.clone(); 2]);
 
         // Vote on one the second proposal
         test_register_proposal(&client, &neuron2, &second_proposal, &1).await;
@@ -118,7 +130,7 @@ pub fn test(env: TestEnv) {
 
         // Now it should be 1 proposal
         let pending_proposals = client.get_pending_proposals().await.unwrap();
-        assert_eq!(pending_proposals, vec![proposal.clone(); 1]);
+        assert_eq!(pending_proposals, vec![expected_proposal.clone(); 1]);
 
         // Vote on third and last proposal
         test_register_proposal(&client, &neuron2, &third_proposal, &1).await;

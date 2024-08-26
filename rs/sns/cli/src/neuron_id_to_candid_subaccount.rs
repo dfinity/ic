@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use anyhow::{anyhow, Result};
 use candid::IDLValue;
 use clap::Parser;
 use ic_sns_governance::pb::v1::NeuronId;
@@ -27,12 +28,12 @@ pub struct NeuronIdToCandidSubaccountArgs {
     pub escaped: bool,
 }
 
-pub fn neuron_id_to_subaccount(args: NeuronIdToCandidSubaccountArgs) -> Result<String, String> {
+pub fn neuron_id_to_subaccount(args: NeuronIdToCandidSubaccountArgs) -> Result<String> {
     let subaccount = args
         .neuron_id
         .0
         .subaccount()
-        .map_err(|e| e.error_message)?
+        .map_err(|e| anyhow!(e.error_message))?
         .to_vec();
 
     // We'll convert it to a candid string.
@@ -47,8 +48,9 @@ pub fn neuron_id_to_subaccount(args: NeuronIdToCandidSubaccountArgs) -> Result<S
     }
 }
 
-pub fn exec(args: NeuronIdToCandidSubaccountArgs) {
-    println!("{}", neuron_id_to_subaccount(args).unwrap());
+pub fn exec(args: NeuronIdToCandidSubaccountArgs) -> Result<()> {
+    println!("{}", neuron_id_to_subaccount(args)?);
+    Ok(())
 }
 
 #[test]
@@ -101,5 +103,7 @@ fn test_neuron_id_to_subaccount_fail() {
     };
     let error = neuron_id_to_subaccount(args).unwrap_err();
 
-    assert!(error.contains("could not convert slice to array"));
+    assert!(error
+        .to_string()
+        .contains("could not convert slice to array"));
 }
