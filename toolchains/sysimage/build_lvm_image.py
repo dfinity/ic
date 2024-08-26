@@ -14,6 +14,7 @@ import os
 import subprocess
 import sys
 import tarfile
+import tempfile
 
 from crc import INITIAL_CRC, calc_crc
 
@@ -174,32 +175,32 @@ def select_partition_file(name, partition_files):
 
 
 def write_partition_image_from_tzst(lvm_entry, image_file, partition_tzst):
-    tmpdir = os.getenv("ICOS_TEMP_DIR")
-    if not tmpdir:
+    base_temp_dir = os.getenv("ICOS_TEMP_DIR")
+    if not base_temp_dir:
         raise RuntimeError("ICOS_TEMP_DIR env variable not available, should be set in BUILD script.")
+    with tempfile.TemporaryDirectory(dir=base_temp_dir) as tmpdir:
+        partition_tf = os.path.join(tmpdir, "partition.tar")
+        subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)
 
-    partition_tf = os.path.join(tmpdir, "partition.tar")
-    subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)
-
-    partition_tf = tarfile.open(partition_tf, mode="r:")
-    base = LVM_HEADER_SIZE_BYTES + (lvm_entry["start"] * EXTENT_SIZE_BYTES)
-    with os.fdopen(os.open(image_file, os.O_RDWR), "wb+") as target:
-        for member in partition_tf:
-            if member.path != "partition.img":
-                continue
-            if member.size > lvm_entry["size"] * EXTENT_SIZE_BYTES:
-                raise RuntimeError("Image too large for partition %s" % lvm_entry["name"])
-            source = partition_tf.extractfile(member)
-            if member.type == tarfile.GNUTYPE_SPARSE:
-                for offset, size in member.sparse:
-                    if size == 0:
-                        continue
-                    source.seek(offset)
-                    target.seek(offset + base)
-                    _copyfile(source, target, size)
-            else:
-                target.seek(base)
-                _copyfile(source, target, member.size)
+        partition_tf = tarfile.open(partition_tf, mode="r:")
+        base = LVM_HEADER_SIZE_BYTES + (lvm_entry["start"] * EXTENT_SIZE_BYTES)
+        with os.fdopen(os.open(image_file, os.O_RDWR), "wb+") as target:
+            for member in partition_tf:
+                if member.path != "partition.img":
+                    continue
+                if member.size > lvm_entry["size"] * EXTENT_SIZE_BYTES:
+                    raise RuntimeError("Image too large for partition %s" % lvm_entry["name"])
+                source = partition_tf.extractfile(member)
+                if member.type == tarfile.GNUTYPE_SPARSE:
+                    for offset, size in member.sparse:
+                        if size == 0:
+                            continue
+                        source.seek(offset)
+                        target.seek(offset + base)
+                        _copyfile(source, target, size)
+                else:
+                    target.seek(base)
+                    _copyfile(source, target, member.size)
 
 
 def _copyfile(source, target, size):
