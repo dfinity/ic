@@ -31,8 +31,9 @@ struct Cli {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let temp_dir = PathBuf::from(env::var("ICOS_TEMP_DIR")
-        .context("ICOS_TEMP_DIR should be set in BUILD script.")?);
+    let temp_dir = PathBuf::from(
+        env::var("ICOS_TEMP_DIR").context("ICOS_TEMP_DIR should be set in BUILD script.")?,
+    );
     let temp_file = temp_dir.join("partition.img");
 
     // TODO: Quick hack to unpack and repack file
