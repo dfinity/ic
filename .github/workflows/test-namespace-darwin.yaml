@@ -4,7 +4,9 @@ on:
   push:
     branches:
       - master
+      - 'dev-gh-*' # used by developers to trigger CI runs without having to open a PR
   pull_request:
+  merge_group:
 
 # Ensure there's only one instance of this workflow for any PR/branch/tag, and
 # cancel the previous one if necessary; except on master where we want to build
@@ -14,20 +16,19 @@ concurrency:
   cancel-in-progress: ${{ github.ref_name != 'master' }}
 
 jobs:
-  test-namespace:
+  bazel-test-macos-arm64:
+    name: Bazel Test Darwin arm64 [Namespace]
+    timeout-minutes: 120
     runs-on: namespace-profile-darwin-small-cache # profile created in namespace console
     steps:
-
       - name: Install nsc
         run: |
           # A recent version is required for `nsc bazel cache setup`
           curl -fsSL https://get.namespace.so/cloud/install.sh | sh -s -- --version 0.0.386
-
       - name: Set up Bazel cache
         run: |
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
-
       - uses: actions/checkout@v4
 
       # Build and test, excluding 'upload' jobs that are not required on macOS (used in reproducibility tests)

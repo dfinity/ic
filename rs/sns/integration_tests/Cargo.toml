@@ -80,4 +80,4 @@ pretty_assertions = { workspace = true }
 rust_decimal = "1.25"
 rust_decimal_macros = "1.25"
 tokio = { workspace = true }
-wat = "1.0.52"
+wat = { workspace = true }

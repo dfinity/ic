@@ -29,4 +29,4 @@ ic-wasm-types = { path = "../../../types/wasm_types" }
 lazy_static = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-wat = "1.0.52"
+wat = { workspace = true }
