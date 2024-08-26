@@ -610,7 +610,7 @@ impl NnsFunction {
             }
             NnsFunction::RecoverSubnet => (REGISTRY_CANISTER_ID, "recover_subnet"),
             NnsFunction::ReviseElectedGuestosVersions => {
-                (REGISTRY_CANISTER_ID, "revise_elected_replica_versions")
+                (REGISTRY_CANISTER_ID, "revise_elected_guestos_versions")
             }
             NnsFunction::UpdateNodeOperatorConfig => {
                 (REGISTRY_CANISTER_ID, "update_node_operator_config")
@@ -637,12 +637,10 @@ impl NnsFunction {
                 ));
             }
             NnsFunction::ReviseElectedHostosVersions => {
-                // TODO[NNS1-3000]: Rename Registry API ednpoints callable only by NNS Governance.
-                (REGISTRY_CANISTER_ID, "update_elected_hostos_versions")
+                (REGISTRY_CANISTER_ID, "revise_elected_hostos_versions")
             }
             NnsFunction::DeployHostosToSomeNodes => {
-                // TODO[NNS1-3000]: Rename Registry API ednpoints callable only by NNS Governance.
-                (REGISTRY_CANISTER_ID, "update_nodes_hostos_version")
+                (REGISTRY_CANISTER_ID, "deploy_hostos_to_some_nodes")
             }
             NnsFunction::UpdateConfigOfSubnet => (REGISTRY_CANISTER_ID, "update_subnet"),
             NnsFunction::IcpXdrConversionRate => {
@@ -716,10 +714,10 @@ impl NnsFunction {
                     ),
                 ));
             }
-            NnsFunction::DeployGuestosToSomeApiBoundaryNodes => {
-                // TODO[NNS1-3000]: Rename Registry API for consistency.
-                (REGISTRY_CANISTER_ID, "update_api_boundary_nodes_version")
-            }
+            NnsFunction::DeployGuestosToSomeApiBoundaryNodes => (
+                REGISTRY_CANISTER_ID,
+                "deploy_guestos_to_some_api_boundary_nodes",
+            ),
             NnsFunction::DeployGuestosToAllUnassignedNodes => (
                 REGISTRY_CANISTER_ID,
                 "deploy_guestos_to_all_unassigned_nodes",
@@ -997,11 +995,6 @@ impl Action {
                     execute_nns_function.payload.clear();
                 }
                 Action::ExecuteNnsFunction(execute_nns_function)
-            }
-            Action::InstallCode(mut install_code) => {
-                install_code.wasm_module = None;
-                install_code.arg = None;
-                Action::InstallCode(install_code)
             }
             action => action,
         }
@@ -3698,11 +3691,7 @@ impl Governance {
         let proposal = if multi_query {
             if let Some(
                 proposal @ Proposal {
-                    action:
-                        Some(
-                            proposal::Action::ExecuteNnsFunction(_)
-                            | proposal::Action::InstallCode(_),
-                        ),
+                    action: Some(proposal::Action::ExecuteNnsFunction(_)),
                     ..
                 },
             ) = data.proposal.clone()
