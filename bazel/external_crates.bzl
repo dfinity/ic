@@ -62,6 +62,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 "opt-level=3",
             ],
         )],
+        "secp256k1-sys 0.10.0": [crate.annotation(
+            rustc_flags = ["--cfg=rust_secp_no_symbol_renaming"],
+        )],
         "sha2": [crate.annotation(
             rustc_flags = [
                 "-C",
@@ -236,8 +239,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "bitcoin-0-32": crate.spec(
                 package = "bitcoin",
-                git = "https://github.com/ninegua/rust-bitcoin",
-                rev = "f1e732c9afe38caae7275fd38864dd44a2542988",
+                version = "^0.32.2",
                 default_features = False,
             ),
             "bitcoin": crate.spec(
