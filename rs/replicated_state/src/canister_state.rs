@@ -325,18 +325,11 @@ impl CanisterState {
     }
 
     /// Inducts messages from the output queue to `self` into the input queue
-    /// from `self` while respecting queue capacity and subnet available memory.
+    /// from `self` while respecting queue capacity and subnet's available
+    /// guaranteed response memory.
     ///
-    /// `max_canister_memory_size` is the replica's configured maximum canister
-    /// memory usage. The specific canister may have an explicit memory
-    /// allocation, which would override this maximum. Based on the canister's
-    /// specific memory limit we compute the canister's available memory and
-    /// pass that to `SystemState::induct_messages_to_self()` (which doesn't
-    /// have all the data necessary to compute it itself).
-    ///
-    /// `subnet_available_memory` (the subnet's available guaranteed response
-    /// message memory) is updated to reflect the change in memory usage due to
-    /// inducting the messages.
+    /// `subnet_available_memory` is updated to reflect the change in memory usage
+    /// due to inducting any guaranteed response messages.
     pub fn induct_messages_to_self(
         &mut self,
         subnet_available_memory: &mut i64,
