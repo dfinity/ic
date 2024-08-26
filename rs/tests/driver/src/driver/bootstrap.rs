@@ -45,7 +45,7 @@ use std::{
     path::PathBuf,
     process,
     process::Command,
-    thread::{self, JoinHandle},
+    thread::{self, JoinHandle, ScopedJoinHandle},
 };
 use url::Url;
 use zstd::stream::write::Encoder;
@@ -529,42 +529,40 @@ pub fn setup_nested_vms(
     nns_url: &Url,
     nns_public_key: &str,
 ) -> anyhow::Result<()> {
-    let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
-    for node in nodes {
-        let t_farm = farm.to_owned();
-        let t_env = env.to_owned();
-        let t_group_name = group_name.to_owned();
-        let t_vm_name = node.name.to_owned();
-        let t_nns_url = nns_url.to_owned();
-        let t_nns_public_key = nns_public_key.to_owned();
-        join_handles.push(thread::spawn(move || {
-            let configured_image =
-                configure_setupos_image(&t_env, &t_vm_name, &t_nns_url, &t_nns_public_key)?;
-
-            let configured_image_spec = AttachImageSpec::new(t_farm.upload_file(
-                &t_group_name,
-                configured_image,
-                NESTED_CONFIGURED_IMAGE_PATH,
-            )?);
-            t_farm.attach_disk_images(
-                &t_group_name,
-                &t_vm_name,
-                "usb-storage",
-                vec![configured_image_spec],
-            )?;
-
-            Ok(())
-        }));
-    }
-
     let mut result = Ok(());
-    // Wait for all threads to finish and return an error if any of them fails.
-    for jh in join_handles {
-        if let Err(e) = jh.join().expect("waiting for a thread failed") {
-            warn!(farm.logger, "setting up VM failed with: {:?}", e);
-            result = Err(anyhow::anyhow!("failed to set up a VM pool"));
+
+    thread::scope(|s| {
+        let mut join_handles: Vec<ScopedJoinHandle<anyhow::Result<()>>> = vec![];
+        for node in nodes {
+            join_handles.push(s.spawn(|| {
+                let vm_name = &node.name;
+                let configured_image =
+                    configure_setupos_image(&env, &vm_name, &nns_url, &nns_public_key)?;
+
+                let configured_image_spec = AttachImageSpec::new(farm.upload_file(
+                    &group_name,
+                    configured_image,
+                    NESTED_CONFIGURED_IMAGE_PATH,
+                )?);
+                farm.attach_disk_images(
+                    &group_name,
+                    &vm_name,
+                    "usb-storage",
+                    vec![configured_image_spec],
+                )?;
+
+                Ok(())
+            }));
         }
-    }
+
+        // Wait for all threads to finish and return an error if any of them fails.
+        for jh in join_handles {
+            if let Err(e) = jh.join().expect("waiting for a thread failed") {
+                warn!(farm.logger, "setting up VM failed with: {:?}", e);
+                result = Err(anyhow::anyhow!("failed to set up a VM pool"));
+            }
+        }
+    });
 
     result
 }
