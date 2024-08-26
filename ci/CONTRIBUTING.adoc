@@ -4,7 +4,7 @@
 
 ### File structure
 
-All GitLab YML config files should live inside `gitlab-ci/config` directory; with the exception of the root `.gitlab-ci.yml` at the root of the repository
+All GitLab YML config files should live inside `ci/config` directory; with the exception of the root `.gitlab-ci.yml` at the root of the repository
 
 The file name structure follows:
 ```

@@ -43,7 +43,7 @@ anchors:
     name: Before script
     id: before-script
     shell: bash
-    run: ./gitlab-ci/src/ci-scripts/before-script.sh
+    run: ./ci/src/ci-scripts/before-script.sh
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
@@ -111,7 +111,7 @@ jobs:
       - name: Run Lock Generate
         id: lock-generate
         if: steps.filter.outputs.lock-generate == 'true'
-        run: ./gitlab-ci/src/ci-scripts/lock-generate.sh
+        run: ./ci/src/ci-scripts/lock-generate.sh
 
   pre-commit:
     name: Pre Commit Test
@@ -123,7 +123,7 @@ jobs:
       - name: Pre-Commit
         id: pre-commit
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/pre-commit.sh
+        run: ./ci/src/ci-scripts/pre-commit.sh
 
   dependencies-check:
     name: Dependency Scan for PR
@@ -156,6 +156,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
-          cd gitlab-ci/src/dependencies/
+          export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
+          cd ci/src/dependencies/
           $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py

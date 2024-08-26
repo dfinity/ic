@@ -67,7 +67,7 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: ./ci/src/ci-scripts/before-script.sh
 
       - name: Set KUBECONFIG
         shell: bash

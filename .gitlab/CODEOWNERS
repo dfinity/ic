@@ -69,14 +69,14 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /.gitlab-ci.yml                                                         @dfinity-lab/teams/idx
 /.gitlab/                                                               @dfinity-lab/teams/idx
 /.gitlab/CODEOWNERS                                                     @dfinity-lab/teams/owners-owners
-/gitlab-ci/                                                             @dfinity-lab/teams/idx
-/gitlab-ci/src/std-fs-check/                                            @dfinity-lab/teams/node-team
-/gitlab-ci/src/dependencies/                                            @dfinity-lab/teams/prodsec
-/gitlab-ci/config/dependencies.yml                                      @dfinity-lab/teams/prodsec
-/gitlab-ci/src/gen_gitlab_cargo_pipeline/farm_rate_limit.py             @dfinity-lab/teams/idx
-/gitlab-ci/config/child-pipeline--benchmark.yml                         @dfinity-lab/teams/runtime-owners
-/gitlab-ci/config/spawn-pipeline--benchmark.yml                         @dfinity-lab/teams/runtime-owners
-/gitlab-ci/config/rosetta.yml                                           @dfinity-lab/teams/financial-integrations
+/ci/                                                             @dfinity-lab/teams/idx
+/ci/src/std-fs-check/                                            @dfinity-lab/teams/node-team
+/ci/src/dependencies/                                            @dfinity-lab/teams/prodsec
+/ci/config/dependencies.yml                                      @dfinity-lab/teams/prodsec
+/ci/src/gen_gitlab_cargo_pipeline/farm_rate_limit.py             @dfinity-lab/teams/idx
+/ci/config/child-pipeline--benchmark.yml                         @dfinity-lab/teams/runtime-owners
+/ci/config/spawn-pipeline--benchmark.yml                         @dfinity-lab/teams/runtime-owners
+/ci/config/rosetta.yml                                           @dfinity-lab/teams/financial-integrations
 
 # [Testnet]
 /testnet/                                                  @dfinity-lab/teams/node-team @dfinity-lab/teams/DRE

@@ -64,7 +64,7 @@ anchors:
     name: Before script
     id: before-script
     shell: bash
-    run: ./gitlab-ci/src/ci-scripts/before-script.sh
+    run: ./ci/src/ci-scripts/before-script.sh
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
@@ -233,9 +233,9 @@ jobs:
         shell: bash
         run: |
           set -xeuo pipefail
-          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
+          export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
           pip3 install --ignore-installed -r requirements.txt
-          cd gitlab-ci/src
+          cd ci/src
           pytest -m "not fails_on_merge_train" -v -o junit_family=xunit1 \
             --junitxml=../../test_report.xml --cov=. --cov-report=term \
             --cov-report=term-missing --cov-report=html --cov-branch
@@ -256,7 +256,7 @@ jobs:
           mkdir -p "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts"
           ln -s "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts" /__w/$REPO_NAME/$REPO_NAME/artifacts
           buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
-              "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-ic.sh
+              "$CI_PROJECT_DIR"/ci/src/ci-scripts/build-ic.sh
           rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"
         env:
           RUN_ON_DIFF_ONLY: "true"
@@ -314,7 +314,7 @@ jobs:
         run: |
           set -eExuo pipefail
           sudo apt update && sudo apt install -y curl
-          "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-determinism.sh
+          "$CI_PROJECT_DIR"/ci/src/ci-scripts/build-determinism.sh
         env:
           TARGET: ${{ matrix.TARGET }}
           PATH0: ${{ matrix.PATH0 }}
@@ -348,7 +348,7 @@ jobs:
         run: |
           set -eExuo pipefail
           buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
-              "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/rust-lint.sh
+              "$CI_PROJECT_DIR"/ci/src/ci-scripts/rust-lint.sh
 
   cargo-build-release-linux:
     name: Cargo Build Release Linux
