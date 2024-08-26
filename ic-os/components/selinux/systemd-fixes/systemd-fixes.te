@@ -154,6 +154,12 @@ systemd_connect_userdb(local_login_t)
 systemd_connect_userdb(sshd_t)
 
 ###############################################################################
+# systemd-notify
+
+require { type systemd_runtime_notify_t; }
+allow sshd_t systemd_runtime_notify_t : sock_file write_sock_file_perms;
+
+###############################################################################
 # pcscd
 
 # allow smart card daemon access to /run/udev
