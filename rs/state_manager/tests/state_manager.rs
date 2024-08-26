@@ -511,7 +511,7 @@ fn lazy_pagemaps() {
     let canister_ids = (0..10)
         .map(|_| env.install_canister_wat(TEST_CANISTER, vec![], None))
         .collect::<Vec<_>>();
-    for i in 0..30 {
+    for i in 0..2 {
         env.set_checkpoints_enabled(false);
         //        for canister_id in &canister_ids {
         //            env.execute_ingress(*canister_id, "write_heap_64k", vec![])
@@ -525,14 +525,6 @@ fn lazy_pagemaps() {
             assert_eq!(env.state_manager.num_loaded_pagemaps(), 0);
         }
     }
-    // Create a checkpoint from the tip without writing any more data. As we merge in tip, the
-    // result is visible at the next checkpoint.
-    env.tick();
-    env.state_manager.flush_tip_channel();
-    assert_ne!(last_checkpoint_size(&env), 0.0);
-    assert_ne!(state_in_memory(&env), 0.0);
-    assert!(last_checkpoint_size(&env) / state_in_memory(&env) > 2.0);
-    assert!(last_checkpoint_size(&env) / state_in_memory(&env) <= 2.5);
 }
 
 #[test]

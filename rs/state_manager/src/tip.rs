@@ -456,12 +456,12 @@ pub(crate) fn spawn_tip_thread(
                             checkpointed_state,
                             execution_state,
                         } => {
-                            //debug_assert!(
-                            ////checkpointed_state == execution_state,
-                            //"Divergence: checkpointed {:#?}, \nexecution: {:#?}",
-                            //checkpointed_state,
-                            //execution_state,
-                            //);
+                            debug_assert!(
+                                checkpointed_state == execution_state,
+                                "Divergence: checkpointed {:#?}, \nexecution: {:#?}",
+                                checkpointed_state,
+                                execution_state,
+                            );
                         }
 
                         TipRequest::Noop => {}
