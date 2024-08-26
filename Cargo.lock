@@ -9266,6 +9266,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b5c7628eac357aecda461130f8074468be5aa4d258a002032d82d817f79f1f8"
 
 [[package]]
+name = "ic-nervous-system-agent"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-agent",
+ "ic-nns-constants",
+ "ic-sns-wasm",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "ic-nervous-system-clients"
 version = "0.0.1"
 dependencies = [
@@ -9840,7 +9853,6 @@ dependencies = [
  "ic-nervous-system-runtime",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
  "ic-nns-handler-root-interface",
  "ic-nns-handler-root-protobuf-generator",
  "ic-nns-test-utils",
@@ -10046,7 +10058,6 @@ dependencies = [
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
  "ic-nns-governance-api",
  "ic-nns-governance-init",
  "ic-nns-gtc",
@@ -11819,6 +11830,7 @@ dependencies = [
  "ic-types",
  "ic-utils 0.9.0",
  "ic-utils-thread",
+ "ic-validate-eq",
  "ic-wasm-types",
  "maplit",
  "nix 0.24.3",
@@ -12851,6 +12863,7 @@ dependencies = [
  "crossbeam-channel",
  "hyper 1.4.1",
  "hyper-util",
+ "ic-async-utils",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
  "ic-interfaces-certified-stream-store",
@@ -12868,7 +12881,6 @@ dependencies = [
  "ic-test-utilities-metrics",
  "ic-test-utilities-types",
  "ic-types",
- "ic-xnet-hyper",
  "maplit",
  "prometheus",
  "prost",
@@ -12891,10 +12903,7 @@ dependencies = [
  "hyper-rustls 0.27.2",
  "hyper-util",
  "ic-crypto-tls-interfaces",
- "ic-crypto-utils-tls",
- "ic-interfaces-registry",
  "ic-xnet-uri",
- "socket2 0.5.7",
  "tokio",
  "tokio-rustls 0.26.0",
  "tower",
@@ -12910,7 +12919,6 @@ dependencies = [
  "http-body-util",
  "hyper 1.4.1",
  "hyper-util",
- "ic-async-utils",
  "ic-base-types",
  "ic-canonical-state",
  "ic-config",
@@ -19223,6 +19231,7 @@ dependencies = [
  "futures",
  "ic-agent",
  "ic-base-types",
+ "ic-nervous-system-agent",
  "ic-nervous-system-clients",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
@@ -19900,9 +19909,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.39.2"
+version = "1.39.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "daa4fb1bc778bd6f04cbfc4bb2d06a7396a8f299dc33ea1900cedaa316f467b1"
+checksum = "9babc99b9923bfa4804bd74722ff02c0381021eafa4db9949217e3be8e84fff5"
 dependencies = [
  "backtrace",
  "bytes",

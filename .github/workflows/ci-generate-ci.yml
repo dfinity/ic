@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows-source/*.yml'
+      - '.github/workflows/*.yml' # trigger workflow on both to ensure they are in sync
 
 env:
   CI_PROJECT_DIR: ${{ github.workspace }}

@@ -13,7 +13,7 @@ hkdf = "0.12"
 pem = "1"
 rand = { workspace = true }
 thiserror = { workspace = true }
-zeroize = { version = "1.5", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }

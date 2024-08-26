@@ -4833,3 +4833,11 @@ impl From<pb_api::ProposalRewardStatus> for pb::ProposalRewardStatus {
         }
     }
 }
+
+impl From<ic_nns_governance_api::test_api::TimeWarp> for crate::TimeWarp {
+    fn from(value: ic_nns_governance_api::test_api::TimeWarp) -> Self {
+        Self {
+            delta_s: value.delta_s,
+        }
+    }
+}
