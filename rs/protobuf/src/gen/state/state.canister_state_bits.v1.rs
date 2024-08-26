@@ -672,11 +672,6 @@ pub struct CanisterStateBits {
     #[prost(message, optional, tag = "41")]
     pub total_query_stats: ::core::option::Option<TotalQueryStats>,
     /// Log visibility for the canister.
-    ///
-    /// TODO(EXC-1670): remove this field.
-    #[prost(enumeration = "LogVisibility", tag = "42")]
-    pub log_visibility: i32,
-    /// Log visibility for the canister.
     #[prost(message, optional, tag = "51")]
     pub log_visibility_v2: ::core::option::Option<LogVisibilityV2>,
     /// Log records of the canister.
