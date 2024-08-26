@@ -220,7 +220,7 @@ where
         artifact_assembler: Assembler,
         sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         topology_watcher: watch::Receiver<SubnetTopology>,
-    ) {
+    ) -> Shutdown {
         let receive_manager = Self {
             log,
             metrics,
@@ -234,10 +234,10 @@ where
             topology_watcher,
         };
 
-        let shutdown = Shutdown::spawn_on_with_cancellation(
+        Shutdown::spawn_on_with_cancellation(
             |cancellation| receive_manager.start_event_loop(cancellation),
             &rt_handle,
-        );
+        )
     }
 
     /// Event loop that processes advert updates and artifact assembles.

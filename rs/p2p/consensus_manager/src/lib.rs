@@ -26,7 +26,7 @@ mod receiver;
 mod sender;
 
 type StartConsensusManagerFn =
-    Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Shutdown>;
+    Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Vec<Shutdown>>;
 
 pub struct ConsensusManagerBuilder {
     log: ReplicaLogger,
@@ -103,7 +103,7 @@ impl ConsensusManagerBuilder {
     ) -> Vec<Shutdown> {
         let mut ret = vec![];
         for client in self.clients {
-            ret.push(client(transport.clone(), topology_watcher.clone()));
+            ret.append(&mut client(transport.clone(), topology_watcher.clone()));
         }
         ret
     }
@@ -121,7 +121,7 @@ fn start_consensus_manager<Artifact, WireArtifact, Assembler>(
     assembler: Assembler,
     transport: Arc<dyn Transport>,
     topology_watcher: watch::Receiver<SubnetTopology>,
-) -> Shutdown
+) -> Vec<Shutdown>
 where
     Artifact: IdentifiableArtifact,
     WireArtifact: PbArtifact,
@@ -138,7 +138,7 @@ where
         assembler.clone(),
     );
 
-    let _shutdown_receive_side = ConsensusManagerReceiver::run(
+    let shutdown_receive_side = ConsensusManagerReceiver::run(
         log,
         metrics,
         rt_handle,
@@ -147,7 +147,7 @@ where
         sender,
         topology_watcher,
     );
-    shutdown_send_side
+    vec![shutdown_send_side, shutdown_receive_side]
 }
 
 pub(crate) struct SlotUpdate<Artifact: PbArtifact> {
