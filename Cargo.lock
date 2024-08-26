@@ -5629,7 +5629,7 @@ dependencies = [
  "candid",
  "candid_parser",
  "futures",
- "ic-cdk 0.13.2",
+ "ic-cdk 0.13.5",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
 ]
