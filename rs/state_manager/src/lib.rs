@@ -1432,6 +1432,25 @@ struct CreateCheckpointResult {
 }
 
 impl StateManagerImpl {
+    pub fn num_loaded_pagemaps(&self) -> usize {
+        let states = self.states.read();
+        let (_tip_height, state) = states.tip.as_ref().expect("failed to get TIP");
+        PageMapType::list_all_including_snapshots(&state)
+            .into_iter()
+            .map(|entry| {
+                if let Some(page_map) = entry.get(&state) {
+                    if page_map.is_loaded() {
+                        1
+                    } else {
+                        0
+                    }
+                } else {
+                    0
+                }
+            })
+            .sum::<usize>()
+    }
+
     pub fn flush_tip_channel(&self) {
         #[allow(clippy::disallowed_methods)]
         let (sender, recv) = unbounded();

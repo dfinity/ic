@@ -464,6 +464,78 @@ fn skipping_flushing_is_invisible_for_state() {
 }
 
 #[test]
+fn lazy_pagemaps() {
+    fn checkpoint_size(checkpoint: &CheckpointLayout<ReadOnly>) -> f64 {
+        let mut size = 0.0;
+        for canister_id in checkpoint.canister_ids().unwrap() {
+            let canister = checkpoint.canister(&canister_id).unwrap();
+            for entry in std::fs::read_dir(canister.raw_path()).unwrap() {
+                size += std::fs::metadata(entry.unwrap().path()).unwrap().len() as f64;
+            }
+        }
+        size
+    }
+    fn last_checkpoint_size(env: &StateMachine) -> f64 {
+        let state_layout = env.state_manager.state_layout();
+        let checkpoint_heights = state_layout.checkpoint_heights().unwrap();
+        if checkpoint_heights.is_empty() {
+            return 0.0;
+        }
+        let last_height = *checkpoint_heights.last().unwrap();
+        checkpoint_size(&state_layout.checkpoint_verified(last_height).unwrap())
+    }
+    fn tip_size(env: &StateMachine) -> f64 {
+        checkpoint_size(
+            &CheckpointLayout::new_untracked(
+                env.state_manager.state_layout().raw_path().join("tip"),
+                height(0),
+            )
+            .unwrap(),
+        )
+    }
+    fn state_in_memory(env: &StateMachine) -> f64 {
+        env.metrics_registry()
+            .prometheus_registry()
+            .gather()
+            .into_iter()
+            .filter(|x| x.get_name() == "canister_memory_usage_bytes")
+            .map(|x| x.get_metric()[0].get_gauge().get_value())
+            .next()
+            .unwrap()
+    }
+
+    let env = StateMachineBuilder::new()
+        .with_lsmt_override(Some(lsmt_with_sharding()))
+        .build();
+
+    let canister_ids = (0..10)
+        .map(|_| env.install_canister_wat(TEST_CANISTER, vec![], None))
+        .collect::<Vec<_>>();
+    for i in 0..30 {
+        env.set_checkpoints_enabled(false);
+        //        for canister_id in &canister_ids {
+        //            env.execute_ingress(*canister_id, "write_heap_64k", vec![])
+        //                .unwrap();
+        //        }
+        env.set_checkpoints_enabled(true);
+        env.tick();
+        env.state_manager.flush_tip_channel();
+        // We should merge when overhead reaches 2.5 and stop merging the moment we go under 2.5.
+        if (i >= 1) {
+            assert_eq!(env.state_manager.num_loaded_pagemaps(), 0);
+        }
+    }
+    // Create a checkpoint from the tip without writing any more data. As we merge in tip, the
+    // result is visible at the next checkpoint.
+    env.tick();
+    env.state_manager.flush_tip_channel();
+    assert_ne!(last_checkpoint_size(&env), 0.0);
+    assert_ne!(state_in_memory(&env), 0.0);
+    assert!(last_checkpoint_size(&env) / state_in_memory(&env) > 2.0);
+    assert!(last_checkpoint_size(&env) / state_in_memory(&env) <= 2.5);
+}
+
+#[test]
 fn rejoining_node_doesnt_accumulate_states() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {

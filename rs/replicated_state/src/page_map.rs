@@ -29,7 +29,7 @@ use ic_validate_eq_derive::ValidateEq;
 use int_map::{Bounds, IntMap};
 use libc::off_t;
 use page_allocator::Page;
-use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
@@ -62,6 +62,10 @@ pub struct StorageMetrics {
     num_files_by_shard: Histogram,
     /// The storage overhead of a shard before merging.
     storage_overhead_by_shard: Histogram,
+    /// The number of loaded Storages.
+    storages_loaded: IntGauge,
+    /// The number of storages that are still lazy.
+    storages_lazy: IntGauge,
 }
 
 impl StorageMetrics {
@@ -117,6 +121,8 @@ impl StorageMetrics {
             ],
         );
 
+        let storages_loaded = metrics_registry.int_gauge("storage_layer_storages_loaded", "FIXME");
+        let storages_lazy = metrics_registry.int_gauge("storage_layer_storages_lazy", "FIXME");
         Self {
             write_bytes,
             write_duration,
@@ -124,6 +130,8 @@ impl StorageMetrics {
             num_merged_files,
             num_files_by_shard,
             storage_overhead_by_shard,
+            storages_loaded,
+            storages_lazy,
         }
     }
 }
@@ -468,6 +476,9 @@ pub struct PageMap {
 }
 
 impl PageMap {
+    pub fn is_loaded(&self) -> bool {
+        self.storage.is_loaded()
+    }
     /// Creates a new page map that always returns zeroed pages.
     /// The allocator of this page map is backed by the file descriptor
     /// the page map is instantiated with.
@@ -1093,6 +1104,8 @@ impl Buffer {
 // instead.
 impl PartialEq for PageMap {
     fn eq(&self, rhs: &PageMap) -> bool {
+        panic!("PAgeMap EQ");
+        return true; // FIXME
         if self.num_host_pages() != rhs.num_host_pages() {
             return false;
         }
