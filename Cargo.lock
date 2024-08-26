@@ -17373,6 +17373,7 @@ dependencies = [
  "registry-canister-protobuf-generator",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "url",
 ]
