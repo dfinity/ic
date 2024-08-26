@@ -375,13 +375,13 @@ pub fn add_transport_to_sim<F>(
                         consensus.clone(),
                         consensus.clone().read().unwrap().clone(),
                     );
-                let pfn_producer = Arc::new(consensus.clone().read().unwrap().clone());
+                let bouncer_factory = Arc::new(consensus.clone().read().unwrap().clone());
 
                 let downloader = FetchArtifact::new(
                     log.clone(),
                     tokio::runtime::Handle::current(),
                     consensus,
-                    pfn_producer,
+                    bouncer_factory,
                     MetricsRegistry::default(),
                 );
                 consensus_builder.add_client(

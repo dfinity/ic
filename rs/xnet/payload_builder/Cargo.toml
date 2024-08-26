@@ -11,7 +11,6 @@ async-trait = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
-ic-async-utils = { path = "../../async_utils" }
 ic-base-types = { path = "../../types/base_types" }
 ic-canonical-state = { path = "../../canonical_state" }
 ic-constants = { path = "../../constants" }

@@ -8310,6 +8310,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-icp-rosetta-runner"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-ledger-test-utils",
+ "icp-ledger",
+ "icrc-ledger-types",
+ "pocket-ic",
+ "reqwest 0.12.5",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "ic-icrc-rosetta"
 version = "1.1.1"
 dependencies = [
@@ -8463,6 +8478,7 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-metrics-encoder",
+ "ic-rosetta-test-utils",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
@@ -8555,6 +8571,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-hash-of",
  "ic-metrics-encoder",
+ "ic-rosetta-test-utils",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "icrc-ledger-types",
@@ -8592,6 +8609,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-metrics-encoder",
  "ic-registry-subnet-type",
+ "ic-rosetta-test-utils",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
@@ -9253,6 +9271,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b5c7628eac357aecda461130f8074468be5aa4d258a002032d82d817f79f1f8"
 
 [[package]]
+name = "ic-nervous-system-agent"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-agent",
+ "ic-nns-constants",
+ "ic-sns-wasm",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "ic-nervous-system-clients"
 version = "0.0.1"
 dependencies = [
@@ -9364,8 +9395,10 @@ dependencies = [
  "dfn_core",
  "futures",
  "ic-nervous-system-common",
+ "ic-wasm",
  "icp-ledger",
  "icrc-ledger-types",
+ "libflate 2.0.0",
  "prometheus-parse",
 ]
 
@@ -9700,6 +9733,7 @@ dependencies = [
  "candid",
  "comparable",
  "ic-base-types",
+ "ic-crypto-sha2",
  "ic-nervous-system-clients",
  "ic-nervous-system-proto",
  "ic-nns-common",
@@ -9824,7 +9858,6 @@ dependencies = [
  "ic-nervous-system-runtime",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
  "ic-nns-handler-root-interface",
  "ic-nns-handler-root-protobuf-generator",
  "ic-nns-test-utils",
@@ -10026,10 +10059,10 @@ dependencies = [
  "ic-nervous-system-clients",
  "ic-nervous-system-common",
  "ic-nervous-system-common-test-keys",
+ "ic-nervous-system-common-test-utils",
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
  "ic-nns-governance-api",
  "ic-nns-governance-init",
  "ic-nns-gtc",
@@ -11352,6 +11385,7 @@ dependencies = [
  "dfn_core",
  "ic-base-types",
  "ic-canister-client-sender",
+ "ic-canisters-http-types",
  "ic-crypto",
  "ic-crypto-sha2",
  "ic-icrc1",
@@ -11394,6 +11428,7 @@ dependencies = [
  "rand 0.8.5",
  "rust_decimal",
  "rust_decimal_macros",
+ "serde_bytes",
  "serde_yaml",
  "tokio",
  "wat",
@@ -11582,6 +11617,7 @@ dependencies = [
  "ic-metrics-encoder",
  "ic-nervous-system-clients",
  "ic-nervous-system-common",
+ "ic-nervous-system-common-test-utils",
  "ic-nervous-system-proto",
  "ic-nervous-system-runtime",
  "ic-nns-constants",
@@ -11603,7 +11639,6 @@ dependencies = [
  "ic-wasm",
  "icp-ledger",
  "icrc-ledger-types",
- "libflate 1.3.0",
  "maplit",
  "pretty_assertions",
  "prost",
@@ -12749,9 +12784,9 @@ dependencies = [
 
 [[package]]
 name = "ic-wasm"
-version = "0.7.2"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1f3f1ec63f08807d176691225de0b993e832b1fff71c631ed897df5888c7be4"
+checksum = "941376953c00628d8edae0adcad4b6e882c01cbfd5416d2ac2bc5fb709927737"
 dependencies = [
  "anyhow",
  "candid",
@@ -12761,7 +12796,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
- "walrus 0.20.3",
+ "walrus 0.21.1",
 ]
 
 [[package]]
@@ -12832,6 +12867,7 @@ dependencies = [
  "crossbeam-channel",
  "hyper 1.4.1",
  "hyper-util",
+ "ic-async-utils",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
  "ic-interfaces-certified-stream-store",
@@ -12849,7 +12885,6 @@ dependencies = [
  "ic-test-utilities-metrics",
  "ic-test-utilities-types",
  "ic-types",
- "ic-xnet-hyper",
  "maplit",
  "prometheus",
  "prost",
@@ -12872,10 +12907,7 @@ dependencies = [
  "hyper-rustls 0.27.2",
  "hyper-util",
  "ic-crypto-tls-interfaces",
- "ic-crypto-utils-tls",
- "ic-interfaces-registry",
  "ic-xnet-uri",
- "socket2 0.5.7",
  "tokio",
  "tokio-rustls 0.26.0",
  "tower",
@@ -12891,7 +12923,6 @@ dependencies = [
  "http-body-util",
  "hyper 1.4.1",
  "hyper-util",
- "ic-async-utils",
  "ic-base-types",
  "ic-canonical-state",
  "ic-config",
@@ -19207,6 +19238,7 @@ dependencies = [
  "futures",
  "ic-agent",
  "ic-base-types",
+ "ic-nervous-system-agent",
  "ic-nervous-system-clients",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
@@ -19884,9 +19916,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.39.2"
+version = "1.39.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "daa4fb1bc778bd6f04cbfc4bb2d06a7396a8f299dc33ea1900cedaa316f467b1"
+checksum = "9babc99b9923bfa4804bd74722ff02c0381021eafa4db9949217e3be8e84fff5"
 dependencies = [
  "backtrace",
  "bytes",
@@ -20825,9 +20857,9 @@ dependencies = [
 
 [[package]]
 name = "walrus"
-version = "0.20.3"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c03529cd0c4400a2449f640d2f27cd1b48c3065226d15e26d98e4429ab0adb7"
+checksum = "467611cafbc8a84834b77d2b4bb191fd2f5769752def8340407e924390c6883b"
 dependencies = [
  "anyhow",
  "gimli 0.26.2",
@@ -20835,8 +20867,8 @@ dependencies = [
  "leb128",
  "log",
  "walrus-macro",
- "wasm-encoder 0.29.0",
- "wasmparser 0.80.2",
+ "wasm-encoder 0.212.0",
+ "wasmparser 0.212.0",
 ]
 
 [[package]]
@@ -20991,15 +21023,6 @@ dependencies = [
 
 [[package]]
 name = "wasm-encoder"
-version = "0.29.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18c41dbd92eaebf3612a39be316540b8377c871cb9bde6b064af962984912881"
-dependencies = [
- "leb128",
-]
-
-[[package]]
-name = "wasm-encoder"
 version = "0.201.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9c7d2731df60006819b013f64ccc2019691deccf6e11a1804bc850cd6748f1a"
@@ -21035,12 +21058,6 @@ name = "wasmparser"
 version = "0.77.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b35c86d22e720a07d954ebbed772d01180501afe7d03d464f413bb5f8914a8d6"
-
-[[package]]
-name = "wasmparser"
-version = "0.80.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "449167e2832691a1bff24cde28d2804e90e09586a448c8e76984792c44334a6b"
 
 [[package]]
 name = "wasmparser"
