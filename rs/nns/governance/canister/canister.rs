@@ -33,11 +33,13 @@ use ic_nns_common::{
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     decoder_config, encode_metrics,
-    governance::{Environment, Governance, HeapGrowthPotential, TimeWarp},
+    governance::{Environment, Governance, HeapGrowthPotential, TimeWarp as GovTimeWarp},
     neuron_data_validation::NeuronDataValidationSummary,
     pb::{v1 as gov_pb, v1::Governance as InternalGovernanceProto},
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
 };
+#[cfg(feature = "test")]
+use ic_nns_governance_api::test_api::TimeWarp;
 use ic_nns_governance_api::{
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
     pb::v1::{
@@ -158,7 +160,7 @@ fn set_governance(gov: Governance) {
 
 struct CanisterEnv {
     rng: ChaCha20Rng,
-    time_warp: TimeWarp,
+    time_warp: GovTimeWarp,
 }
 
 impl CanisterEnv {
@@ -184,7 +186,7 @@ impl CanisterEnv {
                 ChaCha20Rng::from_seed(seed)
             },
 
-            time_warp: TimeWarp { delta_s: 0 },
+            time_warp: GovTimeWarp { delta_s: 0 },
         }
     }
 }
@@ -200,7 +202,7 @@ impl Environment for CanisterEnv {
         )
     }
 
-    fn set_time_warp(&mut self, new_time_warp: TimeWarp) {
+    fn set_time_warp(&mut self, new_time_warp: GovTimeWarp) {
         self.time_warp = new_time_warp;
     }
 
@@ -397,7 +399,7 @@ fn set_time_warp() {
 
 #[cfg(feature = "test")]
 fn set_time_warp_(new_time_warp: TimeWarp) {
-    governance_mut().set_time_warp(new_time_warp);
+    governance_mut().set_time_warp(GovTimeWarp::from(new_time_warp));
 }
 
 /// DEPRECATED: Use manage_neuron directly instead.
@@ -1268,7 +1270,7 @@ fn test_set_time_warp() {
     let mut environment = CanisterEnv::new();
 
     let start = environment.now();
-    environment.set_time_warp(TimeWarp { delta_s: 1_000 });
+    environment.set_time_warp(GovTimeWarp { delta_s: 1_000 });
     let delta_s = environment.now() - start;
 
     assert!(delta_s >= 1000, "delta_s = {}", delta_s);

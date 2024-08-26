@@ -368,7 +368,7 @@ async fn heartbeat() {
 }
 
 // Resources to serve for a given http_request
-#[query(hidden = true)]
+#[query(hidden = true, decoding_quota = 10000)]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),

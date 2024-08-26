@@ -15,6 +15,7 @@ use ic_icrc1_ledger::{ChangeFeeCollector, LedgerArgument, UpgradeArgs as LedgerU
 use ic_icrc1_test_utils::{
     minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
 };
+use ic_rosetta_test_utils::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
@@ -1335,6 +1336,23 @@ fn test_principal_subaccounts() {
     assert_eq!(subaccounts.len(), 1);
     // The subaccount 1 should show up in a `list_subaccount` query although it has only been involved in an Approve transaction
     assert!(subaccounts.contains(&account(2, 1).subaccount.unwrap()));
+}
+
+#[test]
+fn test_index_http_request_decoding_quota() {
+    let env = &StateMachine::new();
+    let ledger_id = install_ledger(
+        env,
+        vec![],
+        default_archive_options(),
+        None,
+        minter_identity().sender().unwrap(),
+    );
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    test_http_request_decoding_quota(env, index_id);
 }
 
 mod metrics {
