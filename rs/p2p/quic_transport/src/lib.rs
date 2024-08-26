@@ -170,7 +170,8 @@ impl QuicTransport {
 
     /// Graceful shutdown of transport
     pub async fn shutdown(&mut self) {
-        if let Some(shutdown) = self.shutdown.write().unwrap().take() {
+        let maybe_shutdown = self.shutdown.write().unwrap().take();
+        if let Some(shutdown) = maybe_shutdown {
             let _ = shutdown.shutdown().await;
         }
     }
