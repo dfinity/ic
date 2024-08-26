@@ -55,7 +55,7 @@ mockall = { workspace = true }
 slog-async = { workspace = true }
 slog-term = { workspace = true }
 tempfile = { workspace = true }
-wat = "1.0.52"
+wat = { workspace = true }
 
 [features]
 sigsegv_handler_checksum = ["memory_tracker/sigsegv_handler_checksum"]
