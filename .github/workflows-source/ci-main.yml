@@ -159,7 +159,7 @@ jobs:
     timeout-minutes: 120
     runs-on:
       labels: macOS
-    if: ${{ ${{ github.ref_protected  }}
+    if: ${{ github.ref_protected }}
     steps:
       - <<: *checkout
       - name: Set PATH
