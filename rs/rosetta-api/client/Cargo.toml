@@ -14,7 +14,7 @@ candid = { workspace = true }
 clap = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
-ic-rosetta-api = { path = "../" }
+ic-rosetta-api = { path = ".." }
 num-bigint = { workspace = true }
 reqwest = { workspace = true }
 rosetta-core = { path = "../rosetta_core" }
