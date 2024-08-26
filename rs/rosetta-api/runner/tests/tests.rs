@@ -16,7 +16,7 @@ fn path_from_env(var: &str) -> PathBuf {
 }
 
 #[test]
-fn test() {
+fn smoke_test() {
     let rt = Runtime::new().unwrap();
     let mut pocket_ic = PocketIcBuilder::new().with_nns_subnet().build();
     let endpoint = pocket_ic.make_live(None);

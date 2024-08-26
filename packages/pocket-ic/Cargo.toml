@@ -44,4 +44,4 @@ ic-universal-canister = { path = "../../rs/universal_canister/lib" }
 icp-ledger = { path = "../../rs/rosetta-api/icp_ledger" }
 k256 = { workspace = true }
 lazy_static = "1.4.0"
-wat = "1.0.57"
+wat = { workspace = true }
