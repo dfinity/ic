@@ -679,7 +679,7 @@ fn compatibility_for_log_visibility() {
         [
             LogVisibilityV2::Controllers,
             LogVisibilityV2::Public,
-            LogVisibilityV2::AllowedViewers(Default::default())
+            LogVisibilityV2::AllowedViewers(BoundedAllowedViewers::new(vec![]))
         ]
     );
 }
