@@ -707,8 +707,8 @@ impl From<u64> for StateMachineNode {
 
 #[allow(clippy::large_enum_variant)]
 enum SignatureSecretKey {
-    EcdsaSecp256k1(ic_crypto_ecdsa_secp256k1::PrivateKey),
-    SchnorrBip340(ic_crypto_ecdsa_secp256k1::PrivateKey),
+    EcdsaSecp256k1(ic_crypto_secp256k1::PrivateKey),
+    SchnorrBip340(ic_crypto_secp256k1::PrivateKey),
     Ed25519(ic_crypto_ed25519::DerivedPrivateKey),
 }
 
@@ -1292,7 +1292,7 @@ impl StateMachine {
                 if let Some(SignatureSecretKey::EcdsaSecp256k1(k)) =
                     self.idkg_subnet_secret_keys.get(&ecdsa_context.key_id())
                 {
-                    let path = ic_crypto_ecdsa_secp256k1::DerivationPath::from_canister_id_and_path(
+                    let path = ic_crypto_secp256k1::DerivationPath::from_canister_id_and_path(
                         ecdsa_context.request.sender.get().as_slice(),
                         &ecdsa_context.derivation_path,
                     );
@@ -1554,7 +1554,7 @@ impl StateMachine {
                     )
                     .unwrap();
 
-                    let private_key = ic_crypto_ecdsa_secp256k1::PrivateKey::deserialize_sec1(
+                    let private_key = ic_crypto_secp256k1::PrivateKey::deserialize_sec1(
                         private_key_bytes.as_slice(),
                     )
                     .unwrap();
@@ -1569,7 +1569,7 @@ impl StateMachine {
                     (public_key, private_key)
                 }
                 MasterPublicKeyId::Ecdsa(id) => {
-                    use ic_crypto_ecdsa_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
+                    use ic_crypto_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
 
                     let path =
                         DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
@@ -1587,9 +1587,7 @@ impl StateMachine {
                 }
                 MasterPublicKeyId::Schnorr(id) => match id.algorithm {
                     SchnorrAlgorithm::Bip340Secp256k1 => {
-                        use ic_crypto_ecdsa_secp256k1::{
-                            DerivationIndex, DerivationPath, PrivateKey,
-                        };
+                        use ic_crypto_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
 
                         let path =
                             DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
@@ -2024,7 +2022,7 @@ impl StateMachine {
         if let Some(SignatureSecretKey::EcdsaSecp256k1(k)) =
             self.idkg_subnet_secret_keys.get(&context.key_id())
         {
-            let path = ic_crypto_ecdsa_secp256k1::DerivationPath::from_canister_id_and_path(
+            let path = ic_crypto_secp256k1::DerivationPath::from_canister_id_and_path(
                 context.request.sender.get().as_slice(),
                 &context.derivation_path,
             );
@@ -2046,7 +2044,7 @@ impl StateMachine {
 
         let signature = match self.idkg_subnet_secret_keys.get(&context.key_id()) {
             Some(SignatureSecretKey::SchnorrBip340(k)) => {
-                let path = ic_crypto_ecdsa_secp256k1::DerivationPath::from_canister_id_and_path(
+                let path = ic_crypto_secp256k1::DerivationPath::from_canister_id_and_path(
                     context.request.sender.get().as_slice(),
                     &context.derivation_path[..],
                 );
@@ -2156,14 +2154,11 @@ impl StateMachine {
     }
 
     /// Checks critical error counters and panics if a critical error occurred.
-    /// We ignore `execution_environment_unfiltered_ingress` for now.
     pub fn check_critical_errors(&self) {
         let error_counter_vec = fetch_counter_vec(&self.metrics_registry, "critical_errors");
         if let Some((metric, _)) = error_counter_vec.into_iter().find(|(_, v)| *v != 0.0) {
             let err: String = metric.get("error").unwrap().to_string();
-            if err != *"execution_environment_unfiltered_ingress" {
-                panic!("Critical error {} occurred.", err);
-            }
+            panic!("Critical error {} occurred.", err);
         }
     }
 
@@ -2923,7 +2918,7 @@ impl StateMachine {
         // Largest single message is 1T for system subnet install messages
         // Considered with 2B instruction slices, this gives us 500 ticks
         const MAX_TICKS: usize = 500;
-        let msg_id = self.send_ingress(sender, canister_id, method, payload);
+        let msg_id = self.send_ingress_safe(sender, canister_id, method, payload)?;
         self.await_ingress(msg_id, MAX_TICKS)
     }
 
@@ -2940,6 +2935,62 @@ impl StateMachine {
     ///
     /// This function is asynchronous. It returns the ID of the ingress message
     /// that can be awaited later with [await_ingress].
+    pub fn send_ingress_safe(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        method: impl ToString,
+        payload: Vec<u8>,
+    ) -> Result<MessageId, UserError> {
+        // Build `SignedIngress` with maximum ingress expiry and unique nonce,
+        // omitting delegations and signatures.
+        let ingress_expiry = (self.get_time() + MAX_INGRESS_TTL).as_nanos_since_unix_epoch();
+        let nonce = self.nonce.fetch_add(1, Ordering::Relaxed) + 1;
+        let nonce_blob = Some(nonce.to_le_bytes().into());
+        let msg = SignedIngress::try_from(HttpRequestEnvelope::<HttpCallContent> {
+            content: HttpCallContent::Call {
+                update: HttpCanisterUpdate {
+                    canister_id: Blob(canister_id.get().into_vec()),
+                    method_name: method.to_string(),
+                    arg: Blob(payload.clone()),
+                    sender: sender.into(),
+                    ingress_expiry,
+                    nonce: nonce_blob,
+                },
+            },
+            sender_pubkey: None,
+            sender_sig: None,
+            sender_delegation: None,
+        })
+        .unwrap();
+
+        // Fetch ingress validation settings from the registry.
+        let registry_version = self.registry_client.get_latest_version();
+        let provisional_whitelist = self
+            .registry_client
+            .get_provisional_whitelist(registry_version)
+            .unwrap()
+            .unwrap();
+
+        // Run `IngressFilter` on the ingress message.
+        let ingress_filter = self.ingress_filter.clone();
+        self.runtime
+            .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone().into())))
+            .unwrap()?;
+
+        let builder = PayloadBuilder::new()
+            .with_max_expiry_time_from_now(self.time())
+            .with_nonce(nonce)
+            .ingress(sender, canister_id, method, payload);
+        let msg_id = builder.ingress_ids().pop().unwrap();
+        self.execute_payload(builder);
+        Ok(msg_id)
+    }
+
+    /// Sends an ingress message to the canister with the specified ID.
+    ///
+    /// This function is asynchronous. It returns the ID of the ingress message
+    /// that can be awaited later with [await_ingress].
     pub fn send_ingress(
         &self,
         sender: PrincipalId,
@@ -2947,16 +2998,8 @@ impl StateMachine {
         method: impl ToString,
         payload: Vec<u8>,
     ) -> MessageId {
-        // increment the global nonce and use it as the current nonce.
-        let nonce = self.nonce.fetch_add(1, Ordering::Relaxed) + 1;
-        let builder = PayloadBuilder::new()
-            .with_max_expiry_time_from_now(self.time())
-            .with_nonce(nonce)
-            .ingress(sender, canister_id, method, payload);
-
-        let msg_id = builder.ingress_ids().pop().unwrap();
-        self.execute_payload(builder);
-        msg_id
+        self.send_ingress_safe(sender, canister_id, method, payload)
+            .unwrap()
     }
 
     /// Returns the status of the ingress message with the specified ID.

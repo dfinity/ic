@@ -39,7 +39,8 @@ use ic_nns_common::{
     types::UpdateIcpXdrConversionRatePayload,
 };
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT, GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance::{
     governance::{
@@ -61,7 +62,6 @@ use ic_nns_governance::{
         governance_error::ErrorType::{
             self, InsufficientFunds, NotAuthorized, NotFound, PreconditionFailed, ResourceExhausted,
         },
-        install_code::CanisterInstallMode,
         manage_neuron::{
             self,
             claim_or_refresh::{By, MemoAndController},
@@ -80,7 +80,7 @@ use ic_nns_governance::{
         AddOrRemoveNodeProvider, ApproveGenesisKyc, Ballot, BallotChange, BallotInfo,
         BallotInfoChange, CreateServiceNervousSystem, Empty, ExecuteNnsFunction,
         Governance as GovernanceProto, GovernanceChange, GovernanceError,
-        IdealMatchedParticipationFunction, InstallCode, KnownNeuron, KnownNeuronData, ListNeurons,
+        IdealMatchedParticipationFunction, KnownNeuron, KnownNeuronData, ListNeurons,
         ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
         MonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState,
         NeuronType, NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction,
@@ -7669,68 +7669,6 @@ fn test_list_proposals_removes_execute_nns_function_payload() {
 }
 
 #[test]
-fn test_list_proposals_removes_install_code_large_fields() {
-    let original_install_code = InstallCode {
-        wasm_module: Some(vec![0; 100_000]),
-        arg: Some(vec![0; 1_000]),
-        install_mode: Some(CanisterInstallMode::Upgrade as i32),
-        canister_id: Some(GOVERNANCE_CANISTER_ID.into()),
-        skip_stopping_before_installing: Some(false),
-    };
-    let proto = GovernanceProto {
-        economics: Some(NetworkEconomics::with_default_values()),
-        proposals: btreemap! {
-            1 => ProposalData {
-                id: Some(ProposalId { id: 1 }),
-                proposal: Some(Proposal {
-                    title: Some("Upgrade canister".to_string()),
-                    action: Some(proposal::Action::InstallCode(original_install_code.clone())),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            }
-        },
-        ..Default::default()
-    };
-    let driver = fake::FakeDriver::default();
-    let gov = Governance::new(
-        proto,
-        driver.get_fake_env(),
-        driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
-    );
-    let caller = &principal(1);
-
-    let results = gov.list_proposals(
-        caller,
-        &ListProposalInfo {
-            ..Default::default()
-        },
-    );
-
-    let action = results.proposal_info[0]
-        .proposal
-        .as_ref()
-        .unwrap()
-        .action
-        .as_ref()
-        .unwrap();
-    match action {
-        proposal::Action::InstallCode(install_code) => {
-            assert_eq!(
-                install_code,
-                &InstallCode {
-                    wasm_module: None,
-                    arg: None,
-                    ..original_install_code
-                }
-            );
-        }
-        _ => panic!("Unexpected action"),
-    };
-}
-
-#[test]
 fn test_list_proposals_retains_execute_nns_function_payload() {
     // ARRANGE
     let proposal_id = ProposalId { id: 2 };
@@ -11979,6 +11917,7 @@ lazy_static! {
                     Some(517576), // memory_allocation
                     448076, // freezing_threshold
                     268693, // idle_cycles_burned_per_day
+                    DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT, // wasm_memory_limit
                 )),
             }),
             governance: Some(ic_sns_root::CanisterSummary {
@@ -12226,7 +12165,6 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_sns_w_fail
     );
 
     // Inspect the proposal fields related to the Neurons' Fund
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(proposal.neurons_fund_data, *NEURONS_FUND_DATA_BEFORE_SETTLE);
 }
 
@@ -12360,7 +12298,6 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_ledger_fai
     );
 
     // Inspect the proposal fields related to the Neurons' Fund
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(proposal.neurons_fund_data, *NEURONS_FUND_DATA_BEFORE_SETTLE);
 }
 
@@ -12448,7 +12385,6 @@ async fn test_create_service_nervous_system_failure_due_to_swap_deployment_error
     assert_matches!(proposal.failure_reason, Some(_), "{:#?}", proposal);
     assert_eq!(proposal.derived_proposal_information, None);
 
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(
         proposal.neurons_fund_data,
         *NEURONS_FUND_DATA_WITH_EARLY_REFUNDS
@@ -12553,7 +12489,6 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
     assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);
     assert_eq!(proposal.derived_proposal_information, None);
 
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(proposal.neurons_fund_data, *NEURONS_FUND_DATA_BEFORE_SETTLE);
 
     // Assert some of the maturity has been decremented and is held in escrow
@@ -12701,7 +12636,6 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
     assert_eq!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
     assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);
     assert_eq!(proposal.derived_proposal_information, None);
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(proposal.neurons_fund_data, *NEURONS_FUND_DATA_BEFORE_SETTLE);
 
     // Assert some of the maturity has been decremented and is held in escrow
@@ -12847,7 +12781,6 @@ async fn test_create_service_nervous_system_proposal_execution_fails() {
     );
     assert_eq!(proposal.sns_token_swap_lifecycle, None);
     assert_eq!(proposal.executed_timestamp_seconds, 0, "{:#?}", proposal);
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(
         proposal.neurons_fund_data,
         *NEURONS_FUND_DATA_WITH_EARLY_REFUNDS
@@ -12996,7 +12929,6 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
         Some(sns_swap_pb::Lifecycle::Committed as i32)
     );
     // Inspect the proposal fields related to the Neurons' Fund
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(
         proposal.neurons_fund_data,
         *NEURONS_FUND_DATA_AFTER_SETTLE_COMMIT
@@ -13040,7 +12972,6 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
         Some(sns_swap_pb::Lifecycle::Committed as i32)
     );
     // Inspect the proposal fields related to the Neurons' Fund
-    assert_eq!(proposal.cf_participants, vec![]);
     assert_eq!(
         proposal.neurons_fund_data,
         *NEURONS_FUND_DATA_AFTER_SETTLE_COMMIT
