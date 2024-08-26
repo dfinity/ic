@@ -11830,6 +11830,7 @@ dependencies = [
  "ic-types",
  "ic-utils 0.9.0",
  "ic-utils-thread",
+ "ic-validate-eq",
  "ic-wasm-types",
  "maplit",
  "nix 0.24.3",
