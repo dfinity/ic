@@ -680,7 +680,14 @@ fn compatibility_for_log_visibility() {
 fn compatibility_for_log_visibility_v2() {
     // If this fails, you are making a potentially incompatible change to `LogVisibilityV2`.
     // See note [Handling changes to Enums in Replicated State] for how to proceed.
-    assert_eq!(LogVisibilityV2::iter().count(), 3);
+    assert_eq!(
+        LogVisibilityV2::iter().collect::<Vec<_>>(),
+        [
+            LogVisibilityV2::Controllers,
+            LogVisibilityV2::Public,
+            LogVisibilityV2::AllowedViewers(Default::default())
+        ]
+    );
 }
 
 #[test]
