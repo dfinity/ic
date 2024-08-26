@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows-source/*.yml'
+      - '.github/workflows/*.yml'
 
 env:
   CI_PROJECT_DIR: ${{ github.workspace }}
