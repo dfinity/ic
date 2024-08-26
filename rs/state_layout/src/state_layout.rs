@@ -1522,6 +1522,7 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
                     snapshot_id.get_canister_id().get_ref().as_slice(),
                 ))
                 .join(hex::encode(snapshot_id.as_slice())),
+            self,
         )
     }
 
@@ -1869,17 +1870,30 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
 pub struct SnapshotLayout<Permissions: AccessPolicy> {
     snapshot_root: PathBuf,
     permissions_tag: PhantomData<Permissions>,
+    checkpoint: Option<CheckpointLayout<Permissions>>,
 }
 
 impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
-    pub fn new(snapshot_root: PathBuf) -> Result<Self, LayoutError> {
+    pub fn new(
+        snapshot_root: PathBuf,
+        checkpoint: &CheckpointLayout<Permissions>,
+    ) -> Result<Self, LayoutError> {
         Permissions::check_dir(&snapshot_root)?;
         Ok(Self {
             snapshot_root,
             permissions_tag: PhantomData,
+            checkpoint: Some(checkpoint.clone()),
         })
     }
 
+    pub fn new_untracked(snapshot_root: PathBuf) -> Result<Self, LayoutError> {
+        Permissions::check_dir(&snapshot_root)?;
+        Ok(Self {
+            snapshot_root,
+            permissions_tag: PhantomData,
+            checkpoint: None,
+        })
+    }
     pub fn raw_path(&self) -> PathBuf {
         self.snapshot_root.clone()
     }
@@ -1899,7 +1913,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
             root: self.snapshot_root.clone(),
             name_stem: "vmemory_0".into(),
             permissions_tag: PhantomData,
-            _checkpoint: None, // FIXME
+            _checkpoint: self.checkpoint.clone(),
         }
     }
 
@@ -1908,7 +1922,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
             root: self.snapshot_root.clone(),
             name_stem: "stable_memory".into(),
             permissions_tag: PhantomData,
-            _checkpoint: None, // FIXME
+            _checkpoint: self.checkpoint.clone(),
         }
     }
 
@@ -1917,7 +1931,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
             root: self.snapshot_root.clone(),
             name_stem: "wasm_chunk_store".into(),
             permissions_tag: PhantomData,
-            _checkpoint: None, // FIXME
+            _checkpoint: self.checkpoint.clone(),
         }
     }
 }
