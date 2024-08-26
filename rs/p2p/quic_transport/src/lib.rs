@@ -75,7 +75,7 @@ pub struct Shutdown {
 }
 
 impl Shutdown {
-    /// When shutting down a future on demand, if a panic happens it should be propagated upstream.
+    /// If a panic happens it should be propagated upstream.
     /// https://github.com/tokio-rs/tokio/issues/4516
     pub async fn shutdown(self) -> Result<(), JoinError> {
         // If an error is returned it means the conn manager is already stopped.
