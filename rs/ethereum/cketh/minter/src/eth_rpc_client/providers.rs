@@ -15,6 +15,7 @@ pub(crate) const SEPOLIA_PROVIDERS: &[RpcService] = &[
     RpcService::EthSepolia(EthSepoliaService::Ankr),
     RpcService::EthSepolia(EthSepoliaService::BlockPi),
     RpcService::EthSepolia(EthSepoliaService::PublicNode),
+    RpcService::EthSepolia(EthSepoliaService::Sepolia),
 ];
 
 pub(crate) const ARBITRUM_PROVIDERS: &[RpcService] = &[
@@ -94,6 +95,7 @@ pub enum EthSepoliaService {
     Ankr,
     BlockPi,
     PublicNode,
+    Sepolia,
 }
 
 #[derive(
