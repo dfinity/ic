@@ -183,6 +183,7 @@ jobs:
           sudo rm -rf /private/var/tmp/bazel-output
 
   bazel-test-macos-namespace:
+    name: Bazel Test MacOS Namespace
     runs-on: namespace-profile-darwin-small-cache # profile created in namespace console
     steps:
       - name: Install nsc
