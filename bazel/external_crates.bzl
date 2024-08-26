@@ -1302,7 +1302,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.36",
             ),
             "tokio": crate.spec(
-                version = "^1.39.2",
+                version = "^1.39.3",
                 features = ["full"],
             ),
             "tokio-io-timeout": crate.spec(
