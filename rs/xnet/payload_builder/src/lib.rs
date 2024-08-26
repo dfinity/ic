@@ -1539,7 +1539,8 @@ impl XNetClientImpl {
         let http_client: Client<TlsConnector, Request<XNetRequestBody>> =
             Client::builder(TokioExecutor::new())
                 .pool_idle_timeout(Some(Duration::from_secs(600)))
-                .pool_max_idle_per_host(1)
+                // TODO(NET-1747): don't decrease before the ticket is resolved
+                .pool_max_idle_per_host(100)
                 .build(https);
 
         let response_body_size = metrics_registry.histogram_vec(
