@@ -1,11 +1,10 @@
 use anyhow::Result;
-use ic_system_test_driver::{
-     driver::group::SystemTestGroup, systest,
-};
+use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use std::time::Duration;
 
 fn main() -> Result<()> {
-    // Upgrade from the branch version, to the branch '-test` version.
+    // Upgrade from the branch version, to the version specified by the
+    // `HOSTOS_UPDATE_VERSION` env variable.
     SystemTestGroup::new()
         .with_setup(|e| nested::config(e, false))
         .add_test(systest!(nested::upgrade))

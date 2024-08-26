@@ -313,6 +313,38 @@ QUALIFYING_SNS_CANISTER_RUNTIME_DEPS, QUALIFYING_SNS_CANISTER_ENV = canister_run
     qualifying_canisters = QUALIFYING_SNS_CANISTERS,
 )
 
+HOSTOS_RUNTIME_DEPS = [
+    "//ic-os/hostos/envs/dev:version.txt",
+    "//ic-os/hostos/envs/dev:update-img-test.tar.zst.cas-url",
+    "//ic-os/hostos/envs/dev:update-img-test.tar.zst.sha256",
+]
+HOSTOS_ENV = {
+    "HOSTOS_UPDATE_VERSION": "$(rootpath //ic-os/hostos/envs/dev:version.txt)",
+    "HOSTOS_UPDATE_URL": "$(rootpath //ic-os/hostos/envs/dev:update-img-test.tar.zst.cas-url)",
+    "HOSTOS_UPDATE_SHA256": "$(rootpath //ic-os/hostos/envs/dev:update-img-test.tar.zst.sha256)",
+}
+
+MAINNET_HOSTOS_RUNTIME_DEPS = [
+    "//rs/tests:mainnet_hostos_version_file",
+    "//rs/tests:mainnet_hostos_url_file",
+    "//rs/tests:mainnet_hostos_sha_file",
+]
+MAINNET_HOSTOS_ENV = {
+    "HOSTOS_UPDATE_VERSION": "$(rootpath //rs/tests:mainnet_version_file)",
+    "HOSTOS_UPDATE_URL": "$(rootpath //rs/tests:mainnet_hostos_url_file)",
+    "HOSTOS_UPDATE_SHA256": "$(rootpath //rs/tests:mainnet_hostos_sha256_file)",
+}
+
+SETUPOS_RUNTIME_DEPS = ["//ic-os/setupos/envs/dev:disk-img.tar.zst"]
+SETUPOS_ENV = {
+    "SETUPOS_PATH": "$(rootpath //ic-os/setupos/envs/dev:disk-img.tar.zst)",
+}
+
+MAINNET_SETUPOS_RUNTIME_DEPS = ["@mainnet_setupos_disk_image//file"]
+MAINNET_SETUPOS_ENV = {
+    "SETUPOS_PATH": "$(rootpath @mainnet_setupos_disk_image//file)",
+}
+
 UNIVERSAL_VM_RUNTIME_DEPS = [
     "//rs/tests:create-universal-vm-config-image.sh",
 ]

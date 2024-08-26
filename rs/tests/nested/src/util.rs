@@ -117,15 +117,8 @@ pub(crate) fn setup_nested_vm(env: TestEnv, name: &str) {
     let nns_public_key =
         std::fs::read_to_string(env.prep_dir("").unwrap().root_public_key_path()).unwrap();
 
-    setup_nested_vms(
-        &nodes,
-        &env,
-        &farm,
-        &group_name,
-        &nns_url,
-        &nns_public_key,
-    )
-    .expect("Unable to setup nested VMs.");
+    setup_nested_vms(&nodes, &env, &farm, &group_name, &nns_url, &nns_public_key)
+        .expect("Unable to setup nested VMs.");
 }
 
 pub(crate) fn start_nested_vm(env: TestEnv) {

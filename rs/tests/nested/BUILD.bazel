@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "HOSTOS_ENV", "HOSTOS_RUNTIME_DEPS", "SETUPOS_ENV", "SETUPOS_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -40,6 +40,7 @@ rust_library(
 
 system_test_nns(
     name = "registration",
+    env = SETUPOS_ENV,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -50,12 +51,19 @@ system_test_nns(
     test_timeout = "eternal",
     uses_guestos_dev = True,
     uses_setupos_dev = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = SETUPOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
 )
 
+env = dict()
+
+env.update(SETUPOS_ENV)
+
+env.update(HOSTOS_ENV)
+
 system_test_nns(
     name = "upgrade",
+    env = env,
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -65,8 +73,7 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     uses_guestos_dev = True,
-    uses_hostos_dev_test = True,
     uses_setupos_dev = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = SETUPOS_RUNTIME_DEPS + HOSTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
 )

@@ -970,7 +970,6 @@ pub trait HasIcDependencies {
     fn get_initial_replica_version(&self) -> Result<ReplicaVersion>;
     fn get_mainnet_ic_os_img_sha256(&self) -> Result<String>;
     fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String>;
-    fn get_mainnet_hostos_update_img_sha256(&self) -> Result<String>;
 }
 
 impl<T: HasTestEnv> HasIcDependencies for T {
@@ -996,12 +995,6 @@ impl<T: HasTestEnv> HasIcDependencies for T {
         let mainnet_version: String =
             read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
         fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst", self.test_env().logger())
-    }
-
-    fn get_mainnet_hostos_update_img_sha256(&self) -> Result<String> {
-        let mainnet_version: String =
-            read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
-        fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/host-os/update-img"), "update-img.tar.zst", self.test_env().logger())
     }
 }
 

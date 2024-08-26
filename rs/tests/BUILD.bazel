@@ -4,6 +4,7 @@ load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
 load("@io_bazel_rules_docker//docker/package_managers:download_pkgs.bzl", "download_pkgs")
 load("@io_bazel_rules_docker//docker/package_managers:install_pkgs.bzl", "install_pkgs")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//:mainnet-images.bzl", "mainnet_images_support")
 load("//bazel:defs.bzl", "symlink_dir", "symlink_dir_test", "symlink_dirs")
 load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES")
 load(":system_tests.bzl", "uvm_config_image")
@@ -311,3 +312,5 @@ uvm_config_image(
     remap_paths = {"activate.sh": "activate"},
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
+
+mainnet_images_support()
