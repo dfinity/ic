@@ -5,7 +5,7 @@ use ic_consensus_utils::registry_version_at_height;
 use ic_interfaces::{
     canister_http::CanisterHttpPool,
     consensus_pool::ConsensusPoolCache,
-    p2p::consensus::{Priority, PriorityFn, PriorityFnFactory},
+    p2p::consensus::{Bouncer, BouncerFactory, BouncerValue},
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{warn, ReplicaLogger};
@@ -21,7 +21,7 @@ use std::{collections::BTreeSet, sync::Arc};
 // to another by about 100 http outcalls + 15 other management canister calls per second.
 const MAX_NUMBER_OF_REQUESTS_AHEAD: u64 = 3 * (100 + 15);
 
-/// The canonical implementation of [`PriorityFnFactory`]
+/// The canonical implementation of [`BouncerFactory`]
 pub struct CanisterHttpGossipImpl {
     consensus_cache: Arc<dyn ConsensusPoolCache>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -43,13 +43,10 @@ impl CanisterHttpGossipImpl {
     }
 }
 
-impl<Pool: CanisterHttpPool> PriorityFnFactory<CanisterHttpResponseShare, Pool>
+impl<Pool: CanisterHttpPool> BouncerFactory<CanisterHttpResponseShare, Pool>
     for CanisterHttpGossipImpl
 {
-    fn get_priority_function(
-        &self,
-        _canister_http_pool: &Pool,
-    ) -> PriorityFn<CanisterHttpResponseId> {
+    fn new_bouncer(&self, _canister_http_pool: &Pool) -> Bouncer<CanisterHttpResponseId> {
         let finalized_height = self.consensus_cache.finalized_block().height;
         let registry_version =
             registry_version_at_height(self.consensus_cache.as_ref(), finalized_height).unwrap();
@@ -69,7 +66,7 @@ impl<Pool: CanisterHttpPool> PriorityFnFactory<CanisterHttpResponseShare, Pool>
         Box::new(move |id: &'_ CanisterHttpResponseId| {
             if id.content.registry_version != registry_version {
                 warn!(log, "Dropping canister http response share with callback id: {}, because registry version {} does not match expected version {}", id.content.id, id.content.registry_version, registry_version);
-                return Priority::Drop;
+                return BouncerValue::Unwanted;
             }
 
             // We derive the highest accepted request id from the next expected request id, plus the
@@ -87,11 +84,11 @@ impl<Pool: CanisterHttpPool> PriorityFnFactory<CanisterHttpResponseShare, Pool>
                 || (id.content.id >= next_callback_id
                     && id.content.id <= highest_accepted_request_id)
             {
-                Priority::FetchNow
+                BouncerValue::Wants
             } else if id.content.id > highest_accepted_request_id {
-                Priority::Stash
+                BouncerValue::MaybeWantsLater
             } else {
-                Priority::Drop
+                BouncerValue::Unwanted
             }
         })
     }

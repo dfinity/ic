@@ -186,7 +186,7 @@ thread_local! {
     // If that goes well, then, this can be deleted.
     static IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
 
-    static ARE_SET_VISIBILITY_PROPOSALS_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static ARE_SET_VISIBILITY_PROPOSALS_ENABLED: Cell<bool> = const { Cell::new(true) };
 }
 
 pub fn is_private_neuron_enforcement_enabled() -> bool {
@@ -944,7 +944,7 @@ impl NeuronSubsetMetricsPb {
 }
 
 fn enable_new_canister_management_topics() -> bool {
-    cfg!(feature = "test")
+    true
 }
 
 #[cfg(test)]

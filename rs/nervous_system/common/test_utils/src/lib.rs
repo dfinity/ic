@@ -19,6 +19,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use std::sync::{atomic, atomic::Ordering as AtomicOrdering, Arc, Mutex};
 
 mod prometheus;
+pub mod wasm_helpers;
 
 /// Reifies the methods of the Ledger trait, such that they can be sent over a
 /// channel
