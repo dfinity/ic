@@ -817,25 +817,6 @@ impl From<LogVisibilityV2> for LogVisibility {
     }
 }
 
-impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
-    fn from(item: &LogVisibility) -> Self {
-        match item {
-            LogVisibility::Controllers => pb_canister_state_bits::LogVisibility::Controllers,
-            LogVisibility::Public => pb_canister_state_bits::LogVisibility::Public,
-        }
-    }
-}
-
-impl From<pb_canister_state_bits::LogVisibility> for LogVisibility {
-    fn from(item: pb_canister_state_bits::LogVisibility) -> Self {
-        match item {
-            pb_canister_state_bits::LogVisibility::Unspecified => Self::default(),
-            pb_canister_state_bits::LogVisibility::Controllers => Self::Controllers,
-            pb_canister_state_bits::LogVisibility::Public => Self::Public,
-        }
-    }
-}
-
 /// Maximum number of allowed log viewers (specified in the interface spec).
 const MAX_ALLOWED_LOG_VIEWERS_COUNT: usize = 10;
 

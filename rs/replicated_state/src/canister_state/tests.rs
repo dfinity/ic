@@ -614,15 +614,6 @@ fn canister_state_callback_round_trip() {
 fn canister_state_log_visibility_round_trip() {
     use ic_protobuf::state::canister_state_bits::v1 as pb;
 
-    // LogVisibilityV1.
-    for initial in LogVisibility::iter() {
-        let encoded = pb::LogVisibility::from(&initial);
-        let round_trip = LogVisibility::from(encoded);
-
-        assert_eq!(initial, round_trip);
-    }
-
-    // LogVisibilityV2.
     for initial in LogVisibilityV2::iter() {
         let encoded = pb::LogVisibilityV2::from(&initial);
         let round_trip = LogVisibilityV2::try_from(encoded).unwrap();
@@ -630,7 +621,7 @@ fn canister_state_log_visibility_round_trip() {
         assert_eq!(initial, round_trip);
     }
 
-    // LogVisibilityV2: check `allowed_viewers` case with non-empty principals.
+    // Check `allowed_viewers` case with non-empty principals.
     let initial = LogVisibilityV2::AllowedViewers(BoundedAllowedViewers::new(vec![
         user_test_id(1).get(),
         user_test_id(2).get(),
@@ -683,6 +674,13 @@ fn compatibility_for_log_visibility() {
             .collect::<Vec<i32>>(),
         [1, 2]
     );
+}
+
+#[test]
+fn compatibility_for_log_visibility_v2() {
+    // If this fails, you are making a potentially incompatible change to `LogVisibilityV2`.
+    // See note [Handling changes to Enums in Replicated State] for how to proceed.
+    assert_eq!(LogVisibilityV2::iter().count(), 3);
 }
 
 #[test]
