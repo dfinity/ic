@@ -1035,10 +1035,11 @@ impl Validator {
             }
 
             // Skip validation if proposal has a higher rank than a known
-            // valid block. Note that we don't consider equivocating blocks
-            // in this check, even if they had been validated through a
-            // notarization. We skip the block instead of removing it because
-            // a higher-rank proposal might still be notarized in the future.
+            // valid block. Note that we don't consider *any* disqualified
+            // rank in this check, including equivocating blocks that were
+            // validated through a notarization. We skip the block instead
+            // of removing it because a higher-rank proposal might still
+            // be notarized in the future.
             if let Some(min_rank) = valid_ranks.get_lowest_rank(proposal.height()) {
                 if proposal.rank() > min_rank {
                     let id = proposal.get_id();
