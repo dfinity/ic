@@ -1,12 +1,12 @@
 use candid::Encode;
 use candid::Principal;
+use ic_icp_rosetta_client::RosettaClient;
 use ic_icp_rosetta_runner::start_rosetta;
-use ic_icp_rosetta_runner::RosettaOptionsBuilder;
+use ic_icp_rosetta_runner::RosettaOptions;
 use ic_ledger_test_utils::build_ledger_wasm;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
 use icp_ledger::LedgerCanisterInitPayload;
 use pocket_ic::PocketIcBuilder;
-use reqwest::StatusCode;
 use std::path::PathBuf;
 use tokio::runtime::Runtime;
 
@@ -15,6 +15,8 @@ fn path_from_env(var: &str) -> PathBuf {
         .unwrap()
 }
 
+// only test_health is in here to check that the client works
+// as intended. All the other tests are in the rosetta tests.
 #[test]
 fn smoke_test() {
     let rt = Runtime::new().unwrap();
@@ -48,25 +50,17 @@ fn smoke_test() {
     let rosetta_bin = path_from_env("ROSETTA_BIN_PATH");
     let rosetta_state_directory =
         tempfile::TempDir::new().expect("failed to create a temporary directory");
-    let http_client = reqwest::Client::new();
 
+    // Wrap async calls in a blocking Block
     rt.block_on(async {
         let context = start_rosetta(
             &rosetta_bin,
             Some(rosetta_state_directory.path().to_owned()),
-            RosettaOptionsBuilder::new(replica_url).build(),
+            RosettaOptions::builder(replica_url).build(),
         )
         .await;
-        let res = http_client
-            .post(format!("http://localhost:{}/network/list", context.port).as_str())
-            .send()
-            .await
-            .expect("Failed to send request");
-        assert_eq!(
-            res.status(),
-            StatusCode::OK,
-            "GET /network_list failed. Response: {:?}",
-            res
-        );
+        let client = RosettaClient::from_str_url(&format!("http://localhost:{}", context.port))
+            .expect("Unable to parse url");
+        assert!(client.network_list().await.is_ok())
     });
 }
