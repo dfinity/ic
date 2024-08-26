@@ -260,6 +260,12 @@ dependencies = [
 
 [[package]]
 name = "ahash"
+version = "0.3.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8fd72866655d1904d6b0997d0b07ba561047d070fbe29de039031c641b61217"
+
+[[package]]
+name = "ahash"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "891477e0c6a8957309ee5c45a6368af3ae14bb510732d2684ffa19af310920f9"
@@ -1127,6 +1133,8 @@ checksum = "d4d30fb43d287492017964a1fd7d3f82e8cc760818471c6ef2d44111e317d5c3"
 dependencies = [
  "bech32 0.8.1",
  "bitcoin_hashes 0.10.0",
+ "core2 0.3.3",
+ "hashbrown 0.8.2",
  "secp256k1 0.22.2",
  "serde",
 ]
@@ -1157,6 +1165,7 @@ version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "006cc91e1a1d99819bc5b8214be3555c1f0611b169f527a1fdc54ed1f2b745b0"
 dependencies = [
+ "core2 0.3.3",
  "serde",
 ]
 
@@ -2462,6 +2471,15 @@ dependencies = [
  "bitcoin-private",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "core2"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "239fa3ae9b63c2dc74bd3fa852d4792b8b305ae64eeede946265b6af62f1fff3"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]
@@ -4459,6 +4477,16 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "hashbrown"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e91b62f79061a0bc2e046024cb7ba44b08419ed238ecbd9adbd787434b9e8c25"
+dependencies = [
+ "ahash 0.3.8",
+ "autocfg 1.1.0",
 ]
 
 [[package]]
@@ -14361,7 +14389,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7d5654ae1795afc7ff76f4365c2c8791b0feb18e8996a96adad8ffd7c3b2bf"
 dependencies = [
  "adler32",
- "core2",
+ "core2 0.4.0",
  "crc32fast",
  "dary_heap",
  "libflate_lz77 2.0.0",
@@ -14382,7 +14410,7 @@ version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be5f52fb8c451576ec6b79d3f4deb327398bc05bbdbd99021a6e77a4c855d524"
 dependencies = [
- "core2",
+ "core2 0.4.0",
  "hashbrown 0.13.2",
  "rle-decode-fast",
 ]

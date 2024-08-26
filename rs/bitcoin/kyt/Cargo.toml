@@ -11,7 +11,7 @@ name = "ic-btc-kyt-canister"
 path = "src/main.rs"
 
 [dependencies]
-bitcoin = "0.28.1"
+bitcoin = { version = "0.28.1", default-features = false, features = ["no-std"] }
 candid = { workspace = true }
 futures = { workspace = true }
 ic-cdk = { workspace = true }
