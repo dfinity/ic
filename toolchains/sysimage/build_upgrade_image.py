@@ -29,7 +29,7 @@ def main():
 
     tmpdir = os.getenv("ICOS_TEMP_DIR")
     if not tmpdir:
-        raise "ICOS_TEMP_DIR env variable not available, should be set in BUILD script."
+        raise RuntimeError("ICOS_TEMP_DIR env variable not available, should be set in BUILD script.")
 
     boot_path = os.path.join(tmpdir, "boot.img")
     subprocess.run(["tar", "xf", boot_image, "--transform=s/partition.img/boot.img/", "-C", tmpdir], check=True)

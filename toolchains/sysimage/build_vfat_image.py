@@ -114,7 +114,7 @@ def main():
 
     tmpdir = os.getenv("ICOS_TEMP_DIR")
     if not tmpdir:
-        raise "ICOS_TEMP_DIR env variable not available, should be set in BUILD script."
+        raise RuntimeError("ICOS_TEMP_DIR env variable not available, should be set in BUILD script.")
 
     fs_basedir = os.path.join(tmpdir, "fs")
     os.mkdir(fs_basedir)

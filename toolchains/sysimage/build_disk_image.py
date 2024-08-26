@@ -98,7 +98,7 @@ def _copyfile(source, target, size):
 def write_partition_image_from_tzst(gpt_entry, image_file, partition_tzst):
     tmpdir = os.getenv("ICOS_TEMP_DIR")
     if not tmpdir:
-        raise "ICOS_TEMP_DIR env variable not available, should be set in BUILD script."
+        raise RuntimeError("ICOS_TEMP_DIR env variable not available, should be set in BUILD script.")
 
     partition_tf = os.path.join(tmpdir, "partition.tar")
     subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)
@@ -158,7 +158,7 @@ def main():
 
     tmpdir = os.getenv("ICOS_TEMP_DIR")
     if not tmpdir:
-        raise "ICOS_TEMP_DIR env variable not available, should be set in BUILD script."
+        raise RuntimeError("ICOS_TEMP_DIR env variable not available, should be set in BUILD script.")
 
     disk_image = os.path.join(tmpdir, "disk.img")
     prepare_diskimage(gpt_entries, disk_image)

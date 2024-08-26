@@ -5,10 +5,13 @@ Tools for building IC OS image.
 def run_with_icos_build_wrapper(command, escape_dollars = False):
     """Wraps a command in a temporary directory and sets the ICOS_TEMP_DIR environment variable.
 
-      Args:
+    Args:
         command: The command to be wrapped.
         escape_dollars: Whether to escape dollar signs in the command. This is necessary in
         contexts where Bazel expands dollar-expressions.
+
+    Returns:
+        The wrapper command.
       """
 
     wrapper = """

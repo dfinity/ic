@@ -95,7 +95,7 @@ def main():
     build_args = list(args.fancy.build_args or [])
     context_dir = os.getenv("ICOS_TEMP_DIR")
     if not context_dir:
-        raise "ICOS_TEMP_DIR env variable not available, should be set in BUILD script."
+        raise RuntimeError("ICOS_TEMP_DIR env variable not available, should be set in BUILD script.")
 
     # Add all context files directly into dir
     for context_file in args.context_files:

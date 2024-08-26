@@ -40,7 +40,7 @@ def main():
 
     tmpdir = os.getenv("ICOS_TEMP_DIR")
     if not tmpdir:
-        raise "ICOS_TEMP_DIR env variable not available, should be set in BUILD script."
+        raise RuntimeError("ICOS_TEMP_DIR env variable not available, should be set in BUILD script.")
     partition = os.path.join(tmpdir, "partition.img")
 
     subprocess.run(

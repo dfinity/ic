@@ -175,7 +175,7 @@ def main():
 
     tmpdir = os.getenv("ICOS_TEMP_DIR")
     if not tmpdir:
-        raise "ICOS_TEMP_DIR env variable not available, should be set in BUILD script."
+        raise RuntimeError("ICOS_TEMP_DIR env variable not available, should be set in BUILD script.")
 
     if file_contexts_file:
         original_file_contexts = open(file_contexts_file, "r").read()
