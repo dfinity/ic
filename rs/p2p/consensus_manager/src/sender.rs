@@ -479,6 +479,7 @@ mod tests {
                 .expect("ConsensusManagerSender did not terminate in time.")
         })
         .await
+        .unwrap();
     }
 
     /// Verify that increasing connection id causes advert to be resent.
@@ -540,6 +541,7 @@ mod tests {
                 .expect("ConsensusManagerSender did not terminate in time.")
         })
         .await
+        .unwrap();
     }
 
     /// Verify failed send is retried.
@@ -592,6 +594,7 @@ mod tests {
                 .expect("ConsensusManagerSender did not terminate in time.")
         })
         .await
+        .unwrap();
     }
 
     /// Verify commit id increases with new adverts/purge events.
@@ -655,6 +658,7 @@ mod tests {
                 .expect("ConsensusManagerSender did not terminate in time.")
         })
         .await
+        .unwrap();
     }
 
     /// Verify that duplicate Advert event does not cause sending twice.
@@ -719,6 +723,7 @@ mod tests {
                 .expect("ConsensusManagerSender did not terminate in time.")
         })
         .await
+        .unwrap();
     }
 
     /// Verify that a panic happening in one of the tasks spawned by the ConsensusManagerSender
@@ -763,7 +768,8 @@ mod tests {
 
         timeout(Duration::from_secs(5), shutdown.shutdown())
             .await
-            .expect("ConsensusManagerSender should terminate since the downstream service `transport` panicked.");
+            .expect("ConsensusManagerSender should terminate since the downstream service `transport` panicked.")
+            .unwrap();
 
         //assert!(join_error.is_panic(), "The join error should be a panic.");
     }).await

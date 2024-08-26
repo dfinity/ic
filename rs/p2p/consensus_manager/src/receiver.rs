@@ -21,7 +21,7 @@ use ic_base_types::NodeId;
 use ic_interfaces::p2p::consensus::{Aborted, ArtifactAssembler, Peers};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::p2p::v1 as pb;
-use ic_quic_transport::{ConnId, SubnetTopology};
+use ic_quic_transport::{ConnId, Shutdown, SubnetTopology};
 use ic_types::artifact::{IdentifiableArtifact, PbArtifact, UnvalidatedArtifactMutation};
 use prost::{DecodeError, Message};
 use tokio::{
@@ -33,6 +33,7 @@ use tokio::{
     },
     task::JoinSet,
 };
+use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 type ReceivedAdvertSender<A> = Sender<(SlotUpdate<A>, NodeId, ConnId)>;
@@ -233,14 +234,25 @@ where
             topology_watcher,
         };
 
-        rt_handle.spawn(receive_manager.start_event_loop());
+        let shutdown = Shutdown::spawn_on_with_cancellation(
+            |cancellation| receive_manager.start_event_loop(cancellation),
+            &rt_handle,
+        );
     }
 
     /// Event loop that processes advert updates and artifact assembles.
     /// The event loop preserves the invariants checked with `debug_assert`.
-    async fn start_event_loop(mut self) {
+    async fn start_event_loop(mut self, cancellation_token: CancellationToken) {
         loop {
             select! {
+                _ = cancellation_token.cancelled() => {
+                    error!(
+                        self.log,
+                        "Sender event loop for the P2P client `{:?}` terminated. No more adverts will be sent for this client.",
+                        uri_prefix::<WireArtifact>()
+                    );
+                    break;
+                }
                 Some((advert_update, peer_id, conn_id)) = self.adverts_received.recv() => {
                     self.handle_advert_receive(advert_update, peer_id, conn_id);
                 }

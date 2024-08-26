@@ -129,7 +129,7 @@ where
 {
     let metrics = ConsensusManagerMetrics::new::<WireArtifact>(metrics_registry);
 
-    let shutdown = ConsensusManagerSender::<Artifact, WireArtifact, _>::run(
+    let shutdown_send_side = ConsensusManagerSender::<Artifact, WireArtifact, _>::run(
         log.clone(),
         metrics.clone(),
         rt_handle.clone(),
@@ -138,7 +138,7 @@ where
         assembler.clone(),
     );
 
-    ConsensusManagerReceiver::run(
+    let _shutdown_receive_side = ConsensusManagerReceiver::run(
         log,
         metrics,
         rt_handle,
@@ -147,7 +147,7 @@ where
         sender,
         topology_watcher,
     );
-    shutdown
+    shutdown_send_side
 }
 
 pub(crate) struct SlotUpdate<Artifact: PbArtifact> {

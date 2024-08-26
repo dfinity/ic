@@ -51,6 +51,7 @@ use ic_metrics::MetricsRegistry;
 use phantom_newtype::AmountOf;
 use quinn::AsyncUdpSocket;
 use tokio::sync::watch;
+use tokio::task::{JoinError, JoinHandle};
 use tokio_util::{sync::CancellationToken, task::task_tracker::TaskTracker};
 use tracing::instrument;
 
@@ -64,17 +65,23 @@ mod request_handler;
 mod utils;
 pub use crate::connection_manager::create_udp_socket;
 
-#[derive(Clone)]
+/// The shutdown primitive is useful if futures should be cancelled at places different than '.await' points.
+/// Such functionality is needed to have explicit control on the state when exiting.
 pub struct Shutdown {
     cancellation: CancellationToken,
     task_tracker: TaskTracker,
+    join_handle: JoinHandle<()>,
+
 }
 
 impl Shutdown {
-    pub async fn shutdown(&self) {
+    /// When shutting down a future on demand, if a panic happens it should be propagated upstream.
+    /// https://github.com/tokio-rs/tokio/issues/4516
+    pub async fn shutdown(self) -> Result<(), JoinError> {
         // If an error is returned it means the conn manager is already stopped.
         self.cancellation.cancel();
         self.task_tracker.wait().await;
+        self.join_handle.await
     }
 
     pub fn cancel(&self) {
@@ -90,16 +97,16 @@ impl Shutdown {
         rt_handle: &tokio::runtime::Handle,
     ) -> Self
     where
-        F: Future + Send + 'static,
-        F::Output: Send + 'static,
+        F: Future<Output = ()> + Send + 'static,
     {
         let task_tracker = TaskTracker::new();
         let cancellation = CancellationToken::new();
-        task_tracker.spawn_on(run(cancellation.clone()), rt_handle);
+        let join_handle = task_tracker.spawn_on(run(cancellation.clone()), rt_handle);
         let _ = task_tracker.close();
         Self {
             cancellation,
             task_tracker,
+            join_handle,
         }
     }
 }
@@ -107,7 +114,7 @@ impl Shutdown {
 #[derive(Clone)]
 pub struct QuicTransport {
     conn_handles: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
-    shutdown: Shutdown,
+    shutdown: Arc<RwLock<Option<Shutdown>>>,
 }
 
 /// This is the main transport handle used for communication between peers.
@@ -158,13 +165,15 @@ impl QuicTransport {
 
         QuicTransport {
             conn_handles,
-            shutdown,
+            shutdown: Arc::new(RwLock::new(Some(shutdown))),
         }
     }
 
     /// Graceful shutdown of transport
-    pub async fn shutdown(&self) {
-        self.shutdown.shutdown().await;
+    pub async fn shutdown(&mut self) {
+        if let Some(shutdown) = self.shutdown.write().unwrap().take() {
+            let _ = shutdown.shutdown().await;
+        }
     }
 
     pub(crate) fn get_conn_handle(
