@@ -32,7 +32,9 @@ DEV_DEPENDENCIES = [
     "//rs/types/types_test_utils",
     "@crate_index//:anyhow",
     "@crate_index//:futures",
+    "@crate_index//:http-body-util",
     "@crate_index//:mockall",
+    "@crate_index//:tower",
 ]
 
 rust_library(

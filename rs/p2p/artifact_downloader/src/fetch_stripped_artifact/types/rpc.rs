@@ -58,6 +58,7 @@ impl From<GetIngressMessageInBlockRequest> for pb::GetIngressMessageInBlockReque
 }
 
 /// `/block/ingress/` rpc response.
+#[derive(Debug, PartialEq)]
 pub(crate) struct GetIngressMessageInBlockResponse {
     pub(crate) ingress_message: SignedIngress,
 }

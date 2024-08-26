@@ -100,6 +100,8 @@ impl IngressPayload {
         self.id_and_pos.is_empty()
     }
 
+    // TODO(kpop): run some benchmarks and see if it makes sense to change the type of
+    // `[IngressPayload::id_and_pos]`
     pub fn get_by_id(
         &self,
         ingress_message_id: &IngressMessageId,

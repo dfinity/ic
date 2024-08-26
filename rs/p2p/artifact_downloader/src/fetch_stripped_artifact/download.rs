@@ -184,6 +184,7 @@ pub(crate) async fn download_ingress<P: Peers>(
 mod tests {
     use super::*;
 
+    use http_body_util::Full;
     use ic_logger::no_op_logger;
     use ic_p2p_test_utils::mocks::{MockPeers, MockTransport, MockValidatedPoolReader};
     use ic_test_utilities_consensus::{
@@ -195,6 +196,7 @@ mod tests {
     use ic_types::consensus::{dkg::Dealings, Block, BlockProposal, DataPayload, Payload, Rank};
     use ic_types::Height;
     use ic_types_test_utils::ids::{node_test_id, NODE_1};
+    use tower::ServiceExt;
 
     fn mock_pools(
         ingress_message: Option<SignedIngress>,
@@ -234,30 +236,49 @@ mod tests {
         }
     }
 
+    async fn send_request(
+        router: Router,
+        bytes: Bytes,
+    ) -> Result<GetIngressMessageInBlockResponse, StatusCode> {
+        let request = Request::builder().uri(URI).body(Full::new(bytes)).unwrap();
+
+        let rpc_response = router
+            .oneshot(request)
+            .await
+            .expect("Should successfully handler the request");
+        let (parts, body) = rpc_response.into_parts();
+        if parts.status != StatusCode::OK {
+            return Err(parts.status);
+        }
+
+        let bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+        let response = pb::GetIngressMessageInBlockResponse::proxy_decode(&bytes)
+            .and_then(|proto: pb::GetIngressMessageInBlockResponse| {
+                GetIngressMessageInBlockResponse::try_from(proto)
+            })
+            .expect("Should return a valid proto");
+
+        Ok(response)
+    }
+
     #[tokio::test]
     async fn rpc_get_from_ingress_pool_test() {
         let ingress_message = SignedIngressBuilder::new().nonce(1).build();
         let block = fake_block_proposal(vec![]);
         let pools = mock_pools(Some(ingress_message.clone()), None);
+        let router = build_axum_router(pools);
 
-        let rpc_response = rpc_handler(
-            State(pools),
+        let response = send_request(
+            router,
             request(
                 ConsensusMessageId::from(&block),
                 IngressMessageId::from(&ingress_message),
             ),
         )
         .await
-        .expect("Should handle the request");
+        .expect("Should return a valid response");
 
-        let deserialized = pb::GetIngressMessageInBlockResponse::proxy_decode(&rpc_response)
-            .and_then(|proto: pb::GetIngressMessageInBlockResponse| {
-                GetIngressMessageInBlockResponse::try_from(proto)
-            })
-            .expect("Should return a valid proto")
-            .ingress_message;
-
-        assert_eq!(deserialized, ingress_message);
+        assert_eq!(response.ingress_message, ingress_message);
     }
 
     #[tokio::test]
@@ -265,25 +286,19 @@ mod tests {
         let ingress_message = SignedIngressBuilder::new().nonce(1).build();
         let block = fake_block_proposal(vec![ingress_message.clone()]);
         let pools = mock_pools(None, Some(block.clone()));
+        let router = build_axum_router(pools);
 
-        let rpc_response = rpc_handler(
-            State(pools),
+        let response = send_request(
+            router,
             request(
                 ConsensusMessageId::from(&block),
                 IngressMessageId::from(&ingress_message),
             ),
         )
         .await
-        .expect("Should handle the request");
+        .expect("Should return a valid response");
 
-        let deserialized = pb::GetIngressMessageInBlockResponse::proxy_decode(&rpc_response)
-            .and_then(|proto: pb::GetIngressMessageInBlockResponse| {
-                GetIngressMessageInBlockResponse::try_from(proto)
-            })
-            .expect("Should return a valid proto")
-            .ingress_message;
-
-        assert_eq!(deserialized, ingress_message);
+        assert_eq!(response.ingress_message, ingress_message);
     }
 
     #[tokio::test]
@@ -291,9 +306,10 @@ mod tests {
         let ingress_message = SignedIngressBuilder::new().nonce(1).build();
         let block = fake_block_proposal(vec![]);
         let pools = mock_pools(None, None);
+        let router = build_axum_router(pools);
 
-        let rpc_response = rpc_handler(
-            State(pools),
+        let response = send_request(
+            router,
             request(
                 ConsensusMessageId::from(&block),
                 IngressMessageId::from(&ingress_message),
@@ -301,7 +317,7 @@ mod tests {
         )
         .await;
 
-        assert_eq!(rpc_response, Err(StatusCode::NOT_FOUND));
+        assert_eq!(response, Err(StatusCode::NOT_FOUND));
     }
 
     #[tokio::test]
@@ -309,9 +325,10 @@ mod tests {
         let ingress_message = SignedIngressBuilder::new().nonce(1).build();
         let block = fake_summary_block_proposal();
         let pools = mock_pools(None, Some(block.clone()));
+        let router = build_axum_router(pools);
 
-        let rpc_response = rpc_handler(
-            State(pools),
+        let response = send_request(
+            router,
             request(
                 ConsensusMessageId::from(&block),
                 IngressMessageId::from(&ingress_message),
@@ -319,7 +336,7 @@ mod tests {
         )
         .await;
 
-        assert_eq!(rpc_response, Err(StatusCode::BAD_REQUEST));
+        assert_eq!(response, Err(StatusCode::BAD_REQUEST));
     }
 
     #[tokio::test]
