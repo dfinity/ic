@@ -145,7 +145,7 @@ jobs:
     timeout-minutes: 120
     runs-on:
       labels: macOS
-    if: ${{ env.CI_COMMIT_REF_PROTECTED == "true" }}
+    if: ${{ github.ref_protected }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
