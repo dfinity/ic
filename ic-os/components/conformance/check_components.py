@@ -55,7 +55,7 @@ def check_paths_in_source(source: str, partition_img_path: str) -> [str]:
         dependencies = re.findall(COMPONENT_FILE_PATTERN, line)
         for dependency in dependencies:
             if re.match(EXCLUDE_FILE_PATTERN, dependency):
-                print(f"Skipping dependency {dependency} (unable to parse)")
+                print(f"Skipping dependency {dependency} (unable to parse path)")
                 continue
             if dependency in allowlisted_unavailable_dependencies:
                 print(f"Skipping allowlisted dependency {dependency}")
