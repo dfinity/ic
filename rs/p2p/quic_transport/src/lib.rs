@@ -71,7 +71,6 @@ pub struct Shutdown {
     cancellation: CancellationToken,
     task_tracker: TaskTracker,
     join_handle: JoinHandle<()>,
-
 }
 
 impl Shutdown {
