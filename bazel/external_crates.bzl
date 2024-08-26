@@ -62,6 +62,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 "opt-level=3",
             ],
         )],
+        "secp256k1-sys": [crate.annotation(
+            rustc_flags = ["--cfg=rust_secp_no_symbol_renaming"],
+        )],
         "sha2": [crate.annotation(
             rustc_flags = [
                 "-C",
