@@ -198,9 +198,9 @@ jobs:
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
       # Build and test, excluding 'upload' jobs that are not required on macOS (used in reproducibility tests)
-      - name: Bazel Test Macos
+      - name: Test
         env:
-          TEST_TAG_FILTERS: ${{ github.ref_protected && 'test_macos,test_macos_slow,-upload' || 'test_macos,-upload' }}
+          TEST_TAG_FILTERS: ${{ env.CI_COMMIT_REF_PROTECTED == "true" }} && 'test_macos,test_macos_slow,-upload' || 'test_macos,-upload'
         run: |
           bazel \
             --noworkspace_rc \
