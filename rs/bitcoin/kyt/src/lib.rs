@@ -1,5 +1,4 @@
 use bitcoin::{
-    address::FromScriptError,
     consensus::{encode, Decodable},
     Address, Network, Transaction,
 };
@@ -12,7 +11,7 @@ use ic_cdk::api::management_canister::http_request::{
 
 #[derive(Debug)]
 pub enum BitcoinTxError {
-    Address(FromScriptError),
+    AddressFromScriptError,
     Encoding(encode::Error),
     TxIdMismatch {
         expected: String,
@@ -39,8 +38,8 @@ pub async fn get_inputs_internal(tx_id: String) -> Result<Vec<String>, BitcoinTx
 
     for (index, input_tx) in input_txs.iter().enumerate() {
         let output = &input_tx.output[vouts[index]];
-        let address =
-            Address::from_script(&output.script_pubkey, Network::Bitcoin).ok_or(BitcoinTxError)?;
+        let address = Address::from_script(&output.script_pubkey, Network::Bitcoin)
+            .ok_or(BitcoinTxError::AddressFromScriptError)?;
         addresses.push(address.to_string());
     }
 
@@ -89,8 +88,12 @@ async fn get_tx(tx_id: String) -> Result<Transaction, BitcoinTxError> {
             let tx = Transaction::consensus_decode(&mut response.body.as_slice())
                 .map_err(BitcoinTxError::Encoding)?;
             // Verify the correctness of the transaction by recomputing the transaction ID.
-            if tx.txid().to_string() != tx_id {
-                return Err(BitcoinTxError);
+            let decoded_id = tx.txid().to_string();
+            if decoded_id != tx_id {
+                return Err(BitcoinTxError::TxIdMismatch {
+                    expected: tx_id,
+                    decoded: decoded_id,
+                });
             }
             Ok(tx)
         }
