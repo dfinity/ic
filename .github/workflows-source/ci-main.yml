@@ -157,7 +157,7 @@ jobs:
     timeout-minutes: 120
     runs-on:
       labels: macOS
-    if: ${{ github.ref_protected }}
+    if: ${{ github.ref_protected }} # Bazel test darwin are still required for building artifacts for the releases, therefore run on protected branches
     steps:
       - <<: *checkout
       - name: Set PATH
