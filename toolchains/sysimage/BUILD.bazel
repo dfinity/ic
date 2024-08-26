@@ -4,7 +4,7 @@ load("@rules_python//python:defs.bzl", "py_binary")
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
-    "build_base_container_image.py",
+    "build_container_base_image.py",
     "build_disk_image.py",
     "build_ext4_image.py",
     "build_fat32_image.py",

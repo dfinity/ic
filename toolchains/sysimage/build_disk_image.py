@@ -10,12 +10,10 @@
 #   build_disk_image -p partitions.csv -o disk.img.tar part1.tzst part2.tzst ...
 #
 import argparse
-import atexit
 import os
 import subprocess
 import sys
 import tarfile
-import tempfile
 
 
 def read_partition_description(data):
@@ -98,8 +96,9 @@ def _copyfile(source, target, size):
 
 
 def write_partition_image_from_tzst(gpt_entry, image_file, partition_tzst):
-    tmpdir = tempfile.mkdtemp(prefix="icosbuild")
-    atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
+    tmpdir = os.getenv("ICOS_TEMP_DIR")
+    if not tmpdir:
+        raise "ICOS_TEMP_DIR env variable not available, should be set in BUILD script."
 
     partition_tf = os.path.join(tmpdir, "partition.tar")
     subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)
@@ -157,8 +156,9 @@ def main():
         gpt_entries = read_partition_description(f.read())
     validate_partition_table(gpt_entries)
 
-    tmpdir = tempfile.mkdtemp(prefix="icosbuild")
-    atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
+    tmpdir = os.getenv("ICOS_TEMP_DIR")
+    if not tmpdir:
+        raise "ICOS_TEMP_DIR env variable not available, should be set in BUILD script."
 
     disk_image = os.path.join(tmpdir, "disk.img")
     prepare_diskimage(gpt_entries, disk_image)

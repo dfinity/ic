@@ -8,12 +8,10 @@
 #   build_fat32_image -s 10M -o partition.img.tzst -p boot/efi -i dockerimg.tar
 #
 import argparse
-import atexit
 import os
 import subprocess
 import sys
 import tarfile
-import tempfile
 
 
 def untar_to_fat32(tf, fs_basedir, out_file, path_transform):
@@ -116,8 +114,9 @@ def main():
     limit_prefix = args.path
     extra_files = args.extra_files
 
-    tmpdir = tempfile.mkdtemp(prefix="icosbuild")
-    atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
+    tmpdir = os.getenv("ICOS_TEMP_DIR")
+    if not tmpdir:
+        raise "ICOS_TEMP_DIR env variable not available, should be set in BUILD script."
 
     fs_basedir = os.path.join(tmpdir, "fs")
     os.mkdir(fs_basedir)

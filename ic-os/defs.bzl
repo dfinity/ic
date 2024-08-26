@@ -8,7 +8,7 @@ load("//bazel:output_files.bzl", "output_files")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:boundary-guestos.bzl", boundary_component_files = "component_files")
-load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "inject_files", "sha256sum", "tar_extract", "tree_hash", "upgrade_image")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "inject_files", "run_with_icos_build_wrapper", "sha256sum", "tar_extract", "tree_hash", "upgrade_image")
 
 def icos_build(
         name,
@@ -214,7 +214,7 @@ def icos_build(
             testonly = malicious,
             srcs = ["partition-root-unsigned.tzst"],
             outs = ["partition-root.tzst", "partition-root-hash"],
-            cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/dflate)",
+            cmd = run_with_icos_build_wrapper("$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/dflate)", escape_dollars = True),
             executable = False,
             tools = ["//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
             tags = ["manual"],
@@ -237,7 +237,7 @@ def icos_build(
                 testonly = malicious,
                 srcs = ["partition-root-test-unsigned.tzst"],
                 outs = ["partition-root-test.tzst", "partition-root-test-hash"],
-                cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tzst) -r $(location partition-root-test-hash) --dflate $(location //rs/ic_os/dflate)",
+                cmd = run_with_icos_build_wrapper("$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tzst) -r $(location partition-root-test-hash) --dflate $(location //rs/ic_os/dflate)", escape_dollars = True),
                 tools = ["//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
                 tags = ["manual"],
             )
@@ -779,7 +779,7 @@ EOF
         name = "partition-root-sign",
         srcs = ["partition-root-unsigned.tzst"],
         outs = ["partition-root.tzst", "partition-root-hash"],
-        cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/dflate)",
+        cmd = run_with_icos_build_wrapper("$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) --dflate $(location //rs/ic_os/dflate)", escape_dollars = True),
         executable = False,
         tools = ["//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
         tags = ["manual"],
