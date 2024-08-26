@@ -39,23 +39,24 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
-    self as ic00, CanisterIdRecord, InstallCodeArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId,
-    Method, Payload,
+    self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
 };
 pub use ic_management_canister_types::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
-    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, EcdsaCurve, EcdsaKeyId,
-    HttpHeader, HttpMethod, SchnorrAlgorithm, SchnorrKeyId, SignWithECDSAReply,
-    SignWithSchnorrReply, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
+    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, ClearChunkStoreArgs,
+    EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, InstallChunkedCodeArgs,
+    LoadCanisterSnapshotArgs, SchnorrAlgorithm, SignWithECDSAReply, SignWithSchnorrReply,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_protobuf::{
     registry::{
-        crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto},
+        crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto, X509PublicKeyCert},
         node::v1::{ConnectionEndpoint, NodeRecord},
         provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
+        replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
         routing_table::v1::{
             CanisterMigrations as PbCanisterMigrations, RoutingTable as PbRoutingTable,
         },
@@ -69,9 +70,11 @@ use ic_registry_client_helpers::{
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
 use ic_registry_keys::{
-    make_canister_migrations_record_key, make_catch_up_package_contents_key,
-    make_chain_key_signing_subnet_list_key, make_crypto_node_key, make_node_record_key,
-    make_provisional_whitelist_record_key, make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
+    make_blessed_replica_versions_key, make_canister_migrations_record_key,
+    make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
+    make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key,
+    make_provisional_whitelist_record_key, make_replica_version_key, make_routing_table_record_key,
+    ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, INITIAL_REGISTRY_VERSION};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -127,6 +130,7 @@ use ic_types::{
     time::GENESIS,
     xnet::{CertifiedStreamSlice, StreamIndex},
     CanisterLog, CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
+    ReplicaVersion,
 };
 pub use ic_types::{
     canister_http::{
@@ -146,6 +150,7 @@ use ic_xnet_payload_builder::{
     ExpectedIndices, RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics,
     XNetSlicePool,
 };
+use rcgen::{CertificateParams, KeyPair};
 use serde::Deserialize;
 
 pub use ic_error_types::RejectCode;
@@ -235,6 +240,29 @@ pub fn finalize_registry(
             Some(pb_whitelist),
         )
         .unwrap();
+    let replica_version = ReplicaVersion::default();
+    let blessed_replica_version = BlessedReplicaVersions {
+        blessed_version_ids: vec![replica_version.clone().into()],
+    };
+    registry_data_provider
+        .add(
+            &make_blessed_replica_versions_key(),
+            registry_version,
+            Some(blessed_replica_version),
+        )
+        .unwrap();
+    let replica_version_record = ReplicaVersionRecord {
+        release_package_sha256_hex: "".to_string(),
+        release_package_urls: vec![],
+        guest_launch_measurement_sha256_hex: None,
+    };
+    registry_data_provider
+        .add(
+            &make_replica_version_key(replica_version),
+            registry_version,
+            Some(replica_version_record),
+        )
+        .unwrap();
 }
 
 /// Adds subnet-related records to registry.
@@ -282,7 +310,10 @@ fn make_nodes_registry(
     for node in nodes {
         let node_record = NodeRecord {
             node_operator_id: vec![0],
-            xnet: None,
+            xnet: Some(ConnectionEndpoint {
+                ip_addr: "2a00:fb01:400:42:5000:22ff:fe5e:e3c4".into(),
+                port: 5678,
+            }),
             http: Some(ConnectionEndpoint {
                 ip_addr: "2a00:fb01:400:42:5000:22ff:fe5e:e3c4".into(),
                 port: 1234,
@@ -299,11 +330,49 @@ fn make_nodes_registry(
                 Some(node_record),
             )
             .unwrap();
+        for (key, key_purpose) in [
+            (node.node_signing_key.clone(), KeyPurpose::NodeSigning),
+            (
+                node.committee_signing_key.clone(),
+                KeyPurpose::CommitteeSigning,
+            ),
+            (
+                node.dkg_dealing_encryption_key.clone(),
+                KeyPurpose::DkgDealingEncryption,
+            ),
+            (
+                node.idkg_mega_encryption_key.clone(),
+                KeyPurpose::IDkgMEGaEncryption,
+            ),
+        ] {
+            let node_pk_proto = PublicKeyProto {
+                algorithm: AlgorithmId::Ed25519 as i32,
+                key_value: key.public_key().serialize_raw().to_vec(),
+                version: 0,
+                proof_data: None,
+                timestamp: None,
+            };
+            registry_data_provider
+                .add(
+                    &make_crypto_node_key(node.node_id, key_purpose),
+                    registry_version,
+                    Some(node_pk_proto.clone()),
+                )
+                .unwrap();
+        }
+        let root_key_pair = KeyPair::generate().unwrap();
+        let root_cert = CertificateParams::new(vec![node.node_id.to_string()])
+            .unwrap()
+            .self_signed(&root_key_pair)
+            .unwrap();
+        let tls_cert = X509PublicKeyCert {
+            certificate_der: root_cert.der().to_vec(),
+        };
         registry_data_provider
             .add(
-                &make_crypto_node_key(node.node_id, KeyPurpose::NodeSigning),
+                &make_crypto_tls_cert_key(node.node_id),
                 registry_version,
-                Some(node.node_pk_proto.clone()),
+                Some(tls_cert),
             )
             .unwrap();
     }
@@ -678,29 +747,32 @@ impl BatchPayloadBuilder for PocketQueryStatsPayloadBuilderImpl {
 /// A replica node of the subnet with the corresponding `StateMachine`.
 pub struct StateMachineNode {
     pub node_id: NodeId,
-    pub node_pk_proto: PublicKeyProto,
-    pub signing_key: ic_crypto_ed25519::PrivateKey,
+    pub node_signing_key: ic_crypto_ed25519::PrivateKey,
+    pub committee_signing_key: ic_crypto_ed25519::PrivateKey,
+    pub dkg_dealing_encryption_key: ic_crypto_ed25519::PrivateKey,
+    pub idkg_mega_encryption_key: ic_crypto_ed25519::PrivateKey,
 }
 
 impl From<u64> for StateMachineNode {
     fn from(i: u64) -> Self {
         let mut bytes = [0; 32];
-        bytes[..8].copy_from_slice(&i.to_le_bytes());
-        let signing_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&bytes);
-        let node_pk_proto = PublicKeyProto {
-            algorithm: AlgorithmId::Ed25519 as i32,
-            key_value: signing_key.public_key().serialize_raw().to_vec(),
-            version: 0,
-            proof_data: None,
-            timestamp: None,
-        };
+        bytes[..8].copy_from_slice(&(4 * i).to_le_bytes());
+        let node_signing_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&bytes);
+        bytes[..8].copy_from_slice(&(4 * i + 1).to_le_bytes());
+        let committee_signing_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&bytes);
+        bytes[..8].copy_from_slice(&(4 * i + 2).to_le_bytes());
+        let dkg_dealing_encryption_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&bytes);
+        bytes[..8].copy_from_slice(&(4 * i + 3).to_le_bytes());
+        let idkg_mega_encryption_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&bytes);
         Self {
             node_id: PrincipalId::new_self_authenticating(
-                &signing_key.public_key().serialize_raw(),
+                &node_signing_key.public_key().serialize_rfc8410_der(),
             )
             .into(),
-            node_pk_proto,
-            signing_key,
+            node_signing_key,
+            committee_signing_key,
+            dkg_dealing_encryption_key,
+            idkg_mega_encryption_key,
         }
     }
 }
@@ -1393,9 +1465,9 @@ impl StateMachine {
                 .schnorr_signature_fee = schnorr_signature_fee;
         }
 
-        let node_offset: u64 = StdRng::from_seed(seed).gen();
-        let nodes: Vec<StateMachineNode> = (0..subnet_size as u64)
-            .map(|i| (node_offset + i).into())
+        let node_offset: u32 = StdRng::from_seed(seed).gen();
+        let nodes: Vec<StateMachineNode> = (0..subnet_size as u32)
+            .map(|i| ((node_offset + i) as u64).into())
             .collect();
         let (ni_dkg_transcript, secret_key) =
             dummy_initial_dkg_transcript_with_master_key(&mut StdRng::from_seed(seed));
@@ -2778,6 +2850,7 @@ impl StateMachine {
         .map(|_| ())
     }
 
+    /// Create a canister snapshot.
     pub fn take_canister_snapshot(
         &self,
         args: TakeCanisterSnapshotArgs,
@@ -2801,12 +2874,18 @@ impl StateMachine {
         })?
     }
 
+    /// Load the canister state from a canister snapshot.
     pub fn load_canister_snapshot(
         &self,
         args: LoadCanisterSnapshotArgs,
     ) -> Result<Vec<u8>, UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.get_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
         self.execute_ingress_as(
-            PrincipalId::new_anonymous(),
+            sender,
             ic00::IC_00,
             Method::LoadCanisterSnapshot,
             args.encode(),
@@ -2817,6 +2896,57 @@ impl StateMachine {
                 panic!("load_canister_snapshot call rejected: {}", reason)
             }
         })?
+    }
+
+    /// Upload a chunk to the wasm chunk store.
+    pub fn upload_chunk(&self, args: UploadChunkArgs) -> Result<UploadChunkReply, UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.get_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
+        self.execute_ingress_as(sender, ic00::IC_00, Method::UploadChunk, args.encode())
+            .map(|res| match res {
+                WasmResult::Reply(data) => UploadChunkReply::decode(&data),
+                WasmResult::Reject(reason) => {
+                    panic!("upload_chunk call rejected: {}", reason)
+                }
+            })?
+    }
+
+    /// Install code from the wasm chunk store.
+    pub fn install_chunked_code(&self, args: InstallChunkedCodeArgs) -> Result<(), UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&args.target_canister_id())
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::InstallChunkedCode,
+            args.encode(),
+        )
+        .map(|_| ())
+    }
+
+    /// Clear the wasm chunk store.
+    pub fn clear_chunk_store(&self, canister_id: CanisterId) -> Result<(), UserError> {
+        let state = self.state_manager.get_latest_state().take();
+        let sender = state
+            .canister_state(&canister_id)
+            .and_then(|s| s.controllers().iter().next().cloned())
+            .unwrap_or_else(PrincipalId::new_anonymous);
+        self.execute_ingress_as(
+            sender,
+            ic00::IC_00,
+            Method::ClearChunkStore,
+            ClearChunkStoreArgs {
+                canister_id: canister_id.into(),
+            }
+            .encode(),
+        )
+        .map(|_| ())
     }
 
     /// Returns true if the canister with the specified id exists.
