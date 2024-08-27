@@ -28,27 +28,11 @@ impl RosettaTestingEnvironment {
     }
 }
 
-pub struct RosettaTestingEnviornmentBuilder {
-    icp_ledger_init_args: Option<LedgerCanisterInitPayload>,
-    controller_id: Option<PrincipalId>,
-}
+pub struct RosettaTestingEnviornmentBuilder {}
 
 impl RosettaTestingEnviornmentBuilder {
     pub fn new() -> Self {
-        Self {
-            icp_ledger_init_args: None,
-            controller_id: None,
-        }
-    }
-
-    pub fn with_icp_ledger_init_args(mut self, args: LedgerCanisterInitPayload) -> Self {
-        self.icp_ledger_init_args = Some(args);
-        self
-    }
-
-    pub fn with_icp_ledger_controller_id(mut self, controller_id: PrincipalId) -> Self {
-        self.controller_id = Some(controller_id);
-        self
+        Self {}
     }
 
     pub async fn build(self) -> RosettaTestingEnvironment {
