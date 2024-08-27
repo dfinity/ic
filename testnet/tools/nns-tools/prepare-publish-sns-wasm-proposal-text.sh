@@ -11,12 +11,14 @@ Usage: $0 <SNS_CANISTER_TYPE> <TARGET_VERSION> (<OUTPUT_FILE>)
   TARGET_VERSION: Git hash of new version to be published to production
   OUTPUT_FILE: File to write contents to (otherwise stdout is used)
 
-  Environment_variables:
-   LAST_PUBLISHED_VERSION: (optional) Git hash of last version published to production. If not provided, the script will
-    attempt to read the last published version from the metadata of the canister.
+  Environment Variables:
+   LAST_PUBLISHED_VERSION: (optional) Git hash of last version published to
+    production. If not provided, the script will attempt to read the last
+    published version from the metadata of the canister.
 
-  This script will output text for publishing the WASM to SNS-W for a given SNS canister.  That text should be modified by hand
-  to include any additional information that should be in the proposal.
+  This script will output text for publishing the WASM to SNS-W for a given SNS
+  canister. That text should be modified by hand to include any additional
+  information that should be in the proposal.
   "
     exit 1
 }

@@ -93,7 +93,6 @@ jobs:
         with:
           name: ${{ github.job }}-bep
           retention-days: 14
-          # we don't always run bazel test (e.g. README changes only)
           if-no-files-found: ignore
           compression-level: 9
           path: |
@@ -263,8 +262,8 @@ jobs:
           BAZEL_TARGETS: "//rs/..."
           BAZEL_EXTRA_ARGS: "--keep_going --config=afl"
       - name: Upload bazel-bep
-        uses: actions/upload-artifact@v4
         if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
           retention-days: 14
