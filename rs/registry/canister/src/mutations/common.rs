@@ -55,11 +55,11 @@ pub(crate) fn check_replica_version_is_blessed(registry: &Registry, replica_vers
     match get_blessed_replica_versions(registry) {
         Ok(blessed_list) => {
             // Verify that the new one is blessed
+            let replica_version_id = replica_version_id.to_string();
             assert!(
                 blessed_list
                     .blessed_version_ids
-                    .iter()
-                    .any(|v| v == replica_version_id),
+                    .contains(&replica_version_id),
                 "Attempt to check if the replica version to '{}' is blessed was rejected, \
                 because that version is NOT blessed. The list of blessed replica versions is: {}.",
                 replica_version_id,
