@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
     "@crate_index//:sha2",
+    "//rs/tests/testing_verification/testnets:qualification"
 ]
 
 TEST_DEPENDENCIES = [

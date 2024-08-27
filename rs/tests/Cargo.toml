@@ -511,6 +511,10 @@ path = "node/ipv4_integration_test.rs"
 name = "ic-xc-ledger-suite-orchestrator"
 path = "cross_chain/ic_xc_ledger_suite_orchestrator_test.rs"
 
+[[bin]]
+name = "ic-qualification"
+path = "qualification/qualification.rs"
+
 # TODO: wait for clap upgrade in the workspace or downgrade clap
 # [[bin]]
 # name = "tnetctl"
