@@ -19,6 +19,7 @@ use ic_system_test_driver::{
 };
 use ic_types::hostos_version::HostosVersion;
 
+use anyhow::Context;
 use slog::info;
 
 mod util;
@@ -94,18 +95,23 @@ pub fn upgrade(env: TestEnv) {
     let logger = env.logger();
 
     let hostos_version = read_dependency_from_env_to_string(HOSTOS_UPDATE_VERSION_ENV_VAR)
-        .unwrap_or_else(|_| {
-            panic!("environment variable {HOSTOS_UPDATE_VERSION_ENV_VAR} is not set")
-        });
+        .context(format!(
+            "environment variable {HOSTOS_UPDATE_VERSION_ENV_VAR} is not set"
+        ))
+        .unwrap();
     let target_version = HostosVersion::try_from(hostos_version).unwrap();
 
     let url = read_dependency_from_env_to_string(HOSTOS_UPDATE_URL_ENV_VAR)
-        .unwrap_or_else(|_| panic!("environment variable {HOSTOS_UPDATE_URL_ENV_VAR} is not set"));
+        .context(format!(
+            "environment variable {HOSTOS_UPDATE_URL_ENV_VAR} is not set"
+        ))
+        .unwrap();
 
-    let sha256 =
-        read_dependency_from_env_to_string(HOSTOS_UPDATE_SHA256_ENV_VAR).unwrap_or_else(|_| {
-            panic!("environment variable {HOSTOS_UPDATE_SHA256_ENV_VAR} is not set")
-        });
+    let sha256 = read_dependency_from_env_to_string(HOSTOS_UPDATE_SHA256_ENV_VAR)
+        .context(format!(
+            "environment variable {HOSTOS_UPDATE_SHA256_ENV_VAR} is not set"
+        ))
+        .unwrap();
 
     let initial_topology = env.topology_snapshot();
     start_nested_vm(env.clone());
