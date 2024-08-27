@@ -25,7 +25,10 @@ use ic_replicated_state::{
 };
 use ic_types::{
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
-    messages::{Request, Response, SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
+    messages::{
+        Request, Response, SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        MAX_RESPONSE_COUNT_BYTES,
+    },
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId,
 };
 use prometheus::IntCounter;
@@ -394,7 +397,8 @@ impl CyclesAccountManager {
     }
 
     /// Withdraws up to `cycles` worth of cycles from the canister's balance
-    /// without putting the canister below its freezing threshold.
+    /// without putting the canister below its freezing threshold even if
+    /// the call currently under construction is performed.
     ///
     /// NOTE: This method is intended for use in inter-canister transfers.
     ///       It doesn't report these cycles as consumed. To withdraw cycles
@@ -404,6 +408,7 @@ impl CyclesAccountManager {
         &self,
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
+        current_payload_size_bytes: NumBytes,
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: NumBytes,
         canister_compute_allocation: ComputeAllocation,
@@ -412,16 +417,24 @@ impl CyclesAccountManager {
         subnet_size: usize,
         reserved_balance: Cycles,
     ) -> Cycles {
-        let threshold = self.freeze_threshold_cycles(
+        let call_perform_cost = self.scale_cost(
+            self.config.xnet_call_fee
+                + self.config.xnet_byte_transmission_fee * current_payload_size_bytes.get(),
+            subnet_size,
+        ) + self.prepayment_for_response_transmission(subnet_size)
+            + self.prepayment_for_response_execution(subnet_size);
+        let memory_used_to_enqueue_message =
+            current_payload_size_bytes.max((MAX_RESPONSE_COUNT_BYTES as u64).into());
+        let freeze_threshold = self.freeze_threshold_cycles(
             freeze_threshold,
             memory_allocation,
             canister_current_memory_usage,
-            canister_current_message_memory_usage,
+            canister_current_message_memory_usage + memory_used_to_enqueue_message,
             canister_compute_allocation,
             subnet_size,
             reserved_balance,
         );
-        let available_for_withdrawal = *cycles_balance - threshold;
+        let available_for_withdrawal = *cycles_balance - freeze_threshold - call_perform_cost;
         let withdrawn_cycles = available_for_withdrawal.min(cycles);
         *cycles_balance -= withdrawn_cycles;
         withdrawn_cycles
@@ -784,6 +797,7 @@ impl CyclesAccountManager {
             subnet_size,
         ) + prepayment_for_response_transmission;
 
+        // todo: can this be deduplicated?
         let fee = transmission_fee + prepayment_for_response_execution;
 
         self.withdraw_with_threshold(

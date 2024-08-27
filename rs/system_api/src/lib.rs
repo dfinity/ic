@@ -1273,6 +1273,7 @@ impl SystemApiImpl {
                         let amount_withdrawn = self
                             .sandbox_safe_system_state
                             .withdraw_cycles_for_transfer(
+                                request.current_payload_size(),
                                 self.memory_usage.current_usage,
                                 self.memory_usage.current_message_usage,
                                 amount,

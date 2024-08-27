@@ -956,6 +956,7 @@ impl SandboxSafeSystemState {
 
     pub(super) fn withdraw_cycles_for_transfer(
         &mut self,
+        current_payload_size_bytes: NumBytes,
         canister_current_memory_usage: NumBytes,
         canister_current_message_memory_usage: NumBytes,
         amount: CyclesAmountType,
@@ -985,6 +986,7 @@ impl SandboxSafeSystemState {
                 .withdraw_up_to_cycles_for_transfer(
                     self.freeze_threshold,
                     self.memory_allocation,
+                    current_payload_size_bytes,
                     canister_current_memory_usage,
                     canister_current_message_memory_usage,
                     self.compute_allocation,
