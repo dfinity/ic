@@ -3,8 +3,8 @@ Rules for check unused components checks.
 """
 
 def _check_unused_components_test_impl(ctx):
-    repo_components = [target.label.name for target in ctx.attr.repo_components]
-    used_components = [target.label.name for target in ctx.attr.used_components]
+    repo_components = [component.label.name for component in ctx.attr.repo_components]
+    used_components = [component.label.name for component in ctx.attr.used_components]
 
     # ADDITIONAL_USED_COMPONENT_FILES are files used for testing and development
     ADDITIONAL_USED_COMPONENT_FILES = ["networking/dev-certs/canister_http_test_ca.key", "networking/dev-certs/root_cert_gen.sh"]
