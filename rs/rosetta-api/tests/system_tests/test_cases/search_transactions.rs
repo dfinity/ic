@@ -2,10 +2,7 @@ use crate::common::system_test_environment::RosettaTestingEnvironment;
 use crate::common::utils::test_identity;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
-use ic_icrc1_test_utils::{
-    minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
-    DEFAULT_TRANSFER_FEE,
-};
+use ic_icrc1_test_utils::{minter_identity, valid_transactions_strategy, DEFAULT_TRANSFER_FEE};
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use proptest::strategy::Strategy;

@@ -5,7 +5,6 @@ use crate::common::{
     utils::test_identity,
 };
 use candid::{Encode, Principal};
-use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
 use ic_icp_rosetta_client::RosettaClient;
 use ic_icp_rosetta_runner::{start_rosetta, RosettaContext, RosettaOptionsBuilder};

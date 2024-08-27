@@ -8321,10 +8321,7 @@ dependencies = [
  "ic-icp-rosetta-runner",
  "ic-ledger-test-utils",
  "ic-rosetta-api",
-<<<<<<< HEAD
  "ic-rosetta-test-utils",
-=======
->>>>>>> master
  "icp-ledger",
  "num-bigint 0.4.6",
  "pocket-ic",
@@ -11072,8 +11069,11 @@ dependencies = [
  "ic-rosetta-test-utils",
  "ic-types",
  "icp-ledger",
+ "icrc-ledger-agent",
+ "icrc-ledger-types",
  "lazy_static",
  "num-bigint 0.4.6",
+ "num-traits",
  "on_wire",
  "pocket-ic",
  "prometheus",

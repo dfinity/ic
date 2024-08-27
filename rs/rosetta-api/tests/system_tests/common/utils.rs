@@ -52,5 +52,5 @@ pub async fn wait_for_rosetta_block(
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
-    last_block
+    panic!("Failed to sync with the ledger");
 }

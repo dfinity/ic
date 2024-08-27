@@ -313,9 +313,9 @@ async fn blocks_test() {
     let resp = req_handler
         .search_transactions(
             SearchTransactionsRequest::builder(req_handler.network_id())
-                .with_transaction_identifier(trans.transaction_identifier.clone()),
+                .with_transaction_identifier(trans.transaction_identifier.clone())
+                .build(),
         )
-        .build()
         .await
         .unwrap();
     assert_eq!(
