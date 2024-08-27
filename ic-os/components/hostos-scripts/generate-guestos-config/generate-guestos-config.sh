@@ -28,6 +28,7 @@ Arguments:
   -h, --help            show this help message and exit
   -i=, --input=         specify the input template file (Default: /opt/ic/share/guestos.xml.template)
   -m=, --media=         specify the config media image file (Default: /run/ic-node/config.img)
+  -f=, --firewall=      specify the firewall.json configuration file (Default: /boot/config/firewall.json)
   -o=, --output=        specify the output configuration file (Default: /var/lib/libvirt/guestos.xml)
 '
             exit 1
@@ -38,6 +39,10 @@ Arguments:
             ;;
         -m=* | --media=*)
             MEDIA="${argument#*=}"
+            shift
+            ;;
+        -f=* | --firewall=*)
+            FIREWALL="${argument#*=}"
             shift
             ;;
         -o=* | --output=*)
@@ -55,6 +60,10 @@ function validate_arguments() {
     if [ "${CONFIG}" == "" -o "${DEPLOYMENT}" == "" -o "${INPUT}" == "" -o "${OUTPUT}" == "" ]; then
         $0 --help
     fi
+    if [ "${FIREWALL}" != "" -a ! -f "${FIREWALL}" ]; then
+        echo >&2 "Error: specified firewall rules file $FIREWALL does not exist"
+        $0 --help
+    fi
 }
 
 # Set arguments if undefined
@@ -62,6 +71,7 @@ CONFIG="${CONFIG:=/boot/config/config.ini}"
 DEPLOYMENT="${DEPLOYMENT:=/boot/config/deployment.json}"
 INPUT="${INPUT:=/opt/ic/share/guestos.xml.template}"
 MEDIA="${MEDIA:=/run/ic-node/config.img}"
+FIREWALL="${DEPLOYMENT:=/boot/config/firewall.json}"
 OUTPUT="${OUTPUT:=/var/lib/libvirt/guestos.xml}"
 
 function read_variables() {
@@ -82,6 +92,9 @@ function read_variables() {
 function assemble_config_media() {
     cmd=(/opt/ic/bin/build-bootstrap-config-image.sh ${MEDIA})
     cmd+=(--nns_public_key "/boot/config/nns_public_key.pem")
+    if [ -f "${FIREWALL}" ]; then
+        cmd+=(--firewall_rules_file "${FIREWALL}")
+    fi
     cmd+=(--elasticsearch_hosts "$(/opt/ic/bin/fetch-property.sh --key=.logging.hosts --metric=hostos_logging_hosts --config=${DEPLOYMENT})")
     cmd+=(--ipv6_address "$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type GuestOS)")
     cmd+=(--ipv6_gateway "${ipv6_gateway}")
