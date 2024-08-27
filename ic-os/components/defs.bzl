@@ -1,4 +1,3 @@
-# help: args, inputs, outputs necessary?
 def _check_unused_components_test_impl(ctx):
     args = []
     inputs = []
