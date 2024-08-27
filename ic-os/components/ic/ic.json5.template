@@ -191,6 +191,9 @@
   counter rate_limit_v4_counter {}\n\
   counter connection_limit_v4_counter {}\n\
 \n\
+  chain provider_INPUT {\n\
+  }\n\
+\n\
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
     iif lo accept\n\
@@ -207,6 +210,7 @@
     ct state { invalid } drop\n\
     #   - The rule accepts all established and related connections. It's required for the IPv4 connectivity check.\n\
     ct state { established, related } accept\n\
+    jump provider_INPUT\n\
     log prefix \"Drop - default policy: \"\n\
   }\n\
 \n\
@@ -237,6 +241,9 @@ table ip6 filter {\n\
   counter rate_limit_v6_counter {}\n\
   counter connection_limit_v6_counter {}\n\
 \n\
+  chain provider_INPUT {\n\
+  }\n\
+\n\
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
     iif lo accept\n\
@@ -259,6 +266,7 @@ table ip6 filter {\n\
     ip6 saddr { hostos } ct state { new } tcp dport { 42372 } accept # Allow access from HostOS metrics-proxy so GuestOS metrics-proxy can proxy certain metrics to HostOS.\n\
     <<IPv6_TCP_RULES>>\n\
     <<IPv6_UDP_RULES>>\n\
+    jump provider_INPUT\n\
     log prefix \"Drop - default policy: \"\n\
   }\n\
 \n\
