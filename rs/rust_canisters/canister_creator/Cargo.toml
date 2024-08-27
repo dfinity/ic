@@ -19,7 +19,7 @@ futures = { workspace = true }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 serde = { workspace = true }
 serde_json = { workspace = true }
-wat = "1.0.52"
+wat = { workspace = true }
 
 [dev-dependencies]
 canister-test = { path = "../../rust_canisters/canister_test" }

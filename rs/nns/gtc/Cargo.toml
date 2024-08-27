@@ -39,6 +39,7 @@ serde = { workspace = true }
 sha3 = { workspace = true }
 
 [dev-dependencies]
+candid_parser = { workspace = true }
 ic-nns-gtc-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 tempfile = { workspace = true }

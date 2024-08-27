@@ -65,7 +65,7 @@ generate_nns_upgrade_proposal_text() {
     local CANDID_ARGS=${4:-}
     local OUTPUT_FILE=${5:-}
 
-    assert_that_a_prebuilt_sns_wasm_is_available "$CANISTER_NAME" "$NEXT_COMMIT"
+    assert_that_a_prebuilt_nns_wasm_is_available "$CANISTER_NAME" "$NEXT_COMMIT"
 
     PROPOSER=$(git config user.email | sed 's/@/ at /')
 
@@ -157,10 +157,11 @@ This should match \`wasm_module\` field of this proposal.$(if [ ! -z "$CANDID_AR
 [latest-didc]: https://github.com/dfinity/candid/releases/latest
 
 \`\`\`
-didc encode '$CANDID_ARGS'
+didc encode '$CANDID_ARGS' | xxd -r -p | sha256sum
+
 \`\`\`
 
-This should match the \`arg_hex\` field of this proposal.
+This should match the \`arg_hash\` field of this proposal.
 "
         fi)
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

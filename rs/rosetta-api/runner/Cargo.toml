@@ -18,3 +18,4 @@ pocket-ic = { path = "../../../packages/pocket-ic" }
 reqwest = { workspace = true }
 ic-ledger-test-utils = { path = "../icp_ledger/test_utils" }
 icp-ledger = { path = "../icp_ledger" }
+tempfile = { workspace = true }

@@ -17,6 +17,7 @@ ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
 ic-crypto-secp256k1 = { path = "secp256k1" }
 ic-crypto-ecdsa-secp256r1 = { path = "ecdsa_secp256r1" }
+ic-crypto-ed25519 = { path = "ed25519" }
 ic-crypto-interfaces-sig-verification = { path = "interfaces/sig_verification" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-internal-csp = { path = "internal/crypto_service_provider" }
@@ -51,7 +52,6 @@ tokio = { workspace = true }
 assert_matches = { workspace = true }
 criterion = { workspace = true }
 ic-certification-test-utils = { path = "../certification/test-utils" }
-ic-crypto-ed25519 = { path = "ed25519" }
 ic-crypto-for-verification-only = { path = "for_verification_only" }
 ic-crypto-internal-basic-sig-der-utils = { path = "internal/crypto_lib/basic_sig/der_utils" }
 ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "internal/crypto_lib/basic_sig/ecdsa_secp256k1" }
