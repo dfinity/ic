@@ -2,7 +2,6 @@ use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
-    group::SystemTestGroup,
     ic::{InternetComputer, Node, Subnet},
     node_software_version::NodeSoftwareVersion,
     prometheus_vm::{HasPrometheus, PrometheusVm},
@@ -26,19 +25,9 @@ pub const IC_CONFIG: &str = "IC_CONFIG";
 
 const TAR_EXTENSION: &str = ".tar.zst";
 
-pub fn setup(env: TestEnv) {
-    let mut config = std::env::var(IC_CONFIG)
-        .unwrap_or_else(|_| panic!("Failed to fetch `{}` from env", IC_CONFIG));
-
-    if config.starts_with('\'') {
-        config = config[1..config.len() - 1].to_string();
-    }
-
-    let parsed: IcConfig = serde_json::from_str(&config)
-        .unwrap_or_else(|_| panic!("Failed to parse json from envrionment: \n{}", config));
-
+pub fn setup(env: TestEnv, config: IcConfig) {
     let mut ic = InternetComputer::new();
-    if let Some(v) = parsed.initial_version {
+    if let Some(v) = config.initial_version {
         ic = ic.with_initial_replica(NodeSoftwareVersion {
             replica_version: v.clone().try_into().unwrap(),
             replica_url: Url::parse("https://unimportant.com").unwrap(),
@@ -67,7 +56,7 @@ pub fn setup(env: TestEnv) {
             ],
         );
     }
-    if let Some(subnets) = parsed.subnets {
+    if let Some(subnets) = config.subnets {
         subnets.iter().for_each(|s| {
             let su = match s {
                 ConfigurableSubnet::Simple(s) => Subnet::new(s.subnet_type).add_nodes(s.num_nodes),
@@ -76,7 +65,7 @@ pub fn setup(env: TestEnv) {
             ic = ic.clone().add_subnet(su)
         })
     }
-    if let Some(u) = parsed.unassigned_nodes {
+    if let Some(u) = config.unassigned_nodes {
         match u {
             ConfigurableUnassignedNodes::Simple(un) => ic = ic.clone().with_unassigned_nodes(un),
             ConfigurableUnassignedNodes::Complex(uns) => uns
@@ -96,7 +85,7 @@ pub fn setup(env: TestEnv) {
         NnsCustomizations::default(),
     );
 
-    if let Some(boundary_nodes) = parsed.boundary_nodes {
+    if let Some(boundary_nodes) = config.boundary_nodes {
         boundary_nodes.iter().for_each(|bn| {
             match bn {
                 ConfigurableBoundaryNode::Simple(bn) => BoundaryNode::new(bn.name.clone()),
@@ -165,41 +154,41 @@ fn fetch_shasum_for_disk_img(version: String) -> String {
 }
 
 #[derive(Deserialize, Debug)]
-struct IcConfig {
-    subnets: Option<Vec<ConfigurableSubnet>>,
-    unassigned_nodes: Option<ConfigurableUnassignedNodes>,
-    boundary_nodes: Option<Vec<ConfigurableBoundaryNode>>,
-    initial_version: Option<String>,
+pub struct IcConfig {
+    pub subnets: Option<Vec<ConfigurableSubnet>>,
+    pub unassigned_nodes: Option<ConfigurableUnassignedNodes>,
+    pub boundary_nodes: Option<Vec<ConfigurableBoundaryNode>>,
+    pub initial_version: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
-enum ConfigurableSubnet {
+pub enum ConfigurableSubnet {
     Simple(SubnetSimple),
     Complex(Box<Subnet>),
 }
 
 #[derive(Deserialize, Debug)]
-struct SubnetSimple {
-    subnet_type: SubnetType,
-    num_nodes: usize,
+pub struct SubnetSimple {
+    pub subnet_type: SubnetType,
+    pub num_nodes: usize,
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
-enum ConfigurableBoundaryNode {
+pub enum ConfigurableBoundaryNode {
     Simple(BoundaryNodeSimple),
     Complex(Box<BoundaryNode>),
 }
 
 #[derive(Deserialize, Debug)]
-struct BoundaryNodeSimple {
-    name: String,
+pub struct BoundaryNodeSimple {
+    pub name: String,
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
-enum ConfigurableUnassignedNodes {
+pub enum ConfigurableUnassignedNodes {
     Simple(usize),
     Complex(Vec<Node>),
 }

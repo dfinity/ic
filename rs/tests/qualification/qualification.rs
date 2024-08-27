@@ -1,6 +1,7 @@
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_tests::qualification_setup::IC_CONFIG;
-use serde_cbor::Value;
+use ic_tests::qualification_setup::{
+    ConfigurableSubnet, ConfigurableUnassignedNodes, IcConfig, SubnetSimple,
+};
 use std::time::Duration;
 
 // 2 Hours
@@ -10,35 +11,28 @@ pub fn main() -> anyhow::Result<()> {
     // setup env variable for config
     let initial_version = std::env::var("INITIAL_VERSION")?;
 
-    let network_layout = format!(
-        r#"{{
-        "subnets": [
-            {{
-                "subnet_type": "system",
-                "num_nodes": 4
-            }},
-            {{
-                "subnet_type": "application",
-                "num_nodes": 4
-            }},
-            {{
-                "subnet_type": "application",
-                "num_nodes": 4
-            }}
-        ],
-        "num_unassigned_nodes": 4,
-        "num_nodes": 4,
-        "initial_version": "{}"
-        }}"#,
-        initial_version
-    );
-    // Validate that the string is valid json
-    let validated = serde_json::to_string(&serde_json::from_str::<Value>(&network_layout)?)?;
-
-    std::env::set_var(IC_CONFIG, validated);
+    let config = IcConfig {
+        subnets: Some(vec![
+            ConfigurableSubnet::Simple(SubnetSimple {
+                subnet_type: ic_registry_subnet_type::SubnetType::System,
+                num_nodes: 4,
+            }),
+            ConfigurableSubnet::Simple(SubnetSimple {
+                subnet_type: ic_registry_subnet_type::SubnetType::Application,
+                num_nodes: 4,
+            }),
+            ConfigurableSubnet::Simple(SubnetSimple {
+                subnet_type: ic_registry_subnet_type::SubnetType::Application,
+                num_nodes: 4,
+            }),
+        ]),
+        unassigned_nodes: Some(ConfigurableUnassignedNodes::Simple(4)),
+        boundary_nodes: None,
+        initial_version: Some(initial_version),
+    };
 
     SystemTestGroup::new()
         .with_overall_timeout(OVERALL_TIMEOUT)
-        .with_setup(ic_tests::qualification_setup::setup)
+        .with_setup(|env| ic_tests::qualification_setup::setup(env, config))
         .execute_from_args()
 }

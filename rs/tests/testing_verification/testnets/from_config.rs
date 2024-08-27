@@ -62,24 +62,22 @@
 //
 // Happy testing!
 
-use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
-use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::{
-    boundary_node::BoundaryNode,
-    group::SystemTestGroup,
-    ic::{InternetComputer, Node, Subnet},
-    node_software_version::NodeSoftwareVersion,
-    prometheus_vm::{HasPrometheus, PrometheusVm},
-    test_env::TestEnv,
-    test_env_api::{get_dependency_path, HasTopologySnapshot, NnsCustomizations},
-};
-use serde::Deserialize;
-use slog::info;
-use url::Url;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_tests::qualification_setup::{IcConfig, IC_CONFIG};
 
 fn main() -> anyhow::Result<()> {
+    let mut config = std::env::var(IC_CONFIG)
+        .unwrap_or_else(|_| panic!("Failed to fetch `{}` from env", IC_CONFIG));
+
+    if config.starts_with('\'') {
+        config = config[1..config.len() - 1].to_string();
+    }
+
+    let parsed: IcConfig = serde_json::from_str(&config)
+        .unwrap_or_else(|_| panic!("Failed to parse json from envrionment: \n{}", config));
+
     SystemTestGroup::new()
-        .with_setup(ic_tests::qualification_setup::setup)
+        .with_setup(|env| ic_tests::qualification_setup::setup(env, parsed))
         .execute_from_args()?;
     Ok(())
 }
