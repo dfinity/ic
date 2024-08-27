@@ -28,9 +28,11 @@ tracing = { workspace = true }
 [dev-dependencies]
 anyhow = { workspace = true }
 futures = { workspace = true }
+http-body-util = { workspace = true }
 ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-consensus = { path = "../../test_utilities/consensus" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 mockall = { workspace = true }
+tower = { workspace = true }
