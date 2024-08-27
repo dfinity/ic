@@ -14,10 +14,10 @@ scoped_threadpool = "0.1.*"
 thiserror = { workspace = true }
 
 [dev-dependencies]
+assert_matches = { workspace = true }
 ic-canonical-state-tree-hash-test-utils = { path = "test_utils" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-crypto-tree-hash-test-utils = { path = "../../crypto/tree_hash/test_utils" }
-assert_matches = { workspace = true }
 proptest = "1.0"
 rand = { workspace = true }
 rand_chacha = { workspace = true }

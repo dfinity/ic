@@ -24,7 +24,7 @@ use ic_consensus_system_test_utils::rw_message::{
     install_nns_and_check_progress, store_message,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance::pb::v1::NnsFunction;
+use ic_nns_governance_api::pb::v1::NnsFunction;
 use ic_recovery::get_node_metrics;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{

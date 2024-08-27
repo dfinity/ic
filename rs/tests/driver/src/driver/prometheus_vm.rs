@@ -21,7 +21,8 @@ use crate::driver::{
     resource::{DiskImage, ImageType},
     test_env::TestEnv,
     test_env_api::{
-        HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession, TopologySnapshot,
+        get_dependency_path, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession,
+        TopologySnapshot,
     },
     test_setup::{GroupSetup, InfraProvider},
     universal_vm::{UniversalVm, UniversalVms},
@@ -29,7 +30,7 @@ use crate::driver::{
 use crate::driver::{
     farm::{DnsRecord, DnsRecordType},
     test_env::TestEnvAttribute,
-    test_env_api::{CreateDnsRecords, HasDependencies},
+    test_env_api::CreateDnsRecords,
 };
 use crate::k8s::config::TNET_DNS_SUFFIX;
 use crate::k8s::tnet::TNet;
@@ -166,7 +167,7 @@ fi
                 ),
             )
             .unwrap();
-        let grafana_dashboards_src = env.get_dependency_path("rs/tests/dashboards");
+        let grafana_dashboards_src = get_dependency_path("rs/tests/dashboards");
         let grafana_dashboards_dst = config_dir.join("grafana").join("dashboards");
         debug!(log, "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ...");
         TestEnv::shell_copy_with_deref(grafana_dashboards_src, grafana_dashboards_dst).unwrap();

@@ -1,24 +1,29 @@
-use crate::canister_agent::CanisterAgent;
-use crate::canister_api::GenericRequest;
-use crate::driver::group::{MAX_RUNTIME_BLOCKING_THREADS, MAX_RUNTIME_THREADS};
-use crate::driver::test_env_api::*;
-use crate::generic_workload_engine::{engine::Engine, metrics::LoadTestMetrics};
-use crate::retry_with_msg;
-use crate::retry_with_msg_async;
-use crate::types::*;
+use crate::{
+    canister_agent::CanisterAgent,
+    canister_api::GenericRequest,
+    driver::{
+        group::{MAX_RUNTIME_BLOCKING_THREADS, MAX_RUNTIME_THREADS},
+        test_env_api::*,
+    },
+    generic_workload_engine::{engine::Engine, metrics::LoadTestMetrics},
+    retry_with_msg, retry_with_msg_async,
+    types::*,
+};
 use anyhow::bail;
 use candid::{Decode, Encode};
 use canister_test::{Canister, RemoteTestRuntime, Runtime, Wasm};
 use dfn_protobuf::{protobuf, ProtoBuf};
-use futures::future::{join_all, select_all, try_join_all};
-use futures::FutureExt;
-use ic_agent::export::Principal;
-use ic_agent::identity::BasicIdentity;
+use futures::{
+    future::{join_all, select_all, try_join_all},
+    FutureExt,
+};
 use ic_agent::{
     agent::{
         http_transport::reqwest_transport::{reqwest, ReqwestTransport},
         CallResponse, EnvelopeContent, RejectCode, RejectResponse,
     },
+    export::Principal,
+    identity::BasicIdentity,
     Agent, AgentError, Identity, Signature,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
@@ -28,20 +33,25 @@ use ic_management_canister_types::{CanisterStatusResult, EmptyBlob, Payload};
 use ic_message::ForwardParams;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
-    create_service_nervous_system::SwapParameters, CreateServiceNervousSystem,
+use ic_nns_governance_api::pb::v1::{
+    create_service_nervous_system::{
+        swap_parameters::NeuronBasketConstructionParameters as GovApiNeuronBasketConstructionParameters,
+        SwapParameters,
+    },
+    CreateServiceNervousSystem,
 };
 use ic_nns_test_utils::governance::upgrade_nns_canister_with_args_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_api::convert::to_arg;
 use ic_sns_swap::pb::v1::{NeuronBasketConstructionParameters, Params};
-use ic_types::messages::{HttpCallContent, HttpQueryContent};
-use ic_types::{CanisterId, Cycles, PrincipalId};
+use ic_types::{
+    messages::{HttpCallContent, HttpQueryContent},
+    CanisterId, Cycles, PrincipalId,
+};
 use ic_universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
-use ic_utils::call::AsyncCall;
-use ic_utils::interfaces::ManagementCanister;
+use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
 use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens,
     DEFAULT_TRANSFER_FEE,
@@ -49,19 +59,19 @@ use icp_ledger::{
 use itertools::Itertools;
 use on_wire::FromWire;
 use slog::{debug, info};
-use std::collections::BTreeMap;
-use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
 use std::{
+    collections::BTreeMap,
     convert::{TryFrom, TryInto},
     fmt::Debug,
     future::Future,
-    net::IpAddr,
+    net::{IpAddr, Ipv6Addr, SocketAddr, SocketAddrV6},
     time::{Duration, Instant, SystemTime},
 };
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
-use tokio::net::{TcpSocket, TcpStream};
-use tokio::runtime::Builder;
-use tokio::runtime::Handle as THandle;
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines},
+    net::{TcpSocket, TcpStream},
+    runtime::{Builder, Handle as THandle},
+};
 use url::Url;
 
 pub mod delegations;
@@ -734,27 +744,6 @@ pub async fn assert_create_agent(url: &str) -> Agent {
         .unwrap_or_else(|err| panic!("Failed to create agent for {}: {:?}", url, err))
 }
 
-/// Initializes an `Agent` using the provided URL.
-/// The root key is fetched as part of the initialization in order
-/// to validate certificates from the replica.
-///
-/// The created agent will route call requests to the
-/// asynchronous V2 call endpoint.
-pub async fn assert_create_agent_using_call_v2(url: &str) -> Agent {
-    let start = Instant::now();
-    // The root key might not be ready yet, so we retry until it is.
-    while start.elapsed() < READY_WAIT_TIMEOUT {
-        if let Ok(agent) = agent_using_call_v2_endpoint(url, None).await {
-            return agent;
-        }
-        tokio::time::sleep(RETRY_BACKOFF).await;
-    }
-
-    agent_using_call_v2_endpoint(url, None)
-        .await
-        .unwrap_or_else(|err| panic!("Failed to create agent for {}: {:?}", url, err))
-}
-
 /// Initializes an `Agent` using the provided URL and identity.
 pub async fn assert_create_agent_with_identity(
     url: &str,
@@ -841,26 +830,22 @@ pub async fn agent_with_client_identity(
 /// Creates an agent that routes ingress messages to the asynchronous V2 call endpoint.
 pub async fn agent_using_call_v2_endpoint(
     url: &str,
-    addr_mapping: Option<IpAddr>,
+    addr_mapping: IpAddr,
 ) -> Result<Agent, AgentError> {
     let identity = get_identity();
+    let parsed_url = reqwest::Url::parse(url).expect("is valid url");
 
-    let builder = reqwest::Client::builder()
+    let reqwest = reqwest::Client::builder()
         .timeout(AGENT_REQUEST_TIMEOUT)
-        .danger_accept_invalid_certs(true);
+        .danger_accept_invalid_certs(true)
+        .resolve(
+            parsed_url.domain().expect("url has domain"),
+            (addr_mapping, 0).into(),
+        )
+        .build()
+        .expect("Is valid reqwest client");
 
-    let builder = match (
-        addr_mapping,
-        reqwest::Url::parse(url).as_ref().map(|u| u.domain()),
-    ) {
-        (Some(addr_mapping), Ok(Some(domain))) => builder.resolve(domain, (addr_mapping, 0).into()),
-        _ => builder,
-    };
-
-    let transport = ReqwestTransport::create_with_client(
-        url,
-        builder.build().expect("Is valid reqwest client"),
-    )?;
+    let transport = ReqwestTransport::create_with_client(url, reqwest)?;
 
     let agent = Agent::builder()
         .with_transport(transport)
@@ -1771,8 +1756,22 @@ pub fn create_service_nervous_system_into_params(
 
     let neuron_basket_construction_parameters: NeuronBasketConstructionParameters =
         neuron_basket_construction_parameters
-            .ok_or("`neuron_basket_construction_parameters` should not be None")?
-            .try_into()?;
+            .map(|neuron_basket_construction_params| {
+                let GovApiNeuronBasketConstructionParameters {
+                    count,
+                    dissolve_delay_interval,
+                } = neuron_basket_construction_params;
+                Ok::<NeuronBasketConstructionParameters, String>(
+                    NeuronBasketConstructionParameters {
+                        count: count.ok_or("`count` should not be None".to_string())?,
+                        dissolve_delay_interval_seconds: dissolve_delay_interval
+                            .ok_or("`dissolve_delay_interval` should not be None".to_string())?
+                            .seconds
+                            .ok_or("`seconds` should not be None".to_string())?,
+                    },
+                )
+            })
+            .expect("`neuron_basket_construction_parameters` should not be None")?;
 
     let start_time = start_time.unwrap_or_else(|| GlobalTimeOfDay::from_hh_mm(12, 0).unwrap()); // Just use a random start time if it's not
     let duration = duration.ok_or("`duration` should not be None")?;

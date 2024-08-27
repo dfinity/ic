@@ -25,6 +25,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/utils",
+    "//rs/utils/validate_eq",
     "@crate_index//:bit-vec",
     "@crate_index//:cvt",
     "@crate_index//:ic-btc-interface",
@@ -36,6 +37,7 @@ DEPENDENCIES = [
     "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
+    "@crate_index//:rayon",
     "@crate_index//:serde",
     "@crate_index//:slog",
     "@crate_index//:strum",
@@ -45,6 +47,7 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/utils/validate_eq_derive",
     "@crate_index//:strum_macros",
 ]
 
@@ -67,7 +70,10 @@ DEV_DEPENDENCIES = [
     "@crate_index//:serde_cbor",
 ]
 
-MACRO_DEV_DEPENDENCIES = []
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:test-strategy",
+]
 
 BIN_DEPENDENCIES = [
     # Keep sorted.

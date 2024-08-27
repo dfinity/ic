@@ -11,18 +11,18 @@ backoff = { workspace = true }
 candid = { workspace = true }
 cargo_metadata = "0.14.2"
 dfn_candid={path="../dfn_candid"}
+escargot = "0.5.2"
 ic-canister-client = { path = "../../canister_client" }
-ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-config = { path = "../../config" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-registry-transport = { path = "../../registry/transport" }
 ic-replica-tests = { path = "../../replica_tests" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-types = { path = "../../types/types" }
-escargot = "0.5.2"
 on_wire = { path = "../on_wire" }
 rand = { workspace = true }
 tokio = { workspace = true }
-wasmprinter = "0.2.45"
-wat = "1.0.52"
+wasmprinter = { workspace = true }
+wat = { workspace = true }
 

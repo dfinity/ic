@@ -8,9 +8,10 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 canister_http = { path = "./canister_http" }
-candid = { workspace = true }
+cloner-canister-types = { path = "./canisters" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
@@ -76,3 +77,7 @@ path = "query_workload_long_test.rs"
 [[bin]]
 name = "ic-systest-update-workload-large-payload-test"
 path = "update_workload_large_payload.rs"
+
+[[bin]]
+name = "ic-systest-cloner-canister-workload"
+path = "cloner_canister_workload.rs"

@@ -866,13 +866,15 @@ pub enum LogVisibilityV2 {
 // When decoding, if `AllowedViewers` is encountered, it is changed to a default value
 // to maintain compatibility with the old `LogVisibility`.
 impl Payload<'_> for LogVisibilityV2 {
-    fn decode(blob: &'_ [u8]) -> Result<Self, UserError> {
-        match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error) {
-            // Fall back to the default value.
-            Ok(Self::AllowedViewers(_)) => Ok(Self::default()),
-            Ok(log_visibility_v2) => Ok(log_visibility_v2),
-            Err(err) => Err(err),
+    fn decode(blob: &[u8]) -> Result<Self, UserError> {
+        let decoded =
+            Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
+
+        if matches!(decoded, Self::AllowedViewers(_)) {
+            return Ok(Self::default()); // Fall back to the default value.
         }
+
+        Ok(decoded)
     }
 }
 
@@ -1022,7 +1024,7 @@ pub struct DefiniteCanisterSettingsArgs {
     memory_allocation: candid::Nat,
     freezing_threshold: candid::Nat,
     reserved_cycles_limit: candid::Nat,
-    log_visibility: LogVisibility,
+    log_visibility: LogVisibilityV2,
     wasm_memory_limit: candid::Nat,
 }
 
@@ -1034,7 +1036,7 @@ impl DefiniteCanisterSettingsArgs {
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
         reserved_cycles_limit: Option<u128>,
-        log_visibility: LogVisibility,
+        log_visibility: LogVisibilityV2,
         wasm_memory_limit: Option<u64>,
     ) -> Self {
         let memory_allocation = candid::Nat::from(memory_allocation.unwrap_or(0));
@@ -1060,8 +1062,12 @@ impl DefiniteCanisterSettingsArgs {
         self.reserved_cycles_limit.clone()
     }
 
-    pub fn log_visibility(&self) -> &LogVisibility {
+    pub fn log_visibility(&self) -> &LogVisibilityV2 {
         &self.log_visibility
+    }
+
+    pub fn wasm_memory_limit(&self) -> candid::Nat {
+        self.wasm_memory_limit.clone()
     }
 }
 
@@ -1178,7 +1184,7 @@ impl CanisterStatusResultV2 {
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
         reserved_cycles_limit: Option<u128>,
-        log_visibility: LogVisibility,
+        log_visibility: LogVisibilityV2,
         idle_cycles_burned_per_day: u128,
         reserved_cycles: u128,
         query_num_calls: u128,
@@ -1862,7 +1868,7 @@ pub struct CanisterSettingsArgs {
     pub memory_allocation: Option<candid::Nat>,
     pub freezing_threshold: Option<candid::Nat>,
     pub reserved_cycles_limit: Option<candid::Nat>,
-    pub log_visibility: Option<LogVisibility>,
+    pub log_visibility: Option<LogVisibilityV2>,
     pub wasm_memory_limit: Option<candid::Nat>,
     pub wasm_memory_threshold: Option<candid::Nat>,
 }
@@ -1893,7 +1899,7 @@ pub struct CanisterSettingsArgsBuilder {
     memory_allocation: Option<candid::Nat>,
     freezing_threshold: Option<candid::Nat>,
     reserved_cycles_limit: Option<candid::Nat>,
-    log_visibility: Option<LogVisibility>,
+    log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<candid::Nat>,
     wasm_memory_threshold: Option<candid::Nat>,
 }
@@ -1976,7 +1982,7 @@ impl CanisterSettingsArgsBuilder {
     }
 
     /// Sets the log visibility.
-    pub fn with_log_visibility(self, log_visibility: LogVisibility) -> Self {
+    pub fn with_log_visibility(self, log_visibility: LogVisibilityV2) -> Self {
         Self {
             log_visibility: Some(log_visibility),
             ..self

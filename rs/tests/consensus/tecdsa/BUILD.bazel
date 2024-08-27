@@ -41,7 +41,7 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/nns/constants",
-        "//rs/nns/governance",
+        "//rs/nns/governance/api",
         "//rs/registry/canister",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",

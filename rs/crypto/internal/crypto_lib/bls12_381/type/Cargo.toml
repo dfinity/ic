@@ -9,17 +9,17 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+hex = { workspace = true }
 ic_bls12_381 = { workspace = true }
 itertools = { workspace = true }
+lazy_static = { workspace = true }
 pairing = { workspace = true }
 paste = "1.0.7"
-subtle = "2.4"
-sha2 = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-lazy_static = { workspace = true }
-hex = { workspace = true }
-zeroize = { version = "1", features = ["zeroize_derive"] }
+sha2 = { workspace = true }
+subtle = "2.4"
+zeroize = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }

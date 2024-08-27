@@ -1,10 +1,11 @@
-use crate::errors::ApiError;
-use crate::ledger_client::OperationOutput;
-use crate::request_types::RequestType;
-use crate::request_types::START_DISSOLVE;
-use ic_nns_governance::pb::v1::governance_error;
-use ic_nns_governance::pb::v1::manage_neuron_response::Command;
-use ic_nns_governance::pb::v1::ManageNeuronResponse;
+use crate::{
+    errors::ApiError,
+    ledger_client::OperationOutput,
+    request_types::{RequestType, START_DISSOLVE},
+};
+use ic_nns_governance_api::pb::v1::{
+    governance_error, manage_neuron_response::Command, ManageNeuronResponse,
+};
 
 pub fn handle_start_dissolve(
     bytes: Vec<u8>,

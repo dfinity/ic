@@ -1,12 +1,7 @@
-use crate::pb::v1::{
-    create_service_nervous_system,
-    create_service_nervous_system::swap_parameters::NeuronBasketConstructionParameters,
-    CreateServiceNervousSystem,
-};
-use ic_nervous_system_common::ONE_DAY_SECONDS;
+use crate::pb::v1::{create_service_nervous_system, CreateServiceNervousSystem};
 use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay};
 use ic_sns_init::pb::v1::{self as sns_init_pb, sns_init_payload, SnsInitPayload};
-use ic_sns_swap::pb::v1::{self as sns_swap_pb, NeuronsFundParticipationConstraints};
+use ic_sns_swap::pb::v1::NeuronsFundParticipationConstraints;
 
 #[derive(Clone, Debug)]
 pub struct ExecutedCreateServiceNervousSystemProposal {
@@ -109,45 +104,11 @@ impl CreateServiceNervousSystem {
         duration: Duration,
         swap_approved_timestamp_seconds: u64,
     ) -> Result<(u64, u64), String> {
-        let start_time_of_day = start_time_of_day
-            .seconds_after_utc_midnight
-            .ok_or("`seconds_after_utc_midnight` should not be None")?;
-        let duration = duration.seconds.ok_or("`seconds` should not be None")?;
-
-        // TODO(NNS1-2298): we should also add 27 leap seconds to this, to avoid
-        // having the swap start half a minute earlier than expected.
-        let midnight_after_swap_approved_timestamp_seconds = swap_approved_timestamp_seconds
-            .saturating_sub(swap_approved_timestamp_seconds % ONE_DAY_SECONDS) // floor to midnight
-            .saturating_add(ONE_DAY_SECONDS); // add one day
-
-        let swap_start_timestamp_seconds = {
-            let mut possible_swap_starts = (0..2).map(|i| {
-                midnight_after_swap_approved_timestamp_seconds
-                    .saturating_add(ONE_DAY_SECONDS * i)
-                    .saturating_add(start_time_of_day)
-            });
-            // Find the earliest time that's at least 24h after the swap was approved.
-            possible_swap_starts
-                .find(|&timestamp| timestamp > swap_approved_timestamp_seconds + ONE_DAY_SECONDS)
-                .ok_or(format!(
-                    "Unable to find a swap start time after the swap was approved. \
-                     swap_approved_timestamp_seconds = {}, \
-                     midnight_after_swap_approved_timestamp_seconds = {}, \
-                     start_time_of_day = {}, \
-                     duration = {} \
-                     This is probably a bug.",
-                    swap_approved_timestamp_seconds,
-                    midnight_after_swap_approved_timestamp_seconds,
-                    start_time_of_day,
-                    duration,
-                ))?
-        };
-
-        let swap_due_timestamp_seconds = duration
-            .checked_add(swap_start_timestamp_seconds)
-            .ok_or("`duration` should not be None")?;
-
-        Ok((swap_start_timestamp_seconds, swap_due_timestamp_seconds))
+        ic_nns_governance_api::pb::v1::CreateServiceNervousSystem::swap_start_and_due_timestamps(
+            start_time_of_day,
+            duration,
+            swap_approved_timestamp_seconds,
+        )
     }
 }
 
@@ -407,7 +368,6 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             // These are not known from only the CreateServiceNervousSystem
             // proposal. See TryFrom<ExecutedCreateServiceNervousSystemProposal>
             nns_proposal_id: None,
-            neurons_fund_participants: None,
             swap_start_timestamp_seconds: None,
             swap_due_timestamp_seconds: None,
             neurons_fund_participation_constraints: None,
@@ -603,29 +563,5 @@ for sns_init_pb::NeuronDistribution
             dissolve_delay_seconds,
             vesting_period_seconds,
         })
-    }
-}
-
-impl TryFrom<NeuronBasketConstructionParameters>
-    for sns_swap_pb::NeuronBasketConstructionParameters
-{
-    type Error = String;
-
-    fn try_from(
-        neuron_basket_construction_parameters: NeuronBasketConstructionParameters,
-    ) -> Result<Self, Self::Error> {
-        let NeuronBasketConstructionParameters {
-            count,
-            dissolve_delay_interval,
-        } = neuron_basket_construction_parameters;
-
-        let params = sns_swap_pb::NeuronBasketConstructionParameters {
-            count: count.ok_or("`count` should not be None")?,
-            dissolve_delay_interval_seconds: dissolve_delay_interval
-                .ok_or("`dissolve_delay_interval` should not be None")?
-                .seconds
-                .ok_or("`seconds` should not be None")?,
-        };
-        Ok(params)
     }
 }

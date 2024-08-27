@@ -1,8 +1,6 @@
 use crate::host::command_utilities::handle_command_output;
 use crate::host::hsm::{attach_hsm, detach_hsm};
-use crate::protocol::{
-    Command, HostOSVsockVersion, NodeIdData, NotifyData, Payload, Response, UpgradeData,
-};
+use crate::protocol::{Command, HostOSVsockVersion, NotifyData, Payload, Response, UpgradeData};
 use sha2::Digest;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
@@ -12,7 +10,6 @@ pub fn dispatch(command: &Command) -> Response {
     match command {
         AttachHSM => attach_hsm(),
         DetachHSM => detach_hsm(),
-        SetNodeId(node_id) => set_node_id(node_id),
         Upgrade(upgrade_data) => upgrade_hostos(upgrade_data),
         Notify(notify_data) => notify(notify_data),
         GetVsockProtocol => get_hostos_vsock_version(),
@@ -22,10 +19,6 @@ pub fn dispatch(command: &Command) -> Response {
 
 // get_hostos_version
 const HOSTOS_VERSION_FILE_PATH: &str = "/opt/ic/share/version.txt";
-
-// set_node_id
-const NODE_ID_FILE_PATH: &str = "/boot/config/node-id";
-const SETUP_HOSTNAME_FILE_PATH: &str = "/opt/ic/bin/setup-hostname.sh";
 
 // upgrade
 const UPGRADE_FILE_PATH: &str = "/tmp/upgrade";
@@ -48,27 +41,6 @@ fn get_hostos_version() -> Response {
 // HostOSVsockVersion command used for backwards compatibility
 fn get_hostos_vsock_version() -> Response {
     Ok(Payload::HostOSVsockVersion(VSOCK_VERSION))
-}
-
-fn set_node_id(node_id: &NodeIdData) -> Response {
-    let mut node_id_file = OpenOptions::new()
-        .write(true)
-        .open(NODE_ID_FILE_PATH)
-        .map_err(|err| {
-            println!("Error opening file: {}", err);
-            err.to_string()
-        })?;
-
-    match node_id_file.write_all(node_id.node_id.as_bytes()) {
-        Ok(_) => println!("Node ID written to file"),
-        Err(err) => println!("Error writing Node ID to file: {}", err),
-    }
-
-    let command_output = std::process::Command::new(SETUP_HOSTNAME_FILE_PATH)
-        .arg("--type=host")
-        .output();
-
-    handle_command_output(command_output)
 }
 
 fn notify(notify_data: &NotifyData) -> Response {

@@ -2,7 +2,20 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = [
+    # Keep sorted.
+    "//rs/nervous_system/clients:__pkg__",
+    "//rs/nervous_system/common:__subpackages__",
+    "//rs/nervous_system/runtime:__pkg__",
+    "//rs/nns:__subpackages__",
+    "//rs/registry/canister:__pkg__",
+    "//rs/rosetta-api:__pkg__",
+    "//rs/rosetta-api/icp_ledger:__subpackages__",
+    "//rs/rust_canisters:__subpackages__",
+    "//rs/scenario_tests:__pkg__",
+    "//rs/sns:__subpackages__",
+    "//rs/tests:__subpackages__",
+])
 
 DEPENDENCIES = [
     # Keep sorted.

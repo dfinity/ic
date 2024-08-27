@@ -256,13 +256,27 @@ pub fn setup_test_router(
     subnet_count: usize,
     nodes_per_subnet: usize,
     response_size: usize,
+    rate_limit_subnet: Option<usize>,
 ) -> (Router, Vec<Subnet>) {
     use axum::extract::connect_info::MockConnectInfo;
     use std::net::SocketAddr;
 
-    let mut args = vec!["", "--local-store-path", "/tmp", "--log-null"];
+    let mut args = vec![
+        "",
+        "--local-store-path",
+        "/tmp",
+        "--log-null",
+        "--retry-update-call",
+    ];
     if !enable_logging {
         args.push("--disable-request-logging");
+    }
+
+    // Hacky, but required due to &str
+    let rate_limit_subnet = rate_limit_subnet.unwrap_or(0).to_string();
+    if rate_limit_subnet != "0" {
+        args.push("--rate-limit-per-second-per-subnet");
+        args.push(rate_limit_subnet.as_str());
     }
 
     #[cfg(not(feature = "tls"))]

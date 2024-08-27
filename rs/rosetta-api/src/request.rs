@@ -1,10 +1,9 @@
-use crate::convert::principal_id_from_public_key_or_principal;
-use crate::errors::ApiError;
-use crate::models::seconds::Seconds;
-use crate::request_types::*;
-use crate::{convert, models};
+use crate::{
+    convert, convert::principal_id_from_public_key_or_principal, errors::ApiError, models,
+    models::seconds::Seconds, request_types::*,
+};
 use dfn_candid::CandidOne;
-use ic_nns_governance::pb::v1::manage_neuron::{self, configure, Command, Configure};
+use ic_nns_governance_api::pb::v1::manage_neuron::{self, configure, Command, Configure};
 use ic_types::PrincipalId;
 use icp_ledger::Tokens;
 use on_wire::FromWire;
@@ -235,7 +234,7 @@ impl TryFrom<&models::Request> for Request {
 
         let manage_neuron = || {
             {
-                CandidOne::<ic_nns_governance::pb::v1::ManageNeuron>::from_bytes(
+                CandidOne::<ic_nns_governance_api::pb::v1::ManageNeuron>::from_bytes(
                     payload.update_content().arg.0.clone(),
                 )
                 .map_err(|e| {

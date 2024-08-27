@@ -27,6 +27,7 @@ pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
 pub mod arb {
     use crate::checked_amount::CheckedAmountOf;
     use crate::eth_rpc::{Block, Data, FeeHistory, FixedSizeData, Hash, LogEntry};
+    use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use candid::Nat;
     use evm_rpc_client::types::candid::{
         HttpOutcallError as EvmHttpOutcallError, JsonRpcError as EvmJsonRpcError,
@@ -131,6 +132,43 @@ pub mod arb {
 
     pub fn arb_gas_used_ratio() -> impl Strategy<Value = Vec<f64>> {
         vec(any::<f64>(), 1..=10)
+    }
+
+    fn arb_transaction_status() -> impl Strategy<Value = TransactionStatus> {
+        prop_oneof![
+            Just(TransactionStatus::Success),
+            Just(TransactionStatus::Failure)
+        ]
+    }
+
+    pub fn arb_transaction_receipt() -> impl Strategy<Value = TransactionReceipt> {
+        (
+            arb_hash(),
+            arb_checked_amount_of(),
+            arb_checked_amount_of(),
+            arb_checked_amount_of(),
+            arb_transaction_status(),
+            arb_hash(),
+        )
+            .prop_map(
+                |(
+                    block_hash,
+                    block_number,
+                    effective_gas_price,
+                    gas_used,
+                    status,
+                    transaction_hash,
+                )| {
+                    TransactionReceipt {
+                        block_hash,
+                        block_number,
+                        effective_gas_price,
+                        gas_used,
+                        status,
+                        transaction_hash,
+                    }
+                },
+            )
     }
 
     pub fn arb_evm_rpc_error() -> impl Strategy<Value = EvmRpcError> {

@@ -2007,6 +2007,184 @@ fn apply_neurons_fund_snapshot(
     }
 }
 
+pub mod neurons_fund_neuron {
+    use ic_base_types::PrincipalId;
+    use std::collections::HashSet;
+
+    /// The number of hotkeys for each Neurons' Fund neuron must be limited due to SNS constraints,
+    /// i.e., an SNS cannot represent arbitrarily-big sets of hotkeys using SNS neuron permissions.
+    /// Concretely, this value should be less than or equal
+    /// `MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_FLOOR` - 2
+    /// because two permissions will be used for the NNS Governance and the NNS neuron controller.
+    pub const MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON: usize = 3;
+
+    /// Returns up to `MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON` elements out of `hotkeys`.
+    ///
+    /// Priority is given to *self-authenticating* principals; if there are too few such principals,
+    /// the function picks the remaining elements in the order in which they appear in the original
+    /// vector.
+    pub fn pick_most_important_hotkeys(hotkeys: &Vec<PrincipalId>) -> Vec<PrincipalId> {
+        // Remove duplicates while preserving the order.
+        let mut unique_hotkeys = vec![];
+        let mut non_self_auth_hotkeys = vec![];
+        let mut observed = HashSet::new();
+        for hotkey in hotkeys {
+            if !observed.contains(hotkey) {
+                observed.insert(*hotkey);
+                // Collect hotkeys that are self-authenticating; save non_self_auth_hotkeys for
+                // later, in case there is still space for some of them.
+                if hotkey.is_self_authenticating() {
+                    unique_hotkeys.push(*hotkey);
+                } else {
+                    non_self_auth_hotkeys.push(*hotkey);
+                }
+            }
+            // Limit how many hotkeys may be collected.
+            if unique_hotkeys.len() == MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON {
+                break;
+            }
+        }
+
+        // If there is space in `unique_hotkeys`, fill it up using `non_self_auth_hotkeys`.
+        while unique_hotkeys.len() < MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON
+            && !non_self_auth_hotkeys.is_empty()
+        {
+            let non_self_authenticating_hotkey = non_self_auth_hotkeys.remove(0);
+            unique_hotkeys.push(non_self_authenticating_hotkey);
+        }
+
+        unique_hotkeys
+    }
+}
+
+#[cfg(test)]
+mod pick_most_important_hotkeys_tests {
+    use super::neurons_fund_neuron::pick_most_important_hotkeys;
+    use ic_types::PrincipalId;
+
+    fn new_non_self_authenticating_principal_id(id: u64) -> PrincipalId {
+        let res = PrincipalId::new_user_test_id(id);
+        assert!(!res.is_self_authenticating());
+        res
+    }
+
+    fn new_self_authenticating_principal_id(id: u64) -> PrincipalId {
+        let res = PrincipalId::new_self_authenticating(&id.to_be_bytes());
+        assert!(res.is_self_authenticating());
+        res
+    }
+
+    #[test]
+    fn trivial() {
+        assert_eq!(pick_most_important_hotkeys(&vec![]), vec![]);
+    }
+
+    #[test]
+    fn ordering_preserved_for_self_auth() {
+        let hot_keys = vec![
+            new_self_authenticating_principal_id(1),
+            new_self_authenticating_principal_id(2),
+        ];
+
+        assert_eq!(
+            pick_most_important_hotkeys(&hot_keys),
+            vec![
+                new_self_authenticating_principal_id(1),
+                new_self_authenticating_principal_id(2),
+            ],
+        );
+    }
+
+    #[test]
+    fn ordering_preserved_for_non_self_auth() {
+        let hot_keys = vec![
+            new_non_self_authenticating_principal_id(1),
+            new_non_self_authenticating_principal_id(2),
+        ];
+
+        assert_eq!(
+            pick_most_important_hotkeys(&hot_keys),
+            vec![
+                new_non_self_authenticating_principal_id(1),
+                new_non_self_authenticating_principal_id(2),
+            ],
+        );
+    }
+
+    #[test]
+    fn ordering_preserved_for_self_auth_followed_by_non_self_auth() {
+        let hot_keys = vec![
+            new_self_authenticating_principal_id(1),
+            new_non_self_authenticating_principal_id(2),
+        ];
+
+        assert_eq!(
+            pick_most_important_hotkeys(&hot_keys),
+            vec![
+                new_self_authenticating_principal_id(1),
+                new_non_self_authenticating_principal_id(2),
+            ],
+        );
+    }
+
+    #[test]
+    fn ordering_reversed_for_non_self_auth_followed_by_self_auth() {
+        let hot_keys = vec![
+            new_non_self_authenticating_principal_id(1),
+            new_self_authenticating_principal_id(2),
+        ];
+
+        assert_eq!(
+            pick_most_important_hotkeys(&hot_keys),
+            vec![
+                new_self_authenticating_principal_id(2),
+                new_non_self_authenticating_principal_id(1),
+            ],
+        );
+    }
+
+    #[test]
+    fn plenty_self_authenticating() {
+        let hot_keys = vec![
+            new_self_authenticating_principal_id(1),
+            new_non_self_authenticating_principal_id(2),
+            new_self_authenticating_principal_id(3),
+            new_self_authenticating_principal_id(4),
+            new_self_authenticating_principal_id(5),
+        ];
+
+        assert_eq!(
+            pick_most_important_hotkeys(&hot_keys),
+            vec![
+                new_self_authenticating_principal_id(1),
+                // #2 dropped as a non-self-authenticating principal.
+                new_self_authenticating_principal_id(3),
+                new_self_authenticating_principal_id(4),
+                // #5 dropped as there are already sufficiently-many hotkeys.
+            ],
+        );
+    }
+
+    #[test]
+    fn few_self_authenticating() {
+        let hot_keys = vec![
+            new_non_self_authenticating_principal_id(1),
+            new_self_authenticating_principal_id(2),
+            new_non_self_authenticating_principal_id(3),
+            new_non_self_authenticating_principal_id(4),
+        ];
+
+        assert_eq!(
+            pick_most_important_hotkeys(&hot_keys),
+            vec![
+                new_self_authenticating_principal_id(2),
+                new_non_self_authenticating_principal_id(1),
+                new_non_self_authenticating_principal_id(3),
+            ],
+        );
+    }
+}
+
 #[cfg(test)]
 mod test_functions_tests {
     use ic_nervous_system_common::E8;

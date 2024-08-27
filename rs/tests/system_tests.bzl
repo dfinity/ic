@@ -23,12 +23,13 @@ def _run_system_test(ctx):
             # relative to the $RUNFILES directory.
             export RUNFILES="$PWD"
             KUBECONFIG=$RUNFILES/${{KUBECONFIG:-}}
-            VERSION_FILE="$(cat $VERSION_FILE_PATH)"
-            cd "$TEST_TMPDIR"
-            mkdir root_env
-            cp -Rs "$RUNFILES" root_env/dependencies/
-            cp -v "$VERSION_FILE" root_env/dependencies/volatile-status.txt
-            "$RUNFILES/{test_executable}" --working-dir . {k8s} --group-base-name {group_base_name} {no_summary_report} "$@" run
+            mkdir "$TEST_TMPDIR/root_env"
+            "$RUNFILES/{test_executable}" \
+              --working-dir "$TEST_TMPDIR" \
+              {k8s} \
+              --group-base-name {group_base_name} \
+              {no_summary_report} \
+              "$@" run
         """.format(
             test_executable = ctx.executable.src.short_path,
             k8s = "--k8s" if k8s else "",
@@ -263,7 +264,8 @@ def system_test(
         env_inherit = env_inherit,
         env = env,
         tags = tags + ["requires-network", "system_test"] +
-               ([] if "experimental_system_test_colocation" in tags else ["manual"]) + additional_colocate_tags,
+               (["colocated"] if "experimental_system_test_colocation" in tags else ["manual"]) +
+               additional_colocate_tags,
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
