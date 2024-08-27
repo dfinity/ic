@@ -23,6 +23,7 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/registry/canister/api",
     "//rs/registry/keys",
+    "//rs/registry/node_provider_rewards",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",

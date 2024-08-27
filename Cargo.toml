@@ -390,6 +390,7 @@ members = [
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
+    "rs/registry/node_provider_rewards",
 ]
 
 resolver = "2"
