@@ -1,4 +1,3 @@
-use std::process;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -20,6 +19,7 @@ use ic_system_test_driver::{
 };
 use ic_types::hostos_version::HostosVersion;
 
+use anyhow::anyhow;
 use slog::info;
 
 mod util;
@@ -94,24 +94,18 @@ pub fn registration(env: TestEnv) {
 pub fn upgrade(env: TestEnv) {
     let logger = env.logger();
 
-    let target_version = HostosVersion::try_from(
-        read_dependency_from_env_to_string(HOSTOS_UPDATE_VERSION_ENV_VAR).unwrap_or_else(|_| {
-            eprintln!("environment variable {HOSTOS_UPDATE_VERSION_ENV_VAR} is not set");
-            process::exit(1);
-        }),
-    )
-    .unwrap();
+    let target_version = read_dependency_from_env_to_string(HOSTOS_UPDATE_VERSION_ENV_VAR)
+        .map_err(|_| anyhow!("environment variable {HOSTOS_UPDATE_VERSION_ENV_VAR} is not set"))
+        .and_then(|v| HostosVersion::try_from(v).map_err(anyhow::Error::from))
+        .unwrap();
 
-    let url = read_dependency_from_env_to_string(HOSTOS_UPDATE_URL_ENV_VAR).unwrap_or_else(|_| {
-        eprintln!("environment variable {HOSTOS_UPDATE_URL_ENV_VAR} is not set");
-        process::exit(1);
-    });
+    let url = read_dependency_from_env_to_string(HOSTOS_UPDATE_URL_ENV_VAR)
+        .map_err(|_| format!("environment variable {HOSTOS_UPDATE_URL_ENV_VAR} is not set"))
+        .unwrap();
 
-    let sha256 =
-        read_dependency_from_env_to_string(HOSTOS_UPDATE_SHA256_ENV_VAR).unwrap_or_else(|_| {
-            eprintln!("environment variable {HOSTOS_UPDATE_SHA256_ENV_VAR} is not set");
-            process::exit(1);
-        });
+    let sha256 = read_dependency_from_env_to_string(HOSTOS_UPDATE_SHA256_ENV_VAR)
+        .map_err(|_| format!("environment variable {HOSTOS_UPDATE_SHA256_ENV_VAR} is not set"))
+        .unwrap();
 
     let initial_topology = env.topology_snapshot();
     start_nested_vm(env.clone());

@@ -43,7 +43,6 @@ use std::{
     io::Write,
     net::{IpAddr, SocketAddr},
     path::PathBuf,
-    process,
     process::Command,
     thread::{self, JoinHandle, ScopedJoinHandle},
 };
@@ -584,10 +583,10 @@ pub fn configure_setupos_image(
     let tmp_dir = env.get_path("setupos");
     fs::create_dir_all(&tmp_dir)?;
 
-    let setupos_image = PathBuf::from(std::env::var(SETUPOS_PATH_ENV_VAR).unwrap_or_else(|_| {
-        eprintln!("environment variable {SETUPOS_PATH_ENV_VAR} is not set");
-        process::exit(1);
-    }));
+    let setupos_image = match std::env::var(SETUPOS_PATH_ENV_VAR) {
+        Ok(path) => PathBuf::from(path),
+        Err(_) => bail!("environment variable {SETUPOS_PATH_ENV_VAR} is not set"),
+    };
 
     let setupos_inject_configs =
         get_dependency_path("rs/ic_os/setupos-inject-configuration/setupos-inject-configuration");
