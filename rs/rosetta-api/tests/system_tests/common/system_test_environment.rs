@@ -44,10 +44,16 @@ pub struct RosettaTestingEnviornmentBuilder {
 
 impl RosettaTestingEnviornmentBuilder {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            transfer_args_for_block_generating: None,
+            minting_account: None,
+        }
     }
 
-    pub fn with_args_with_caller(mut self, transfer_args: Vec<ArgWithCaller>) -> Self {
+    pub fn with_transfer_args_for_block_generating(
+        mut self,
+        transfer_args: Vec<ArgWithCaller>,
+    ) -> Self {
         self.transfer_args_for_block_generating = Some(transfer_args);
         self
     }
@@ -68,27 +74,24 @@ impl RosettaTestingEnviornmentBuilder {
             .await
             .expect("Unable to create the canister in which the Ledger would be installed");
 
-        let init_args = self.icp_ledger_init_args.unwrap_or_else(|| {
-            LedgerCanisterInitPayload::builder()
-                .minting_account(
-                    self.minting_account
-                        .unwrap_or_else(|| minter_identity().sender().unwrap().into())
-                        .into(),
-                )
-                .initial_values(HashMap::from([(
-                    AccountIdentifier::new(PrincipalId(test_identity().sender().unwrap()), None),
-                    icp_ledger::Tokens::from_tokens(DEFAULT_INITIAL_BALANCE).unwrap(),
-                )]))
-                .build()
-                .unwrap()
-        });
-
+        let init_args = LedgerCanisterInitPayload::builder()
+            .minting_account(
+                self.minting_account
+                    .unwrap_or_else(|| minter_identity().sender().unwrap().into())
+                    .into(),
+            )
+            .initial_values(HashMap::from([(
+                AccountIdentifier::new(PrincipalId(test_identity().sender().unwrap()), None),
+                icp_ledger::Tokens::from_tokens(DEFAULT_INITIAL_BALANCE).unwrap(),
+            )]))
+            .build()
+            .unwrap();
         pocket_ic
             .install_canister(
                 canister_id,
                 build_ledger_wasm().bytes().to_vec(),
                 Encode!(&init_args).unwrap(),
-                self.controller_id.map(|id| id.into()),
+                None,
             )
             .await;
 

@@ -42,7 +42,7 @@ fn test_search_transactions_by_hash() {
                 let rt = Runtime::new().unwrap();
                 rt.block_on(async {
                     let rosetta_testing_environment = RosettaTestingEnvironment::builder()
-                        .with_args_with_caller(args_with_caller.clone())
+                        .with_transfer_args_for_block_generating(args_with_caller.clone())
                         .with_minting_account(MINTING_IDENTITY.sender().unwrap().into())
                         .build()
                         .await;
