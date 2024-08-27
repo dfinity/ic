@@ -12,6 +12,9 @@ use serde::Deserialize;
 use slog::info;
 use url::Url;
 
+pub mod defs;
+mod steps;
+
 const IC_VERSION_FILE: &str = "ENV_DEPS__IC_VERSION_FILE";
 const CUSTOM_REVISION: &str = "custom_revision";
 
