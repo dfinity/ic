@@ -38,37 +38,13 @@ impl RosettaTestingEnvironment {
 }
 
 pub struct RosettaTestingEnviornmentBuilder {
-    pub persistent_storage: bool,
-    pub icp_ledger_init_args: Option<LedgerCanisterInitPayload>,
-    pub controller_id: Option<PrincipalId>,
     pub transfer_args_for_block_generating: Option<Vec<ArgWithCaller>>,
     pub minting_account: Option<Account>,
 }
 
 impl RosettaTestingEnviornmentBuilder {
     pub fn new() -> Self {
-        Self {
-            persistent_storage: false,
-            icp_ledger_init_args: None,
-            controller_id: None,
-            transfer_args_for_block_generating: None,
-            minting_account: None,
-        }
-    }
-
-    pub fn with_persistent_storage(mut self) -> Self {
-        self.persistent_storage = true;
-        self
-    }
-
-    pub fn with_icp_ledger_init_args(mut self, args: LedgerCanisterInitPayload) -> Self {
-        self.icp_ledger_init_args = Some(args);
-        self
-    }
-
-    pub fn with_icp_ledger_controller_id(mut self, controller_id: PrincipalId) -> Self {
-        self.controller_id = Some(controller_id);
-        self
+        Self {}
     }
 
     pub fn with_args_with_caller(mut self, transfer_args: Vec<ArgWithCaller>) -> Self {
