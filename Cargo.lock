@@ -9372,8 +9372,10 @@ dependencies = [
  "anyhow",
  "candid",
  "ic-agent",
+ "ic-nervous-system-clients",
  "ic-nns-constants",
  "ic-sns-wasm",
+ "serde",
  "tempfile",
  "tokio",
 ]
