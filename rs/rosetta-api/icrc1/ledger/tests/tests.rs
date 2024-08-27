@@ -390,7 +390,6 @@ fn test_block_transformation() {
     );
 }
 
-#[cfg_attr(feature = "u256-tokens", ignore)]
 #[test]
 fn icrc1_test_upgrade_serialization() {
     let minter = Arc::new(minter_identity());
@@ -399,14 +398,32 @@ fn icrc1_test_upgrade_serialization() {
         .with_transfer_fee(FEE);
     let init_args = Encode!(&LedgerArgument::Init(builder.build())).unwrap();
     let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
+    #[cfg(not(feature = "u256-tokens"))]
+    let ledger_mainnet_wasm = ledger_mainnet_u64_wasm();
+    #[cfg(feature = "u256-tokens")]
+    let ledger_mainnet_wasm = ledger_mainnet_u256_wasm();
     ic_icrc1_ledger_sm_tests::test_upgrade_serialization(
-        ledger_mainnet_wasm(),
+        ledger_mainnet_wasm,
         ledger_wasm(),
         Some(ledger_wasm_upgradetomemorymanager()),
         init_args,
         upgrade_args,
         minter,
         true,
+    );
+}
+
+#[test]
+fn icrc1_test_upgrade_serialization_deterministic() {
+    #[cfg(not(feature = "u256-tokens"))]
+    let ledger_mainnet_wasm = ledger_mainnet_u64_wasm();
+    #[cfg(feature = "u256-tokens")]
+    let ledger_mainnet_wasm = ledger_mainnet_u256_wasm();
+    ic_icrc1_ledger_sm_tests::icrc1_test_upgrade_serialization_deterministic(
+        ledger_mainnet_wasm,
+        ledger_wasm(),
+        ledger_wasm_upgradetomemorymanager(),
+        encode_init_args,
     );
 }
 

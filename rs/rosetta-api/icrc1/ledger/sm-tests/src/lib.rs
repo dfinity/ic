@@ -1,4 +1,4 @@
-use crate::in_memory_ledger::{empty_icrc1_in_memory_ledger, verify_ledger_state};
+use crate::in_memory_ledger::{verify_ledger_state, InMemoryLedger};
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
 use ic_agent::identity::{BasicIdentity, Identity};
 use ic_base_types::PrincipalId;
@@ -2516,7 +2516,7 @@ pub fn test_upgrade_serialization(
                     .install_canister(ledger_wasm_mainnet.clone(), init_args.clone(), None)
                     .unwrap();
 
-                let mut in_memory_ledger = empty_icrc1_in_memory_ledger();
+                let mut in_memory_ledger = InMemoryLedger::default();
 
                 let mut tx_index = 0;
                 let mut tx_index_target = INITIAL_TX_BATCH_SIZE;
@@ -2589,6 +2589,143 @@ pub fn test_upgrade_serialization(
             },
         )
         .unwrap();
+}
+
+pub fn icrc1_test_upgrade_serialization_deterministic<T>(
+    ledger_wasm_mainnet: Vec<u8>,
+    ledger_wasm_current: Vec<u8>,
+    ledger_wasm_upgradetomemorymanager: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let accounts = vec![
+        Account::from(PrincipalId::new_user_test_id(1).0),
+        Account {
+            owner: PrincipalId::new_user_test_id(2).0,
+            subaccount: Some([2; 32]),
+        },
+        Account::from(PrincipalId::new_user_test_id(3).0),
+        Account {
+            owner: PrincipalId::new_user_test_id(4).0,
+            subaccount: Some([4; 32]),
+        },
+    ];
+    let additional_accounts = vec![
+        Account::from(PrincipalId::new_user_test_id(5).0),
+        Account {
+            owner: PrincipalId::new_user_test_id(6).0,
+            subaccount: Some([6; 32]),
+        },
+    ];
+    let mut initial_balances = vec![];
+    let all_accounts = [accounts.clone(), additional_accounts.clone()].concat();
+    for (index, account) in all_accounts.iter().enumerate() {
+        initial_balances.push((*account, 10_000_000u64 + index as u64));
+    }
+
+    // Setup ledger as it is deployed on the mainnet.
+    let (env, canister_id) = setup(
+        ledger_wasm_mainnet.clone(),
+        encode_init_args,
+        initial_balances,
+    );
+
+    const APPROVE_AMOUNT: u64 = 150_000;
+    let expiration =
+        system_time_to_nanos(env.time()) + Duration::from_secs(5 * 3600).as_nanos() as u64;
+
+    let mut expected_allowances = vec![];
+
+    for i in 0..accounts.len() {
+        for j in i + 1..accounts.len() {
+            let mut approve_args = default_approve_args(accounts[j], APPROVE_AMOUNT);
+            approve_args.from_subaccount = accounts[i].subaccount;
+            send_approval(&env, canister_id, accounts[i].owner, &approve_args)
+                .expect("approval failed");
+            expected_allowances.push(get_allowance(&env, canister_id, accounts[i], accounts[j]));
+
+            let mut approve_args = default_approve_args(accounts[i], APPROVE_AMOUNT);
+            approve_args.expires_at = Some(expiration);
+            approve_args.from_subaccount = accounts[j].subaccount;
+            send_approval(&env, canister_id, accounts[j].owner, &approve_args)
+                .expect("approval failed");
+            expected_allowances.push(get_allowance(&env, canister_id, accounts[j], accounts[i]));
+        }
+    }
+    let mut balances = BTreeMap::new();
+    for account in &all_accounts {
+        balances.insert(account, Nat::from(balance_of(&env, canister_id, *account)));
+    }
+
+    let test_upgrade = |ledger_wasm: Vec<u8>, balances: BTreeMap<&Account, Nat>| {
+        env.upgrade_canister(
+            canister_id,
+            ledger_wasm,
+            Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+        )
+        .unwrap();
+
+        let mut allowances = vec![];
+        for i in 0..accounts.len() {
+            for j in i + 1..accounts.len() {
+                let allowance = get_allowance(&env, canister_id, accounts[i], accounts[j]);
+                assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
+                allowances.push(allowance);
+                let allowance = get_allowance(&env, canister_id, accounts[j], accounts[i]);
+                assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
+                allowances.push(allowance);
+            }
+        }
+        assert_eq!(expected_allowances, allowances);
+
+        for account in &all_accounts {
+            assert_eq!(balance_of(&env, canister_id, *account), balances[account]);
+        }
+    };
+
+    // Test if the old serialized approvals and balances are correctly deserialized
+    test_upgrade(ledger_wasm_current.clone(), balances.clone());
+    // Test the new wasm serialization
+    test_upgrade(ledger_wasm_current.clone(), balances.clone());
+    // Test serializing to the memory manager
+    test_upgrade(ledger_wasm_upgradetomemorymanager.clone(), balances.clone());
+    // Test upgrade to memory manager again
+    test_upgrade(ledger_wasm_upgradetomemorymanager, balances.clone());
+    // Test deserializing from memory manager
+    test_upgrade(ledger_wasm_current, balances.clone());
+
+    // Add some more approvals
+    for a1 in &accounts {
+        for a2 in &additional_accounts {
+            let mut approve_args = default_approve_args(*a2, APPROVE_AMOUNT);
+            approve_args.from_subaccount = a1.subaccount;
+            send_approval(&env, canister_id, a1.owner, &approve_args).expect("approval failed");
+            balances.insert(a1, balances[a1].clone() - approve_args.fee.unwrap());
+
+            let mut approve_args = default_approve_args(*a1, APPROVE_AMOUNT);
+            approve_args.expires_at = Some(expiration);
+            approve_args.from_subaccount = a2.subaccount;
+            send_approval(&env, canister_id, a2.owner, &approve_args).expect("approval failed");
+            balances.insert(a2, balances[a2].clone() - approve_args.fee.unwrap());
+        }
+    }
+
+    // Test downgrade to mainnet wasm
+    test_upgrade(ledger_wasm_mainnet, balances);
+
+    // See if the additional approvals are there
+    for a1 in &accounts {
+        for a2 in &additional_accounts {
+            let allowance = get_allowance(&env, canister_id, *a1, *a2);
+            assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
+            assert_eq!(allowance.expires_at, None);
+
+            let allowance = get_allowance(&env, canister_id, *a2, *a1);
+            assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
+            assert_eq!(allowance.expires_at, Some(expiration));
+        }
+    }
 }
 
 pub fn default_approve_args(spender: impl Into<Account>, amount: u64) -> ApproveArgs {
