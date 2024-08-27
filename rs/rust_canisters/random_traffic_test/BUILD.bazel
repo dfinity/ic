@@ -10,6 +10,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
+    "@crate_index//:rand",
     "@crate_index//:serde",
 ]
 
@@ -19,17 +20,17 @@ MACRO_DEPENDENCIES = [
 ]
 
 rust_library(
-    name = "subnet_memory_test",
+    name = "random_traffic_test",
     srcs = ["src/lib.rs"],
-    crate_name = "subnet_memory_test",
+    crate_name = "random_traffic_test",
     version = "0.1.0",
     deps = DEPENDENCIES,
 )
 
 rust_canister(
-    name = "subnet-memory-test-canister",
+    name = "random-traffic-test-canister",
     srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
-    service_file = ":subnet_memory_test.did",
-    deps = DEPENDENCIES + [":subnet_memory_test"],
+    service_file = ":random_traffic_test.did",
+    deps = DEPENDENCIES + [":random_traffic_test"],
 )

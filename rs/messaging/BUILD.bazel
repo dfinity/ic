@@ -85,12 +85,12 @@ rust_ic_test_suite(
     srcs = glob(["tests/**/*.rs"]),
     data = [
         "//rs/rust_canisters/downstream_calls_test:downstream-calls-test-canister",
-	"//rs/rust_canisters/subnet_memory_test:subnet-memory-test-canister",
+        "//rs/rust_canisters/random_traffic_test:random-traffic-test-canister",
         "//rs/rust_canisters/xnet_test:xnet-test-canister",
     ],
     env = {
         "DOWNSTREAM_CALLS_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/downstream_calls_test:downstream-calls-test-canister)",
-	"SUBNET_MEMORY_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/subnet_memory_test:subnet-memory-test-canister)",
+        "RANDOM_TRAFFIC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/random_traffic_test:random-traffic-test-canister)",
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
     deps = [
@@ -102,7 +102,7 @@ rust_ic_test_suite(
         "//rs/replicated_state",
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/downstream_calls_test",
-        "//rs/rust_canisters/subnet_memory_test",
+        "//rs/rust_canisters/random_traffic_test",
         "//rs/rust_canisters/xnet_test",
         "//rs/state_machine_tests",
         "//rs/test_utilities",
@@ -114,7 +114,7 @@ rust_ic_test_suite(
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:maplit",
-    	"@crate_index//:proptest",
+        "@crate_index//:proptest",
         "@crate_index//:serde",
     ],
 )

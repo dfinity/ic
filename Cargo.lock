@@ -9284,9 +9284,9 @@ dependencies = [
  "prometheus",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "random-traffic-test",
  "serde",
  "slog",
- "subnet-memory-test",
  "tempfile",
  "tracing",
  "xnet-test",
@@ -17184,6 +17184,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "random-traffic-test"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "dfn_core",
+ "ic-base-types",
+ "ic-cdk 0.13.5",
+ "ic-cdk-macros 0.9.0",
+ "ic-types",
+ "rand 0.8.5",
+ "serde",
+]
+
+[[package]]
 name = "rangemap"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -19243,19 +19257,6 @@ dependencies = [
  "log",
  "rand 0.8.5",
  "tokio",
-]
-
-[[package]]
-name = "subnet-memory-test"
-version = "0.1.0"
-dependencies = [
- "candid",
- "dfn_core",
- "ic-base-types",
- "ic-cdk 0.13.5",
- "ic-cdk-macros 0.9.0",
- "ic-types",
- "serde",
 ]
 
 [[package]]

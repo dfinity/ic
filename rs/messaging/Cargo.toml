@@ -66,8 +66,8 @@ mockall = { workspace = true }
 pretty_assertions = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
+random-traffic-test = { path = "../rust_canisters/random_traffic_test" }
 serde = { workspace = true }
-subnet-memory-test = { path = "../rust_canisters/subnet_memory_test" }
 tempfile = { workspace = true }
 xnet-test = { path = "../rust_canisters/xnet_test" }
 
