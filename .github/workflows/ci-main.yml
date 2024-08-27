@@ -138,8 +138,8 @@ jobs:
           path: |
             bazel-bep.pb
             profile.json
-  bazel-test-darwin-x86-64:
-    name: Bazel Test Darwin x86-64
+  bazel-test-macos-intel:
+    name: Bazel Test MacOS Intel
     timeout-minutes: 120
     runs-on:
       labels: macOS
