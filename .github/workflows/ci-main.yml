@@ -55,6 +55,8 @@ jobs:
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
       - name: Set BAZEL_EXTRA_ARGS_RULES
         shell: bash
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
         run: |
           set -xeuo pipefail
           if [[ "${{ github.event_name }}" == 'merge_group' ]]; then
@@ -68,7 +70,6 @@ jobs:
         uses: ./.github/actions/bazel-test-all/
         env:
           AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
         with:
           BAZEL_COMMAND: "test"
