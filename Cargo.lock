@@ -2280,8 +2280,10 @@ dependencies = [
  "anyhow",
  "clap 4.5.20",
  "ic-types",
+ "ipnet",
  "mac_address",
  "once_cell",
+ "pretty_assertions",
  "regex",
  "serde",
  "serde_json",
@@ -14303,7 +14305,10 @@ dependencies = [
 name = "ipnet"
 version = "2.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddc24109865250148c2e0f3d25d4f0f479571723792d3802153c60922a4fb708"
+checksum = "187674a687eed5fe42285b40c6291f9a01517d415fad1c3cbc6a9f778af7fcd4"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "ipnetwork"

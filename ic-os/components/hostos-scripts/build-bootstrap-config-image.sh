@@ -110,6 +110,9 @@ options may be specified:
   --generate_ic_boundary_tls_cert domain_name
     Generate and inject a self-signed TLS certificate and key for ic-boundary
     for the given domain name. To be used in system tests only.
+
+  --firewall_rules_file path
+    Optional. Should point to a file containing a firewall.json rules file.
 EOF
 }
 
@@ -130,6 +133,7 @@ function build_ic_bootstrap_tar() {
     local QUERY_STATS_EPOCH_LENGTH
     local BITCOIND_ADDR
     local JAEGER_ADDR
+    local FIREWALL_RULES_FILE
 
     while true; do
         if [ $# == 0 ]; then
@@ -205,6 +209,8 @@ function build_ic_bootstrap_tar() {
                 ;;
             --generate_ic_boundary_tls_cert)
                 IC_BOUNDARY_TLS_CERT_DOMAIN_NAME="$2"
+            --firewall_rules_file)
+                FIREWALL_RULES_FILE="$2"
                 ;;
             *)
                 echo "Unrecognized option: $1"
@@ -282,6 +288,8 @@ EOF
             -keyout ${BOOTSTRAP_TMPDIR}/ic-boundary-tls.key \
             -out ${BOOTSTRAP_TMPDIR}/ic-boundary-tls.crt -sha256 -days 3650 -nodes \
             -subj /C=CH/ST=Zurich/L=Zurich/O=InternetComputer/OU=ApiBoundaryNodes/CN=${IC_BOUNDARY_TLS_CERT_DOMAIN_NAME}
+    if [ "${FIREWALL_RULES_FILE}" != "" ]; then
+        cp "${FIREWALL_RULES_FILE}" "${BOOTSTRAP_TMPDIR}/firewall.json"
     fi
 
     tar cf "${OUT_FILE}" \

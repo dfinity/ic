@@ -1,9 +1,12 @@
+use crate::types::firewall::FirewallSettings;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use mac_address::mac_address::FormattedMacAddress;
 use serde::{Deserialize, Serialize};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::PathBuf;
 use url::Url;
+
+pub mod firewall;
 
 /// SetupOS configuration. User-facing configuration files
 /// (e.g., `config.ini`, `deployment.json`) are transformed into `SetupOSConfig`.
@@ -96,6 +99,7 @@ pub struct ICOSSettings {
     pub nns_urls: Vec<Url>,
     /// This file contains the Node Operator private key,
     /// which is registered with the NNS and used to sign the IC join request.
+    // FIXME: these should probably be under its own structure Auth.
     pub node_operator_private_key_path: Option<PathBuf>,
     /// This directory contains individual files named `admin`, `backup`, `readonly`.
     /// The contents of these files serve as `authorized_keys` for their respective role account.
@@ -122,6 +126,8 @@ pub struct Logging {
 pub struct NetworkSettings {
     pub ipv6_config: Ipv6Config,
     pub ipv4_config: Option<Ipv4Config>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub firewall: Option<FirewallSettings>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]

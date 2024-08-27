@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
+    "@crate_index//:ipnet",
     "@crate_index//:regex",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
@@ -19,6 +20,7 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:once_cell",
+    "@crate_index//:pretty_assertions",
     "@crate_index//:tempfile",
 ]
 

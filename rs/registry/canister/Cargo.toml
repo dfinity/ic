@@ -45,7 +45,7 @@ ic-types = { path = "../../types/types" }
 idna = { workspace = true }
 lazy_static = { workspace = true }
 leb128 = "0.2.4"
-ipnet = "2.5.0"
+ipnet = "2.8.0"
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
 serde = { workspace = true }
