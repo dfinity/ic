@@ -331,6 +331,7 @@ pub fn build_mainnet_registry_wasm() -> Wasm {
     let features = [];
     Project::cargo_bin_maybe_from_env("mainnet-registry-canister", &features)
 }
+
 /// Build Wasm for NNS Ledger canister
 pub fn build_ledger_wasm() -> Wasm {
     let features = ["notify-method"];
@@ -340,6 +341,11 @@ pub fn build_ledger_wasm() -> Wasm {
 pub fn build_cmc_wasm() -> Wasm {
     let features = [];
     Project::cargo_bin_maybe_from_env("cycles-minting-canister", &features)
+}
+/// Build mainnet Wasm for NNS Cycles Minting canister
+pub fn build_mainnet_cmc_wasm() -> Wasm {
+    let features = [];
+    Project::cargo_bin_maybe_from_env("mainnet-cycles-minting-canister", &features)
 }
 /// Build Wasm for NNS Lifeline canister
 pub fn build_lifeline_wasm() -> Wasm {

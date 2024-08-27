@@ -7,8 +7,9 @@ use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_P
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
-    self, ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
-    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    self, ALL_NNS_CANISTER_IDS, CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::pb::v1::{
     manage_neuron, manage_neuron_response, proposal, CreateServiceNervousSystem,
@@ -18,10 +19,11 @@ use ic_nns_governance_api::pb::v1::{
 };
 use ic_nns_test_utils::{
     common::{
-        build_governance_wasm, build_ledger_wasm, build_lifeline_wasm,
-        build_mainnet_governance_wasm, build_mainnet_ledger_wasm, build_mainnet_lifeline_wasm,
-        build_mainnet_registry_wasm, build_mainnet_root_wasm, build_mainnet_sns_wasms_wasm,
-        build_registry_wasm, build_root_wasm, build_sns_wasms_wasm, NnsInitPayloadsBuilder,
+        build_cmc_wasm, build_governance_wasm, build_ledger_wasm, build_lifeline_wasm,
+        build_mainnet_cmc_wasm, build_mainnet_governance_wasm, build_mainnet_ledger_wasm,
+        build_mainnet_lifeline_wasm, build_mainnet_registry_wasm, build_mainnet_root_wasm,
+        build_mainnet_sns_wasms_wasm, build_registry_wasm, build_root_wasm, build_sns_wasms_wasm,
+        NnsInitPayloadsBuilder,
     },
     governance::UpgradeRootProposal,
     sns_wasm::{
@@ -291,26 +293,35 @@ pub fn install_nns_canisters(
 
     let nns_init_payload = nns_init_payload_builder.build();
 
-    let (governance_wasm, ledger_wasm, root_wasm, lifeline_wasm, sns_wasm_wasm, registry_wasm) =
-        if with_mainnet_nns_canister_versions {
-            (
-                build_mainnet_governance_wasm(),
-                build_mainnet_ledger_wasm(),
-                build_mainnet_root_wasm(),
-                build_mainnet_lifeline_wasm(),
-                build_mainnet_sns_wasms_wasm(),
-                build_mainnet_registry_wasm(),
-            )
-        } else {
-            (
-                build_governance_wasm(),
-                build_ledger_wasm(),
-                build_root_wasm(),
-                build_lifeline_wasm(),
-                build_sns_wasms_wasm(),
-                build_registry_wasm(),
-            )
-        };
+    let (
+        governance_wasm,
+        ledger_wasm,
+        root_wasm,
+        lifeline_wasm,
+        sns_wasm_wasm,
+        registry_wasm,
+        cmc_wasm,
+    ) = if with_mainnet_nns_canister_versions {
+        (
+            build_mainnet_governance_wasm(),
+            build_mainnet_ledger_wasm(),
+            build_mainnet_root_wasm(),
+            build_mainnet_lifeline_wasm(),
+            build_mainnet_sns_wasms_wasm(),
+            build_mainnet_registry_wasm(),
+            build_mainnet_cmc_wasm(),
+        )
+    } else {
+        (
+            build_governance_wasm(),
+            build_ledger_wasm(),
+            build_root_wasm(),
+            build_lifeline_wasm(),
+            build_sns_wasms_wasm(),
+            build_registry_wasm(),
+            build_cmc_wasm(),
+        )
+    };
 
     install_canister(
         pocket_ic,
@@ -358,6 +369,14 @@ pub fn install_nns_canisters(
         REGISTRY_CANISTER_ID,
         Encode!(&nns_init_payload.registry).unwrap(),
         registry_wasm,
+        Some(ROOT_CANISTER_ID.get()),
+    );
+    install_canister(
+        pocket_ic,
+        "CMC",
+        CYCLES_MINTING_CANISTER_ID,
+        Encode!(&nns_init_payload.cycles_minting).unwrap(),
+        cmc_wasm,
         Some(ROOT_CANISTER_ID.get()),
     );
 
