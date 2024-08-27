@@ -1,5 +1,5 @@
 {
-  "checksum": "f9bc2e926d17b931dc091679342a43d8cfd51c4feba3aa54cbacd595bf0da26d",
+  "checksum": "6fc19c391d6fc5ee83c6383b3f8410b4f2bd189026655397f94a88830e709342",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5454,6 +5454,59 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "base58ck 0.1.0": {
+      "name": "base58ck",
+      "version": "0.1.0",
+      "package_url": "https://github.com/rust-bitcoin/rust-bitcoin/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/base58ck/0.1.0/download",
+          "sha256": "2c8d66485a3a2ea485c1913c4572ce0256067a5377ac8c75c4960e1cda98605f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "base58ck",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "base58ck",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bitcoin-internals 0.3.0",
+              "target": "bitcoin_internals",
+              "alias": "internals"
+            },
+            {
+              "id": "bitcoin_hashes 0.14.0",
+              "target": "bitcoin_hashes",
+              "alias": "hashes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.0"
+      },
+      "license": "CC0-1.0",
+      "license_ids": [
+        "CC0-1.0"
+      ],
+      "license_file": null
+    },
     "base64 0.13.1": {
       "name": "base64",
       "version": "0.13.1",
@@ -5830,6 +5883,50 @@
         "MIT"
       ],
       "license_file": null
+    },
+    "bech32 0.11.0": {
+      "name": "bech32",
+      "version": "0.11.0",
+      "package_url": "https://github.com/rust-bitcoin/rust-bech32",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/bech32/0.11.0/download",
+          "sha256": "d965446196e3b7decd44aa7ee49e31d630118f90ef12f97900f262eb915c951d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bech32",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "bech32",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc"
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.11.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE-MIT"
     },
     "beef 0.5.2": {
       "name": "beef",
@@ -6783,6 +6880,227 @@
       ],
       "license_file": null
     },
+    "bitcoin 0.32.2": {
+      "name": "bitcoin",
+      "version": "0.32.2",
+      "package_url": "https://github.com/rust-bitcoin/rust-bitcoin/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/bitcoin/0.32.2/download",
+          "sha256": "ea507acc1cd80fc084ace38544bbcf7ced7c2aa65b653b102de0ce718df668f6"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bitcoin",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "bitcoin",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "base58ck 0.1.0",
+              "target": "base58ck",
+              "alias": "base58"
+            },
+            {
+              "id": "bech32 0.11.0",
+              "target": "bech32"
+            },
+            {
+              "id": "bitcoin 0.32.2",
+              "target": "build_script_build"
+            },
+            {
+              "id": "bitcoin-internals 0.3.0",
+              "target": "bitcoin_internals",
+              "alias": "internals"
+            },
+            {
+              "id": "bitcoin-io 0.1.2",
+              "target": "bitcoin_io",
+              "alias": "io"
+            },
+            {
+              "id": "bitcoin-units 0.1.2",
+              "target": "bitcoin_units",
+              "alias": "units"
+            },
+            {
+              "id": "bitcoin_hashes 0.14.0",
+              "target": "bitcoin_hashes",
+              "alias": "hashes"
+            },
+            {
+              "id": "hex-conservative 0.2.1",
+              "target": "hex_conservative",
+              "alias": "hex"
+            },
+            {
+              "id": "hex_lit 0.1.1",
+              "target": "hex_lit"
+            },
+            {
+              "id": "secp256k1 0.29.0",
+              "target": "secp256k1"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.32.2"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "CC0-1.0",
+      "license_ids": [
+        "CC0-1.0"
+      ],
+      "license_file": null
+    },
+    "bitcoin-internals 0.3.0": {
+      "name": "bitcoin-internals",
+      "version": "0.3.0",
+      "package_url": "https://github.com/rust-bitcoin/rust-bitcoin/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/bitcoin-internals/0.3.0/download",
+          "sha256": "30bdbe14aa07b06e6cfeffc529a1f099e5fbe249524f8125358604df99a4bed2"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bitcoin_internals",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "bitcoin_internals",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitcoin-internals 0.3.0",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.3.0"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "CC0-1.0",
+      "license_ids": [
+        "CC0-1.0"
+      ],
+      "license_file": null
+    },
+    "bitcoin-io 0.1.2": {
+      "name": "bitcoin-io",
+      "version": "0.1.2",
+      "package_url": "https://github.com/rust-bitcoin/rust-bitcoin",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/bitcoin-io/0.1.2/download",
+          "sha256": "340e09e8399c7bd8912f495af6aa58bea0c9214773417ffaa8f6460f93aaee56"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bitcoin_io",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "bitcoin_io",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.2"
+      },
+      "license": "CC0-1.0",
+      "license_ids": [
+        "CC0-1.0"
+      ],
+      "license_file": null
+    },
     "bitcoin-private 0.1.0": {
       "name": "bitcoin-private",
       "version": "0.1.0",
@@ -6848,6 +7166,60 @@
         "data_glob": [
           "**"
         ]
+      },
+      "license": "CC0-1.0",
+      "license_ids": [
+        "CC0-1.0"
+      ],
+      "license_file": null
+    },
+    "bitcoin-units 0.1.2": {
+      "name": "bitcoin-units",
+      "version": "0.1.2",
+      "package_url": "https://github.com/rust-bitcoin/rust-bitcoin/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/bitcoin-units/0.1.2/download",
+          "sha256": "5285c8bcaa25876d07f37e3d30c303f2609179716e11d688f51e8f1fe70063e2"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bitcoin_units",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "bitcoin_units",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitcoin-internals 0.3.0",
+              "target": "bitcoin_internals",
+              "alias": "internals"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.2"
       },
       "license": "CC0-1.0",
       "license_ids": [
@@ -6962,6 +7334,66 @@
         },
         "edition": "2018",
         "version": "0.12.0"
+      },
+      "license": "CC0-1.0",
+      "license_ids": [
+        "CC0-1.0"
+      ],
+      "license_file": null
+    },
+    "bitcoin_hashes 0.14.0": {
+      "name": "bitcoin_hashes",
+      "version": "0.14.0",
+      "package_url": "https://github.com/rust-bitcoin/rust-bitcoin",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/bitcoin_hashes/0.14.0/download",
+          "sha256": "bb18c03d0db0247e147a21a6faafd5a7eb851c743db062de72018b6b7e8e4d16"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bitcoin_hashes",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "bitcoin_hashes",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "bitcoin-io",
+            "io"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitcoin-io 0.1.2",
+              "target": "bitcoin_io"
+            },
+            {
+              "id": "hex-conservative 0.2.1",
+              "target": "hex_conservative",
+              "alias": "hex"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.14.0"
       },
       "license": "CC0-1.0",
       "license_ids": [
@@ -17012,6 +17444,11 @@
               "target": "bitcoin"
             },
             {
+              "id": "bitcoin 0.32.2",
+              "target": "bitcoin",
+              "alias": "bitcoin_0_32"
+            },
+            {
               "id": "bitcoincore-rpc 0.15.0",
               "target": "bitcoincore_rpc"
             },
@@ -24987,6 +25424,59 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "hex-conservative 0.2.1": {
+      "name": "hex-conservative",
+      "version": "0.2.1",
+      "package_url": "https://github.com/rust-bitcoin/hex-conservative",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/hex-conservative/0.2.1/download",
+          "sha256": "5313b072ce3c597065a808dbf612c4c8e8590bdbf8b579508bf7a762c5eae6cd"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hex_conservative",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "hex_conservative",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "arrayvec 0.7.4",
+              "target": "arrayvec"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.2.1"
+      },
+      "license": "CC0-1.0",
+      "license_ids": [
+        "CC0-1.0"
+      ],
+      "license_file": "LICENSE"
     },
     "hex-literal 0.4.1": {
       "name": "hex-literal",
@@ -56248,6 +56738,65 @@
       ],
       "license_file": "LICENSE"
     },
+    "secp256k1 0.29.0": {
+      "name": "secp256k1",
+      "version": "0.29.0",
+      "package_url": "https://github.com/rust-bitcoin/rust-secp256k1/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/secp256k1/0.29.0/download",
+          "sha256": "0e0cc0f1cf93f4969faf3ea1c7d8a9faed25918d96affa959720823dfe86d4f3"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "secp256k1",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "secp256k1",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "hashes"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitcoin_hashes 0.12.0",
+              "target": "bitcoin_hashes",
+              "alias": "hashes"
+            },
+            {
+              "id": "secp256k1-sys 0.10.0",
+              "target": "secp256k1_sys"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.29.0"
+      },
+      "license": "CC0-1.0",
+      "license_ids": [
+        "CC0-1.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "secp256k1-sys 0.5.2": {
       "name": "secp256k1-sys",
       "version": "0.5.2",
@@ -56478,6 +57027,92 @@
           "selects": {}
         },
         "links": "rustsecp256k1_v0_9_2"
+      },
+      "license": "CC0-1.0",
+      "license_ids": [
+        "CC0-1.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "secp256k1-sys 0.10.0": {
+      "name": "secp256k1-sys",
+      "version": "0.10.0",
+      "package_url": "https://github.com/rust-bitcoin/rust-secp256k1/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/secp256k1-sys/0.10.0/download",
+          "sha256": "1433bd67156263443f14d603720b082dd3121779323fce20cba2aa07b874bc1b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "secp256k1_sys",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "secp256k1_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "secp256k1-sys 0.10.0",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "rustc_flags": {
+          "common": [
+            "--cfg=rust_secp_no_symbol_renaming"
+          ],
+          "selects": {}
+        },
+        "version": "0.10.0"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cc 1.0.83",
+              "target": "cc"
+            }
+          ],
+          "selects": {}
+        },
+        "links": "rustsecp256k1_v0_10_0"
       },
       "license": "CC0-1.0",
       "license_ids": [
@@ -77712,6 +78347,7 @@
     "bip32 0.5.1",
     "bit-vec 0.6.3",
     "bitcoin 0.28.2",
+    "bitcoin 0.32.2",
     "bitcoincore-rpc 0.15.0",
     "bitcoind 0.32.0",
     "bitflags 1.3.2",
