@@ -1,5 +1,5 @@
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_tests::qualification_setup::{
+use ic_tests::qualification::{
     ConfigurableSubnet, ConfigurableUnassignedNodes, IcConfig, SubnetSimple,
 };
 use std::time::Duration;
@@ -33,6 +33,6 @@ pub fn main() -> anyhow::Result<()> {
 
     SystemTestGroup::new()
         .with_overall_timeout(OVERALL_TIMEOUT)
-        .with_setup(|env| ic_tests::qualification_setup::setup(env, config))
+        .with_setup(|env| ic_tests::qualification::setup(env, config))
         .execute_from_args()
 }

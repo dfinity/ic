@@ -63,7 +63,7 @@
 // Happy testing!
 
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_tests::qualification_setup::{IcConfig, IC_CONFIG};
+use ic_tests::qualification::{IcConfig, IC_CONFIG};
 
 fn main() -> anyhow::Result<()> {
     let mut config = std::env::var(IC_CONFIG)
@@ -77,7 +77,7 @@ fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|_| panic!("Failed to parse json from envrionment: \n{}", config));
 
     SystemTestGroup::new()
-        .with_setup(|env| ic_tests::qualification_setup::setup(env, parsed))
+        .with_setup(|env| ic_tests::qualification::setup(env, parsed))
         .execute_from_args()?;
     Ok(())
 }
