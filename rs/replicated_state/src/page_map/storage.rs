@@ -167,10 +167,6 @@ pub(crate) struct Storage {
 
 impl Storage {
     fn init(&self) -> &StorageImpl {
-        eprintln!(
-            "Backtrace: {:#?}",
-            std::backtrace::Backtrace::force_capture()
-        );
         self.imp.get_or_init(|| match self.storage_layout.as_ref() {
             None => Default::default(),
             Some(storage_layout) => {

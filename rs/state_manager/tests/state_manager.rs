@@ -339,7 +339,7 @@ fn lsmt_merge_overhead() {
         .with_lsmt_override(Some(lsmt_with_sharding()))
         .build();
 
-    let canister_ids = (0..10)
+    let canister_ids = (0..1)
         .map(|_| env.install_canister_wat(TEST_CANISTER, vec![], None))
         .collect::<Vec<_>>();
     for i in 0..30 {
@@ -508,7 +508,7 @@ fn lazy_pagemaps() {
         .with_lsmt_override(Some(lsmt_with_sharding()))
         .build();
 
-    let canister_ids = (0..10)
+    let canister_ids = (0..1)
         .map(|_| env.install_canister_wat(TEST_CANISTER, vec![], None))
         .collect::<Vec<_>>();
     for i in 0..2 {

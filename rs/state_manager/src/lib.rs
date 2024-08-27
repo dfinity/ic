@@ -1431,6 +1431,19 @@ struct CreateCheckpointResult {
     tip_requests: Vec<TipRequest>,
 }
 
+fn num_loaded_and_total_pagemaps(state: &ReplicatedState) -> (usize, usize) {
+    let mut loaded = 0;
+    let mut total = 0;
+    for entry in PageMapType::list_all_including_snapshots(&state) {
+        if let Some(page_map) = entry.get(&state) {
+            total += 1;
+            if page_map.is_loaded() {
+                loaded += 1;
+            }
+        }
+    }
+    (loaded, total)
+}
 impl StateManagerImpl {
     pub fn num_loaded_pagemaps(&self) -> usize {
         let states = self.states.read();
@@ -2398,6 +2411,11 @@ impl StateManagerImpl {
         state: &mut ReplicatedState,
         height: Height,
     ) -> CreateCheckpointResult {
+        info!(
+            self.log,
+            "Num loaded and total pagemaps: {:#?}",
+            num_loaded_and_total_pagemaps(state),
+        );
         struct PreviousCheckpointInfo {
             dirty_pages: DirtyPages,
             base_manifest: Manifest,

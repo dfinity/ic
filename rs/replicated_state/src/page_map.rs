@@ -631,6 +631,8 @@ impl PageMap {
         lsmt_config: &LsmtConfig,
         metrics: &StorageMetrics,
     ) -> Result<(), PersistenceError> {
+        let num_pages = self.num_host_pages();
+        *self.storage_num_host_pages.lock().unwrap() = Some(num_pages);
         match lsmt_config.lsmt_status {
             FlagStatus::Disabled => {
                 self.persist_to_file(&self.unflushed_delta, &storage_layout.base())
@@ -900,7 +902,10 @@ impl PageMap {
                 *storage_pages_lock = Some(read_num_pages);
                 read_num_pages
             }
-            Some(pages_in_checkpoint) => pages_in_checkpoint,
+            Some(pages_in_checkpoint) => {
+                debug_assert_eq!(pages_in_checkpoint, self.storage.num_logical_pages());
+                pages_in_checkpoint
+            }
         };
 
         pages_in_checkpoint.max(
@@ -921,6 +926,11 @@ impl PageMap {
         assert!(self.unflushed_delta.is_empty());
         assert!(checkpointed_page_map.page_delta.is_empty());
         assert!(checkpointed_page_map.unflushed_delta.is_empty());
+        assert!(!checkpointed_page_map.is_loaded());
+        assert_eq!(
+            self.num_host_pages(),
+            checkpointed_page_map.num_host_pages()
+        );
         self.storage_num_host_pages = Arc::new(Mutex::new(Some(self.num_host_pages())));
         // Keep the page allocators of the states disjoint.
     }

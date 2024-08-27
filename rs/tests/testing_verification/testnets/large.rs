@@ -48,6 +48,7 @@ use ic_system_test_driver::driver::ic::{
 };
 use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
+    farm::HostFeature,
     group::SystemTestGroup,
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
@@ -80,17 +81,17 @@ pub fn setup(env: TestEnv) {
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
-        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2000)),
+        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(4000)),
     };
     let mut ic = InternetComputer::new().with_default_vm_resources(vm_resources);
     ic = ic.add_subnet(Subnet::new(SubnetType::System).add_nodes(1));
     for _ in 0..NUM_FULL_CONSENSUS_APP_SUBNETS {
-        ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(4));
+        ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(1));
     }
     for _ in 0..NUM_SINGLE_NODE_APP_SUBNETS {
         ic = ic.add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_required_host_features(vec![ic_tests::driver::farm::HostFeature::Host(
+                .with_required_host_features(vec![HostFeature::Host(
                     "se1-dll02.se1.dfinity.network".to_string(),
                 )])
                 .add_nodes(1),
