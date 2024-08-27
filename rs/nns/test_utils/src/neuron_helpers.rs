@@ -1,15 +1,13 @@
 use crate::state_test_helpers::{list_neurons_by_principal, nns_governance_make_proposal};
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_OWNER_PRINCIPAL,
+    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
+    TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_ID, TEST_NEURON_3_OWNER_PRINCIPAL,
 };
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
-use ic_nns_governance::{
-    init::{TEST_NEURON_1_ID, TEST_NEURON_2_ID, TEST_NEURON_3_ID},
-    pb::v1::{
-        manage_neuron_response::Command, proposal::Action, ExecuteNnsFunction, Neuron, NnsFunction,
-        Proposal,
-    },
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron_response::Command, ExecuteNnsFunction, MakeProposalRequest, Neuron, NnsFunction,
+    ProposalActionRequest,
 };
 use ic_state_machine_tests::StateMachine;
 use std::collections::HashMap;
@@ -67,15 +65,17 @@ pub fn get_neuron_3() -> TestNeuronOwner {
     }
 }
 
-pub fn get_some_proposal() -> Proposal {
-    Proposal {
+pub fn get_some_proposal() -> MakeProposalRequest {
+    MakeProposalRequest {
         title: Some("<proposal created from initialization>".to_string()),
         summary: "".to_string(),
         url: "".to_string(),
-        action: Some(Action::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: NnsFunction::NnsRootUpgrade as i32,
-            payload: Vec::new(),
-        })),
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::NnsRootUpgrade as i32,
+                payload: Vec::new(),
+            },
+        )),
     }
 }
 

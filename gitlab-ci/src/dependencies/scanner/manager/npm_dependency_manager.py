@@ -42,7 +42,31 @@ class NPMDependencyManager(DependencyManager):
         return
 
     @staticmethod
-    def __npm_audit_output(engine_version: int, path: pathlib.Path) -> typing.Dict:
+    def __npm_check_engine(repository_name: str, engine_version: str, path: pathlib.Path) -> bool:
+        package_json_file = path / "package.json"
+
+        if not package_json_file.exists():
+            # Unable to read package.json file.
+            return False
+
+        f = open(package_json_file)
+        data = json.load(f)
+
+        if "engines" not in data or "node" not in data["engines"]:
+            # engines not specified in package.json. Using default should be fine
+            return True
+
+        supported_engine_versions = str(data['engines']['node'])
+        if satisfies(engine_version, supported_engine_versions, loose=True):
+            # engine version is supported
+            return True
+
+        # We can't run the scan at this point
+        logging.error(f"Engine version is not supported for {repository_name}, Current: {engine_version}; Accepted: {supported_engine_versions}")
+        return False
+
+    @staticmethod
+    def __npm_audit_output(engine_version: str, path: pathlib.Path) -> typing.Dict:
         nvm_dir = os.environ.get("NVM_DIR", "/opt/nvm")
         environment = {}
         cwd = path
@@ -55,7 +79,7 @@ class NPMDependencyManager(DependencyManager):
         return audit_out
 
     @staticmethod
-    def __npm_list_output(engine_version: int, path: pathlib.Path) -> typing.Dict:
+    def __npm_list_output(engine_version: str, path: pathlib.Path) -> typing.Dict:
         nvm_dir = os.environ.get("NVM_DIR", "/opt/nvm")
         environment = {}
         cwd = path
@@ -162,10 +186,15 @@ class NPMDependencyManager(DependencyManager):
         return vulnerable_dependency
 
     def get_findings(
-        self, repository_name: str, project: typing.Optional[Project], engine_version: typing.Optional[int]
+        self, repository_name: str, project: Project, engine_version: typing.Optional[str]
     ) -> typing.List[Finding]:
         path = self.root.parent / project.path
         finding_builder: typing.List[Finding] = []
+
+        can_run_scan = self.__npm_check_engine(repository_name, engine_version, path)
+
+        if not can_run_scan:
+            raise RuntimeError(f"Dependency scan for {repository_name} can't be executed due to engine version mismatch")
 
         npm_audit_output = self.__npm_audit_output(engine_version, path)
 
@@ -220,7 +249,7 @@ class NPMDependencyManager(DependencyManager):
                         vulnerable_dependency=vulnerable_dependency,
                         vulnerabilities=vulnerabilities,
                         first_level_dependencies=first_level_dependencies,
-                        projects=[project.name],
+                        projects=[project.path],
                         risk_assessor=[],
                         score=score,
                     )

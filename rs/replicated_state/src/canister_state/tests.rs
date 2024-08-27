@@ -15,7 +15,8 @@ use crate::Memory;
 use ic_base_types::NumSeconds;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
-    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterLogRecord, LogVisibility,
+    BoundedAllowedViewers, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
+    CanisterLogRecord, LogVisibility, LogVisibilityV2,
 };
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities_types::{
@@ -48,13 +49,12 @@ fn default_input_request() -> RequestOrResponse {
         .into()
 }
 
-fn default_input_response(callback_id: CallbackId) -> RequestOrResponse {
+fn default_input_response(callback_id: CallbackId) -> Response {
     ResponseBuilder::default()
         .originator(CANISTER_ID)
         .respondent(OTHER_CANISTER_ID)
         .originator_reply_callback(callback_id)
         .build()
-        .into()
 }
 
 fn default_output_request() -> Arc<Request> {
@@ -163,9 +163,18 @@ fn canister_state_push_input_response_no_reserved_slot() {
     let mut fixture = CanisterStateFixture::new();
     let response = default_input_response(fixture.make_callback());
     assert_eq!(
-        Err((StateError::QueueFull { capacity: 0 }, response.clone(),)),
+        Err((
+            StateError::NonMatchingResponse {
+                err_str: "No reserved response slot".to_string(),
+                originator: response.originator,
+                callback_id: response.originator_reply_callback,
+                respondent: response.respondent,
+                deadline: response.deadline,
+            },
+            response.clone().into(),
+        )),
         fixture.push_input(
-            response,
+            response.into(),
             SubnetType::Application,
             InputQueueType::RemoteSubnet
         ),
@@ -178,7 +187,7 @@ fn canister_state_push_input_response_success() {
     // Reserve a slot in the input queue.
     fixture.with_input_slot_reservation();
     // Pushing input response should succeed.
-    let response = default_input_response(fixture.make_callback());
+    let response = default_input_response(fixture.make_callback()).into();
     fixture
         .push_input(
             response,
@@ -400,7 +409,7 @@ fn canister_state_push_input_response_memory_limit_test_impl(
 
     // Reserve a slot in the input queue.
     fixture.with_input_slot_reservation();
-    let response = default_input_response(fixture.make_callback());
+    let response: RequestOrResponse = default_input_response(fixture.make_callback()).into();
 
     let mut subnet_available_memory = -13;
     fixture
@@ -605,12 +614,31 @@ fn canister_state_callback_round_trip() {
 fn canister_state_log_visibility_round_trip() {
     use ic_protobuf::state::canister_state_bits::v1 as pb;
 
+    // LogVisibilityV1.
     for initial in LogVisibility::iter() {
         let encoded = pb::LogVisibility::from(&initial);
         let round_trip = LogVisibility::from(encoded);
 
         assert_eq!(initial, round_trip);
     }
+
+    // LogVisibilityV2.
+    for initial in LogVisibilityV2::iter() {
+        let encoded = pb::LogVisibilityV2::from(&initial);
+        let round_trip = LogVisibilityV2::try_from(encoded).unwrap();
+
+        assert_eq!(initial, round_trip);
+    }
+
+    // LogVisibilityV2: check `allowed_viewers` case with non-empty principals.
+    let initial = LogVisibilityV2::AllowedViewers(BoundedAllowedViewers::new(vec![
+        user_test_id(1).get(),
+        user_test_id(2).get(),
+    ]));
+    let encoded = pb::LogVisibilityV2::from(&initial);
+    let round_trip = LogVisibilityV2::try_from(encoded).unwrap();
+
+    assert_eq!(initial, round_trip);
 }
 
 #[test]

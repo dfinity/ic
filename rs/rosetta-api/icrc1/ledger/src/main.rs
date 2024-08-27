@@ -21,8 +21,8 @@ use ic_ledger_canister_core::ledger::{
 };
 use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_core::block::BlockIndex;
+use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Zero;
-use ic_ledger_core::{approvals::Approvals, timestamp::TimeStamp};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc21::{
     errors::Icrc21Error, lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
@@ -57,6 +57,7 @@ use icrc_ledger_types::{
 use num_traits::{bounds::Bounded, ToPrimitive};
 use serde_bytes::ByteBuf;
 use std::cell::RefCell;
+use std::io::{Read, Write};
 
 const MAX_MESSAGE_SIZE: u64 = 1024 * 1024;
 
@@ -68,6 +69,8 @@ pub type Tokens = ic_icrc1_tokens_u256::U256;
 
 thread_local! {
     static LEDGER: RefCell<Option<Ledger<Tokens>>> = const { RefCell::new(None) };
+    static PRE_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
+    static POST_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
 }
 
 declare_log_buffer!(name = LOG, capacity = 1000);
@@ -120,8 +123,16 @@ fn pre_upgrade() {
     #[cfg(feature = "canbench-rs")]
     let _p = canbench_rs::bench_scope("pre_upgrade");
 
-    Access::with_ledger(|ledger| ciborium::ser::into_writer(ledger, StableWriter::default()))
+    let start = ic_cdk::api::instruction_counter();
+    let mut stable_writer = StableWriter::default();
+    Access::with_ledger(|ledger| ciborium::ser::into_writer(ledger, &mut stable_writer))
         .expect("failed to encode ledger state");
+    let end = ic_cdk::api::instruction_counter();
+    let instructions_consumed = end - start;
+    let counter_bytes: [u8; 8] = instructions_consumed.to_le_bytes();
+    stable_writer
+        .write_all(&counter_bytes)
+        .expect("failed to write instructions consumed to stable memory");
 }
 
 #[post_upgrade]
@@ -129,10 +140,11 @@ fn post_upgrade(args: Option<LedgerArgument>) {
     #[cfg(feature = "canbench-rs")]
     let _p = canbench_rs::bench_scope("post_upgrade");
 
+    let start = ic_cdk::api::instruction_counter();
+    let mut stable_reader = StableReader::default();
     LEDGER.with(|cell| {
         *cell.borrow_mut() = Some(
-            ciborium::de::from_reader(StableReader::default())
-                .expect("failed to decode ledger state"),
+            ciborium::de::from_reader(&mut stable_reader).expect("failed to decode ledger state"),
         );
     });
 
@@ -146,6 +158,20 @@ fn post_upgrade(args: Option<LedgerArgument>) {
             }
         }
     }
+    let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
+    let pre_upgrade_instructions_consumed =
+        match stable_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
+            Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
+            Err(_) => {
+                // If upgrading from a version that didn't write the instructions counter to stable memory
+                0u64
+            }
+        };
+    PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
+
+    let end = ic_cdk::api::instruction_counter();
+    let instructions_consumed = end - start;
+    POST_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = instructions_consumed);
 }
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
@@ -173,6 +199,23 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.gauge_vec("cycle_balance", "Cycle balance on the ledger canister.")?
         .value(&[("canister", "icrc1-ledger")], cycle_balance)?;
+    let pre_upgrade_instructions = PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow());
+    let post_upgrade_instructions = POST_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow());
+    w.encode_gauge(
+        "ledger_pre_upgrade_instructions_consumed",
+        pre_upgrade_instructions as f64,
+        "Number of instructions consumed during the last pre-upgrade.",
+    )?;
+    w.encode_gauge(
+        "ledger_post_upgrade_instructions_consumed",
+        post_upgrade_instructions as f64,
+        "Number of instructions consumed during the last post-upgrade.",
+    )?;
+    w.encode_gauge(
+        "ledger_total_upgrade_instructions_consumed",
+        pre_upgrade_instructions.saturating_add(post_upgrade_instructions) as f64,
+        "Total number of instructions consumed during the last upgrade.",
+    )?;
 
     Access::with_ledger(|ledger| {
         w.encode_gauge(
@@ -254,7 +297,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     })
 }
 
-#[query(hidden = true)]
+#[query(hidden = true, decoding_quota = 10000)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -762,12 +805,14 @@ fn icrc21_canister_call_consent_message(
     let caller_principal = ic_cdk::api::caller();
     let ledger_fee = icrc1_fee();
     let token_symbol = icrc1_symbol();
+    let decimals = icrc1_decimals();
 
     build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
         consent_msg_request,
         caller_principal,
         ledger_fee,
         token_symbol,
+        decimals,
     )
 }
 

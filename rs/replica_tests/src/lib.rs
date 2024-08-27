@@ -35,7 +35,6 @@ use ic_test_utilities_types::{
 };
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    artifact_kind::IngressArtifact,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CertificateDelegation, Query, QuerySource, SignedIngress},
     replica_config::NODE_INDEX_DEFAULT,
@@ -66,7 +65,7 @@ const CYCLES_BALANCE: u128 = 1 << 120;
 /// time.
 #[allow(clippy::await_holding_lock)]
 fn process_ingress(
-    ingress_tx: &UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    ingress_tx: &UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     ingress_hist_reader: &dyn IngressHistoryReader,
     msg: SignedIngress,
     time_limit: Duration,
@@ -154,7 +153,7 @@ where
 pub struct LocalTestRuntime {
     pub query_handler:
         tower::buffer::Buffer<QueryExecutionService, (Query, Option<CertificateDelegation>)>,
-    pub ingress_sender: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    pub ingress_sender: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     pub ingress_history_reader: Arc<dyn IngressHistoryReader>,
     pub state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     pub node_id: NodeId,

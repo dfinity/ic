@@ -85,24 +85,6 @@ pub(crate) struct ProposeToUpdateSubnetCmd {
     pub halt_at_cup_height: Option<bool>,
 
     #[clap(long)]
-    /// If set, this updates the instruction limit per message.
-    /// See the comments in `subnet_config.rs` for more details
-    /// on how to choose values.
-    max_instructions_per_message: Option<u64>,
-
-    #[clap(long)]
-    /// If set, this updates the instruction limit per round.
-    /// See the comments in `subnet_config.rs` for more details
-    /// on how to choose values.
-    max_instructions_per_round: Option<u64>,
-
-    #[clap(long)]
-    /// If set, this updates the instruction limit per
-    /// `install_code` message. See the comments in `subnet_config.rs`
-    /// for more details on how to choose values.
-    max_instructions_per_install_code: Option<u64>,
-
-    #[clap(long)]
     /// Configuration for chain key:
     /// The key configurations to be added to (or edited) for this subnet. If a key configuration
     /// is new for the specified subnet, it must also not already exist on the IC.
@@ -330,9 +312,6 @@ impl ProposeToUpdateSubnetCmd {
 
             is_halted: self.is_halted,
             halt_at_cup_height: self.halt_at_cup_height,
-            max_instructions_per_message: self.max_instructions_per_message,
-            max_instructions_per_round: self.max_instructions_per_round,
-            max_instructions_per_install_code: self.max_instructions_per_install_code,
             features: self.features.map(|v| v.into()),
 
             ssh_readonly_access: self.ssh_readonly_access.clone(),
@@ -401,9 +380,6 @@ mod tests {
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: None,
-            max_instructions_per_message: None,
-            max_instructions_per_round: None,
-            max_instructions_per_install_code: None,
             features: None,
             ecdsa_config: None,
             ecdsa_key_signing_enable: None,
@@ -438,9 +414,6 @@ mod tests {
             start_as_nns: None,
             is_halted: None,
             halt_at_cup_height: None,
-            max_instructions_per_message: None,
-            max_instructions_per_round: None,
-            max_instructions_per_install_code: None,
             chain_key_configs_to_generate: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,

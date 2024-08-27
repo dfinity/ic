@@ -40,7 +40,9 @@ use ic_types::{
     CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 use proptest::prelude::*;
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 use proptest::test_runner::{TestRng, TestRunner};
 use std::collections::BTreeSet;
 use std::mem::size_of;
@@ -4043,6 +4045,7 @@ impl MemoryAccessor {
         assert_empty_reply(result);
     }
 
+    #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
     fn verify_dirty_pages(&self, is_dirty_page: &[bool]) {
         let execution_state = self.test.execution_state(self.canister_id);
         let mut actual_dirty = vec![false; is_dirty_page.len()];
@@ -4101,6 +4104,7 @@ fn write_after_grow() {
 }
 
 #[derive(Debug, Clone)]
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 enum Operation {
     Read(i32),
     Write(i32, u8),
@@ -4108,6 +4112,7 @@ enum Operation {
     GrowAndWrite(u8),
 }
 
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn random_operations(
     num_pages: i32,
     num_operations: usize,
@@ -7031,10 +7036,7 @@ fn set_reserved_cycles_limit_below_existing_fails() {
         .canister_update_reserved_cycles_limit(canister_id, Cycles::from(reserved_cycles.get() - 1))
         .unwrap_err();
 
-    assert_eq!(
-        err.code(),
-        ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
-    );
+    assert_eq!(err.code(), ErrorCode::ReservedCyclesLimitIsTooLow);
 }
 
 #[test]
@@ -7915,4 +7917,113 @@ fn wasm_memory_limit_cannot_exceed_256_tb() {
         .unwrap_err();
 
     assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+}
+
+// Test the result that is close to 2^64.
+#[test]
+fn ic0_canister_cycle_balance_u64() {
+    let mut test: ExecutionTest = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles((1 << 64) - 1)
+        .build();
+    let id = test.universal_canister().unwrap();
+    let result = test
+        .ingress(id, "update", wasm().cycles_balance().reply_int64().build())
+        .unwrap();
+    match result {
+        WasmResult::Reply(response) => {
+            let result = u64::from_le_bytes(response.try_into().unwrap());
+            assert!(result >= (1 << 63));
+        }
+        WasmResult::Reject(err) => unreachable!("{:?}", err),
+    }
+}
+
+// Test the result that is close to 2^64.
+#[test]
+fn ic0_msg_cycles_available_u64() {
+    let mut test: ExecutionTest = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(2 * (1 << 64))
+        .build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().msg_cycles_available().reply_int64().build();
+    let caller = wasm()
+        .call_with_cycles(
+            callee_id,
+            "update",
+            call_args()
+                .other_side(callee)
+                .on_reject(wasm().reject_message().reject())
+                .on_reply(wasm().message_payload().append_and_reply()),
+            Cycles::new((1 << 64) - 1),
+        )
+        .build();
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+    match result {
+        WasmResult::Reply(response) => {
+            let result = u64::from_le_bytes(response.try_into().unwrap());
+            assert!(result >= (1 << 63));
+        }
+        WasmResult::Reject(err) => unreachable!("{:?}", err),
+    }
+}
+
+// Test the result that is close to 2^64.
+#[test]
+fn ic0_msg_cycles_refunded_u64() {
+    let mut test: ExecutionTest = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(2 * (1 << 64))
+        .build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().push_int64(0).reply_int64().build();
+    let caller = wasm()
+        .call_with_cycles(
+            callee_id,
+            "update",
+            call_args()
+                .other_side(callee)
+                .on_reject(wasm().reject_message().reject())
+                .on_reply(wasm().msg_cycles_refunded().reply_int64()),
+            Cycles::new((1 << 64) - 1),
+        )
+        .build();
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+    match result {
+        WasmResult::Reply(response) => {
+            let result = u64::from_le_bytes(response.try_into().unwrap());
+            assert!(result >= (1 << 63));
+        }
+        WasmResult::Reject(err) => unreachable!("{:?}", err),
+    }
+}
+
+// Test the result that is close to 2^64.
+#[test]
+fn ic0_mint_cycles_u64() {
+    let mut test: ExecutionTest = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1 << 64)
+        .build();
+    let wat = r#"
+        (module
+            (import "ic0" "mint_cycles" (func $mint_cycles (param i64) (result i64)))
+
+            (func (export "canister_update test")
+                (drop (call $mint_cycles (i64.const 18446744073709551615)))
+            )
+        )"#;
+    let mut canister_id = test.canister_from_wat(wat).unwrap();
+    // This loop should finish after four iterations.
+    while canister_id != CYCLES_MINTING_CANISTER_ID {
+        canister_id = test.canister_from_wat(wat).unwrap();
+    }
+    let result = test.ingress(canister_id, "test", vec![]);
+    assert_empty_reply(result);
+    assert!(
+        test.canister_state(canister_id)
+            .system_state
+            .balance()
+            .get()
+            >= 2 * (1 << 64) - 10_000_000
+    );
 }

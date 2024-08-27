@@ -1,4 +1,3 @@
-use ed25519_consensus::SigningKey as EdKeypair;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_rosetta_api::{
@@ -53,11 +52,11 @@ fn zondex_icp_format(amount: Tokens) -> String {
 
 pub fn generate_zondax_test(
     index: u32,
-    keypair: EdKeypair,
+    key: ic_crypto_ed25519::PrivateKey,
     send_args: SendArgs,
 ) -> serde_json::Value {
     let public_key_der = ic_canister_client_sender::ed25519_public_key_to_der(
-        keypair.verification_key().to_bytes().to_vec(),
+        key.public_key().serialize_raw().to_vec(),
     );
 
     let public_key =
@@ -102,7 +101,7 @@ pub fn generate_zondax_test(
     };
 
     let bytes = from_hex(&transaction_payload.hex_bytes).unwrap();
-    let signature_bytes = keypair.sign(&bytes).to_bytes();
+    let signature_bytes = key.sign_message(&bytes);
     let hex_bytes = to_hex(&signature_bytes);
 
     let transaction_signature = Signature {
@@ -234,10 +233,10 @@ fn test_zondax_generator() {
         created_at_time: None,
     };
 
-    let rng = StdRng::seed_from_u64(1);
-    let keypair = EdKeypair::new(rng);
+    let rng = &mut StdRng::seed_from_u64(1);
+    let key = ic_crypto_ed25519::PrivateKey::generate_using_rng(rng);
 
-    let s = generate_zondax_test(1, keypair, send_args);
+    let s = generate_zondax_test(1, key, send_args);
     println!("{}", s);
 }
 
@@ -359,7 +358,7 @@ fn main() {
                     created_at_time,
                 };
 
-                let keypair = EdKeypair::new(&mut rng);
+                let keypair = ic_crypto_ed25519::PrivateKey::generate_using_rng(&mut rng);
 
                 let s = generate_zondax_test(index, keypair, send_args);
                 seq.serialize_element(&s).unwrap();

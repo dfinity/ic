@@ -8,9 +8,9 @@ use ic_btc_adapter::{
 };
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::generate_headers;
-use ic_btc_types_internal::BitcoinAdapterRequestWrapper;
-use ic_btc_types_internal::BitcoinAdapterResponseWrapper;
-use ic_btc_types_internal::GetSuccessorsRequestInitial;
+use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
+use ic_btc_replica_types::BitcoinAdapterResponseWrapper;
+use ic_btc_replica_types::GetSuccessorsRequestInitial;
 use ic_config::adapters::AdaptersConfig;
 use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig;
 use ic_interfaces_adapter_client::Options;

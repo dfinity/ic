@@ -1,8 +1,8 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "NNS_CANISTER_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 rust_library(
     name = "sdk-system-tests",
@@ -14,6 +14,7 @@ rust_library(
     crate_name = "sdk_system_tests",
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = [
+        # Keep sorted.
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:backoff",
@@ -28,19 +29,21 @@ RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + [
     "@dfx",
 ]
 
-BOUNDARY_NODE_RUNTIME_DEPS = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + [
+BOUNDARY_NODE_RUNTIME_DEPS = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + [
     "@nns_dapp_canister//file",
 ]
 
-system_test(
+system_test_nns(
     name = "dfx_smoke_test",
     flaky = True,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = RUNTIME_DEPS + BOUNDARY_NODE_RUNTIME_DEPS,
     deps = [
+        # Keep sorted.
         "sdk-system-tests",
         "//rs/registry/subnet_type",
         "//rs/tests",
+        "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
@@ -55,6 +58,7 @@ system_test(
         "@wallet_canister_0.7.2//file",
     ],
     deps = [
+        # Keep sorted.
         "sdk-system-tests",
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",

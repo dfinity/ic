@@ -21,14 +21,14 @@ ic-crypto-internal-basic-sig-ed25519 = { path = "../crypto_lib/basic_sig/ed25519
 ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "../crypto_lib/basic_sig/rsa_pkcs1" }
 ic-crypto-internal-logmon = { path = "../logmon" }
 ic-crypto-internal-multi-sig-bls12381 = { path = "../crypto_lib/multi_sig/bls12_381" }
-ic-crypto-secrets-containers = { path = "../../secrets_containers" }
 ic-crypto-internal-seed = { path = "../crypto_lib/seed" }
+ic-crypto-internal-test-vectors = { path = "../test_vectors" }
 ic-crypto-internal-threshold-sig-bls12381 = { path = "../crypto_lib/threshold_sig/bls12_381" }
 ic-crypto-internal-threshold-sig-ecdsa = { path = "../crypto_lib/threshold_sig/tecdsa" }
-ic-crypto-internal-test-vectors = { path = "../test_vectors" }
 ic-crypto-internal-tls = { path = "../crypto_lib/tls" }
 ic-crypto-internal-types = { path = "../crypto_lib/types" }
 ic-crypto-node-key-validation = { path = "../../../crypto/node_key_validation" }
+ic-crypto-secrets-containers = { path = "../../secrets_containers" }
 ic-crypto-sha2 = { path = "../../sha2" }
 ic-crypto-standalone-sig-verifier = { path = "../../standalone-sig-verifier" }
 ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
@@ -47,32 +47,33 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
-stubborn-io = "0.3.2"
 strum = { workspace = true }
 strum_macros = { workspace = true }
+stubborn-io = "0.3.2"
 tarpc = { version = "0.34", features = ["full"] }
 tempfile = { workspace = true }
-time = { workspace = true }
 thiserror = { workspace = true }
+time = { workspace = true }
 tokio = { workspace = true }
 tokio-serde = { version = "0.8", features = ["json", "bincode"] }
 tokio-util = { workspace = true }
+tracing = { workspace = true }
 x509-parser = { workspace = true }
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-ic-crypto-internal-csp-test-utils = { path = "../csp_test_utils" }
 ic-crypto-internal-csp-proptest-utils = { path = "./csp_proptest_utils" }
 ic-crypto-internal-csp-protobuf-generator = { path = "./protobuf_generator" }
+ic-crypto-internal-csp-test-utils = { path = "../csp_test_utils" }
 ic-crypto-internal-threshold-sig-ecdsa-test-utils = { path = "../crypto_lib/threshold_sig/tecdsa/test_utils" }
 ic-crypto-node-key-generation = { path = "../../node_key_generation" }
 ic-crypto-temp-crypto-vault = { path = "../../temp_crypto/temp_vault" }
 ic-crypto-test-utils = { path = "../../test_utils" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../../../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-test-utils-keys = { path = "../../../crypto/test_utils/keys" }
-ic-crypto-test-utils-metrics = { path = "../../../crypto/test_utils/metrics" }
 ic-crypto-test-utils-local-csp-vault = { path = "../../../crypto/test_utils/local_csp_vault" }
+ic-crypto-test-utils-metrics = { path = "../../../crypto/test_utils/metrics" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
 ic-crypto-utils-basic-sig = { path = "../../utils/basic_sig" }
 ic-test-utilities-compare-dirs = { path = "../../../test_utilities/compare_dirs" }
@@ -80,8 +81,8 @@ ic-test-utilities-in-memory-logger = { path = "../../../test_utilities/in_memory
 ic-test-utilities-time = { path = "../../../test_utilities/time" }
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
 lazy_static = { workspace = true }
-num_cpus = "1.16"
 mockall = { workspace = true }
+num_cpus = "1.16"
 proptest = "1.0"
 proptest-derive = "0.3.0"
 rsa = "0.9"

@@ -1,9 +1,10 @@
-use crate::types::{NodeDetails, SubnetRecord};
-use crate::SubnetDescriptor;
+use crate::{
+    types::{NodeDetails, SubnetRecord},
+    SubnetDescriptor,
+};
 use ic_canister_client::Sender;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance::init::TEST_NEURON_1_ID;
 use ic_protobuf::registry::subnet::v1::{
     SubnetListRecord as SubnetListRecordPb, SubnetRecord as SubnetRecordPb,
 };

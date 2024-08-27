@@ -9,8 +9,8 @@ use crate::{
     DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
     DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
     DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID, ERC20_HELPER_CONTRACT_ADDRESS,
-    ETH_HELPER_CONTRACT_ADDRESS, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_ETH_LOGS_BLOCK_RANGE,
-    MAX_TICKS, RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
+    ETH_HELPER_CONTRACT_ADDRESS, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_TICKS,
+    RECEIVED_ERC20_EVENT_TOPIC,
 };
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
@@ -22,7 +22,7 @@ use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::{CkErc20Token, MinterInfo};
 use ic_cketh_minter::eth_rpc::FixedSizeData;
 use ic_cketh_minter::numeric::{BlockNumber, Erc20Value};
-use ic_cketh_minter::SCRAPPING_ETH_LOGS_INTERVAL;
+use ic_cketh_minter::SCRAPING_ETH_LOGS_INTERVAL;
 use ic_ethereum_types::Address;
 pub use ic_ledger_suite_orchestrator::candid::AddErc20Arg as Erc20Token;
 use ic_ledger_suite_orchestrator::candid::InitArg as LedgerSuiteOrchestratorInitArg;
@@ -88,7 +88,8 @@ impl CkErc20Setup {
                 minter_id: Some(cketh.minter_id.get_ref().0),
                 cycles_management: None,
             },
-        );
+        )
+        .register_embedded_wasms();
         Self {
             env,
             cketh,
@@ -98,14 +99,7 @@ impl CkErc20Setup {
     }
 
     pub fn add_supported_erc20_tokens(mut self) -> Self {
-        let embedded_ledger_wasm_hash = self.orchestrator.embedded_ledger_wasm_hash.clone();
-        let embedded_index_wasm_hash = self.orchestrator.embedded_index_wasm_hash.clone();
-
-        self.supported_erc20_tokens = supported_erc20_tokens(
-            self.cketh.minter_id.into(),
-            embedded_ledger_wasm_hash,
-            embedded_index_wasm_hash,
-        );
+        self.supported_erc20_tokens = supported_erc20_tokens();
         for token in self.supported_erc20_tokens.iter() {
             self.orchestrator = self
                 .orchestrator
@@ -366,6 +360,11 @@ impl CkErc20Setup {
             .map(|erc20_address| FixedSizeData(erc20_address.into()).to_string())
             .collect()
     }
+
+    pub fn received_erc20_event_topic(&self) -> serde_json::Value {
+        self.as_ref()
+            .json_topic(RECEIVED_ERC20_EVENT_TOPIC.to_string())
+    }
 }
 
 pub struct CkErc20DepositParams {
@@ -526,9 +525,10 @@ impl CkErc20DepositFlow {
     }
 
     pub fn handle_log_scraping(&self) {
+        let max_eth_logs_block_range = self.as_ref().max_logs_block_range();
         let latest_finalized_block =
-            LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1 + MAX_ETH_LOGS_BLOCK_RANGE;
-        self.setup.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+            LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1 + max_eth_logs_block_range;
+        self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
         MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
             .respond_for_all_with(block_response(latest_finalized_block))
             .build()
@@ -537,7 +537,7 @@ impl CkErc20DepositFlow {
 
         let first_from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
         let first_to_block = first_from_block
-            .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
+            .checked_add(BlockNumber::from(max_eth_logs_block_range))
             .unwrap();
 
         let eth_logs = match self.params.cketh_amount {
@@ -554,7 +554,7 @@ impl CkErc20DepositFlow {
                 "fromBlock": first_from_block,
                 "toBlock": first_to_block,
                 "address": [ETH_HELPER_CONTRACT_ADDRESS],
-                "topics": [RECEIVED_ETH_EVENT_TOPIC]
+                "topics": [self.as_ref().received_eth_event_topic()]
             }]))
             .respond_for_all_with(eth_logs)
             .build()
@@ -565,7 +565,7 @@ impl CkErc20DepositFlow {
                 "fromBlock": first_from_block,
                 "toBlock": first_to_block,
                 "address": [ERC20_HELPER_CONTRACT_ADDRESS],
-                "topics": [RECEIVED_ERC20_EVENT_TOPIC, erc20_topics.clone()]
+                "topics": [self.setup.received_erc20_event_topic(), erc20_topics.clone()]
             }]))
             .respond_for_all_with(vec![self.params.erc20_log()])
             .build()

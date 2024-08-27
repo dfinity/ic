@@ -1,13 +1,15 @@
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 PROXY_CANISTER_RUNTIME_DEPS = [
+    # Keep sorted.
     "//rs/rust_canisters/proxy_canister:proxy_canister",
 ]
 
 CANISTER_HTTP_BASE_DEPS = [
+    # Keep sorted.
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/proxy_canister:lib",
     "//rs/tests",
@@ -20,8 +22,11 @@ CANISTER_HTTP_BASE_DEPS = [
     "@crate_index//:slog",
 ]
 
-system_test(
+system_test_nns(
     name = "canister_http_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["k8s"],
@@ -29,13 +34,15 @@ system_test(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + ["//rs/rust_canisters/canister_test"],
 )
 
-system_test(
+system_test_nns(
     name = "canister_http_socks_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -48,7 +55,6 @@ system_test(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
         BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + [
@@ -57,8 +63,11 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "canister_http_correctness_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = ["k8s"],
@@ -66,7 +75,6 @@ system_test(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/rust_canisters/canister_test",
@@ -77,8 +85,11 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "canister_http_fault_tolerance_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -89,7 +100,6 @@ system_test(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/registry/subnet_type",
@@ -101,8 +111,11 @@ system_test(
     ],
 )
 
-system_test(
+system_test_nns(
     name = "canister_http_time_out_test",
+    env = {
+        "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -114,12 +127,11 @@ system_test(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS,
 )
 
-system_test(
+system_test_nns(
     name = "firewall_max_connections_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -128,11 +140,11 @@ system_test(
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "firewall_priority_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -141,11 +153,11 @@ system_test(
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "network_reliability_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -154,11 +166,11 @@ system_test(
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "network_large_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -168,11 +180,11 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "query_workload_long_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -183,11 +195,11 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "update_workload_large_payload",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -197,11 +209,11 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "p2p_performance",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -211,8 +223,33 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
         "//rs/tests:jaeger_uvm_config_image",
     ],
     deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "cloner_canister_workload",
+    env = {
+        "CLONER_CANISTER_WASM_PATH": "$(rootpath //rs/tests/networking/canisters:cloner_canister)",
+    },
+    tags = [
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
+        "//rs/tests/networking/canisters:cloner_canister",
+    ],
+    deps = [
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/networking/canisters:cloner_canister_types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
 )

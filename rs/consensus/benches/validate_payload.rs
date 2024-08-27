@@ -217,6 +217,7 @@ fn setup_ingress_state(now: Time, state_manager: &mut StateManagerImpl) {
         state,
         Height::new(CERTIFIED_HEIGHT),
         CertificationScope::Full,
+        None,
     );
 
     let to_certify = state_manager.list_state_hashes_to_certify();
@@ -278,7 +279,7 @@ fn add_past_blocks(
                 dealings: dkg::Dealings::new_empty(
                     block.payload.as_ref().dkg_interval_start_height(),
                 ),
-                ecdsa: None,
+                idkg: None,
             }),
         );
 
@@ -355,7 +356,7 @@ fn validate_payload_benchmark(criterion: &mut Criterion) {
                         dealings: dkg::Dealings::new_empty(
                             tip.payload.as_ref().dkg_interval_start_height(),
                         ),
-                        ecdsa: None,
+                        idkg: None,
                     }),
                 );
 

@@ -18,15 +18,15 @@
 //! * A node must only issue notarization shares for rounds for which this node
 //!   is selected as a notary.
 //! * A node must only issue notarization shares for blocks that have a lower
-//!   (or equal) rank than what it has previously issued shares for in the same
-//!   round.
+//!   (or equal) rank than every non-disqualified block for which the node
+//!   has previously issued shares for in the same round.
 //! * A node must not issue new notarization share for any round older than the
 //!   latest round, which would break security if it has already finality-signed
 //!   for that round.
 use crate::consensus::metrics::NotaryMetrics;
 use ic_consensus_utils::{
     crypto::ConsensusCrypto,
-    find_lowest_ranked_proposals, get_adjusted_notary_delay,
+    find_lowest_ranked_non_disqualified_proposals, get_adjusted_notary_delay,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
 };
@@ -88,7 +88,7 @@ impl Notary {
                 return notarization_shares;
             }
             let height = notarized_height.increment();
-            for proposal in find_lowest_ranked_proposals(pool, height) {
+            for proposal in find_lowest_ranked_non_disqualified_proposals(pool, height) {
                 if let Some(elapsed) = self.time_to_notarize(pool, height, proposal.rank()) {
                     if !self.is_proposal_already_notarized_by_me(pool, &proposal) {
                         let block = proposal.as_ref();

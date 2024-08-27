@@ -64,7 +64,6 @@
 // the sum of all compute allocations with the multiplier.
 
 pub mod artifact;
-pub mod artifact_kind;
 pub mod batch;
 pub mod canister_http;
 pub mod canister_log;
@@ -102,12 +101,13 @@ pub use ic_crypto_internal_types::NodeIndex;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb_state_bits;
 use ic_protobuf::types::v1 as pb;
-use phantom_newtype::{AmountOf, Id};
+use phantom_newtype::{AmountOf, DisplayerOf, Id};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;
 use std::sync::Arc;
 use strum::EnumIter;
+use thousands::Separable;
 
 pub struct UserTag {}
 /// An end-user's [`PrincipalId`].
@@ -171,6 +171,12 @@ pub struct NumInstructionsTag;
 /// execution cutoff point for messages. This amount can be used to charge the
 /// respective amount of `Cycles` on a canister's balance for message execution.
 pub type NumInstructions = AmountOf<NumInstructionsTag, u64>;
+
+impl DisplayerOf<NumInstructions> for NumInstructionsTag {
+    fn display(amount: &NumInstructions, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", amount.get().separate_with_underscores())
+    }
+}
 
 pub struct NumMessagesTag;
 /// Represents the number of messages.

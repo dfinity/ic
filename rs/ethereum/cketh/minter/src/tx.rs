@@ -10,7 +10,7 @@ use crate::numeric::{BlockNumber, GasAmount, TransactionNonce, Wei, WeiPerGas};
 use crate::state::{lazy_call_ecdsa_public_key, mutate_state, read_state, TaskType};
 use ethnum::u256;
 use ic_canister_log::log;
-use ic_crypto_ecdsa_secp256k1::RecoveryId;
+use ic_crypto_secp256k1::RecoveryId;
 use ic_ethereum_types::Address;
 use ic_management_canister_types::DerivationPath;
 use minicbor::{Decode, Encode};
@@ -510,16 +510,24 @@ impl GasFeeEstimate {
                 base_fee_estimate.checked_add(self.max_priority_fee_per_gas)
             })
     }
+
     pub fn estimate_max_fee_per_gas(&self) -> WeiPerGas {
         self.checked_estimate_max_fee_per_gas()
             .unwrap_or(WeiPerGas::MAX)
     }
+
     pub fn to_price(self, gas_limit: GasAmount) -> TransactionPrice {
         TransactionPrice {
             gas_limit,
             max_fee_per_gas: self.estimate_max_fee_per_gas(),
             max_priority_fee_per_gas: self.max_priority_fee_per_gas,
         }
+    }
+
+    pub fn min_max_fee_per_gas(&self) -> WeiPerGas {
+        self.base_fee_per_gas
+            .checked_add(self.max_priority_fee_per_gas)
+            .unwrap_or(WeiPerGas::MAX)
     }
 }
 
@@ -554,69 +562,36 @@ impl TransactionPrice {
                 .unwrap_or(WeiPerGas::MAX)
         };
 
-        if self.max_fee_per_gas
-            >= new_gas_fee
-                .base_fee_per_gas
-                .checked_add(new_gas_fee.max_priority_fee_per_gas)
-                .unwrap_or(WeiPerGas::MAX)
+        if self.max_fee_per_gas >= new_gas_fee.min_max_fee_per_gas()
             && self.max_priority_fee_per_gas >= new_gas_fee.max_priority_fee_per_gas
         {
             self
         } else {
+            // At this point the transaction price needs to be updated
+            // which involves a minimum increase of 10% in the max_priority_fee_per_gas.
+            // We also need to ensure that the new max_fee_per_gas covers the new max_priority_fee_per_gas,
+            // but it would be counter-productive to increase it further than the minimum required.
+            // The reason is that any increase in the max_fee_per_gas may render the corresponding transaction
+            // not resubmittable due to the user not having enough funds to cover the new transaction price,
+            // which could potentially block the minter further. In other words, having a stuck transaction with a higher
+            // max_priority_fee_per_gas, is better than having a stuck transaction with a lower max_priority_fee_per_gas,
+            // since the first one will go through sooner than the second one when the transaction prices decrease.
+            // In case of steep increasing transaction fees, several resubmissions each involving costly operations
+            // (various HTTPs outcalls, tECDSA signatures, etc.) might be required, which potentially could be avoided,
+            // if one were to increase the max_fee_per_gas more than the minimum required. However,
+            // this seems less important than getting the minter unstuck as soon as possible.
             let updated_max_priority_fee_per_gas = plus_10_percent(self.max_priority_fee_per_gas)
                 .max(new_gas_fee.max_priority_fee_per_gas);
-            if self.max_fee_per_gas
-                >= new_gas_fee
-                    .base_fee_per_gas
-                    .checked_add(updated_max_priority_fee_per_gas)
-                    .unwrap_or(WeiPerGas::MAX)
-            {
-                Self {
-                    gas_limit: self.gas_limit,
-                    max_fee_per_gas: self.max_fee_per_gas,
-                    max_priority_fee_per_gas: updated_max_priority_fee_per_gas,
-                }
-            } else {
-                GasFeeEstimate {
-                    max_priority_fee_per_gas: updated_max_priority_fee_per_gas,
-                    ..new_gas_fee
-                }
-                .to_price(self.gas_limit)
+            let new_gas_fee = GasFeeEstimate {
+                max_priority_fee_per_gas: updated_max_priority_fee_per_gas,
+                ..new_gas_fee
+            };
+            let new_max_fee_per_gas = new_gas_fee.min_max_fee_per_gas().max(self.max_fee_per_gas);
+            TransactionPrice {
+                gas_limit: self.gas_limit,
+                max_fee_per_gas: new_max_fee_per_gas,
+                max_priority_fee_per_gas: updated_max_priority_fee_per_gas,
             }
-        }
-    }
-
-    /// Increase current transaction price by at least 10%
-    pub fn increase_by_10_percent(self) -> Self {
-        let plus_10_percent = |amount: WeiPerGas| {
-            amount
-                .checked_add(
-                    amount
-                        .checked_div_ceil(10_u8)
-                        .expect("BUG: must be Some() because divisor is non-zero"),
-                )
-                .unwrap_or(WeiPerGas::MAX)
-        };
-        Self {
-            gas_limit: self.gas_limit,
-            max_fee_per_gas: plus_10_percent(self.max_fee_per_gas),
-            max_priority_fee_per_gas: plus_10_percent(self.max_priority_fee_per_gas),
-        }
-    }
-
-    /// Returns true if the new transaction fee is higher than the current one
-    pub fn is_fee_increased(&self, new: &Self) -> bool {
-        self.max_fee_per_gas < new.max_fee_per_gas
-            || self.max_priority_fee_per_gas < new.max_priority_fee_per_gas
-    }
-
-    pub fn max(self, other: Self) -> Self {
-        Self {
-            gas_limit: self.gas_limit.max(other.gas_limit),
-            max_fee_per_gas: self.max_fee_per_gas.max(other.max_fee_per_gas),
-            max_priority_fee_per_gas: self
-                .max_priority_fee_per_gas
-                .max(other.max_priority_fee_per_gas),
         }
     }
 }

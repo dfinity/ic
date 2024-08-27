@@ -7,8 +7,8 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ed25519-consensus = "2.0.1"
 ic-canister-client-sender = { path = "../../canister_client/sender" }
+ic-crypto-ed25519 = { path = "../../crypto/ed25519" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 rand = { workspace = true }

@@ -9,7 +9,7 @@ use ic_system_test_driver::driver::{
     boundary_node::BoundaryNodeVm,
     test_env::TestEnv,
     test_env_api::{
-        HasPublicApiUrl, HasTopologySnapshot, HasWasm, IcNodeContainer, IcNodeSnapshot,
+        load_wasm, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
         NnsCustomizations,
     },
 };
@@ -21,13 +21,7 @@ use serde::{Deserialize, Serialize};
 use slog::info;
 use std::collections::HashMap;
 
-pub const ICRC1_LEDGER_WASM: &str = "rs/rosetta-api/icrc1/ledger/ledger_canister.wasm.gz";
-pub const INTERNET_IDENTITY_WASM: &str =
-    "external/ii_dev_canister/file/internet_identity_dev.wasm.gz";
-pub const NNS_DAPP_WASM: &str = "external/nns_dapp_canister/file/nns_dapp_canister.wasm.gz";
-pub const SUBNET_RENTAL_CANISTER_WASM: &str =
-    "external/subnet_rental_canister/file/subnet_rental_canister.wasm";
-pub const SNS_AGGREGATOR_WASM: &str = "external/sns_aggregator/file/sns_aggregator_dev.wasm.gz";
+use std::env;
 
 /// Init and post_upgrade arguments for SNS aggregator.
 #[derive(Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
@@ -91,7 +85,7 @@ pub fn install_sns_aggregator(
     let farm_url = boundary_node.get_playnet().unwrap();
 
     let sns_agent = sns_node.build_default_agent();
-    let sns_aggregator_wasm = env.load_wasm(SNS_AGGREGATOR_WASM);
+    let sns_aggregator_wasm = load_wasm(env::var("SNS_AGGREGATOR_WASM_PATH").unwrap());
     let logger = env.logger();
     block_on(async move {
         let sns_aggregator_canister_id =
@@ -136,7 +130,7 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
     let topology = env.topology_snapshot();
     let nns_node = topology.root_subnet().nodes().next().unwrap();
     let ii_canister_id =
-        nns_node.create_and_install_canister_with_arg(INTERNET_IDENTITY_WASM, None);
+        nns_node.create_and_install_canister_with_arg(&env::var("II_WASM_PATH").unwrap(), None);
 
     // create the NNS dapp canister so that its canister ID is allocated
     // and the Subnet Rental Canister gets its mainnet canister ID in the next step
@@ -149,8 +143,8 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
 
     // deploy the Subnet Rental Canister
     let nns_node = topology.root_subnet().nodes().next().unwrap();
-    let subnet_rental_canister_id =
-        nns_node.create_and_install_canister_with_arg(SUBNET_RENTAL_CANISTER_WASM, None);
+    let subnet_rental_canister_id = nns_node
+        .create_and_install_canister_with_arg(&env::var("SUBNET_RENTAL_WASM_PATH").unwrap(), None);
     assert_eq!(subnet_rental_canister_id, SUBNET_RENTAL_CANISTER_ID.into());
 
     // deploy the ckETH ledger canister (ICRC1-ledger with "ckETH" as token symbol and name) required by NNS dapp
@@ -159,13 +153,13 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
         .with_token_name("ckETH".to_string())
         .build();
     let cketh_canister_id = nns_node.create_and_install_canister_with_arg(
-        ICRC1_LEDGER_WASM,
+        &env::var("IC_ICRC1_LEDGER_WASM_PATH").expect("IC_ICRC1_LEDGER_WASM_PATH not set"),
         Some(Encode!(&(LedgerArgument::Init(cketh_init_args))).unwrap()),
     );
 
     // now that we know all required canister IDs, install the NNS dapp
     let nns_agent = nns_node.build_default_agent();
-    let nns_dapp_wasm = env.load_wasm(NNS_DAPP_WASM);
+    let nns_dapp_wasm = load_wasm(env::var("NNS_DAPP_WASM_PATH").unwrap());
     let logger = env.logger();
     block_on(async move {
         let nns_dapp_metadata = vec![

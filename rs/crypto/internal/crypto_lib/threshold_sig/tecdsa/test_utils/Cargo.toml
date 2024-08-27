@@ -9,11 +9,11 @@ documentation.workspace = true
 [dependencies]
 assert_matches = { workspace = true }
 ed25519-dalek = { workspace = true }
-ic-types = { path = "../../../../../../types/types" }
 ic-crypto-internal-threshold-sig-ecdsa = { path = ".." }
 ic-crypto-sha2 = { path = "../../../../../sha2" }
+ic-types = { path = "../../../../../../types/types" }
 k256 = { workspace = true }
 p256 = { workspace = true }
 rand = { workspace = true }
 schnorr_fun = "0.10"
-sha2 = "0.10"
+sha2 = { workspace = true }

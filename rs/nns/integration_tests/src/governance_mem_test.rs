@@ -4,15 +4,12 @@ use candid::{Decode, Encode};
 use canister_test::Project;
 use ic_base_types::PrincipalId;
 use ic_management_canister_types::{CanisterInstallMode, CanisterSettingsArgsBuilder};
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
 };
-use ic_nns_governance::{
-    init::TEST_NEURON_1_ID,
-    pb::v1::{ListProposalInfo, ListProposalInfoResponse},
-};
+use ic_nns_governance_api::pb::v1::{ListProposalInfo, ListProposalInfoResponse};
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_nns_test_utils::state_test_helpers::{
     create_canister_id_at_position, nns_governance_get_proposal_info,
@@ -88,6 +85,7 @@ fn governance_mem_test() {
         GOVERNANCE_CANISTER_ID,
         real_gov_wasm.bytes(),
         module_arg,
+        false,
     );
 
     state_machine.tick();

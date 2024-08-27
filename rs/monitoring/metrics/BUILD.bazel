@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/monitoring/adapter_metrics/client",
     "//rs/monitoring/logger",
     "@crate_index//:futures",

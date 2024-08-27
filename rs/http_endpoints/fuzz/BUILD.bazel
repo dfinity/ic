@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:private"])
 MACRO_DEPENDENCIES = []
 
 CALLSERVICE_FUZZER_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/http_endpoints/public",
     "//rs/interfaces",
@@ -42,14 +43,15 @@ CALLSERVICE_FUZZER_DEPENDENCIES = [
 
 # required to compile tests/common
 DEV_DEPENDENCIES = [
-    "//rs/monitoring/metrics",
+    # Keep sorted.
     "//rs/certification/test-utils",
-    "//rs/crypto/tree_hash",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/tls_interfaces/mocks",
+    "//rs/crypto/tree_hash",
     "//rs/interfaces/mocks",
     "//rs/interfaces/state_manager",
     "//rs/interfaces/state_manager/mocks",
+    "//rs/monitoring/metrics",
     "//rs/monitoring/pprof",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",

@@ -1,24 +1,20 @@
 use async_trait::async_trait;
-use ic_ledger_canister_blocks_synchronizer::blocks::Blocks;
-use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
-use ic_ledger_canister_blocks_synchronizer::blocks::RosettaBlocksMode;
+use ic_ledger_canister_blocks_synchronizer::blocks::{Blocks, HashedBlock, RosettaBlocksMode};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
-use ic_ledger_core::block::BlockType;
-use ic_ledger_core::timestamp::TimeStamp;
-use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
-use ic_nns_governance::pb::v1::{KnownNeuron, ProposalInfo};
-use ic_rosetta_api::convert::{from_arg, to_model_account_identifier};
-use ic_rosetta_api::errors::ApiError;
-use ic_rosetta_api::ledger_client::LedgerAccess;
-use ic_rosetta_api::models::{
-    AccountBalanceRequest, EnvelopePair, PartialBlockIdentifier, SignedTransaction,
+use ic_ledger_core::{block::BlockType, timestamp::TimeStamp};
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron::NeuronIdOrSubaccount, KnownNeuron, ProposalInfo,
 };
-use ic_rosetta_api::request::request_result::RequestResult;
-use ic_rosetta_api::request::transaction_results::TransactionResults;
-use ic_rosetta_api::request::Request;
-use ic_rosetta_api::request_handler::RosettaRequestHandler;
-use ic_rosetta_api::request_types::{RequestType, Status};
-use ic_rosetta_api::DEFAULT_TOKEN_SYMBOL;
+use ic_rosetta_api::{
+    convert::{from_arg, to_model_account_identifier},
+    errors::ApiError,
+    ledger_client::LedgerAccess,
+    models::{AccountBalanceRequest, EnvelopePair, PartialBlockIdentifier, SignedTransaction},
+    request::{request_result::RequestResult, transaction_results::TransactionResults, Request},
+    request_handler::RosettaRequestHandler,
+    request_types::{RequestType, Status},
+    DEFAULT_TOKEN_SYMBOL,
+};
 use ic_types::{
     messages::{HttpCallContent, HttpCanisterUpdate},
     CanisterId, PrincipalId,
@@ -26,11 +22,12 @@ use ic_types::{
 use icp_ledger::{
     self, AccountIdentifier, Block, Operation, SendArgs, Tokens, TransferFee, DEFAULT_TRANSFER_FEE,
 };
-use std::convert::TryFrom;
-use std::ops::Deref;
-use std::str::FromStr;
-use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex};
+use std::{
+    convert::TryFrom,
+    ops::Deref,
+    str::FromStr,
+    sync::{atomic::AtomicBool, Arc, Mutex},
+};
 use tokio::sync::RwLock;
 
 const FIRST_BLOCK_TIMESTAMP_NANOS_SINCE_EPOC: u64 = 1_656_147_600_000_000_000; // 25 June 2022 09:00:00
@@ -232,7 +229,7 @@ impl LedgerAccess for TestLedger {
         &self,
         _id: NeuronIdOrSubaccount,
         _: bool,
-    ) -> Result<ic_nns_governance::pb::v1::NeuronInfo, ApiError> {
+    ) -> Result<ic_nns_governance_api::pb::v1::NeuronInfo, ApiError> {
         panic!("Neuron info not available through TestLedger");
     }
 

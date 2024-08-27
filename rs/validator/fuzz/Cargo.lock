@@ -874,7 +874,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-btc-types-internal"
+name = "ic-btc-replica-types"
 version = "0.1.0"
 dependencies = [
  "candid",
@@ -1234,7 +1234,7 @@ dependencies = [
  "candid",
  "ic-base-types",
  "ic-btc-interface",
- "ic-btc-types-internal",
+ "ic-btc-replica-types",
  "ic-error-types",
  "ic-protobuf",
  "num-traits",
@@ -1289,7 +1289,7 @@ dependencies = [
  "derive_more",
  "hex",
  "ic-base-types",
- "ic-btc-types-internal",
+ "ic-btc-replica-types",
  "ic-constants",
  "ic-crypto-internal-types",
  "ic-crypto-sha2",

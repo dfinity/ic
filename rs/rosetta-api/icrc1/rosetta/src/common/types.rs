@@ -14,7 +14,6 @@ use strum_macros::{EnumString, VariantNames};
 // Documentation for the Rosetta API can be found at https://www.rosetta-api.org/docs/1.4.13/welcome.html
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct Error(pub rosetta_core::miscellaneous::Error);
 const ERROR_CODE_INVALID_NETWORK_ID: u32 = 1;
 const ERROR_CODE_UNABLE_TO_FIND_BLOCK: u32 = 2;

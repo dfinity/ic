@@ -560,7 +560,7 @@ fn put_replicated_state_for_testing(
     let (_height, mut state) = state_manager.take_tip();
     let stream = get_stream_for_testing();
     state.with_streams(btreemap![DST_SUBNET => stream]);
-    state_manager.commit_and_certify(state, h, CertificationScope::Metadata);
+    state_manager.commit_and_certify(state, h, CertificationScope::Metadata, None);
 }
 
 /// Generates a stream containing `STREAM_COUNT` requests, beginning at
@@ -605,7 +605,7 @@ async fn http_get(url: &str) -> Bytes {
 /// Parses a `Response` into status code and body.
 async fn parse_response(response: Response<Body>) -> (u16, Vec<u8>) {
     let status = response.status().as_u16();
-    let body = hyper::body::to_bytes(response.into_body())
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .unwrap()
         .to_vec();

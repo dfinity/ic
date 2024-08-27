@@ -13,6 +13,7 @@ rust_library(
     crate_name = "ic_crypto_utils_canister_threshold_sig",
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
         "//rs/types/types",
     ],

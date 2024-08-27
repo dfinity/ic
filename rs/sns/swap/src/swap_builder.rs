@@ -41,7 +41,6 @@ pub struct SwapBuilder {
     // The following fields are deprecated and thus don't need to be represented here.
     // min_icp_e8s,
     // max_icp_e8s,
-    // neurons_fund_participants,
 }
 
 fn i2canister_id(i: u64) -> CanisterId {
@@ -247,7 +246,6 @@ impl SwapBuilder {
             // The following fields are deprecated.
             min_icp_e8s: None,
             max_icp_e8s: None,
-            neurons_fund_participants: None,
         };
         let swap = Swap::new(init);
         Swap {

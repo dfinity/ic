@@ -57,7 +57,7 @@ pub trait HyperBody: hyper_transport::HyperBody + From<Body> + Into<Body> {}
 
 impl<B> HyperBody for B where B: hyper_transport::HyperBody + From<Body> + Into<Body> {}
 
-/// Trait representing the constraints on [`Service`] that [`HyperReplicaV2Transport`] requires.
+/// Trait representing the constraints on [`Service`] that [`HyperTransport`] requires.
 pub trait HyperService<B1: HyperBody>: hyper_transport::HyperService<B1> {}
 
 impl<B1, S> HyperService<B1> for S

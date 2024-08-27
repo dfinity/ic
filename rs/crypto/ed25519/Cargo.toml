@@ -10,12 +10,13 @@ documentation.workspace = true
 curve25519-dalek = { workspace = true }
 ed25519-dalek = { workspace = true }
 hkdf = "0.12"
-sha2 = "0.10"
-rand = { workspace = true }
-zeroize = { version = "1.5", features = ["zeroize_derive"] }
 pem = "1"
+rand = { workspace = true }
+thiserror = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }
 hex-literal = "0.4"
+rand_chacha = { workspace = true }
 wycheproof = "0.5"

@@ -8,7 +8,7 @@ Runbook::
 1. Instantiate an IC with one application subnet with the HTTP feature enabled.
 2. Install NNS canisters
 3. Install the proxy canister
-4. Make an update call to the proxy canister
+4. Make an update call to the proxy canister.
 
 Success::
 1. Received http response with status 200.
@@ -464,7 +464,7 @@ pub fn test(env: TestEnv) {
                 |response| {
                     let err_response = response.clone().unwrap_err();
                     matches!(err_response.0, RejectionCode::SysTransient)
-                        && err_response.1.contains("Failed to directly connect")
+                        && err_response.1.contains("client error (Connect)")
                 },
             )
             .await,

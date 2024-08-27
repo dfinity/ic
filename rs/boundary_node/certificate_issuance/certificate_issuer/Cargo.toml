@@ -19,12 +19,13 @@ clap = { workspace = true }
 cloudflare = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }
+http = { workspace = true }
 ic-agent = { workspace = true }
-ic-utils = { workspace = true, features = ["raw"] }
-ic-response-verification = { workspace = true }
 ic-http-certification = { workspace = true }
-idna = "0.3.0"
-instant-acme = "0.3.2"
+ic-response-verification = { workspace = true }
+ic-utils = { workspace = true, features = ["raw"] }
+idna = { workspace = true }
+instant-acme = "0.7.1"
 leb128 = "0.2.5"
 mockall = { workspace = true }
 opentelemetry = { version = "0.20", features = ["metrics", "trace"] }
@@ -43,7 +44,7 @@ reqwest = { workspace = true, default-features = false, features = [
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
-sha2 = "0.10.6"
+sha2 = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }

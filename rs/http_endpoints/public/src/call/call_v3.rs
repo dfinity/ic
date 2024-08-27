@@ -43,6 +43,12 @@ use std::{
 use tokio_util::time::FutureExt;
 use tower::{util::BoxCloneService, ServiceBuilder};
 
+const LOG_EVERY_N_SECONDS: i32 = 10;
+
+/// The timeout duration used when creating a subscriber for the ingres message,
+/// by calling [`IngressWatcherHandle::subscribe_for_certification`].
+const SUBSCRIPTION_TIMEOUT: Duration = Duration::from_secs(1);
+
 enum CallV3Response {
     Certificate(Certificate),
     UserError(UserError),
@@ -145,7 +151,6 @@ impl CallServiceV3 {
         )
     }
 
-    #[allow(dead_code)]
     pub fn new_service(
         call_handler: IngressValidator,
         ingress_watcher_handle: IngressWatcherHandle,
@@ -191,11 +196,9 @@ async fn call_sync_v3(
 
     let message_id = ingress_submitter.message_id();
 
-    let timeout = Duration::from_secs(ingress_message_certificate_timeout_seconds);
-
     let certification_subscriber = match ingress_watcher_handle
         .subscribe_for_certification(message_id.clone())
-        .timeout(timeout)
+        .timeout(SUBSCRIPTION_TIMEOUT)
         .await
     {
         Ok(Ok(message_subscriber)) => Ok(message_subscriber),
@@ -210,6 +213,7 @@ async fn call_sync_v3(
             // TODO: Send a warning or notification.
             // This probably means that the ingress watcher panicked.
             error!(
+                every_n_seconds => LOG_EVERY_N_SECONDS,
                 log,
                 "Error while waiting for subscriber of ingress message: {}", error_message
             );
@@ -220,6 +224,7 @@ async fn call_sync_v3(
         }
         Err(_) => {
             warn!(
+                every_n_seconds => LOG_EVERY_N_SECONDS,
                 log,
                 "Timed out while submitting a certification subscription.";
             );
@@ -250,7 +255,9 @@ async fn call_sync_v3(
 
     match certification_subscriber
         .wait_for_certification()
-        .timeout(timeout)
+        .timeout(Duration::from_secs(
+            ingress_message_certificate_timeout_seconds,
+        ))
         .await
     {
         Ok(()) => (),

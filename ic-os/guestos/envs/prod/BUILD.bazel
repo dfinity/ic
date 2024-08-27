@@ -9,5 +9,5 @@ icos_build(
     name = "prod",
     image_deps_func = image_deps,
     upload_prefix = "guest-os",
-    visibility = ["//visibility:public"],
+    visibility = ["//rs:ic-os-pkg"],
 )

@@ -1,6 +1,6 @@
 use crate::metrics::HttpHandlerMetrics;
 use ic_async_utils::JoinMap;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{info, ReplicaLogger};
 use ic_types::{messages::MessageId, Height};
 use std::{
     cmp::max,
@@ -40,7 +40,7 @@ struct IngressWatcherSubscription {
 
 /// A handle to the [`IngressWatcher`] used to register subscription over a channel.
 #[derive(Clone)]
-pub(crate) struct IngressWatcherHandle {
+pub struct IngressWatcherHandle {
     subscriber_registration_tx: Sender<IngressWatcherSubscription>,
     metrics: HttpHandlerMetrics,
 }
@@ -115,7 +115,7 @@ enum MessageExecutionStatus {
 /// Invariants:
 /// - 1:1 mapping of keys in `message_statuses` and `cancellations`.
 /// - 1:1 mapping of keys in `message_statuses` with execution status as completed and `completed_execution_heights`.
-pub(crate) struct IngressWatcher {
+pub struct IngressWatcher {
     log: ReplicaLogger,
     metrics: HttpHandlerMetrics,
     rt_handle: Handle,
@@ -132,7 +132,7 @@ pub(crate) struct IngressWatcher {
 }
 
 impl IngressWatcher {
-    pub(crate) fn start(
+    pub fn start(
         rt_handle: Handle,
         log: ReplicaLogger,
         metrics: HttpHandlerMetrics,
@@ -247,7 +247,7 @@ impl IngressWatcher {
                 }
 
                 _ = self.cancellation_token.cancelled() => {
-                    error!(
+                    info!(
                         self.log,
                         "Ingress watcher event loop cancelled.",
                     );
@@ -262,6 +262,10 @@ impl IngressWatcher {
             self.metrics
                 .ingress_watcher_tracked_messages
                 .set(self.message_statuses.len() as i64);
+
+            self.metrics
+                .ingress_watcher_messages_completed_execution_channel_capacity
+                .set(completed_execution_messages_rx.capacity() as i64);
         }
     }
 

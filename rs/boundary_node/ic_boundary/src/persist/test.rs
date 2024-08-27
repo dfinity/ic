@@ -149,35 +149,35 @@ pub fn generate_test_routes(offset: u64) -> Routes {
             .unwrap();
 
     let subnet1 = RouteSubnet {
-        id: subnet_id_1.to_string(),
+        id: subnet_id_1,
         range_start: principal_to_u256("f7crg-kabae").unwrap(),
         range_end: principal_to_u256("sxiki-5ygae-aq").unwrap(),
         nodes: vec![node(1 + offset, subnet_id_1)],
     };
 
     let subnet2 = RouteSubnet {
-        id: subnet_id_2.to_string(),
+        id: subnet_id_2,
         range_start: principal_to_u256("sqjm4-qahae-aq").unwrap(),
         range_end: principal_to_u256("sqjm4-qahae-aq").unwrap(),
         nodes: vec![node(2 + offset, subnet_id_2)],
     };
 
     let subnet3 = RouteSubnet {
-        id: subnet_id_1.to_string(),
+        id: subnet_id_1,
         range_start: principal_to_u256("t5his-7iiae-aq").unwrap(),
         range_end: principal_to_u256("jlzvg-byp77-7qcai").unwrap(),
         nodes: vec![node(1 + offset, subnet_id_1)],
     };
 
     let subnet4 = RouteSubnet {
-        id: subnet_id_3.to_string(),
+        id: subnet_id_3,
         range_start: principal_to_u256("zdpgc-saqaa-aacai").unwrap(),
         range_end: principal_to_u256("fij4j-bi777-7qcai").unwrap(),
         nodes: vec![node(3 + offset, subnet_id_3)],
     };
 
     let subnet5 = RouteSubnet {
-        id: subnet_id_2.to_string(),
+        id: subnet_id_2,
         range_start: principal_to_u256("6l3jn-7icca-aaaai-b").unwrap(),
         range_end: principal_to_u256("ca5tg-macd7-776ai-b").unwrap(),
         nodes: vec![node(2 + offset, subnet_id_2)],
@@ -193,7 +193,7 @@ pub fn generate_test_routes(offset: u64) -> Routes {
 
     let subnet_map = subnets
         .iter()
-        .map(|subnet| (Principal::from_text(&subnet.id).unwrap(), subnet.clone()))
+        .map(|subnet| (subnet.id, subnet.clone()))
         .collect::<HashMap<_, _>>();
 
     Routes {
@@ -243,49 +243,56 @@ fn test_lookup() -> Result<(), Error> {
     assert_eq!(
         r.lookup_by_canister_id(Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap())
             .unwrap()
-            .id,
+            .id
+            .to_string(),
         "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
     );
 
     assert_eq!(
         r.lookup_by_canister_id(Principal::from_text("qjdve-lqaaa-aaaaa-aaaeq-cai").unwrap())
             .unwrap()
-            .id,
+            .id
+            .to_string(),
         "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
     );
 
     assert_eq!(
         r.lookup_by_canister_id(Principal::from_text("2b2k4-rqaaa-aaaaa-qaatq-cai").unwrap())
             .unwrap()
-            .id,
+            .id
+            .to_string(),
         "snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae"
     );
 
     assert_eq!(
         r.lookup_by_canister_id(Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap())
             .unwrap()
-            .id,
+            .id
+            .to_string(),
         "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe"
     );
 
     assert_eq!(
         r.lookup_by_canister_id(Principal::from_text("sqjm4-qahae-aq").unwrap())
             .unwrap()
-            .id,
+            .id
+            .to_string(),
         "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe"
     );
 
     assert_eq!(
         r.lookup_by_canister_id(Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap())
             .unwrap()
-            .id,
+            .id
+            .to_string(),
         "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe"
     );
 
     assert_eq!(
         r.lookup_by_canister_id(Principal::from_text("uc7f6-kaaaa-aaaaq-qaaaa-cai").unwrap())
             .unwrap()
-            .id,
+            .id
+            .to_string(),
         "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe"
     );
 

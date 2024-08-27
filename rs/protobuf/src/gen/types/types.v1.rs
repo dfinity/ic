@@ -381,7 +381,7 @@ pub struct ThresholdSignatureShare {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaPayload {
+pub struct IDkgPayload {
     #[prost(message, repeated, tag = "1")]
     pub signature_agreements: ::prost::alloc::vec::Vec<CompletedSignature>,
     #[prost(message, optional, tag = "5")]
@@ -397,14 +397,11 @@ pub struct EcdsaPayload {
     #[prost(uint64, tag = "10")]
     pub next_unused_pre_signature_id: u64,
     #[prost(message, repeated, tag = "13")]
-    pub key_transcripts: ::prost::alloc::vec::Vec<EcdsaKeyTranscript>,
+    pub key_transcripts: ::prost::alloc::vec::Vec<MasterKeyTranscript>,
     #[prost(message, repeated, tag = "14")]
     pub available_pre_signatures: ::prost::alloc::vec::Vec<AvailablePreSignature>,
     #[prost(message, repeated, tag = "15")]
     pub pre_signatures_in_creation: ::prost::alloc::vec::Vec<PreSignatureInProgress>,
-    /// TODO: retire these fields, once we start using `pre_signatures`.
-    #[prost(bool, tag = "16")]
-    pub generalized_pre_signatures: bool,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -427,9 +424,7 @@ pub mod consensus_response {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaKeyTranscript {
-    #[prost(message, optional, tag = "1")]
-    pub deprecated_key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
+pub struct MasterKeyTranscript {
     #[prost(message, optional, tag = "2")]
     pub current: ::core::option::Option<UnmaskedTranscriptWithAttributes>,
     #[prost(message, optional, tag = "3")]
@@ -683,8 +678,6 @@ pub struct IDkgReshareRequest {
     pub receiving_node_ids: ::prost::alloc::vec::Vec<NodeId>,
     #[prost(uint64, tag = "3")]
     pub registry_version: u64,
-    #[prost(message, optional, tag = "4")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
     #[prost(message, optional, tag = "5")]
     pub master_key_id:
         ::core::option::Option<super::super::registry::crypto::v1::MasterPublicKeyId>,
@@ -726,9 +719,9 @@ pub mod i_dkg_message {
         #[prost(message, tag = "3")]
         EcdsaSigShare(super::EcdsaSigShare),
         #[prost(message, tag = "4")]
-        Complaint(super::EcdsaComplaint),
+        Complaint(super::SignedIDkgComplaint),
         #[prost(message, tag = "5")]
-        Opening(super::EcdsaOpening),
+        Opening(super::SignedIDkgOpening),
         #[prost(message, tag = "6")]
         SchnorrSigShare(super::SchnorrSigShare),
     }
@@ -755,29 +748,29 @@ pub struct SchnorrSigShare {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaComplaint {
+pub struct SignedIDkgComplaint {
     #[prost(message, optional, tag = "1")]
-    pub content: ::core::option::Option<EcdsaComplaintContent>,
+    pub content: ::core::option::Option<IDkgComplaintContent>,
     #[prost(message, optional, tag = "2")]
     pub signature: ::core::option::Option<BasicSignature>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaComplaintContent {
+pub struct IDkgComplaintContent {
     #[prost(message, optional, tag = "1")]
     pub idkg_complaint: ::core::option::Option<super::super::registry::subnet::v1::IDkgComplaint>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaOpening {
+pub struct SignedIDkgOpening {
     #[prost(message, optional, tag = "1")]
-    pub content: ::core::option::Option<EcdsaOpeningContent>,
+    pub content: ::core::option::Option<IDkgOpeningContent>,
     #[prost(message, optional, tag = "2")]
     pub signature: ::core::option::Option<BasicSignature>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaOpeningContent {
+pub struct IDkgOpeningContent {
     #[prost(message, optional, tag = "1")]
     pub idkg_opening: ::core::option::Option<super::super::registry::subnet::v1::IDkgOpening>,
 }
@@ -795,45 +788,69 @@ pub struct IDkgDealingSupport {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaPrefix {
+pub struct IDkgPrefix {
     #[prost(uint64, tag = "1")]
     pub group_tag: u64,
     #[prost(uint64, tag = "2")]
     pub meta_hash: u64,
-    #[prost(uint64, tag = "3")]
-    pub height: u64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PrefixHashPair {
-    #[prost(message, optional, tag = "1")]
-    pub prefix: ::core::option::Option<EcdsaPrefix>,
+pub struct IDkgArtifactIdData {
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
+    #[prost(bytes = "vec", tag = "2")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "3")]
+    pub subnet_id: ::core::option::Option<SubnetId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SigShareIdData {
+    #[prost(uint64, tag = "1")]
+    pub height: u64,
     #[prost(bytes = "vec", tag = "2")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaArtifactId {
-    #[prost(oneof = "ecdsa_artifact_id::Kind", tags = "1, 2, 3, 4, 5, 6")]
-    pub kind: ::core::option::Option<ecdsa_artifact_id::Kind>,
+pub struct PrefixPairIDkg {
+    #[prost(message, optional, tag = "1")]
+    pub prefix: ::core::option::Option<IDkgPrefix>,
+    #[prost(message, optional, tag = "2")]
+    pub id_data: ::core::option::Option<IDkgArtifactIdData>,
 }
-/// Nested message and enum types in `EcdsaArtifactId`.
-pub mod ecdsa_artifact_id {
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PrefixPairSigShare {
+    #[prost(message, optional, tag = "1")]
+    pub prefix: ::core::option::Option<IDkgPrefix>,
+    #[prost(message, optional, tag = "2")]
+    pub id_data: ::core::option::Option<SigShareIdData>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IDkgArtifactId {
+    #[prost(oneof = "i_dkg_artifact_id::Kind", tags = "1, 2, 3, 4, 5, 6")]
+    pub kind: ::core::option::Option<i_dkg_artifact_id::Kind>,
+}
+/// Nested message and enum types in `IDkgArtifactId`.
+pub mod i_dkg_artifact_id {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Kind {
         #[prost(message, tag = "1")]
-        Dealing(super::PrefixHashPair),
+        Dealing(super::PrefixPairIDkg),
         #[prost(message, tag = "2")]
-        DealingSupport(super::PrefixHashPair),
+        DealingSupport(super::PrefixPairIDkg),
         #[prost(message, tag = "3")]
-        EcdsaSigShare(super::PrefixHashPair),
+        EcdsaSigShare(super::PrefixPairSigShare),
         #[prost(message, tag = "4")]
-        Complaint(super::PrefixHashPair),
+        Complaint(super::PrefixPairIDkg),
         #[prost(message, tag = "5")]
-        Opening(super::PrefixHashPair),
+        Opening(super::PrefixPairIDkg),
         #[prost(message, tag = "6")]
-        SchnorrSigShare(super::PrefixHashPair),
+        SchnorrSigShare(super::PrefixPairSigShare),
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -992,7 +1009,7 @@ pub struct Block {
     #[prost(message, optional, tag = "12")]
     pub self_validating_payload: ::core::option::Option<SelfValidatingPayload>,
     #[prost(message, optional, tag = "13")]
-    pub ecdsa_payload: ::core::option::Option<EcdsaPayload>,
+    pub idkg_payload: ::core::option::Option<IDkgPayload>,
     #[prost(bytes = "vec", tag = "15")]
     pub canister_http_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "16")]
@@ -1366,31 +1383,6 @@ pub mod canister_http_response_message {
         Timeout(u64),
         #[prost(message, tag = "3")]
         DivergenceResponse(super::CanisterHttpResponseDivergence),
-    }
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct IDkgMessageAttribute {
-    #[prost(oneof = "i_dkg_message_attribute::Kind", tags = "1, 2, 3, 4, 5, 6")]
-    pub kind: ::core::option::Option<i_dkg_message_attribute::Kind>,
-}
-/// Nested message and enum types in `IDkgMessageAttribute`.
-pub mod i_dkg_message_attribute {
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Kind {
-        #[prost(message, tag = "1")]
-        SignedDealing(super::super::super::registry::subnet::v1::IDkgTranscriptId),
-        #[prost(message, tag = "2")]
-        DealingSupport(super::super::super::registry::subnet::v1::IDkgTranscriptId),
-        #[prost(message, tag = "3")]
-        EcdsaSigShare(super::RequestId),
-        #[prost(message, tag = "4")]
-        Complaint(super::super::super::registry::subnet::v1::IDkgTranscriptId),
-        #[prost(message, tag = "5")]
-        Opening(super::super::super::registry::subnet::v1::IDkgTranscriptId),
-        #[prost(message, tag = "6")]
-        SchnorrSigShare(super::RequestId),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]

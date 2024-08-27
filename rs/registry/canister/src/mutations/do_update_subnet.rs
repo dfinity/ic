@@ -1,8 +1,4 @@
-use crate::{
-    common::LOG_PREFIX,
-    mutations::common::{encode_or_panic, has_duplicates},
-    registry::Registry,
-};
+use crate::{common::LOG_PREFIX, mutations::common::has_duplicates, registry::Registry};
 use candid::{CandidType, Deserialize};
 use dfn_core::println;
 use ic_base_types::{subnet_id_into_protobuf, SubnetId};
@@ -17,6 +13,7 @@ use ic_registry_subnet_features::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
+use prost::Message;
 use serde::Serialize;
 use std::collections::HashSet;
 
@@ -38,7 +35,7 @@ impl Registry {
 
         let subnet_record_mutation = upsert(
             make_subnet_record_key(subnet_id).into_bytes(),
-            encode_or_panic(&new_subnet_record),
+            new_subnet_record.encode_to_vec(),
         );
 
         let mut mutations = vec![subnet_record_mutation];
@@ -303,7 +300,7 @@ impl Registry {
 
             mutations.push(upsert(
                 make_chain_key_signing_subnet_list_key(master_public_key_id).into_bytes(),
-                encode_or_panic(&chain_key_signing_list_for_key),
+                chain_key_signing_list_for_key.encode_to_vec(),
             ));
         }
         mutations
@@ -341,9 +338,6 @@ pub struct UpdateSubnetPayload {
     pub is_halted: Option<bool>,
     pub halt_at_cup_height: Option<bool>,
 
-    pub max_instructions_per_message: Option<u64>,
-    pub max_instructions_per_round: Option<u64>,
-    pub max_instructions_per_install_code: Option<u64>,
     pub features: Option<SubnetFeaturesPb>,
 
     /// The following three ecdsa_* fields will soon be deprecated and replaced with chain_* fields.
@@ -546,9 +540,6 @@ fn merge_subnet_record(
         subnet_type,
         is_halted,
         halt_at_cup_height,
-        max_instructions_per_message,
-        max_instructions_per_round,
-        max_instructions_per_install_code,
         features,
         ecdsa_config,
         chain_key_config,
@@ -590,10 +581,6 @@ fn merge_subnet_record(
 
     maybe_set!(subnet_record, is_halted);
     maybe_set!(subnet_record, halt_at_cup_height);
-
-    maybe_set!(subnet_record, max_instructions_per_message);
-    maybe_set!(subnet_record, max_instructions_per_round);
-    maybe_set!(subnet_record, max_instructions_per_install_code);
 
     maybe_set_option!(subnet_record, features);
 
@@ -661,9 +648,6 @@ mod tests {
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: None,
-            max_instructions_per_message: None,
-            max_instructions_per_round: None,
-            max_instructions_per_install_code: None,
             features: None,
             ecdsa_config: None,
             ecdsa_key_signing_enable: None,
@@ -703,9 +687,6 @@ mod tests {
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
             halt_at_cup_height: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
@@ -743,9 +724,6 @@ mod tests {
             subnet_type: None,
             is_halted: Some(true),
             halt_at_cup_height: Some(false),
-            max_instructions_per_message: Some(6_000_000_000),
-            max_instructions_per_round: Some(8_000_000_000),
-            max_instructions_per_install_code: Some(300_000_000_000),
             features: Some(
                 SubnetFeatures {
                     canister_sandboxing: false,
@@ -791,9 +769,6 @@ mod tests {
                 subnet_type: SubnetType::Application.into(),
                 is_halted: true,
                 halt_at_cup_height: false,
-                max_instructions_per_message: 6_000_000_000,
-                max_instructions_per_round: 8_000_000_000,
-                max_instructions_per_install_code: 300_000_000_000,
                 features: Some(
                     SubnetFeatures {
                         canister_sandboxing: false,
@@ -827,9 +802,6 @@ mod tests {
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
             halt_at_cup_height: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
@@ -856,9 +828,6 @@ mod tests {
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: Some(true),
-            max_instructions_per_message: None,
-            max_instructions_per_round: Some(8_000_000_000),
-            max_instructions_per_install_code: None,
             features: None,
             ecdsa_config: None,
             ecdsa_key_signing_enable: None,
@@ -896,9 +865,6 @@ mod tests {
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
                 halt_at_cup_height: true,
-                max_instructions_per_message: 5_000_000_000,
-                max_instructions_per_round: 8_000_000_000,
-                max_instructions_per_install_code: 200_000_000_000,
                 features: None,
                 max_number_of_canisters: 50,
                 ssh_readonly_access: vec![],

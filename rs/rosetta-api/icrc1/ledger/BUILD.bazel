@@ -15,6 +15,7 @@ package(default_visibility = ["//visibility:public"])
         crate_features = features,
         crate_name = "ic_icrc1_ledger",
         proc_macro_deps = [
+            # Keep sorted.
             "@crate_index//:async-trait",
         ],
         rustc_env = {
@@ -22,6 +23,7 @@ package(default_visibility = ["//visibility:public"])
         },
         version = "0.9.0",
         deps = [
+            # Keep sorted.
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/crypto/tree_hash",
@@ -72,10 +74,12 @@ package(default_visibility = ["//visibility:public"])
         crate_name = "ic_icrc1_ledger_canister" + name_suffix,
         opt = "z",
         proc_macro_deps = [
+            # Keep sorted.
             "@crate_index//:ic-cdk-macros",
         ],
         service_file = ":ledger.did",
         deps = [
+            # Keep sorted.
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/rosetta-api/icrc1",
             "//rs/rosetta-api/ledger_canister_core",
@@ -175,16 +179,21 @@ rust_test(
             ":ledger_canister" + name_suffix + ".wasm",
             "//rs/rosetta-api/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
             "@ic-icrc1-ledger-first-version.wasm.gz//file",
+            "@mainnet_ckbtc_ic-icrc1-ledger//file",
+            "@mainnet_cketh_ic-icrc1-ledger-u256//file",
             "@mainnet_ic-icrc1-ledger//file",
         ],
         env = {
             "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/ledger",
+            "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc_ic-icrc1-ledger//file)",
+            "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-ledger-u256//file)",
             "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz)",
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
             "IC_ICRC1_LEDGER_FIRST_VERSION_WASM_PATH": "$(rootpath @ic-icrc1-ledger-first-version.wasm.gz//file)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + ".wasm)",
         },
         deps = [
+            # Keep sorted.
             ":ledger",
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
             "//packages/icrc-ledger-types:icrc_ledger_types",
@@ -196,11 +205,13 @@ rust_test(
             "//rs/state_machine_tests",
             "//rs/test_utilities/load_wasm",
             "//rs/types/base_types",
+            "@crate_index//:assert_matches",
             "@crate_index//:candid",
             "@crate_index//:cddl",
             "@crate_index//:hex",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:leb128",
+            "@crate_index//:num-bigint",
             "@crate_index//:num-traits",
             "@crate_index//:proptest",
             "@crate_index//:serde_bytes",
@@ -227,6 +238,7 @@ rust_test(
     ],
     crate = "ledger",
     deps = [
+        # Keep sorted.
         ":ledger",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/rosetta-api/icrc1",
@@ -254,10 +266,12 @@ rust_test(
         srcs = glob(["src/**/*.rs"]),
         crate_features = features,
         proc_macro_deps = [
+            # Keep sorted.
             "@crate_index//:ic-cdk-macros",
         ],
         results_file = "canbench_results/canbench" + name_suffix + ".yml",
         deps = [
+            # Keep sorted.
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/rosetta-api/icrc1",
             "//rs/rosetta-api/ledger_canister_core",

@@ -3,22 +3,22 @@ use crate::tls::rustls::certified_key;
 use crate::tls::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
 use crate::tls::rustls::node_cert_verifier::NodeServerCertVerifier;
 use crate::tls::tls_cert_from_registry;
-use ic_crypto_internal_csp::api::CspTlsHandshakeSignerProvider;
 use ic_crypto_internal_csp::key_id::KeyId;
+use ic_crypto_internal_csp::vault::api::CspVault;
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfigError};
 use ic_interfaces_registry::RegistryClient;
 use ic_types::{NodeId, RegistryVersion};
 use rustls::{
-    cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384},
     client::ResolvesClientCert,
+    crypto::ring::cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384},
     sign::CertifiedKey,
     version::TLS13,
     ClientConfig, SignatureScheme,
 };
 use std::sync::Arc;
 
-pub fn client_config<P: CspTlsHandshakeSignerProvider>(
-    signer_provider: &P,
+pub fn client_config(
+    vault: &Arc<dyn CspVault>,
     self_node_id: NodeId,
     registry_client: Arc<dyn RegistryClient>,
     server: NodeId,
@@ -32,22 +32,26 @@ pub fn client_config<P: CspTlsHandshakeSignerProvider>(
         }
     })?;
     let ed25519_signing_key =
-        CspServerEd25519SigningKey::new(self_tls_cert_key_id, signer_provider.handshake_signer());
+        CspServerEd25519SigningKey::new(self_tls_cert_key_id, Arc::clone(vault));
     let server_cert_verifier = NodeServerCertVerifier::new(
         SomeOrAllNodes::new_with_single_node(server),
         registry_client,
         registry_version,
     );
-    Ok(ClientConfig::builder()
-        .with_cipher_suites(&[TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256])
-        .with_safe_default_kx_groups()
-        .with_protocol_versions(&[&TLS13])
-        .expect("Valid rustls client config.")
-        .with_custom_certificate_verifier(Arc::new(server_cert_verifier))
-        .with_client_cert_resolver(static_cert_resolver(
-            certified_key(self_tls_cert, ed25519_signing_key),
-            SignatureScheme::ED25519,
-        )))
+    let mut ring_crypto_provider = rustls::crypto::ring::default_provider();
+    ring_crypto_provider.cipher_suites = vec![TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256];
+
+    Ok(
+        ClientConfig::builder_with_provider(Arc::new(ring_crypto_provider))
+            .with_protocol_versions(&[&TLS13])
+            .expect("Valid rustls client config.")
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(server_cert_verifier))
+            .with_client_cert_resolver(static_cert_resolver(
+                certified_key(self_tls_cert, ed25519_signing_key),
+                SignatureScheme::ED25519,
+            )),
+    )
 }
 
 fn static_cert_resolver(key: CertifiedKey, scheme: SignatureScheme) -> Arc<dyn ResolvesClientCert> {

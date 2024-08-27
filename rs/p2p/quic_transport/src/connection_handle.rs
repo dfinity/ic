@@ -12,7 +12,7 @@ use quinn::Connection;
 use crate::{
     metrics::{
         QuicTransportMetrics, ERROR_TYPE_FINISH, ERROR_TYPE_OPEN, ERROR_TYPE_READ,
-        ERROR_TYPE_WRITE, REQUEST_TYPE_PUSH, REQUEST_TYPE_RPC,
+        ERROR_TYPE_STOPPED, ERROR_TYPE_WRITE, REQUEST_TYPE_PUSH, REQUEST_TYPE_RPC,
     },
     utils::{read_response, write_request},
     ConnId, MessagePriority,
@@ -87,10 +87,18 @@ impl ConnectionHandle {
                 err
             })?;
 
-        send_stream.finish().await.map_err(|err| {
+        send_stream.finish().map_err(|err| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_FINISH])
+                .inc();
+            err
+        })?;
+
+        send_stream.stopped().await.map_err(|err| {
+            self.metrics
+                .connection_handle_errors_total
+                .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_STOPPED])
                 .inc();
             err
         })?;
@@ -145,10 +153,18 @@ impl ConnectionHandle {
                 err
             })?;
 
-        send_stream.finish().await.map_err(|err| {
+        send_stream.finish().map_err(|err| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_FINISH])
+                .inc();
+            err
+        })?;
+
+        send_stream.stopped().await.map_err(|err| {
+            self.metrics
+                .connection_handle_errors_total
+                .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_STOPPED])
                 .inc();
             err
         })?;

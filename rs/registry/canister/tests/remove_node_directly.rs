@@ -4,7 +4,6 @@ use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
 };
-use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::registry::{
     create_subnet_threshold_signing_pubkey_and_cup_mutations, get_committee_signing_key,
     get_dkg_dealing_key, get_idkg_dealing_encryption_key, get_node_record, get_node_signing_key,
@@ -28,6 +27,7 @@ use ic_registry_transport::pb::v1::{
 };
 use ic_types::{NodeId, ReplicaVersion};
 use maplit::btreemap;
+use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
 use registry_canister::mutations::node_management::do_add_node::connection_endpoint_from_string;
@@ -173,13 +173,13 @@ fn node_cannot_be_removed_if_in_subnet() {
             RegistryMutation {
                 mutation_type: registry_mutation::Type::Insert as i32,
                 key: make_subnet_record_key(test_subnet_id).as_bytes().to_vec(),
-                value: encode_or_panic(&test_subnet_record),
+                value: test_subnet_record.encode_to_vec(),
             },
             // Overwrite Subnet List
             RegistryMutation {
                 mutation_type: registry_mutation::Type::Update as i32,
                 key: make_subnet_list_record_key().as_bytes().to_vec(),
-                value: encode_or_panic(&test_subnet_list_record),
+                value: test_subnet_list_record.encode_to_vec(),
             },
         ];
         let mut subnet_threshold_pk_and_cup_mutations =
@@ -242,10 +242,11 @@ fn init_mutation(node_record: &NodeRecord) -> (NodeId, PublicKey, RegistryAtomic
         key: make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL)
             .as_bytes()
             .to_vec(),
-        value: encode_or_panic(&NodeOperatorRecord {
+        value: NodeOperatorRecord {
             node_allowance: TEST_NODE_ALLOWANCE,
             ..Default::default()
-        }),
+        }
+        .encode_to_vec(),
     });
     (
         node_id,

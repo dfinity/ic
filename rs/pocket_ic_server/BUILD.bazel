@@ -1,75 +1,105 @@
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_ic_test")
 
-package(default_visibility = ["//visibility:public"])
+BUILD_DEPENDENCIES = []
 
 LIB_DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/pocket-ic:pocket-ic",
+    "//rs/boundary_node/ic_boundary",
     "//rs/canister_sandbox:backend_lib",
     "//rs/config",
-    "//rs/boundary_node/ic_boundary",
-    "//rs/boundary_node/icx_proxy:icx_proxy_dev",
-    "//rs/interfaces",
-    "//rs/http_endpoints/public",
-    "//rs/validator/ingress_message",
+    "//rs/crypto/ed25519",
     "//rs/crypto/iccsa",
+    "//rs/crypto/sha2",
     "//rs/crypto/utils/threshold_sig_der",
+    "//rs/http_endpoints/public",
+    "//rs/https_outcalls/adapter:adapter_with_http",
+    "//rs/https_outcalls/client",
+    "//rs/https_outcalls/service",
+    "//rs/interfaces",
+    "//rs/interfaces/adapter_client",
+    "//rs/interfaces/state_manager",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
     "//rs/protobuf",
     "//rs/registry/keys",
-    "//rs/registry/subnet_type",
     "//rs/registry/proto_data_provider",
-    "//rs/state_machine_tests",
-    "//packages/pocket-ic:pocket-ic",
-    "//rs/types/types",
-    "//rs/types/management_canister_types",
-    "//rs/crypto/sha2",
-    "//rs/utils/thread",
     "//rs/registry/routing_table",
+    "//rs/registry/subnet_type",
+    "//rs/replicated_state",
+    "//rs/starter:ic-starter-lib",
+    "//rs/state_machine_tests",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
+    "//rs/types/management_canister_types",
+    "//rs/types/types",
+    "//rs/utils/thread",
+    "//rs/validator/ingress_message",
     "@crate_index//:aide",
+    "@crate_index//:askama",
     "@crate_index//:axum",
     "@crate_index//:axum-extra",
     "@crate_index//:axum_server_0_6_0",
     "@crate_index//:backoff",
+    "@crate_index//:base64",
+    "@crate_index//:bytes",
+    "@crate_index//:candid",
+    "@crate_index//:clap_3_2_25",
+    "@crate_index//:flate2",
+    "@crate_index//:form_urlencoded",
+    "@crate_index//:fqdn",
+    "@crate_index//:futures",
+    "@crate_index//:hex",
+    "@crate_index//:http",
     "@crate_index//:http-body-util",
+    "@crate_index//:hyper",
+    "@crate_index//:hyper-rustls",
+    "@crate_index//:hyper-socks2",
     "@crate_index//:hyper-util",
     "@crate_index//:ic-agent",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-http-gateway",
     "@crate_index//:ic-utils",
     "@crate_index//:itertools",
-    "@crate_index//:tokio",
-    "@crate_index//:tempfile",
-    "@crate_index//:candid",
-    "@crate_index//:hyper",
-    "@crate_index//:ed25519-consensus",
-    "@crate_index//:clap_3_2_25",
-    "@crate_index//:serde",
-    "@crate_index//:hex",
     "@crate_index//:rand",
+    "@crate_index//:serde",
     "@crate_index//:serde_cbor",
+    "@crate_index//:serde_json",
+    "@crate_index//:tempfile",
     "@crate_index//:time",
-    "@crate_index//:tracing",
-    "@crate_index//:tracing-subscriber",
-    "@crate_index//:tracing-appender",
+    "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
+    "@crate_index//:tonic",
     "@crate_index//:tower",
     "@crate_index//:tower-http",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:base64",
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-appender",
+    "@crate_index//:tracing-subscriber",
     "@crate_index//:wat",
-    "@crate_index//:flate2",
 ]
 
 TEST_DEPENDENCIES = [
+    # Keep sorted.
     "//packages/pocket-ic:pocket-ic",
-    "//rs/types/types",
+    "//rs/interfaces/registry",
+    "//rs/registry/canister",
+    "//rs/registry/proto_data_provider",
     "//rs/registry/routing_table",
+    "//rs/registry/transport",
+    "//rs/types/management_canister_types",
+    "//rs/types/types",
+    "@crate_index//:candid",
+    "@crate_index//:hex",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-utils",
+    "@crate_index//:rcgen",
     "@crate_index//:reqwest",
-    "@crate_index//:candid",
+    "@crate_index//:slog",
+    "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:wat",
-    "@crate_index//:rcgen",
-    "@crate_index//:tempfile",
 ]
 
 SPEC_TEST_DEPENDENCIES = TEST_DEPENDENCIES + [
@@ -77,13 +107,27 @@ SPEC_TEST_DEPENDENCIES = TEST_DEPENDENCIES + [
     "//rs/registry/subnet_type",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
+
+ALIASES = {}
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    aliases = ALIASES,
+    data = ["templates/dashboard.html"],  # build script data (e.g. template files) goes here
+    deps = BUILD_DEPENDENCIES,
+)
 
 rust_binary(
     name = "pocket-ic-server",
     testonly = True,
     srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
+    # TODO: restrict the visibility
+    visibility = ["//visibility:public"],
     deps = LIB_DEPENDENCIES + [":pocket-ic-server-lib"],
 )
 
@@ -98,15 +142,15 @@ rust_library(
     ]),
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "4.0.0",
-    deps = LIB_DEPENDENCIES,
+    version = "5.0.0",
+    deps = LIB_DEPENDENCIES + [":build_script"],
 )
 
 rust_ic_test(
     name = "pic_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = LIB_DEPENDENCIES,
+    deps = LIB_DEPENDENCIES + [":build_script"],
 )
 
 rust_test(
@@ -116,12 +160,15 @@ rust_test(
         "tests/common.rs",
         "tests/test.rs",
     ],
+    aliases = {},
     data = [
         ":pocket-ic-server",
+        "//rs/registry/canister:registry-canister",
         "@ii_dev_canister//file",
     ],
     env = {
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "REGISTRY_WASM": "$(rootpath //rs/registry/canister:registry-canister)",
         "II_WASM": "external/ii_dev_canister/file/internet_identity_dev.wasm.gz",
     },
     tags = ["cpu:8"],
@@ -138,8 +185,10 @@ rust_test(
     data = [
         ":pocket-ic-server",
         "//rs/tests:ic-hs",
+        "//rs/tests/httpbin-rs:httpbin",
     ],
     env = {
+        "HTTPBIN_BIN": "$(rootpath //rs/tests/httpbin-rs:httpbin)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "IC_REF_TEST_ROOT": "rs/tests/ic-hs",
     },

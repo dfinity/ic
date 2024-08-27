@@ -8,6 +8,7 @@ use axum::{
     error_handling::HandleErrorLayer, extract::ConnectInfo, response::IntoResponse, BoxError,
     Router,
 };
+use candid::Principal;
 use http::request::Request;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, time::Duration};
@@ -40,7 +41,7 @@ impl TryFrom<u32> for RateLimit {
 struct SubnetRateToken;
 
 impl KeyExtractor for SubnetRateToken {
-    type Key = String;
+    type Key = Principal;
 
     fn extract<B>(&self, req: &Request<B>) -> Result<Self::Key, GovernorError> {
         // This should always work, because we extract the subnet id after preprocess_request puts it there.
@@ -48,8 +49,7 @@ impl KeyExtractor for SubnetRateToken {
             .extensions()
             .get::<Arc<RouteSubnet>>()
             .ok_or(GovernorError::UnableToExtractKey)?
-            .id
-            .clone())
+            .id)
     }
 }
 
@@ -130,7 +130,7 @@ impl RateLimit {
     }
 }
 
-pub mod canister;
+pub mod generic;
 
 #[cfg(test)]
 pub mod test;

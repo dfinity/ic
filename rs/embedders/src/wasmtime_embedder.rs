@@ -1,3 +1,8 @@
+// False positive clippy lint.
+// Issue: https://github.com/rust-lang/rust-clippy/issues/12856
+// Fixed in: https://github.com/rust-lang/rust-clippy/pull/12892
+#![allow(clippy::needless_borrows_for_generic_args)]
+
 pub mod host_memory;
 mod signal_stack;
 mod system_api;
@@ -1213,6 +1218,11 @@ impl WasmtimeInstance {
             CanisterMemoryType::Stable => STABLE_MEMORY_NAME,
         };
         NumWasmPages::from(self.get_memory(name).map_or(0, |mem| mem.size(&self.store)) as usize)
+    }
+
+    /// Returns true iff the Wasm memory is 32 bit.
+    pub fn is_wasm32(&self) -> bool {
+        matches!(self.main_memory_type, WasmMemoryType::Wasm32)
     }
 
     /// Returns a list of exported globals.

@@ -8,8 +8,7 @@ use discower_bowndary::{
 };
 use ic_base_types::NodeId;
 use k256::SecretKey;
-use std::collections::HashSet;
-use std::time::Instant;
+use std::{collections::HashSet, time::Instant};
 use tokio::time::sleep;
 
 use crate::boundary_nodes::{
@@ -21,30 +20,30 @@ use crate::boundary_nodes::{
 };
 use candid::{Decode, Encode};
 use ic_canister_client::Sender;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_nns_governance::{init::TEST_NEURON_1_ID, pb::v1::NnsFunction};
+use ic_nns_governance_api::pb::v1::NnsFunction;
 use ic_nns_test_utils::governance::submit_external_update_proposal;
-use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
-use ic_system_test_driver::driver::{
-    boundary_node::BoundaryNodeVm,
-    test_env::TestEnv,
-    test_env_api::{
-        GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, SshSession,
-        READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+use ic_system_test_driver::{
+    driver::{
+        boundary_node::BoundaryNodeVm,
+        test_env::TestEnv,
+        test_env_api::{
+            GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot,
+            SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+        },
     },
+    nns::{self, vote_execute_proposal_assert_executed},
+    util::{block_on, runtime_from_url},
 };
-use ic_system_test_driver::nns::{self, vote_execute_proposal_assert_executed};
-use ic_system_test_driver::util::{block_on, runtime_from_url};
 use itertools::Itertools;
 use registry_canister::mutations::{
     do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
     do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
     node_management::do_update_node_domain_directly::UpdateNodeDomainDirectlyPayload,
 };
-use std::sync::Arc;
-use std::{net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use anyhow::bail;
 use ic_agent::{

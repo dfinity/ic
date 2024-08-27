@@ -15,12 +15,16 @@ use ic_image_upgrader::{
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types::MasterPublicKeyId;
+use ic_protobuf::proxy::try_from_option_field;
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{
     consensus::{CatchUpPackage, HasHeight},
-    crypto::canister_threshold_sig::MasterPublicKey,
+    crypto::{
+        canister_threshold_sig::MasterPublicKey,
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet},
+    },
     Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use std::{
@@ -136,20 +140,70 @@ impl Upgrade {
     pub(crate) async fn check(&mut self) -> OrchestratorResult<Option<SubnetId>> {
         let latest_registry_version = self.registry.get_latest_version();
         // Determine the subnet_id using the local CUP.
-        let (subnet_id, local_cup_proto, local_cup) =
-            if let Some(proto) = self.cup_provider.get_local_cup_proto() {
-                let cup = CatchUpPackage::try_from(&proto).expect("deserializing CUP failed");
-                let subnet_id =
-                    get_subnet_id(&*self.registry.registry_client, &cup).map_err(|err| {
-                        OrchestratorError::UpgradeError(format!(
-                            "Couldn't determine the subnet id: {:?}",
-                            err
-                        ))
-                    })?;
-                (subnet_id, Some(proto), Some(cup))
-            } else {
-                // No local CUP found, check registry
-                match self.registry.get_subnet_id(latest_registry_version) {
+        let (subnet_id, local_cup_proto, local_cup) = {
+            let maybe_proto = self.cup_provider.get_local_cup_proto();
+            let maybe_cup = maybe_proto.as_ref().and_then(|proto| {
+                CatchUpPackage::try_from(proto)
+                    .inspect_err(|err| {
+                        error!(self.logger, "Failed to deserialize CatchUpPackage: {}", err);
+                    })
+                    .ok()
+            });
+
+            match (&maybe_cup, &maybe_proto) {
+                (Some(cup), _) => {
+                    let subnet_id =
+                        get_subnet_id(&*self.registry.registry_client, cup).map_err(|err| {
+                            OrchestratorError::UpgradeError(format!(
+                                "Couldn't determine the subnet id: {:?}",
+                                err
+                            ))
+                        })?;
+                    (subnet_id, maybe_proto, maybe_cup)
+                }
+                (None, Some(proto)) => {
+                    // We found a local CUP proto that we can't deserialize. This may only happen
+                    // if this is the first CUP we are reading on a new replica version after an
+                    // upgrade. This means we have to be an assigned node, otherwise we would have
+                    // left the subnet and deleted the CUP before upgrading to this version.
+                    // The only way to leave this branch is via subnet recovery.
+                    self.metrics.critical_error_cup_deserialization_failed.inc();
+
+                    // Try to find the subnet ID by deserializing only the NiDkgId. If it fails
+                    // we will have to recover using failover nodes.
+                    let nidkg_id: NiDkgId = try_from_option_field(proto.signer.clone(), "NiDkgId")
+                        .map_err(|err| {
+                            OrchestratorError::UpgradeError(format!(
+                                "Couldn't deserialize NiDkgId to determine the subnet id: {:?}",
+                                err
+                            ))
+                        })?;
+
+                    let subnet_id = match nidkg_id.target_subnet {
+                        NiDkgTargetSubnet::Local => nidkg_id.dealer_subnet,
+                        NiDkgTargetSubnet::Remote(_) => {
+                            // If this CUP was created by a remote subnet, then it is a genesis/recovery
+                            // CUP. This is the only case in the branch where we can trust the subnet ID
+                            // of the latest registry version, as switching to a registry CUP "resets" the
+                            // "oldest registry version in use" which is responsible for subnet membership.
+                            match self.registry.get_subnet_id(latest_registry_version) {
+                                Ok(subnet_id) => subnet_id,
+                                Err(OrchestratorError::NodeUnassignedError(_, _)) => {
+                                    // If the registry says that we are unassigned, this unassignment
+                                    // must have happened after the registry CUP triggering the upgrade.
+                                    // Otherwise we would have left the subnet before upgrading. This means
+                                    // we will trust the registry and go ahead with removing the node's state
+                                    // including the broken local CUP.
+                                    self.remove_state()?;
+                                    return Ok(None);
+                                }
+                                Err(other) => return Err(other),
+                            }
+                        }
+                    };
+                    (subnet_id, maybe_proto, None)
+                }
+                (None, None) => match self.registry.get_subnet_id(latest_registry_version) {
                     Ok(subnet_id) => {
                         info!(self.logger, "Assignment to subnet {} detected", subnet_id);
                         (subnet_id, None, None)
@@ -159,8 +213,9 @@ impl Upgrade {
                         self.check_for_upgrade_as_unassigned().await?;
                         return Ok(None);
                     }
-                }
-            };
+                },
+            }
+        };
 
         // When we arrived here, we are an assigned node.
         let old_cup_height = local_cup.as_ref().map(HasHeight::height);
@@ -213,16 +268,8 @@ impl Upgrade {
             subnet_id,
             &latest_cup,
         ) {
-            // Reset the key changed errors counter to not raise alerts in other subnets
-            self.metrics.master_public_key_changed_errors.reset();
             self.stop_replica()?;
-            remove_node_state(
-                self.replica_config_file.clone(),
-                self.cup_provider.get_cup_path(),
-                self.orchestrator_data_directory.clone(),
-            )
-            .map_err(OrchestratorError::UpgradeError)?;
-            info!(self.logger, "Subnet state removed");
+            self.remove_state()?;
             return Ok(None);
         }
 
@@ -291,7 +338,7 @@ impl Upgrade {
                     .expect("temporary location for local store download could not be created")
                     .into_path();
                 downloader
-                    .download_and_extract_tar_gz(
+                    .download_and_extract_tar(
                         &registry_store_uri.uri,
                         &local_store_location,
                         Some(registry_store_uri.hash),
@@ -309,6 +356,19 @@ impl Upgrade {
                 reexec_current_process(&self.logger);
             }
         }
+        Ok(())
+    }
+
+    fn remove_state(&self) -> OrchestratorResult<()> {
+        // Reset the key changed errors counter to not raise alerts in other subnets
+        self.metrics.master_public_key_changed_errors.reset();
+        remove_node_state(
+            self.replica_config_file.clone(),
+            self.cup_provider.get_cup_path(),
+            self.orchestrator_data_directory.clone(),
+        )
+        .map_err(OrchestratorError::UpgradeError)?;
+        info!(self.logger, "Subnet state removed");
         Ok(())
     }
 
@@ -502,7 +562,6 @@ fn get_subnet_id(registry: &dyn RegistryClient, cup: &CatchUpPackage) -> Result<
     // recovery CUPs) they always have the signer id (the DKG id), which is taken
     // from the high-threshold transcript when we build a genesis/recovery CUP.
     let dkg_id = cup.signature.signer;
-    use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetSubnet;
     // If the DKG key material was signed by the subnet itself — use it, if not, get
     // the subnet id from the registry.
     match dkg_id.target_subnet {
@@ -697,15 +756,15 @@ fn get_master_public_keys(
 ) -> BTreeMap<MasterPublicKeyId, MasterPublicKey> {
     let mut public_keys = BTreeMap::new();
 
-    let Some(ecdsa) = cup.content.block.get_value().payload.as_ref().as_ecdsa() else {
+    let Some(idkg) = cup.content.block.get_value().payload.as_ref().as_idkg() else {
         return public_keys;
     };
 
-    for (key_id, key_transcript) in &ecdsa.key_transcripts {
+    for (key_id, key_transcript) in &idkg.key_transcripts {
         let Some(transcript) = key_transcript
             .current
             .as_ref()
-            .and_then(|transcript_ref| ecdsa.idkg_transcripts.get(&transcript_ref.transcript_id()))
+            .and_then(|transcript_ref| idkg.idkg_transcripts.get(&transcript_ref.transcript_id()))
         else {
             continue;
         };
@@ -800,6 +859,13 @@ fn report_master_public_key_changed_metric(
     path: PathBuf,
     metrics: &OrchestratorMetrics,
 ) -> OrchestratorResult<()> {
+    // If the file doesn't exist then there is nothing to report.
+    if !path
+        .try_exists()
+        .map_err(OrchestratorError::key_monitoring_error)?
+    {
+        return Ok(());
+    }
     let file = std::fs::File::open(path).map_err(OrchestratorError::key_monitoring_error)?;
     let key_changes: BTreeMap<String, u64> =
         serde_cbor::from_reader(file).map_err(OrchestratorError::key_monitoring_error)?;
@@ -831,7 +897,7 @@ mod tests {
     use ic_types::{
         batch::ValidationContext,
         consensus::{
-            idkg::{self, EcdsaKeyTranscript, TranscriptAttributes},
+            idkg::{self, MasterKeyTranscript, TranscriptAttributes},
             Block, BlockPayload, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload,
             RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
         },
@@ -859,17 +925,16 @@ mod tests {
             .map(|t| BTreeMap::from_iter(vec![(t.transcript_id, t.clone())]))
             .unwrap_or_default();
 
-        let mut ecdsa = idkg::EcdsaPayload::empty(
+        let mut idkg = idkg::IDkgPayload::empty(
             h,
             subnet_test_id(0),
-            vec![EcdsaKeyTranscript {
+            vec![MasterKeyTranscript {
                 current: unmasked,
                 next_in_creation: idkg::KeyTranscriptCreation::Begin,
                 master_key_id: key_id.clone(),
-                deprecated_key_id: None,
             }],
         );
-        ecdsa.idkg_transcripts = idkg_transcripts;
+        idkg.idkg_transcripts = idkg_transcripts;
 
         let block = Block::new(
             CryptoHashOf::from(CryptoHash(Vec::new())),
@@ -877,7 +942,7 @@ mod tests {
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Summary(SummaryPayload {
                     dkg: ic_types::consensus::dkg::Summary::fake(),
-                    ecdsa: Some(ecdsa),
+                    idkg: Some(idkg),
                 }),
             ),
             h,
@@ -973,9 +1038,17 @@ mod tests {
 
             let metrics_new = OrchestratorMetrics::new(&MetricsRegistry::new());
             report_master_public_key_changed_metric(setup.path(), &metrics_new).unwrap();
-            let after_restart = get_master_key_changed_metric(&key_id, &metrics);
+            let after_restart = get_master_key_changed_metric(&key_id, &metrics_new);
 
             assert_eq!(after_restart, after);
+
+            // If there are no persisted metrics we should not report anything
+            let metrics_new = OrchestratorMetrics::new(&MetricsRegistry::new());
+            let path = setup.path().parent().unwrap().join("test");
+            report_master_public_key_changed_metric(path, &metrics_new).unwrap();
+            let non_existent = get_master_key_changed_metric(&key_id, &metrics_new);
+
+            assert_eq!(non_existent, 0);
         });
     }
 

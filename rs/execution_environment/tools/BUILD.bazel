@@ -3,19 +3,17 @@ load("@rules_rust//rust:defs.bzl", "rust_binary")
 package(default_visibility = ["//visibility:public"])
 
 rust_binary(
-    name = "fees_and_limits",
-    srcs = ["src/fees_and_limits.rs"],
+    name = "icp_config",
+    srcs = ["src/icp_config.rs"],
     deps = [
+        # Keep sorted.
         "//rs/config",
         "//rs/embedders",
         "//rs/replicated_state",
         "//rs/system_api",
         "//rs/types/types",
-        "@crate_index//:candid",
         "@crate_index//:clap_3_2_25",
         "@crate_index//:eyre",
-        "@crate_index//:ic-agent",
         "@crate_index//:serde_json",
-        "@crate_index//:tokio",
     ],
 )

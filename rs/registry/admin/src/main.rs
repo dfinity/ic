@@ -38,10 +38,8 @@ use ic_nervous_system_root::change_canister::{
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance::{
-    governance::{
-        BitcoinNetwork, BitcoinSetConfigProposal, RentalConditionId, SubnetRentalRequest,
-    },
+use ic_nns_governance_api::{
+    bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
     pb::v1::{
         add_or_remove_node_provider::Change,
         create_service_nervous_system::{
@@ -53,15 +51,22 @@ use ic_nns_governance::{
             swap_parameters, GovernanceParameters, InitialTokenDistribution, LedgerParameters,
             SwapParameters,
         },
-        manage_neuron::Command,
+        install_code::CanisterInstallMode as GovernanceInstallMode,
         proposal::Action,
-        AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, ManageNeuron,
-        NnsFunction, NodeProvider, Proposal, RewardNodeProviders,
+        stop_or_start_canister::CanisterAction as GovernanceCanisterAction,
+        update_canister_settings::{
+            CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
+        },
+        AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, InstallCodeRequest,
+        MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, NnsFunction,
+        NodeProvider, ProposalActionRequest, RewardNodeProviders, StopOrStartCanister,
+        UpdateCanisterSettings,
     },
-    proposals::proposal_submission::{
+    proposal_helpers::{
         create_external_update_proposal_candid, create_make_proposal_payload,
         decode_make_proposal_response,
     },
+    subnet_rental::{RentalConditionId, SubnetRentalRequest},
 };
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
@@ -122,22 +127,19 @@ use maplit::hashmap;
 use prost::Message;
 use recover_subnet::ProposeToUpdateRecoveryCupCmd;
 use registry_canister::mutations::{
-    common::decode_registry_value,
     complete_canister_migration::CompleteCanisterMigrationPayload,
     do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
     do_add_node_operator::AddNodeOperatorPayload,
-    do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
     do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
-    do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
     do_set_firewall_config::SetFirewallConfigPayload,
-    do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
-    do_update_elected_hostos_versions::UpdateElectedHostosVersionsPayload,
+    do_update_api_boundary_nodes_version::DeployGuestosToSomeApiBoundaryNodes,
+    do_update_elected_hostos_versions::ReviseElectedHostosVersionsPayload,
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
-    do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
+    do_update_nodes_hostos_version::DeployHostosToSomeNodes,
     do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
     firewall::{
         add_firewall_rules_compute_entries, compute_firewall_ruleset_hash,
@@ -149,13 +151,13 @@ use registry_canister::mutations::{
     reroute_canister_ranges::RerouteCanisterRangesPayload,
 };
 use serde::{Deserialize, Serialize};
-use std::net::Ipv6Addr;
 use std::{
     collections::{BTreeMap, HashSet},
     convert::TryFrom,
     fmt::Debug,
     fs::{metadata, read_to_string, File},
     io::Read,
+    net::Ipv6Addr,
     path::{Path, PathBuf},
     process::exit,
     str::FromStr,
@@ -163,8 +165,9 @@ use std::{
     time::SystemTime,
 };
 use types::{
-    NodeDetails, ProposalMetadata, ProposalPayload, ProvisionalWhitelistRecord, Registry,
-    RegistryRecord, RegistryValue, SubnetDescriptor, SubnetRecord,
+    LogVisibility, NodeDetails, ProposalAction, ProposalMetadata, ProposalPayload,
+    ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SubnetDescriptor,
+    SubnetRecord,
 };
 use update_subnet::ProposeToUpdateSubnetCmd;
 use url::Url;
@@ -190,12 +193,12 @@ const IC_DOMAINS: &[&str; 3] = &["ic0.app", "icp0.io", "icp-api.io"];
 #[derive(Parser)]
 #[clap(version = "1.0")]
 struct Opts {
-    #[clap(short = 'r', long, aliases = &["registry-url", "nns-url"], value_delimiter = ',')]
+    #[clap(short = 'r', long, aliases = &["registry-url", "nns-url"], value_delimiter = ',', global = true)]
     /// The URL of an NNS entry point. That is, the URL of any replica on the
     /// NNS subnet.
     nns_urls: Vec<Url>,
 
-    #[clap(short = 's', long)]
+    #[clap(short = 's', long, global = true)]
     /// The pem file containing a secret key to use while authenticating with
     /// the NNS.
     secret_key_pem: Option<PathBuf>,
@@ -204,27 +207,30 @@ struct Opts {
     subcmd: SubCommand,
 
     /// Use an HSM to sign calls.
-    #[clap(long)]
+    #[clap(long, global = true)]
     use_hsm: bool,
 
     /// The slot related to the HSM key that shall be used.
     #[clap(
         long = "slot",
-        help = "Only required if use-hsm is set. Ignored otherwise."
+        help = "Only required if use-hsm is set. Ignored otherwise.",
+        global = true
     )]
     hsm_slot: Option<String>,
 
     /// The id of the key on the HSM that shall be used.
     #[clap(
         long = "key-id",
-        help = "Only required if use-hsm is set. Ignored otherwise."
+        help = "Only required if use-hsm is set. Ignored otherwise.",
+        global = true
     )]
     key_id: Option<String>,
 
     /// The PIN used to unlock the HSM.
     #[clap(
         long = "pin",
-        help = "Only required if use-hsm is set. Ignored otherwise."
+        help = "Only required if use-hsm is set. Ignored otherwise.",
+        global = true
     )]
     pin: Option<String>,
 
@@ -246,6 +252,10 @@ struct Opts {
     /// Return the output in JSON format.
     #[clap(long = "json", global = true)]
     json: bool,
+
+    /// silence notices, can be useful if ic-admin is executed from automation
+    #[clap(long = "silence-notices", global = true)]
+    silence_notices: bool,
 }
 
 /// List of sub-commands accepted by `ic-admin`.
@@ -256,10 +266,9 @@ enum SubCommand {
     GetPublicKey(GetPublicKeyCmd),
     /// Get the last version of a node's TLS certificate key from the registry.
     GetTlsCertificate(GetTlsCertificateCmd),
-    /// Submits a proposal to remove nodes from the subnets they are currently
-    /// assigned to.
-    ProposeToRemoveNodesFromSubnet(ProposeToRemoveNodesFromSubnetCmd),
     /// Submits a proposal to change node membership in a subnet.
+    /// Consider using instead the DRE tool to submit this type of proposals.
+    /// https://github.com/dfinity/dre
     ProposeToChangeSubnetMembership(ProposeToChangeSubnetMembershipCmd),
     /// Get the last version of a node from the registry.
     GetNode(GetNodeCmd),
@@ -291,8 +300,6 @@ enum SubCommand {
     ProposeToCreateSubnet(ProposeToCreateSubnetCmd),
     /// Submits a proposal to create a new service nervous system (usually referred to as SNS).
     ProposeToCreateServiceNervousSystem(ProposeToCreateServiceNervousSystemCmd),
-    /// Submits a proposal to update an existing subnet.
-    ProposeToAddNodesToSubnet(ProposeToAddNodesToSubnetCmd),
     /// Submits a proposal to update a subnet's recovery CUP
     ProposeToUpdateRecoveryCup(ProposeToUpdateRecoveryCupCmd),
     /// Submits a proposal to update an existing subnet's configuration.
@@ -448,6 +455,8 @@ enum SubCommand {
     GetApiBoundaryNodes,
     /// Submits a proposal to express the interest in renting a subnet.
     ProposeToRentSubnet(ProposeToRentSubnetCmd),
+    /// Propose to update the settings of a canister.
+    ProposeToUpdateCanisterSettings(ProposeToUpdateCanisterSettingsCmd),
 }
 
 /// Indicates whether a value should be added or removed.
@@ -492,41 +501,9 @@ pub trait ProposalTitle {
     fn title(&self) -> String;
 }
 
-/// Sub-command to submit a proposal to remove nodes from a subnet.
-#[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
-struct ProposeToRemoveNodesFromSubnetCmd {
-    #[clap(name = "NODE_ID", multiple_values(true), required = true)]
-    /// The node IDs of the nodes that will leave the subnet.
-    pub node_ids: Vec<PrincipalId>,
-}
-
-impl ProposalTitle for ProposeToRemoveNodesFromSubnetCmd {
-    fn title(&self) -> String {
-        match &self.proposal_title {
-            Some(title) => title.clone(),
-            None => format!(
-                "Remove nodes: {} from their assigned subnets",
-                shortened_pids_string(&self.node_ids)
-            ),
-        }
-    }
-}
-
-#[async_trait]
-impl ProposalPayload<RemoveNodesFromSubnetPayload> for ProposeToRemoveNodesFromSubnetCmd {
-    async fn payload(&self, _: &Agent) -> RemoveNodesFromSubnetPayload {
-        let node_ids = self
-            .node_ids
-            .clone()
-            .into_iter()
-            .map(NodeId::from)
-            .collect();
-        RemoveNodesFromSubnetPayload { node_ids }
-    }
-}
-
 /// Sub-command to submit a proposal to replace in a subnet.
+/// Consider using instead the DRE tool to submit this type of proposals.
+/// https://github.com/dfinity/dre
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
 struct ProposeToChangeSubnetMembershipCmd {
@@ -812,6 +789,11 @@ impl ProposalPayload<UpdateIcpXdrConversionRatePayload> for ProposeXdrIcpConvers
 struct StartCanisterCmd {
     #[clap(long)]
     pub canister_id: CanisterId,
+
+    /// If true, the proposal will be sent as an StopOrStartCanister proposal instead of ExecuteNnsFunction.
+    /// TODO(NNS1-3223): Change to `use_legacy_excutenns` after the StopOrStartCanister proposal is supported.
+    #[clap(long)]
+    use_explicit_action_type: bool,
 }
 
 impl ProposalTitle for StartCanisterCmd {
@@ -833,12 +815,30 @@ impl ProposalPayload<StopOrStartCanisterRequest> for StartCanisterCmd {
     }
 }
 
+#[async_trait]
+impl ProposalAction for StartCanisterCmd {
+    async fn action(&self) -> ProposalActionRequest {
+        let canister_id = Some(self.canister_id.get());
+        let action = Some(GovernanceCanisterAction::Start as i32);
+        let start_canister = StopOrStartCanister {
+            canister_id,
+            action,
+        };
+        ProposalActionRequest::StopOrStartCanister(start_canister)
+    }
+}
+
 /// Sub-command to submit a proposal to start a canister.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
 struct StopCanisterCmd {
     #[clap(long)]
     pub canister_id: CanisterId,
+
+    /// If true, the proposal will be sent as an StopOrStartCanister proposal instead of ExecuteNnsFunction.
+    /// TODO(NNS1-3223): Change to `use_legacy_excutenns` after the StopOrStartCanister proposal is supported.
+    #[clap(long)]
+    use_explicit_action_type: bool,
 }
 
 impl ProposalTitle for StopCanisterCmd {
@@ -857,6 +857,19 @@ impl ProposalPayload<StopOrStartCanisterRequest> for StopCanisterCmd {
             canister_id: self.canister_id,
             action: CanisterAction::Stop,
         }
+    }
+}
+
+#[async_trait]
+impl ProposalAction for StopCanisterCmd {
+    async fn action(&self) -> ProposalActionRequest {
+        let canister_id = Some(self.canister_id.get());
+        let action = Some(GovernanceCanisterAction::Stop as i32);
+        let stop_canister = StopOrStartCanister {
+            canister_id,
+            action,
+        };
+        ProposalActionRequest::StopOrStartCanister(stop_canister)
     }
 }
 
@@ -912,54 +925,6 @@ impl ProposalPayload<ReviseElectedGuestosVersionsPayload>
     }
 }
 
-/// Sub-command to submit a proposal to add nodes to an existing subnet.
-#[derive_common_proposal_fields]
-#[derive(ProposalMetadata, Parser)]
-struct ProposeToAddNodesToSubnetCmd {
-    #[clap(long)]
-    #[allow(dead_code)]
-    /// Obsolete. Does nothing
-    subnet_handler_id: Option<String>,
-
-    #[clap(long, required = true, alias = "subnet-id")]
-    /// The subnet to modify
-    subnet: SubnetDescriptor,
-
-    #[clap(name = "NODE_ID", multiple_values(true), required = true)]
-    /// The node IDs of the nodes that will be part of the new subnet.
-    pub node_ids: Vec<PrincipalId>,
-}
-
-impl ProposalTitle for ProposeToAddNodesToSubnetCmd {
-    fn title(&self) -> String {
-        match &self.proposal_title {
-            Some(title) => title.clone(),
-            None => format!(
-                "Add nodes: {} to subnet: {}",
-                shortened_pids_string(&self.node_ids),
-                shortened_subnet_string(&self.subnet)
-            ),
-        }
-    }
-}
-
-#[async_trait]
-impl ProposalPayload<AddNodesToSubnetPayload> for ProposeToAddNodesToSubnetCmd {
-    async fn payload(&self, agent: &Agent) -> AddNodesToSubnetPayload {
-        let registry_canister = RegistryCanister::new_with_agent(agent.clone());
-        let node_ids = self
-            .node_ids
-            .clone()
-            .into_iter()
-            .map(NodeId::from)
-            .collect();
-        AddNodesToSubnetPayload {
-            subnet_id: self.subnet.get_id(&registry_canister).await.get(),
-            node_ids,
-        }
-    }
-}
-
 /// Sub-command to submit a proposal to upgrade an NNS canister.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
@@ -996,6 +961,10 @@ struct ProposeToChangeNnsCanisterCmd {
     /// canister.
     arg: Option<PathBuf>,
 
+    /// The sha256 of the arg binary file.
+    #[clap(long)]
+    arg_sha256: Option<String>,
+
     #[clap(long)]
     /// If set, it will update the canister's compute allocation to this value.
     /// See `ComputeAllocation` for the semantics of this field.
@@ -1004,6 +973,11 @@ struct ProposeToChangeNnsCanisterCmd {
     /// If set, it will update the canister's memory allocation to this value.
     /// See `MemoryAllocation` for the semantics of this field.
     memory_allocation: Option<u64>,
+
+    /// If true, the proposal will be sent as an InstallCode proposal instead of ExecuteNnsFunction.
+    /// TODO(NNS1-3223): Change to `use_legacy_excutenns` after the InstallCode proposal is supported.
+    #[clap(long)]
+    use_explicit_action_type: bool,
 }
 
 #[async_trait]
@@ -1015,10 +989,7 @@ impl ProposalPayload<UpgradeRootProposal> for ProposeToChangeNnsCanisterCmd {
             &self.wasm_module_sha256,
         )
         .await;
-        let module_arg = self
-            .arg
-            .as_ref()
-            .map_or(vec![], |path| read_file_fully(path));
+        let module_arg = read_arg(&self.arg, &self.arg_sha256);
         let stop_upgrade_start = !self.skip_stopping_before_installing;
         UpgradeRootProposal {
             wasm_module,
@@ -1049,10 +1020,7 @@ impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
             &self.wasm_module_sha256,
         )
         .await;
-        let arg = self
-            .arg
-            .as_ref()
-            .map_or(vec![], |path| read_file_fully(path));
+        let arg = read_arg(&self.arg, &self.arg_sha256);
         ChangeCanisterRequest {
             stop_before_installing: !self.skip_stopping_before_installing,
             mode: self.mode,
@@ -1062,6 +1030,42 @@ impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
             compute_allocation: self.compute_allocation.map(candid::Nat::from),
             memory_allocation: self.memory_allocation.map(candid::Nat::from),
         }
+    }
+}
+
+#[async_trait]
+impl ProposalAction for ProposeToChangeNnsCanisterCmd {
+    async fn action(&self) -> ProposalActionRequest {
+        let canister_id = Some(self.canister_id.get());
+        let wasm_module = Some(
+            read_wasm_module(
+                &self.wasm_module_path,
+                &self.wasm_module_url,
+                &self.wasm_module_sha256,
+            )
+            .await,
+        );
+        let arg = Some(
+            self.arg
+                .as_ref()
+                .map_or(vec![], |path| read_file_fully(path)),
+        );
+        let skip_stopping_before_installing = Some(self.skip_stopping_before_installing);
+        let install_mode = match self.mode {
+            CanisterInstallMode::Install => Some(GovernanceInstallMode::Install as i32),
+            CanisterInstallMode::Reinstall => Some(GovernanceInstallMode::Reinstall as i32),
+            CanisterInstallMode::Upgrade => Some(GovernanceInstallMode::Upgrade as i32),
+        };
+
+        let install_code = InstallCodeRequest {
+            skip_stopping_before_installing,
+            install_mode,
+            canister_id,
+            wasm_module,
+            arg,
+        };
+
+        ProposalActionRequest::InstallCode(install_code)
     }
 }
 
@@ -1176,6 +1180,88 @@ impl ProposalPayload<SubnetRentalRequest> for ProposeToRentSubnetCmd {
             user: self.user,
             rental_condition_id: self.rental_condition_id,
         }
+    }
+}
+
+/// Sub-command to submit a proposal to update the settings of a canister. When neigther
+/// `--controllers` nor `--remove-all-controllers` is provided, the controllers will not be updated.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToUpdateCanisterSettingsCmd {
+    #[clap(long, required = true)]
+    /// The ID of the target canister.
+    canister_id: CanisterId,
+
+    /// If set, it will update the canister's controllers to this value.
+    #[clap(long, multiple_values(true), group = "update_controllers")]
+    controllers: Option<Vec<PrincipalId>>,
+    /// If set, it will remove all controllers of the canister.
+    #[clap(long, group = "update_controllers")]
+    remove_all_controllers: bool,
+
+    #[clap(long)]
+    /// If set, it will update the canister's compute allocation to this value.
+    compute_allocation: Option<u64>,
+    #[clap(long)]
+    /// If set, it will update the canister's memory allocation to this value.
+    memory_allocation: Option<u64>,
+    #[clap(long)]
+    /// If set, it will update the canister's freezing threshold to this value.
+    freezing_threshold: Option<u64>,
+    #[clap(long)]
+    /// If set, it will update the canister's log wasm memory limit to this value.
+    wasm_memory_limit: Option<u64>,
+    #[clap(long)]
+    /// If set, it will update the canister's log visibility to this value.
+    log_visibility: Option<LogVisibility>,
+}
+
+impl ProposalTitle for ProposeToUpdateCanisterSettingsCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!("Update canister settings: {}", self.canister_id),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalAction for ProposeToUpdateCanisterSettingsCmd {
+    async fn action(&self) -> ProposalActionRequest {
+        let canister_id = Some(self.canister_id.get());
+
+        let controllers = if self.remove_all_controllers {
+            Some(Controllers {
+                controllers: vec![],
+            })
+        } else {
+            self.controllers
+                .clone()
+                .map(|controllers| Controllers { controllers })
+        };
+        let compute_allocation = self.compute_allocation;
+        let memory_allocation = self.memory_allocation;
+        let freezing_threshold = self.freezing_threshold;
+        let wasm_memory_limit = self.wasm_memory_limit;
+        let log_visibility = match self.log_visibility {
+            Some(LogVisibility::Controllers) => Some(GovernanceLogVisibility::Controllers as i32),
+            Some(LogVisibility::Public) => Some(GovernanceLogVisibility::Public as i32),
+            None => None,
+        };
+
+        let update_settings = UpdateCanisterSettings {
+            canister_id,
+            settings: Some(CanisterSettings {
+                controllers,
+                compute_allocation,
+                memory_allocation,
+                freezing_threshold,
+                wasm_memory_limit,
+                log_visibility,
+            }),
+        };
+
+        ProposalActionRequest::UpdateCanisterSettings(update_settings)
     }
 }
 
@@ -2992,9 +3078,12 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             governance_parameters,
         };
 
+        let result = ic_nns_governance::pb::v1::CreateServiceNervousSystem::from(result);
+
+        // TODO migrate validation out of SnsInitPayload so we no longer have to support ic_nns_gov types
         SnsInitPayload::try_from(result.clone())?;
 
-        Ok(result)
+        Ok(result.into())
     }
 }
 
@@ -3011,13 +3100,13 @@ async fn propose_to_create_service_nervous_system(
 ) {
     let is_dry_run = cmd.is_dry_run();
 
-    let action = Some(Action::CreateServiceNervousSystem(
+    let action = Some(ProposalActionRequest::CreateServiceNervousSystem(
         CreateServiceNervousSystem::try_from(cmd.clone()).unwrap(),
     ));
     let title = cmd.title();
     let summary = cmd.summary.clone().unwrap();
     let url = parse_proposal_url(cmd.proposal_url.clone());
-    let proposal = Proposal {
+    let proposal = MakeProposalRequest {
         title: Some(title.clone()),
         summary,
         url,
@@ -3089,11 +3178,11 @@ impl ProposalTitle for ProposeToReviseElectedHostosVersionsCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<UpdateElectedHostosVersionsPayload>
+impl ProposalPayload<ReviseElectedHostosVersionsPayload>
     for ProposeToReviseElectedHostosVersionsCmd
 {
-    async fn payload(&self, _: &Agent) -> UpdateElectedHostosVersionsPayload {
-        let payload = UpdateElectedHostosVersionsPayload {
+    async fn payload(&self, _: &Agent) -> ReviseElectedHostosVersionsPayload {
+        let payload = ReviseElectedHostosVersionsPayload {
             hostos_version_to_elect: self.hostos_version_to_elect.clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: self.release_package_urls.clone(),
@@ -3166,8 +3255,8 @@ impl ProposalTitle for ProposeToDeployHostosToSomeNodesCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<UpdateNodesHostosVersionPayload> for ProposeToDeployHostosToSomeNodesCmd {
-    async fn payload(&self, _: &Agent) -> UpdateNodesHostosVersionPayload {
+impl ProposalPayload<DeployHostosToSomeNodes> for ProposeToDeployHostosToSomeNodesCmd {
+    async fn payload(&self, _: &Agent) -> DeployHostosToSomeNodes {
         let node_ids = self
             .node_ids
             .clone()
@@ -3175,7 +3264,7 @@ impl ProposalPayload<UpdateNodesHostosVersionPayload> for ProposeToDeployHostosT
             .map(NodeId::from)
             .collect();
 
-        UpdateNodesHostosVersionPayload {
+        DeployHostosToSomeNodes {
             node_ids,
             hostos_version_id: self.hostos_version_flag.simplify().clone(),
         }
@@ -3287,11 +3376,11 @@ impl ProposalTitle for ProposeToDeployGuestosToSomeApiBoundaryNodesCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<UpdateApiBoundaryNodesVersionPayload>
+impl ProposalPayload<DeployGuestosToSomeApiBoundaryNodes>
     for ProposeToDeployGuestosToSomeApiBoundaryNodesCmd
 {
-    async fn payload(&self, _: &Agent) -> UpdateApiBoundaryNodesVersionPayload {
-        UpdateApiBoundaryNodesVersionPayload {
+    async fn payload(&self, _: &Agent) -> DeployGuestosToSomeApiBoundaryNodes {
+        DeployGuestosToSomeApiBoundaryNodes {
             node_ids: self.nodes.iter().cloned().map(NodeId::from).collect(),
             version: self.version.clone(),
         }
@@ -3444,9 +3533,7 @@ async fn main() {
             SubCommand::ProposeToDeployGuestosToAllSubnetNodes(_) => (),
             SubCommand::ProposeToUpdateSubnetReplicaVersion(_) => (),
             SubCommand::ProposeToCreateSubnet(_) => (),
-            SubCommand::ProposeToAddNodesToSubnet(_) => (),
             SubCommand::ProposeToRemoveNodes(_) => (),
-            SubCommand::ProposeToRemoveNodesFromSubnet(_) => (),
             SubCommand::ProposeToChangeSubnetMembership(_) => (),
             SubCommand::ProposeToChangeNnsCanister(_) => (),
             SubCommand::ProposeToHardResetNnsRootToVersion(_) => (),
@@ -3513,6 +3600,7 @@ async fn main() {
                 ProposeToCreateServiceNervousSystem instead"
             ),
             SubCommand::ProposeToRentSubnet(_) => (),
+            SubCommand::ProposeToUpdateCanisterSettings(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
@@ -3562,21 +3650,6 @@ async fn main() {
                 make_crypto_tls_cert_key(node_id).as_bytes().to_vec(),
                 &registry_canister,
                 opts.json,
-            )
-            .await;
-        }
-        SubCommand::ProposeToRemoveNodesFromSubnet(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            propose_external_proposal_from_command(
-                cmd,
-                NnsFunction::RemoveNodesFromSubnet,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-                proposer,
             )
             .await;
         }
@@ -3709,7 +3782,7 @@ async fn main() {
             eprintln!("Download IC-OS .. ");
             let tmp_dir = tempfile::tempdir().unwrap().into_path();
             let mut tmp_file = tmp_dir.clone();
-            tmp_file.push("temp.gz");
+            tmp_file.push("temp-image");
 
             // Download the IC-OS upgrade, do not check sha256 yet, we will do that
             // explicitly later
@@ -3862,23 +3935,16 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::ProposeToAddNodesToSubnet(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
-            propose_external_proposal_from_command(
-                cmd,
-                NnsFunction::AddNodeToSubnet,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-                proposer,
-            )
-            .await;
-        }
         SubCommand::ProposeToChangeSubnetMembership(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
+            if !opts.silence_notices {
+                println!(
+                    "Notice: invoking this command can undesirably worsen the decentralization."
+                );
+                println!(
+                    "Notice: Consider using instead the DRE tool https://dfinity.github.io/dre/ to submit this proposal"
+                )
+            }
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::ChangeSubnetMembership,
@@ -3939,21 +4005,19 @@ async fn main() {
         }
         SubCommand::ProposeToChangeNnsCanister(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            if cmd.canister_id == ROOT_CANISTER_ID {
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            if cmd.use_explicit_action_type {
+                propose_action_from_command(cmd, canister_client, proposer).await;
+            } else if cmd.canister_id == ROOT_CANISTER_ID {
                 propose_external_proposal_from_command::<
                     UpgradeRootProposal,
                     ProposeToChangeNnsCanisterCmd,
-                >(
-                    cmd,
-                    NnsFunction::NnsRootUpgrade,
-                    make_canister_client(
-                        reachable_nns_urls,
-                        opts.verify_nns_responses,
-                        opts.nns_public_key_pem_file,
-                        sender,
-                    ),
-                    proposer,
-                )
+                >(cmd, NnsFunction::NnsRootUpgrade, canister_client, proposer)
                 .await;
             } else {
                 propose_external_proposal_from_command::<
@@ -3962,12 +4026,7 @@ async fn main() {
                 >(
                     cmd,
                     NnsFunction::NnsCanisterUpgrade,
-                    make_canister_client(
-                        reachable_nns_urls,
-                        opts.verify_nns_responses,
-                        opts.nns_public_key_pem_file,
-                        sender,
-                    ),
+                    canister_client,
                     proposer,
                 )
                 .await;
@@ -4023,33 +4082,43 @@ async fn main() {
         }
         SubCommand::ProposeToStartCanister(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            propose_external_proposal_from_command(
-                cmd,
-                NnsFunction::StopOrStartNnsCanister,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-                proposer,
-            )
-            .await;
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            if cmd.use_explicit_action_type {
+                propose_action_from_command(cmd, canister_client, proposer).await;
+            } else {
+                propose_external_proposal_from_command(
+                    cmd,
+                    NnsFunction::StopOrStartNnsCanister,
+                    canister_client,
+                    proposer,
+                )
+                .await;
+            }
         }
         SubCommand::ProposeToStopCanister(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
-            propose_external_proposal_from_command(
-                cmd,
-                NnsFunction::StopOrStartNnsCanister,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
-                proposer,
-            )
-            .await;
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            if cmd.use_explicit_action_type {
+                propose_action_from_command(cmd, canister_client, proposer).await;
+            } else {
+                propose_external_proposal_from_command(
+                    cmd,
+                    NnsFunction::StopOrStartNnsCanister,
+                    canister_client,
+                    proposer,
+                )
+                .await;
+            }
         }
         SubCommand::ProposeToClearProvisionalWhitelist(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
@@ -4216,7 +4285,7 @@ async fn main() {
                 .await
                 .unwrap();
 
-            let firewall_config = decode_registry_value::<FirewallConfig>(bytes);
+            let firewall_config = FirewallConfig::decode(bytes.as_slice()).unwrap();
             println!("{:#?}", firewall_config);
         }
         SubCommand::ProposeToSetFirewallConfig(cmd) => {
@@ -4414,7 +4483,7 @@ async fn main() {
                 pub table: BTreeMap<String, NodeRewardRatesFlattened>,
             }
 
-            let table = decode_registry_value::<NodeRewardsTableFlattened>(bytes);
+            let table = NodeRewardsTableFlattened::decode(bytes.as_slice()).unwrap();
             println!(
                 "{}",
                 serde_json::to_string_pretty(&table)
@@ -4780,6 +4849,16 @@ async fn main() {
             )
             .await;
         }
+        SubCommand::ProposeToUpdateCanisterSettings(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            propose_action_from_command(cmd, canister_client, proposer).await;
+        }
         // Since we're matching on the `SubCommand` type the second time, this match doesn't have
         // to be exhaustive, e.g., we've already verified that the subcommand is not obsolete.
         _ => unreachable!(),
@@ -5030,6 +5109,35 @@ async fn propose_external_proposal_from_command<
     };
 }
 
+async fn propose_action_from_command<Command>(cmd: Command, agent: Agent, proposer: NeuronId)
+where
+    Command: ProposalMetadata + ProposalTitle + ProposalAction,
+{
+    let canister_client = GovernanceCanisterClient(NnsCanisterClient::new(
+        agent,
+        GOVERNANCE_CANISTER_ID,
+        Some(proposer),
+    ));
+
+    let action = cmd.action().await;
+
+    print_proposal(&Action::from(action.clone()), &cmd);
+
+    if cmd.is_dry_run() {
+        return;
+    }
+
+    let proposal_id = canister_client
+        .submit_proposal_action(action, cmd.url(), cmd.title(), cmd.summary())
+        .await
+        .unwrap_or_else(|e| {
+            eprintln!("propose_action_from_command error: {:?}", e);
+            std::process::exit(1);
+        });
+
+    println!("proposal {}", proposal_id);
+}
+
 #[derive(Serialize)]
 struct FirewallCommandResult {
     entries: Vec<FirewallRule>,
@@ -5244,7 +5352,7 @@ async fn get_node_list_since(
         .await
         .unwrap();
     let nns_subnet_id =
-        decode_registry_value::<ic_protobuf::types::v1::SubnetId>(nns_subnet_id_vec);
+        ic_protobuf::types::v1::SubnetId::decode(nns_subnet_id_vec.as_slice()).unwrap();
     let (nns_pub_key_vec, _) = registry
         .get_value_with_update(
             make_crypto_threshold_signing_pubkey_key(SubnetId::new(
@@ -5383,6 +5491,22 @@ async fn read_wasm_module(
         .expect("Wasm module's sha256 does not match provided sha256");
 
     read_file_fully(&wasm_file_path)
+}
+
+fn read_arg(arg_path: &Option<PathBuf>, arg_sha256: &Option<String>) -> Vec<u8> {
+    match (arg_path, arg_sha256) {
+        // No arguments, which is fine and we default to empty blob.
+        (None, None) => vec![],
+        (Some(arg_path), Some(arg_sha256)) => {
+            check_file_hash(arg_path, arg_sha256)
+                .expect("Upgrade arg's sha256 does not match provided sha256");
+            read_file_fully(arg_path)
+        }
+        (Some(_), None) => panic!("Must provide a sha256 checksum for the upgrade arg",),
+        (None, Some(_)) => {
+            panic!("--arg-sha256 provided without --arg-path");
+        }
+    }
 }
 
 async fn download_wasm_module(url: &Url) -> PathBuf {
@@ -5827,13 +5951,13 @@ impl GovernanceCanisterClient {
         title: String,
         summary: String,
     ) -> Result<ProposalId, String> {
-        let serialized = Encode!(&ManageNeuron {
+        let serialized = Encode!(&ManageNeuronRequest {
             neuron_id_or_subaccount: None,
-            command: Some(Command::MakeProposal(Box::new(Proposal {
+            command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(MakeProposalRequest {
                 title: Some(title),
                 summary,
                 url,
-                action: Some(Action::AddOrRemoveNodeProvider(payload)),
+                action: Some(ProposalActionRequest::AddOrRemoveNodeProvider(payload)),
             }))),
             id: Some((*self.0.proposal_author()).into()),
         })
@@ -5876,9 +6000,43 @@ impl GovernanceCanisterClient {
         .await
     }
 
+    async fn submit_proposal_action(
+        &self,
+        action: ProposalActionRequest,
+        url: String,
+        title: String,
+        summary: String,
+    ) -> Result<ProposalId, String> {
+        let serialized = Encode!(&ManageNeuronRequest {
+            neuron_id_or_subaccount: None,
+            command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
+                MakeProposalRequest {
+                    title: Some(title),
+                    summary,
+                    url,
+                    action: Some(action),
+                }
+            ))),
+            id: Some((*self.0.proposal_author()).into()),
+        })
+        .map_err(|e| {
+            format!(
+                "Cannot candid-serialize the submit_proposal_action payload: {}",
+                e
+            )
+        })?;
+        let response = self
+            .0
+            .execute_update("manage_neuron", serialized)
+            .await?
+            .ok_or_else(|| "submit_proposal replied nothing.".to_string())?;
+
+        decode_make_proposal_response(response)
+    }
+
     async fn submit_external_proposal(
         &self,
-        submit_proposal_command: &ManageNeuron,
+        submit_proposal_command: &ManageNeuronRequest,
         title: &str,
     ) -> Result<ProposalId, String> {
         let serialized = Encode!(submit_proposal_command).map_err(|e| {

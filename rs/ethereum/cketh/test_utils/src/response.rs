@@ -1,9 +1,8 @@
 use crate::{
     DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_BLOCK_NUMBER,
     DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
-    DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS, EFFECTIVE_GAS_PRICE, GAS_USED, HEADER_SIZE_LIMIT,
-    MINTER_ADDRESS, RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
-    USDC_ERC20_CONTRACT_ADDRESS,
+    DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS, EFFECTIVE_GAS_PRICE, GAS_USED, MINTER_ADDRESS,
+    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC, USDC_ERC20_CONTRACT_ADDRESS,
 };
 use ethers_core::abi::AbiDecode;
 use ethers_core::utils::rlp;
@@ -101,23 +100,6 @@ pub fn multi_logs_for_single_transaction<Entry: Clone + Into<ethers_core::types:
         logs.push(log);
     }
     logs
-}
-
-pub fn all_eth_get_logs_response_size_estimates() -> Vec<u64> {
-    vec![
-        100 + HEADER_SIZE_LIMIT,
-        2048 + HEADER_SIZE_LIMIT,
-        4096 + HEADER_SIZE_LIMIT,
-        8192 + HEADER_SIZE_LIMIT,
-        16_384 + HEADER_SIZE_LIMIT,
-        32_768 + HEADER_SIZE_LIMIT,
-        65_536 + HEADER_SIZE_LIMIT,
-        131_072 + HEADER_SIZE_LIMIT,
-        262_144 + HEADER_SIZE_LIMIT,
-        524_288 + HEADER_SIZE_LIMIT,
-        1_048_576 + HEADER_SIZE_LIMIT,
-        2_000_000,
-    ]
 }
 
 pub fn send_raw_transaction_response() -> ethers_core::types::TxHash {

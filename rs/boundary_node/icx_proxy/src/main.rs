@@ -3,7 +3,7 @@
 
 use anyhow::Error;
 use clap::Parser;
-use jemallocator::Jemalloc;
+use tikv_jemallocator::Jemalloc;
 
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;

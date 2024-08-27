@@ -6,12 +6,15 @@
 use core::fmt::Write;
 use ic_agent::{agent::RejectResponse, export::Principal, AgentError, RequestId};
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+
+use ic_system_test_driver::{
+    driver::{
+        ic::{InternetComputer, Subnet},
+        test_env::TestEnv,
+        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+    },
+    util::*,
 };
-use ic_system_test_driver::util::*;
 use ic_utils::interfaces::ManagementCanister;
 use slog::{debug, Logger};
 use std::{time::Duration, time::Instant};
@@ -29,7 +32,6 @@ pub fn config(env: TestEnv) {
 const ENABLE_DEBUG_LOG: bool = false;
 
 pub fn malicious_inputs(env: TestEnv) {
-    let logger = &env.logger();
     let wasm = wat::parse_str(
         r#"(module
               (import "ic0" "msg_reply" (func $msg_reply))
@@ -43,38 +45,10 @@ pub fn malicious_inputs(env: TestEnv) {
                 (func $msg_caller_size (result i32)))
               (import "ic0" "msg_caller_copy"
                 (func $msg_caller_copy (param i32) (param i32) (param i32)))
-              (import "ic0" "data_certificate_copy"
-                (func $data_certificate_copy (param i32) (param i32) (param i32)))
-              (import "ic0" "data_certificate_size"
-                (func $data_certificate_size (result i32)))
-              (import "ic0" "data_certificate_present"
-                (func $data_certificate_present (result i32)))
-              (import "ic0" "certified_data_set"
-                (func $certified_data_set (param i32) (param i32)))
-              (import "ic0" "call_new"
-                (func $ic0_call_new
-                (param i32 i32)
-                (param $method_name_src i32)    (param $method_name_len i32)
-                (param $reply_fun i32)          (param $reply_env i32)
-                (param $reject_fun i32)         (param $reject_env i32)
-              ))
-              (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
-
-              (func $proxy_msg_reply_data_append
-                (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (call $msg_arg_data_size))
-                (call $msg_reply_data_append (i32.load (i32.const 0)) (i32.load (i32.const 4)))
-                (call $msg_reply))
-
-              (func $proxy_msg_arg_data_copy_from_buffer_without_input
-                (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 10)))
 
               (func $proxy_msg_arg_data_copy_last_10_bytes
                 (call $msg_arg_data_copy (i32.const 0) (i32.sub (call $msg_arg_data_size) (i32.const 10)) (i32.const 10))
                 (call $msg_reply_data_append (i32.const 0) (i32.const 10))
-                (call $msg_reply))
-
-              (func $proxy_msg_arg_data_copy_to_oob_buffer
-                (call $msg_arg_data_copy (i32.const 65536) (i32.const 0) (i32.const 10))
                 (call $msg_reply))
 
               (func $proxy_msg_arg_data_copy_return_last_4_bytes
@@ -93,50 +67,10 @@ pub fn malicious_inputs(env: TestEnv) {
                 (call $msg_reply_data_append (i32.const 1) (i32.load (i32.const 65532)))
                 (call $msg_reply))
 
-              ;; All the function below are not used
-              (func $proxy_data_certificate_present
-                (i32.const 0)
-                (call $data_certificate_present)
-                (i32.store)
-                (call $msg_reply_data_append (i32.const 0) (i32.const 1))
-                (call $msg_reply))
-
-              (func $proxy_certified_data_set
-                (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (call $msg_arg_data_size))
-                (call $certified_data_set (i32.const 0) (call $msg_arg_data_size))
-                (call $msg_reply_data_append (i32.const 0) (call $msg_arg_data_size))
-                (call $msg_reply))
-
-              (func $proxy_data_certificate_copy
-                (call $data_certificate_copy (i32.const 0) (i32.const 0) (i32.const 32))
-                (call $msg_reply_data_append (i32.const 0) (i32.const 32))
-                (call $msg_reply))
-
-              (func $f_100 (result i32)
-                i32.const 100)
-              (func $f_200 (result i32)
-                i32.const 200)
-
-              (type $return_i32 (func (result i32))) ;; if this was f32, type checking would fail
-              (func $callByIndex
-                (i32.const 0)
-                (call_indirect (type $return_i32) (i32.const 0))
-                (i32.store)
-                (call $msg_reply_data_append (i32.const 0) (i32.const 4))
-                (call $msg_reply))
-
-              (table funcref (elem $f_100 $f_200))
               (memory $memory 1)
               (export "memory" (memory $memory))
-              (export "canister_query callByIndex" (func $callByIndex))
-              (export "canister_query proxy_msg_reply_data_append" (func $proxy_msg_reply_data_append))
-              (export "canister_query proxy_msg_arg_data_copy_from_buffer_without_input" (func $proxy_msg_arg_data_copy_from_buffer_without_input))
               (export "canister_query proxy_msg_arg_data_copy_last_10_bytes" (func $proxy_msg_arg_data_copy_last_10_bytes))
-              (export "canister_query proxy_msg_arg_data_copy_to_oob_buffer" (func $proxy_msg_arg_data_copy_to_oob_buffer))
               (export "canister_query proxy_msg_caller" (func $proxy_msg_caller))
-              (export "canister_query proxy_data_certificate_present" (func $proxy_data_certificate_present))
-              (export "canister_update proxy_certified_data_set" (func $proxy_certified_data_set))
-              (export "canister_query proxy_data_certificate_copy" (func $proxy_data_certificate_copy))
               )"#,
     ).unwrap();
 
@@ -172,32 +106,11 @@ pub fn malicious_inputs(env: TestEnv) {
             .await
             .unwrap();
 
-        tests_for_illegal_wasm_memory_access(logger, &agent, &canister_id).await;
-
-        tests_for_stale_data_in_buffer_between_calls(&agent, &canister_id).await;
-
         tests_for_illegal_data_buffer_access(&agent, &canister_id).await;
-    })
+    });
 }
 
 async fn tests_for_illegal_data_buffer_access(agent: &ic_agent::Agent, canister_id: &Principal) {
-    // No input given but still read the input buffer
-    let ret_val = agent
-        .query(
-            canister_id,
-            "proxy_msg_arg_data_copy_from_buffer_without_input",
-        )
-        .call()
-        .await;
-    let containing_str = "violated contract: ic0.msg_arg_data_copy payload: src=0 + length=10 exceeds the slice size=0";
-    assert!(
-        matches!(
-            ret_val,
-            Err(AgentError::UncertifiedReject(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
-        ),
-        "Should return error if try to read input buffer on no input",
-    );
-
     // Provide 1 GB of data
     let ret_val = agent
         .query(canister_id, "proxy_msg_arg_data_copy_last_10_bytes")
@@ -209,23 +122,6 @@ async fn tests_for_illegal_data_buffer_access(agent: &ic_agent::Agent, canister_
         ret_val.is_err(),
         "Should return error if 1GB of data sent as input"
     );
-
-    // copy data from argument buffer to out of bound internal buffer
-    let ret_val = agent
-        .query(canister_id, "proxy_msg_arg_data_copy_to_oob_buffer")
-        .with_arg(vec![1; 10])
-        .call()
-        .await;
-    let containing_str = "violated contract: ic0.msg_arg_data_copy heap: src=65536 + length=10 exceeds the slice size=65536";
-
-    match ret_val {
-        Err(AgentError::UncertifiedReject(RejectResponse { reject_message, reject_code, error_code})) => {
-            assert!(reject_message.contains(containing_str), "Should return error if input data is copied to out of bound internal buffer. Instead, it returns unexpected message: {}.", reject_message);
-            assert_eq!(reject_code, ic_agent::agent::RejectCode::CanisterError);
-            assert_eq!(error_code, Some("IC0504".into()));
-        }
-        _ => panic!("Should return error if input data is copied to out of bound internal buffer. Instead, it returns unexpected reply: {:?}.", ret_val)
-    };
 
     // Calls msg caller with correct size = 29 bytes
     let ret_val = agent
@@ -249,128 +145,6 @@ async fn tests_for_illegal_data_buffer_access(agent: &ic_agent::Agent, canister_
             Err(AgentError::UncertifiedReject(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
         ),
         "msg_caller with caller large length 128 was accepted"
-    );
-}
-
-async fn tests_for_stale_data_in_buffer_between_calls(
-    agent: &ic_agent::Agent,
-    canister_id: &Principal,
-) {
-    // Between every query the input data buffer is expected to be reset
-    // and no stale data from previous query can be found. The following
-    // test check this case
-    let mut input = vec![10; (32 * 1024) + 8];
-    for i in input.iter_mut().take(8) {
-        *i = 0;
-    }
-    input[0] = 8; //bytes 0x00 0x00 0x00 0x08 start index = 8 - Little Endian
-    input[5] = 128; //bytes 0x00 0x00 0x80 0x00 size = 32768 - Little Endian
-    let ret_val = agent
-        .query(canister_id, "proxy_msg_reply_data_append")
-        .with_arg(input)
-        .call()
-        .await;
-    assert!(
-        ret_val.is_ok(),
-        "Check for stale data step 1 failed. Error: {}",
-        ret_val.unwrap_err()
-    );
-    let data = ret_val.unwrap();
-    assert_eq!(
-        [10, 10, 10, 10],
-        &data[0..4],
-        "first read - expected [10, 10, 10, 10] at data index 0 to 4 {:?}",
-        &data[0..4]
-    );
-    assert_eq!(
-        [10, 10, 10, 10],
-        &data[32764..32768],
-        "first read - expected [10, 10, 10, 10] at data index 32765 to 32768 {:?}",
-        &data[32764..32768]
-    );
-    let ret_val = agent
-        .query(canister_id, "proxy_msg_reply_data_append")
-        .with_arg(vec![8, 0, 0, 0, 0, 128, 0, 0])
-        .call()
-        .await;
-    assert!(
-        ret_val.is_ok(),
-        "Check for stale data step 2 failed. Error: {}",
-        ret_val.unwrap_err()
-    );
-    let data = ret_val.unwrap();
-    assert_eq!(
-        [0, 0, 0, 0],
-        &data[0..4],
-        "second read - stale data present, expected [0, 0, 0, 0] at data index 0 to 4 {:?}",
-        &data[0..4]
-    );
-    assert_eq!(
-        [0, 0, 0, 0],
-        &data[32764..32768],
-        "second read - stale data present, expected [0, 0, 0, 0] at data index 32765 to 32768 {:?}",
-        &data[32764..32768]
-    );
-}
-
-async fn tests_for_illegal_wasm_memory_access(
-    logger: &Logger,
-    agent: &ic_agent::Agent,
-    canister_id: &Principal,
-) {
-    // msg_reply_data_append(0, 65536) => expect no error
-    let ret_val = agent
-        .query(canister_id, "proxy_msg_reply_data_append")
-        .with_arg(vec![0, 0, 0, 0, 0, 0, 1, 0])
-        .call()
-        .await;
-    if ENABLE_DEBUG_LOG {
-        print_result_or_error(
-            logger,
-            &ret_val,
-            format!(
-                "proxy_msg_reply_data_appendInput => {} {} Output =>",
-                0, 65536
-            )
-            .as_str(),
-        );
-    }
-    assert!(
-        ret_val.is_ok(),
-        "msg_reply_data_append(0, 65536) failed. Error: {}",
-        ret_val.unwrap_err()
-    );
-
-    // msg_reply_data_append(0, 65537) => expect no error
-    let ret_val = agent
-        .query(canister_id, "proxy_msg_reply_data_append")
-        .with_arg(vec![0, 0, 0, 0, 1, 0, 1, 0])
-        .call()
-        .await;
-    let containing_str =
-        "violated contract: msg.reply: src=0 + length=65537 exceeds the slice size=65536";
-    assert!(
-        matches!(
-            ret_val,
-            Err(AgentError::UncertifiedReject(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
-        ),
-        "expected msg_reply_data_append(0, 65537) to fail"
-    );
-
-    // msg_reply_data_append(65536, 10) => expect error
-    let ret_val = agent
-        .query(canister_id, "proxy_msg_reply_data_append")
-        .with_arg(vec![0, 0, 1, 0, 10, 0, 0, 0])
-        .call()
-        .await;
-    let containing_str =
-        "violated contract: msg.reply: src=65536 + length=10 exceeds the slice size=65536";
-    assert!(
-        matches!(
-            ret_val,
-            Err(AgentError::UncertifiedReject(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
-        ),
-        "expected msg_reply_data_append(65536, 10) to fail"
     );
 }
 
@@ -584,7 +358,7 @@ pub fn malicious_intercanister_calls(env: TestEnv) {
             debug!(logger, "total cycles used = {}", cycles_used_proxy);
         }
 
-        /* Now make intercanister call proxy_err that throws error  and check the cycles used */
+        /* Now make intercanister call proxy_err that throws error and check the cycles used */
         let ret_val = agent.query(&canister_a, "read_cycles").call().await;
         let num_cycles_before =
             print_validate_num_cycles(logger, &ret_val, "Before calling proxy_err()");
@@ -592,9 +366,10 @@ pub fn malicious_intercanister_calls(env: TestEnv) {
         let ret_val = agent
             .update(&canister_a, "proxy_err")
             .with_arg(vec![2; 4])
-            .call()
+            .call_and_wait()
             .await;
-        assert!(ret_val.is_ok());
+
+        assert!(matches!(ret_val, Err(AgentError::CertifiedReject(_)),));
 
         // Wait for few seconds before reading the data.
         for _ in 0..NR_SLEEPS {
@@ -692,35 +467,6 @@ fn print_validate_num_cycles(
         0
     };
     num_cycles
-}
-
-fn print_result_or_error(logger: &Logger, ret_val: &Result<Vec<u8>, AgentError>, msg: &str) {
-    match ret_val {
-        Ok(result) => {
-            debug!(logger, "{} - Message Length:{:?}", msg, result.len());
-            print_result_range(logger, &Ok(result.clone()), msg);
-        }
-        Err(err) => debug!(logger, "{} {:?}", msg, err),
-    }
-}
-
-fn print_result_range(logger: &Logger, ret_val: &Result<Vec<u8>, AgentError>, msg: &str) {
-    match ret_val {
-        Ok(result) => {
-            if result.len() > 32 {
-                let mut v1: [u8; 16] = [0; 16];
-                let mut v2: [u8; 16] = [0; 16];
-                for i in 0..16 {
-                    v1[i] = result[i];
-                    v2[i] = result[result.len() - 16 + i];
-                }
-                debug!(logger, "{} {:?}..{:?}", msg, v1, v2)
-            } else {
-                debug!(logger, "{} {:?}", msg, result);
-            }
-        }
-        Err(_) => (),
-    }
 }
 
 fn print_result(logger: &Logger, ret_val: &Result<Vec<u8>, AgentError>, msg: &str) {

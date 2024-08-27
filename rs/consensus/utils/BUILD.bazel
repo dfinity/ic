@@ -39,6 +39,7 @@ rust_library(
     }),
     crate_name = "ic_consensus_utils",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:strum_macros",
     ],
     version = "0.9.0",

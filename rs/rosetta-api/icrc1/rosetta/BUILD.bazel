@@ -9,6 +9,7 @@ load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
@@ -49,8 +50,8 @@ DEPENDENCIES = [
     "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
-    "@crate_index//:tower-request-id",
     "@crate_index//:tower-http",
+    "@crate_index//:tower-request-id",
     "@crate_index//:tracing",
     "@crate_index//:tracing-appender",
     "@crate_index//:tracing-subscriber",
@@ -58,6 +59,8 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
+    ":ic-icrc-rosetta",
     "//packages/pocket-ic:pocket-ic",
     "//rs/rosetta-api/icrc1/ledger/sm-tests",
     "//rs/rosetta-api/icrc1/rosetta/client:ic-icrc-rosetta-client",
@@ -65,7 +68,6 @@ DEV_DEPENDENCIES = [
     "//rs/rosetta-api/icrc1/test_utils",
     "//rs/rosetta-api/test_utils",
     "//rs/test_utilities/load_wasm",
-    ":ic-icrc-rosetta",
     "@crate_index//:futures",
     "@crate_index//:ic-utils",
     "@crate_index//:once_cell",
@@ -73,6 +75,7 @@ DEV_DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:strum_macros",
 ]
 
@@ -82,7 +85,7 @@ MACRO_DEV_DEPENDENCIES = [
 ALIASES = {
 }
 
-ROSETTA_VERSION = "1.1.0"
+ROSETTA_VERSION = "1.1.1"
 
 rust_library(
     name = "ic-icrc-rosetta",
@@ -244,6 +247,9 @@ container_image(
     name = "ic_icrc_rosetta_image_base",
     base = "@rust_base//image",
     tags = ["manual"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     tars = [
         ":passwd_tar",
         ":data_tar",
@@ -264,6 +270,9 @@ container_image(
     ],
     ports = ["8080"],
     tags = ["manual"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     user = "ic_icrc_rosetta",
     workdir = "/home/ic_icrc_rosetta",
 )

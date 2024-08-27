@@ -33,7 +33,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "",
                 Module::render_loop(
                     LoopIterations::Mi,
-                    "(set_local $s (i32.add (get_local $s) (i32.load (i32.const 0))))",
+                    "(local.set $s (i32.add (local.get $s) (i32.load (i32.const 0))))",
                 ),
             )),
             16000006,

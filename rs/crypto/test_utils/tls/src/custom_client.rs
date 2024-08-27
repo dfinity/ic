@@ -9,8 +9,11 @@ use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::NodeId;
 use rand::{CryptoRng, Rng};
-use rustls;
-use rustls::ClientConfig;
+use rustls::{
+    client::danger::{HandshakeSignatureValid, ServerCertVerified},
+    pki_types::{CertificateDer, ServerName, UnixTime},
+    ClientConfig, DigitallySignedStruct, SignatureScheme,
+};
 use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
@@ -135,20 +138,27 @@ impl CustomClient {
             end_entity: self.server_cert.clone(),
         };
 
-        let config_builder = ClientConfig::builder()
-            .with_cipher_suites(&cipher_suites)
-            .with_safe_default_kx_groups()
+        let mut ring_crypto_provider = rustls::crypto::ring::default_provider();
+        ring_crypto_provider.cipher_suites = cipher_suites;
+
+        let config_builder = ClientConfig::builder_with_provider(Arc::new(ring_crypto_provider))
             .with_protocol_versions(&protocol_versions)
-            .expect("invalid rustls client config")
+            .expect("Valid rustls client config.")
+            .dangerous()
             .with_custom_certificate_verifier(Arc::new(matching_end_entity_cert_verifier)); // disables hostname verification
 
         let config = if let Some(cert_with_key) = &self.client_auth_data {
-            let key_der = rustls::PrivateKey(cert_with_key.key_pair().serialize_for_rustls());
-            let mut cert_chain = vec![rustls::Certificate(cert_with_key.cert_der())];
+            let key_der = rustls::pki_types::PrivateKeyDer::try_from(
+                cert_with_key.key_pair().serialize_for_rustls(),
+            )
+            .unwrap();
+            let mut cert_chain = vec![rustls::pki_types::CertificateDer::from(
+                cert_with_key.cert_der(),
+            )];
             if let Some(extra_chain_certs) = &self.extra_chain_certs {
                 extra_chain_certs
                     .iter()
-                    .map(|x| rustls::Certificate(x.as_der().clone()))
+                    .map(|x| rustls::pki_types::CertificateDer::from(x.as_der().clone()))
                     .for_each(|cert| cert_chain.push(cert));
             }
             config_builder
@@ -206,22 +216,22 @@ impl CustomClient {
 /// * the `end_entity` exactly matches a given reference
 ///   certificate, and
 /// * the `intermediates` certs are empty.
-/// All other parameters (server name, time, etc.) are ignored.
+///   All other parameters (server name, time, etc.) are ignored.
+#[derive(Debug)]
 struct MatchingEndEntityCertVerifier {
     end_entity: TlsPublicKeyCert,
 }
 
-impl rustls::client::ServerCertVerifier for MatchingEndEntityCertVerifier {
+impl rustls::client::danger::ServerCertVerifier for MatchingEndEntityCertVerifier {
     fn verify_server_cert(
         &self,
-        end_entity: &rustls::Certificate,
-        intermediates: &[rustls::Certificate],
-        _server_name: &rustls::ServerName,
-        _scts: &mut dyn Iterator<Item = &[u8]>,
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
         _ocsp_response: &[u8],
-        _now: std::time::SystemTime,
-    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
-        if end_entity.0 != *self.end_entity.as_der() {
+        _now: UnixTime,
+    ) -> Result<ServerCertVerified, rustls::Error> {
+        if end_entity.as_ref() != self.end_entity.as_der() {
             return Err(rustls::Error::General("not an exact match".to_string()));
         }
         if !intermediates.is_empty() {
@@ -229,6 +239,34 @@ impl rustls::client::ServerCertVerifier for MatchingEndEntityCertVerifier {
                 "intermediates not empty".to_string(),
             ));
         }
-        Ok(rustls::client::ServerCertVerified::assertion())
+        Ok(ServerCertVerified::assertion())
+    }
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &CertificateDer<'_>,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        Err(rustls::Error::PeerIncompatible(
+            rustls::PeerIncompatible::Tls12NotOffered,
+        ))
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        rustls::crypto::verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+        )
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        vec![SignatureScheme::ED25519]
     }
 }

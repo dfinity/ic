@@ -504,6 +504,7 @@ fn test_abridged_neuron_size() {
         joined_community_fund_timestamp_seconds: Some(u64::MAX),
         neuron_type: Some(i32::MAX),
         dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(u64::MAX)),
+        visibility: None,
     };
 
     assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::BOUND.max_size());

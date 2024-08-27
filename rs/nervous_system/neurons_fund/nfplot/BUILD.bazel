@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 # See rs/nervous_system/feature_test.md
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/neurons_fund",
     "//rs/sns/governance",
     "//rs/sns/swap",

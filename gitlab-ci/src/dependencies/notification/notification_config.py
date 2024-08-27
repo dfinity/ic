@@ -24,8 +24,8 @@ class NotificationConfig:
     notify_on_finding_patch_version_available: bool = False
     notify_on_finding_deleted: bool = False
 
-    merge_request_base_url: str = "https://gitlab.com/dfinity-lab/public/ic/-/merge_requests/"
-    ci_pipeline_base_url: str = "https://gitlab.com/dfinity-lab/public/ic/-/pipelines/"
+    merge_request_base_url: str = "https://github.com/dfinity/ic/pull/"
+    ci_pipeline_base_url: str = "https://github.com/dfinity/ic/actions/runs/"
 
     notification_handlers: List[NotificationHandler] = field(default_factory=lambda: [SlackDefaultNotificationHandler()])
 

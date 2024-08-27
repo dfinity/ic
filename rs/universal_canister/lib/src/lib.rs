@@ -15,9 +15,9 @@ use universal_canister::Ops;
 ///
 /// For steps on how to produce it, please see the README in
 /// `rs/universal_canister`.
-pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm");
+pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm.gz");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("8ef999073db5db1462841db81808a21ac980850c121e67ba64f5f24df0e8223c");
+    hex!("65b035adf05770b69d68be0a5bec39df4d2ac5fc1dccb8397766120270159e6b");
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
@@ -654,6 +654,13 @@ impl PayloadBuilder {
     /// Push `blob` with canister cycles balance.
     pub fn cycles_balance128(mut self) -> Self {
         self.0.push(Ops::CyclesBalance128 as u8);
+        self
+    }
+
+    /// Allocates heap memory until the memory size is at least the specified amount in bytes.
+    pub fn memory_size_is_at_least(mut self, amount: u64) -> Self {
+        self = self.push_int64(amount);
+        self.0.push(Ops::MemorySizeIsAtLeast as u8);
         self
     }
 

@@ -1117,8 +1117,8 @@ fn process_response_result(
                     "[DTS] Finished response callback {:} of canister {} after {} / {} instructions.",
                     original.callback_id,
                     clean_canister.canister_id(),
-                    slice.executed_instructions,
-                    instructions_used,
+                    slice.executed_instructions.display(),
+                    instructions_used.display(),
                 );
             }
             update_round_limits(round_limits, &slice);
@@ -1212,8 +1212,8 @@ fn process_cleanup_result(
                     "[DTS] Finished cleanup callback {:?} of canister {} after {} / {} instructions.",
                     original.callback_id,
                     clean_canister.canister_id(),
-                    slice.executed_instructions,
-                    instructions_used,
+                    slice.executed_instructions.display(),
+                    instructions_used.display(),
                 );
             }
             update_round_limits(round_limits, &slice);

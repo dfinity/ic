@@ -1141,9 +1141,9 @@ fn test_extract_section_name() {
 ///      * `icp:public`
 ///      * `icp:private`
 /// * Checks that no more than `max_custom_sections` are defined in the
-/// module.
+///   module.
 /// * Checks that the size of a custom section does not exceed
-/// `max_custom_section_size`.
+///   `max_custom_section_size`.
 ///
 /// Returns the validated custom sections.
 fn validate_custom_section(
@@ -1515,7 +1515,6 @@ pub(super) fn validate_wasm_binary<'a>(
         config.max_sum_exported_function_name_lengths,
     )?;
     validate_data_section(&module)?;
-    let num_tables = module.tables.len();
     validate_global_section(&module, config.max_globals)?;
     validate_function_section(&module, config.max_functions)?;
     let (largest_function_instruction_count, max_complexity) = validate_code_section(&module)?;
@@ -1523,7 +1522,6 @@ pub(super) fn validate_wasm_binary<'a>(
     Ok((
         WasmValidationDetails {
             imports_details,
-            num_tables,
             wasm_metadata,
             largest_function_instruction_count,
             max_complexity,

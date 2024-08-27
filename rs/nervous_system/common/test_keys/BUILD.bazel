@@ -8,6 +8,7 @@ rust_library(
     crate_name = "ic_nervous_system_common_test_keys",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/canister_client/sender",
         "//rs/types/base_types",
         "//rs/types/types",

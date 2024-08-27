@@ -28,7 +28,6 @@ fn test_setup(
         .with_config(Some(config))
         .with_subnet_seed([subnet_seed; 32])
         .with_registry_data_provider(registry_data_provider)
-        .with_multisubnet_ecdsa_key()
         .build_with_subnets(subnets)
 }
 

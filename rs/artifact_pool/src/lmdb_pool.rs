@@ -1,19 +1,22 @@
 use crate::consensus_pool::{InitializablePoolSection, PoolSectionOp, PoolSectionOps};
-use crate::lmdb_iterator::{LMDBEcdsaIterator, LMDBIterator};
-use crate::metrics::EcdsaPoolMetrics;
+use crate::lmdb_iterator::{LMDBIDkgIterator, LMDBIterator};
+use crate::metrics::IDkgPoolMetrics;
 use ic_config::artifact_pool::LMDBConfig;
 use ic_interfaces::consensus_pool::PurgeableArtifactType;
 use ic_interfaces::{
     consensus_pool::{
         HeightIndexedPool, HeightRange, OnlyError, PoolSection, ValidatedConsensusArtifact,
     },
-    ecdsa::{EcdsaPoolSection, EcdsaPoolSectionOp, EcdsaPoolSectionOps, MutableEcdsaPoolSection},
+    idkg::{IDkgPoolSection, IDkgPoolSectionOp, IDkgPoolSectionOps, MutableIDkgPoolSection},
 };
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
 use ic_types::consensus::certification::CertificationMessageHash;
-use ic_types::consensus::idkg::SigShare;
+use ic_types::consensus::idkg::{
+    IDkgArtifactIdData, IDkgArtifactIdDataOf, SigShare, SigShareIdData, SigShareIdDataOf,
+};
 use ic_types::consensus::{DataPayload, HasHash, SummaryPayload};
 use ic_types::{
     artifact::{CertificationMessageId, ConsensusMessageId, IDkgMessageId},
@@ -22,8 +25,8 @@ use ic_types::{
         certification::{Certification, CertificationMessage, CertificationShare},
         dkg,
         idkg::{
-            EcdsaArtifactId, EcdsaComplaint, EcdsaOpening, EcdsaPrefix, EcdsaPrefixOf,
-            EcdsaSigShare, IDkgMessage, IDkgMessageType, SchnorrSigShare,
+            EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefix, IDkgPrefixOf,
+            SchnorrSigShare, SignedIDkgComplaint, SignedIDkgOpening,
         },
         BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
         ConsensusMessageHash, ConsensusMessageHashable, EquivocationProof, Finalization,
@@ -56,7 +59,7 @@ use strum::{AsRefStr, FromRepr, IntoEnumIterator};
 /// There are 3 kind of LMDB databases used:
 ///
 /// 1. An "artifacts" database maps IdKey to bincode encoded bytes for fast
-/// serialization and deserialization:
+///    serialization and deserialization:
 ///
 /// ```text
 /// artifacts
@@ -66,7 +69,7 @@ use strum::{AsRefStr, FromRepr, IntoEnumIterator};
 /// ```
 ///
 /// 2. A set of index databases, one for each message type. Each one of them
-/// maps a HeightKey to a set of IdKeys:
+///    maps a HeightKey to a set of IdKeys:
 ///
 /// ```text
 /// --------------------------
@@ -102,10 +105,10 @@ pub(crate) struct PersistentHeightIndexedPool<T> {
 /// We differentiate between 3 types:
 ///
 /// 1. Object that is serialized and stored in the pool. This can include
-/// additional data such as timestamp.
+///    additional data such as timestamp.
 ///
 /// 2. Artifact::Message is the message type (usually an enum) of each
-/// ArtifactKind. It can be casted into individual messages using TryFrom.
+///    ArtifactKind. It can be casted into individual messages using TryFrom.
 ///
 /// 3. Individual message type.
 pub(crate) trait PoolArtifact: Sized {
@@ -161,13 +164,13 @@ pub(crate) enum TypeKey {
     // Certification messages
     Certification,
     CertificationShare,
-    // Ecdsa messages
-    EcdsaDealing,
-    EcdsaDealingSupport,
+    // IDkg messages
+    IDkgDealing,
+    IDkgDealingSupport,
     EcdsaSigShare,
     SchnorrSigShare,
-    EcdsaComplaint,
-    EcdsaOpening,
+    IDkgComplaint,
+    IDkgOpening,
 }
 
 impl TypeKey {
@@ -646,7 +649,7 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
             }
 
             // update meta
-            let meta = if meta.max <= height_key {
+            let meta = if meta.max < height_key {
                 None
             } else {
                 tx_get_key(tx, index_db, GetOp::First)?.map(|key| Meta {
@@ -1030,12 +1033,12 @@ impl PoolArtifact for ConsensusMessage {
                 Box::new(move || match payload_type {
                     PayloadType::Summary => BlockPayload::Summary(SummaryPayload {
                         dkg: dkg::Summary::default(),
-                        ecdsa: None,
+                        idkg: None,
                     }),
                     PayloadType::Data => BlockPayload::Data(DataPayload {
                         batch: BatchPayload::default(),
                         dealings: dkg::Dealings::new_empty(start_height),
-                        ecdsa: None,
+                        idkg: None,
                     }),
                 }),
             );
@@ -1186,6 +1189,7 @@ impl PersistentHeightIndexedPool<ConsensusMessage> {
                     let type_key = match artifact_type {
                         PurgeableArtifactType::NotarizationShare => TypeKey::NotarizationShare,
                         PurgeableArtifactType::FinalizationShare => TypeKey::FinalizationShare,
+                        PurgeableArtifactType::EquivocationProof => TypeKey::EquivocationProof,
                     };
 
                     purged.extend(
@@ -1561,67 +1565,144 @@ impl crate::certification_pool::MutablePoolSection
     }
 }
 
-///////////////////////////// ECDSA Pool /////////////////////////////
+///////////////////////////// IDKG Pool /////////////////////////////
 
+/// The message id as a database key. The first 8 bytes are the big-endian representation
+/// of the group tag (transcript ID / pre-signature ID). The next 8 bytes are a hash of meta
+/// data (i.e. dealer ID, sig share sender, dealer ID + support sender, ...).
+/// The remaining bytes are a proto encoding of additional ID data (height, message hash, [subnet Id]).
+///
+/// ```text
+/// -----------------------------------------------------------------------------
+/// |0   <group tag>   7|8   <meta hash>   15|16   <proto encoded ID data>   ...|
+/// -----------------------------------------------------------------------------
+/// ```
+///
+/// Two kinds of look up are possible with this:
+/// 1. Look up by full key of <16 bytes prefix + id data>, which would return the matching
+///    artifact if present.
+/// 2. Look up by prefix match. This can return 0 or more entries, as several artifacts may share
+///    the same prefix. The caller is expected to filter the returned entries as needed. The look up
+///    by prefix makes some frequent queries more efficient (e.g) to know if a node has already
+///    issued a support for a <transcript Id, dealer Id>, we could iterate through all the entries
+///    in the support pool looking for a matching artifact. Instead, this implementation allows
+///    us to issue a single prefix query for prefix = <transcript Id, dealer Id + support signer Id>.
 #[derive(Debug)]
-pub(crate) struct EcdsaIdKey(Vec<u8>);
+pub(crate) struct IDkgIdKey(Vec<u8>);
 
-impl AsRef<[u8]> for EcdsaIdKey {
+impl AsRef<[u8]> for IDkgIdKey {
     fn as_ref(&self) -> &[u8] {
         &self.0
     }
 }
 
-impl From<&[u8]> for EcdsaIdKey {
-    fn from(bytes: &[u8]) -> EcdsaIdKey {
-        EcdsaIdKey(bytes.to_vec())
+impl From<&[u8]> for IDkgIdKey {
+    fn from(bytes: &[u8]) -> IDkgIdKey {
+        IDkgIdKey(bytes.to_vec())
     }
 }
 
-impl From<&IDkgMessageId> for EcdsaIdKey {
-    fn from(msg_id: &IDkgMessageId) -> EcdsaIdKey {
+impl From<IDkgMessageId> for IDkgIdKey {
+    fn from(msg_id: IDkgMessageId) -> IDkgIdKey {
+        // Serialize the prefix
         let prefix = msg_id.prefix();
         let mut bytes = vec![];
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.group_tag()));
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.meta_hash()));
-        bytes.extend_from_slice(&u64::to_be_bytes(prefix.height().get()));
-        bytes.extend_from_slice(&msg_id.hash().0);
-        EcdsaIdKey(bytes)
+
+        // Serialize the ID data
+        let id_data_bytes = match msg_id {
+            IDkgArtifactId::Dealing(_, data) => {
+                pb::IDkgArtifactIdData::from(data.get()).encode_to_vec()
+            }
+            IDkgArtifactId::DealingSupport(_, data) => {
+                pb::IDkgArtifactIdData::from(data.get()).encode_to_vec()
+            }
+            IDkgArtifactId::EcdsaSigShare(_, data) => {
+                pb::SigShareIdData::from(data.get()).encode_to_vec()
+            }
+            IDkgArtifactId::SchnorrSigShare(_, data) => {
+                pb::SigShareIdData::from(data.get()).encode_to_vec()
+            }
+            IDkgArtifactId::Complaint(_, data) => {
+                pb::IDkgArtifactIdData::from(data.get()).encode_to_vec()
+            }
+            IDkgArtifactId::Opening(_, data) => {
+                pb::IDkgArtifactIdData::from(data.get()).encode_to_vec()
+            }
+        };
+        bytes.extend_from_slice(&id_data_bytes);
+        IDkgIdKey(bytes)
     }
 }
 
-impl From<&EcdsaPrefix> for EcdsaIdKey {
-    fn from(prefix: &EcdsaPrefix) -> EcdsaIdKey {
+impl From<IDkgPrefix> for IDkgIdKey {
+    fn from(prefix: IDkgPrefix) -> IDkgIdKey {
         let mut bytes = vec![];
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.group_tag()));
         bytes.extend_from_slice(&u64::to_be_bytes(prefix.meta_hash()));
-        bytes.extend_from_slice(&u64::to_be_bytes(prefix.height().get()));
-        EcdsaIdKey(bytes)
+        IDkgIdKey(bytes)
     }
 }
 
-fn deser_idkg_message_id(message_type: IDkgMessageType, id_key: EcdsaIdKey) -> IDkgMessageId {
+fn deser_idkg_artifact_id_data(bytes: &[u8]) -> Result<IDkgArtifactIdData, ProxyDecodeError> {
+    pb::IDkgArtifactIdData::decode(bytes)
+        .map_err(ProxyDecodeError::DecodeError)
+        .and_then(IDkgArtifactIdData::try_from)
+}
+
+fn deser_sig_share_id_data(bytes: &[u8]) -> Result<SigShareIdData, ProxyDecodeError> {
+    pb::SigShareIdData::decode(bytes)
+        .map_err(ProxyDecodeError::DecodeError)
+        .and_then(SigShareIdData::try_from)
+}
+
+fn deser_idkg_message_id(
+    message_type: IDkgMessageType,
+    id_key: IDkgIdKey,
+) -> Result<IDkgMessageId, ProxyDecodeError> {
+    // Deserialize the prefix
     let mut group_tag_bytes = [0; 8];
     group_tag_bytes.copy_from_slice(&id_key.0[0..8]);
 
     let mut meta_hash_bytes = [0; 8];
     meta_hash_bytes.copy_from_slice(&id_key.0[8..16]);
 
-    let mut height_bytes = [0; 8];
-    height_bytes.copy_from_slice(&id_key.0[16..24]);
+    let prefix = IDkgPrefix::new_with_meta_hash(
+        u64::from_be_bytes(group_tag_bytes),
+        u64::from_be_bytes(meta_hash_bytes),
+    );
 
-    let crypto_hash_bytes: &[u8] = &id_key.0[24..];
+    // Deserialize the remaining bytes as the ID data
+    let id_data_bytes: &[u8] = &id_key.0[16..];
 
-    (
-        message_type,
-        EcdsaPrefix::new_with_meta_hash(
-            u64::from_be_bytes(group_tag_bytes),
-            u64::from_be_bytes(meta_hash_bytes),
-            Height::from(u64::from_be_bytes(height_bytes)),
+    let id = match message_type {
+        IDkgMessageType::Dealing => IDkgArtifactId::Dealing(
+            IDkgPrefixOf::new(prefix),
+            IDkgArtifactIdDataOf::new(deser_idkg_artifact_id_data(id_data_bytes)?),
         ),
-        CryptoHash(crypto_hash_bytes.to_vec()),
-    )
-        .into()
+        IDkgMessageType::DealingSupport => IDkgArtifactId::DealingSupport(
+            IDkgPrefixOf::new(prefix),
+            IDkgArtifactIdDataOf::new(deser_idkg_artifact_id_data(id_data_bytes)?),
+        ),
+        IDkgMessageType::EcdsaSigShare => IDkgArtifactId::EcdsaSigShare(
+            IDkgPrefixOf::new(prefix),
+            SigShareIdDataOf::new(deser_sig_share_id_data(id_data_bytes)?),
+        ),
+        IDkgMessageType::SchnorrSigShare => IDkgArtifactId::SchnorrSigShare(
+            IDkgPrefixOf::new(prefix),
+            SigShareIdDataOf::new(deser_sig_share_id_data(id_data_bytes)?),
+        ),
+        IDkgMessageType::Complaint => IDkgArtifactId::Complaint(
+            IDkgPrefixOf::new(prefix),
+            IDkgArtifactIdDataOf::new(deser_idkg_artifact_id_data(id_data_bytes)?),
+        ),
+        IDkgMessageType::Opening => IDkgArtifactId::Opening(
+            IDkgPrefixOf::new(prefix),
+            IDkgArtifactIdDataOf::new(deser_idkg_artifact_id_data(id_data_bytes)?),
+        ),
+    };
+    Ok(id)
 }
 
 /// The per-message type DB
@@ -1629,7 +1710,7 @@ struct IDkgMessageDb {
     db_env: Arc<Environment>,
     db: Database,
     object_type: IDkgMessageType,
-    metrics: EcdsaPoolMetrics,
+    metrics: IDkgPoolMetrics,
     log: ReplicaLogger,
 }
 
@@ -1638,7 +1719,7 @@ impl IDkgMessageDb {
         db_env: Arc<Environment>,
         db: Database,
         object_type: IDkgMessageType,
-        metrics: EcdsaPoolMetrics,
+        metrics: IDkgPoolMetrics,
         log: ReplicaLogger,
     ) -> Self {
         Self {
@@ -1654,7 +1735,7 @@ impl IDkgMessageDb {
     /// false otherwise.
     fn insert_txn(&self, message: IDkgMessage, tx: &mut RwTransaction) -> bool {
         assert_eq!(IDkgMessageType::from(&message), self.object_type);
-        let key = EcdsaIdKey::from(&EcdsaArtifactId::from(&message));
+        let key = IDkgIdKey::from(IDkgArtifactId::from(&message));
         let bytes = match bincode::serialize::<IDkgMessage>(&message) {
             Ok(bytes) => bytes,
             Err(err) => {
@@ -1680,7 +1761,7 @@ impl IDkgMessageDb {
     }
 
     fn get_object(&self, id: &IDkgMessageId) -> Option<IDkgMessage> {
-        let key = EcdsaIdKey::from(id);
+        let key = IDkgIdKey::from(id.clone());
         let tx = match self.db_env.begin_ro_txn() {
             Ok(tx) => tx,
             Err(err) => {
@@ -1721,8 +1802,8 @@ impl IDkgMessageDb {
 
     /// Adds the serialized <key> to be removed to the transaction. Returns true on success,
     /// false otherwise.
-    fn remove_txn(&self, id: &IDkgMessageId, tx: &mut RwTransaction) -> bool {
-        let key = EcdsaIdKey::from(id);
+    fn remove_txn(&self, id: IDkgMessageId, tx: &mut RwTransaction) -> bool {
+        let key = IDkgIdKey::from(id);
         if let Err(err) = tx.del(self.db, &key, None) {
             error!(
                 self.log,
@@ -1736,7 +1817,7 @@ impl IDkgMessageDb {
 
     fn iter<T: TryFrom<IDkgMessage>>(
         &self,
-        prefix: Option<EcdsaPrefixOf<T>>,
+        prefix: Option<IDkgPrefixOf<T>>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + '_>
     where
         <T as TryFrom<IDkgMessage>>::Error: Debug,
@@ -1748,8 +1829,19 @@ impl IDkgMessageDb {
             // Convert key bytes to IDkgMessageId
             let mut key_bytes = Vec::<u8>::new();
             key_bytes.extend_from_slice(key);
-            let id_key = EcdsaIdKey(key_bytes);
-            let id = deser_idkg_message_id(message_type, id_key);
+            let id_key = IDkgIdKey(key_bytes);
+            let id = match deser_idkg_message_id(message_type, id_key) {
+                Ok(id) => id,
+                Err(err) => {
+                    error!(
+                        log,
+                        "IDkgMessageDb::iter(): deser_idkg_message_id() for key of length {} failed: {:?}",
+                        key.len(),
+                        err,
+                    );
+                    return None;
+                }
+            };
 
             // Stop iterating if we hit a different prefix.
             if let Some(prefix) = &prefix_cl {
@@ -1790,29 +1882,29 @@ impl IDkgMessageDb {
             }
         };
 
-        Box::new(LMDBEcdsaIterator::new(
+        Box::new(LMDBIDkgIterator::new(
             self.db_env.clone(),
             self.db,
             deserialize_fn,
-            prefix.map(|p| EcdsaIdKey::from(&p.get())),
+            prefix.map(|p| IDkgIdKey::from(p.get())),
             self.log.clone(),
         ))
     }
 }
 
-/// The PersistentEcdsaPoolSection is just a collection of per-message type
+/// The PersistentIDkgPoolSection is just a collection of per-message type
 /// backend DBs. The main role is to route the operations to the appropriate
 /// backend DB.
-pub(crate) struct PersistentEcdsaPoolSection {
+pub(crate) struct PersistentIDkgPoolSection {
     // Per message type data base
     db_env: Arc<Environment>,
     message_dbs: Vec<(IDkgMessageType, IDkgMessageDb)>,
-    metrics: EcdsaPoolMetrics,
+    metrics: IDkgPoolMetrics,
     log: ReplicaLogger,
 }
 
-impl PersistentEcdsaPoolSection {
-    pub(crate) fn new_ecdsa_pool(
+impl PersistentIDkgPoolSection {
+    pub(crate) fn new_idkg_pool(
         config: LMDBConfig,
         read_only: bool,
         log: ReplicaLogger,
@@ -1826,9 +1918,9 @@ impl PersistentEcdsaPoolSection {
         }
 
         let mut path = config.persistent_pool_validated_persistent_db_path;
-        path.push("ecdsa");
+        path.push("idkg");
         if let Err(err) = std::fs::create_dir_all(path.as_path()) {
-            panic!("Error creating ECDSA dir {:?}: {:?}", path, err)
+            panic!("Error creating IDKG dir {:?}: {:?}", path, err)
         }
         let db_env = Arc::new(create_db_env(
             path.as_path(),
@@ -1837,17 +1929,17 @@ impl PersistentEcdsaPoolSection {
         ));
 
         let mut message_dbs = Vec::new();
-        let metrics = EcdsaPoolMetrics::new(metrics_registry, pool, pool_type);
+        let metrics = IDkgPoolMetrics::new(metrics_registry, pool, pool_type);
         for (message_type, type_key) in &type_keys {
             let db = if read_only {
                 db_env.open_db(Some(type_key.name())).unwrap_or_else(|err| {
-                    panic!("Error opening ECDSA db {}: {:?}", type_key.name(), err)
+                    panic!("Error opening IDKG db {}: {:?}", type_key.name(), err)
                 })
             } else {
                 db_env
                     .create_db(Some(type_key.name()), DatabaseFlags::empty())
                     .unwrap_or_else(|err| {
-                        panic!("Error creating ECDSA db {}: {:?}", type_key.name(), err)
+                        panic!("Error creating IDKG db {}: {:?}", type_key.name(), err)
                     })
             };
             message_dbs.push((
@@ -1864,7 +1956,7 @@ impl PersistentEcdsaPoolSection {
 
         info!(
             log,
-            "PersistentEcdsaPoolSection::new_ecdsa_pool(): num_dbs = {}",
+            "PersistentIDkgPoolSection::new_idkg_pool(): num_dbs = {}",
             type_keys.len()
         );
 
@@ -1886,17 +1978,17 @@ impl PersistentEcdsaPoolSection {
 
     fn get_type_key(message_type: IDkgMessageType) -> TypeKey {
         match message_type {
-            IDkgMessageType::Dealing => TypeKey::EcdsaDealing,
-            IDkgMessageType::DealingSupport => TypeKey::EcdsaDealingSupport,
+            IDkgMessageType::Dealing => TypeKey::IDkgDealing,
+            IDkgMessageType::DealingSupport => TypeKey::IDkgDealingSupport,
             IDkgMessageType::EcdsaSigShare => TypeKey::EcdsaSigShare,
             IDkgMessageType::SchnorrSigShare => TypeKey::SchnorrSigShare,
-            IDkgMessageType::Complaint => TypeKey::EcdsaComplaint,
-            IDkgMessageType::Opening => TypeKey::EcdsaOpening,
+            IDkgMessageType::Complaint => TypeKey::IDkgComplaint,
+            IDkgMessageType::Opening => TypeKey::IDkgOpening,
         }
     }
 }
 
-impl EcdsaPoolSection for PersistentEcdsaPoolSection {
+impl IDkgPoolSection for PersistentIDkgPoolSection {
     fn contains(&self, msg_id: &IDkgMessageId) -> bool {
         self.get_message_db(IDkgMessageType::from(msg_id))
             .get_object(msg_id)
@@ -1915,7 +2007,7 @@ impl EcdsaPoolSection for PersistentEcdsaPoolSection {
 
     fn signed_dealings_by_prefix(
         &self,
-        prefix: EcdsaPrefixOf<SignedIDkgDealing>,
+        prefix: IDkgPrefixOf<SignedIDkgDealing>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Dealing);
         message_db.iter(Some(prefix))
@@ -1930,7 +2022,7 @@ impl EcdsaPoolSection for PersistentEcdsaPoolSection {
 
     fn dealing_support_by_prefix(
         &self,
-        prefix: EcdsaPrefixOf<IDkgDealingSupport>,
+        prefix: IDkgPrefixOf<IDkgDealingSupport>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::DealingSupport);
         message_db.iter(Some(prefix))
@@ -1945,7 +2037,7 @@ impl EcdsaPoolSection for PersistentEcdsaPoolSection {
 
     fn ecdsa_signature_shares_by_prefix(
         &self,
-        prefix: EcdsaPrefixOf<EcdsaSigShare>,
+        prefix: IDkgPrefixOf<EcdsaSigShare>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaSigShare)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::EcdsaSigShare);
         message_db.iter(Some(prefix))
@@ -1960,7 +2052,7 @@ impl EcdsaPoolSection for PersistentEcdsaPoolSection {
 
     fn schnorr_signature_shares_by_prefix(
         &self,
-        prefix: EcdsaPrefixOf<SchnorrSigShare>,
+        prefix: IDkgPrefixOf<SchnorrSigShare>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SchnorrSigShare)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::SchnorrSigShare);
         message_db.iter(Some(prefix))
@@ -1981,35 +2073,35 @@ impl EcdsaPoolSection for PersistentEcdsaPoolSection {
         )
     }
 
-    fn complaints(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaComplaint)> + '_> {
+    fn complaints(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgComplaint)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Complaint);
         message_db.iter(None)
     }
 
     fn complaints_by_prefix(
         &self,
-        prefix: EcdsaPrefixOf<EcdsaComplaint>,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaComplaint)> + '_> {
+        prefix: IDkgPrefixOf<SignedIDkgComplaint>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgComplaint)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Complaint);
         message_db.iter(Some(prefix))
     }
 
-    fn openings(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaOpening)> + '_> {
+    fn openings(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Opening);
         message_db.iter(None)
     }
 
     fn openings_by_prefix(
         &self,
-        prefix: EcdsaPrefixOf<EcdsaOpening>,
-    ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaOpening)> + '_> {
+        prefix: IDkgPrefixOf<SignedIDkgOpening>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Opening);
         message_db.iter(Some(prefix))
     }
 }
 
-impl MutableEcdsaPoolSection for PersistentEcdsaPoolSection {
-    fn mutate(&mut self, ops: EcdsaPoolSectionOps) {
+impl MutableIDkgPoolSection for PersistentIDkgPoolSection {
+    fn mutate(&mut self, ops: IDkgPoolSectionOps) {
         if ops.ops.is_empty() {
             return;
         }
@@ -2019,7 +2111,7 @@ impl MutableEcdsaPoolSection for PersistentEcdsaPoolSection {
             Err(err) => {
                 error!(
                     self.log,
-                    "MutableEcdsaPoolSection::mutate(): begin_rw_txn(): {:?}", err
+                    "MutableIDkgPoolSection::mutate(): begin_rw_txn(): {:?}", err
                 );
                 self.metrics.persistence_error("begin_rw_txn");
                 return;
@@ -2028,7 +2120,7 @@ impl MutableEcdsaPoolSection for PersistentEcdsaPoolSection {
 
         for op in ops.ops {
             match op {
-                EcdsaPoolSectionOp::Insert(message) => {
+                IDkgPoolSectionOp::Insert(message) => {
                     let message_type = IDkgMessageType::from(&message);
                     let db = self.get_message_db(message_type);
                     if !db.insert_txn(message, &mut tx) {
@@ -2036,10 +2128,10 @@ impl MutableEcdsaPoolSection for PersistentEcdsaPoolSection {
                     }
                     self.metrics.observe_insert(message_type.as_str());
                 }
-                EcdsaPoolSectionOp::Remove(id) => {
+                IDkgPoolSectionOp::Remove(id) => {
                     let message_type = IDkgMessageType::from(&id);
                     let db = self.get_message_db(message_type);
-                    if !db.remove_txn(&id, &mut tx) {
+                    if !db.remove_txn(id, &mut tx) {
                         return;
                     }
                     self.metrics.observe_remove(message_type.as_str())
@@ -2055,14 +2147,14 @@ impl MutableEcdsaPoolSection for PersistentEcdsaPoolSection {
             Err(err) => {
                 error!(
                     self.log,
-                    "MutableEcdsaPoolSection::mutate(): tx.commit(): {:?}", err
+                    "MutableIDkgPoolSection::mutate(): tx.commit(): {:?}", err
                 );
                 self.metrics.persistence_error("tx_commit");
             }
         }
     }
 
-    fn as_pool_section(&self) -> &dyn EcdsaPoolSection {
+    fn as_pool_section(&self) -> &dyn IDkgPoolSection {
         self
     }
 }
@@ -2078,7 +2170,7 @@ mod tests {
         },
     };
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::consensus::Rank;
+    use ic_types::{consensus::Rank, PrincipalId, SubnetId};
     use std::{panic, path::PathBuf};
 
     #[test]
@@ -2100,6 +2192,60 @@ mod tests {
             id_key.type_key().expect("Should deserialize the key"),
             TypeKey::BlockPayload
         );
+    }
+
+    #[test]
+    fn test_encode_decode_idkg_key() {
+        let data = [1u8; PrincipalId::MAX_LENGTH_IN_BYTES];
+        let max_principal = PrincipalId::new(data.len(), data);
+        let small_principal = PrincipalId::new(20, data);
+        let one_byte_principal = PrincipalId::new(1, data);
+        let empty_principal = PrincipalId::new(0, data);
+
+        let subnet_ids = [
+            SubnetId::new(max_principal),
+            SubnetId::new(small_principal),
+            SubnetId::new(one_byte_principal),
+            SubnetId::new(empty_principal),
+        ];
+
+        let hashes = [
+            CryptoHash(vec![]),
+            CryptoHash(vec![2u8; 1]),
+            CryptoHash(vec![2u8; 32]),
+            CryptoHash(vec![2u8; 128]),
+        ];
+
+        let message_types = [IDkgMessageType::Dealing, IDkgMessageType::EcdsaSigShare];
+
+        for message_type in &message_types {
+            for subnet_id in &subnet_ids {
+                for hash in &hashes {
+                    let prefix = IDkgPrefix::new_with_meta_hash(1, 2);
+                    let id = match message_type {
+                        IDkgMessageType::Dealing => IDkgArtifactId::Dealing(
+                            IDkgPrefixOf::new(prefix),
+                            IDkgArtifactIdDataOf::new(IDkgArtifactIdData {
+                                height: Height::from(3),
+                                hash: hash.clone(),
+                                subnet_id: *subnet_id,
+                            }),
+                        ),
+                        IDkgMessageType::EcdsaSigShare => IDkgArtifactId::EcdsaSigShare(
+                            IDkgPrefixOf::new(prefix),
+                            SigShareIdDataOf::new(SigShareIdData {
+                                height: Height::from(3),
+                                hash: hash.clone(),
+                            }),
+                        ),
+                        _ => panic!("Unexpected type: {:?}", message_type),
+                    };
+                    let id_key = IDkgIdKey::from(id.clone());
+                    let deser_id = deser_idkg_message_id(*message_type, id_key).unwrap();
+                    assert_eq!(id, deser_id);
+                }
+            }
+        }
     }
 
     // TODO: Remove this after it is no longer needed
@@ -2449,6 +2595,36 @@ mod tests {
                 );
                 assert_consistency(&pool);
             }
+        });
+    }
+
+    #[test]
+    fn test_purge_below_maximum_element() {
+        run_persistent_pool_test("test_purge_below_maximum_element", |config, log| {
+            const MAX_HEIGHT: Height = Height::new(10);
+            let mut pool = PersistentHeightIndexedPool::new_consensus_pool(
+                config.clone(),
+                /*read_only=*/ false,
+                log.clone(),
+            );
+            let rb_ops = random_beacon_ops(1..=MAX_HEIGHT.get());
+            pool.mutate(rb_ops.clone());
+            assert_eq!(pool.random_beacon().size(), rb_ops.ops.len());
+
+            // purge artifacts strictly below the maximum element (at height 10)
+            let mut purge_ops = PoolSectionOps::new();
+            purge_ops.purge_below(MAX_HEIGHT);
+            pool.mutate(purge_ops);
+
+            // verify that the artifacts have been purged
+            assert_eq!(
+                pool.random_beacon().height_range(),
+                Some(HeightRange {
+                    min: MAX_HEIGHT,
+                    max: MAX_HEIGHT
+                })
+            );
+            assert_consistency(&pool);
         });
     }
 

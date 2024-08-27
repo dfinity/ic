@@ -5,15 +5,11 @@ use dfn_core::{
     println,
 };
 use ic_base_types::PrincipalId;
+use ic_crypto_secp256k1::PublicKey;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance::pb::v1::GovernanceError;
-use libsecp256k1::{PublicKey, PublicKeyFormat};
+use ic_nns_governance_api::pb::v1::GovernanceError;
 use sha3::{Digest, Keccak256};
-use simple_asn1::{
-    oid, to_der,
-    ASN1Block::{BitString, ObjectIdentifier, Sequence},
-};
 use std::{collections::HashSet, time::SystemTime};
 
 pub mod init;
@@ -280,9 +276,7 @@ fn decode_hex_public_key(public_key_hex: &str) -> Result<PublicKey, String> {
     let public_key_bytes =
         hex::decode(public_key_hex).map_err(|_| "Could not hex-decode public key".to_string())?;
 
-    let format = Some(PublicKeyFormat::Full);
-
-    PublicKey::parse_slice(&public_key_bytes, format)
+    PublicKey::deserialize_sec1(&public_key_bytes)
         .map_err(|_| "Could not parse hex-decoded public key".to_string())
 }
 
@@ -304,32 +298,20 @@ fn validate_public_key_against_caller(
 /// Given a public key, return the associated GTC account address
 fn public_key_to_gtc_address(public_key: &PublicKey) -> String {
     let mut hasher = Keccak256::new();
-    hasher.update(&public_key.serialize()[1..]);
+    hasher.update(&public_key.serialize_sec1(false)[1..]);
     let address_bytes = &hasher.finalize()[12..];
     hex::encode::<&[u8]>(address_bytes)
 }
 
 /// Convert a `PublicKey` to a `PrincipalId`
 fn public_key_to_principal(public_key: &PublicKey) -> PrincipalId {
-    PrincipalId::new_self_authenticating(&der_encode(public_key))
-}
-
-/// DER-encode the given `PublicKey`
-pub fn der_encode(public_key: &PublicKey) -> Vec<u8> {
-    let public_key_bytes = public_key.serialize().to_vec();
-    let ec_public_key_id = ObjectIdentifier(0, oid!(1, 2, 840, 10045, 2, 1));
-    let secp256k1_id = ObjectIdentifier(0, oid!(1, 3, 132, 0, 10));
-    let metadata = Sequence(0, vec![ec_public_key_id, secp256k1_id]);
-    let data = BitString(0, public_key_bytes.len() * 8, public_key_bytes);
-    let envelope = Sequence(0, vec![metadata, data]);
-    to_der(&envelope).expect("Cannot encode public key.")
+    PrincipalId::new_self_authenticating(&public_key.serialize_der())
 }
 
 pub mod test_constants {
     use super::{decode_hex_public_key, public_key_to_gtc_address, public_key_to_principal};
     use ic_base_types::PrincipalId;
-    use ic_crypto_sha2::Sha256;
-    use libsecp256k1::{sign, Message, PublicKey, PublicKeyFormat, SecretKey};
+    use ic_crypto_secp256k1::{PrivateKey, PublicKey};
     use std::str::FromStr;
 
     /// An identity used to make calls to the GTC canister in tests
@@ -343,12 +325,11 @@ pub mod test_constants {
 
     impl TestIdentity {
         pub fn public_key(&self) -> PublicKey {
-            let format = Some(PublicKeyFormat::Full);
-            PublicKey::parse_slice(&self.public_key_bytes, format).unwrap()
+            PublicKey::deserialize_sec1(&self.public_key_bytes).unwrap()
         }
 
-        pub fn secret_key(&self) -> SecretKey {
-            SecretKey::parse_slice(&self.secret_key_bytes).unwrap()
+        pub fn secret_key(&self) -> PrivateKey {
+            PrivateKey::deserialize_sec1(&self.secret_key_bytes).unwrap()
         }
 
         pub fn principal_id(&self) -> PrincipalId {
@@ -356,18 +337,7 @@ pub mod test_constants {
         }
 
         pub fn sign(&self, msg: &[u8]) -> Vec<u8> {
-            let hashed_msg = {
-                let mut state = Sha256::new();
-                state.write(msg);
-                state.finish()
-            };
-
-            let message = Message::parse(&hashed_msg);
-            let secret_key = self.secret_key();
-
-            let (sig, _) = sign(&message, &secret_key);
-
-            sig.serialize().to_vec()
+            self.secret_key().sign_message_with_ecdsa(msg).to_vec()
         }
 
         /// Assert that `self.public_key_hex` is the hex-encoding of

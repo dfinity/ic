@@ -9,17 +9,17 @@ documentation.workspace = true
 [dependencies]
 bit-vec = "0.6.3"
 cvt = "0.1.1"
-ic-btc-interface = { workspace = true }
-ic-btc-types-internal = { path = "../bitcoin/types/internal" }
 ic-base-types = { path = "../types/base_types" }
+ic-btc-interface = { workspace = true }
+ic-btc-replica-types = { path = "../bitcoin/replica_types" }
 ic-certification-version = { path = "../canonical_state/certification_version" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-error-types = { path = "../types/error_types" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
@@ -27,6 +27,8 @@ ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
+ic-validate-eq = { path = "../utils/validate_eq" }
+ic-validate-eq-derive = { path = "../utils/validate_eq_derive" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
 itertools = { workspace = true }
@@ -34,16 +36,24 @@ lazy_static = { workspace = true }
 libc = { workspace = true }
 maplit = "1.0.2"
 nix = { workspace = true }
-rand = { workspace = true }
-rand_chacha = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+rayon = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = { workspace = true }
-uuid = { version = "1.2.1", features = ["v4", "serde"] }
+uuid = { workspace = true }
+
+# Optional dependencies needed for fuzzing
+arbitrary = { workspace = true, optional = true }
+assert_matches = { workspace = true, optional = true }
+ic-test-utilities-io = { path = "../test_utilities/io", optional = true }
+ic-test-utilities-metrics = { path = "../test_utilities/metrics", optional = true }
+proptest = { workspace = true, optional = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
@@ -58,11 +68,21 @@ ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 maplit = "1.0.2"
-serde_cbor = { workspace = true }
 proptest = "1.0"
 prost = { workspace = true }
 scoped_threadpool = "0.1.*"
+serde_cbor = { workspace = true }
+test-strategy = "0.4.0"
 
 [[bench]]
 name = "bench_allocator"
 harness = false
+
+[features]
+fuzzing_code = [
+    "dep:arbitrary",
+    "dep:assert_matches",
+    "dep:ic-test-utilities-io",
+    "dep:ic-test-utilities-metrics",
+    "dep:proptest",
+]

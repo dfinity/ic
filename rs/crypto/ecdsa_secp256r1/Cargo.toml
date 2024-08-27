@@ -10,13 +10,13 @@ documentation.workspace = true
 
 [dependencies]
 lazy_static = { workspace = true }
-num-bigint = "0.4"
+num-bigint = { workspace = true }
 p256 = { workspace = true }
 pem = "1.1.0"
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 simple_asn1 = { workspace = true }
-zeroize = { version = "1.5", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }

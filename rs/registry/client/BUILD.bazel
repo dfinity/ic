@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/interfaces/registry",
     "//rs/monitoring/metrics",
     "//rs/types/types",
@@ -14,8 +15,9 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
-    "//rs/registry/proto",
+    # Keep sorted.
     "//rs/registry/helpers",
+    "//rs/registry/proto",
     "//rs/registry/proto_data_provider",
     "//rs/test_utilities/metrics",
     "@crate_index//:assert_matches",

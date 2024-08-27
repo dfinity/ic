@@ -8,6 +8,7 @@ rust_library(
     crate_name = "ic_registry_keys",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/types/base_types",
         "//rs/types/management_canister_types",
         "//rs/types/types",
@@ -20,6 +21,7 @@ rust_test(
     name = "keys_test",
     crate = ":keys",
     deps = [
+        # Keep sorted.
         "@crate_index//:rand",
         "@crate_index//:strum",
     ],

@@ -25,10 +25,6 @@ use ic_config::{
     adapters::AdaptersConfig,
     artifact_pool::ArtifactPoolTomlConfig,
     crypto::CryptoConfig,
-    embedders::Config as EmbeddersConfig,
-    embedders::FeatureFlags,
-    execution_environment::Config as HypervisorConfig,
-    flag_status::FlagStatus,
     http_handler::Config as HttpHandlerConfig,
     logger::Config as LoggerConfig,
     metrics::{Config as MetricsConfig, Exporter},
@@ -47,6 +43,7 @@ use ic_prep_lib::{
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
+use ic_starter::hypervisor_config;
 use ic_types::{Height, ReplicaVersion};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -466,12 +463,12 @@ impl CliArgs {
             Some(log_level) => match log_level.to_lowercase().as_str() {
                 // According to the principle of least surprise, accept also a
                 // few alternative log level names
-                "critical" => slog::Level::Critical,
-                "error" => slog::Level::Error,
-                "warning" => slog::Level::Warning,
-                "info" => slog::Level::Info,
-                "debug" => slog::Level::Debug,
-                "trace" => slog::Level::Trace,
+                "critical" => ic_config::logger::Level::Critical,
+                "error" => ic_config::logger::Level::Error,
+                "warning" => ic_config::logger::Level::Warning,
+                "info" => ic_config::logger::Level::Info,
+                "debug" => ic_config::logger::Level::Debug,
+                "trace" => ic_config::logger::Level::Trace,
                 _ => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
@@ -479,7 +476,7 @@ impl CliArgs {
                     ))
                 }
             },
-            None => slog::Level::Warning,
+            None => ic_config::logger::Level::Warning,
         };
 
         let artifact_pool_dir = node_dir.join("ic_consensus_pool");
@@ -584,7 +581,7 @@ fn to_subnet_features(features: &[String]) -> SubnetFeatures {
 struct ValidatedConfig {
     replica_path: Option<PathBuf>,
     replica_version: ReplicaVersion,
-    log_level: slog::Level,
+    log_level: ic_config::logger::Level,
     cargo_bin: String,
     cargo_opts: String,
     state_dir: PathBuf,
@@ -649,33 +646,7 @@ impl ValidatedConfig {
             ..Default::default()
         });
 
-        let hypervisor_config = HypervisorConfig {
-            canister_sandboxing_flag: if self.subnet_features.canister_sandboxing {
-                FlagStatus::Enabled
-            } else {
-                FlagStatus::Disabled
-            },
-            embedders_config: EmbeddersConfig {
-                feature_flags: FeatureFlags {
-                    rate_limiting_of_debug_prints: FlagStatus::Disabled,
-                    canister_logging: FlagStatus::Enabled,
-                    best_effort_responses: FlagStatus::Enabled,
-                    ..FeatureFlags::default()
-                },
-                ..EmbeddersConfig::default()
-            },
-            rate_limiting_of_heap_delta: FlagStatus::Disabled,
-            rate_limiting_of_instructions: FlagStatus::Disabled,
-            composite_queries: FlagStatus::Enabled,
-            wasm_chunk_store: FlagStatus::Enabled,
-            query_stats_aggregation: FlagStatus::Enabled,
-            query_stats_epoch_length: 60,
-            ic00_schnorr_public_key: FlagStatus::Enabled,
-            ic00_sign_with_schnorr: FlagStatus::Enabled,
-            ..HypervisorConfig::default()
-        };
-
-        let hypervisor = Some(hypervisor_config);
+        let hypervisor = Some(hypervisor_config(self.subnet_features.canister_sandboxing));
 
         let adapters_config = Some(AdaptersConfig {
             bitcoin_testnet_uds_path: self.bitcoin_testnet_uds_path.clone(),

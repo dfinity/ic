@@ -15,7 +15,6 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL, TEST_USER4_PRINCIPAL,
     TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
 };
-use ic_nns_common::registry::encode_or_panic;
 use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, InitialNiDkgTranscriptRecord};
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
@@ -25,6 +24,7 @@ use ic_protobuf::registry::{
     routing_table::v1::RoutingTable as RoutingTablePB,
     subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord},
 };
+use ic_registry_canister_api::AddNodePayload;
 use ic_registry_keys::{
     make_blessed_replica_versions_key, make_catch_up_package_contents_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
@@ -51,12 +51,8 @@ use maplit::btreemap;
 use on_wire::bytes;
 use prost::Message;
 use rand::RngCore;
-use registry_canister::mutations::{
-    common::decode_registry_value,
-    node_management::{
-        common::make_add_node_registry_mutations,
-        do_add_node::{connection_endpoint_from_string, AddNodePayload},
-    },
+use registry_canister::mutations::node_management::{
+    common::make_add_node_registry_mutations, do_add_node::connection_endpoint_from_string,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
@@ -198,14 +194,15 @@ pub async fn insert_value<T: Message + Default>(registry: &Canister<'_>, key: &[
         .update_(
             "atomic_mutate",
             bytes,
-            encode_or_panic(&RegistryAtomicMutateRequest {
+            RegistryAtomicMutateRequest {
                 mutations: vec![RegistryMutation {
                     mutation_type: Type::Insert as i32,
                     key: key.to_vec(),
-                    value: encode_or_panic(value),
+                    value: value.encode_to_vec(),
                 }],
                 preconditions: vec![],
-            }),
+            }
+            .encode_to_vec(),
         )
         .await
         .unwrap();
@@ -274,7 +271,7 @@ pub fn invariant_compliant_mutation_with_subnet_id(
         }
     };
     const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
-    let release_package_url = "http://release_package.tar.gz".to_string();
+    let release_package_url = "http://release_package.tar.zst".to_string();
     let replica_version_id = ReplicaVersion::default().to_string();
     let replica_version = ReplicaVersionRecord {
         release_package_sha256_hex: MOCK_HASH.into(),
@@ -300,20 +297,20 @@ pub fn invariant_compliant_mutation_with_subnet_id(
     let mut mutations = vec![
         insert(
             make_subnet_list_record_key().as_bytes(),
-            encode_or_panic(&subnet_list),
+            subnet_list.encode_to_vec(),
         ),
         insert(
             make_subnet_record_key(subnet_pid).as_bytes(),
-            encode_or_panic(&system_subnet),
+            system_subnet.encode_to_vec(),
         ),
         routing_table_mutation(&RoutingTable::default()),
         insert(
             make_replica_version_key(replica_version_id).as_bytes(),
-            encode_or_panic(&replica_version),
+            replica_version.encode_to_vec(),
         ),
         insert(
             make_blessed_replica_versions_key().as_bytes(),
-            encode_or_panic(&blessed_replica_version),
+            blessed_replica_version.encode_to_vec(),
         ),
     ];
     mutations.append(&mut make_add_node_registry_mutations(
@@ -348,31 +345,31 @@ pub fn new_current_node_crypto_keys_mutations(
     if let Some(pk) = &npks.node_signing_public_key {
         mutations.push(insert(
             make_crypto_node_key(node_id, KeyPurpose::NodeSigning),
-            encode_or_panic(pk),
+            pk.encode_to_vec(),
         ));
     };
     if let Some(pk) = &npks.committee_signing_public_key {
         mutations.push(insert(
             make_crypto_node_key(node_id, KeyPurpose::CommitteeSigning),
-            encode_or_panic(pk),
+            pk.encode_to_vec(),
         ));
     };
     if let Some(pk) = &npks.dkg_dealing_encryption_public_key {
         mutations.push(insert(
             make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption),
-            encode_or_panic(pk),
+            pk.encode_to_vec(),
         ));
     };
     if let Some(pk) = &npks.idkg_dealing_encryption_public_key {
         mutations.push(insert(
             make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption),
-            encode_or_panic(pk),
+            pk.encode_to_vec(),
         ));
     };
     if let Some(pk) = &npks.tls_certificate {
         mutations.push(insert(
             make_crypto_tls_cert_key(node_id),
-            encode_or_panic(pk),
+            pk.encode_to_vec(),
         ));
     };
     mutations
@@ -471,9 +468,9 @@ pub fn create_subnet_threshold_signing_pubkey_and_cup_mutations(
     vec![
         insert(
             make_crypto_threshold_signing_pubkey_key(subnet_id).as_bytes(),
-            encode_or_panic(&PublicKey::from(subnet_threshold_sig_pk)),
+            PublicKey::from(subnet_threshold_sig_pk).encode_to_vec(),
         ),
-        insert(cup_contents_key, encode_or_panic(&cup_contents)),
+        insert(cup_contents_key, cup_contents.encode_to_vec()),
     ]
 }
 
@@ -521,7 +518,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
 
     let replica_version_id = ReplicaVersion::default().to_string();
     const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
-    let release_package_url = "http://release_package.tar.gz".to_string();
+    let release_package_url = "http://release_package.tar.zst".to_string();
     let replica_version = ReplicaVersionRecord {
         release_package_sha256_hex: MOCK_HASH.into(),
         release_package_urls: vec![release_package_url],
@@ -552,23 +549,23 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
     let mut mutations = vec![
         insert(
             make_subnet_list_record_key().as_bytes(),
-            encode_or_panic(&subnet_list),
+            subnet_list.encode_to_vec(),
         ),
         insert(
             make_subnet_record_key(nns_subnet_id).as_bytes(),
-            encode_or_panic(&system_subnet),
+            system_subnet.encode_to_vec(),
         ),
         insert(
             make_routing_table_record_key().as_bytes(),
-            encode_or_panic(&RoutingTablePB::from(routing_table)),
+            RoutingTablePB::from(routing_table).encode_to_vec(),
         ),
         insert(
             make_replica_version_key(replica_version_id).as_bytes(),
-            encode_or_panic(&replica_version),
+            replica_version.encode_to_vec(),
         ),
         insert(
             make_blessed_replica_versions_key().as_bytes(),
-            encode_or_panic(&blessed_replica_version),
+            blessed_replica_version.encode_to_vec(),
         ),
     ];
 
@@ -578,7 +575,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
                 PrincipalId::try_from(&nor.node_operator_principal_id).unwrap(),
             )
             .as_bytes(),
-            encode_or_panic(nor),
+            nor.encode_to_vec(),
         ));
     }
 
@@ -675,7 +672,7 @@ pub fn prepare_registry_with_two_node_sets(
     let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(17));
     mutations.push(insert(
         make_subnet_record_key(subnet_id).as_bytes(),
-        encode_or_panic(&subnet_record),
+        subnet_record.encode_to_vec(),
     ));
 
     let mut threshold_signing_pk_and_cup_mutations_subnet_1 =
@@ -686,7 +683,7 @@ pub fn prepare_registry_with_two_node_sets(
     mutations.append(&mut threshold_signing_pk_and_cup_mutations_subnet_1);
 
     // Subnet list record
-    let mut subnet_list = decode_registry_value::<SubnetListRecord>(mutations.remove(0).value);
+    let mut subnet_list = SubnetListRecord::decode(mutations.remove(0).value.as_slice()).unwrap();
     subnet_list.subnets.push(subnet_id.get().to_vec());
 
     let mut subnet2_id_option = None;
@@ -706,7 +703,7 @@ pub fn prepare_registry_with_two_node_sets(
         subnet2_id_option = Some(subnet2_id);
         mutations.push(insert(
             make_subnet_record_key(subnet2_id).as_bytes(),
-            encode_or_panic(&subnet2_record),
+            subnet2_record.encode_to_vec(),
         ));
 
         let mut threshold_signing_pk_and_cup_mutations_subnet_2 =
@@ -721,7 +718,7 @@ pub fn prepare_registry_with_two_node_sets(
 
     mutations.push(insert(
         make_subnet_list_record_key().as_bytes(),
-        encode_or_panic(&subnet_list),
+        subnet_list.encode_to_vec(),
     ));
 
     let mutate_request = RegistryAtomicMutateRequest {
@@ -769,8 +766,8 @@ fn generate_node_keys_and_add_node_record_and_key_mutations(
                 node_operator_id: PrincipalId::new_user_test_id(999).to_vec(),
                 ..Default::default()
             };
-            mutations.push(insert(node_key.as_bytes(), encode_or_panic(&node_record)));
-            node_mutations.push(insert(node_key.as_bytes(), encode_or_panic(&node_record)));
+            mutations.push(insert(node_key.as_bytes(), node_record.encode_to_vec()));
+            node_mutations.push(insert(node_key.as_bytes(), node_record.encode_to_vec()));
             (node_id, node_pks.dkg_dealing_encryption_key().clone())
         })
         .collect()
@@ -806,13 +803,15 @@ pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePu
         generate_node_keys_once(&config, None).expect("error generating node public keys");
 
     // create payload message
-    let node_signing_pk = encode_or_panic(node_public_keys.node_signing_key());
-    let committee_signing_pk = encode_or_panic(node_public_keys.committee_signing_key());
-    let ni_dkg_dealing_encryption_pk =
-        encode_or_panic(node_public_keys.dkg_dealing_encryption_key());
-    let transport_tls_cert = encode_or_panic(node_public_keys.tls_certificate());
-    let idkg_dealing_encryption_pk =
-        encode_or_panic(node_public_keys.idkg_dealing_encryption_key());
+    let node_signing_pk = node_public_keys.node_signing_key().encode_to_vec();
+    let committee_signing_pk = node_public_keys.committee_signing_key().encode_to_vec();
+    let ni_dkg_dealing_encryption_pk = node_public_keys
+        .dkg_dealing_encryption_key()
+        .encode_to_vec();
+    let transport_tls_cert = node_public_keys.tls_certificate().encode_to_vec();
+    let idkg_dealing_encryption_pk = node_public_keys
+        .idkg_dealing_encryption_key()
+        .encode_to_vec();
 
     let payload = AddNodePayload {
         node_signing_pk,

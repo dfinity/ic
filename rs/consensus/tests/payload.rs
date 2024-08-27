@@ -2,9 +2,9 @@
 mod framework;
 
 use crate::framework::ConsensusDriver;
-use ic_artifact_pool::{consensus_pool, dkg_pool, ecdsa_pool};
+use ic_artifact_pool::{consensus_pool, dkg_pool, idkg_pool};
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
-use ic_consensus::{certification::CertifierImpl, dkg, ecdsa};
+use ic_consensus::{certification::CertifierImpl, dkg, idkg};
 use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces_state_manager::Labeled;
@@ -18,7 +18,7 @@ use ic_test_utilities::{
     xnet_payload_builder::FakeXNetPayloadBuilder,
 };
 use ic_test_utilities_consensus::batch::MockBatchPayloadBuilder;
-use ic_test_utilities_consensus::{make_genesis, EcdsaStatsNoOp};
+use ic_test_utilities_consensus::{make_genesis, IDkgStatsNoOp};
 use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
 use ic_test_utilities_state::get_initial_state;
 use ic_test_utilities_time::FastForwardTimeSource;
@@ -99,11 +99,11 @@ fn consensus_produces_expected_batches() {
             metrics_registry.clone(),
             no_op_logger(),
         )));
-        let ecdsa_pool = Arc::new(RwLock::new(ecdsa_pool::EcdsaPoolImpl::new(
+        let idkg_pool = Arc::new(RwLock::new(idkg_pool::IDkgPoolImpl::new(
             pool_config.clone(),
             no_op_logger(),
             metrics_registry.clone(),
-            Box::new(EcdsaStatsNoOp {}),
+            Box::new(IDkgStatsNoOp {}),
         )));
 
         let registry_client = setup_registry(
@@ -152,7 +152,7 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&canister_http_payload_builder) as Arc<_>,
             query_stats_payload_builder,
             Arc::clone(&dkg_pool) as Arc<_>,
-            Arc::clone(&ecdsa_pool) as Arc<_>,
+            Arc::clone(&idkg_pool) as Arc<_>,
             dkg_key_manager.clone(),
             Arc::clone(&router) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
@@ -170,7 +170,7 @@ fn consensus_produces_expected_batches() {
             metrics_registry.clone(),
             no_op_logger(),
         );
-        let ecdsa = ecdsa::EcdsaImpl::new(
+        let idkg = idkg::IDkgImpl::new(
             replica_config.node_id,
             consensus_pool.read().unwrap().get_block_cache(),
             Arc::clone(&fake_crypto) as Arc<_>,
@@ -196,11 +196,11 @@ fn consensus_produces_expected_batches() {
             Box::new(consensus),
             consensus_gossip,
             dkg,
-            Box::new(ecdsa),
+            Box::new(idkg),
             Box::new(certifier),
             consensus_pool,
             dkg_pool,
-            ecdsa_pool,
+            idkg_pool,
             no_op_logger(),
             metrics_registry,
         );

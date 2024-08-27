@@ -316,8 +316,8 @@ fn debug_http_outcalls(env: &StateMachine) -> String {
             .map(|body| std::str::from_utf8(body).unwrap())
             .expect("BUG: missing request body");
         debug_str.push(format!(
-            "{:?} {} {}",
-            context.http_method, context.url, request_body
+            "{:?} {} (max_response_bytes={:?}) {}",
+            context.http_method, context.url, context.max_response_bytes, request_body
         ));
     }
     debug_str.join("\n")

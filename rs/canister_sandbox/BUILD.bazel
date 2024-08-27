@@ -5,6 +5,7 @@ load("//bazel:defs.bzl", "rust_ic_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/constants",
     "//rs/cycles_account_manager",
@@ -40,6 +41,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/registry/routing_table",
     "//rs/test_utilities/types",
     "@crate_index//:mockall",
@@ -86,6 +88,7 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         ":backend_lib",
         ":build_script",
         "@crate_index//:libc",

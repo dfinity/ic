@@ -4,7 +4,6 @@ use candid::Encode;
 use canister_test::{Canister, Project, Runtime};
 use ic_crypto_tree_hash::{lookup_path, LabeledTree, MixedHashTree};
 use ic_interfaces_registry::RegistryTransportRecord;
-use ic_nns_common::registry::encode_or_panic;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, set_up_universal_canister,
@@ -20,6 +19,7 @@ use ic_registry_transport::{
     pb::v1::{CertifiedResponse, RegistryAtomicMutateRequest, RegistryGetChangesSinceRequest},
 };
 use ic_types::RegistryVersion;
+use prost::Message;
 use registry_canister::{
     init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder},
     proto_on_wire::protobuf,
@@ -119,7 +119,7 @@ async fn get_changes_since_certified(runtime: &Runtime, upgrade_scenario: Upgrad
             &fake_governance_canister,
             &canister,
             "atomic_mutate",
-            encode_or_panic(&mutation_request)
+            mutation_request.encode_to_vec()
         )
         .await
     );

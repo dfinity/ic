@@ -24,9 +24,10 @@ ExecStart=/bin/bash -c ' \
         --nftables-system-replicas-path /run/ic-node/etc/nftables/system_replicas.ruleset \
         --geoip-db /run/ic-node/etc/ic-boundary/GeoLite2-Country.mmdb \
         --disable-latency-routing \
+        --retry-update-call \
+        --rate-limit-per-second-per-subnet "1000" \
         ${MAX_CONCURRENCY:+ --max-concurrency "${MAX_CONCURRENCY}"} \
         ${SHED_EWMA_PARAM:+ --shed-ewma-param "${SHED_EWMA_PARAM}"} \
-        ${RPS_LIMIT_SUBNET:+ --rate-limit-per-second-per-subnet "${RPS_LIMIT_SUBNET}"} \
         ${CACHE_SIZE:+ --cache-size-bytes "${CACHE_SIZE}"} \
         ${CACHE_ITEM_MAX_SIZE:+ --cache-max-item-size-bytes "${CACHE_ITEM_MAX_SIZE}"} \
         ${CACHE_TTL:+ --cache-ttl-seconds "${CACHE_TTL}"} \

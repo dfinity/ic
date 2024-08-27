@@ -119,124 +119,6 @@ fn check_ed25519_shares(
 }
 
 #[test]
-fn verify_protocol_output_remains_unchanged_over_time_k256() -> Result<(), CanisterThresholdError> {
-    let nodes = 5;
-    let threshold = 2;
-
-    let seed = Seed::from_bytes(b"ic-crypto-tecdsa-fixed-seed");
-
-    let setup = EcdsaSignatureProtocolSetup::new(
-        TestConfig::new(IdkgProtocolAlgorithm::EcdsaSecp256k1, EccCurveType::K256),
-        nodes,
-        threshold,
-        0,
-        seed.derive("setup"),
-        true,
-    )?;
-
-    check_dealings(
-        "key",
-        &setup.key,
-        "37ce09d86d4b9c9f",
-        "22a1d27f0e1ec3ea",
-        &[
-            "7c9d61f84550aeca",
-            "879da1770269d259",
-            "156e7067e3312955",
-            "b1d63e6701cc7ad1",
-            "0ed247ceb236192c",
-        ],
-    )?;
-
-    check_dealings(
-        "key*lambda",
-        &setup.key_times_lambda,
-        "c344074c331097c9",
-        "0c26dd94115c7d5f",
-        &[
-            "22ee59398752df1a",
-            "89135c72bb2c9914",
-            "3ac4a8ba93ae014c",
-            "812e0be25da3e26f",
-            "bfb2357a9674d6ed",
-        ],
-    )?;
-
-    check_dealings(
-        "lambda",
-        &setup.lambda,
-        "8dd4614df082fe36",
-        "03a809fbb230d236",
-        &[
-            "8189addeb7d981b7",
-            "52292dae9012d268",
-            "e52ae28414154f8f",
-            "5fab6fbde6db99c1",
-            "52e3988b0b4ea6cb",
-        ],
-    )?;
-
-    check_dealings(
-        "kappa",
-        &setup.kappa,
-        "560b9083478bd271",
-        "05ec50d8c9ef6a80",
-        &[
-            "6d061eab8b87d2c5",
-            "f11109f94423fa40",
-            "4bf82cd004d6eedd",
-            "7ddfc9d91d52c730",
-            "1cd7622801758d0d",
-        ],
-    )?;
-
-    check_dealings(
-        "kappa*lambda",
-        &setup.kappa_times_lambda,
-        "07215348bb432159",
-        "37f394faf8f904f5",
-        &[
-            "4584d2b1089fa088",
-            "5d913fd32d4010fd",
-            "5ef5749e44a26eb1",
-            "0ecd8fc15cf7a63f",
-            "b3c15e8a38ebd8e2",
-        ],
-    )?;
-
-    let signed_message = seed.derive("message").into_rng().gen::<[u8; 32]>().to_vec();
-    let random_beacon =
-        ic_types::Randomness::from(seed.derive("beacon").into_rng().gen::<[u8; 32]>());
-
-    let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
-    let proto =
-        EcdsaSignatureProtocolExecution::new(setup, signed_message, random_beacon, derivation_path);
-
-    let shares = proto.generate_shares()?;
-
-    check_ecdsa_shares(
-        &shares,
-        &[
-            "197234a7fcc3799a",
-            "6a7f9a58aa48f1fc",
-            "5c2ccaa1fb1d6bd7",
-            "dcaf3c4e2363349b",
-            "f567c058c6ac8fff",
-        ],
-    )?;
-
-    let sig = proto.generate_signature(&shares).unwrap();
-
-    verify_data(
-        "signature".to_string(),
-        "3e8c9cc3ab976692",
-        &sig.serialize(),
-    );
-
-    Ok(())
-}
-
-#[test]
 fn verify_protocol_output_remains_unchanged_over_time_k256_unmasked_kappa(
 ) -> Result<(), CanisterThresholdError> {
     let nodes = 5;
@@ -251,7 +133,6 @@ fn verify_protocol_output_remains_unchanged_over_time_k256_unmasked_kappa(
         threshold,
         0,
         seed.derive("setup"),
-        false,
     )?;
 
     check_dealings(
@@ -369,7 +250,6 @@ fn verify_protocol_output_remains_unchanged_over_time_p256() -> Result<(), Canis
         threshold,
         0,
         seed.derive("setup"),
-        true,
     )?;
 
     check_dealings(
@@ -389,14 +269,14 @@ fn verify_protocol_output_remains_unchanged_over_time_p256() -> Result<(), Canis
     check_dealings(
         "key*lambda",
         &setup.key_times_lambda,
-        "aadfa658e9ab4edd",
-        "db755534d152d48a",
+        "94accc13810a7f08",
+        "2e62e0e0ea396799",
         &[
-            "6fbbb342ca7dce0b",
-            "62b64ce8eb66038b",
-            "1090b25b73f41aed",
-            "94301205a8d69918",
-            "e80f6122eec0926d",
+            "fd3113df5ba579c4",
+            "deb9a94966751daf",
+            "452281aa5065a47b",
+            "682bfcf20ce0156b",
+            "5803615e08950d9f",
         ],
     )?;
 
@@ -417,28 +297,28 @@ fn verify_protocol_output_remains_unchanged_over_time_p256() -> Result<(), Canis
     check_dealings(
         "kappa",
         &setup.kappa,
-        "12ef49bc52d8404c",
-        "40330a049570c4bd",
+        "494ae0a2b2c0a714",
+        "5037c3840f64a1ce",
         &[
-            "fca98b65204c12dc",
-            "1d4fd7cc4ef5fe9f",
-            "6d2d459e15d0f0b5",
-            "8d806521c42fd7d8",
-            "13462b4571b74bc7",
+            "c3116e3df02220c7",
+            "2596def94c9a2572",
+            "dbae6fdecb7f1928",
+            "8c5759fd01bd2bc7",
+            "ec1ad2eab886bd8e",
         ],
     )?;
 
     check_dealings(
         "kappa*lambda",
         &setup.kappa_times_lambda,
-        "a7c118c4864af7b2",
-        "eeaebef0aecf27f1",
+        "b9d9a94a8aa428c2",
+        "048c6c90783ac001",
         &[
-            "c101169675afb7ae",
-            "e8f395804bbbe4dc",
-            "b8ce0fd3b5d2f632",
-            "90154a70a3089714",
-            "e85a29c25e3cde09",
+            "70fe7cda709b5c11",
+            "ed95fdda935e2ca5",
+            "ebb82c5e901c76e2",
+            "23fc37f98e0e4796",
+            "8450c212acb0470f",
         ],
     )?;
 
@@ -455,11 +335,11 @@ fn verify_protocol_output_remains_unchanged_over_time_p256() -> Result<(), Canis
     check_ecdsa_shares(
         &shares,
         &[
-            "db8147dca7d0a751",
-            "7a193718d67d2bbc",
-            "4fe9e795491a1a73",
-            "2a8db02316b3bee4",
-            "0e31aa88ee8dd26d",
+            "4e59ae873eae8156",
+            "251a4336838a56d2",
+            "a8d1abdf5f7f8c95",
+            "c4ef98791f7ed7a3",
+            "cfdb1af1257ae2c3",
         ],
     )?;
 
@@ -488,7 +368,6 @@ fn verify_protocol_output_remains_unchanged_over_time_p256_sig_with_k256_mega(
         threshold,
         0,
         seed.derive("setup"),
-        true,
     )?;
 
     check_dealings(
@@ -508,14 +387,14 @@ fn verify_protocol_output_remains_unchanged_over_time_p256_sig_with_k256_mega(
     check_dealings(
         "key*lambda",
         &setup.key_times_lambda,
-        "d72b3943c9ffec62",
-        "5ca3a0bf99a154aa",
+        "42566e0604e35e0a",
+        "2b940e3696a06931",
         &[
-            "3d9b841aa5b443cf",
-            "11e2f6c46a9beb0d",
-            "4bde35ab78cdc664",
-            "83a98817c2b7edf4",
-            "311d92582d3948a3",
+            "a66c060cf022a552",
+            "ee44c495bbb55e91",
+            "c206961397951926",
+            "da5b58473f2970ab",
+            "2f170bf7e04617b2",
         ],
     )?;
 
@@ -536,28 +415,28 @@ fn verify_protocol_output_remains_unchanged_over_time_p256_sig_with_k256_mega(
     check_dealings(
         "kappa",
         &setup.kappa,
-        "9090aaa5dc1c488b",
-        "eb3010f61d926794",
+        "46cd1385e6e7645a",
+        "cac96382452e1eb9",
         &[
-            "7b042234c436db10",
-            "d2e14a79d3b1feae",
-            "4ecfef4b58fb537b",
-            "2429ab1a8808f905",
-            "704903eb1b98cefb",
+            "e3faa392aa28d24b",
+            "ab3e7d37e19e30e4",
+            "7d84b24afc3c77ae",
+            "d38ac43cd3f2ac30",
+            "7bfe4297b6ce1c42",
         ],
     )?;
 
     check_dealings(
         "kappa*lambda",
         &setup.kappa_times_lambda,
-        "266449ff46acb6b7",
-        "daecd8e6a6d052bf",
+        "9be435bcb7efb22f",
+        "cc02a94a53e0be88",
         &[
-            "8e5a1a6d49bdce44",
-            "4a02bc7a20c07550",
-            "260dc294ac419cf3",
-            "4dbaa3529dede11a",
-            "ac5e624f2534d6d6",
+            "0adbd3c9c0950bba",
+            "e27cb5a9b6c7b12d",
+            "526d37786a2ba2d5",
+            "dd4f1ad3759ff996",
+            "c88121198c237a99",
         ],
     )?;
 
@@ -574,11 +453,11 @@ fn verify_protocol_output_remains_unchanged_over_time_p256_sig_with_k256_mega(
     check_ecdsa_shares(
         &shares,
         &[
-            "a3011fe4b38de5e8",
-            "2345d5274a84690f",
-            "47affce36ff68b99",
-            "173804f86f557ace",
-            "e19924ed36e89c0d",
+            "12d3b0330cb53c14",
+            "714ae2e914f8c017",
+            "6d95a53e918f6497",
+            "3cfb7dc937f9c603",
+            "ab53d3c68db4f06e",
         ],
     )?;
 

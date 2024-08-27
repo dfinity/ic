@@ -2,12 +2,12 @@ use crate::invariants::common::{InvariantCheckError, RegistrySnapshot};
 
 use std::convert::TryFrom;
 
-use ic_nns_common::registry::decode_or_panic;
 use ic_protobuf::registry::routing_table::v1::{
     CanisterMigrations as pbCanisterMigrations, RoutingTable as pbRoutingTable,
 };
 use ic_registry_keys::{make_canister_migrations_record_key, make_routing_table_record_key};
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
+use prost::Message;
 
 /// Routing table invariants hold if reading and conversion succeed.
 pub(crate) fn check_routing_table_invariants(
@@ -20,10 +20,11 @@ pub(crate) fn check_routing_table_invariants(
 // Return routing table from snapshot
 fn get_routing_table(snapshot: &RegistrySnapshot) -> RoutingTable {
     match snapshot.get(make_routing_table_record_key().as_bytes()) {
-        Some(routing_table_bytes) => RoutingTable::try_from(decode_or_panic::<pbRoutingTable>(
-            (*routing_table_bytes).clone(),
-        ))
-        .unwrap(),
+        Some(routing_table_bytes) => {
+            let routing_table_proto =
+                pbRoutingTable::decode(routing_table_bytes.as_slice()).unwrap();
+            RoutingTable::try_from(routing_table_proto).unwrap()
+        }
         None => panic!("No routing table in snapshot"),
     }
 }
@@ -36,11 +37,9 @@ pub(crate) fn check_canister_migrations_invariants(
         snapshot.get(make_canister_migrations_record_key().as_bytes())
     {
         // Check if canister migrations are well formed.
-        let canister_migrations =
-            CanisterMigrations::try_from(decode_or_panic::<pbCanisterMigrations>(
-                (*canister_migrations_bytes).clone(),
-            ))
-            .unwrap();
+        let canister_migrations_proto =
+            pbCanisterMigrations::decode(canister_migrations_bytes.as_slice()).unwrap();
+        let canister_migrations = CanisterMigrations::try_from(canister_migrations_proto).unwrap();
 
         let routing_table = get_routing_table(snapshot);
         // Check if each canister range is assigned to one of the subnets on the migration trace.
@@ -89,7 +88,6 @@ mod tests {
         check_canister_migrations_invariants, check_routing_table_invariants,
     };
     use ic_base_types::CanisterId;
-    use ic_nns_common::registry::encode_or_panic;
     use ic_protobuf::registry::routing_table::v1::{
         CanisterMigrations as PbCanisterMigrations, RoutingTable as PbRoutingTable,
     };
@@ -97,6 +95,7 @@ mod tests {
     use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
     use ic_test_utilities_types::ids::subnet_test_id;
     use maplit::btreemap;
+    use prost::Message;
     use std::convert::TryFrom;
 
     #[test]
@@ -110,7 +109,7 @@ mod tests {
 
         let routing_table = PbRoutingTable::from(routing_table);
         let key1 = make_routing_table_record_key();
-        let value1 = encode_or_panic(&routing_table);
+        let value1 = routing_table.encode_to_vec();
 
         snapshot.insert(key1.into_bytes(), value1);
 
@@ -129,10 +128,10 @@ mod tests {
 
         let routing_table = PbRoutingTable::from(routing_table);
         let key1 = make_routing_table_record_key();
-        let value1 = encode_or_panic(&routing_table);
+        let value1 = routing_table.encode_to_vec();
 
         let key2 = make_canister_migrations_record_key();
-        let value2 = encode_or_panic(&PbCanisterMigrations { entries: vec![] });
+        let value2 = PbCanisterMigrations { entries: vec![] }.encode_to_vec();
 
         snapshot.insert(key1.into_bytes(), value1);
         snapshot.insert(key2.into_bytes(), value2);
@@ -153,7 +152,7 @@ mod tests {
 
         let routing_table = PbRoutingTable::from(routing_table);
         let key1 = make_routing_table_record_key();
-        let value1 = encode_or_panic(&routing_table);
+        let value1 = routing_table.encode_to_vec();
 
         snapshot.insert(key1.into_bytes(), value1);
         assert!(check_routing_table_invariants(&snapshot).is_ok());
@@ -166,7 +165,7 @@ mod tests {
 
         let canister_migrations = PbCanisterMigrations::from(canister_migrations);
         let key2 = make_canister_migrations_record_key();
-        let value2 = encode_or_panic(&canister_migrations);
+        let value2 = canister_migrations.encode_to_vec();
 
         snapshot.insert(key2.into_bytes(), value2);
         assert!(check_routing_table_invariants(&snapshot).is_ok());
@@ -180,14 +179,14 @@ mod tests {
 
         let routing_table = PbRoutingTable::from(routing_table);
         let key3 = make_routing_table_record_key();
-        let value3 = encode_or_panic(&routing_table);
+        let value3 = routing_table.encode_to_vec();
         snapshot.insert(key3.into_bytes(), value3);
         assert!(check_routing_table_invariants(&snapshot).is_ok());
         assert!(check_canister_migrations_invariants(&snapshot).is_ok());
 
         // Complete canister migrations by removing entries.
         let key4 = make_canister_migrations_record_key();
-        let value4 = encode_or_panic(&PbCanisterMigrations { entries: vec![] });
+        let value4 = PbCanisterMigrations { entries: vec![] }.encode_to_vec();
 
         snapshot.insert(key4.into_bytes(), value4);
         assert!(check_routing_table_invariants(&snapshot).is_ok());
@@ -207,7 +206,7 @@ mod tests {
 
         let routing_table = PbRoutingTable::from(routing_table);
         let key1 = make_routing_table_record_key();
-        let value1 = encode_or_panic(&routing_table);
+        let value1 = routing_table.encode_to_vec();
 
         snapshot.insert(key1.into_bytes(), value1);
         assert!(check_routing_table_invariants(&snapshot).is_ok());
@@ -222,7 +221,7 @@ mod tests {
 
         let canister_migrations = PbCanisterMigrations::from(canister_migrations);
         let key2 = make_canister_migrations_record_key();
-        let value2 = encode_or_panic(&canister_migrations);
+        let value2 = canister_migrations.encode_to_vec();
 
         snapshot.insert(key2.into_bytes(), value2);
 
@@ -243,7 +242,7 @@ mod tests {
 
         let routing_table = PbRoutingTable::from(routing_table);
         let key1 = make_routing_table_record_key();
-        let value1 = encode_or_panic(&routing_table);
+        let value1 = routing_table.encode_to_vec();
 
         // The canister migrations after preparation.
         let canister_migrations = CanisterMigrations::try_from(btreemap! {
@@ -252,7 +251,7 @@ mod tests {
 
         let canister_migrations = PbCanisterMigrations::from(canister_migrations);
         let key2 = make_canister_migrations_record_key();
-        let value2 = encode_or_panic(&canister_migrations);
+        let value2 = canister_migrations.encode_to_vec();
 
         snapshot.insert(key1.into_bytes(), value1);
         snapshot.insert(key2.into_bytes(), value2);
@@ -271,7 +270,7 @@ mod tests {
 
         let routing_table = PbRoutingTable::from(new_routing_table_1);
         let key3 = make_routing_table_record_key();
-        let value3 = encode_or_panic(&routing_table);
+        let value3 = routing_table.encode_to_vec();
         new_snapshot.insert(key3.into_bytes(), value3);
 
         assert!(check_routing_table_invariants(&new_snapshot).is_ok());
@@ -286,7 +285,7 @@ mod tests {
 
         let routing_table = PbRoutingTable::from(new_routing_table_2);
         let key4 = make_routing_table_record_key();
-        let value4 = encode_or_panic(&routing_table);
+        let value4 = routing_table.encode_to_vec();
         snapshot.insert(key4.into_bytes(), value4);
 
         assert!(check_routing_table_invariants(&snapshot).is_ok());

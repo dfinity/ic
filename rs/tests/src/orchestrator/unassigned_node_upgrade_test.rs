@@ -20,24 +20,24 @@ Success::
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_check_progress;
-use crate::orchestrator::utils::ssh_access::update_ssh_keys_for_all_unassigned_nodes;
-use crate::{
-    orchestrator::utils::ssh_access::{
-        generate_key_strings, get_updatesshreadonlyaccesskeyspayload,
-        wait_until_authentication_is_granted, AuthMean,
-    },
-    orchestrator::utils::upgrade::{fetch_unassigned_node_version, get_blessed_replica_versions},
-};
 use anyhow::bail;
 use ic_canister_client::Sender;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_consensus_system_test_utils::upgrade::{
+    fetch_unassigned_node_version, get_blessed_replica_versions,
+};
+use ic_consensus_system_test_utils::{
+    rw_message::install_nns_and_check_progress,
+    ssh_access::{
+        generate_key_strings, get_updatesshreadonlyaccesskeyspayload,
+        update_ssh_keys_for_all_unassigned_nodes, wait_until_authentication_is_granted, AuthMean,
+    },
+};
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance::init::TEST_NEURON_1_ID;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::{ic::InternetComputer, test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::{
+    driver::{ic::InternetComputer, test_env::TestEnv, test_env_api::*},
     nns::{
         self, submit_update_elected_replica_versions_proposal,
         submit_update_unassigned_node_version_proposal, vote_execute_proposal_assert_executed,
@@ -86,8 +86,7 @@ pub fn test(env: TestEnv) {
     let original_version = fetch_unassigned_node_version(&unassigned_node).unwrap();
     info!(logger, "Original replica version: {}", original_version);
 
-    let upgrade_url = env
-        .get_ic_os_update_img_test_url()
+    let upgrade_url = get_ic_os_update_img_test_url()
         .expect("no image URL")
         .to_string();
     info!(logger, "Upgrade URL: {}", upgrade_url);
@@ -103,9 +102,7 @@ pub fn test(env: TestEnv) {
         info!(logger, "Registry version: {}", reg_ver);
         let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
         info!(logger, "Initial: {:?}", blessed_versions);
-        let sha256 = env
-            .get_ic_os_update_img_test_sha256()
-            .expect("no SHA256 hash");
+        let sha256 = get_ic_os_update_img_test_sha256().expect("no SHA256 hash");
         info!(logger, "Update image SHA256: {}", sha256);
 
         // prepare for the 1. proposal

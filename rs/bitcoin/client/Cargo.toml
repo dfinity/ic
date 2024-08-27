@@ -9,8 +9,8 @@ documentation.workspace = true
 [dependencies]
 ic-adapter-metrics-client = { path = "../../monitoring/adapter_metrics/client" }
 ic-async-utils = { path = "../../async_utils" }
+ic-btc-replica-types = { path = "../replica_types" }
 ic-btc-service = { path = "../service" }
-ic-btc-types-internal = { path = "../types/internal" }
 ic-config = { path = "../../config" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-logger = { path = "../../monitoring/logger" }
@@ -22,3 +22,4 @@ slog = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
+tracing = { workspace = true }

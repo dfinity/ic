@@ -8,4 +8,4 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
-walkdir = "2.5.0"
+walkdir = { workspace = true }

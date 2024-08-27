@@ -4,10 +4,10 @@
 /// 'supervisor'.
 ///
 /// * When the supervisor fails, all supervised scopes that are being executed
-/// or have not yet started executing are failed immediately.
+///   or have not yet started executing are failed immediately.
 ///
 /// * When children have stopped executing (regardless of result), the
-/// supervising task is stopped (but not failed).
+///   supervising task is stopped (but not failed).
 ///
 /// * The supervisor is started before the children.
 ///

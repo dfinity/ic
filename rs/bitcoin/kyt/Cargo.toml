@@ -1,0 +1,13 @@
+[package]
+name = "btc-kyt-canister"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+bitcoin = { workspace = true }
+candid = { workspace = true }
+futures = { workspace = true }
+ic-cdk = { workspace = true }

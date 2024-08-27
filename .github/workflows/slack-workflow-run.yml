@@ -11,6 +11,7 @@ on:
       - Schedule Daily
       - Schedule Weekly
       - Release Testing
+      - Container IC Base Images
 
 jobs:
   slack-workflow-run:
@@ -21,21 +22,25 @@ jobs:
         id: setup
         shell: bash
         run: |
-          # TODO: change to 'eng-idx-alerts,release-management-alerts'
+          TRIGGERING_WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
           CHANNEL="eng-idx-alerts"
-          echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
-
           FULL_MESSAGE="nothing"
+
           if [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(success)$ ]]; then
-            if [[ "$BRANCH_NAME" =~ rc--.* ]]; then
-              FULL_MESSAGE=":white_check_mark: ${MESSAGE} :relaxed:"
-            fi
+            FULL_MESSAGE=":white_check_mark: ${MESSAGE} :relaxed:"
           elif [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(failure|timed_out)$ ]]; then
             FULL_MESSAGE=":fire: ${MESSAGE} :disappointed:"
           fi
+
+          if [[ "$TRIGGERING_WORKFLOW_NAME" == "Release Testing" ]]; then
+            CHANNEL="release-management-alerts"
+            COMMIT="${{ github.event.workflow_run.head_sha }}"
+            FULL_MESSAGE="${FULL_MESSAGE} commit: ${COMMIT}"
+          fi
+
+          echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
           echo "message=${FULL_MESSAGE}" >> $GITHUB_OUTPUT
         env:
-          BRANCH_NAME: "${{ github.head_ref || github.ref_name }}"
           MESSAGE: "*${{github.event.workflow_run.name}}* ${{github.event.workflow_run.conclusion}} on ${{github.event.workflow_run.head_branch}} - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.event.workflow_run.id}}|Run#${{github.event.workflow_run.id}}>"
 
       - name: Post Slack Notification

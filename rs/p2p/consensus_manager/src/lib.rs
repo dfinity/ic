@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use crate::{
     metrics::ConsensusManagerMetrics,
@@ -7,14 +7,11 @@ use crate::{
 };
 use axum::Router;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::{
-    artifact_manager::ArtifactProcessorEvent,
-    consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader},
-};
+use ic_interfaces::p2p::consensus::{ArtifactAssembler, ArtifactMutation};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_quic_transport::{ConnId, SubnetTopology, Transport};
-use ic_types::artifact::{ArtifactKind, UnvalidatedArtifactMutation};
+use ic_quic_transport::{ConnId, Shutdown, SubnetTopology, Transport};
+use ic_types::artifact::{IdentifiableArtifact, PbArtifact, UnvalidatedArtifactMutation};
 use phantom_newtype::AmountOf;
 use tokio::{
     runtime::Handle,
@@ -23,13 +20,13 @@ use tokio::{
         watch,
     },
 };
-use tokio_util::sync::CancellationToken;
 
 mod metrics;
 mod receiver;
 mod sender;
 
-type StartConsensusManagerFn = Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>)>;
+type StartConsensusManagerFn =
+    Box<dyn FnOnce(Arc<dyn Transport>, watch::Receiver<SubnetTopology>) -> Shutdown>;
 
 pub struct ConsensusManagerBuilder {
     log: ReplicaLogger,
@@ -37,7 +34,6 @@ pub struct ConsensusManagerBuilder {
     rt_handle: Handle,
     clients: Vec<StartConsensusManagerFn>,
     router: Option<Router>,
-    cancellation_token: CancellationToken,
 }
 
 impl ConsensusManagerBuilder {
@@ -48,26 +44,28 @@ impl ConsensusManagerBuilder {
             rt_handle,
             clients: Vec::new(),
             router: None,
-            cancellation_token: CancellationToken::new(),
         }
     }
 
-    pub fn add_client<Artifact, Pool>(
+    pub fn add_client<
+        Artifact: IdentifiableArtifact,
+        WireArtifact: PbArtifact,
+        F: FnOnce(Arc<dyn Transport>) -> D + 'static,
+        D: ArtifactAssembler<Artifact, WireArtifact>,
+    >(
         &mut self,
-        outbound_artifacts_rx: Receiver<ArtifactProcessorEvent<Artifact>>,
-        pool: Arc<RwLock<Pool>>,
-        priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
+        outbound_artifacts_rx: Receiver<ArtifactMutation<Artifact>>,
         inbound_artifacts_tx: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
-    ) where
-        Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
-        Artifact: ArtifactKind,
-    {
-        let (router, adverts_from_peers_rx) = build_axum_router(self.log.clone(), pool.clone());
+        (assembler, assembler_router): (F, Router),
+    ) {
+        assert!(uri_prefix::<WireArtifact>()
+            .chars()
+            .all(char::is_alphabetic));
+        let (router, adverts_from_peers_rx) = build_axum_router(self.log.clone());
 
         let log = self.log.clone();
         let rt_handle = self.rt_handle.clone();
         let metrics_registry = self.metrics_registry.clone();
-        let cancellation_token = self.cancellation_token.child_token();
 
         let builder = move |transport: Arc<dyn Transport>, topology_watcher| {
             start_consensus_manager(
@@ -76,16 +74,20 @@ impl ConsensusManagerBuilder {
                 rt_handle,
                 outbound_artifacts_rx,
                 adverts_from_peers_rx,
-                pool,
-                priority_fn_producer,
                 inbound_artifacts_tx,
+                assembler(transport.clone()),
                 transport,
                 topology_watcher,
-                cancellation_token,
             )
         };
 
-        self.router = Some(self.router.take().unwrap_or_default().merge(router));
+        self.router = Some(
+            self.router
+                .take()
+                .unwrap_or_default()
+                .merge(router)
+                .merge(assembler_router),
+        );
 
         self.clients.push(Box::new(builder));
     }
@@ -98,41 +100,42 @@ impl ConsensusManagerBuilder {
         self,
         transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
-    ) -> CancellationToken {
+    ) -> Vec<Shutdown> {
+        let mut ret = vec![];
         for client in self.clients {
-            client(transport.clone(), topology_watcher.clone());
+            ret.push(client(transport.clone(), topology_watcher.clone()));
         }
-        self.cancellation_token
+        ret
     }
 }
 
-fn start_consensus_manager<Artifact, Pool>(
+fn start_consensus_manager<Artifact, WireArtifact, Assembler>(
     log: ReplicaLogger,
     metrics_registry: &MetricsRegistry,
     rt_handle: Handle,
     // Locally produced adverts to send to the node's peers.
-    adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
+    adverts_to_send: Receiver<ArtifactMutation<Artifact>>,
     // Adverts received from peers
-    adverts_received: Receiver<(SlotUpdate<Artifact>, NodeId, ConnId)>,
-    raw_pool: Arc<RwLock<Pool>>,
-    priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
+    adverts_received: Receiver<(SlotUpdate<WireArtifact>, NodeId, ConnId)>,
     sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
+    assembler: Assembler,
     transport: Arc<dyn Transport>,
     topology_watcher: watch::Receiver<SubnetTopology>,
-    cancellation_token: CancellationToken,
-) where
-    Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
-    Artifact: ArtifactKind,
+) -> Shutdown
+where
+    Artifact: IdentifiableArtifact,
+    WireArtifact: PbArtifact,
+    Assembler: ArtifactAssembler<Artifact, WireArtifact>,
 {
-    let metrics = ConsensusManagerMetrics::new::<Artifact>(metrics_registry);
+    let metrics = ConsensusManagerMetrics::new::<WireArtifact>(metrics_registry);
 
-    ConsensusManagerSender::run(
+    let shutdown = ConsensusManagerSender::<Artifact, WireArtifact, _>::run(
         log.clone(),
         metrics.clone(),
         rt_handle.clone(),
         transport.clone(),
         adverts_to_send,
-        cancellation_token,
+        assembler.clone(),
     );
 
     ConsensusManagerReceiver::run(
@@ -140,27 +143,26 @@ fn start_consensus_manager<Artifact, Pool>(
         metrics,
         rt_handle,
         adverts_received,
-        raw_pool,
-        priority_fn_producer,
+        assembler,
         sender,
-        transport,
         topology_watcher,
     );
+    shutdown
 }
 
-pub(crate) struct SlotUpdate<Artifact: ArtifactKind> {
+pub(crate) struct SlotUpdate<Artifact: PbArtifact> {
     slot_number: SlotNumber,
     commit_id: CommitId,
     update: Update<Artifact>,
 }
 
-pub(crate) enum Update<Artifact: ArtifactKind> {
-    Artifact(Artifact::Message),
-    Advert((Artifact::Id, Artifact::Attribute)),
+pub(crate) enum Update<Artifact: PbArtifact> {
+    Artifact(Artifact),
+    Id(Artifact::Id),
 }
 
-pub(crate) fn uri_prefix<Artifact: ArtifactKind>() -> String {
-    Artifact::TAG.to_string().to_lowercase()
+pub fn uri_prefix<Artifact: PbArtifact>() -> String {
+    Artifact::NAME.to_lowercase()
 }
 
 struct SlotNumberTag;
@@ -168,33 +170,3 @@ pub(crate) type SlotNumber = AmountOf<SlotNumberTag, u64>;
 
 struct CommitIdTag;
 pub(crate) type CommitId = AmountOf<CommitIdTag, u64>;
-
-#[cfg(test)]
-mod tests {
-    use ic_types::artifact_kind::{
-        CanisterHttpArtifact, CertificationArtifact, ConsensusArtifact, DkgArtifact, EcdsaArtifact,
-        IngressArtifact,
-    };
-
-    use crate::uri_prefix;
-
-    #[test]
-    fn no_special_chars_in_uri() {
-        assert!(uri_prefix::<ConsensusArtifact>()
-            .chars()
-            .all(char::is_alphabetic));
-        assert!(uri_prefix::<CertificationArtifact>()
-            .chars()
-            .all(char::is_alphabetic));
-        assert!(uri_prefix::<DkgArtifact>().chars().all(char::is_alphabetic));
-        assert!(uri_prefix::<IngressArtifact>()
-            .chars()
-            .all(char::is_alphabetic));
-        assert!(uri_prefix::<EcdsaArtifact>()
-            .chars()
-            .all(char::is_alphabetic));
-        assert!(uri_prefix::<CanisterHttpArtifact>()
-            .chars()
-            .all(char::is_alphabetic));
-    }
-}

@@ -2,7 +2,7 @@ use crate::{archive::ArchiveCanisterWasm, blockchain::Blockchain, range_utils, r
 use ic_base_types::CanisterId;
 use ic_canister_log::{log, Sink};
 use ic_ledger_core::approvals::{
-    Approvals, ApproveError, InsufficientAllowance, PrunableApprovals,
+    AllowanceTable, AllowancesData, ApproveError, InsufficientAllowance,
 };
 use ic_ledger_core::tokens::Zero;
 use serde::{Deserialize, Serialize};
@@ -63,16 +63,16 @@ impl<Tokens> From<ApproveError<Tokens>> for TxApplyError<Tokens> {
 
 pub trait LedgerContext {
     type AccountId: std::hash::Hash + Ord + Eq + Clone;
-    type Approvals: Approvals<AccountId = Self::AccountId, Tokens = Self::Tokens>
-        + PrunableApprovals;
     type BalancesStore: BalancesStore<AccountId = Self::AccountId, Tokens = Self::Tokens> + Default;
+    type AllowancesData: AllowancesData<AccountId = Self::AccountId, Tokens = Self::Tokens>
+        + Default;
     type Tokens: TokensType;
 
     fn balances(&self) -> &Balances<Self::BalancesStore>;
     fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore>;
 
-    fn approvals(&self) -> &Self::Approvals;
-    fn approvals_mut(&mut self) -> &mut Self::Approvals;
+    fn approvals(&self) -> &AllowanceTable<Self::AllowancesData>;
+    fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData>;
 
     fn fee_collector(&self) -> Option<&FeeCollector<Self::AccountId>>;
 }

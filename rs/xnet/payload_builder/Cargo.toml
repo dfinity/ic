@@ -8,8 +8,9 @@ documentation.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
-hyper = { version = "0.14.18", features = ["full", "tcp"] }
-ic-async-utils = { path = "../../async_utils" }
+http-body-util = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canonical-state = { path = "../../canonical_state" }
 ic-constants = { path = "../../constants" }
@@ -32,10 +33,12 @@ ic-xnet-uri = { path = "../uri" }
 prometheus = { workspace = true }
 rand = { workspace = true }
 slog = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+axum = { workspace = true }
 ic-config = { path = "../../config" }
 ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
 ic-interfaces-certified-stream-store-mocks = { path = "../../interfaces/certified_stream_store/mocks" }
@@ -57,5 +60,4 @@ nix = { workspace = true }
 proptest = "1.0"
 reqwest = { workspace = true }
 tempfile = { workspace = true }
-axum = { workspace = true }
-url = "2.1.1"
+url = { workspace = true }

@@ -12,3 +12,4 @@ pub const API_VERSION: &str = "1.4.10";
 pub const NODE_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const DEFAULT_TOKEN_SYMBOL: &str = "ICP";
 pub const DEFAULT_BLOCKCHAIN: &str = "Internet Computer";
+pub const MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST: u64 = 10000;

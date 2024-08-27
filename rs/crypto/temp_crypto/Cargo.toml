@@ -15,8 +15,8 @@ ic-crypto-interfaces-sig-verification = { path = "../interfaces/sig_verification
 ic-crypto-internal-csp = { path = "../internal/crypto_service_provider" }
 ic-crypto-internal-logmon = { path = "../internal/logmon" }
 ic-crypto-node-key-generation = { path = "../node_key_generation" }
-ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
 ic-crypto-temp-crypto-vault = { path = "temp_vault" }
+ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
 ic-crypto-utils-basic-sig = { path = "../utils/basic_sig" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
@@ -27,7 +27,7 @@ ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-types = { path = "../../types/types" }
 rand = { workspace = true }
-rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
+rustls = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 

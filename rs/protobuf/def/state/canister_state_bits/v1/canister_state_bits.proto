@@ -102,6 +102,7 @@ message WasmMethod {
     SYSTEM_METHOD_CANISTER_HEARTBEAT = 6;
     reserved 7; // deprecated SYSTEM_METHOD_EMPTY
     SYSTEM_METHOD_CANISTER_GLOBAL_TIMER = 8;
+    SYSTEM_METHOD_CANISTER_ON_LOW_WASM_MEMORY = 9;
   }
   oneof wasm_method {
     string update = 1;
@@ -183,6 +184,7 @@ message ExecutionTask {
     CANISTER_TASK_UNSPECIFIED = 0;
     CANISTER_TASK_HEARTBEAT = 1;
     CANISTER_TASK_TIMER = 2;
+    CANISTER_TASK_ON_LOW_WASM_MEMORY = 3;
   }
 
   message AbortedExecution {
@@ -310,10 +312,26 @@ message WasmChunkStoreMetadata {
   uint64 size = 2;
 }
 
+// TODO(EXC-1670): Migrate to pb_canister_state_bits::LogVisibilityV2.
+// The current enum only supports i32 values, which limits the
+// storage of allowed_viewers principals. LogVisibilityV2 will
+// support both enum values and a list of principals.
 enum LogVisibility {
   LOG_VISIBILITY_UNSPECIFIED = 0;
   LOG_VISIBILITY_CONTROLLERS = 1;
   LOG_VISIBILITY_PUBLIC = 2;
+}
+
+message LogVisibilityAllowedViewers {
+  repeated types.v1.PrincipalId principals = 1;
+}
+
+message LogVisibilityV2 {
+  oneof log_visibility_v2 {
+    int32 controllers = 1;
+    int32 public = 2;
+    LogVisibilityAllowedViewers allowed_viewers = 3;
+  }
 }
 
 message CanisterLogRecord {
@@ -401,7 +419,9 @@ message CanisterStateBits {
   // Statistics on query execution for entire lifetime of canister.
   TotalQueryStats total_query_stats = 41;
   // Log visibility for the canister.
-  LogVisibility log_visibility = 42;
+  LogVisibility log_visibility = 42; // TODO(EXC-1670): remove this field.
+  // Log visibility for the canister.
+  LogVisibilityV2 log_visibility_v2 = 51;
   // Log records of the canister.
   repeated CanisterLogRecord canister_log_records = 43;
   // The index of the next log record to be created.
@@ -413,7 +433,10 @@ message CanisterStateBits {
   optional uint64 wasm_memory_limit = 45;
   // The next local snapshot ID.
   uint64 next_snapshot_id = 46;
+  // Captures the memory usage of all snapshots associated with a canister.
+  uint64 snapshots_memory_usage = 52;
   reserved 47;
   int64 priority_credit = 48;
   LongExecutionMode long_execution_mode = 49;
+  optional uint64 wasm_memory_threshold = 50;
 }

@@ -6,9 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+ic-base-types = { path = "../../types/base_types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-base-types = { path = "../../types/base_types" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-quic-transport = { path = "../quic_transport" }
@@ -20,5 +20,5 @@ tokio = { workspace = true }
 
 [dev-dependencies]
 ic-p2p-test-utils = { path = "../test_utils" }
-ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }

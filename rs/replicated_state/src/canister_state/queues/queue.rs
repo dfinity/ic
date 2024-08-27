@@ -9,6 +9,8 @@ use ic_protobuf::state::{ingress::v1 as pb_ingress, queues::v1 as pb_queues};
 use ic_types::messages::{Ingress, Request, RequestOrResponse, Response, NO_DEADLINE};
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{CountBytes, Cycles, Time};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use std::collections::{BTreeMap, VecDeque};
 use std::convert::{From, TryFrom, TryInto};
 use std::mem::size_of;
@@ -93,7 +95,7 @@ impl CanisterQueueItem {
 /// for that response to be consumed while the request still consumes a slot in
 /// the queue; so we must additionally explicitly limit the number of slots used
 /// by requests to the queue capacity.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
 pub(crate) struct CanisterQueue {
     /// A FIFO queue of requests and responses.
     ///
@@ -341,7 +343,7 @@ impl TryFrom<(InputQueue, &mut MessagePool)> for CanisterQueue {
     type Error = ProxyDecodeError;
 
     fn try_from((iq, pool): (InputQueue, &mut MessagePool)) -> Result<Self, Self::Error> {
-        let mut queue = VecDeque::with_capacity(iq.num_messages());
+        let mut queue = VecDeque::with_capacity(iq.len());
         for msg in iq.queue.queue.into_iter() {
             let id = pool.insert_inbound(msg);
             queue.push_back(CanisterQueueItem::Reference(id));
@@ -561,12 +563,13 @@ impl QueueItem<Option<RequestOrResponse>> for Option<RequestOrResponse> {
 /// reserve a slot for a response; and later push the response into the reserved
 /// slot, consuming the slot reservation. Attempting to push a response with no
 /// reserved slot available will produce an error.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct QueueWithReservation<T: QueueItem<T> + std::clone::Clone> {
+#[derive(Clone, Debug, PartialEq, Eq, Hash, ValidateEq)]
+struct QueueWithReservation<T: QueueItem<T> + std::clone::Clone + ValidateEq> {
     /// A FIFO queue of all requests and responses. Since responses may be enqueued
     /// at arbitrary points in time, response reservations cannot be explicitly
     /// represented in `queue`. They only exist as the difference between
     /// `num_responses + num_requests` and `queue.len()`.
+    #[validate_eq(CompareWithValidateEq)]
     queue: VecDeque<T>,
     /// Maximum number of requests; or responses + reservations; allowed by the
     /// queue at any one time.
@@ -577,7 +580,7 @@ struct QueueWithReservation<T: QueueItem<T> + std::clone::Clone> {
     num_response_slots: usize,
 }
 
-impl<T: QueueItem<T> + std::clone::Clone> QueueWithReservation<T> {
+impl<T: QueueItem<T> + std::clone::Clone + ValidateEq> QueueWithReservation<T> {
     fn new(capacity: usize) -> Self {
         let queue = VecDeque::new();
 
@@ -654,8 +657,12 @@ impl<T: QueueItem<T> + std::clone::Clone> QueueWithReservation<T> {
             Ok(())
         } else {
             Err((
-                StateError::QueueFull {
-                    capacity: self.capacity,
+                StateError::NonMatchingResponse {
+                    err_str: "No reserved response slot".to_string(),
+                    originator: response.originator,
+                    callback_id: response.originator_reply_callback,
+                    respondent: response.respondent,
+                    deadline: response.deadline,
                 },
                 response,
             ))
@@ -818,8 +825,9 @@ impl TryFrom<pb_queues::InputOutputQueue> for QueueWithReservation<Option<Reques
 
 /// Representation of a single canister input queue. There is an upper bound on
 /// the number of messages it can store.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, ValidateEq)]
 pub(super) struct InputQueue {
+    #[validate_eq(CompareWithValidateEq)]
     queue: QueueWithReservation<RequestOrResponse>,
 }
 
@@ -867,7 +875,7 @@ impl InputQueue {
     }
 
     /// Returns the number of messages in the queue.
-    pub(super) fn num_messages(&self) -> usize {
+    pub(super) fn len(&self) -> usize {
         self.queue.queue.len()
     }
 
@@ -945,8 +953,9 @@ impl TryFrom<pb_queues::InputOutputQueue> for InputQueue {
 /// Additionally, an invariant is imposed such that there is always `Some` at the
 /// front. This is ensured when a message is popped off the queue by also popping
 /// any subsequent `None` items.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, ValidateEq)]
 pub(crate) struct OutputQueue {
+    #[validate_eq(CompareWithValidateEq)]
     queue: QueueWithReservation<Option<RequestOrResponse>>,
     /// Queue begin index.
     ///
@@ -1190,8 +1199,8 @@ impl OutputQueue {
     /// Returns an iterator over the underlying messages.
     ///
     /// For testing purposes only.
-    pub(super) fn iter_for_testing(&self) -> impl Iterator<Item = &Option<RequestOrResponse>> {
-        self.queue.queue.iter()
+    pub(super) fn iter_for_testing(&self) -> impl Iterator<Item = RequestOrResponse> + '_ {
+        self.queue.queue.iter().filter_map(|item| item.clone())
     }
 }
 
@@ -1325,13 +1334,14 @@ impl TryFrom<pb_queues::InputOutputQueue> for OutputQueue {
 ///
 /// When `skip_ingress_input()` is called canister from the front of the
 /// `schedule` is moved to its back.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, ValidateEq)]
 pub(super) struct IngressQueue {
     // Schedule of canisters that have Ingress messages to be processed.
     // Because `effective_canister_id` of `Ingress` message has type Option<CanisterId>,
     // the same type is used for entries `schedule` and keys in `queues`.
     schedule: VecDeque<Option<CanisterId>>,
     // Per canister queue of Ingress messages.
+    #[validate_eq(CompareWithValidateEq)]
     queues: BTreeMap<Option<CanisterId>, VecDeque<Arc<Ingress>>>,
     // Total number of Ingress messages that are waiting to be executed.
     total_ingress_count: usize,

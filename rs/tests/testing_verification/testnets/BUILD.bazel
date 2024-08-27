@@ -1,7 +1,7 @@
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_ENV", "SNS_CANISTER_ENV", "SNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 # the "_test" postfixes in names are dropped on purpose since this target is meant for interactive use.
 
@@ -33,7 +33,7 @@ system_test(
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "single_app_large_node_with_nns",
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -43,11 +43,11 @@ system_test(
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "small",
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -56,11 +56,24 @@ system_test(
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
+    name = "from_config",
+    flaky = False,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test_nns(
     name = "small_nns",
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -69,7 +82,7 @@ system_test(
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
+    runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "//rs/rosetta-api/icrc1/ledger:ledger_canister.wasm.gz",
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
@@ -78,8 +91,14 @@ system_test(
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "small_with_query_stats",
+    env = {
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
+        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+        "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
+        "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+    },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -87,8 +106,8 @@ system_test(
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
-        "//rs/rosetta-api/icrc1/ledger:ledger_canister.wasm.gz",
+    runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
+        "//rs/rosetta-api/icrc1/ledger:ledger_canister",
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
         "@subnet_rental_canister//file",
@@ -96,8 +115,14 @@ system_test(
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "sns_testing",
+    env = SNS_CANISTER_ENV | {
+        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+        "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+        "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+    },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -105,8 +130,7 @@ system_test(
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
-        "//rs/rosetta-api/icrc1/ledger:ledger_canister.wasm.gz",
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
         "@sns_aggregator//file",
@@ -115,7 +139,7 @@ system_test(
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "medium",
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -124,12 +148,18 @@ system_test(
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "large",
+    env = SNS_CANISTER_ENV | {
+        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+        "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+        "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+    },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -137,8 +167,7 @@ system_test(
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
-        "//rs/rosetta-api/icrc1/ledger:ledger_canister.wasm.gz",
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
         "@sns_aggregator//file",
@@ -147,8 +176,15 @@ system_test(
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test(
+system_test_nns(
     name = "src_testing",
+    env = SNS_CANISTER_ENV | {
+        "XRC_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
+        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+        "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
+        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
+        "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+    },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -156,9 +192,8 @@ system_test(
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
-        "//rs/rosetta-api/icrc1/ledger:ledger_canister.wasm.gz",
-        "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister.wasm.gz",
+    runtime_deps = GUESTOS_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
+        "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
         "@sns_aggregator//file",
@@ -180,6 +215,7 @@ system_test(
         "vcpus": 16,
         "boot_image_minimal_size_gibibytes": 100,
     },
+    env = NNS_CANISTER_ENV,
     env_inherit = ["SSH_AUTH_SOCK"],
     flaky = True,
     tags = [
@@ -193,6 +229,7 @@ system_test(
     test_timeout = "eternal",
     runtime_deps = IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS,
     deps = [
+        # Keep sorted.
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nns/ic_mainnet_nns_recovery",
         "@crate_index//:anyhow",

@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/interfaces",
     "//rs/interfaces/state_manager",
@@ -16,6 +17,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/interfaces/state_manager/mocks",
     "//rs/test_utilities",
     "//rs/test_utilities/state",

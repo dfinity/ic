@@ -20,6 +20,14 @@ pub struct NeuronId {
     #[serde(with = "serde_bytes")]
     pub id: ::prost::alloc::vec::Vec<u8>,
 }
+/// A sequence of NeuronIds, which is used to get prost to generate a type isomorphic to Option<Vec<NeuronId>>.
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NeuronIds {
+    #[prost(message, repeated, tag = "1")]
+    pub neuron_ids: ::prost::alloc::vec::Vec<NeuronId>,
+}
 /// The id of a specific proposal.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable, Eq, Copy)]
 #[self_describing]
@@ -2511,7 +2519,13 @@ pub struct GetModeResponse {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ClaimSwapNeuronsRequest {
     /// The set of parameters that define the neurons created in `claim_swap_neurons`. For
+    /// each NeuronRecipe, one neuron will be created.
+    #[prost(message, optional, tag = "2")]
+    pub neuron_recipes: ::core::option::Option<claim_swap_neurons_request::NeuronRecipes>,
+    /// The set of parameters that define the neurons created in `claim_swap_neurons`. For
     /// each NeuronParameter, one neuron will be created.
+    /// Deprecated. Use \[`recipes`\] instead.
+    #[deprecated]
     #[prost(message, repeated, tag = "1")]
     pub neuron_parameters: ::prost::alloc::vec::Vec<claim_swap_neurons_request::NeuronParameters>,
 }
@@ -2519,6 +2533,7 @@ pub struct ClaimSwapNeuronsRequest {
 pub mod claim_swap_neurons_request {
     /// NeuronParameters groups parameters for creating a neuron in the
     /// `claim_swap_neurons` method.
+    /// TODO(NNS1-3198): Remove this message once `NeuronRecipe` is used systematically.
     #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2563,6 +2578,72 @@ pub mod claim_swap_neurons_request {
         /// relations can be added after neuron creation.
         #[prost(message, repeated, tag = "8")]
         pub followees: ::prost::alloc::vec::Vec<super::NeuronId>,
+    }
+    /// Replacement for NeuronParameters. Contains the information needed to set up
+    /// a neuron for a swap participant.
+    #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct NeuronRecipe {
+        /// The principal that should be the controller of the SNS neuron
+        #[prost(message, optional, tag = "1")]
+        pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
+        /// The ID of the SNS neuron
+        #[prost(message, optional, tag = "2")]
+        pub neuron_id: ::core::option::Option<super::NeuronId>,
+        /// The SNS neuron's stake in e8s (10E-8 of a token)
+        #[prost(uint64, optional, tag = "3")]
+        pub stake_e8s: ::core::option::Option<u64>,
+        /// The duration in seconds that the neuron's dissolve delay will be set to.
+        #[prost(uint64, optional, tag = "4")]
+        pub dissolve_delay_seconds: ::core::option::Option<u64>,
+        /// The neurons this neuron should follow
+        #[prost(message, optional, tag = "5")]
+        pub followees: ::core::option::Option<super::NeuronIds>,
+        #[prost(oneof = "neuron_recipe::Participant", tags = "6, 7")]
+        pub participant: ::core::option::Option<neuron_recipe::Participant>,
+    }
+    /// Nested message and enum types in `NeuronRecipe`.
+    pub mod neuron_recipe {
+        /// The info that for a participant in the Neurons' Fund
+        #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+        #[allow(clippy::derive_partial_eq_without_eq)]
+        #[derive(Clone, PartialEq, ::prost::Message)]
+        pub struct NeuronsFund {
+            /// The neuron ID of the NNS neuron that participated in the Neurons' Fund.
+            #[prost(uint64, optional, tag = "1")]
+            pub nns_neuron_id: ::core::option::Option<u64>,
+            /// The controller of the NNS neuron that participated in the Neurons' Fund.
+            #[prost(message, optional, tag = "2")]
+            pub nns_neuron_controller: ::core::option::Option<::ic_base_types::PrincipalId>,
+            /// The hotkeys of the NNS neuron that participated in the Neurons' Fund.
+            #[prost(message, optional, tag = "3")]
+            pub nns_neuron_hotkeys:
+                ::core::option::Option<::ic_nervous_system_proto::pb::v1::Principals>,
+        }
+        /// The info that for a direct participant
+        #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+        #[allow(clippy::derive_partial_eq_without_eq)]
+        #[derive(Clone, PartialEq, ::prost::Message)]
+        pub struct Direct {}
+        #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+        #[allow(clippy::derive_partial_eq_without_eq)]
+        #[derive(Clone, PartialEq, ::prost::Oneof)]
+        pub enum Participant {
+            #[prost(message, tag = "6")]
+            Direct(Direct),
+            #[prost(message, tag = "7")]
+            NeuronsFund(NeuronsFund),
+        }
+    }
+    /// Needed to cause prost to generate a type isomorphic to
+    /// Optional<Vec<NeuronRecipe>>.
+    #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct NeuronRecipes {
+        #[prost(message, repeated, tag = "1")]
+        pub neuron_recipes: ::prost::alloc::vec::Vec<NeuronRecipe>,
     }
 }
 /// The response for the `claim_swap_neurons` method.

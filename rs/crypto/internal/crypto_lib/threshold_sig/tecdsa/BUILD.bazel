@@ -5,6 +5,7 @@ load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/crypto_lib/hmac",
     "//rs/crypto/internal/crypto_lib/seed",
     "//rs/crypto/internal/crypto_lib/types",
@@ -12,9 +13,9 @@ DEPENDENCIES = [
     "//rs/crypto/sha2",
     "//rs/types/types",
     "@crate_index//:curve25519-dalek",
+    "@crate_index//:group",
     "@crate_index//:hex",
     "@crate_index//:hex-literal",
-    "@crate_index//:group",
     "@crate_index//:k256",
     "@crate_index//:lazy_static",
     "@crate_index//:p256",
@@ -28,18 +29,20 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/fe-derive",
     "@crate_index//:paste",
     "@crate_index//:strum_macros",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/test_utils",
     "//rs/crypto/test_utils/reproducible_rng",
     "@crate_index//:assert_matches",
     "@crate_index//:bip32",
-    "@crate_index//:ed25519-dalek",
     "@crate_index//:criterion",
+    "@crate_index//:ed25519-dalek",
     "@crate_index//:num-traits",
 ]
 
@@ -85,6 +88,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/dealings.rs"],
     deps = [
+        # Keep sorted.
         ":tecdsa",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/rust_canisters/canister_test",
@@ -99,6 +103,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/group_ops.rs"],
     deps = [
+        # Keep sorted.
         ":tecdsa",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
@@ -111,6 +116,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/hash2curve.rs"],
     deps = [
+        # Keep sorted.
         ":tecdsa",
         "@crate_index//:criterion",
     ],
@@ -121,6 +127,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/key_derivation.rs"],
     deps = [
+        # Keep sorted.
         ":tecdsa",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/types/types",
@@ -134,6 +141,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/poly.rs"],
     deps = [
+        # Keep sorted.
         ":tecdsa",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
@@ -146,6 +154,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/zk.rs"],
     deps = [
+        # Keep sorted.
         ":tecdsa",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",

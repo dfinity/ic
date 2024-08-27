@@ -3,18 +3,24 @@ use crate::{
     CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{unbounded, Sender};
-use ic_base_types::{subnet_id_try_from_protobuf, CanisterId};
+use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, SnapshotId};
 use ic_config::flag_status::FlagStatus;
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_snapshots::CanisterSnapshots;
+use ic_replicated_state::canister_snapshots::{
+    CanisterSnapshot, CanisterSnapshots, ExecutionStateSnapshot, PageMemory,
+};
+use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
     ExecutionState, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
-use ic_state_layout::{CanisterLayout, CanisterStateBits, CheckpointLayout, ReadOnly};
+use ic_state_layout::{
+    CanisterLayout, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, ReadOnly,
+    ReadPolicy, SnapshotLayout,
+};
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
 use ic_utils::thread::parallel_map;
@@ -131,6 +137,8 @@ pub(crate) fn make_checkpoint(
         )?
     };
 
+    cp.remove_unverified_checkpoint_marker()?;
+
     Ok((cp, state, has_downgrade))
 }
 
@@ -153,13 +161,28 @@ pub fn load_checkpoint_parallel(
     )
 }
 
+/// Calls [load_checkpoint_parallel] and removes the unverified checkpoint marker.
+/// This combination is useful when marking a checkpoint as verified immediately after a successful loading.
+pub fn load_checkpoint_parallel_and_mark_verified(
+    checkpoint_layout: &CheckpointLayout<ReadOnly>,
+    own_subnet_type: SubnetType,
+    metrics: &CheckpointMetrics,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+) -> Result<ReplicatedState, CheckpointError> {
+    let state = load_checkpoint_parallel(checkpoint_layout, own_subnet_type, metrics, fd_factory)?;
+    checkpoint_layout
+        .remove_unverified_checkpoint_marker()
+        .map_err(CheckpointError::from)?;
+    Ok(state)
+}
+
 /// Loads the node state heighted with `height` using the specified
 /// directory layout.
 pub fn load_checkpoint(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
     own_subnet_type: SubnetType,
     metrics: &CheckpointMetrics,
-    thread_pool: Option<&mut scoped_threadpool::Pool>,
+    mut thread_pool: Option<&mut scoped_threadpool::Pool>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<ReplicatedState, CheckpointError> {
     let into_checkpoint_error =
@@ -228,7 +251,7 @@ pub fn load_checkpoint(
         let mut canister_states = BTreeMap::new();
         let canister_ids = checkpoint_layout.canister_ids()?;
         match thread_pool {
-            Some(thread_pool) => {
+            Some(ref mut thread_pool) => {
                 let results = parallel_map(thread_pool, canister_ids.iter(), |canister_id| {
                     load_canister_state_from_checkpoint(
                         checkpoint_layout,
@@ -265,8 +288,51 @@ pub fn load_checkpoint(
         canister_states
     };
 
-    // TODO(EXC-1539): Load canister snapshots from checkpoint.
-    let canister_snapshots = CanisterSnapshots::default();
+    let canister_snapshots = {
+        let _timer = metrics
+            .load_checkpoint_step_duration
+            .with_label_values(&["canister_snapshots"])
+            .start_timer();
+
+        let mut canister_snapshots = BTreeMap::new();
+        let snapshot_ids = checkpoint_layout.snapshot_ids()?;
+        match thread_pool {
+            Some(thread_pool) => {
+                let results = parallel_map(thread_pool, snapshot_ids.iter(), |snapshot_id| {
+                    (
+                        **snapshot_id,
+                        load_snapshot_from_checkpoint(
+                            checkpoint_layout,
+                            snapshot_id,
+                            Arc::clone(&fd_factory),
+                        ),
+                    )
+                });
+
+                for (snapshot_id, canister_snapshot) in results.into_iter() {
+                    let (canister_snapshot, durations) = canister_snapshot?;
+                    canister_snapshots.insert(snapshot_id, Arc::new(canister_snapshot));
+
+                    durations.apply(metrics);
+                }
+            }
+            None => {
+                for snapshot_id in snapshot_ids.iter() {
+                    let (canister_snapshot, durations) = load_snapshot_from_checkpoint(
+                        checkpoint_layout,
+                        snapshot_id,
+                        Arc::clone(&fd_factory),
+                    )?;
+                    canister_snapshots.insert(*snapshot_id, Arc::new(canister_snapshot));
+
+                    durations.apply(metrics);
+                }
+            }
+        }
+
+        CanisterSnapshots::new(canister_snapshots)
+    };
+
     let state = ReplicatedState::new_from_checkpoint(
         canister_states,
         metadata,
@@ -401,6 +467,7 @@ pub fn load_canister_state(
         *canister_id,
         queues,
         canister_state_bits.memory_allocation,
+        canister_state_bits.wasm_memory_threshold,
         canister_state_bits.freeze_threshold,
         canister_state_bits.status,
         canister_state_bits.certified_data,
@@ -419,6 +486,8 @@ pub fn load_canister_state(
         canister_state_bits.canister_log,
         canister_state_bits.wasm_memory_limit,
         canister_state_bits.next_snapshot_id,
+        canister_state_bits.snapshots_memory_usage,
+        metrics,
     );
 
     let canister_state = CanisterState {
@@ -457,5 +526,101 @@ fn load_canister_state_from_checkpoint(
         checkpoint_layout.height(),
         Arc::clone(&fd_factory),
         metrics,
+    )
+}
+
+pub fn load_snapshot<P: ReadPolicy>(
+    snapshot_layout: &SnapshotLayout<P>,
+    snapshot_id: &SnapshotId,
+    height: Height,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+) -> Result<(CanisterSnapshot, LoadCanisterMetrics), CheckpointError> {
+    let mut durations = BTreeMap::<&str, Duration>::default();
+
+    let into_checkpoint_error =
+        |field: String, err: ic_protobuf::proxy::ProxyDecodeError| CheckpointError::ProtoError {
+            path: snapshot_layout.raw_path(),
+            field,
+            proto_err: err.to_string(),
+        };
+
+    let starting_time = Instant::now();
+    let canister_snapshot_bits: CanisterSnapshotBits = CanisterSnapshotBits::try_from(
+        snapshot_layout.snapshot().deserialize()?,
+    )
+    .map_err(|err| {
+        into_checkpoint_error(
+            format!("canister_snapshot[{}]::canister_snapshot_bits", snapshot_id),
+            err,
+        )
+    })?;
+    durations.insert("canister_snapshot_bits", starting_time.elapsed());
+
+    let execution_snapshot: ExecutionStateSnapshot = {
+        let starting_time = Instant::now();
+        let wasm_memory_layout = snapshot_layout.vmemory_0();
+        let wasm_memory = PageMemory {
+            page_map: PageMap::open(&wasm_memory_layout, height, Arc::clone(&fd_factory))?,
+            size: canister_snapshot_bits.wasm_memory_size,
+        };
+        durations.insert("snapshot_wasm_memory", starting_time.elapsed());
+
+        let starting_time = Instant::now();
+        let stable_memory_layout = snapshot_layout.stable_memory();
+        let stable_memory = PageMemory {
+            page_map: PageMap::open(&stable_memory_layout, height, Arc::clone(&fd_factory))?,
+            size: canister_snapshot_bits.stable_memory_size,
+        };
+        durations.insert("snapshot_stable_memory", starting_time.elapsed());
+
+        let starting_time = Instant::now();
+        let wasm_binary = snapshot_layout
+            .wasm()
+            .deserialize(canister_snapshot_bits.binary_hash)?;
+        durations.insert("snapshot_canister_module", starting_time.elapsed());
+
+        ExecutionStateSnapshot {
+            wasm_binary,
+            stable_memory,
+            wasm_memory,
+        }
+    };
+
+    let starting_time = Instant::now();
+    let wasm_chunk_store_layout = snapshot_layout.wasm_chunk_store();
+    let wasm_chunk_store_data =
+        PageMap::open(&wasm_chunk_store_layout, height, Arc::clone(&fd_factory))?;
+    let wasm_chunk_store = WasmChunkStore::from_checkpoint(
+        wasm_chunk_store_data,
+        canister_snapshot_bits.wasm_chunk_store_metadata,
+    );
+    durations.insert("snapshot_wasm_chunk_store", starting_time.elapsed());
+
+    let canister_snapshot = CanisterSnapshot::new(
+        canister_snapshot_bits.canister_id,
+        canister_snapshot_bits.taken_at_timestamp,
+        canister_snapshot_bits.canister_version,
+        canister_snapshot_bits.certified_data.clone(),
+        wasm_chunk_store,
+        execution_snapshot,
+        canister_snapshot_bits.total_size,
+    );
+
+    let metrics = LoadCanisterMetrics { durations };
+
+    Ok((canister_snapshot, metrics))
+}
+
+fn load_snapshot_from_checkpoint<P: ReadPolicy>(
+    checkpoint_layout: &CheckpointLayout<P>,
+    snapshot_id: &SnapshotId,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+) -> Result<(CanisterSnapshot, LoadCanisterMetrics), CheckpointError> {
+    let snapshot_layout = checkpoint_layout.snapshot(snapshot_id)?;
+    load_snapshot::<P>(
+        &snapshot_layout,
+        snapshot_id,
+        checkpoint_layout.height(),
+        Arc::clone(&fd_factory),
     )
 }

@@ -5,6 +5,7 @@ load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
     "//rs/cycles_account_manager",
     "//rs/interfaces",
@@ -32,18 +33,17 @@ DEPENDENCIES = [
     "@crate_index//:slog-term",
     "@crate_index//:wasm-encoder",
     "@crate_index//:wasmparser",
+    "@crate_index//:wasmprinter",
     "@crate_index//:wasmtime",
     "@crate_index//:wasmtime-environ",
-    "@crate_index//:wasmprinter",
 ]
 
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/registry/routing_table",
     "//rs/rust_canisters/canister_test",
-    "//rs/types/base_types",
-    "//rs/types/error_types",
     "//rs/test_utilities",
     "//rs/test_utilities/embedders",
     "//rs/test_utilities/execution_environment",
@@ -51,6 +51,8 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/state",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
+    "//rs/types/base_types",
+    "//rs/types/error_types",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
     "@crate_index//:insta",
@@ -162,6 +164,7 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "@crate_index//:candid",
     ] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -173,6 +176,7 @@ rust_ic_bench(
     data = DATA,
     env = ENV,
     deps = [
+        # Keep sorted.
         ":embedders_bench",
         "@crate_index//:candid",
     ] + DEPENDENCIES + DEV_DEPENDENCIES,
@@ -186,6 +190,7 @@ rust_ic_bench(
     data = DATA,
     env = ENV,
     deps = [
+        # Keep sorted.
         ":embedders_bench",
         "@crate_index//:candid",
     ] + DEPENDENCIES + DEV_DEPENDENCIES,

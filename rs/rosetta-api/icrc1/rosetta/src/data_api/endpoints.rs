@@ -127,3 +127,20 @@ pub async fn search_transactions(
         state.metadata.decimals,
     )?))
 }
+
+pub async fn call(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<CallRequest>,
+) -> Result<Json<CallResponse>> {
+    verify_network_id(&request.network_identifier, &state)
+        .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
+    Ok(Json(services::call(
+        &state.storage,
+        &request.method_name,
+        request.parameters,
+        rosetta_core::objects::Currency::new(
+            state.metadata.symbol.clone(),
+            state.metadata.decimals.into(),
+        ),
+    )?))
+}

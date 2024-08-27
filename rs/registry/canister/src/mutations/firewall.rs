@@ -4,11 +4,11 @@ use candid::{CandidType, Deserialize};
 use dfn_core::println;
 use serde::Serialize;
 
-use crate::mutations::common::{decode_registry_value, encode_or_panic};
 use ic_crypto_sha2::Sha256;
 use ic_protobuf::registry::firewall::v1::{FirewallRule, FirewallRuleSet};
 use ic_registry_keys::{make_firewall_rules_record_key, FirewallRulesScope};
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
+use prost::Message;
 use std::fmt::Write;
 
 impl Registry {
@@ -39,7 +39,7 @@ impl Registry {
         let mutations = vec![RegistryMutation {
             mutation_type: registry_mutation::Type::Upsert as i32,
             key: make_firewall_rules_record_key(scope).into_bytes(),
-            value: encode_or_panic(&ruleset),
+            value: ruleset.encode_to_vec(),
         }];
 
         // Check invariants before applying mutations
@@ -51,7 +51,7 @@ impl Registry {
         let key = make_firewall_rules_record_key(scope).into_bytes();
 
         let default_registry_value = RegistryValue {
-            value: encode_or_panic(&FirewallRuleSet { entries: vec![] }),
+            value: FirewallRuleSet { entries: vec![] }.encode_to_vec(),
             version: 0,
             deletion_marker: false,
         };
@@ -64,7 +64,7 @@ impl Registry {
             .get(&key, self.latest_version())
             .unwrap_or(&default_registry_value);
 
-        let current_ruleset = decode_registry_value::<FirewallRuleSet>(current_ruleset_vec.clone());
+        let current_ruleset = FirewallRuleSet::decode(current_ruleset_vec.as_slice()).unwrap();
         current_ruleset.entries
     }
 
@@ -117,7 +117,7 @@ impl Registry {
 pub fn compute_firewall_ruleset_hash(rules: &[FirewallRule]) -> String {
     let mut hasher = Sha256::new();
     for rule in rules {
-        hasher.write(&encode_or_panic(rule));
+        hasher.write(&rule.encode_to_vec());
     }
     let bytes = &hasher.finish();
     let mut result_hash = String::new();
@@ -257,7 +257,7 @@ pub struct UpdateFirewallRulesPayload {
 #[cfg(test)]
 mod tests {
     use crate::common::test_helpers::invariant_compliant_registry;
-    use crate::mutations::firewall::{compute_firewall_ruleset_hash, decode_registry_value};
+    use crate::mutations::firewall::compute_firewall_ruleset_hash;
     use crate::mutations::firewall::{
         AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
     };
@@ -267,6 +267,7 @@ mod tests {
         FirewallAction, FirewallRule, FirewallRuleDirection, FirewallRuleSet,
     };
     use ic_registry_keys::{make_firewall_rules_record_key, FirewallRulesScope};
+    use prost::Message;
 
     const MUTATION_ID: u8 = 0;
 
@@ -308,7 +309,7 @@ mod tests {
 
         registry.do_add_firewall_rules(payload);
 
-        let result_ruleset: FirewallRuleSet = decode_registry_value(
+        let result_ruleset = FirewallRuleSet::decode(
             registry
                 .get(
                     &make_firewall_rules_record_key(&scope).into_bytes(),
@@ -316,8 +317,9 @@ mod tests {
                 )
                 .unwrap()
                 .value
-                .clone(),
-        );
+                .as_slice(),
+        )
+        .unwrap();
 
         assert_eq!(expected_result, result_ruleset);
 
@@ -359,7 +361,7 @@ mod tests {
 
         registry.do_add_firewall_rules(payload);
 
-        let result_ruleset: FirewallRuleSet = decode_registry_value(
+        let result_ruleset = FirewallRuleSet::decode(
             registry
                 .get(
                     &make_firewall_rules_record_key(&scope).into_bytes(),
@@ -367,8 +369,9 @@ mod tests {
                 )
                 .unwrap()
                 .value
-                .clone(),
-        );
+                .as_slice(),
+        )
+        .unwrap();
 
         assert_eq!(expected_result, result_ruleset);
 
@@ -411,7 +414,7 @@ mod tests {
 
         registry.do_update_firewall_rules(payload);
 
-        let result_ruleset: FirewallRuleSet = decode_registry_value(
+        let result_ruleset = FirewallRuleSet::decode(
             registry
                 .get(
                     &make_firewall_rules_record_key(&scope).into_bytes(),
@@ -419,8 +422,9 @@ mod tests {
                 )
                 .unwrap()
                 .value
-                .clone(),
-        );
+                .as_slice(),
+        )
+        .unwrap();
 
         assert_eq!(expected_result, result_ruleset);
 
@@ -439,7 +443,7 @@ mod tests {
 
         registry.do_remove_firewall_rules(payload);
 
-        let result_ruleset: FirewallRuleSet = decode_registry_value(
+        let result_ruleset = FirewallRuleSet::decode(
             registry
                 .get(
                     &make_firewall_rules_record_key(&scope).into_bytes(),
@@ -447,8 +451,9 @@ mod tests {
                 )
                 .unwrap()
                 .value
-                .clone(),
-        );
+                .as_slice(),
+        )
+        .unwrap();
 
         assert_eq!(expected_result, result_ruleset);
 
@@ -551,7 +556,7 @@ mod tests {
 
         registry.do_add_firewall_rules(payload);
 
-        let result_ruleset: FirewallRuleSet = decode_registry_value(
+        let result_ruleset = FirewallRuleSet::decode(
             registry
                 .get(
                     &make_firewall_rules_record_key(&scope).into_bytes(),
@@ -559,8 +564,9 @@ mod tests {
                 )
                 .unwrap()
                 .value
-                .clone(),
-        );
+                .as_slice(),
+        )
+        .unwrap();
 
         assert_eq!(expected_result, result_ruleset);
     }

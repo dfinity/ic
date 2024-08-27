@@ -7,7 +7,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     create_ecdsa_signature_share as tecdsa_sign_share, IDkgTranscriptInternal,
     ThresholdEcdsaSigShareInternal,
 };
-use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaSignShareError;
+use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCreateSigShareError;
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
 use ic_types::Randomness;
@@ -19,7 +19,7 @@ mod tests;
 impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
     ThresholdEcdsaSignerCspVault for LocalCspVault<R, S, C, P>
 {
-    fn ecdsa_sign_share(
+    fn create_ecdsa_sig_share(
         &self,
         derivation_path: ExtendedDerivationPath,
         hashed_message: Vec<u8>,
@@ -30,12 +30,12 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         kappa_times_lambda_raw: IDkgTranscriptInternalBytes,
         key_times_lambda_raw: IDkgTranscriptInternalBytes,
         algorithm_id: AlgorithmId,
-    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
+    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaCreateSigShareError> {
         fn deserialize_transcript(
             bytes: &[u8],
-        ) -> Result<IDkgTranscriptInternal, ThresholdEcdsaSignShareError> {
+        ) -> Result<IDkgTranscriptInternal, ThresholdEcdsaCreateSigShareError> {
             IDkgTranscriptInternal::deserialize(bytes).map_err(|e| {
-                ThresholdEcdsaSignShareError::SerializationError {
+                ThresholdEcdsaCreateSigShareError::SerializationError {
                     internal_error: e.0,
                 }
             })
@@ -85,7 +85,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         kappa_times_lambda: &IDkgTranscriptInternal,
         key_times_lambda: &IDkgTranscriptInternal,
         algorithm_id: AlgorithmId,
-    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError> {
+    ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaCreateSigShareError> {
         let lambda_share =
             self.combined_commitment_opening_from_sks(&lambda_masked.combined_commitment)?;
         let kappa_times_lambda_share =
@@ -104,7 +104,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             &key_times_lambda_share,
             algorithm_id,
         )
-        .map_err(|e| ThresholdEcdsaSignShareError::InternalError {
+        .map_err(|e| ThresholdEcdsaCreateSigShareError::InternalError {
             internal_error: format!("{:?}", e),
         })
     }

@@ -400,7 +400,6 @@ fn should_set_up_initial_state_with_mainnet_canisters() {
     assert!(ledger_archives.is_empty());
 }
 
-// TODO(NNS1-3123): re-enable this test once ledger and archive are upgraded to the same version
 #[ignore]
 #[test]
 fn should_spawn_a_new_archive_with_icp_transfers() {

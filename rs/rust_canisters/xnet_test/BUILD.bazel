@@ -4,6 +4,7 @@ load("//bazel:canisters.bzl", "rust_canister")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/dfn_core",
     "@crate_index//:candid",
     "@crate_index//:rand",

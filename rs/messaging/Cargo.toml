@@ -15,12 +15,12 @@ ic-crypto-ed25519 = { path = "../crypto/ed25519" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-error-types = { path = "../types/error_types" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-logger = { path = "../monitoring/logger" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
 ic-query-stats = { path = "../query_stats" }
@@ -35,22 +35,23 @@ ic-types = { path = "../types/types" }
 ic-utils-thread = { path = "../utils/thread" }
 prometheus = { workspace = true }
 slog = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-ic-state-manager = { path = "../state_manager" }
+candid = { workspace = true }
+canister-test = { path = "../rust_canisters/canister_test" }
+downstream-calls-test = { path = "../rust_canisters/downstream_calls_test" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
-ic-state-machine-tests = { path = "../state_machine_tests" }
-xnet-test = { path = "../rust_canisters/xnet_test" }
-canister-test = { path = "../rust_canisters/canister_test" }
-ic-registry-transport = { path = "../registry/transport" }
-downstream-calls-test = { path = "../rust_canisters/downstream_calls_test" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-local-registry = { path = "../registry/local_registry" }
 ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-local-store-artifacts = { path = "../registry/local_store/artifacts" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
+ic-registry-transport = { path = "../registry/transport" }
+ic-state-machine-tests = { path = "../state_machine_tests" }
+ic-state-manager = { path = "../state_manager" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-execution-environment = { path = "../test_utilities/execution_environment" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
@@ -59,14 +60,15 @@ ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
-candid = { workspace = true }
 lazy_static = { workspace = true }
 maplit = "1.0.2"
 mockall = { workspace = true }
+pretty_assertions = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }
 tempfile = { workspace = true }
+xnet-test = { path = "../rust_canisters/xnet_test" }
 
 [features]
 default = []

@@ -10,10 +10,10 @@ ciborium = { workspace = true }
 ethnum = { workspace = true }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-stable-structures = { workspace = true }
-num-bigint = "0.4"
+num-bigint = { workspace = true }
 num-traits = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
-proptest = "1.0"
 hex = { workspace = true }
+proptest = "1.0"

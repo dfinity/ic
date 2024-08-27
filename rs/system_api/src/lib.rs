@@ -105,7 +105,7 @@ fn summarize(heap: &[u8], start: usize, size: usize) -> u64 {
 /// Supports operations to reduce the message limit while keeping the maximum
 /// slice limit the same, which is useful for messages that have multiple
 /// execution steps such as install, upgrade, and response.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct InstructionLimits {
     /// The total instruction limit for message execution. With deterministic
     /// time slicing this limit may exceed the per-round instruction limit.  The
@@ -171,7 +171,7 @@ impl InstructionLimits {
 }
 
 // Canister and subnet configuration parameters required for execution.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct ExecutionParameters {
     pub instruction_limits: InstructionLimits,
     pub canister_memory_limit: NumBytes,
@@ -227,7 +227,7 @@ pub enum ModificationTracking {
 /// deserializing will result in duplication of the data, but no issues in
 /// correctness.
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 pub enum ApiType {
     /// For executing the `canister_start` method
     Start {
@@ -618,7 +618,14 @@ impl ApiType {
             ApiType::SystemTask { system_task, .. } => match system_task {
                 SystemMethod::CanisterHeartbeat => "heartbeat",
                 SystemMethod::CanisterGlobalTimer => "global timer",
-                _ => panic!("Only `canister_heartbeat` and `canister_global_timer` are allowed."),
+                SystemMethod::CanisterOnLowWasmMemory => "on low Wasm memory",
+                SystemMethod::CanisterStart
+                | SystemMethod::CanisterInit
+                | SystemMethod::CanisterPreUpgrade
+                | SystemMethod::CanisterPostUpgrade
+                | SystemMethod::CanisterInspectMessage => {
+                    panic!("Only `canister_heartbeat`, `canister_global_timer`, and `canister_on_low_wasm_memory` are allowed.")
+                }
             },
             ApiType::Update { .. } => "update",
             ApiType::ReplicatedQuery { .. } => "replicated query",
@@ -1481,9 +1488,8 @@ impl SystemApiImpl {
     }
 
     /// Appends the specified bytes on the heap as a string to the canister's logs.
-    pub fn save_log_message(&mut self, is_enabled: bool, src: usize, size: usize, heap: &[u8]) {
+    pub fn save_log_message(&mut self, src: usize, size: usize, heap: &[u8]) {
         self.sandbox_safe_system_state.append_canister_log(
-            is_enabled,
             self.api_type.time(),
             valid_subslice("save_log_message", src, size, heap)
                 .unwrap_or(

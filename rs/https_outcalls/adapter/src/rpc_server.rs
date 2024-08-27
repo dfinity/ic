@@ -1,20 +1,25 @@
 use crate::metrics::{
-    AdapterMetrics, LABEL_BODY_RECEIVE_SIZE, LABEL_BODY_RECEIVE_TIMEOUT, LABEL_CONNECT,
-    LABEL_DOWNLOAD, LABEL_HEADER_RECEIVE_SIZE, LABEL_HTTP_METHOD, LABEL_HTTP_SCHEME,
-    LABEL_REQUEST_HEADERS, LABEL_RESPONSE_HEADERS, LABEL_UPLOAD, LABEL_URL_PARSE,
+    AdapterMetrics, LABEL_BODY_RECEIVE_SIZE, LABEL_CONNECT, LABEL_DOWNLOAD,
+    LABEL_HEADER_RECEIVE_SIZE, LABEL_HTTP_METHOD, LABEL_REQUEST_HEADERS, LABEL_RESPONSE_HEADERS,
+    LABEL_UPLOAD, LABEL_URL_PARSE,
 };
 use core::convert::TryFrom;
-use futures::StreamExt;
+use http::{header::USER_AGENT, HeaderName, HeaderValue, Uri};
+use http_body_util::{BodyExt, Full};
+use hyper::{
+    body::Bytes,
+    header::{HeaderMap, ToStrError},
+    Method,
+};
+use hyper_rustls::HttpsConnector;
+use hyper_socks2::SocksConnector;
+use hyper_util::client::legacy::{connect::HttpConnector, Client};
 use ic_https_outcalls_service::{
     canister_http_service_server::CanisterHttpService, CanisterHttpSendRequest,
     CanisterHttpSendResponse, HttpHeader, HttpMethod,
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use reqwest::{
-    header::{HeaderMap, HeaderName, HeaderValue, ToStrError, USER_AGENT},
-    Client, Method, Url,
-};
 use std::str::FromStr;
 use tonic::{Request, Response, Status};
 
@@ -28,18 +33,20 @@ const HEADER_NAME_VALUE_LIMIT: usize = 8_192;
 /// By default most higher-level http libs like `curl` set some `User-Agent` so we do the same here to avoid getting rejected due to strict server requirements.
 const USER_AGENT_ADAPTER: &str = "ic/1.0";
 
+pub type CanisterRequestBody = Full<Bytes>;
+
 /// implements RPC
 pub struct CanisterHttp {
-    client: Client,
-    socks_client: Option<Client>,
+    client: Client<HttpsConnector<HttpConnector>, CanisterRequestBody>,
+    socks_client: Client<HttpsConnector<SocksConnector<HttpConnector>>, CanisterRequestBody>,
     logger: ReplicaLogger,
     metrics: AdapterMetrics,
 }
 
 impl CanisterHttp {
     pub fn new(
-        client: Client,
-        socks_client: Option<Client>,
+        client: Client<HttpsConnector<HttpConnector>, CanisterRequestBody>,
+        socks_client: Client<HttpsConnector<SocksConnector<HttpConnector>>, CanisterRequestBody>,
         logger: ReplicaLogger,
         metrics: &MetricsRegistry,
     ) -> Self {
@@ -62,19 +69,7 @@ impl CanisterHttpService for CanisterHttp {
 
         let req = request.into_inner();
 
-        if !req.url.is_ascii() {
-            debug!(self.logger, "URL contains non-ascii characters");
-            self.metrics
-                .request_errors
-                .with_label_values(&[LABEL_URL_PARSE])
-                .inc();
-            return Err(Status::new(
-                tonic::Code::InvalidArgument,
-                "Failed to parse URL: URL contains non-ascii characters".to_string(),
-            ));
-        }
-
-        let url = req.url.parse::<Url>().map_err(|err| {
+        let uri = req.url.parse::<Uri>().map_err(|err| {
             debug!(self.logger, "Failed to parse URL: {}", err);
             self.metrics
                 .request_errors
@@ -86,10 +81,12 @@ impl CanisterHttpService for CanisterHttp {
             )
         })?;
 
-        if url.scheme() != "https" {
+        #[cfg(not(feature = "http"))]
+        if uri.scheme() != Some(&http::uri::Scheme::HTTPS) {
+            use crate::metrics::LABEL_HTTP_SCHEME;
             debug!(
                 self.logger,
-                "Got request with no or http scheme specified. {}", url
+                "Got request with no or http scheme specified. {}", uri
             );
             self.metrics
                 .request_errors
@@ -144,25 +141,31 @@ impl CanisterHttpService for CanisterHttp {
 
         // If we are allowed to use socks and condition described in `should_use_socks_proxy` hold,
         // we do the requests through the socks proxy. If not we use the default IPv6 route.
-        let http_resp = match &self.socks_client {
-            Some(socks_client) if req.socks_proxy_allowed => {
-            let response = self.client.request(method.clone(), url.clone()).headers(headers.clone()).body(req.body.clone()).send().await;
+        let http_resp = if req.socks_proxy_allowed {
+            // Http request does not implement clone. So we have to manually construct a clone.
+            let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
+            *http_req.headers_mut() = headers;
+            *http_req.method_mut() = method;
+            *http_req.uri_mut() = uri.clone();
+            let http_req_clone = http_req.clone();
 
-            match response {
+            match self.client.request(http_req).await {
                 // If we fail we try with the socks proxy. For destinations that are ipv4 only this should
                 // fail fast because our interface does not have an ipv4 assigned.
                 Err(direct_err) => {
                     self.metrics.requests_socks.inc();
-                    socks_client.request(method.clone(), url.clone()).headers(headers.clone()).body(req.body).send().await.map_err(|e| {
+                    self.socks_client.request(http_req_clone).await.map_err(|e| {
                         format!("Request failed direct connect {direct_err} and connect through socks {e}")
                     })
                 }
                 Ok(resp)=> Ok(resp),
             }
-            },
-            _ => {
-                self.client.request(method.clone(), url.clone()).headers(headers.clone()).body(req.body).send().await.map_err(|e| format!("Failed to directly connect: {e}"))
-            }
+        } else {
+            let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
+            *http_req.headers_mut() = headers;
+            *http_req.method_mut() = method;
+            *http_req.uri_mut() = uri.clone();
+            self.client.request(http_req).await.map_err(|e| format!("Failed to directly connect: {e}"))
         }
         .map_err(|err| {
             debug!(self.logger, "Failed to connect: {}", err);
@@ -174,12 +177,11 @@ impl CanisterHttpService for CanisterHttp {
                 tonic::Code::Unavailable,
                 format!(
                     "Connecting to {:.50} failed: {}",
-                    url.host().map(|host| host.to_string()).unwrap_or("".to_string()),
+                    uri.host().unwrap_or(""),
                     err,
                 ),
             )
         })?;
-
         self.metrics
             .network_traffic
             .with_label_values(&[LABEL_UPLOAD])
@@ -213,65 +215,36 @@ impl CanisterHttpService for CanisterHttp {
                 )
             })?;
 
-        let available_size = req
-            .max_response_size_bytes
-            .checked_sub(headers_size_bytes as u64)
-            .ok_or_else(|| {
-                self.metrics
-                    .request_errors
-                    .with_label_values(&[LABEL_HEADER_RECEIVE_SIZE])
-                    .inc();
-                Status::new(
-                    tonic::Code::OutOfRange,
-                    format!(
-                        "Header size exceeds specified response size limit {}",
-                        req.max_response_size_bytes
-                    ),
-                )
-            })? as usize;
-
-        let length = http_resp.content_length().unwrap_or_default() as usize;
-
-        if length > available_size {
+        // We don't need a timeout here because there is a global timeout on the entire request.
+        let body_bytes = http_body_util::Limited::new(
+            http_resp.into_body(),
+            req.max_response_size_bytes
+                .checked_sub(headers_size_bytes as u64)
+                .ok_or_else(|| {
+                    self.metrics
+                        .request_errors
+                        .with_label_values(&[LABEL_HEADER_RECEIVE_SIZE])
+                        .inc();
+                    Status::new(
+                        tonic::Code::OutOfRange,
+                        format!(
+                            "Header size exceeds specified response size limit {}",
+                            req.max_response_size_bytes
+                        ),
+                    )
+                })? as usize,
+        )
+        .collect()
+        .await
+        .map(|col| col.to_bytes())
+        .map_err(|err| {
+            debug!(self.logger, "Failed to fetch body: {}", err);
             self.metrics
                 .request_errors
                 .with_label_values(&[LABEL_BODY_RECEIVE_SIZE])
                 .inc();
-            return Err(Status::new(
-                tonic::Code::OutOfRange,
-                "Value of 'Content-length' header exceeds http body size limit.",
-            ));
-        }
-
-        let mut stream = http_resp.bytes_stream();
-        let mut body_bytes: Vec<u8> = Vec::with_capacity(length);
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|err| {
-                debug!(self.logger, "Failed to fetch body: {}", err);
-                self.metrics
-                    .request_errors
-                    .with_label_values(&[LABEL_BODY_RECEIVE_TIMEOUT])
-                    .inc();
-                Status::new(
-                    tonic::Code::Unavailable,
-                    format!("Failed to fetch body: {}", err),
-                )
-            })?;
-            let mut chunk = chunk.slice(..).to_vec();
-
-            if body_bytes.len() + chunk.len() > available_size {
-                self.metrics
-                    .request_errors
-                    .with_label_values(&[LABEL_BODY_RECEIVE_SIZE])
-                    .inc();
-                return Err(Status::new(
-                    tonic::Code::OutOfRange,
-                    format!("Http body exceeds size limit of {} bytes.", available_size),
-                ));
-            }
-
-            body_bytes.append(&mut chunk);
-        }
+            Status::new(tonic::Code::OutOfRange, err.to_string())
+        })?;
 
         self.metrics
             .network_traffic
@@ -280,7 +253,7 @@ impl CanisterHttpService for CanisterHttp {
         Ok(Response::new(CanisterHttpSendResponse {
             status,
             headers,
-            content: body_bytes,
+            content: body_bytes.to_vec(),
         }))
     }
 }

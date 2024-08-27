@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "
 package(default_visibility = ["//visibility:private"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/async_utils",
     "//rs/config",
     "//rs/https_outcalls/service",
@@ -12,7 +13,12 @@ DEPENDENCIES = [
     "@crate_index//:byte-unit",
     "@crate_index//:clap_3_2_25",
     "@crate_index//:futures",
-    "@crate_index//:reqwest",
+    "@crate_index//:http",
+    "@crate_index//:http-body-util",
+    "@crate_index//:hyper",
+    "@crate_index//:hyper-rustls",
+    "@crate_index//:hyper-socks2",
+    "@crate_index//:hyper-util",
     "@crate_index//:prometheus",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
@@ -26,6 +32,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-stream",
     "@crate_index//:once_cell",
     "@crate_index//:rand",
@@ -48,13 +55,42 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
+# Same target as above but allows the adapter to make HTTP calls.
+rust_library(
+    name = "adapter_with_http",
+    testonly = True,
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_features = ["http"],
+    crate_name = "ic_https_outcalls_adapter",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    visibility = ["//rs/pocket_ic_server:__subpackages__"],
+    deps = DEPENDENCIES,
+)
+
 rust_binary(
     name = "ic-https-outcalls-adapter",
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    visibility = ["//publish:__subpackages__"],
+    visibility = [
+        "//ic-os/guestos:__subpackages__",
+        "//rs:release-pkg",
+    ],
     deps = DEPENDENCIES + [":adapter"],
+)
+
+# Same target as above but allows the adapter to make HTTP calls.
+# This target is used for local testing (e.g. DFX)
+rust_binary(
+    name = "ic-outcalls-adapter-with-http",
+    testonly = True,
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = ["//rs:release-pkg"],
+    deps = DEPENDENCIES + [":adapter_with_http"],
 )
 
 rust_test(
@@ -72,4 +108,14 @@ rust_test_suite(
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["requires-network"],
     deps = [":adapter"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "adapter_integration_with_http",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    crate_features = ["http"],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = ["requires-network"],
+    deps = [":adapter_with_http"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

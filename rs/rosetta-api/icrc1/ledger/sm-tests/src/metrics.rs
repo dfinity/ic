@@ -120,6 +120,45 @@ pub fn assert_existence_of_ledger_total_transactions_metric<T>(
     );
 }
 
+pub fn assert_ledger_upgrade_instructions_consumed_metric_set<T, U>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+    encode_upgrade_args: fn() -> U,
+) where
+    T: CandidType,
+    U: CandidType,
+{
+    const PRE_UPGRADE_METRIC: &str = "ledger_pre_upgrade_instructions_consumed";
+    const POST_UPGRADE_METRIC: &str = "ledger_post_upgrade_instructions_consumed";
+    const TOTAL_UPGRADE_METRICS: &str = "ledger_total_upgrade_instructions_consumed";
+
+    let (env, canister_id) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
+
+    for metric in [
+        PRE_UPGRADE_METRIC,
+        POST_UPGRADE_METRIC,
+        TOTAL_UPGRADE_METRICS,
+    ]
+    .iter()
+    {
+        assert_eq!(0, parse_metric(&env, canister_id, metric));
+    }
+
+    let args = encode_upgrade_args();
+    let encoded_upgrade_args = Encode!(&args).unwrap();
+    env.upgrade_canister(canister_id, ledger_wasm, encoded_upgrade_args)
+        .expect("should successfully upgrade ledger canister");
+
+    let pre_upgrade_instructions_consumed = parse_metric(&env, canister_id, PRE_UPGRADE_METRIC);
+    let post_upgrade_instructions_consumed = parse_metric(&env, canister_id, POST_UPGRADE_METRIC);
+    assert_ne!(0, pre_upgrade_instructions_consumed);
+    assert_ne!(0, post_upgrade_instructions_consumed);
+    assert_eq!(
+        pre_upgrade_instructions_consumed + post_upgrade_instructions_consumed,
+        parse_metric(&env, canister_id, TOTAL_UPGRADE_METRICS)
+    );
+}
+
 fn assert_existence_of_metric(env: &StateMachine, canister_id: CanisterId, metric: &str) {
     let metrics = retrieve_metrics(env, canister_id);
     assert!(
@@ -130,7 +169,7 @@ fn assert_existence_of_metric(env: &StateMachine, canister_id: CanisterId, metri
     );
 }
 
-fn parse_metric(env: &StateMachine, canister_id: CanisterId, metric: &str) -> u64 {
+pub(crate) fn parse_metric(env: &StateMachine, canister_id: CanisterId, metric: &str) -> u64 {
     let metrics = retrieve_metrics(env, canister_id);
     for line in &metrics {
         let tokens: Vec<&str> = line.split(' ').collect();

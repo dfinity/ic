@@ -34,14 +34,16 @@ rust_library(
     ),
     crate_name = "ic_cketh_minter",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:ic-cdk-macros",
         "@crate_index//:strum_macros",
     ],
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/crypto/ecdsa_secp256k1",
+        "//rs/crypto/secp256k1",
         "//rs/crypto/sha3",
         "//rs/ethereum/evm-rpc-client",
         "//rs/ethereum/types",
@@ -93,6 +95,7 @@ rust_test(
         "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
     },
     deps = [
+        # Keep sorted.
         ":minter",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:assert_matches",
@@ -116,6 +119,7 @@ rust_test(
         "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
     },
     deps = [
+        # Keep sorted.
         ":minter",
         "@crate_index//:candid_parser",
         "@crate_index//:maplit",
@@ -133,14 +137,16 @@ rust_test(
     crate_features = features,
     crate_name = "ic_cketh_minter_canister",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:ic-cdk-macros",
     ],
     service_file = "cketh_minter.did",
     deps = [
+        # Keep sorted.
         ":minter",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/crypto/ecdsa_secp256k1",
+        "//rs/crypto/secp256k1",
         "//rs/ethereum/types",
         "//rs/rust_canisters/http_types",
         "@crate_index//:askama",
@@ -167,6 +173,7 @@ rust_binary(
     name = "principal_to_hex",
     srcs = ["bin/principal_to_hex.rs"],
     deps = [
+        # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:hex",
     ],
@@ -193,6 +200,7 @@ rust_binary(
         } | extra_env,
         proc_macro_deps = [],
         deps = [
+            # Keep sorted.
             ":minter",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/ethereum/cketh/test_utils",
@@ -230,6 +238,7 @@ closure_js_test(
     name = "principal_to_bytes_test",
     srcs = ["tests/principal_to_bytes_test.js"],
     deps = [
+        # Keep sorted.
         ":principal_to_bytes",
         "@com_google_javascript_closure_library//closure/goog/testing:asserts",
         "@com_google_javascript_closure_library//closure/goog/testing:jsunit",

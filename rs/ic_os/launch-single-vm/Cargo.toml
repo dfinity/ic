@@ -18,4 +18,4 @@ slog-async = { workspace = true }
 slog-term = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
-url = "2.1.1"
+url = { workspace = true }

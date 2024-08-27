@@ -4,7 +4,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased 
+## Unreleased
+
+## [2.1.0] - 2024-08-21
 ### Fixes
 - Enable store-location option to be set by a user
 - Replacing internal crypto library `ic_canister_client_sender` with `ic_crypto_ed25519` 
@@ -12,7 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Return the correct `signature_type` in the `payloads` returned by the `construction_payloads` endpoint.
 - Handle Errors that may occur while deserializing objects using serde_json
 ### Added
+- /call endpoint with the method 'query_block_range' to fetch multiple blocks at once
 ### Changed
+- [BREAKING CHANGE]: consolidate block and transaction tables into a single table
+  The clients have to delete the old database and re-sync the Rosetta node from scratch. 
 
 ## [2.0.0] - 2024-01-18
 ### Fixes

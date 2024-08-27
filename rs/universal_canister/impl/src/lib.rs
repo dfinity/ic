@@ -111,6 +111,7 @@ try_from_u8!(
         InReplicatedExecution = 81,
         CallWithBestEffortResponse = 82,
         MsgDeadline = 83,
-        CallCyclesAdd128UpTo = 84,
+        MemorySizeIsAtLeast = 84,
+        CallCyclesAdd128UpTo = 85,
     }
 );

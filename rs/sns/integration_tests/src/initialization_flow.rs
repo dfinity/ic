@@ -7,7 +7,7 @@ use ic_nervous_system_proto::pb::v1::{
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     create_service_nervous_system::{
         governance_parameters::VotingRewardParameters,
         initial_token_distribution::{
@@ -17,9 +17,7 @@ use ic_nns_governance::pb::v1::{
         swap_parameters::NeuronBasketConstructionParameters,
         GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
     },
-    manage_neuron_response,
-    proposal::Action,
-    CreateServiceNervousSystem, Proposal,
+    manage_neuron_response, CreateServiceNervousSystem, MakeProposalRequest, ProposalActionRequest,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -46,8 +44,10 @@ use ic_state_machine_tests::StateMachine;
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use lazy_static::lazy_static;
 use maplit::hashmap;
-use std::collections::BTreeSet;
-use std::{collections::HashMap, time::UNIX_EPOCH};
+use std::{
+    collections::{BTreeSet, HashMap},
+    time::UNIX_EPOCH,
+};
 
 // Valid images to be used in the CreateServiceNervousSystem proposal.
 pub const IMAGE_1: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC";
@@ -233,11 +233,11 @@ impl SnsInitializationFlowTestSetup {
         neuron_id: NeuronId,
         create_service_nervous_system: &CreateServiceNervousSystem,
     ) -> ProposalId {
-        let proposal = Proposal {
+        let proposal = MakeProposalRequest {
             title: Some("Proposal to create the SNS-2 ServiceNervousSystem".to_string()),
             summary: "Please do this, if anything just so that the test can pass.".to_string(),
             url: "".to_string(),
-            action: Some(Action::CreateServiceNervousSystem(
+            action: Some(ProposalActionRequest::CreateServiceNervousSystem(
                 create_service_nervous_system.clone(),
             )),
         };
@@ -565,7 +565,7 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
 
     let cf_participants_principals = cf_participants
         .iter()
-        .map(|cf_participant| cf_participant.hotkey_principal.clone())
+        .map(|cf_participant| cf_participant.try_get_controller().unwrap())
         .collect::<Vec<_>>();
     let neurons = sns_governance_list_neurons(
         &sns_initialization_flow_test.state_machine,
@@ -578,7 +578,7 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
         if neuron.is_neurons_fund_controlled() {
             at_least_one_sns_neuron_is_nf_controlled = true;
             let from_neurons_fund = neuron.permissions.iter().any(|permission| {
-                cf_participants_principals.contains(&permission.principal.unwrap().to_string())
+                cf_participants_principals.contains(&permission.principal.unwrap())
             });
             assert!(
                 from_neurons_fund,

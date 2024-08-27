@@ -29,7 +29,7 @@ class DependencyManager(abc.ABC):
 
     @abc.abstractmethod
     def get_findings(
-        self, repository_name: str, project: typing.Optional[Project], engine_version: typing.Optional[int]
+        self, repository_name: str, project: Project, engine_version: typing.Optional[str]
     ) -> typing.List[Finding]:
         """Return list of vulnerable dependencies for the given project or the whole repo if no project is specified"""
         raise NotImplementedError

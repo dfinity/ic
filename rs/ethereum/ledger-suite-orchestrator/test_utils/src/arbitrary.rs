@@ -21,7 +21,7 @@ pub fn arb_init_arg() -> impl Strategy<Value = InitArg> {
         )
 }
 
-fn arb_principal() -> impl Strategy<Value = Principal> {
+pub fn arb_principal() -> impl Strategy<Value = Principal> {
     vec(any::<u8>(), 0..=29).prop_map(|bytes| Principal::from_slice(&bytes))
 }
 

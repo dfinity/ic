@@ -1,26 +1,25 @@
 use candid::Encode;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
+    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
+    TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::{self as nns_common_pb, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance::{
-    governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
-    init::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
-    pb::v1::{
-        governance_error::ErrorType,
-        manage_neuron::{self, RegisterVote},
-        manage_neuron_response,
-        proposal,
-        // Perhaps surprisingly, CreateServiceNervousSystem is not needed by
-        // this file, because we simply use a constant of that type
-        ManageNeuron,
-        ManageNeuronResponse,
-        Proposal,
-        ProposalStatus,
-        Vote,
-    },
+use ic_nns_governance::governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
+use ic_nns_governance_api::pb::v1::{
+    governance_error::ErrorType,
+    manage_neuron::{self, RegisterVote},
+    manage_neuron_response,
+    proposal::Action,
+    MakeProposalRequest,
+    // Perhaps surprisingly, CreateServiceNervousSystem is not needed by
+    // this file, because we simply use a constant of that type
+    ManageNeuron,
+    ManageNeuronResponse,
+    ProposalActionRequest,
+    ProposalStatus,
+    Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -144,7 +143,7 @@ fn test_several_proposals() {
         .into_iter()
         .filter_map(
             |proposal_info| match proposal_info.proposal.as_ref().unwrap().action {
-                Some(proposal::Action::CreateServiceNervousSystem(_)) => {
+                Some(Action::CreateServiceNervousSystem(_)) => {
                     let id = proposal_info.id.as_ref().unwrap().id;
                     Some((id, proposal_info))
                 }
@@ -191,12 +190,14 @@ fn make_proposal(state_machine: &StateMachine, sns_number: u64) -> ManageNeuronR
         state_machine,
         *TEST_NEURON_2_OWNER_PRINCIPAL,
         neuron_id,
-        &Proposal {
+        &MakeProposalRequest {
             title: Some(format!("Create SNS #{}", sns_number)),
             summary: "".to_string(),
             url: "".to_string(),
-            action: Some(proposal::Action::CreateServiceNervousSystem(
-                CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone(),
+            action: Some(ProposalActionRequest::CreateServiceNervousSystem(
+                CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
+                    .clone()
+                    .into(),
             )),
         },
     )

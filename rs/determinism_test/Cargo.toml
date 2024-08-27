@@ -10,9 +10,9 @@ documentation.workspace = true
 ic-config = { path = "../config" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-messaging = { path = "../messaging" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
@@ -29,4 +29,4 @@ ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types = { path = "../types/types" }
 slog = { workspace = true }
 tokio = { workspace = true }
-wat = "1.0.52"
+wat = { workspace = true }

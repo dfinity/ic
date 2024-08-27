@@ -5,7 +5,7 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
 use ic_consensus::{
     certification::{CertificationCrypto, CertifierImpl},
-    dkg, ecdsa,
+    dkg, idkg,
 };
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
@@ -160,7 +160,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.canister_http_payload_builder.clone(),
             deps.query_stats_payload_builder.clone(),
             deps.dkg_pool.clone(),
-            deps.ecdsa_pool.clone(),
+            deps.idkg_pool.clone(),
             dkg_key_manager.clone(),
             deps.message_routing.clone(),
             deps.state_manager.clone(),
@@ -178,7 +178,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.metrics_registry.clone(),
             replica_logger.clone(),
         );
-        let ecdsa = ecdsa::EcdsaImpl::new(
+        let idkg = idkg::IDkgImpl::new(
             deps.replica_config.node_id,
             deps.consensus_pool.read().unwrap().get_block_cache(),
             consensus_crypto,
@@ -214,11 +214,11 @@ impl<'a> ConsensusRunner<'a> {
                 apply_modifier_consensus(&modifier, consensus),
                 consensus_gossip,
                 dkg,
-                apply_modifier_ecdsa(&modifier, ecdsa),
+                apply_modifier_idkg(&modifier, idkg),
                 Box::new(certifier),
                 deps.consensus_pool.clone(),
                 deps.dkg_pool.clone(),
-                deps.ecdsa_pool.clone(),
+                deps.idkg_pool.clone(),
                 replica_logger,
                 deps.metrics_registry.clone(),
             ),

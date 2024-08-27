@@ -53,6 +53,7 @@ DEPENDENCIES = [
     "@crate_index//:threadpool",
     "@crate_index//:tokio",
     "@crate_index//:tower",
+    "@crate_index//:tracing",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -73,6 +74,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:criterion",
     "@crate_index//:ic-btc-test-utils",
     "@crate_index//:insta",
+    "@crate_index//:itertools",
     "@crate_index//:libflate",
     "@crate_index//:maplit",
     "@crate_index//:more-asserts",
@@ -83,6 +85,7 @@ DEV_DEPENDENCIES = [
 ]
 
 MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:test-strategy",
 ]
 
@@ -111,11 +114,11 @@ rust_ic_test(
     data = DATA,
     env = ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    # TODO(IDX-3164): enable when flakiness issues is resolved
+    # TODO(IDX-3164): enable on PR when flakiness issue is resolved
     #                 or we have new darwin runners in use
-    # tags = [
-    #     "test_macos",
-    # ],
+    tags = [
+        "test_macos_slow",
+    ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
@@ -124,6 +127,7 @@ rust_ic_test_suite(
     size = "large",
     srcs = glob(["tests/*.rs"]),
     aliases = ALIASES,
+    compile_data = glob(["tests/test-data/**"]),
     data = DATA,
     env = ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
@@ -142,6 +146,7 @@ rust_doc_test(
 )
 
 BENCH_DEPENDENCIES = [
+    # Keep sorted.
     ":execution_environment",
     "//rs/config",
     "//rs/constants",
@@ -159,8 +164,10 @@ BENCH_DEPENDENCIES = [
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
     "//rs/types/error_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
+    "//rs/universal_canister/lib",
     "@crate_index//:criterion",
     "@crate_index//:lazy_static",
     "@crate_index//:tempfile",
@@ -206,6 +213,7 @@ rust_ic_bench(
     data = DATA,
     env = ENV,
     deps = [
+        # Keep sorted.
         "//rs/execution_environment/benches/lib:execution_environment_bench",
         "//rs/state_machine_tests",
         "//rs/types/base_types",
@@ -221,6 +229,7 @@ rust_ic_bench(
         ("CANISTER_CREATOR_CANISTER_WASM_PATH", "$(rootpath //rs/rust_canisters/canister_creator:canister_creator_canister)"),
     ]),
     deps = [
+        # Keep sorted.
         "//rs/execution_environment/benches/lib:execution_environment_bench",
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
@@ -235,6 +244,7 @@ rust_library(
     srcs = ["benches/management_canister/utils.rs"],
     aliases = ALIASES,
     deps = [
+        # Keep sorted.
         "//rs/execution_environment/benches/lib:execution_environment_bench",
         "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
@@ -251,6 +261,7 @@ rust_ic_bench(
         ("TEST_CANISTER_WASM_PATH", "$(rootpath //rs/execution_environment/benches/management_canister/test_canister)"),
     ]),
     deps = [
+        # Keep sorted.
         ":utils",
         "//rs/execution_environment/benches/lib:execution_environment_bench",
         "//rs/rust_canisters/canister_test",

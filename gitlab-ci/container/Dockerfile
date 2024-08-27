@@ -164,7 +164,7 @@ ENV PYTHONPATH=/ic/gitlab-ci/src:/ic/gitlab-ci/src/dependencies:$PYTHONPATH
 RUN cd /tmp/bazel && bazel version
 
 # Add Rust/Cargo support
-ARG RUST_VERSION=1.79.0
+ARG RUST_VERSION=1.80.0
 RUN curl --fail https://sh.rustup.rs -sSf \
     | sh -s -- -y --default-toolchain ${RUST_VERSION}-x86_64-unknown-linux-gnu --no-modify-path && \
     rustup default ${RUST_VERSION}-x86_64-unknown-linux-gnu && \

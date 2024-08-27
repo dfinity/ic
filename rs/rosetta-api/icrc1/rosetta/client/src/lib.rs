@@ -11,7 +11,9 @@ use icrc_ledger_types::icrc1::account::Subaccount;
 use num_bigint::BigInt;
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::*;
+use rosetta_core::models::CurveType;
 use rosetta_core::models::RosettaSupportedKeyPair;
+use rosetta_core::objects::ObjectMap;
 use rosetta_core::objects::Operation;
 use rosetta_core::objects::PublicKey;
 use rosetta_core::objects::Signature;
@@ -68,25 +70,46 @@ impl RosettaClient {
             };
 
             // Verify that the signature is correct
-            let verification_key = ed25519_consensus::VerificationKey::try_from(
-                signer_keypair.get_pb_key().as_slice(),
-            )
-            .with_context(|| {
-                format!(
-                    "Failed to convert public key to verification key: {:?}",
-                    signer_keypair.get_pb_key()
-                )
-            })?;
+            match signer_keypair.get_curve_type() {
+                CurveType::Edwards25519 => {
+                    let verification_key = ic_crypto_ed25519::PublicKey::deserialize_raw(
+                        signer_keypair.get_pb_key().as_slice(),
+                    )
+                    .with_context(|| {
+                        format!(
+                            "Failed to convert public key to verification key: {:?}",
+                            signer_keypair.get_pb_key()
+                        )
+                    })?;
+                    if verification_key
+                        .verify_signature(&signable_bytes, signed_bytes.as_slice())
+                        .is_err()
+                    {
+                        bail!("Signature verification failed")
+                    };
+                }
+                CurveType::Secp256K1 => {
+                    let verification_key = ic_crypto_secp256k1::PublicKey::deserialize_sec1(
+                        &signer_keypair.get_pb_key(),
+                    )
+                    .with_context(|| {
+                        format!(
+                            "Failed to convert public key to verification key: {:?}",
+                            signer_keypair.get_pb_key()
+                        )
+                    })?;
+                    if !verification_key
+                        .verify_signature(signable_bytes.as_slice(), signed_bytes.as_slice())
+                    {
+                        bail!("Signature verification failed")
+                    };
+                }
+                _ => bail!(
+                    "Unsupported curve type: {:?}",
+                    signer_keypair.get_curve_type()
+                ),
+            }
 
-            if verification_key
-                .verify(
-                    &ed25519_consensus::Signature::try_from(signed_bytes.as_slice())?,
-                    &signable_bytes,
-                )
-                .is_err()
-            {
-                bail!("Signature verification failed")
-            };
             signatures.push(signature);
         }
 
@@ -689,6 +712,23 @@ impl RosettaClient {
                 network_identifier,
                 transaction,
                 signed: is_signed,
+            },
+        )
+        .await
+    }
+
+    pub async fn call(
+        &self,
+        network_identifier: NetworkIdentifier,
+        method_name: String,
+        parameters: ObjectMap,
+    ) -> Result<CallResponse, Error> {
+        self.call_endpoint(
+            "/call",
+            &CallRequest {
+                network_identifier,
+                method_name,
+                parameters,
             },
         )
         .await

@@ -8,9 +8,11 @@ rust_library(
         "src/lib.rs",
     ],
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:async-trait",
     ],
     deps = [
+        # Keep sorted.
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",

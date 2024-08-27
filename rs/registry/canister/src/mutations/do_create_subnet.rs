@@ -1,9 +1,5 @@
 use crate::chain_key::{InitialChainKeyConfigInternal, KeyConfigRequestInternal};
-use crate::{
-    common::LOG_PREFIX,
-    mutations::common::{decode_registry_value, encode_or_panic},
-    registry::Registry,
-};
+use crate::{common::LOG_PREFIX, registry::Registry};
 use candid::{CandidType, Deserialize, Encode};
 use dfn_core::api::{call, CanisterId};
 #[cfg(target_arch = "wasm32")]
@@ -29,6 +25,7 @@ use ic_registry_subnet_features::{
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
 use on_wire::bytes;
+use prost::Message;
 use serde::Serialize;
 use std::{collections::HashSet, convert::TryFrom};
 
@@ -136,7 +133,7 @@ impl Registry {
             key: make_catch_up_package_contents_key(subnet_id)
                 .as_bytes()
                 .to_vec(),
-            value: encode_or_panic(&cup_contents),
+            value: cup_contents.encode_to_vec(),
         };
 
         let new_subnet_threshold_signing_pubkey = RegistryMutation {
@@ -144,7 +141,7 @@ impl Registry {
             key: make_crypto_threshold_signing_pubkey_key(subnet_id)
                 .as_bytes()
                 .to_vec(),
-            value: encode_or_panic(&response.subnet_threshold_public_key),
+            value: response.subnet_threshold_public_key.encode_to_vec(),
         };
 
         let subnet_record = SubnetRecord::from(payload);
@@ -168,13 +165,13 @@ impl Registry {
         let subnet_list_mutation = RegistryMutation {
             mutation_type: registry_mutation::Type::Update as i32,
             key: make_subnet_list_record_key().as_bytes().to_vec(),
-            value: encode_or_panic(&subnet_list_record),
+            value: subnet_list_record.encode_to_vec(),
         };
 
         let new_subnet = RegistryMutation {
             mutation_type: registry_mutation::Type::Insert as i32,
             key: make_subnet_record_key(subnet_id).into_bytes(),
-            value: encode_or_panic(&subnet_record),
+            value: subnet_record.encode_to_vec(),
         };
 
         let routing_table_mutation =
@@ -211,7 +208,7 @@ impl Registry {
                     version: _,
                     deletion_marker: _,
                 }) => assert_ne!(
-                    decode_registry_value::<NodeRecord>(value.clone()),
+                    NodeRecord::decode(value.as_slice()).unwrap(),
                     NodeRecord::default()
                 ),
                 None => panic!("A NodeRecord for Node with id {} was not found", node_id),
@@ -314,10 +311,6 @@ pub struct CreateSubnetPayload {
     pub subnet_type: SubnetType,
 
     pub is_halted: bool,
-
-    pub max_instructions_per_message: u64,
-    pub max_instructions_per_round: u64,
-    pub max_instructions_per_install_code: u64,
 
     pub features: SubnetFeaturesPb,
 
@@ -636,9 +629,6 @@ impl From<CreateSubnetPayload> for SubnetRecord {
             is_halted: val.is_halted,
             halt_at_cup_height: false,
 
-            max_instructions_per_message: val.max_instructions_per_message,
-            max_instructions_per_round: val.max_instructions_per_round,
-            max_instructions_per_install_code: val.max_instructions_per_install_code,
             features: Some(SubnetFeatures::from(val.features).into()),
             max_number_of_canisters: val.max_number_of_canisters,
             ssh_readonly_access: val.ssh_readonly_access,

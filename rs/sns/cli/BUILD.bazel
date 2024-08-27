@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/sha2",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
@@ -47,6 +48,7 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:lazy_static",
 ]
 

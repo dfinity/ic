@@ -27,6 +27,7 @@ use dfn_core::println;
 ///      ip:port pairs for anything, no node has the same ip:port for multiple
 ///      endpoints), i.e., all IP:port-pairs of all nodes are mutually exclusive
 ///      (this includes the prometheus-endpoints)
+///
 /// Strict check imposes stricter rules on IP addresses
 pub(crate) fn check_endpoint_invariants(
     snapshot: &RegistrySnapshot,
@@ -313,9 +314,9 @@ fn mask_ipv6(addr: Ipv6Addr, mask: Ipv6Addr) -> Ipv6Addr {
 mod tests {
     use super::*;
     use ic_base_types::{NodeId, PrincipalId};
-    use ic_nns_common::registry::encode_or_panic;
     use ic_protobuf::registry::node::v1::NodeRecord;
     use ic_registry_keys::make_node_record_key;
+    use prost::Message;
 
     #[test]
     fn test_validate_endpoint() {
@@ -389,7 +390,7 @@ mod tests {
         let node_id = NodeId::from(PrincipalId::new_node_test_id(1));
         snapshot.insert(
             make_node_record_key(node_id).into_bytes(),
-            encode_or_panic::<NodeRecord>(&NodeRecord {
+            NodeRecord {
                 node_operator_id: vec![0],
                 http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
@@ -403,7 +404,8 @@ mod tests {
                 chip_id: None,
                 public_ipv4_config: None,
                 domain: None,
-            }),
+            }
+            .encode_to_vec(),
         );
 
         assert!(check_endpoint_invariants(&snapshot, true).is_ok());
@@ -413,7 +415,7 @@ mod tests {
         let key = make_node_record_key(node_id).into_bytes();
         snapshot.insert(
             key.clone(),
-            encode_or_panic::<NodeRecord>(&NodeRecord {
+            NodeRecord {
                 node_operator_id: vec![0],
                 http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
@@ -427,7 +429,8 @@ mod tests {
                 chip_id: None,
                 public_ipv4_config: None,
                 domain: None,
-            }),
+            }
+            .encode_to_vec(),
         );
 
         // TODO: change to `assert!(check_endpoint_invariants(&snapshot, true).is_err());` after NNS1-2228 is closed.
@@ -440,7 +443,7 @@ mod tests {
         let key = make_node_record_key(node_id).into_bytes();
         snapshot.insert(
             key,
-            encode_or_panic::<NodeRecord>(&NodeRecord {
+            NodeRecord {
                 node_operator_id: vec![0],
                 http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.2".to_string(),
@@ -454,7 +457,8 @@ mod tests {
                 chip_id: None,
                 public_ipv4_config: None,
                 domain: None,
-            }),
+            }
+            .encode_to_vec(),
         );
         check_endpoint_invariants(&snapshot, true).unwrap();
     }

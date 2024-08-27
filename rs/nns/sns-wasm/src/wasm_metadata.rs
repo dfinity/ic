@@ -4,6 +4,9 @@ use crate::pb::v1::{
     SnsWasmError as SnsWasmErrorPb,
 };
 
+pub const MAX_METADATA_SECTION_NAME_BYTES: usize = 100;
+pub const MAX_METADATA_SECTION_CONTENTS_BYTES: usize = 100_000;
+
 impl TryFrom<GetWasmMetadataRequestPb> for [u8; 32] {
     type Error = String;
 
@@ -23,10 +26,44 @@ impl TryFrom<GetWasmMetadataRequestPb> for [u8; 32] {
 }
 
 /// The internal representation of `MetadataSectionPb`.
+#[derive(Debug)]
 pub struct MetadataSection {
     pub visibility: String,
     pub name: String,
     pub contents: Vec<u8>,
+}
+
+impl MetadataSection {
+    pub fn validate(&self) -> Result<(), String> {
+        let mut errs = vec![];
+        if !["icp:private", "icp:public"]
+            .iter()
+            .any(|allowed_visibility| allowed_visibility == &self.visibility)
+        {
+            errs.push(".visibility should be `icp:private` or `icp:public`.".to_string());
+        }
+        if self.name.is_empty() {
+            errs.push(".name must not be the empty string.".to_string());
+        }
+        if self.name.len() > MAX_METADATA_SECTION_NAME_BYTES {
+            errs.push(format!(
+                ".name must fit into at most {} bytes.",
+                MAX_METADATA_SECTION_NAME_BYTES
+            ));
+        }
+        if self.contents.len() > MAX_METADATA_SECTION_CONTENTS_BYTES {
+            errs.push(format!(
+                ".contents must fit into at most {} bytes.",
+                MAX_METADATA_SECTION_CONTENTS_BYTES
+            ));
+        }
+        if !errs.is_empty() {
+            let errs = errs.join(", ");
+            return Err(format!("Invalid MetadataSection: {}", errs));
+        }
+
+        Ok(())
+    }
 }
 
 impl From<MetadataSection> for MetadataSectionPb {
@@ -36,6 +73,34 @@ impl From<MetadataSection> for MetadataSectionPb {
             name: Some(src.name),
             contents: Some(src.contents),
         }
+    }
+}
+
+impl TryFrom<MetadataSectionPb> for MetadataSection {
+    type Error = String;
+
+    fn try_from(src: MetadataSectionPb) -> Result<Self, Self::Error> {
+        let MetadataSectionPb {
+            visibility,
+            name,
+            contents,
+        } = src;
+
+        let Some(visibility) = visibility else {
+            return Err("Required field MetadataSection.visibility is not specified.".to_string());
+        };
+        let Some(name) = name else {
+            return Err("Required field MetadataSection.name is not specified".to_string());
+        };
+        let Some(contents) = contents else {
+            return Err("Required field MetadataSection.contents is not specified".to_string());
+        };
+
+        Ok(Self {
+            visibility,
+            name,
+            contents,
+        })
     }
 }
 

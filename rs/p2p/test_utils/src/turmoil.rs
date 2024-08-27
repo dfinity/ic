@@ -1,9 +1,11 @@
 use std::{
+    fmt::Debug,
     future::Future,
     io::{self, IoSliceMut},
     net::{IpAddr, Ipv4Addr, SocketAddr},
+    pin::Pin,
     sync::{Arc, RwLock},
-    task::Poll,
+    task::{Context, Poll},
     time::Duration,
 };
 
@@ -14,14 +16,13 @@ use crate::{
 };
 use axum::Router;
 use bytes::BytesMut;
-use either::Either;
 use futures::{future::BoxFuture, FutureExt};
+use ic_artifact_downloader::FetchArtifact;
 use ic_artifact_manager::run_artifact_processor;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
-    p2p::artifact_manager::{ArtifactProcessorEvent, JoinGuard},
-    p2p::state_sync::StateSyncClient,
-    time_source::SysTimeSource,
+    p2p::artifact_manager::JoinGuard, p2p::consensus::ArtifactMutation,
+    p2p::state_sync::StateSyncClient, time_source::SysTimeSource,
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -29,11 +30,7 @@ use ic_quic_transport::SubnetTopology;
 use ic_quic_transport::{QuicTransport, Transport};
 use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{artifact::UnvalidatedArtifactMutation, NodeId, RegistryVersion};
-use quinn::{
-    self,
-    udp::{EcnCodepoint, Transmit},
-    AsyncUdpSocket,
-};
+use quinn::{self, udp::EcnCodepoint, AsyncUdpSocket, UdpPoller};
 use tokio::{
     select,
     sync::{mpsc, oneshot, watch, Notify},
@@ -59,50 +56,91 @@ impl std::fmt::Debug for CustomUdp {
     }
 }
 
+pin_project_lite::pin_project! {
+    /// Helper adapting a function `MakeFut` that constructs a single-use future `Fut` into a
+    /// [`UdpPoller`] that may be reused indefinitely
+    struct UdpPollHelper<MakeFut, Fut> {
+        make_fut: MakeFut,
+        #[pin]
+        fut: Option<Fut>,
+    }
+}
+
+impl<MakeFut, Fut> UdpPollHelper<MakeFut, Fut> {
+    /// Construct a [`UdpPoller`] that calls `make_fut` to get the future to poll, storing it until
+    /// it yields [`Poll::Ready`], then creating a new one on the next
+    /// [`poll_writable`](UdpPoller::poll_writable)
+    fn new(make_fut: MakeFut) -> Self {
+        Self {
+            make_fut,
+            fut: None,
+        }
+    }
+}
+
+impl<MakeFut, Fut> UdpPoller for UdpPollHelper<MakeFut, Fut>
+where
+    MakeFut: Fn() -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = io::Result<()>> + Send + Sync + 'static,
+{
+    fn poll_writable(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        let mut this = self.project();
+        if this.fut.is_none() {
+            this.fut.set(Some((this.make_fut)()));
+        }
+        // We're forced to `unwrap` here because `Fut` may be `!Unpin`, which means we can't safely
+        // obtain an `&mut Fut` after storing it in `self.fut` when `self` is already behind `Pin`,
+        // and if we didn't store it then we wouldn't be able to keep it alive between
+        // `poll_writable` calls.
+        let result = this.fut.as_mut().as_pin_mut().unwrap().poll(cx);
+        if result.is_ready() {
+            // Polling an arbitrary `Future` after it becomes ready is a logic error, so arrange for
+            // a new `Future` to be created on the next call.
+            this.fut.set(None);
+        }
+        result
+    }
+}
+
+impl<MakeFut, Fut> Debug for UdpPollHelper<MakeFut, Fut> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UdpPollHelper").finish_non_exhaustive()
+    }
+}
+//
+
 impl AsyncUdpSocket for CustomUdp {
-    fn poll_send(
-        &self,
-        _state: &quinn::udp::UdpState,
-        cx: &mut std::task::Context,
-        transmits: &[Transmit],
-    ) -> Poll<Result<usize, io::Error>> {
-        let fut = self.inner.writable();
-        tokio::pin!(fut);
+    fn create_io_poller(self: Arc<Self>) -> Pin<Box<(dyn UdpPoller + 'static)>> {
+        Box::pin(UdpPollHelper::new(move || {
+            let socket = self.clone();
+            async move { socket.inner.writable().await }
+        }))
+    }
 
-        match fut.poll(cx) {
-            Poll::Ready(x) => x?,
-            Poll::Pending => {
-                return Poll::Pending;
-            }
-        };
-
-        let mut transmits_sent = 0;
-        for transmit in transmits {
-            let mut buffer = BytesMut::new();
-            buffer.extend_from_slice(&transmit.segment_size.unwrap_or_default().to_le_bytes());
-            buffer.extend_from_slice(&transmit.contents);
-            let mut bytes_sent = 0;
-            loop {
-                match self.inner.try_send_to(&buffer, transmit.destination) {
-                    Ok(x) => bytes_sent += x,
-                    Err(e) => {
-                        if matches!(e.kind(), io::ErrorKind::WouldBlock) {
-                            break;
-                        }
-                        return Poll::Ready(Err(e));
+    fn try_send(&self, transmit: &quinn_udp::Transmit<'_>) -> Result<(), std::io::Error> {
+        let mut buffer = BytesMut::new();
+        buffer.extend_from_slice(&transmit.segment_size.unwrap_or_default().to_le_bytes());
+        buffer.extend_from_slice(transmit.contents);
+        let mut bytes_sent = 0;
+        loop {
+            match self.inner.try_send_to(&buffer, transmit.destination) {
+                Ok(x) => bytes_sent += x,
+                Err(e) => {
+                    if matches!(e.kind(), io::ErrorKind::WouldBlock) {
+                        break;
                     }
-                }
-                if bytes_sent == buffer.len() {
-                    break;
-                }
-                if bytes_sent > buffer.len() {
-                    panic!("Bug: Should not send more bytes then in buffer");
+                    return Err(e);
                 }
             }
-            transmits_sent += 1;
+            if bytes_sent == buffer.len() {
+                break;
+            }
+            if bytes_sent > buffer.len() {
+                panic!("Bug: Should not send more bytes then in buffer");
+            }
         }
 
-        Poll::Ready(Ok(transmits_sent))
+        Ok(())
     }
 
     fn poll_recv(
@@ -111,13 +149,15 @@ impl AsyncUdpSocket for CustomUdp {
         bufs: &mut [IoSliceMut<'_>],
         meta: &mut [quinn::udp::RecvMeta],
     ) -> Poll<io::Result<usize>> {
-        let fut = self.inner.readable();
-        tokio::pin!(fut);
+        {
+            let fut = self.inner.readable();
+            tokio::pin!(fut);
 
-        match fut.poll(cx) {
-            Poll::Ready(x) => x?,
-            Poll::Pending => return Poll::Pending,
-        };
+            match fut.poll(cx) {
+                Poll::Ready(x) => x?,
+                Poll::Pending => return Poll::Pending,
+            };
+        }
 
         assert!(bufs.len() == meta.len());
         let mut packets_received = 0;
@@ -335,12 +375,19 @@ pub fn add_transport_to_sim<F>(
                         consensus.clone(),
                         consensus.clone().read().unwrap().clone(),
                     );
-                let pfn_producer = Arc::new(consensus.clone().read().unwrap().clone());
+                let bouncer_factory = Arc::new(consensus.clone().read().unwrap().clone());
+
+                let downloader = FetchArtifact::new(
+                    log.clone(),
+                    tokio::runtime::Handle::current(),
+                    consensus,
+                    bouncer_factory,
+                    MetricsRegistry::default(),
+                );
                 consensus_builder.add_client(
                     artifact_manager_event_rx,
-                    consensus,
-                    pfn_producer,
                     artifact_sender,
+                    downloader,
                 );
                 router = Some(router.unwrap_or_default().merge(consensus_builder.router()));
 
@@ -357,7 +404,7 @@ pub fn add_transport_to_sim<F>(
                 registry_client,
                 peer,
                 topology_watcher_clone.clone(),
-                Either::Right(custom_udp),
+                Arc::new(custom_udp),
                 router.unwrap_or_default(),
             ));
 
@@ -398,7 +445,7 @@ pub fn start_test_processor(
     change_set_producer: TestConsensus<U64Artifact>,
 ) -> (
     Box<dyn JoinGuard>,
-    mpsc::Receiver<ArtifactProcessorEvent<U64Artifact>>,
+    mpsc::Receiver<ArtifactMutation<U64Artifact>>,
     mpsc::UnboundedSender<UnvalidatedArtifactMutation<U64Artifact>>,
 ) {
     let (tx, rx) = tokio::sync::mpsc::channel(1000);

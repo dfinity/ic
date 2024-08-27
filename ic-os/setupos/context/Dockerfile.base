@@ -1,4 +1,4 @@
-# GuestOS - Base Image
+# SetupOS - Base Image
 #
 # Build steps:
 # - `docker build -t dfinity/setupos-base:<tag> -f Dockerfile.base .`

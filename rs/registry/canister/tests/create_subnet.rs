@@ -13,7 +13,6 @@ use ic_interfaces_registry::RegistryClient;
 use ic_management_canister_types::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
-use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::itest_helpers::try_call_via_universal_canister;
 use ic_nns_test_utils::{
     itest_helpers::{
@@ -35,14 +34,12 @@ use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryAtomicMutateRequest, upsert};
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use ic_types::{NodeId, ReplicaVersion};
+use prost::Message;
 use registry_canister::mutations::do_create_subnet::{EcdsaInitialConfig, EcdsaKeyRequest};
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
-    mutations::{
-        common::decode_registry_value,
-        do_create_subnet::{
-            CreateSubnetPayload, InitialChainKeyConfig, KeyConfig, KeyConfigRequest,
-        },
+    mutations::do_create_subnet::{
+        CreateSubnetPayload, InitialChainKeyConfig, KeyConfig, KeyConfigRequest,
     },
 };
 use std::convert::TryFrom;
@@ -233,15 +230,17 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet_legacy() {
 
         // Here we discover the IC's subnet ID (from our test harness)
         // and then modify it to hold the key.
-        let subnet_list_record = decode_registry_value::<SubnetListRecordPb>(
+        let subnet_list_record = SubnetListRecordPb::decode(
             fake_client
                 .get_value(
                     &make_subnet_list_record_key(),
                     fake_client.get_latest_version(),
                 )
                 .unwrap()
-                .unwrap(),
-        );
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
 
         let subnet_principals = subnet_list_record
             .subnets
@@ -251,15 +250,17 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet_legacy() {
         let system_subnet_principal = subnet_principals.first().unwrap();
 
         let system_subnet_id = SubnetId::new(*system_subnet_principal);
-        let mut subnet_record = decode_registry_value::<SubnetRecordPb>(
+        let mut subnet_record = SubnetRecordPb::decode(
             fake_client
                 .get_value(
                     &make_subnet_record_key(system_subnet_id),
                     fake_client.get_latest_version(),
                 )
                 .unwrap()
-                .unwrap(),
-        );
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
 
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
             key_configs: vec![KeyConfigInternal {
@@ -274,7 +275,7 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet_legacy() {
         let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
             mutations: vec![upsert(
                 make_subnet_record_key(system_subnet_id),
-                encode_or_panic(&subnet_record),
+                subnet_record.encode_to_vec(),
             )],
             preconditions: vec![],
         };
@@ -378,15 +379,17 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
 
         // Here we discover the IC's subnet ID (from our test harness)
         // and then modify it to hold the key.
-        let subnet_list_record = decode_registry_value::<SubnetListRecordPb>(
+        let subnet_list_record = SubnetListRecordPb::decode(
             fake_client
                 .get_value(
                     &make_subnet_list_record_key(),
                     fake_client.get_latest_version(),
                 )
                 .unwrap()
-                .unwrap(),
-        );
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
 
         let subnet_principals = subnet_list_record
             .subnets
@@ -397,15 +400,17 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
         let system_subnet_principal = subnet_principals.first().unwrap();
 
         let system_subnet_id = SubnetId::new(*system_subnet_principal);
-        let mut subnet_record = decode_registry_value::<SubnetRecordPb>(
+        let mut subnet_record = SubnetRecordPb::decode(
             fake_client
                 .get_value(
                     &make_subnet_record_key(system_subnet_id),
                     fake_client.get_latest_version(),
                 )
                 .unwrap()
-                .unwrap(),
-        );
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
 
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
             key_configs: vec![KeyConfigInternal {
@@ -420,7 +425,7 @@ fn test_accepted_proposal_with_chain_key_gets_keys_from_other_subnet(key_id: Mas
         let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
             mutations: vec![upsert(
                 make_subnet_record_key(system_subnet_id),
-                encode_or_panic(&subnet_record),
+                subnet_record.encode_to_vec(),
             )],
             preconditions: vec![],
         };
@@ -540,9 +545,6 @@ fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
         start_as_nns: false,
         subnet_type: SubnetType::Application,
         is_halted: false,
-        max_instructions_per_message: 5_000_000_000,
-        max_instructions_per_round: 7_000_000_000,
-        max_instructions_per_install_code: 200_000_000_000,
         features: Default::default(),
         max_number_of_canisters: 0,
         ssh_readonly_access: vec![],

@@ -5,7 +5,6 @@ use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
 };
-use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::registry::{
     get_committee_signing_key, get_dkg_dealing_key, get_node_operator_record, get_node_record,
     get_node_signing_key, get_transport_tls_certificate,
@@ -20,6 +19,7 @@ use ic_registry_transport::pb::v1::{
     registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
 };
 use ic_types::NodeId;
+use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 
 #[test]
@@ -338,7 +338,7 @@ fn init_mutation_with_node_allowance(node_allowance: u64) -> RegistryAtomicMutat
             key: make_node_operator_record_key(*TEST_NEURON_1_OWNER_PRINCIPAL)
                 .as_bytes()
                 .to_vec(),
-            value: encode_or_panic(&node_operator_record),
+            value: node_operator_record.encode_to_vec(),
         }],
         preconditions: vec![],
     }

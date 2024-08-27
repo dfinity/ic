@@ -1,20 +1,21 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/prep",
+    "//rs/registry/subnet_type",
+    "//rs/tests/driver:ic-system-test-driver",
+    "//rs/types/types",
     "@crate_index//:clap_3_2_25",
     "@crate_index//:reqwest",
     "@crate_index//:serde",
+    "@crate_index//:slog",
     "@crate_index//:slog-async",
     "@crate_index//:slog-term",
-    "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:url",
-    "//rs/tests/driver:ic-system-test-driver",
-    "//rs/prep",
-    "//rs/registry/subnet_type",
-    "//rs/types/types",
 ]
 
 MACRO_DEPENDENCIES = []

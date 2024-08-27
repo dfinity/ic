@@ -8,13 +8,12 @@ documentation.workspace = true
 
 [dependencies]
 ic-base-types = { path = "../types/base_types" }
-ic-registry-subnet-type = { path = "../registry/subnet_type" }
-ic-types = { path = "../types/types" }
 ic-protobuf = { path = "../protobuf" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-sys = { path = "../sys" }
+ic-types = { path = "../types/types" }
 json5 = "0.4.1"
 serde = { workspace = true }
-slog = { workspace = true }
 tempfile = { workspace = true }
 
 [dev-dependencies]

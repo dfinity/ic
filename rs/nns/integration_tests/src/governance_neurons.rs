@@ -6,20 +6,18 @@ use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
+    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
+    TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
-use ic_nns_governance::{
-    init::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
-    pb::v1::{
-        governance_error::ErrorType,
-        manage_neuron::{Command, Merge, NeuronIdOrSubaccount, Spawn},
-        manage_neuron_response::{
-            Command as CommandResponse, {self},
-        },
-        neuron::DissolveState,
-        GovernanceError, ListNeurons, ManageNeuron, ManageNeuronResponse, Neuron, NeuronState,
+use ic_nns_governance_api::pb::v1::{
+    governance_error::ErrorType,
+    manage_neuron::{Command, Merge, NeuronIdOrSubaccount, Spawn},
+    manage_neuron_response::{
+        Command as CommandResponse, {self},
     },
+    neuron::DissolveState,
+    GovernanceError, ListNeurons, ManageNeuron, ManageNeuronResponse, Neuron, NeuronState,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -526,6 +524,7 @@ fn test_list_neurons() {
             neuron_ids: vec![neuron_id_1.id, neuron_id_2.id, neuron_id_3.id],
             include_neurons_readable_by_caller: false,
             include_empty_neurons_readable_by_caller: Some(false),
+            include_public_neurons_in_full_neurons: None,
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 3);
@@ -539,6 +538,7 @@ fn test_list_neurons() {
             neuron_ids: vec![],
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: Some(true),
+            include_public_neurons_in_full_neurons: None,
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 2);
@@ -552,6 +552,7 @@ fn test_list_neurons() {
             neuron_ids: vec![],
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: Some(false),
+            include_public_neurons_in_full_neurons: None,
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 1);
@@ -566,6 +567,7 @@ fn test_list_neurons() {
             neuron_ids: vec![neuron_id_3.id],
             include_neurons_readable_by_caller: true,
             include_empty_neurons_readable_by_caller: None,
+            include_public_neurons_in_full_neurons: None,
         },
     );
     assert_eq!(list_neurons_response.neuron_infos.len(), 3);

@@ -64,7 +64,7 @@ pub mod internal {
         IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
         IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
         IDkgVerifyInitialDealingsError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
-        ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+        ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
         ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
         ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
         ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
@@ -639,11 +639,11 @@ pub mod internal {
     impl<C: CryptoServiceProvider, R: CryptoComponentRng> ThresholdEcdsaSigner
         for TempCryptoComponentGeneric<C, R>
     {
-        fn sign_share(
+        fn create_sig_share(
             &self,
             inputs: &ThresholdEcdsaSigInputs,
-        ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
-            ThresholdEcdsaSigner::sign_share(&self.crypto_component, inputs)
+        ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaCreateSigShareError> {
+            ThresholdEcdsaSigner::create_sig_share(&self.crypto_component, inputs)
         }
     }
 
@@ -1045,9 +1045,6 @@ impl EcdsaSubnetConfig {
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
                 halt_at_cup_height: false,
-                max_instructions_per_message: 5_000_000_000,
-                max_instructions_per_round: 7_000_000_000,
-                max_instructions_per_install_code: 200_000_000_000,
                 features: None,
                 max_number_of_canisters: 0,
                 ssh_readonly_access: vec![],

@@ -7,6 +7,9 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+clap = { version = "3.2.25", features = ["derive"] }
+futures.workspace = true
+hex = { workspace = true }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-config = { path = "../config" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
@@ -14,9 +17,9 @@ ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-error-types = { path = "../types/error_types" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-messaging = { path = "../messaging" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
@@ -37,15 +40,12 @@ ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types = { path = "../types/types" }
-clap = { version = "3.2.25", features = ["derive"] }
-hex = { workspace = true }
+rand = { workspace = true }
 slog = { workspace = true }
 slog-term = { workspace = true }
 tokio = { workspace = true }
-rand = { workspace = true }
 tower = { workspace = true }
-futures.workspace = true
-wasmparser = "0.115.0"
+wasmparser = { workspace = true }
 
 [[bin]]
 name = "drun"

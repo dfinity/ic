@@ -5,16 +5,17 @@ package(default_visibility = ["//visibility:public"])
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nns/common",
     "//rs/rosetta-api/icp_ledger",
-    "//rs/rosetta-api/ledger_core",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/index-ng",
     "//rs/rosetta-api/icrc1/tokens_u64",
+    "//rs/rosetta-api/ledger_core",
     "//rs/sns/root",
     "//rs/test_utilities/load_wasm",
     "//rs/types/base_types",
@@ -22,8 +23,8 @@ BASE_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
     "@crate_index//:lazy_static",
-    "@crate_index//:rust_decimal",
     "@crate_index//:prost",
+    "@crate_index//:rust_decimal",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
@@ -68,6 +69,7 @@ BASE_DEPENDENCIES = [
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/sns/init:init--test_feature",
     "//rs/nns/governance:governance--test_feature",
+    "//rs/nns/governance/api:api--test_feature",
     "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/nns/handlers/root/impl:root--test_feature",
     "//rs/sns/governance:governance--test_feature",
@@ -83,6 +85,7 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 })
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:rust_decimal_macros",
 ]
 
@@ -182,5 +185,8 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = [],
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "cpu:6",
+    ],
     deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )

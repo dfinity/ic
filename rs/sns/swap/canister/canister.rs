@@ -1,5 +1,5 @@
 use candid::candid_method;
-use dfn_candid::{candid_one, CandidOne};
+use dfn_candid::{candid_one, candid_one_with_config, CandidOne};
 use dfn_core::{
     api::{caller, id, now},
     over, over_async, over_init, CanisterId,
@@ -7,15 +7,12 @@ use dfn_core::{
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_nervous_system_clients::ledger_client::LedgerCanister;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResultV2,
     management_canister_client::{ManagementCanisterClient, ManagementCanisterClientImpl},
 };
-use ic_nervous_system_common::{
-    dfn_core_stable_mem_utils::BufferedStableMemReader, serve_logs, serve_logs_v2, serve_metrics,
-};
+use ic_nervous_system_common::{serve_logs, serve_logs_v2, serve_metrics};
 use ic_nervous_system_runtime::DfnRuntime;
 use ic_sns_swap::{
     logs::{ERROR, INFO},
@@ -31,8 +28,7 @@ use ic_sns_swap::{
         ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
         ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
         NewSaleTicketRequest, NewSaleTicketResponse, NotifyPaymentFailureRequest,
-        NotifyPaymentFailureResponse, OpenRequest, OpenResponse, RefreshBuyerTokensRequest,
-        RefreshBuyerTokensResponse, Swap,
+        NotifyPaymentFailureResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Swap,
     },
 };
 use ic_stable_structures::{writer::Writer, Memory};
@@ -126,33 +122,6 @@ fn list_community_fund_participants_(
 ) -> ListCommunityFundParticipantsResponse {
     log!(INFO, "list_community_fund_participants");
     swap().list_community_fund_participants(&request)
-}
-
-/// Try to open the swap.
-///
-/// See Swap.open.
-#[export_name = "canister_update open"]
-fn open() {
-    over_async(candid_one, open_)
-}
-
-/// See `open`.
-#[candid_method(update, rename = "open")]
-async fn open_(req: OpenRequest) -> OpenResponse {
-    log!(INFO, "open");
-    // Require authorization.
-    let allowed_canister = swap().init_or_panic().nns_governance_or_panic();
-    if caller() != PrincipalId::from(allowed_canister) {
-        panic!(
-            "This method can only be called by canister {}",
-            allowed_canister
-        );
-    }
-    let sns_ledger = create_real_icrc1_ledger(swap().init_or_panic().sns_ledger_or_panic());
-    match swap_mut().open(id(), &sns_ledger, now_seconds(), req).await {
-        Ok(res) => res,
-        Err(msg) => panic!("{}", msg),
-    }
 }
 
 /// See `Swap.refresh_buyer_token_e8`.
@@ -389,13 +358,6 @@ fn create_real_icp_ledger(id: CanisterId) -> ic_nervous_system_common::ledger::I
     ic_nervous_system_common::ledger::IcpLedgerCanister::new(id)
 }
 
-/// Returns a real ledger stub that communicates with the specified
-/// canister, which is assumed to be a canister that implements the
-/// ICRC1 interface.
-fn create_real_icrc1_ledger(id: CanisterId) -> LedgerCanister {
-    LedgerCanister::new(id)
-}
-
 #[export_name = "canister_init"]
 fn canister_init() {
     over_init(|CandidOne(arg)| canister_init_(arg))
@@ -460,51 +422,34 @@ fn canister_post_upgrade() {
 
     log!(INFO, "Executing post upgrade");
 
-    // This post_upgrade is done in two steps because of NNS1-2014:
-    //   1. First try to read the state as it was stored before NNS1-2014
-    //   2. If that fails then we try to read the state as it is stored since NNS1-2014
+    // Read the length of the state bytes.
+    let serialized_swap_message_len = UPGRADES_MEMORY.with(|um| {
+        let mut serialized_swap_message_len_bytes = [0; std::mem::size_of::<u32>()];
+        um.borrow()
+            .read(/* offset */ 0, &mut serialized_swap_message_len_bytes);
+        u32::from_le_bytes(serialized_swap_message_len_bytes) as usize
+    });
 
-    // First try to read the state using the same approach used before NNS1-2014
+    // Read the state bytes.
+    let decode_swap_result = UPGRADES_MEMORY.with(|um| {
+        let mut swap_bytes = vec![0; serialized_swap_message_len];
+        um.borrow().read(
+            /* offset */ std::mem::size_of::<u32>() as u64,
+            &mut swap_bytes,
+        );
+        Swap::decode(&swap_bytes[..])
+    });
 
-    const STABLE_MEM_BUFFER_SIZE: u32 = 1024 * 1024; // 1MiB
-    let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
-    match Swap::decode(reader) {
-        // if reading was successful then this canister was pre NNS1-2014,
-        // nothing else to do
-        Ok(proto) => set_state(proto),
-
-        // otherwise try to read the state using the approach implemented in NNS1-2014
-        Err(_) => {
-            // Read the length of the state bytes.
-            let serialized_swap_message_len = UPGRADES_MEMORY.with(|um| {
-                let mut serialized_swap_message_len_bytes = [0; std::mem::size_of::<u32>()];
-                um.borrow()
-                    .read(/* offset */ 0, &mut serialized_swap_message_len_bytes);
-                u32::from_le_bytes(serialized_swap_message_len_bytes) as usize
-            });
-
-            // Read the state bytes.
-            let decode_swap_result = UPGRADES_MEMORY.with(|um| {
-                let mut swap_bytes = vec![0; serialized_swap_message_len];
-                um.borrow().read(
-                    /* offset */ std::mem::size_of::<u32>() as u64,
-                    &mut swap_bytes,
-                );
-                Swap::decode(&swap_bytes[..])
-            });
-
-            // Deserialize and set the state
-            match decode_swap_result {
-                Err(err) => {
-                    panic!(
-                        "Error deserializing canister state post-upgrade. \
-                 CANISTER HAS BROKEN STATE!!!!. Error: {:?}",
-                        err
-                    );
-                }
-                Ok(proto) => set_state(proto),
-            }
+    // Deserialize and set the state
+    match decode_swap_result {
+        Err(err) => {
+            panic!(
+                "Error deserializing canister state post-upgrade. \
+                CANISTER HAS BROKEN STATE!!!!. Error: {:?}",
+                err
+            );
         }
+        Ok(proto) => set_state(proto),
     }
 
     // Rebuild the indexes if needed. If the rebuilding process fails, panic so the upgrade
@@ -520,7 +465,7 @@ fn canister_post_upgrade() {
 /// Resources to serve for a given http_request
 #[export_name = "canister_query http_request"]
 fn http_request() {
-    over(candid_one, serve_http)
+    over(candid_one_with_config, serve_http)
 }
 
 /// Serve an HttpRequest made to this canister
@@ -598,103 +543,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     Ok(())
 }
 
-/// When run on native, this prints the candid service definition of this
-/// canister, from the methods annotated with `candid_method` above.
-///
-/// Note that `cargo test` calls `main`, and `export_service` (which defines
-/// `__export_service` in the current scope) needs to be called exactly once. So
-/// in addition to `not(target_arch = "wasm32")` we have a `not(test)` guard here
-/// to avoid calling `export_service` in tests.
-#[cfg(not(any(target_arch = "wasm32", test)))]
 fn main() {
-    // The line below generates did types and service definition from the
-    // methods annotated with `candid_method` above. The definition is then
-    // obtained with `__export_service()`.
-    candid::export_service!();
-    std::print!("{}", __export_service());
+    // This block is intentionally left blank.
 }
 
-/// Empty main for test target.
-#[cfg(any(target_arch = "wasm32", test))]
-fn main() {}
-
+// In order for some of the test(s) within this mod to work,
+// this MUST occur at the end.
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use ic_nervous_system_clients::{
-        canister_status::{
-            CanisterStatusResultFromManagementCanister, CanisterStatusResultV2, CanisterStatusType,
-            DefiniteCanisterSettingsArgs, DefiniteCanisterSettingsFromManagementCanister,
-        },
-        management_canister_client::{
-            MockManagementCanisterClient, MockManagementCanisterClientReply,
-        },
-    };
-
-    /// A test that fails if the API was updated but the candid definition was not.
-    #[test]
-    fn check_swap_candid_file() {
-        let did_path = format!(
-            "{}/canister/swap.did",
-            std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set")
-        );
-        let did_contents = String::from_utf8(std::fs::read(did_path).unwrap()).unwrap();
-
-        // See comments in main above
-        candid::export_service!();
-        let expected = __export_service();
-
-        if did_contents != expected {
-            panic!(
-                "Generated candid definition does not match canister/swap.did. \
-                 Run `bazel run :generate_did > canister/swap.did` (no nix and/or direnv) or \
-                 `cargo run --bin sns-swap-canister > canister/swap.did` in \
-                 rs/sns/swap to update canister/swap.did."
-            )
-        }
-    }
-
-    #[tokio::test]
-    async fn test_get_canister_status() {
-        let expected_canister_status_result = CanisterStatusResultV2 {
-            status: CanisterStatusType::Running,
-            module_hash: Some(vec![0_u8]),
-            settings: DefiniteCanisterSettingsArgs {
-                controllers: vec![PrincipalId::new_user_test_id(0)],
-                compute_allocation: candid::Nat::from(0_u32),
-                memory_allocation: candid::Nat::from(0_u32),
-                freezing_threshold: candid::Nat::from(0_u32),
-            },
-            memory_size: candid::Nat::from(0_u32),
-            cycles: candid::Nat::from(0_u32),
-            idle_cycles_burned_per_day: candid::Nat::from(0_u32),
-        };
-
-        let management_canister_client = MockManagementCanisterClient::new(vec![
-            MockManagementCanisterClientReply::CanisterStatus(Ok(
-                CanisterStatusResultFromManagementCanister {
-                    status: CanisterStatusType::Running,
-                    module_hash: Some(vec![0_u8]),
-                    memory_size: candid::Nat::from(0_u32),
-                    settings: DefiniteCanisterSettingsFromManagementCanister {
-                        controllers: vec![PrincipalId::new_user_test_id(0_u64)],
-                        compute_allocation: candid::Nat::from(0_u32),
-                        memory_allocation: candid::Nat::from(0_u32),
-                        freezing_threshold: candid::Nat::from(0_u32),
-                        reserved_cycles_limit: candid::Nat::from(0_u32),
-                    },
-                    cycles: candid::Nat::from(0_u32),
-                    idle_cycles_burned_per_day: candid::Nat::from(0_u32),
-                    reserved_cycles: candid::Nat::from(0_u32),
-                },
-            )),
-        ]);
-
-        let actual_canister_status_result =
-            do_get_canister_status(CanisterId::from_u64(1), &management_canister_client).await;
-        assert_eq!(
-            actual_canister_status_result,
-            expected_canister_status_result
-        );
-    }
-}
+mod tests;

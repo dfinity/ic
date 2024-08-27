@@ -434,64 +434,62 @@ fn hitting_page_delta_limit_fails_message_system_subnet() {
     );
 }
 
-#[test]
-fn hitting_page_delta_limit_fails_for_long_message() {
-    let no_pages = 10;
-    let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
-            upgrade: NumOsPages::new(no_pages),
-            message: NumOsPages::new(no_pages),
-            query: NumOsPages::new(no_pages),
-        })
-        .build();
-    let wat =
-        wat_writing_to_each_stable_memory_page_long_execution(no_pages * PAGE_SIZE as u64 + 1);
+fn hitting_page_delta_limit_fails_for_install_code_helper(with_native_stable_mem: bool) {
+    let no_pages_upgrade = 10;
+    // A large enough limit that will never be triggered.
+    let no_pages_other_messages = no_pages_upgrade * 10_000_000;
+    let mut test =
+        ExecutionTestBuilder::new().with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+            upgrade: NumOsPages::new(no_pages_upgrade),
+            message: NumOsPages::new(no_pages_other_messages),
+            query: NumOsPages::new(no_pages_other_messages),
+        });
+    if with_native_stable_mem {
+        test = test.with_non_native_stable();
+    }
+    let mut test = test.build();
+    let wat = wat_writing_to_each_stable_memory_page_long_execution(
+        no_pages_upgrade * PAGE_SIZE as u64 + 1,
+    );
 
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
     let result = test
         .install_canister(canister_id, wat::parse_str(wat).unwrap())
         .unwrap_err();
-    result.assert_contains(
-        ErrorCode::CanisterMemoryAccessLimitExceeded,
-        &format!(
-            "Error from Canister {canister_id}: Canister exceeded memory access \
-        limits: Exceeded the limit for the number of modified pages in the stable memory \
-        in a single execution: limit {} KB for regular messages, {} KB for upgrade \
-        messages and {} KB for queries.",
-            no_pages * (PAGE_SIZE as u64 / 1024),
-            no_pages * (PAGE_SIZE as u64 / 1024),
-            no_pages * (PAGE_SIZE as u64 / 1024)
-        ),
-    );
+    if with_native_stable_mem {
+        result.assert_contains(
+            ErrorCode::CanisterMemoryAccessLimitExceeded,
+            &format!(
+                "Error from Canister {canister_id}: Canister exceeded memory access \
+            limits: Exceeded the limit for the number of modified pages in the stable \
+            memory in a single message execution: limit: 40 KB."
+            ),
+        );
+    } else {
+        result.assert_contains(
+            ErrorCode::CanisterMemoryAccessLimitExceeded,
+            &format!(
+                "Error from Canister {canister_id}: Canister exceeded memory access \
+            limits: Exceeded the limit for the number of modified pages in the stable memory \
+            in a single execution: limit {} KB for regular messages, {} KB for upgrade \
+            messages and {} KB for queries.",
+                no_pages_other_messages * (PAGE_SIZE as u64 / 1024),
+                no_pages_upgrade * (PAGE_SIZE as u64 / 1024),
+                no_pages_other_messages * (PAGE_SIZE as u64 / 1024)
+            ),
+        );
+    }
+}
+
+#[test]
+fn hitting_page_delta_limit_fails_for_install_code() {
+    hitting_page_delta_limit_fails_for_install_code_helper(false)
 }
 
 #[test]
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
-fn hitting_page_delta_limit_fails_for_long_message_non_native_stable() {
-    let no_pages = 10;
-    let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
-            upgrade: NumOsPages::new(no_pages),
-            message: NumOsPages::new(no_pages),
-            query: NumOsPages::new(no_pages),
-        })
-        .with_non_native_stable()
-        .build();
-    let wat =
-        wat_writing_to_each_stable_memory_page_long_execution(no_pages * PAGE_SIZE as u64 + 1);
-
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
-    let result = test
-        .install_canister(canister_id, wat::parse_str(wat).unwrap())
-        .unwrap_err();
-    result.assert_contains(
-        ErrorCode::CanisterMemoryAccessLimitExceeded,
-        &format!(
-            "Error from Canister {canister_id}: Canister exceeded memory access \
-        limits: Exceeded the limit for the number of modified pages in the stable \
-        memory in a single message execution: limit: 40 KB."
-        ),
-    );
+fn hitting_page_delta_limit_fails_for_install_code_non_native_stable() {
+    hitting_page_delta_limit_fails_for_install_code_helper(true)
 }
 
 #[test]

@@ -3,49 +3,17 @@ use std::collections::{BTreeMap, BTreeSet};
 use ic_crypto_prng::Csprng;
 use ic_interfaces::execution_environment::RegistryExecutionSettings;
 use ic_management_canister_types::MasterPublicKeyId;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-    SignWithEcdsaContext, SignWithThresholdContext,
-};
+use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
 use ic_types::{consensus::idkg::PreSigId, ExecutionRound, Height};
 use rand::RngCore;
 
 use super::SchedulerMetrics;
 
-pub(crate) enum SignatureRequestContext<'a> {
-    Ecdsa(&'a mut SignWithEcdsaContext),
-    Generic(&'a mut SignWithThresholdContext),
-}
-
-impl SignatureRequestContext<'_> {
-    fn nonce(&mut self) -> &mut Option<[u8; 32]> {
-        match self {
-            SignatureRequestContext::Ecdsa(context) => &mut context.nonce,
-            SignatureRequestContext::Generic(context) => &mut context.nonce,
-        }
-    }
-
-    fn pre_signature(&mut self) -> &mut Option<(PreSigId, Height)> {
-        match self {
-            SignatureRequestContext::Ecdsa(context) => &mut context.matched_quadruple,
-            SignatureRequestContext::Generic(context) => &mut context.matched_pre_signature,
-        }
-    }
-
-    fn key_id(&self) -> MasterPublicKeyId {
-        match self {
-            SignatureRequestContext::Ecdsa(context) => {
-                MasterPublicKeyId::Ecdsa(context.key_id.clone())
-            }
-            SignatureRequestContext::Generic(context) => context.key_id(),
-        }
-    }
-}
-
 /// Update [`SignatureRequestContext`]s by assigning randomness and matching pre-signatures.
 pub(crate) fn update_signature_request_contexts(
     current_round: ExecutionRound,
     idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
-    mut contexts: Vec<SignatureRequestContext>,
+    mut contexts: Vec<&mut SignWithThresholdContext>,
     csprng: &mut Csprng,
     registry_settings: &RegistryExecutionSettings,
     metrics: &SchedulerMetrics,
@@ -57,14 +25,14 @@ pub(crate) fn update_signature_request_contexts(
     // Assign a random nonce to the context in the round immediately subsequent to its successful
     // match with a pre-signature.
     for context in &mut contexts {
-        if context.nonce().is_none()
+        if context.nonce.is_none()
             && context
-                .pre_signature()
+                .matched_pre_signature
                 .is_some_and(|(_, height)| height.get() + 1 == current_round.get())
         {
             let mut nonce = [0u8; 32];
             csprng.fill_bytes(&mut nonce);
-            let _ = context.nonce().insert(nonce);
+            let _ = context.nonce.insert(nonce);
             metrics
                 .completed_signature_request_contexts
                 .with_label_values(&[&context.key_id().to_string()])
@@ -100,7 +68,7 @@ pub(crate) fn update_signature_request_contexts(
 fn match_pre_signatures_by_key_id(
     key_id: MasterPublicKeyId,
     mut pre_sig_ids: BTreeSet<PreSigId>,
-    contexts: &mut [SignatureRequestContext],
+    contexts: &mut [&mut SignWithThresholdContext],
     max_ongoing_signatures: usize,
     height: Height,
 ) {
@@ -109,15 +77,15 @@ fn match_pre_signatures_by_key_id(
     for (pre_sig_id, _) in contexts
         .iter_mut()
         .filter(|context| context.key_id() == key_id)
-        .flat_map(|context| context.pre_signature())
+        .flat_map(|context| context.matched_pre_signature)
     {
-        pre_sig_ids.remove(pre_sig_id);
+        pre_sig_ids.remove(&pre_sig_id);
         matched += 1;
     }
 
     // Assign pre-signatures to unmatched contexts until `max_ongoing_signatures` is reached.
     for context in contexts.iter_mut() {
-        if !(context.pre_signature().is_none() && context.key_id() == key_id) {
+        if !(context.matched_pre_signature.is_none() && context.key_id() == key_id) {
             continue;
         }
         if matched >= max_ongoing_signatures {
@@ -126,34 +94,22 @@ fn match_pre_signatures_by_key_id(
         let Some(pre_sig_id) = pre_sig_ids.pop_first() else {
             break;
         };
-        let _ = context.pre_signature().insert((pre_sig_id, height));
+        let _ = context.matched_pre_signature.insert((pre_sig_id, height));
         matched += 1;
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
     use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
     use ic_replicated_state::metadata_state::subnet_call_context_manager::{
-        SchnorrArguments, SignWithEcdsaContext, SignWithThresholdContext, ThresholdArguments,
+        EcdsaArguments, SchnorrArguments, SignWithThresholdContext, ThresholdArguments,
     };
     use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::{messages::CallbackId, time::UNIX_EPOCH};
-
-    enum Context {
-        Ecdsa(SignWithEcdsaContext),
-        Generic(SignWithThresholdContext),
-    }
-
-    impl Context {
-        fn as_mut(&mut self) -> SignatureRequestContext {
-            match self {
-                Context::Ecdsa(c) => SignatureRequestContext::Ecdsa(c),
-                Context::Generic(c) => SignatureRequestContext::Generic(c),
-            }
-        }
-    }
 
     fn ecdsa_key_id(i: u8) -> MasterPublicKeyId {
         MasterPublicKeyId::Ecdsa(EcdsaKeyId {
@@ -173,44 +129,40 @@ mod tests {
         id: u64,
         key_id: &MasterPublicKeyId,
         matched_pre_signature: Option<(u64, Height)>,
-    ) -> (CallbackId, Context) {
+    ) -> (CallbackId, SignWithThresholdContext) {
         let callback_id = CallbackId::from(id);
-        let context = match key_id {
-            MasterPublicKeyId::Ecdsa(key_id) => Context::Ecdsa(SignWithEcdsaContext {
-                request: RequestBuilder::new().build(),
+        let args = match key_id {
+            MasterPublicKeyId::Ecdsa(key_id) => ThresholdArguments::Ecdsa(EcdsaArguments {
                 key_id: key_id.clone(),
-                pseudo_random_id: [id as u8; 32],
                 message_hash: [0; 32],
-                derivation_path: vec![],
-                batch_time: UNIX_EPOCH,
-                matched_quadruple: matched_pre_signature.map(|(id, h)| (PreSigId(id), h)),
-                nonce: None,
             }),
-            MasterPublicKeyId::Schnorr(key_id) => Context::Generic(SignWithThresholdContext {
-                request: RequestBuilder::new().build(),
-                args: ThresholdArguments::Schnorr(SchnorrArguments {
-                    key_id: key_id.clone(),
-                    message: vec![1; 64],
-                }),
-                pseudo_random_id: [id as u8; 32],
-                derivation_path: vec![],
-                batch_time: UNIX_EPOCH,
-                matched_pre_signature: matched_pre_signature.map(|(id, h)| (PreSigId(id), h)),
-                nonce: None,
+            MasterPublicKeyId::Schnorr(key_id) => ThresholdArguments::Schnorr(SchnorrArguments {
+                key_id: key_id.clone(),
+                message: Arc::new(vec![1; 64]),
             }),
         };
+        let context = SignWithThresholdContext {
+            request: RequestBuilder::new().build(),
+            args,
+            pseudo_random_id: [id as u8; 32],
+            derivation_path: vec![],
+            batch_time: UNIX_EPOCH,
+            matched_pre_signature: matched_pre_signature.map(|(id, h)| (PreSigId(id), h)),
+            nonce: None,
+        };
+
         (callback_id, context)
     }
 
     fn match_pre_signatures_basic_test(
         key_id: &MasterPublicKeyId,
         pre_sig_ids: BTreeSet<PreSigId>,
-        mut contexts: BTreeMap<CallbackId, Context>,
+        mut contexts: BTreeMap<CallbackId, SignWithThresholdContext>,
         max_ongoing_signatures: usize,
         height: Height,
         cutoff: u64,
     ) {
-        let mut context_vec: Vec<_> = contexts.values_mut().map(|c| c.as_mut()).collect();
+        let mut context_vec: Vec<_> = contexts.values_mut().collect();
         match_pre_signatures_by_key_id(
             key_id.clone(),
             pre_sig_ids,
@@ -224,11 +176,10 @@ mod tests {
         contexts.iter_mut().for_each(|(id, context)| {
             if id.get() <= cutoff {
                 assert!(context
-                    .as_mut()
-                    .pre_signature()
+                    .matched_pre_signature
                     .is_some_and(|(pid, h)| pid.id() == id.get() && h == height))
             } else {
-                assert!(context.as_mut().pre_signature().is_none())
+                assert!(context.matched_pre_signature.is_none())
             }
         });
     }
@@ -391,23 +342,21 @@ mod tests {
             fake_context(2, key_id, Some((5, Height::from(2)))),
             fake_context(4, key_id, None),
         ]);
-        let mut context_vec: Vec<_> = contexts.values_mut().map(|c| c.as_mut()).collect();
+        let mut context_vec: Vec<_> = contexts.values_mut().collect();
 
         // Match them at height 3
         match_pre_signatures_by_key_id(key_id.clone(), ids, &mut context_vec, 5, Height::from(3));
 
         // The first context should still be matched at the height of the previous round (height 2).
-        let mut first_context = contexts.pop_first().unwrap().1;
+        let first_context = contexts.pop_first().unwrap().1;
         assert!(first_context
-            .as_mut()
-            .pre_signature()
+            .matched_pre_signature
             .is_some_and(|(pid, h)| { pid == PreSigId(5) && h == Height::from(2) }));
 
         // The second context should have been matched to the second pre-signature at height 3.
-        let mut second_context = contexts.pop_first().unwrap().1;
+        let second_context = contexts.pop_first().unwrap().1;
         assert!(second_context
-            .as_mut()
-            .pre_signature()
+            .matched_pre_signature
             .is_some_and(|(pid, h)| { pid == PreSigId(6) && h == Height::from(3) }));
     }
 }

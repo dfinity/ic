@@ -3,16 +3,18 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/nervous_system/clients",
     "//rs/nns/constants",
-    "//rs/types/base_types",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
+    "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:serde",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 
