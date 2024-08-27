@@ -27,17 +27,6 @@ def _check_unused_components_test_impl(ctx):
         output = script,
         content = "echo Unused components check completed"
     )
-    
-    # executable_file = ctx.actions.declare_file(ctx.label.name + ".exe")
-    # ctx.actions.write(
-    #     output=executable_file,
-    #     content="echo Unused components check completed"
-    # )
-
-    # ctx.actions.run_shell(
-    #     outputs=[executable_file],
-    #     command="bash {} > {}".format(executable_file.path, executable_file.path)
-    # )
 
     return [
         DefaultInfo(
