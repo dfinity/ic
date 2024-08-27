@@ -30,7 +30,7 @@ use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 fn system_time_to_nanos(t: SystemTime) -> u64 {
     t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
@@ -1006,6 +1006,69 @@ fn test_upgrade_serialization() {
         minter,
         false,
     );
+}
+
+#[test]
+fn test_approval_upgrade() {
+    let ledger_wasm_mainnet =
+        std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
+    let ledger_wasm_current = ledger_wasm();
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let p3 = PrincipalId::new_user_test_id(3);
+
+    let env = StateMachine::new();
+    let mut initial_balances = HashMap::new();
+    initial_balances.insert(Account::from(p1.0).into(), Tokens::from_e8s(10_000_000));
+
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .icrc1_minting_account(MINTER)
+        .initial_values(initial_balances)
+        .transfer_fee(Tokens::from_e8s(10_000))
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(
+            ledger_wasm_mainnet.clone(),
+            CandidOne(payload).into_bytes().unwrap(),
+            None,
+        )
+        .expect("Unable to install the Ledger canister with the new init");
+
+    let approve_args = default_approve_args(p2.0, 120_000);
+    send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");
+    let mut approve_args = default_approve_args(p3.0, 130_000);
+    let expiration =
+        system_time_to_nanos(env.time()) + Duration::from_secs(5 * 3600).as_nanos() as u64;
+    approve_args.expires_at = Some(expiration);
+    send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");
+
+    let test_upgrade = |ledger_wasm: Vec<u8>| {
+        env.upgrade_canister(
+            canister_id,
+            ledger_wasm,
+            Encode!(&LedgerCanisterPayload::Upgrade(None)).unwrap(),
+        )
+        .unwrap();
+
+        let allowance = get_allowance(&env, canister_id, p1.0, p2.0);
+        assert_eq!(allowance.allowance.0.to_u64().unwrap(), 120_000);
+        assert_eq!(allowance.expires_at, None);
+
+        let allowance = get_allowance(&env, canister_id, p1.0, p3.0);
+        assert_eq!(allowance.allowance.0.to_u64().unwrap(), 130_000);
+        assert_eq!(allowance.expires_at, Some(expiration));
+    };
+
+    // Test if the old serialized approvals are correctly deserialized
+    test_upgrade(ledger_wasm_current.clone());
+    // Test if new approvals serialization also works
+    test_upgrade(ledger_wasm_current);
+    // Test if downgrade works
+    test_upgrade(ledger_wasm_mainnet);
 }
 
 #[test]
