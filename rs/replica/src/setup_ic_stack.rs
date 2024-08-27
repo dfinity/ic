@@ -47,7 +47,7 @@ const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 
 /// If enable traffic to `api/v3/call` will be routed to the v3 call handler.
 /// Otherwise requests will be routed to the v2 call handler.
-const ENABLE_V3_CALL_HANDLER: bool = false;
+const ENABLE_V3_CALL_HANDLER: bool = true;
 
 /// Create the consensus pool directory (if none exists)
 fn create_consensus_pool_dir(config: &Config) {
