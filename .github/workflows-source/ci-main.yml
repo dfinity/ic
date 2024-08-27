@@ -62,6 +62,8 @@ anchors:
     id: before-script
     shell: bash
     run: ./gitlab-ci/src/ci-scripts/before-script.sh
+    env:
+      DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
@@ -106,8 +108,6 @@ jobs:
       - <<: *before-script
       - name: Set BAZEL_EXTRA_ARGS_RULES
         shell: bash
-        env:
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
         run: |
           set -xeuo pipefail
           if [[ "${{ github.event_name }}" == 'merge_group' ]]; then
