@@ -29,23 +29,16 @@ impl RosettaTestingEnvironment {
 }
 
 pub struct RosettaTestingEnviornmentBuilder {
-    pub persistent_storage: bool,
-    pub icp_ledger_init_args: Option<LedgerCanisterInitPayload>,
-    pub controller_id: Option<PrincipalId>,
+    icp_ledger_init_args: Option<LedgerCanisterInitPayload>,
+    controller_id: Option<PrincipalId>,
 }
 
 impl RosettaTestingEnviornmentBuilder {
     pub fn new() -> Self {
         Self {
-            persistent_storage: false,
             icp_ledger_init_args: None,
             controller_id: None,
         }
-    }
-
-    pub fn with_persistent_storage(mut self) -> Self {
-        self.persistent_storage = true;
-        self
     }
 
     pub fn with_icp_ledger_init_args(mut self, args: LedgerCanisterInitPayload) -> Self {
