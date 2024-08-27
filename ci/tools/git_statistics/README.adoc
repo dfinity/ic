@@ -4,6 +4,6 @@ Usage:
 
 -----
 pip install -r requirements.txt
-cd gitlab-ci/tools/git_statistics
+cd ci/tools/git_statistics
 python3 git_statistics.py
 ----

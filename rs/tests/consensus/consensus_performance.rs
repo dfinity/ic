@@ -10,7 +10,7 @@
 //
 // You can setup this test by executing the following commands:
 //
-//   $ gitlab-ci/container/container-run.sh
+//   $ ci/container/container-run.sh
 //   $ ict test consensus_performance_colocate --keepalive -- --test_tmpdir=./performance
 //
 // The --test_tmpdir=./performance will store the test output in the specified directory.

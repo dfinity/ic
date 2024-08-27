@@ -191,7 +191,7 @@ class Env:
     @property
     def build_id(self):
         if self._build_id is None:
-            self._build_id = sh("gitlab-ci/src/artifacts/find-build-id.sh", cwd=self._top, capture=True)
+            self._build_id = sh("ci/src/artifacts/find-build-id.sh", cwd=self._top, capture=True)
         return self._build_id
 
 

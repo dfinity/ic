@@ -10,4 +10,4 @@ repo_root = pathlib.PosixPath(
     .strip()
     .decode("utf8")
 )
-sys.path.insert(0, str(repo_root / "gitlab-ci" / "src"))
+sys.path.insert(0, str(repo_root / "ci" / "src"))

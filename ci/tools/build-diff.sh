@@ -52,7 +52,7 @@ alert() {
     MESSAGE+="<!subteam^S022UEH2AKE>"
     # https://stackoverflow.com/questions/54284389/mention-users-group-via-slack-api
 
-    ./gitlab-ci/src/notify_slack/notify_slack.py \
+    ./ci/src/notify_slack/notify_slack.py \
         "$MESSAGE" --channel "#eng-idx-alerts"
 
     exit 1

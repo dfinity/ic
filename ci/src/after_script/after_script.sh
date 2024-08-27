@@ -8,7 +8,7 @@ test -z "${SSH_AUTH_SOCK:-}" && {
 }
 ssh-add -L || true
 date
-export PYTHONPATH="${CI_PROJECT_DIR}/gitlab-ci/src"
+export PYTHONPATH="${CI_PROJECT_DIR}/ci/src"
 
 ENG_CONS_CHANNEL="eng-consensus-test-failures"
 INGRESS_MNGR_PROPTEST_NAME="ingress-manager-proptests-nightly"
@@ -22,7 +22,7 @@ debug=""
 MESSAGE="Scheduled ${debug}job \`$CI_JOB_NAME\` *failed*. <$CI_JOB_URL|log>. Commit: <$CI_PROJECT_URL/-/commit/$CI_COMMIT_SHA|$CI_COMMIT_SHORT_SHA>."
 
 if [[ "$CI_PIPELINE_SOURCE" == "schedule" ]] && [[ "$CI_JOB_STATUS" == "failed" ]] && [[ ! -f "${CI_PROJECT_DIR}/test-results.json" ]]; then
-    cd "${CI_PROJECT_DIR}/gitlab-ci/src" || true
+    cd "${CI_PROJECT_DIR}/ci/src" || true
     # We support multiple comma separated slack channels in the SLACK_CHANNEL variable.
     IFS=',' read -ra CHANNELS <<<"${SLACK_CHANNEL:-}"
     for channel in "${CHANNELS[@]}"; do
@@ -32,7 +32,7 @@ fi
 
 # send slack messages for specific test signals
 if [[ "$CI_JOB_STATUS" == "failed" ]]; then
-    cd "${CI_PROJECT_DIR}/gitlab-ci/src" || true
+    cd "${CI_PROJECT_DIR}/ci/src" || true
     # and old bash-test that was introduced with OR-187, failures are dispatched to OR-team directly
     # test signals for ingress manager proptests are sent to CONS directly
     if [[ "$CI_JOB_NAME" == "$INGRESS_MNGR_PROPTEST_NAME" ]]; then
@@ -58,7 +58,7 @@ export PIPELINE_START_TIME
 # Key the file to the job id. Darwin builders do not run in jobs in Docker, and could
 # stomp eachother's file.
 export BUILDEVENT_FILE="/tmp/buildevents-step-file-${CI_JOB_ID}"
-python3 "${CI_PROJECT_DIR}"/gitlab-ci/src/log_metrics/gen_honeycomb_metrics.py >"$BUILDEVENT_FILE"
+python3 "${CI_PROJECT_DIR}"/ci/src/log_metrics/gen_honeycomb_metrics.py >"$BUILDEVENT_FILE"
 
 buildevents step "$ROOT_PIPELINE_ID" "$CI_JOB_ID" "$STEP_START" "$CI_JOB_NAME"
 

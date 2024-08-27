@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# This script should only be executed from the gitlab-ci job context.
+# This script should only be executed from the ci job context.
 # To reproduce a build, invoke the Bazel command directly.
 # e.g. follow the buildfarm link -> details -> explicit command line.
 
@@ -32,7 +32,7 @@ if [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
     && [ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ] \
     && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
     # get bazel targets that changed within the MR
-    BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/gitlab-ci/src/bazel-ci/diff.sh)
+    BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/src/bazel-ci/diff.sh)
 fi
 
 # pass info about bazel targets to bazel-targets file

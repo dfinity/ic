@@ -45,7 +45,7 @@ Perform these instructions from the usual place:
 ```
 ssh -A devenv
 cd src/ic
-./gitlab-ci/container/container-run.sh
+./ci/container/container-run.sh
 ```
 
 One special requirement for this to work is access to zh1-pyr07. This can be
@@ -162,7 +162,7 @@ git pull
 # Optional. This is recommended in case you lose your ssh connection.
 tmux -S release
 
-./gitlab-ci/container/container-run.sh
+./ci/container/container-run.sh
 
 TEST_TMPDIR="/tmp/$(whoami)/test_tmpdir"; \
 echo "TEST_TMPDIR=$TEST_TMPDIR"; \
@@ -204,7 +204,7 @@ To interact with the testnet using the shell scripts in this directory, you'll n
 `set_testnet_env_variables.sh` deep within `/tmp/$(whoami)/test_tmpdir`. There is a helper function to do this for you:
 
 ```
-./gitlab-ci/container/container-run.sh
+./ci/container/container-run.sh
 # you probably don't need this if you're just going to use the SNS and NNS upgrade testing scripts
 # as they call it for you. If that's your plan, just skip this step.
 . ./testnet/tools/nns-tools/cmd.sh set_testnet_env_variables
