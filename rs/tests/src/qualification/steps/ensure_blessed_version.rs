@@ -22,13 +22,8 @@ impl Step for EnsureBlessedVersion {
         rt: Handle,
         registry: RegistryWrapper,
     ) -> anyhow::Result<()> {
-        let blessed_versions = registry
-            .get_family_entries::<BlessedReplicaVersions>()?
-            .first_entry()
-            .ok_or(anyhow::anyhow!("No blessed replica versions found"))?
-            .get()
-            .to_owned();
-        if blessed_versions.blessed_version_ids.contains(&self.version) {
+        let blessed_versions = registry.get_blessed_versins()?;
+        if blessed_versions.contains(&self.version) {
             info!(env.logger(), "Version `{}` already blessed", self.version);
             return Ok(());
         }
@@ -53,14 +48,9 @@ impl Step for EnsureBlessedVersion {
         )?;
 
         rt.block_on(registry.sync_with_local_store())?;
-        let blessed_versions = registry
-            .get_family_entries::<BlessedReplicaVersions>()?
-            .first_entry()
-            .ok_or(anyhow::anyhow!("No blessed replica versions found"))?
-            .get()
-            .to_owned();
+        let blessed_versions = registry.get_blessed_versins()?;
 
-        match blessed_versions.blessed_version_ids.contains(&self.version) {
+        match blessed_versions.contains(&self.version) {
             true => Ok(()),
             false => Err(anyhow::anyhow!("Blessed version not found in the registry")),
         }

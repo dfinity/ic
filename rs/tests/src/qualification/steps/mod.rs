@@ -12,6 +12,7 @@ use slog::{error, info};
 use tokio::runtime::Handle;
 
 pub mod ensure_blessed_version;
+pub mod retire_blessed_version;
 pub mod update_subnet_type;
 
 pub trait Step: Sync + Send {
@@ -90,6 +91,14 @@ impl RegistryWrapper {
             .sync_with_local_store()
             .await
             .map_err(anyhow::Error::from)
+    }
+
+    fn get_blessed_versins(&self) -> anyhow::Result<Vec<String>> {
+        self.get_family_entries::<BlessedReplicaVersions>()?
+            .first_entry()
+            .ok_or(anyhow::anyhow!("No blessed replica versions found"))?
+            .get()
+            .to_owned()
     }
 
     fn get_latest_version(&self) -> RegistryVersion {
