@@ -3,8 +3,8 @@ use ic_system_test_driver::driver::{
     test_env_api::{read_dependency_from_env_to_string, read_dependency_to_string},
 };
 use ic_tests::qualification::{
-    defs::QualificationExecutorBuilder, ConfigurableSubnet, ConfigurableUnassignedNodes, IcConfig,
-    SubnetSimple,
+    defs::QualificationExecutor, steps::ensure_blessed_version::EnsureBlessedVersion,
+    ConfigurableSubnet, ConfigurableUnassignedNodes, IcConfig, SubnetSimple,
 };
 use std::time::Duration;
 
@@ -18,12 +18,18 @@ pub fn main() -> anyhow::Result<()> {
         Err(_) => read_dependency_to_string("testnet/mainnet_nns_revision.txt").map_err(|_| anyhow::anyhow!("Didn't find initial version specified in `testnet/mainnet_nns_revision.txt` nur in `INITIAL_VERSION` env variable"))?,
     };
 
-    let qualifier = QualificationExecutorBuilder::default()
-        .with_from_version(&initial_version)
-        .with_to_version(read_dependency_from_env_to_string(
-            "ENV_DEPS__IC_VERSION_FILE",
-        )?)
-        .build()?;
+    let qualifier = QualificationExecutor::new(
+        initial_version.clone(),
+        read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?,
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(16)
+            .max_blocking_threads(16)
+            .enable_all()
+            .build()?,
+        vec![EnsureBlessedVersion {
+            version: initial_version.clone(),
+        }],
+    );
 
     let config = IcConfig {
         subnets: Some(vec![
