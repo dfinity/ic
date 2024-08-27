@@ -45,23 +45,20 @@ impl RosettaTestingEnviornmentBuilder {
             .await
             .expect("Unable to create the canister in which the Ledger would be installed");
 
-        let init_args = self.icp_ledger_init_args.unwrap_or_else(|| {
-            LedgerCanisterInitPayload::builder()
-                .minting_account(minter_identity().sender().unwrap().into())
-                .initial_values(HashMap::from([(
-                    AccountIdentifier::new(PrincipalId(test_identity().sender().unwrap()), None),
-                    icp_ledger::Tokens::from_tokens(DEFAULT_INITIAL_BALANCE).unwrap(),
-                )]))
-                .build()
-                .unwrap()
-        });
-
+        let init_args = LedgerCanisterInitPayload::builder()
+            .minting_account(minter_identity().sender().unwrap().into())
+            .initial_values(HashMap::from([(
+                AccountIdentifier::new(PrincipalId(test_identity().sender().unwrap()), None),
+                icp_ledger::Tokens::from_tokens(DEFAULT_INITIAL_BALANCE).unwrap(),
+            )]))
+            .build()
+            .unwrap();
         pocket_ic
             .install_canister(
                 canister_id,
                 build_ledger_wasm().bytes().to_vec(),
                 Encode!(&init_args).unwrap(),
-                self.controller_id.map(|id| id.into()),
+                None,
             )
             .await;
 
