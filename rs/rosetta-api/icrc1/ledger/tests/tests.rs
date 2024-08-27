@@ -410,6 +410,17 @@ fn icrc1_test_upgrade_serialization() {
     );
 }
 
+#[cfg_attr(feature = "u256-tokens", ignore)]
+#[test]
+fn icrc1_test_upgrade_serialization_deterministic() {
+    ic_icrc1_ledger_sm_tests::icrc1_test_upgrade_serialization_deterministic(
+        ledger_mainnet_wasm(),
+        ledger_wasm(),
+        ledger_wasm_upgradetomemorymanager(),
+        encode_init_args,
+    );
+}
+
 mod metrics {
     use crate::{
         encode_init_args, encode_upgrade_args, ledger_wasm, ledger_wasm_upgradetomemorymanager,
