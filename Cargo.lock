@@ -8321,10 +8321,7 @@ dependencies = [
  "ic-icp-rosetta-runner",
  "ic-ledger-test-utils",
  "ic-rosetta-api",
-<<<<<<< HEAD
  "ic-rosetta-test-utils",
-=======
->>>>>>> master
  "icp-ledger",
  "num-bigint 0.4.6",
  "pocket-ic",
