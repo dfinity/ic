@@ -9,6 +9,7 @@ rust_library(
     srcs = ["src/lib.rs"],
     crate_name = "ic_btc_kyt",
     deps = [
+        # Keep sorted.
         "@crate_index//:bitcoin_0_32",
         "@crate_index//:candid",
         "@crate_index//:futures",
@@ -24,6 +25,7 @@ rust_canister(
     proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     service_file = "btc_kyt_canister.did",
     deps = [
+        # Keep sorted.
         ":btc_kyt",
         "@crate_index//:bitcoin_0_32",
         "@crate_index//:candid",
@@ -42,6 +44,7 @@ rust_ic_test(
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     },
     deps = [
+        # Keep sorted.
         ":btc_kyt",
         "//packages/pocket-ic",
         "//rs/pocket_ic_server:pocket-ic-server",
