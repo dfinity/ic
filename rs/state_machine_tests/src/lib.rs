@@ -312,11 +312,11 @@ fn make_nodes_registry(
         let node_record = NodeRecord {
             node_operator_id: vec![0],
             xnet: Some(ConnectionEndpoint {
-                ip_addr: node.http_ip_addr.to_string(),
+                ip_addr: node.xnet_ip_addr.to_string(),
                 port: 2497,
             }),
             http: Some(ConnectionEndpoint {
-                ip_addr: node.xnet_ip_addr.to_string(),
+                ip_addr: node.http_ip_addr.to_string(),
                 port: 8080,
             }),
             hostos_version_id: None,
