@@ -568,7 +568,7 @@ impl TlsHandshakeCspVault for RemoteCspVault {
         #[allow(clippy::disallowed_methods)]
         tokio::task::block_in_place(|| {
             self.tokio_block_on(self.tarpc_csp_client.tls_sign(
-                context_with_timeout(self.rpc_timeout),
+                context_with_timeout(Duration::from_secs(5)),
                 ByteBuf::from(message),
                 key_id,
             ))
