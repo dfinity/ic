@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - 'dev-gh-*' # used by developers to trigger CI runs without having to open a PR
   pull_request:
   merge_group:
 
