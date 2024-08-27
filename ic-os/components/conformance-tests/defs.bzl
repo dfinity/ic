@@ -2,8 +2,12 @@
 
 def component_file_references_test(name, component_files, image):
     """
-    Verifies that the `component_files` only reference file
-    paths that are accessible within the provided `image`.
+    Verifies that the `component_files` only reference file paths that are accessible within the provided `image`.
+
+    Args:
+        name: The name of the test rule (must end in _test).
+        component_files: A list of Labels that reference components.
+        image: The compressed image where the referenced file paths can be found.
     """
 
     deps = [image]
@@ -24,6 +28,9 @@ def component_file_references_test(name, component_files, image):
     )
 
 def _check_unused_components_test_impl(ctx):
+    """
+    Verifies that every file in components/ is actually being used in one of the images.
+    """
     repo_components = [component.label.name for component in ctx.attr.repo_components]
     used_components = [component.label.name for component in ctx.attr.used_components]
 
