@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+# Process wrapper for commands that are run as part of the ic-os build.
+# Usage:
+# ./proc_wrapper.sh COMMAND
+
+tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX") &&
+trap 'sudo rm -rf "$tmpdir"' INT TERM EXIT &&
+ICOS_TMPDIR="$tmpdir" "$@"

@@ -39,3 +39,9 @@ py_binary(
         requirement("invoke"),
     ],
 )
+
+# Process wrapper for commands that are run as part of the ic-os build.
+sh_binary(
+    name = "proc_wrapper",
+    srcs = ["proc_wrapper.sh"],
+)

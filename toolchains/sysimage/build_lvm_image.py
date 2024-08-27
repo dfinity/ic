@@ -51,9 +51,9 @@ def main():
         lvm_entries = read_volume_description(f.read())
     validate_volume_table(lvm_entries)
 
-    tmpdir = os.getenv("ICOS_TEMP_DIR")
+    tmpdir = os.getenv("ICOS_TMPDIR")
     if not tmpdir:
-        raise RuntimeError("ICOS_TEMP_DIR env variable not available, should be set in BUILD script.")
+        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
     lvm_image = os.path.join(tmpdir, "partition.img")
     prepare_lvm_image(lvm_entries, lvm_image, vg_name, vg_uuid, pv_uuid)
@@ -175,9 +175,9 @@ def select_partition_file(name, partition_files):
 
 
 def write_partition_image_from_tzst(lvm_entry, image_file, partition_tzst):
-    base_temp_dir = os.getenv("ICOS_TEMP_DIR")
+    base_temp_dir = os.getenv("ICOS_TMPDIR")
     if not base_temp_dir:
-        raise RuntimeError("ICOS_TEMP_DIR env variable not available, should be set in BUILD script.")
+        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
     with tempfile.TemporaryDirectory(dir=base_temp_dir) as tmpdir:
         partition_tf = os.path.join(tmpdir, "partition.tar")
         subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)

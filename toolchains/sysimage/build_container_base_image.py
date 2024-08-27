@@ -92,9 +92,9 @@ def main():
     temp_sys_dir = process_temp_sys_dir_args(args.fancy.temp_container_sys_dir, args.fancy.tmpfs_container_sys_dir)
 
     build_args = list(args.fancy.build_args or [])
-    context_dir = os.getenv("ICOS_TEMP_DIR")
+    context_dir = os.getenv("ICOS_TMPDIR")
     if not context_dir:
-        raise RuntimeError("ICOS_TEMP_DIR env variable not available, should be set in BUILD script.")
+        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
     # Add all context files directly into dir
     for context_file in args.context_files:

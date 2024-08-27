@@ -173,9 +173,9 @@ def main():
     if limit_prefix and limit_prefix[0] == "/":
         limit_prefix = limit_prefix[1:]
 
-    tmpdir = os.getenv("ICOS_TEMP_DIR")
+    tmpdir = os.getenv("ICOS_TMPDIR")
     if not tmpdir:
-        raise RuntimeError("ICOS_TEMP_DIR env variable not available, should be set in BUILD script.")
+        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
     if file_contexts_file:
         original_file_contexts = open(file_contexts_file, "r").read()

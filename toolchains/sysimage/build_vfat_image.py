@@ -112,9 +112,9 @@ def main():
     limit_prefix = args.path
     extra_files = args.extra_files
 
-    tmpdir = os.getenv("ICOS_TEMP_DIR")
+    tmpdir = os.getenv("ICOS_TMPDIR")
     if not tmpdir:
-        raise RuntimeError("ICOS_TEMP_DIR env variable not available, should be set in BUILD script.")
+        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
     fs_basedir = os.path.join(tmpdir, "fs")
     os.mkdir(fs_basedir)

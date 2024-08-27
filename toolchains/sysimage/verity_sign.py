@@ -38,9 +38,9 @@ def main():
 
     args = parser.parse_args(sys.argv[1:])
 
-    tmpdir = os.getenv("ICOS_TEMP_DIR")
+    tmpdir = os.getenv("ICOS_TMPDIR")
     if not tmpdir:
-        raise RuntimeError("ICOS_TEMP_DIR env variable not available, should be set in BUILD script.")
+        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
     partition = os.path.join(tmpdir, "partition.img")
 
     subprocess.run(
