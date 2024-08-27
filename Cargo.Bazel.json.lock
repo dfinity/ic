@@ -1,5 +1,5 @@
 {
-  "checksum": "6fc19c391d6fc5ee83c6383b3f8410b4f2bd189026655397f94a88830e709342",
+  "checksum": "cd8da0d5404089c29f7e2bee184710db73d53817e58090fb815fa2cbc731d538",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18664,7 +18664,7 @@
               "target": "wsl"
             },
             {
-              "id": "wycheproof 0.5.1",
+              "id": "wycheproof 0.5.2",
               "target": "wycheproof"
             },
             {
@@ -75816,14 +75816,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wycheproof 0.5.1": {
+    "wycheproof 0.5.2": {
       "name": "wycheproof",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "package_url": "https://github.com/randombit/wycheproof-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wycheproof/0.5.1/download",
-          "sha256": "e639f57253b80c6584b378011aec0fed61c4c21d7a4b97c4d9d7eaf35ca77d12"
+          "url": "https://static.crates.io/crates/wycheproof/0.5.2/download",
+          "sha256": "71039afb8a94cba8b3fbcd400af2d259eb0ecd833fca548130f9e7681ef2c53a"
         }
       },
       "targets": [
@@ -75848,12 +75848,8 @@
         "deps": {
           "common": [
             {
-              "id": "base64 0.21.6",
-              "target": "base64"
-            },
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
+              "id": "data-encoding 2.4.0",
+              "target": "data_encoding"
             },
             {
               "id": "serde 1.0.203",
@@ -75867,7 +75863,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.5.1"
+        "version": "0.5.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -78659,7 +78655,7 @@
     "which 4.4.0",
     "wiremock 0.5.19",
     "wsl 0.1.0",
-    "wycheproof 0.5.1",
+    "wycheproof 0.5.2",
     "x509-cert 0.2.5",
     "x509-parser 0.16.0",
     "yansi 0.5.1",
