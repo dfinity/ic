@@ -76,6 +76,22 @@ pub fn main() -> anyhow::Result<()> {
                             subnet_type: SubnetType::System,
                             version: initial_version.clone(),
                         }),
+                        // Ensure that the new version is blessed
+                        Box::new(EnsureBlessedVersion {
+                            version: to_version.clone(),
+                        }),
+                        // Ensure that application subnets are on the
+                        // new version.
+                        Box::new(UpdateSubnetType {
+                            subnet_type: SubnetType::Application,
+                            version: to_version.clone(),
+                        }),
+                        // Ensure that system subnet is on the
+                        // new version.
+                        Box::new(UpdateSubnetType {
+                            subnet_type: SubnetType::System,
+                            version: to_version.clone(),
+                        }),
                     ],
                 );
                 qualifier.qualify(env).expect("Failed to qualify")
