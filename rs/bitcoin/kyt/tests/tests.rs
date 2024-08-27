@@ -20,7 +20,7 @@ fn kyt_wasm() -> Vec<u8> {
 #[test]
 fn test_get_inputs() {
     let env = PocketIc::new();
-    let p2 = Principal::anonymous();
+    let sender = Principal::anonymous();
 
     let kyt = env.create_canister();
     env.add_cycles(kyt, 100_000_000_000_000);
@@ -29,7 +29,7 @@ fn test_get_inputs() {
     let call_id = env
         .submit_call(
             kyt,
-            p2.into(),
+            sender,
             "get_inputs",
             Encode!(
                 &"c80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475ed".to_string()
