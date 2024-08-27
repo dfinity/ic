@@ -58,7 +58,6 @@ members = [
     "rs/crypto",
     "rs/crypto/ecdsa_secp256r1",
     "rs/crypto/ed25519",
-    "rs/crypto/extended_bip32",
     "rs/crypto/for_verification_only",
     "rs/crypto/iccsa",
     "rs/crypto/internal/crypto_lib/basic_sig/der_utils",
