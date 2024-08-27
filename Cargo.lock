@@ -12884,12 +12884,9 @@ dependencies = [
 name = "ic-xnet-endpoint"
 version = "0.9.0"
 dependencies = [
- "axum 0.7.5",
  "bytes",
  "crossbeam-channel",
- "hyper 1.4.1",
- "hyper-util",
- "ic-async-utils",
+ "hyper 0.14.26",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
  "ic-interfaces-certified-stream-store",
@@ -12907,6 +12904,7 @@ dependencies = [
  "ic-test-utilities-metrics",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-xnet-hyper",
  "maplit",
  "prometheus",
  "prost",
@@ -12916,8 +12914,6 @@ dependencies = [
  "slog",
  "threadpool",
  "tokio",
- "tokio-rustls 0.26.0",
- "tower",
  "url",
 ]
 
@@ -12925,14 +12921,14 @@ dependencies = [
 name = "ic-xnet-hyper"
 version = "0.9.0"
 dependencies = [
- "hyper 1.4.1",
- "hyper-rustls 0.27.2",
- "hyper-util",
+ "hyper 0.14.26",
  "ic-crypto-tls-interfaces",
+ "ic-crypto-utils-tls",
+ "ic-interfaces-registry",
  "ic-xnet-uri",
+ "socket2 0.5.7",
  "tokio",
  "tokio-rustls 0.26.0",
- "tower",
 ]
 
 [[package]]
@@ -12942,9 +12938,8 @@ dependencies = [
  "assert_matches",
  "async-trait",
  "axum 0.7.5",
- "http-body-util",
- "hyper 1.4.1",
- "hyper-util",
+ "hyper 0.14.26",
+ "ic-async-utils",
  "ic-base-types",
  "ic-canonical-state",
  "ic-config",
@@ -12988,7 +12983,6 @@ dependencies = [
  "reqwest 0.12.5",
  "slog",
  "tempfile",
- "thiserror",
  "tokio",
  "url",
 ]
@@ -12997,7 +12991,7 @@ dependencies = [
 name = "ic-xnet-uri"
 version = "0.9.0"
 dependencies = [
- "http 1.1.0",
+ "http 0.2.12",
  "ic-types",
 ]
 
