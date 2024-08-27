@@ -670,8 +670,6 @@ impl SnsInitPayload {
             latest_ledger_archive_poll_timestamp_seconds: None,
             index_canister_id: Some(sns_canister_ids.index),
             testflight,
-            // Newly created canisters don't need their memory limit updated.
-            updated_framework_canisters_memory_limit: Some(true),
         }
     }
 
