@@ -10158,6 +10158,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nervous-system-common-test-keys",
  "ic-nervous-system-common-test-utils",
+ "ic-nervous-system-integration-tests",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
  "ic-nns-common",

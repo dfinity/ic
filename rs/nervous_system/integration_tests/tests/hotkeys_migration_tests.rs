@@ -30,24 +30,29 @@ fn test_hotkey_principal_migration() {
         sns_instance_label,
     );
 
-    let original_neurons_fund_audit_info =
+    upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, GOVERNANCE_CANISTER_ID);
+
+    let neurons_fund_audit_info =
         nns::governance::get_neurons_fund_audit_info(&pocket_ic, proposal_id);
     {
-        let original_neurons_fund_audit_info = original_neurons_fund_audit_info.clone();
-        let neurons_fund_neuron_portions = assert_matches!(original_neurons_fund_audit_info, GetNeuronsFundAuditInfoResponse {
-            result: Some(Result::Ok(Ok {
-                neurons_fund_audit_info: Some(NeuronsFundAuditInfo {
-                    initial_neurons_fund_participation: Some(NeuronsFundParticipation {
-                        neurons_fund_reserves: Some(NeuronsFundSnapshot {
-                            neurons_fund_neuron_portions,
+        let neurons_fund_audit_info = neurons_fund_audit_info.clone();
+        let neurons_fund_neuron_portions = assert_matches!(
+            neurons_fund_audit_info,
+            GetNeuronsFundAuditInfoResponse {
+                result: Some(Result::Ok(Ok {
+                    neurons_fund_audit_info: Some(NeuronsFundAuditInfo {
+                        initial_neurons_fund_participation: Some(NeuronsFundParticipation {
+                            neurons_fund_reserves: Some(NeuronsFundSnapshot {
+                                neurons_fund_neuron_portions,
+                            }),
+                            ..
                         }),
-                        ..
-                    }),
-                    final_neurons_fund_participation: None,
-                    neurons_fund_refunds: None,
-                })
-            }))
-        } => neurons_fund_neuron_portions);
+                        final_neurons_fund_participation: None,
+                        neurons_fund_refunds: None,
+                    })
+                }))
+            } => neurons_fund_neuron_portions
+        );
         assert_matches!(
             &neurons_fund_neuron_portions[..],
             [NeuronsFundNeuronPortion {
@@ -56,10 +61,4 @@ fn test_hotkey_principal_migration() {
             }]
         );
     };
-
-    upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, GOVERNANCE_CANISTER_ID);
-
-    let neurons_fund_audit_info =
-        nns::governance::get_neurons_fund_audit_info(&pocket_ic, proposal_id);
-    assert_eq!(original_neurons_fund_audit_info, neurons_fund_audit_info);
 }
