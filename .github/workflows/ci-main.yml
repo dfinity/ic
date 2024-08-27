@@ -53,10 +53,10 @@ jobs:
         id: before-script
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
-      - name: Set BAZEL_EXTRA_ARGS_RULES
-        shell: bash
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+      - name: Set BAZEL_EXTRA_ARGS_RULES
+        shell: bash
         run: |
           set -xeuo pipefail
           if [[ "${{ github.event_name }}" == 'merge_group' ]]; then
@@ -117,6 +117,8 @@ jobs:
         id: before-script
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run bazel build --config=check //rs/...
         id: bazel-build-config-check
         uses: ./.github/actions/bazel-test-all/
@@ -159,6 +161,8 @@ jobs:
         id: before-script
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
         uses: ./.github/actions/bazel-test-all/
@@ -203,6 +207,8 @@ jobs:
         id: before-script
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Build Fuzzers
         id: bazel-build-fuzzers
         uses: ./.github/actions/bazel-test-all/
@@ -239,6 +245,8 @@ jobs:
         id: before-script
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Build Fuzzers AFL
         id: bazel-build-fuzzers-afl
         uses: ./.github/actions/bazel-test-all/
@@ -303,6 +311,8 @@ jobs:
         id: before-script
         shell: bash
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        env:
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Build IC
         id: build-ic
         shell: bash
