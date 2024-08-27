@@ -1,5 +1,5 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
 
@@ -17,6 +17,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/common",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
+    "//rs/nns/constants",
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/http_types",
     "//rs/sns/swap",  # TODO[NNS1-2282]
@@ -68,17 +69,6 @@ rust_library(
     deps = DEPENDENCIES + [":build_script"],
 )
 
-rust_binary(
-    name = "generate_did",
-    srcs = ["canister/canister.rs"],
-    compile_data = ["canister/root.did"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [
-        ":build_script",
-        ":root",
-    ],
-)
-
 rust_canister(
     name = "sns-root-canister",
     srcs = ["canister/canister.rs"],
@@ -111,6 +101,7 @@ generated_files_check(
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/sns/root/protobuf_generator:lib",
+    "@crate_index//:candid_parser",
     "@crate_index//:maplit",
     "@crate_index//:tokio",
 ]
@@ -134,10 +125,14 @@ rust_test(
 
 rust_test(
     name = "canister_unit_test",
-    crate = ":_wasm_sns-root-canister",
-    data = ["canister/root.did"],
-    env = {"CARGO_MANIFEST_DIR": "rs/sns/root"},
-    deps = ["@crate_index//:candid_parser"],
+    srcs = glob(["canister/**/*.rs"]),
+    compile_data = ["canister/root.did"],
+    crate_root = "canister/canister.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+        ":root",
+    ],
 )
 
 rust_test_suite(

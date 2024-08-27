@@ -70,7 +70,10 @@ DEV_DEPENDENCIES = [
     "@crate_index//:serde_cbor",
 ]
 
-MACRO_DEV_DEPENDENCIES = []
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:test-strategy",
+]
 
 BIN_DEPENDENCIES = [
     # Keep sorted.

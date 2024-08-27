@@ -34,7 +34,6 @@ DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:axum",
     "@crate_index//:bytes",
-    "@crate_index//:either",
     "@crate_index//:futures",
     "@crate_index//:mockall",
     "@crate_index//:pin-project-lite",

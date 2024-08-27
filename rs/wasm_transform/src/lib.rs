@@ -289,8 +289,9 @@ impl<'a> Module<'a> {
                     }
                     if !enable_multi_memory
                         && instructions.iter().any(|i| match i {
-                            Operator::MemoryGrow { mem_byte, .. }
-                            | Operator::MemorySize { mem_byte, .. } => *mem_byte != 0x00,
+                            Operator::MemoryGrow { mem } | Operator::MemorySize { mem } => {
+                                mem.to_le_bytes()[0] != 0
+                            }
                             _ => false,
                         })
                     {
@@ -324,13 +325,13 @@ impl<'a> Module<'a> {
                 Payload::TagSection(_)
                 | Payload::ModuleSection {
                     parser: _,
-                    range: _,
+                    unchecked_range: _,
                 }
                 | Payload::InstanceSection(_)
                 | Payload::CoreTypeSection(_)
                 | Payload::ComponentSection {
                     parser: _,
-                    range: _,
+                    unchecked_range: _,
                 }
                 | Payload::ComponentInstanceSection(_)
                 | Payload::ComponentAliasSection(_)
@@ -380,11 +381,9 @@ impl<'a> Module<'a> {
         if !self.types.is_empty() {
             let mut types = wasm_encoder::TypeSection::new();
             for subtype in self.types {
-                types.subtype(
-                    &wasm_encoder::SubType::try_from(subtype.clone()).map_err(|()| {
-                        Error::ConversionError(format!("Failed to convert type: {:?}", subtype))
-                    })?,
-                );
+                types.subtype(&wasm_encoder::SubType::try_from(subtype.clone()).map_err(
+                    |_err| Error::ConversionError(format!("Failed to convert type: {:?}", subtype)),
+                )?);
             }
             module.section(&types);
         }
@@ -395,7 +394,7 @@ impl<'a> Module<'a> {
                 imports.import(
                     import.module,
                     import.name,
-                    wasm_encoder::EntityType::try_from(import.ty).map_err(|()| {
+                    wasm_encoder::EntityType::try_from(import.ty).map_err(|_err| {
                         Error::ConversionError(format!("Failed to convert type: {:?}", import.ty))
                     })?,
                 );
@@ -414,7 +413,7 @@ impl<'a> Module<'a> {
         if !self.tables.is_empty() {
             let mut tables = wasm_encoder::TableSection::new();
             for (table_ty, init) in self.tables {
-                let table_ty = wasm_encoder::TableType::try_from(table_ty).map_err(|()| {
+                let table_ty = wasm_encoder::TableType::try_from(table_ty).map_err(|_err| {
                     Error::ConversionError(format!("Failed to convert type: {:?}", table_ty))
                 })?;
                 match init {
@@ -438,7 +437,7 @@ impl<'a> Module<'a> {
             let mut globals = wasm_encoder::GlobalSection::new();
             for global in self.globals {
                 globals.global(
-                    wasm_encoder::GlobalType::try_from(global.ty).map_err(|()| {
+                    wasm_encoder::GlobalType::try_from(global.ty).map_err(|_err| {
                         Error::ConversionError(format!("Failed to convert type: {:?}", global.ty))
                     })?,
                     &internal_to_encoder::const_expr(&global.init_expr)?,
@@ -478,7 +477,7 @@ impl<'a> Module<'a> {
                             temp_const_exprs.push(internal_to_encoder::const_expr(e)?);
                         }
                         wasm_encoder::Elements::Expressions(
-                            wasm_encoder::RefType::try_from(*ty).map_err(|()| {
+                            wasm_encoder::RefType::try_from(*ty).map_err(|_err| {
                                 Error::ConversionError(format!("Failed to convert type: {:?}", ty))
                             })?,
                             &temp_const_exprs,
@@ -526,7 +525,7 @@ impl<'a> Module<'a> {
                 for (c, t) in locals {
                     converted_locals.push((
                         c,
-                        wasm_encoder::ValType::try_from(t).map_err(|()| {
+                        wasm_encoder::ValType::try_from(t).map_err(|_err| {
                             Error::ConversionError(format!("Falied to convert type: {:?}", t))
                         })?,
                     ));

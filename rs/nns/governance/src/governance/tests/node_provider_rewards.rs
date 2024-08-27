@@ -1,5 +1,6 @@
 use crate::{
     governance::Governance,
+    node_provider_rewards::DateRangeFilter,
     pb::v1::{Governance as GovernanceProto, MonthlyNodeProviderRewards},
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
@@ -88,72 +89,13 @@ fn test_list_node_provider_rewards_api() {
 
     governance.update_most_recent_monthly_node_provider_rewards(rewards_2.clone());
 
-    let result = governance.list_node_provider_rewards(2);
+    let rewards = governance.list_node_provider_rewards(None);
 
-    assert_eq!(result, vec![rewards_2, rewards_1]);
+    assert_eq!(rewards, vec![rewards_2, rewards_1]);
 }
 
 #[test]
 fn test_list_node_provider_rewards_api_with_paging_and_filters() {
-    let rewards_1 = MonthlyNodeProviderRewards {
-        timestamp: 1721029451, // july 15 2024
-        rewards: vec![],
-        xdr_conversion_rate: None,
-        minimum_xdr_permyriad_per_icp: None,
-        maximum_node_provider_rewards_e8s: None,
-        registry_version: None,
-        node_providers: vec![],
-    };
-
-    let rewards_2 = MonthlyNodeProviderRewards {
-        timestamp: 1723707851, // august 15 2024
-        rewards: vec![],
-        xdr_conversion_rate: None,
-        minimum_xdr_permyriad_per_icp: None,
-        maximum_node_provider_rewards_e8s: None,
-        registry_version: None,
-        node_providers: vec![],
-    };
-    let rewards_3 = MonthlyNodeProviderRewards {
-        timestamp: 1726374659, // sept 15 2024
-        rewards: vec![],
-        xdr_conversion_rate: None,
-        minimum_xdr_permyriad_per_icp: None,
-        maximum_node_provider_rewards_e8s: None,
-        registry_version: None,
-        node_providers: vec![],
-    };
-
-    let rewards_4 = MonthlyNodeProviderRewards {
-        timestamp: 1729041067, // oct 15 2024
-        rewards: vec![],
-        xdr_conversion_rate: None,
-        minimum_xdr_permyriad_per_icp: None,
-        maximum_node_provider_rewards_e8s: None,
-        registry_version: None,
-        node_providers: vec![],
-    };
-
-    let rewards_5 = MonthlyNodeProviderRewards {
-        timestamp: 1731707475, // nov 15 2024
-        rewards: vec![],
-        xdr_conversion_rate: None,
-        minimum_xdr_permyriad_per_icp: None,
-        maximum_node_provider_rewards_e8s: None,
-        registry_version: None,
-        node_providers: vec![],
-    };
-
-    let rewards_6 = MonthlyNodeProviderRewards {
-        timestamp: 1734373883, // dec 15 2024
-        rewards: vec![],
-        xdr_conversion_rate: None,
-        minimum_xdr_permyriad_per_icp: None,
-        maximum_node_provider_rewards_e8s: None,
-        registry_version: None,
-        node_providers: vec![],
-    };
-
     let mut governance = Governance::new(
         GovernanceProto {
             ..Default::default()
@@ -163,19 +105,46 @@ fn test_list_node_provider_rewards_api_with_paging_and_filters() {
         Box::new(StubCMC {}),
     );
 
-    governance.update_most_recent_monthly_node_provider_rewards(rewards_1.clone());
-    governance.update_most_recent_monthly_node_provider_rewards(rewards_2.clone());
-    governance.update_most_recent_monthly_node_provider_rewards(rewards_3.clone());
-    governance.update_most_recent_monthly_node_provider_rewards(rewards_4.clone());
-    governance.update_most_recent_monthly_node_provider_rewards(rewards_5.clone());
-    governance.update_most_recent_monthly_node_provider_rewards(rewards_6.clone());
+    let mut rewards_minted = vec![];
 
-    let result = governance.list_node_provider_rewards(6);
+    for i in 1..=25 {
+        let rewards = MonthlyNodeProviderRewards {
+            timestamp: 100 * i, // july 15 2024
+            rewards: vec![],
+            xdr_conversion_rate: None,
+            minimum_xdr_permyriad_per_icp: None,
+            maximum_node_provider_rewards_e8s: None,
+            registry_version: None,
+            node_providers: vec![],
+        };
+        governance.update_most_recent_monthly_node_provider_rewards(rewards.clone());
+        rewards_minted.push(rewards);
+    }
+
+    let rewards = governance.list_node_provider_rewards(Some(DateRangeFilter {
+        start: None,
+        end: Some(rewards_minted[23].timestamp),
+    }));
 
     // limit of 5
-    assert_eq!(result.len(), 5);
+    assert_eq!(rewards.len(), 24);
     assert_eq!(
-        result,
-        vec![rewards_6, rewards_5, rewards_4, rewards_3, rewards_2]
+        rewards,
+        rewards_minted[..=23]
+            .iter()
+            .rev()
+            .cloned()
+            .collect::<Vec<_>>()
+    );
+
+    let rewards = governance.list_node_provider_rewards(None);
+    assert_eq!(rewards.len(), 24);
+    assert_eq!(
+        rewards,
+        rewards_minted[1..=24]
+            .iter()
+            .rev()
+            .cloned()
+            .collect::<Vec<_>>()
     );
 }
