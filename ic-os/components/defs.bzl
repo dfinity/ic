@@ -12,17 +12,39 @@ def _check_unused_components_test_impl(ctx):
     used_components += ADDITIONAL_USED_COMPONENT_FILES
 
     unused_components = [file for file in repo_components if file not in used_components]
-    print(unused_components)
+
+    unused_components_file = ctx.actions.declare_file(ctx.label.name + ".unused_components")
+    ctx.actions.write(
+        output = unused_components_file,
+        content = "\n".join(unused_components)
+    )
 
     if unused_components:
         fail("Unused components found: {}".format(", ".join(unused_components)))
 
-    # todo: fix return type
-    # return [DefaultInfo(
-    #     files = depset(outputs),
-    #     runfiles = ctx.runfiles(outputs),
-    # )]
-    # todo: need to return true/false
+    script = ctx.actions.declare_file(ctx.label.name + ".sh")
+    ctx.actions.write(
+        output = script,
+        content = "echo Unused components check completed"
+    )
+    
+    # executable_file = ctx.actions.declare_file(ctx.label.name + ".exe")
+    # ctx.actions.write(
+    #     output=executable_file,
+    #     content="echo Unused components check completed"
+    # )
+
+    # ctx.actions.run_shell(
+    #     outputs=[executable_file],
+    #     command="bash {} > {}".format(executable_file.path, executable_file.path)
+    # )
+
+    return [
+        DefaultInfo(
+            files=depset([unused_components_file]),
+            executable=script,
+        )
+    ]
 
 check_unused_components_test = rule(
     test = True,
