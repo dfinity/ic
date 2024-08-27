@@ -46,7 +46,7 @@ use ic_types::{
     registry::RegistryClientError,
     replica_config::ReplicaConfig,
     signature::{BasicSigned, MultiSignature, MultiSignatureShare, ThresholdSignatureShare},
-    Height, NodeId, RegistryVersion,
+    Height, NodeId, RegistryVersion, SubnetId,
 };
 use std::{
     collections::{BTreeMap, HashSet},
@@ -185,7 +185,7 @@ impl SignatureVerify for BlockProposal {
             ));
         }
         let registry_version = get_registry_version(pool, height)?;
-        let signed_metadata = BlockMetadata::signed_from_proposal(self, cfg);
+        let signed_metadata = BlockMetadata::signed_from_proposal(self, cfg.subnet_id);
         crypto.verify(&signed_metadata, registry_version)?;
         Ok(())
     }
@@ -603,7 +603,7 @@ fn get_disqualified_ranks(
     cfg: ReplicaConfig,
     range: HeightRange,
 ) -> RankMap {
-    let mut rank_map = RankMap::new(cfg);
+    let mut rank_map = RankMap::new(cfg.subnet_id);
     for proof in pool
         .pool()
         .validated()
@@ -627,21 +627,22 @@ fn get_disqualified_ranks(
 /// A data structure for storing ranks and proposal metadata.
 struct RankMap {
     map: BTreeMap<Height, BTreeMap<Rank, BasicSigned<BlockMetadata>>>,
-    config: ReplicaConfig,
+    subnet_id: SubnetId,
 }
 
 impl RankMap {
-    fn new(config: ReplicaConfig) -> Self {
+    /// Pass our node's subnet id.
+    fn new(subnet_id: SubnetId) -> Self {
         Self {
             map: BTreeMap::default(),
-            config,
+            subnet_id,
         }
     }
 
     /// Add a new rank & metadata to the map, by passing the corresponding
     /// block proposal.
     fn add(&mut self, proposal: &BlockProposal) {
-        let signed_metadata = BlockMetadata::signed_from_proposal(proposal, &self.config);
+        let signed_metadata = BlockMetadata::signed_from_proposal(proposal, self.subnet_id);
         self.add_from_parts(proposal.rank(), signed_metadata);
     }
 
@@ -656,7 +657,11 @@ impl RankMap {
         self.map.get_mut(&height).and_then(|map| map.remove(&rank));
     }
 
-    fn get(&self, height: Height, rank: Rank) -> Option<&BasicSigned<BlockMetadata>> {
+    fn get_block_metadata(
+        &self,
+        height: Height,
+        rank: Rank,
+    ) -> Option<&BasicSigned<BlockMetadata>> {
         self.map.get(&height)?.get(&rank)
     }
 
@@ -939,20 +944,20 @@ impl Validator {
             pool_reader,
             &self.membership,
             self.replica_config.clone(),
-            range.clone(),
+            range,
         );
 
         // Contains ranks of validated block proposals that don't have an
         // equivocation proof. Disqualified and valid ranks are disjoint.
-        let mut valid_ranks = RankMap::new(self.replica_config.clone());
+        let mut valid_ranks = RankMap::new(self.replica_config.subnet_id);
         pool_reader
             .pool()
             .validated()
             .block_proposal()
-            .get_by_height_range(range.clone())
+            .get_by_height_range(range)
             .filter(|proposal| {
                 disqualified_ranks
-                    .get(proposal.height(), proposal.rank())
+                    .get_block_metadata(proposal.height(), proposal.rank())
                     .is_none()
             })
             .for_each(|proposal| valid_ranks.add(&proposal));
@@ -1016,7 +1021,7 @@ impl Validator {
                         // Only add proposal's rank to the set of valid ranks if
                         // it's not already disqualified.
                         if disqualified_ranks
-                            .get(proposal.height(), proposal.rank())
+                            .get_block_metadata(proposal.height(), proposal.rank())
                             .is_none()
                         {
                             valid_ranks.add(&proposal);
@@ -1073,7 +1078,7 @@ impl Validator {
             // Skip block proposals with a disqualified rank. We do this after
             // checking for a fast-path validation, to avoid getting stuck.
             if disqualified_ranks
-                .get(proposal.height(), proposal.rank())
+                .get_block_metadata(proposal.height(), proposal.rank())
                 .is_some()
             {
                 continue;
@@ -1082,8 +1087,9 @@ impl Validator {
             // Disqualify rank if equivocation was found. If there already
             // exists a validated block of the same rank as the current
             // proposal, we must generate an equivocation proof.
-            if let Some(existing_metadata) =
-                valid_ranks.get(proposal.height(), proposal.rank()).cloned()
+            if let Some(existing_metadata) = valid_ranks
+                .get_block_metadata(proposal.height(), proposal.rank())
+                .cloned()
             {
                 // Ensure the proposal has a different hash from the validated
                 // block of same rank. Then we can construct the proof.
