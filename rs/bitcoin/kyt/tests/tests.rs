@@ -38,6 +38,13 @@ fn test_get_inputs() {
         )
         .expect("submit_call failed to return call id");
 
+    // The response body used for testing below is generated from the output of
+    //
+    //   curl -H 'User-Agent: bitcoin-value-collector' https://btcscan.org/api/tx/{txid}/raw
+    //
+    // There wll be two outcalls because the canister will first fetch the above
+    // given txid, and then fetch the vout[0] from the returned transaction body.
+
     let canister_http_requests = tick_until_next_request(&env);
     env.mock_canister_http_response(MockCanisterHttpResponse {
         subnet_id: canister_http_requests[0].subnet_id,
