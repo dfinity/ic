@@ -30,11 +30,8 @@ env:
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-  AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
-  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
-  DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+  DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
   CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
-  BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
   bazel-test-all:
@@ -69,6 +66,10 @@ jobs:
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
+        env:
+          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
+          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
         with:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "//..."
