@@ -39,12 +39,13 @@ rust_ic_test(
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/kyt",
         "IC_BTC_KYT_CANISTER_WASM_PATH": "$(rootpath :btc_kyt_canister)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     },
     deps = [
         ":btc_kyt",
-        "//rs/state_machine_tests",
+        "//packages/pocket-ic",
+        "//rs/pocket_ic_server:pocket-ic-server",
         "//rs/test_utilities/load_wasm",
-        "@crate_index//:assert_matches",
         "@crate_index//:candid",
     ],
 )

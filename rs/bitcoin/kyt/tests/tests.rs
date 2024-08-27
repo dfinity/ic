@@ -1,9 +1,11 @@
-use assert_matches::assert_matches;
 use candid::{Decode, Encode, Principal};
-use ic_state_machine_tests::{
-    CanisterHttpResponsePayload, Cycles, IngressState, IngressStatus, StateMachine, WasmResult,
-};
 use ic_test_utilities_load_wasm::load_wasm;
+use pocket_ic::{
+    common::rest::{
+        CanisterHttpReply, CanisterHttpRequest, CanisterHttpResponse, MockCanisterHttpResponse,
+    },
+    PocketIc, WasmResult,
+};
 
 const MAX_TICKS: usize = 10;
 
@@ -17,38 +19,33 @@ fn kyt_wasm() -> Vec<u8> {
 
 #[test]
 fn test_get_inputs() {
-    let env = StateMachine::new();
+    let env = PocketIc::new();
     let p2 = Principal::anonymous();
 
-    let kyt = env
-        .install_canister_with_cycles(
-            kyt_wasm(),
-            vec![],
-            None,
-            Cycles::from(100_000_000_000_000u64),
-        )
-        .expect("failed to install the KYT canister");
+    let kyt = env.create_canister();
+    env.add_cycles(kyt, 100_000_000_000_000);
+    env.install_canister(kyt, kyt_wasm(), vec![], None);
 
-    let call_id = env.send_ingress(
-        p2.into(),
-        kyt,
-        "get_inputs",
-        Encode!(&"c80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475ed".to_string())
+    let call_id = env
+        .submit_call(
+            kyt,
+            p2.into(),
+            "get_inputs",
+            Encode!(
+                &"c80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475ed".to_string()
+            )
             .unwrap(),
-    );
+        )
+        .expect("submit_call failed to return call id");
 
-    assert_matches!(
-        env.ingress_status(&call_id),
-        IngressStatus::Known {
-            state: IngressState::Processing,
-            ..
-        }
-    );
-
-    env.tick();
-
-    env.handle_http_call("http outcall", |_| {
-        let body = b"\
+    let canister_http_requests = tick_until_next_request(&env);
+    env.mock_canister_http_response(MockCanisterHttpResponse {
+        subnet_id: canister_http_requests[0].subnet_id,
+        request_id: canister_http_requests[0].request_id,
+        response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+            status: 200,
+            headers: vec![],
+            body: b"\
 \x02\x00\x00\x00\x01\x17\x34\x3a\xab\xa9\x67\x67\x2f\x17\xef\x0a\xbf\x4b\xb1\x14\xad\x19\x63\xe0\
 \x7d\xd2\xf2\x05\xaa\x25\xa4\xda\x50\x3e\xdb\x01\xab\x01\x00\x00\x00\x6a\x47\x30\x44\x02\x20\x21\
 \x81\xb5\x9c\xa7\xed\x7e\x2c\x8e\x06\x96\x52\xb0\x7e\xd2\x10\x24\x9e\x83\x37\xec\xc5\x35\xca\x6b\
@@ -59,18 +56,18 @@ fn test_get_inputs() {
 \xed\xfc\x0a\x8b\x66\xfe\xeb\xae\x5c\x2e\x25\xa7\xb6\xa5\xd1\xcf\x31\x88\xac\x7c\x2e\x00\x00\x00\
 \x00\x00\x00\x19\x76\xa9\x14\xb9\x73\x68\xd8\xbf\x0a\x37\x69\x00\x85\x16\x57\xf3\x7f\xbe\x73\xa6\
 \x56\x61\x33\x88\xac\x14\xa4\x0c\x00"
-            .to_vec();
-        CanisterHttpResponsePayload {
-            status: 200,
-            headers: vec![],
-            body,
-        }
+                .to_vec(),
+        }),
     });
 
-    tick_until_next_request(&env);
-
-    env.handle_http_call("http outcall", |_| {
-        let body = b"\
+    let canister_http_requests = tick_until_next_request(&env);
+    env.mock_canister_http_response(MockCanisterHttpResponse {
+        subnet_id: canister_http_requests[0].subnet_id,
+        request_id: canister_http_requests[0].request_id,
+        response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+            status: 200,
+            headers: vec![],
+            body: b"\
 \x02\x00\x00\x00\x01\x82\xc8\x5d\xe7\x4d\x19\xbb\x36\x16\x2f\xca\xef\xc7\xe7\x70\x15\x65\xb0\x2d\
 \xf6\x06\x0f\x8e\xcf\x49\x64\x63\x37\xfc\xe8\x59\x37\x07\x00\x00\x00\x6a\x47\x30\x44\x02\x20\x15\
 \xf2\xc7\x7a\x3b\x95\x13\x73\x7a\xa2\x86\xb3\xe6\x06\xf9\xb6\x82\x1c\x6d\x5d\x35\xe5\xa9\x58\xe0\
@@ -81,16 +78,12 @@ fn test_get_inputs() {
 \xb1\x5c\xbf\x27\xd5\x42\x53\x99\xeb\xf6\xf0\xfb\x50\xeb\xb8\x8f\x18\x88\xac\x00\x96\x00\x00\x00\
 \x00\x00\x00\x19\x76\xa9\x14\xb9\x73\x68\xd8\xbf\x0a\x37\x69\x00\x85\x16\x57\xf3\x7f\xbe\x73\xa6\
 \x56\x61\x33\x88\xac\xb3\xa3\x0c\x00"
-            .to_vec();
-        CanisterHttpResponsePayload {
-            status: 200,
-            headers: vec![],
-            body,
-        }
+                .to_vec(),
+        }),
     });
 
     let result = env
-        .await_ingress(call_id, /*max_ticks=*/ MAX_TICKS)
+        .await_call(call_id)
         .expect("the fetch request didn't finish");
 
     match &result {
@@ -105,16 +98,18 @@ fn test_get_inputs() {
     }
 }
 
-fn tick_until_next_request(env: &StateMachine) {
+fn tick_until_next_request(env: &PocketIc) -> Vec<CanisterHttpRequest> {
     for _ in 0..MAX_TICKS {
-        if !env.canister_http_request_contexts().is_empty() {
+        if !env.get_canister_http().is_empty() {
             break;
         }
         env.tick();
     }
+    let canister_http_requests = env.get_canister_http();
     assert!(
-        !env.canister_http_request_contexts().is_empty(),
+        !canister_http_requests.is_empty(),
         "The canister did not produce another request in {} ticks",
         MAX_TICKS
     );
+    canister_http_requests
 }

@@ -5697,14 +5697,12 @@ dependencies = [
 name = "ic-btc-kyt"
 version = "0.9.0"
 dependencies = [
- "assert_matches",
  "bitcoin 0.32.2",
  "candid",
- "candid_parser",
  "futures",
  "ic-cdk 0.13.5",
- "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
+ "pocket-ic",
 ]
 
 [[package]]
