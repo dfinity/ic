@@ -11,7 +11,10 @@ hyper = { workspace = true }
 hyper-rustls = { workspace = true }
 hyper-util = { workspace = true }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
+ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-xnet-uri = { path = "../uri" }
+socket2 = { workspace = true }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
 tower = { workspace = true }

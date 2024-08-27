@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 //! This module contains various utilities for https://hyper.rs
 //! specific to Message Routing.
 use hyper::Uri;
@@ -8,22 +10,75 @@ use ic_xnet_uri::XNetAuthority;
 use std::{
     convert::TryFrom,
     future::Future,
+    net::SocketAddr,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
 };
-use tokio::net::TcpStream;
-use tower::{BoxError, Service};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    runtime::Handle,
+};
+use tower::Service;
+
+pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
+
+/// Box an error to erase its type.
+fn box_err(e: impl std::error::Error + Send + Sync + 'static) -> BoxError {
+    Box::new(e) as Box<_>
+}
+
+/// Binds a TCP listener to the specified address with `SO_REUSEADDR`
+/// and `SO_REUSEPORT` set.
+pub fn bind_listener(
+    addr: &SocketAddr,
+    runtime_handle: Handle,
+) -> Result<(TcpListener, SocketAddr), BoxError> {
+    let socket = bind_tcp_socket_with_reuse(addr)?;
+    let listener = {
+        let _guard = runtime_handle.enter();
+        TcpListener::from_std(socket.into())?
+    };
+    let address = listener.local_addr()?;
+
+    Ok((listener, address))
+}
+
+/// Binds a TCP socket on the given address after having set the `SO_REUSEADDR`
+/// and `SO_REUSEPORT` flags.
+///
+/// Setting the flags after binding to the port has no effect.
+fn bind_tcp_socket_with_reuse(addr: &SocketAddr) -> Result<socket2::Socket, BoxError> {
+    use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+    let domain = match addr {
+        SocketAddr::V4(_) => Domain::IPV4,
+        SocketAddr::V6(_) => Domain::IPV6,
+    };
+    let socket = Socket::new(domain, Type::STREAM, Some(Protocol::TCP))?;
+
+    #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
+    {
+        socket.set_reuse_address(true)?;
+        socket.set_reuse_port(true)?;
+    }
+    socket.set_nonblocking(true)?;
+    socket.bind(&SockAddr::from(*addr))?;
+    socket.listen(128)?;
+
+    Ok(socket)
+}
 
 /// The type of the connection that should be used. This enum is mostly useful
 /// for testing to avoid setting up the registry and keystore for TLS.
 #[derive(Debug, Clone, Copy, Default)]
 enum ConnectionType {
     /// Only accept TLS connections.
+    #[allow(dead_code)]
     #[default]
     Tls,
     /// Only accept raw unencrypted connections. Should only be used for
     /// testing.
+    #[allow(dead_code)]
     Raw,
 }
 
@@ -67,13 +122,13 @@ impl Service<Uri> for TlsConnector {
     type Error = BoxError;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.http.poll_ready(cx).map_err(|e| Box::new(e) as Box<_>)
+        self.http.poll_ready(cx).map_err(box_err)
     }
 
     fn call(&mut self, dst: Uri) -> Self::Future {
         let xnet_auth = match XNetAuthority::try_from(&dst) {
             Ok(auth) => auth,
-            Err(err) => return Box::pin(async move { Err(Box::new(err) as Box<_>) }),
+            Err(err) => return Box::pin(async move { Err(box_err(err)) }),
         };
 
         let http_uri = format!("http://{}", xnet_auth.address)
@@ -84,7 +139,7 @@ impl Service<Uri> for TlsConnector {
         let tls = self.tls.clone();
         let connection_type = self.connection_type;
         let future = async move {
-            let tcp_stream = connecting.await?;
+            let tcp_stream = connecting.await.map_err(box_err)?;
             match connection_type {
                 ConnectionType::Raw => Ok(MaybeHttpsStream::Http(tcp_stream)),
                 ConnectionType::Tls => {
@@ -102,7 +157,8 @@ impl Service<Uri> for TlsConnector {
                                 .expect("failed to create domain"),
                             TokioIo::new(tcp_stream),
                         )
-                        .await?;
+                        .await
+                        .map_err(box_err)?;
                     Ok(MaybeHttpsStream::Https(TokioIo::new(tls_stream)))
                 }
             }
