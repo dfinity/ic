@@ -19,6 +19,7 @@ SetupOS validates, sanitizes, and copies all of its configuration files to the H
   node_operator_private_key.pem   # Node Operator private key created in the Node Provider onboarding
   deployment.json                 # Deployment-specific configurations
   nns_public_key.pem              # NNS public key
+  firewall.json                   # Firewall rules; refer to Network-Configuration.adoc for more information
 
 Refer to link:../../rs/ic_os/config/README.md[rs/ic_os/config] & link:../components/setupos-scripts/setup-hostos-config.sh[setup-hostos-config.sh]
 
