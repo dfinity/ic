@@ -65,7 +65,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         "secp256k1-sys": [crate.annotation(
             # This specific version is used by ic-btc-kyt canister, which
             # requires an extra cfg flag to avoid linking issues.
-            # Applying the same cfg to other versions of secp256k1-sys 
+            # Applying the same cfg to other versions of secp256k1-sys
             # may break other programs or tests.
             version = "0.10.0",
             rustc_flags = ["--cfg=rust_secp_no_symbol_renaming"],
