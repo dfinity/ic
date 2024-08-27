@@ -653,19 +653,6 @@ def boundary_node_icos_build(
 
     image_deps = image_deps_func(mode)
 
-    # -------------------- Pre-check --------------------
-
-    # Verify that all the referenced components exist
-    native.genrule(
-        name = name + "_pre_check",
-        srcs = [k for k, v in image_deps["component_files"].items()],
-        outs = [name + "_pre_check_result.txt"],
-        cmd = """
-            echo "Running pre_check for {name}"
-            echo "All paths exist" > $@
-        """,
-    )
-
     native.sh_binary(
         name = "vuln-scan",
         srcs = ["//ic-os:vuln-scan/vuln-scan.sh"],

@@ -2,8 +2,6 @@
 Hold manifest common to all Boundary GuestOS variants.
 """
 
-load("//ic-os/components:boundary-guestos.bzl", "component_files")
-
 # Declare the dependencies that we will have for the built filesystem images.
 # This needs to be done separately from the build rules because we want to
 # compute the hash over all inputs going into the image and derive the
@@ -33,7 +31,6 @@ def image_deps(mode):
             "//publish/binaries:systemd-journal-gatewayd-shim": "/opt/ic/bin/systemd-journal-gatewayd-shim:0755",
             "//publish/binaries:ic-boundary": "/opt/ic/bin/ic-boundary:0755",
         },
-        "component_files": component_files,
     }
 
     image_variants = {
