@@ -1,5 +1,5 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test_suite")
 load("//bazel:prost.bzl", "generated_files_check")
@@ -88,6 +88,14 @@ DEV_DEPENDENCIES = [
 
 MACRO_DEV_DEPENDENCIES = []
 
+LIB_SRCS = glob(
+    ["src/**"],
+    exclude = [
+        "**/*tests.rs",
+        "**/tests/**",
+    ],
+)
+
 cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
@@ -99,10 +107,7 @@ cargo_build_script(
 
 rust_library(
     name = "root",
-    srcs = glob(
-        ["src/**"],
-        exclude = ["**/*tests.rs"],
-    ),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_name = "ic_nns_handler_root",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -112,27 +117,13 @@ rust_library(
 
 rust_library(
     name = "root--test_feature",
-    srcs = glob(
-        ["src/**"],
-        exclude = ["**/*tests.rs"],
-    ),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_features = ["test"],
     crate_name = "ic_nns_handler_root",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [":build_script"],
-)
-
-rust_binary(
-    name = "generate_did",
-    srcs = ["canister/canister.rs"],
-    compile_data = ["canister/root.did"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [
-        ":build_script",
-        ":root",
-    ],
 )
 
 rust_test(
@@ -152,7 +143,10 @@ rust_canister(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/root.did",
-    deps = DEPENDENCIES + [":root"] + [":build_script"],
+    deps = DEPENDENCIES + [
+        ":build_script",
+        ":root",
+    ],
 )
 
 rust_canister(
@@ -161,15 +155,22 @@ rust_canister(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test_canisters/upgrade_test_canister.did",
-    deps = DEPENDENCIES + [":root"] + [":build_script"],
+    deps = DEPENDENCIES + [
+        ":build_script",
+        ":root",
+    ],
 )
 
 rust_test(
     name = "canister_unit_test",
-    crate = ":_wasm_root-canister",
-    data = ["canister/root.did"],
-    env = {"CARGO_MANIFEST_DIR": "rs/nns/handlers/root/impl"},
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":root"] + [":build_script"],
+    srcs = glob(["canister/**/*.rs"]),
+    compile_data = ["canister/root.did"],
+    crate_root = "canister/canister.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        ":build_script",
+        ":root",
+    ],
 )
 
 generated_files_check(
