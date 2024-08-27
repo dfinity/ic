@@ -1,7 +1,7 @@
 use std::sync::{Arc, RwLock};
 
 use ic_interfaces::p2p::consensus::{
-    Aborted, ArtifactAssembler, Peers, PriorityFnFactory, ValidatedPoolReader,
+    Aborted, ArtifactAssembler, BouncerFactory, Peers, ValidatedPoolReader,
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -24,8 +24,8 @@ use super::{
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
 
-struct PriorityFnFactoryWrapper<Pool: ValidatedPoolReader<ConsensusMessage>> {
-    pfn_producer: Arc<dyn PriorityFnFactory<ConsensusMessage, Pool>>,
+struct BouncerFactoryWrapper<Pool: ValidatedPoolReader<ConsensusMessage>> {
+    bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessage, Pool>>,
 }
 
 struct ConsensusPoolWrapper<Pool: ValidatedPoolReader<ConsensusMessage>> {
@@ -52,20 +52,19 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>> ValidatedPoolReader<MaybeStrip
 }
 
 impl<Pool: ValidatedPoolReader<ConsensusMessage>>
-    PriorityFnFactory<MaybeStrippedConsensusMessage, ConsensusPoolWrapper<Pool>>
-    for PriorityFnFactoryWrapper<Pool>
+    BouncerFactory<MaybeStrippedConsensusMessage, ConsensusPoolWrapper<Pool>>
+    for BouncerFactoryWrapper<Pool>
 {
-    fn get_priority_function(
+    fn new_bouncer(
         &self,
         pool: &ConsensusPoolWrapper<Pool>,
-    ) -> ic_interfaces::p2p::consensus::PriorityFn<
+    ) -> ic_interfaces::p2p::consensus::Bouncer<
         <MaybeStrippedConsensusMessage as IdentifiableArtifact>::Id,
-        <MaybeStrippedConsensusMessage as IdentifiableArtifact>::Attribute,
     > {
         let pool = pool.consensus_pool.read().unwrap();
-        let nested = self.pfn_producer.get_priority_function(&pool);
+        let nested = self.bouncer_factory.new_bouncer(&pool);
 
-        Box::new(move |id, attributes| nested(id.as_ref(), attributes))
+        Box::new(move |id| nested(id.as_ref()))
     }
 }
 
@@ -85,7 +84,7 @@ impl FetchStrippedConsensusArtifact {
         rt: tokio::runtime::Handle,
         consensus_pool: Arc<RwLock<Pool>>,
         ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
-        pfn_producer: Arc<dyn PriorityFnFactory<ConsensusMessage, Pool>>,
+        bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessage, Pool>>,
         metrics_registry: MetricsRegistry,
         node_id: NodeId,
     ) -> (impl Fn(Arc<dyn Transport>) -> Self, axum::Router) {
@@ -101,7 +100,7 @@ impl FetchStrippedConsensusArtifact {
             log.clone(),
             rt,
             Arc::new(RwLock::new(ConsensusPoolWrapper { consensus_pool })),
-            Arc::new(PriorityFnFactoryWrapper { pfn_producer }),
+            Arc::new(BouncerFactoryWrapper { bouncer_factory }),
             metrics_registry.clone(),
         );
 
@@ -134,14 +133,13 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
     async fn assemble_message<P: Peers + Clone + Send + 'static>(
         &self,
         id: <MaybeStrippedConsensusMessage as IdentifiableArtifact>::Id,
-        attr: <MaybeStrippedConsensusMessage as IdentifiableArtifact>::Attribute,
         artifact: Option<(MaybeStrippedConsensusMessage, NodeId)>,
         peer_rx: P,
     ) -> Result<(ConsensusMessage, NodeId), Aborted> {
         // Download the Stripped message if it hasn't been pushed.
         let (stripped_artifact, peer) = self
             .fetch_stripped
-            .assemble_message(id.clone(), attr, artifact, peer_rx.clone())
+            .assemble_message(id.clone(), artifact, peer_rx.clone())
             .await?;
 
         let mut stripped_block_proposal = match stripped_artifact {

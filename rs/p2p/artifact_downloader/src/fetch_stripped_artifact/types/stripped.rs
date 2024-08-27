@@ -1,5 +1,3 @@
-use std::convert::Infallible;
-
 use ic_protobuf::{
     p2p::v1 as p2p_pb,
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -88,8 +86,6 @@ impl IdentifiableArtifact for MaybeStrippedConsensusMessage {
 
     type Id = StrippedConsensusMessageId;
 
-    type Attribute = ();
-
     fn id(&self) -> Self::Id {
         let unstripped_id = match self {
             MaybeStrippedConsensusMessage::Unstripped(unstripped) => unstripped.id(),
@@ -100,8 +96,6 @@ impl IdentifiableArtifact for MaybeStrippedConsensusMessage {
 
         StrippedConsensusMessageId(unstripped_id)
     }
-
-    fn attribute(&self) -> Self::Attribute {}
 }
 
 impl PbArtifact for MaybeStrippedConsensusMessage {
@@ -112,8 +106,4 @@ impl PbArtifact for MaybeStrippedConsensusMessage {
     type PbMessage = p2p_pb::StrippedConsensusMessage;
 
     type PbMessageError = ProxyDecodeError;
-
-    type PbAttribute = ();
-
-    type PbAttributeError = Infallible;
 }
