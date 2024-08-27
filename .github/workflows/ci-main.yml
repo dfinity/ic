@@ -6,7 +6,7 @@ on:
   push:
     branches:
       - master
-      - 'dev-gh-*' # Used for development purposes if desired to iterate without PR
+      - 'dev-gh-*'
   pull_request:
   # Used as reusable workflow within release-testing workflow
   workflow_call:
