@@ -14,6 +14,9 @@ table filter {
   counter rate_limit_v4_counter {}
   counter connection_limit_v4_counter {}
 
+  chain provider_INPUT {
+  }
+
   chain INPUT {
     type filter hook input priority 0; policy drop;
     iif lo accept
@@ -34,6 +37,7 @@ ip saddr {6.6.6.6} ct state { new } tcp dport {1006} accept # global
     ct state { invalid } drop
     #   - The rule accepts all established and related connections. It's required for the IPv4 connectivity check.
     ct state { established, related } accept
+    jump provider_INPUT
     log prefix "Drop - default policy: "
   }
 
@@ -64,6 +68,9 @@ table ip6 filter {
   counter rate_limit_v6_counter {}
   counter connection_limit_v6_counter {}
 
+  chain provider_INPUT {
+  }
+
   chain INPUT {
     type filter hook input priority 0; policy drop;
     iif lo accept
@@ -89,6 +96,7 @@ ip6 saddr {::ffff:3.3.3.3} ct state { new } tcp dport {1003} accept # subnet_ynd
 ip6 saddr {::ffff:4.4.4.4} ct state { new } tcp dport {1004} accept # replica_nodes
 ip6 saddr {::ffff:6.6.6.6} ct state { new } tcp dport {1006} accept # global
     
+    jump provider_INPUT
     log prefix "Drop - default policy: "
   }
 
