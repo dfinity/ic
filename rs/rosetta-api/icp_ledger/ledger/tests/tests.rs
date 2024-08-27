@@ -28,7 +28,7 @@ use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use num_traits::cast::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -1017,18 +1017,26 @@ fn test_upgrade_serialization() {
 }
 
 #[test]
-fn test_approval_upgrade() {
+fn test_upgrade_serialization_deterministic() {
     let ledger_wasm_mainnet =
         std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
     let ledger_wasm_current = ledger_wasm();
+    let ledger_wasm_upgradetomemorymanager = ledger_wasm_upgradetomemorymanager();
 
     let p1 = PrincipalId::new_user_test_id(1);
     let p2 = PrincipalId::new_user_test_id(2);
     let p3 = PrincipalId::new_user_test_id(3);
+    let accounts = vec![
+        Account::from(p1.0),
+        Account::from(p2.0),
+        Account::from(p3.0),
+    ];
 
     let env = StateMachine::new();
     let mut initial_balances = HashMap::new();
-    initial_balances.insert(Account::from(p1.0).into(), Tokens::from_e8s(10_000_000));
+    for account in &accounts {
+        initial_balances.insert((*account).into(), Tokens::from_e8s(10_000_000));
+    }
 
     let payload = LedgerCanisterInitPayload::builder()
         .minting_account(MINTER.into())
@@ -1054,6 +1062,11 @@ fn test_approval_upgrade() {
     approve_args.expires_at = Some(expiration);
     send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");
 
+    let mut balances = BTreeMap::new();
+    for account in &accounts {
+        balances.insert(account, balance_of(&env, canister_id, *account));
+    }
+
     let test_upgrade = |ledger_wasm: Vec<u8>| {
         env.upgrade_canister(
             canister_id,
@@ -1069,11 +1082,21 @@ fn test_approval_upgrade() {
         let allowance = get_allowance(&env, canister_id, p1.0, p3.0);
         assert_eq!(allowance.allowance.0.to_u64().unwrap(), 130_000);
         assert_eq!(allowance.expires_at, Some(expiration));
+
+        for account in &accounts {
+            assert_eq!(balances[account], balance_of(&env, canister_id, *account));
+        }
     };
 
-    // Test if the old serialized approvals are correctly deserialized
+    // Test if the old serialized approvals and balances are correctly deserialized
     test_upgrade(ledger_wasm_current.clone());
-    // Test if new approvals serialization also works
+    // Test the new wasm serialization
+    test_upgrade(ledger_wasm_current.clone());
+    // Test serializing to the memory manager
+    test_upgrade(ledger_wasm_upgradetomemorymanager.clone());
+    // Test upgrade to memory manager again
+    test_upgrade(ledger_wasm_upgradetomemorymanager);
+    // Test deserializing from memory manager
     test_upgrade(ledger_wasm_current);
     // Test if downgrade works
     test_upgrade(ledger_wasm_mainnet);
