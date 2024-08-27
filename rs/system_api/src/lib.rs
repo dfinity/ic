@@ -1120,6 +1120,12 @@ impl SystemApiImpl {
         self.memory_usage.current_usage
     }
 
+    /// Note that this function is made public only for the tests
+    #[doc(hidden)]
+    pub fn get_compute_allocation(&self) -> ComputeAllocation {
+        self.execution_parameters.compute_allocation
+    }
+
     /// Bytes allocated in the Wasm/stable memory.
     pub fn get_allocated_bytes(&self) -> NumBytes {
         self.memory_usage.allocated_execution_memory

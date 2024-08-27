@@ -324,7 +324,7 @@ pub struct SystemState {
     ingress_induction_cycles_debit: Cycles,
 
     /// Resource reservation cycles.
-    reserved_balance: Cycles,
+    pub reserved_balance: Cycles,
 
     /// The user-specified upper limit on `reserved_balance`.
     ///
