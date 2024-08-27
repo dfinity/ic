@@ -250,8 +250,8 @@ function verify_deployment_path() {
     if [[ ${GENERATION} == 2 ]] && [[ ! -f "${CONFIG_DIR}/node_operator_private_key.pem" ]]; then
         echo -e "\n\n\n\n\n\n"
         echo -e "\033[1;31mWARNING: Gen2 hardware detected but no Node Operator Private Key found\033[0m"
-        echo -e "\033[1;31mGen2 hardware should be onboarded using the Gen2 Node Depolyment method\033[0m"
-        echo -e "\033[1;31mPlease redeploy using the Gen2 Node Depolyment method\033[0m"
+        echo -e "\033[1;31mGen2 hardware should be onboarded using the Gen2 Node Deployment method\033[0m"
+        echo -e "\033[1;31mPlease redeploy using the Gen2 Node Deployment method\033[0m"
         echo -e "\n\n\n"
         echo "Pausing for 5 minutes before continuing installation..."
         sleep 300

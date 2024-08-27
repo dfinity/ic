@@ -1,5 +1,7 @@
 use candid::Deserialize;
 use ic_management_canister_types::{CanisterLogRecord, DataSize};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use serde::Serialize;
 use std::collections::VecDeque;
 
@@ -15,8 +17,9 @@ fn truncate_content(mut record: CanisterLogRecord) -> CanisterLogRecord {
 
 // Helper struct to hold canister log records and keep track of the used space.
 // This is needed to avoid iterating over all records to calculate the used space.
-#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, Eq, ValidateEq)]
 struct Records {
+    #[validate_eq(Ignore)]
     records: VecDeque<CanisterLogRecord>,
     used_space: usize,
 }
@@ -96,9 +99,10 @@ impl Records {
 }
 
 /// Holds canister log records and keeps track of the next canister log record index.
-#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, Eq, ValidateEq)]
 pub struct CanisterLog {
     next_idx: u64,
+    #[validate_eq(CompareWithValidateEq)]
     records: Records,
 }
 

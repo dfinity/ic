@@ -16,6 +16,7 @@ reqwest = { workspace = true }
 slog = { workspace = true }
 tar = { workspace = true }
 tokio = { workspace = true }
+zstd = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

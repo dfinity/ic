@@ -34,6 +34,8 @@ use ic_wasm_types::{BinaryEncodedWasm, CanisterModule};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
+const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
+
 // Please enable only for debugging.
 // If enabled, will collect and log checksums of execution results.
 // Disabled by default to avoid producing too much data.
@@ -710,7 +712,7 @@ pub fn process(
     if instance.is_wasm32() {
         let wasm_heap_size_after = instance.heap_size(CanisterMemoryType::Heap);
         let wasm32_max_pages = NumWasmPages::from(
-            wasmtime_environ::WASM32_MAX_SIZE as usize / wasmtime_environ::WASM_PAGE_SIZE as usize,
+            wasmtime_environ::WASM32_MAX_SIZE as usize / WASM_PAGE_SIZE as usize,
         );
         let wasm_heap_limit = wasm32_max_pages - wasm_reserved_pages;
 

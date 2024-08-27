@@ -29,7 +29,6 @@ http = "0.2.12"
 humantime = "2.0"
 humantime-serde = { workspace = true }
 hyper = "0.14.18"
-hyper-rustls = { workspace = true }
 ic-agent = { workspace = true }
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-base-types = { path = "../../types/base_types" }
@@ -67,6 +66,7 @@ ic-nns-init = { path = "../../nns/init" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-prep = { path = "../../prep" }
 ic-protobuf = { path = "../../protobuf" }
+ic-registry-canister-api = { path = "../../registry/canister/api" }
 ic-regedit = { path = "../../registry/regedit" }
 ic-registry-client = { path = "../../registry/client" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
@@ -147,5 +147,5 @@ tracing-subscriber = { workspace = true }
 tree-deserializer = { path = "../../tree_deserializer" }
 url = { workspace = true }
 walkdir = { workspace = true }
-wat = "1.0.52"
+wat = { workspace = true }
 zstd = { workspace = true }

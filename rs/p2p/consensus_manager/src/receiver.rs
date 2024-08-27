@@ -12,6 +12,7 @@ use crate::{
 use axum::{
     extract::{DefaultBodyLimit, State},
     http::StatusCode,
+    response::IntoResponse,
     routing::any,
     Extension, Router,
 };
@@ -22,7 +23,7 @@ use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::p2p::v1 as pb;
 use ic_quic_transport::{ConnId, SubnetTopology};
 use ic_types::artifact::{IdentifiableArtifact, PbArtifact, UnvalidatedArtifactMutation};
-use prost::Message;
+use prost::{DecodeError, Message};
 use tokio::{
     runtime::Handle,
     select,
@@ -53,35 +54,63 @@ pub fn build_axum_router<Artifact: PbArtifact>(
     (router, update_rx)
 }
 
+enum UpdateHandlerError<Artifact: PbArtifact> {
+    SlotUpdateDecoding(DecodeError),
+    IdDecoding(DecodeError),
+    IdPbConversion(Artifact::PbIdError),
+    MessageDecoding(DecodeError),
+    MessagePbConversion(Artifact::PbMessageError),
+    MissingUpdate,
+}
+
+impl<Artifact: PbArtifact> IntoResponse for UpdateHandlerError<Artifact> {
+    fn into_response(self) -> axum::response::Response {
+        let r = match self {
+            Self::SlotUpdateDecoding(e) => (StatusCode::BAD_REQUEST, e.to_string()),
+            Self::IdDecoding(e) => (StatusCode::BAD_REQUEST, e.to_string()),
+            Self::IdPbConversion(e) => (StatusCode::BAD_REQUEST, e.to_string()),
+            Self::MessageDecoding(e) => (StatusCode::BAD_REQUEST, e.to_string()),
+            Self::MessagePbConversion(e) => (StatusCode::BAD_REQUEST, e.to_string()),
+            Self::MissingUpdate => (StatusCode::BAD_REQUEST, "Missing update field".to_string()),
+        };
+        r.into_response()
+    }
+}
+
 async fn update_handler<Artifact: PbArtifact>(
     State((log, sender)): State<(ReplicaLogger, ReceivedAdvertSender<Artifact>)>,
     Extension(peer): Extension<NodeId>,
     Extension(conn_id): Extension<ConnId>,
     payload: Bytes,
-) -> Result<(), StatusCode> {
-    let pb_slot_update = pb::SlotUpdate::decode(payload).map_err(|_| StatusCode::BAD_REQUEST)?;
+) -> Result<(), UpdateHandlerError<Artifact>> {
+    let pb_slot_update = pb::SlotUpdate::decode(payload)
+        .map_err(|e| UpdateHandlerError::SlotUpdateDecoding::<Artifact>(e))?;
 
     let update = SlotUpdate {
         commit_id: CommitId::from(pb_slot_update.commit_id),
         slot_number: SlotNumber::from(pb_slot_update.slot_id),
         update: match pb_slot_update.update {
-            Some(pb::slot_update::Update::Advert(advert)) => {
-                let id: Artifact::Id = Artifact::PbId::decode(advert.id.as_slice())
-                    .map(|pb_id| pb_id.try_into().map_err(|_| StatusCode::BAD_REQUEST))
-                    .map_err(|_| StatusCode::BAD_REQUEST)??;
-                let attr: Artifact::Attribute =
-                    Artifact::PbAttribute::decode(advert.attribute.as_slice())
-                        .map(|pb_attr| pb_attr.try_into().map_err(|_| StatusCode::BAD_REQUEST))
-                        .map_err(|_| StatusCode::BAD_REQUEST)??;
-                Update::Advert((id, attr))
+            Some(pb::slot_update::Update::Id(id)) => {
+                let id: Artifact::Id = Artifact::PbId::decode(id.as_slice())
+                    .map_err(|e| UpdateHandlerError::IdDecoding(e))
+                    .and_then(|pb_id| {
+                        pb_id
+                            .try_into()
+                            .map_err(|e| UpdateHandlerError::IdPbConversion(e))
+                    })?;
+                Update::Id(id)
             }
             Some(pb::slot_update::Update::Artifact(artifact)) => {
                 let message: Artifact = Artifact::PbMessage::decode(artifact.as_slice())
-                    .map(|pb_msg| pb_msg.try_into().map_err(|_| StatusCode::BAD_REQUEST))
-                    .map_err(|_| StatusCode::BAD_REQUEST)??;
+                    .map_err(|e| UpdateHandlerError::MessageDecoding(e))
+                    .and_then(|pb_msg| {
+                        pb_msg
+                            .try_into()
+                            .map_err(|e| UpdateHandlerError::MessagePbConversion(e))
+                    })?;
                 Update::Artifact(message)
             }
-            None => return Err(StatusCode::BAD_REQUEST),
+            None => return Err(UpdateHandlerError::MissingUpdate),
         },
     };
 
@@ -164,11 +193,7 @@ pub(crate) struct ConsensusManagerReceiver<
     active_assembles: HashMap<WireArtifact::Id, watch::Sender<PeerCounter>>,
 
     #[allow(clippy::type_complexity)]
-    artifact_processor_tasks: JoinSet<(
-        watch::Receiver<PeerCounter>,
-        WireArtifact::Id,
-        WireArtifact::Attribute,
-    )>,
+    artifact_processor_tasks: JoinSet<(watch::Receiver<PeerCounter>, WireArtifact::Id)>,
 
     topology_watcher: watch::Receiver<SubnetTopology>,
 }
@@ -221,8 +246,8 @@ where
                 }
                 Some(result) = self.artifact_processor_tasks.join_next() => {
                     match result {
-                        Ok((receiver, id, attr)) => {
-                            self.handle_artifact_processor_joined(receiver, id, attr);
+                        Ok((receiver, id)) => {
+                            self.handle_artifact_processor_joined(receiver, id);
 
                         }
                         Err(err) => {
@@ -261,7 +286,6 @@ where
         &mut self,
         peer_rx: watch::Receiver<PeerCounter>,
         id: WireArtifact::Id,
-        attr: WireArtifact::Attribute,
     ) {
         self.metrics.assemble_task_finished_total.inc();
         // Invariant: Peer sender should only be dropped in this task..
@@ -275,7 +299,6 @@ where
                 Self::process_advert(
                     self.log.clone(),
                     id,
-                    attr,
                     None,
                     peer_rx,
                     self.sender.clone(),
@@ -310,9 +333,9 @@ where
             update,
         } = advert_update;
 
-        let (id, attribute, artifact) = match update {
-            Update::Artifact(artifact) => (artifact.id(), artifact.attribute(), Some(artifact)),
-            Update::Advert((id, attribute)) => (id, attribute, None),
+        let (id, artifact) = match update {
+            Update::Artifact(artifact) => (artifact.id(), Some(artifact)),
+            Update::Id(id) => (id, None),
         };
 
         if artifact.is_some() {
@@ -369,7 +392,6 @@ where
                         Self::process_advert(
                             self.log.clone(),
                             id.clone(),
-                            attribute,
                             artifact.map(|a| (a, peer_id)),
                             rx,
                             self.sender.clone(),
@@ -409,18 +431,13 @@ where
     async fn process_advert(
         log: ReplicaLogger,
         id: WireArtifact::Id,
-        attr: WireArtifact::Attribute,
         // Only first peer for specific artifact ID is considered for push
         mut artifact: Option<(WireArtifact, NodeId)>,
         mut peer_rx: watch::Receiver<PeerCounter>,
         sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         mut artifact_assembler: Assembler,
         metrics: ConsensusManagerMetrics,
-    ) -> (
-        watch::Receiver<PeerCounter>,
-        WireArtifact::Id,
-        WireArtifact::Attribute,
-    ) {
+    ) -> (watch::Receiver<PeerCounter>, WireArtifact::Id) {
         let _timer = metrics.assemble_task_duration.start_timer();
 
         let mut peer_rx_clone = peer_rx.clone();
@@ -436,10 +453,9 @@ where
 
         let mut peer_rx_c = peer_rx.clone();
         let id_c = id.clone();
-        let attr_c = attr.clone();
         let assemble_artifact = async move {
             artifact_assembler
-                .assemble_message(id, attr, artifact, PeerWatcher::new(peer_rx_c))
+                .assemble_message(id, artifact, PeerWatcher::new(peer_rx_c))
                 .await
         };
 
@@ -480,7 +496,7 @@ where
             },
         };
 
-        (peer_rx, id_c, attr_c)
+        (peer_rx, id_c)
     }
 
     /// Notifies all running tasks about the topology update.
@@ -669,7 +685,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -695,7 +711,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(0),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -718,7 +734,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(0),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(0),
@@ -741,7 +757,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(10),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(0),
@@ -764,7 +780,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(0),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(0),
@@ -803,7 +819,7 @@ mod tests {
             let mut artifact_assembler = MockArtifactAssembler::default();
             artifact_assembler
                 .expect_assemble_message()
-                .returning(|id, _, _, _: PeerWatcher| {
+                .returning(|id, _, _: PeerWatcher| {
                     Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
                 });
             artifact_assembler
@@ -816,7 +832,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -843,7 +859,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(0),
-                update: Update::Advert((1, ())),
+                update: Update::Id(1),
             },
             NODE_1,
             ConnId::from(2),
@@ -889,7 +905,7 @@ mod tests {
             let mut artifact_assembler = MockArtifactAssembler::default();
             artifact_assembler
                 .expect_assemble_message()
-                .returning(|id, _, _, _: PeerWatcher| {
+                .returning(|id, _, _: PeerWatcher| {
                     Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
                 });
             artifact_assembler
@@ -902,7 +918,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -934,7 +950,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(0),
-                update: Update::Advert((1, ())),
+                update: Update::Id(1),
             },
             NODE_1,
             ConnId::from(2),
@@ -994,7 +1010,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1004,7 +1020,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_2,
             ConnId::from(1),
@@ -1031,7 +1047,7 @@ mod tests {
             let mut artifact_assembler = MockArtifactAssembler::default();
             artifact_assembler
                 .expect_assemble_message()
-                .returning(|id, _, _, _: PeerWatcher| {
+                .returning(|id, _, _: PeerWatcher| {
                     Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
                 });
             artifact_assembler
@@ -1044,7 +1060,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1054,13 +1070,13 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(2),
-                update: Update::Advert((1, ())),
+                update: Update::Id(1),
             },
             NODE_1,
             ConnId::from(1),
         );
         // Check that the assemble task is closed.
-        let (peer_rx, id, attr) = mgr
+        let (peer_rx, id) = mgr
             .artifact_processor_tasks
             .join_next()
             .await
@@ -1071,14 +1087,14 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(3),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_2,
             ConnId::from(1),
         );
         assert_eq!(mgr.active_assembles.len(), 2);
         // Verify that we reopened the assemble task for advert 0.
-        mgr.handle_artifact_processor_joined(peer_rx, id, attr);
+        mgr.handle_artifact_processor_joined(peer_rx, id);
         assert_eq!(mgr.active_assembles.len(), 2);
     }
 
@@ -1102,7 +1118,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1111,7 +1127,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_2,
             ConnId::from(1),
@@ -1172,7 +1188,7 @@ mod tests {
             let mut artifact_assembler = MockArtifactAssembler::default();
             artifact_assembler
                 .expect_assemble_message()
-                .returning(|id, _, _, _: PeerWatcher| {
+                .returning(|id, _, _: PeerWatcher| {
                     Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
                 });
             artifact_assembler
@@ -1186,7 +1202,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1228,7 +1244,7 @@ mod tests {
             let mut artifact_assembler = MockArtifactAssembler::default();
             artifact_assembler
                 .expect_assemble_message()
-                .returning(|id, _, _, _: PeerWatcher| {
+                .returning(|id, _, _: PeerWatcher| {
                     Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
                 });
             artifact_assembler
@@ -1242,7 +1258,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1252,7 +1268,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(2),
                 commit_id: CommitId::from(2),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1262,7 +1278,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(3),
-                update: Update::Advert((1, ())),
+                update: Update::Id(1),
             },
             NODE_1,
             ConnId::from(1),
@@ -1282,7 +1298,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(2),
                 commit_id: CommitId::from(4),
-                update: Update::Advert((1, ())),
+                update: Update::Id(1),
             },
             NODE_1,
             ConnId::from(1),
@@ -1317,7 +1333,7 @@ mod tests {
             let mut artifact_assembler = MockArtifactAssembler::default();
             artifact_assembler
                 .expect_assemble_message()
-                .returning(|id, _, _, _: PeerWatcher| {
+                .returning(|id, _, _: PeerWatcher| {
                     Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
                 });
             artifact_assembler
@@ -1330,7 +1346,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1339,7 +1355,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(2),
                 commit_id: CommitId::from(2),
-                update: Update::Advert((1, ())),
+                update: Update::Id(1),
             },
             NODE_1,
             ConnId::from(1),
@@ -1359,7 +1375,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(2),
                 commit_id: CommitId::from(3),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1391,7 +1407,7 @@ mod tests {
             let mut artifact_assembler = MockArtifactAssembler::default();
             artifact_assembler
                 .expect_assemble_message()
-                .returning(|id, _, _, _: PeerWatcher| {
+                .returning(|id, _, _: PeerWatcher| {
                     Box::pin(async move { Ok((U64Artifact::id_to_msg(id, 100), NODE_1)) })
                 });
             artifact_assembler
@@ -1404,7 +1420,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(1),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1426,7 +1442,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(2),
-                update: Update::Advert((0, ())),
+                update: Update::Id(0),
             },
             NODE_1,
             ConnId::from(1),
@@ -1464,7 +1480,7 @@ mod tests {
             SlotUpdate {
                 slot_number: SlotNumber::from(1),
                 commit_id: CommitId::from(3),
-                update: Update::Advert((2, ())),
+                update: Update::Id(2),
             },
             NODE_1,
             ConnId::from(1),
@@ -1498,9 +1514,7 @@ mod tests {
         impl IdentifiableArtifact for BigArtifact {
             const NAME: &'static str = "big";
             type Id = ();
-            type Attribute = ();
             fn id(&self) -> Self::Id {}
-            fn attribute(&self) -> Self::Attribute {}
         }
         impl From<BigArtifact> for Vec<u8> {
             fn from(value: BigArtifact) -> Self {
@@ -1517,9 +1531,7 @@ mod tests {
             type PbMessage = Vec<u8>;
             type PbIdError = Infallible;
             type PbMessageError = Infallible;
-            type PbAttributeError = Infallible;
             type PbId = ();
-            type PbAttribute = ();
         }
 
         let (router, mut update_rx) = build_axum_router::<BigArtifact>(no_op_logger());

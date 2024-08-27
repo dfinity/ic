@@ -3,6 +3,8 @@ use std::{collections::BTreeMap, sync::Arc};
 use ic_protobuf::{proxy::ProxyDecodeError, state::canister_state_bits::v1 as pb};
 use ic_sys::{PageBytes, PageIndex, PAGE_SIZE};
 use ic_types::{NumBytes, NumOsPages};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 
 use crate::{page_map::PageAllocatorFileDescriptor, PageMap};
 
@@ -34,8 +36,9 @@ struct ChunkInfo {
 
 /// Uploaded chunks which can be assembled to create a Wasm module.
 /// It is cheap to clone because the data is stored in a [`PageMap`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
 pub struct WasmChunkStore {
+    #[validate_eq(Ignore)]
     data: PageMap,
     metadata: WasmChunkStoreMetadata,
 }

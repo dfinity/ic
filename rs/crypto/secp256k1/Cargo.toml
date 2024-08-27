@@ -1,0 +1,27 @@
+[package]
+name = "ic-crypto-secp256k1"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+hmac = "0.12"
+k256 = { workspace = true }
+lazy_static = { workspace = true }
+num-bigint = { workspace = true }
+pem = "1.1.0"
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+simple_asn1 = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+bip32 = "0.5"
+hex = { workspace = true }
+hex-literal = "0.4"
+sha2 = { workspace = true }
+wycheproof = "0.5"

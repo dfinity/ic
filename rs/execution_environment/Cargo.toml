@@ -83,8 +83,8 @@ more-asserts = "0.3.1"
 proptest = "1.0"
 tempfile = { workspace = true }
 test-strategy = "0.3.1"
-wasmparser = "0.201.0"
-wat = "1.0.52"
+wasmparser = { workspace = true }
+wat = { workspace = true }
 
 [build-dependencies]
 escargot = "0.5"

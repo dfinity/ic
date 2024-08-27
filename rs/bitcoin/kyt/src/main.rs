@@ -1,12 +1,5 @@
-use bitcoin::{consensus::Decodable, Address, Network, Transaction};
-use futures::future::try_join_all;
-use ic_cdk::api::management_canister::http_request::{
-    http_request, CanisterHttpRequestArgument, HttpHeader, HttpMethod, HttpResponse, TransformArgs,
-    TransformContext, TransformFunc,
-};
-
-#[derive(Debug, Clone)]
-struct BitcoinTxError;
+use ic_btc_kyt::get_inputs_internal;
+use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
 
 #[ic_cdk::update]
 /// The function returns the Bitcoin addresses of the inputs in the

@@ -10,6 +10,8 @@ use ic_types::{
     methods::{SystemMethod, WasmMethod},
     CountBytes, ExecutionRound, NumBytes,
 };
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
@@ -226,15 +228,17 @@ impl TryFrom<Vec<pb::WasmMethod>> for ExportedFunctions {
 }
 
 /// Represent a wasm binary.
-#[derive(Debug)]
+#[derive(Debug, ValidateEq)]
 pub struct WasmBinary {
     /// The raw canister module provided by the user. Remains immutable after
     /// creating a WasmBinary object.
+    #[validate_eq(CompareWithValidateEq)]
     pub binary: CanisterModule,
 
     /// Cached compiled representation of the binary. Lower layers will assign
     /// to this field to create a compiled representation of the wasm, and
     /// ensure that this happens only once.
+    #[validate_eq(Ignore)]
     pub embedder_cache: Arc<std::sync::Mutex<Option<EmbedderCache>>>,
 }
 
@@ -252,9 +256,10 @@ impl WasmBinary {
 }
 
 /// Represents a canister's wasm or stable memory.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, ValidateEq)]
 pub struct Memory {
     /// The contents of this memory.
+    #[validate_eq(CompareWithValidateEq)]
     pub page_map: PageMap,
     /// The size of the memory in wasm pages. This does not indicate how much
     /// data is stored in the `page_map`, only the number of pages the memory
@@ -265,6 +270,7 @@ pub struct Memory {
 
     /// Contains either a handle to the execution state in the sandbox process
     /// or information that is necessary to constructs the state remotely.
+    #[validate_eq(Ignore)]
     pub sandbox_memory: Arc<Mutex<SandboxMemory>>,
 }
 
@@ -425,10 +431,11 @@ impl NextScheduledMethod {
 /// persist `ExecutionState`.
 // Do ***NOT*** derive PartialEq, Eq, Serialization or
 // Deserialization for `ExecutionState`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, ValidateEq)]
 pub struct ExecutionState {
     /// The path where Canister memory is located. Needs to be stored in
     /// ExecutionState in order to perform the exec system call.
+    #[validate_eq(Ignore)]
     pub canister_root: std::path::PathBuf,
 
     /// Session state Nonce. If occupied, runtime is already
@@ -436,6 +443,7 @@ pub struct ExecutionState {
     /// to mutated `MappedState` and globals that reside in the
     /// sandbox execution process (and not necessarily in memory) and
     /// enable continuations.
+    #[validate_eq(Ignore)]
     pub session_nonce: Option<SessionNonce>,
 
     /// The wasm executable associated with this state. It represented here as
@@ -446,22 +454,28 @@ pub struct ExecutionState {
     ///
     /// The latter property ensures that compilation for queries is cached
     /// properly when loading a state from checkpoint.
+    #[validate_eq(CompareWithValidateEq)]
     pub wasm_binary: Arc<WasmBinary>,
 
     /// The persistent heap of the module. The size of this memory is expected
     /// to fit in a `u32`.
+    #[validate_eq(CompareWithValidateEq)]
     pub wasm_memory: Memory,
 
     /// The canister stable memory which is persisted across canister upgrades.
+    #[validate_eq(CompareWithValidateEq)]
     pub stable_memory: Memory,
 
     /// The state of exported globals. Internal globals are not accessible.
+    #[validate_eq(Ignore)]
     pub exported_globals: Vec<Global>,
 
     /// A set of the functions that a Wasm module exports.
+    #[validate_eq(Ignore)]
     pub exports: ExportedFunctions,
 
     /// Metadata extracted from the Wasm module.
+    #[validate_eq(Ignore)]
     pub metadata: WasmMetadata,
 
     /// Round number at which canister executed

@@ -1,4 +1,4 @@
-use super::testing::{new_canister_queues_for_test, CanisterQueuesTesting};
+use super::testing::{new_canister_output_queues_for_test, CanisterQueuesTesting};
 use super::InputQueueType::*;
 use super::*;
 use crate::{CanisterState, SchedulerState, SystemState};
@@ -23,6 +23,10 @@ struct CanisterQueuesFixture {
     pub queues: CanisterQueues,
     pub this: CanisterId,
     pub other: CanisterId,
+
+    /// The last callback ID used for outbound requests / inbound responses. Ensures
+    /// that all inbound responses have unique callback IDs.
+    last_callback_id: u64,
 }
 
 impl CanisterQueuesFixture {
@@ -31,6 +35,7 @@ impl CanisterQueuesFixture {
             queues: CanisterQueues::default(),
             this: canister_test_id(13),
             other: canister_test_id(11),
+            last_callback_id: 0,
         }
     }
 
@@ -39,6 +44,7 @@ impl CanisterQueuesFixture {
             queues: CanisterQueues::default(),
             this,
             other,
+            last_callback_id: 0,
         }
     }
 
@@ -54,10 +60,12 @@ impl CanisterQueuesFixture {
     }
 
     fn push_input_response(&mut self) -> Result<(), (StateError, RequestOrResponse)> {
+        self.last_callback_id += 1;
         self.queues.push_input(
             ResponseBuilder::default()
                 .originator(self.this)
                 .respondent(self.other)
+                .originator_reply_callback(CallbackId::from(self.last_callback_id))
                 .build()
                 .into(),
             LocalSubnet,
@@ -69,11 +77,13 @@ impl CanisterQueuesFixture {
     }
 
     fn push_output_request(&mut self) -> Result<(), (StateError, Arc<Request>)> {
+        self.last_callback_id += 1;
         self.queues.push_output_request(
             Arc::new(
                 RequestBuilder::default()
                     .sender(self.this)
                     .receiver(self.other)
+                    .sender_reply_callback(CallbackId::from(self.last_callback_id))
                     .build(),
             ),
             UNIX_EPOCH,
@@ -351,6 +361,10 @@ fn test_message_picking_ingress_only() {
 struct CanisterQueuesMultiFixture {
     pub queues: CanisterQueues,
     pub this: CanisterId,
+
+    /// The last callback ID used for outbound requests / inbound responses. Ensures
+    /// that all inbound responses have unique callback IDs.
+    last_callback_id: u64,
 }
 
 impl CanisterQueuesMultiFixture {
@@ -358,6 +372,7 @@ impl CanisterQueuesMultiFixture {
         CanisterQueuesMultiFixture {
             queues: CanisterQueues::default(),
             this: canister_test_id(13),
+            last_callback_id: 0,
         }
     }
 
@@ -381,10 +396,12 @@ impl CanisterQueuesMultiFixture {
         other: CanisterId,
         input_queue_type: InputQueueType,
     ) -> Result<(), (StateError, RequestOrResponse)> {
+        self.last_callback_id += 1;
         self.queues.push_input(
             ResponseBuilder::default()
                 .originator(self.this)
                 .respondent(other)
+                .originator_reply_callback(CallbackId::from(self.last_callback_id))
                 .build()
                 .into(),
             input_queue_type,
@@ -416,11 +433,13 @@ impl CanisterQueuesMultiFixture {
     }
 
     fn push_output_request(&mut self, other: CanisterId) -> Result<(), (StateError, Arc<Request>)> {
+        self.last_callback_id += 1;
         self.queues.push_output_request(
             Arc::new(
                 RequestBuilder::default()
                     .sender(self.this)
                     .receiver(other)
+                    .sender_reply_callback(CallbackId::from(self.last_callback_id))
                     .build(),
             ),
             UNIX_EPOCH,
@@ -1937,219 +1956,258 @@ fn test_peek_output_with_stale_references() {
 // `crate` and we wouldn't have access to its non-public methods.
 prop_compose! {
     /// Strategy that generates an arbitrary `CanisterQueues` (and a matching
-    /// iteration order); with up to `max_requests` requests; addressed to up to
-    /// `max_receivers` (if `Some`) or one request per receiver (if `None`).
-    pub fn arb_canister_queues(
+    /// iteration order); with up to `max_requests` outbound requests; addressed to
+    /// up to `max_receivers` (if `Some`) or one request per receiver (if `None`).
+    fn arb_canister_output_queues(
         max_requests: usize,
         max_receivers: Option<usize>,
     )(
         num_receivers in arb_num_receivers(max_receivers),
         reqs in prop::collection::vec(arbitrary::request(), 0..max_requests)
     ) -> (CanisterQueues, VecDeque<RequestOrResponse>) {
-        new_canister_queues_for_test(reqs, canister_test_id(42), num_receivers)
+        new_canister_output_queues_for_test(reqs, canister_test_id(42), num_receivers)
     }
 }
 
-proptest! {
-    #[test]
-    fn output_into_iter_peek_and_next_consistent(
-        (mut canister_queues, raw_requests) in arb_canister_queues(100, Some(10))
-    ) {
-        let mut output_iter = canister_queues.output_into_iter();
+#[test_strategy::proptest]
+fn output_into_iter_peek_and_next_consistent(
+    #[strategy(arb_canister_output_queues(10, Some(5)))] test: (
+        CanisterQueues,
+        VecDeque<RequestOrResponse>,
+    ),
+) {
+    let (mut canister_queues, raw_requests) = test;
+    let mut output_iter = canister_queues.output_into_iter();
 
-        let mut popped = 0;
-        while let Some(msg) = output_iter.peek() {
-            popped += 1;
-            assert_eq!(Some(msg.clone()), output_iter.next());
-        }
-
-        assert_eq!(output_iter.next(), None);
-        assert_eq!(raw_requests.len(), popped);
+    let mut popped = 0;
+    while let Some(msg) = output_iter.peek() {
+        popped += 1;
+        prop_assert_eq!(Some(msg.clone()), output_iter.next());
     }
 
-    #[test]
-    fn output_into_iter_peek_and_next_consistent_with_excludes(
-        (mut canister_queues, raw_requests) in arb_canister_queues(100, None),
-        start in 0..=1,
-        exclude_step in 2..=5,
-    ) {
+    prop_assert_eq!(output_iter.next(), None);
+    prop_assert_eq!(raw_requests.len(), popped);
+}
+
+#[test_strategy::proptest]
+fn output_into_iter_peek_and_next_consistent_with_excludes(
+    #[strategy(arb_canister_output_queues(10, None))] test: (
+        CanisterQueues,
+        VecDeque<RequestOrResponse>,
+    ),
+    #[strategy(0..=1_u64)] start: u64,
+    #[strategy(2..=5_u64)] exclude_step: u64,
+) {
+    let (mut canister_queues, raw_requests) = test;
+    let mut output_iter = canister_queues.output_into_iter();
+
+    let mut i = start;
+    let mut popped = 0;
+    let mut excluded = 0;
+    while let Some(msg) = output_iter.peek() {
+        i += 1;
+        if i % exclude_step == 0 {
+            output_iter.exclude_queue();
+            excluded += 1;
+            continue;
+        }
+        popped += 1;
+        prop_assert_eq!(Some(msg.clone()), output_iter.next());
+    }
+    prop_assert_eq!(output_iter.pop(), None);
+    prop_assert_eq!(raw_requests.len(), excluded + popped);
+}
+
+#[test_strategy::proptest]
+fn output_into_iter_leaves_non_consumed_messages_untouched(
+    #[strategy(arb_canister_output_queues(10, Some(5)))] test: (
+        CanisterQueues,
+        VecDeque<RequestOrResponse>,
+    ),
+) {
+    let (mut canister_queues, mut raw_requests) = test;
+    let num_requests = raw_requests.len();
+
+    // Consume half of the messages in the canister queues and verify whether we pop the
+    // expected elements.
+    {
+        let mut output_iter = canister_queues.output_into_iter();
+
+        for _ in 0..num_requests / 2 {
+            let popped_message = output_iter.next().unwrap();
+            let expected_message = raw_requests.pop_front().unwrap();
+            prop_assert_eq!(popped_message, expected_message);
+        }
+
+        prop_assert_eq!(
+            canister_queues.output_message_count(),
+            num_requests - num_requests / 2
+        );
+    }
+
+    // Ensure that the messages that have not been consumed above are still in the queues
+    // after dropping `output_iter`.
+    while let Some(raw) = raw_requests.pop_front() {
+        if let Some(msg) = canister_queues.pop_canister_output(&raw.receiver()) {
+            prop_assert_eq!(raw, msg);
+        } else {
+            prop_assert!(false, "Not all unconsumed messages left in canister queues");
+        }
+    }
+
+    // Ensure that there are no messages left in the canister queues.
+    prop_assert_eq!(canister_queues.output_message_count(), 0);
+}
+
+#[test_strategy::proptest]
+fn output_into_iter_with_exclude_leaves_excluded_queues_untouched(
+    #[strategy(arb_canister_output_queues(10, None))] test: (
+        CanisterQueues,
+        VecDeque<RequestOrResponse>,
+    ),
+    #[strategy(0..=1_u64)] start: u64,
+    #[strategy(2..=5_u64)] exclude_step: u64,
+) {
+    let (mut canister_queues, mut raw_requests) = test;
+    let mut excluded_requests = VecDeque::new();
+    // Consume half of the messages in the canister queues and verify whether we pop the
+    // expected elements.
+    {
         let mut output_iter = canister_queues.output_into_iter();
 
         let mut i = start;
-        let mut popped = 0;
         let mut excluded = 0;
-        while let Some(msg) = output_iter.peek() {
+        while let Some(peeked_message) = output_iter.peek() {
             i += 1;
             if i % exclude_step == 0 {
                 output_iter.exclude_queue();
+                // We only have one message per queue, so popping this request
+                // should leave us with a consistent expected queue
+                excluded_requests.push_back(raw_requests.pop_front().unwrap());
                 excluded += 1;
                 continue;
             }
-            popped += 1;
-            assert_eq!(Some(msg.clone()), output_iter.next());
+
+            let peeked_message = peeked_message.clone();
+            let popped_message = output_iter.pop().unwrap();
+            prop_assert_eq!(&popped_message, &peeked_message);
+            let expected_message = raw_requests.pop_front().unwrap();
+            prop_assert_eq!(&popped_message, &expected_message);
         }
-        assert_eq!(output_iter.pop(), None);
-        assert_eq!(raw_requests.len(), excluded + popped);
+
+        prop_assert_eq!(canister_queues.output_message_count(), excluded);
     }
 
-    #[test]
-    fn output_into_iter_leaves_non_consumed_messages_untouched(
-        (mut canister_queues, mut raw_requests) in arb_canister_queues(100, Some(10)),
-    ) {
-        let num_requests = raw_requests.len();
-
-        // Consume half of the messages in the canister queues and verify whether we pop the
-        // expected elements.
-        {
-            let mut output_iter = canister_queues.output_into_iter();
-
-            for _ in 0..num_requests / 2 {
-                let popped_message = output_iter.next().unwrap();
-                let expected_message = raw_requests.pop_front().unwrap();
-                assert_eq!(popped_message, expected_message);
-            }
-
-            assert_eq!(canister_queues.output_message_count(), num_requests - num_requests / 2);
+    // Ensure that the messages that have not been consumed above are still in the queues
+    // after dropping `output_iter`.
+    while let Some(raw) = excluded_requests.pop_front() {
+        if let Some(msg) = canister_queues.pop_canister_output(&raw.receiver()) {
+            prop_assert_eq!(&raw, &msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw);
+        } else {
+            prop_assert!(false, "Not all unconsumed messages left in canister queues");
         }
-
-        // Ensure that the messages that have not been consumed above are still in the queues
-        // after dropping `output_iter`.
-        while let Some(raw) = raw_requests.pop_front() {
-            if let Some(msg) = canister_queues.pop_canister_output(&raw.receiver()) {
-                assert_eq!(raw, msg);
-            } else {
-                panic!("Not all unconsumed messages left in canister queues");
-            }
-        }
-
-        // Ensure that there are no messages left in the canister queues.
-        assert_eq!(canister_queues.output_message_count(), 0);
     }
 
-    #[test]
-    fn output_into_iter_with_exclude_leaves_excluded_queues_untouched(
-        (mut canister_queues, mut raw_requests) in arb_canister_queues(100, None),
-        start in 0..=1,
-        exclude_step in 2..=5,
-    ) {
-        let mut excluded_requests = VecDeque::new();
-        // Consume half of the messages in the canister queues and verify whether we pop the
-        // expected elements.
-        {
-            let mut output_iter = canister_queues.output_into_iter();
+    // Ensure that there are no messages left in the canister queues.
+    prop_assert_eq!(canister_queues.output_message_count(), 0);
+}
 
-            let mut i = start;
-            let mut excluded = 0;
-            while let Some(peeked_message) = output_iter.peek() {
-                i += 1;
-                if i % exclude_step == 0 {
-                    output_iter.exclude_queue();
-                    // We only have one message per queue, so popping this request
-                    // should leave us with a consistent expected queue
-                    excluded_requests.push_back(raw_requests.pop_front().unwrap());
-                    excluded += 1;
-                    continue;
-                }
+#[test_strategy::proptest]
+fn output_into_iter_yields_correct_elements(
+    #[strategy(arb_canister_output_queues(10, Some(5)))] test: (
+        CanisterQueues,
+        VecDeque<RequestOrResponse>,
+    ),
+) {
+    let (mut canister_queues, raw_requests) = test;
+    let recovered: VecDeque<_> = canister_queues.output_into_iter().collect();
 
-                let peeked_message = peeked_message.clone();
-                let popped_message = output_iter.pop().unwrap();
-                assert_eq!(popped_message, peeked_message);
-                let expected_message = raw_requests.pop_front().unwrap();
-                assert_eq!(popped_message, expected_message);
-            }
+    prop_assert_eq!(raw_requests, recovered);
+}
 
-            assert_eq!(canister_queues.output_message_count(), excluded);
-        }
+#[test_strategy::proptest]
+fn output_into_iter_exclude_leaves_state_untouched(
+    #[strategy(arb_canister_output_queues(10, Some(5)))] test: (
+        CanisterQueues,
+        VecDeque<RequestOrResponse>,
+    ),
+) {
+    let (mut canister_queues, _raw_requests) = test;
+    let expected_canister_queues = canister_queues.clone();
+    let mut output_iter = canister_queues.output_into_iter();
 
-        // Ensure that the messages that have not been consumed above are still in the queues
-        // after dropping `output_iter`.
-        while let Some(raw) = excluded_requests.pop_front() {
-            if let Some(msg) = canister_queues.pop_canister_output(&raw.receiver()) {
-                assert_eq!(raw, msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw);
-            } else {
-                panic!("Not all unconsumed messages left in canister queues");
-            }
-        }
-
-        // Ensure that there are no messages left in the canister queues.
-        assert_eq!(canister_queues.output_message_count(), 0);
+    while output_iter.peek().is_some() {
+        output_iter.exclude_queue();
     }
+    // Check that there's nothing left to pop.
+    prop_assert!(output_iter.next().is_none());
 
-    #[test]
-    fn output_into_iter_yields_correct_elements(
-        (mut canister_queues, raw_requests) in arb_canister_queues(100, Some(10))
-    ) {
-        let recovered: VecDeque<_> = canister_queues
-            .output_into_iter()
-            .collect();
+    prop_assert_eq!(expected_canister_queues, canister_queues);
+}
 
-        assert_eq!(raw_requests, recovered);
+#[test_strategy::proptest]
+fn output_into_iter_peek_pop_loop_terminates(
+    #[strategy(arb_canister_output_queues(10, Some(5)))] test: (
+        CanisterQueues,
+        VecDeque<RequestOrResponse>,
+    ),
+) {
+    let (mut canister_queues, _raw_requests) = test;
+    let mut output_iter = canister_queues.output_into_iter();
+
+    while let Some(msg) = output_iter.peek() {
+        prop_assert_eq!(Some(msg.clone()), output_iter.next());
     }
+    prop_assert_eq!(None, output_iter.next());
+}
 
-    #[test]
-    fn output_into_iter_exclude_leaves_state_untouched(
-        (mut canister_queues, _) in arb_canister_queues(100, Some(10)),
-    ) {
-        let expected_canister_queues = canister_queues.clone();
-        let mut output_iter = canister_queues.output_into_iter();
+#[test_strategy::proptest]
+fn output_into_iter_peek_pop_loop_with_excludes_terminates(
+    #[strategy(arb_canister_output_queues(10, Some(5)))] test: (
+        CanisterQueues,
+        VecDeque<RequestOrResponse>,
+    ),
+    #[strategy(0..=1_u64)] start: u64,
+    #[strategy(2..=5_u64)] exclude_step: u64,
+) {
+    let (mut canister_queues, _raw_requests) = test;
+    let mut output_iter = canister_queues.output_into_iter();
 
-        while output_iter.peek().is_some() {
+    let mut i = start;
+    while let Some(msg) = output_iter.peek() {
+        i += 1;
+        if i % exclude_step == 0 {
             output_iter.exclude_queue();
+            continue;
         }
-        // Check that there's nothing left to pop.
-        assert!(output_iter.next().is_none());
-
-        assert_eq!(expected_canister_queues, canister_queues);
+        prop_assert_eq!(Some(msg.clone()), output_iter.next());
     }
+}
 
-    #[test]
-    fn output_into_iter_peek_pop_loop_terminates(
-        (mut canister_queues, _) in arb_canister_queues(100, Some(10)),
-    ) {
-        let mut output_iter = canister_queues.output_into_iter();
+#[test_strategy::proptest]
+fn output_into_iter_peek_with_stale_references(
+    #[strategy(arb_canister_output_queues(10, Some(5)))] test: (
+        CanisterQueues,
+        VecDeque<RequestOrResponse>,
+    ),
+    #[any] deadline: u32,
+) {
+    let (mut canister_queues, _raw_requests) = test;
+    let own_canister_id = canister_test_id(13);
+    let local_canisters = BTreeMap::new();
+    // Time out some messages.
+    canister_queues.time_out_requests(
+        coarse_time(deadline).into(),
+        &own_canister_id,
+        &local_canisters,
+    );
 
-        while let Some(msg) = output_iter.peek() {
-            assert_eq!(Some(msg.clone()), output_iter.next());
-        }
-        assert_eq!(None, output_iter.next());
+    // Peek and pop until the output queues are empty.
+    let mut output_iter = canister_queues.output_into_iter();
+    while let Some(msg) = output_iter.peek() {
+        prop_assert_eq!(Some(msg.clone()), output_iter.next());
     }
-
-    #[test]
-    fn output_into_iter_peek_pop_loop_with_excludes_terminates(
-        (mut canister_queues, _) in arb_canister_queues(100, Some(10)),
-        start in 0..=1,
-        exclude_step in 2..=5,
-    ) {
-        let mut output_iter = canister_queues.output_into_iter();
-
-        let mut i = start;
-        while let Some(msg) = output_iter.peek() {
-            i += 1;
-            if i % exclude_step == 0 {
-                output_iter.exclude_queue();
-                continue;
-            }
-            assert_eq!(Some(msg.clone()), output_iter.next());
-        }
-    }
-
-    #[test]
-    fn output_into_iter_peek_with_stale_references(
-        (mut canister_queues, _) in arb_canister_queues(100, Some(10)),
-        deadline in any::<u32>(),
-    ) {
-        let own_canister_id = canister_test_id(13);
-        let local_canisters = BTreeMap::new();
-        // Time out some messages.
-        canister_queues.time_out_requests(coarse_time(deadline).into(), &own_canister_id, &local_canisters);
-
-        // Peek and pop until the output queues are empty.
-        let mut output_iter = canister_queues.output_into_iter();
-        while let Some(msg) = output_iter.peek() {
-            assert_eq!(Some(msg.clone()), output_iter.next());
-        }
-        assert_eq!(None, output_iter.next());
-    }
+    prop_assert_eq!(None, output_iter.next());
 }
 
 /// Tests that 'has_expired_deadlines` reports:
@@ -2351,6 +2409,7 @@ mod mainnet_compatibility_tests {
                 queues,
                 this: CANISTER_ID,
                 other: OTHER_CANISTER_ID,
+                last_callback_id: 0,
             };
             assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Request(_));
             assert_matches!(queues.pop_input().unwrap(), CanisterMessage::Response(_));

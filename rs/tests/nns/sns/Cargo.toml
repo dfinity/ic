@@ -10,7 +10,6 @@ documentation.workspace = true
 anyhow = { workspace = true }
 ic-nervous-system-common = { path = "../../../nervous_system/common" }
 ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
-ic-nns-governance = { path = "../../../nns/governance" }
 ic-sns-swap = { path = "../../../sns/swap" }
 ic-system-test-driver = { path = "../../driver" }
 rust_decimal = "1.25"

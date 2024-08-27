@@ -45,21 +45,18 @@
 //
 // Happy testing!
 
-use ic_consensus_system_test_utils::{
-    limit_tc_ssh_command, rw_message::install_nns_with_customizations_and_check_progress,
-};
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::canister_agent::CanisterAgent;
+use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
 use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
-use ic_system_test_driver::driver::test_env_api::SshSession;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
+    simulate_network::{FixedNetworkSimulation, SimulateNetwork},
     test_env::TestEnv,
     test_env_api::{
         read_dependency_from_env_to_string, HasTopologySnapshot, IcNodeContainer, NnsCustomizations,
@@ -71,8 +68,7 @@ use ic_system_test_driver::generic_workload_engine::metrics::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    assert_canister_counter_with_retries, assert_create_agent_using_call_v2,
-    get_app_subnet_and_node, MetricsFetcher,
+    assert_canister_counter_with_retries, get_app_subnet_and_node, MetricsFetcher,
 };
 use ic_types::Height;
 
@@ -100,6 +96,9 @@ const INGRESS_MESSAGES_SUM_METRIC: &str = "consensus_ingress_messages_delivered_
 // Network parameters
 const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(200); // artificial added latency
+const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
+    .with_latency(LATENCY)
+    .with_bandwidth(BANDWIDTH_MBITS);
 
 fn setup(env: TestEnv) {
     PrometheusVm::default()
@@ -137,16 +136,8 @@ fn setup(env: TestEnv) {
 
     let topology_snapshot = env.topology_snapshot();
     let (app_subnet, _) = get_app_subnet_and_node(&topology_snapshot);
-    for node in app_subnet.nodes() {
-        let session = node
-            .block_on_ssh_session()
-            .expect("Failed to ssh into node");
-        node.block_on_bash_script_from_session(
-            &session,
-            &limit_tc_ssh_command(BANDWIDTH_MBITS, LATENCY),
-        )
-        .expect("Failed to execute bash script from session");
-    }
+
+    app_subnet.apply_network_settings(NETWORK_SIMULATION);
 }
 
 fn test(env: TestEnv, message_size: usize, rps: f64) {
@@ -182,10 +173,7 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
         "Step 1: Install {} canisters on the subnet..", canister_count
     );
     let mut canisters = Vec::new();
-    let agent = rt.block_on(async {
-        let agent = assert_create_agent_using_call_v2(app_node.get_public_url().as_str()).await;
-        CanisterAgent { agent }
-    });
+    let agent = rt.block_on(app_node.build_canister_agent());
 
     let nodes = env
         .topology_snapshot()
@@ -195,10 +183,12 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
         .nodes()
         .collect::<Vec<_>>();
     let agents = rt.block_on(async {
-        join_all(nodes.iter().cloned().map(|n| async move {
-            let agent = assert_create_agent_using_call_v2(n.get_public_url().as_str()).await;
-            CanisterAgent { agent }
-        }))
+        join_all(
+            nodes
+                .iter()
+                .cloned()
+                .map(|n| async move { n.build_canister_agent().await }),
+        )
         .await
     });
 

@@ -183,6 +183,7 @@ fn can_successfully_create_bitcoin_payload() {
                     proposal_context.validation_context,
                     &[],
                     SELF_VALIDATING_PAYLOAD_BYTE_LIMIT,
+                    0,
                 )
                 .0;
             assert_eq!(payload, expected_payload);
@@ -426,23 +427,40 @@ fn bitcoin_payload_builder_fits_largest_blocks() {
         state_manager,
         registry_client,
         |proposal_context, bitcoin_payload_builder| {
-            let payload = bitcoin_payload_builder.build_payload(
-                Height::new(1),
-                MAX_BLOCK_PAYLOAD_SIZE,
-                &[],
+            let (payload, _) = bitcoin_payload_builder.get_self_validating_payload(
                 proposal_context.validation_context,
+                &[],
+                MAX_BLOCK_PAYLOAD_SIZE,
+                0,
             );
 
-            let validation_result = bitcoin_payload_builder.validate_payload(
-                Height::new(1),
-                &proposal_context,
+            let validation_result = bitcoin_payload_builder.validate_self_validating_payload(
                 &payload,
+                proposal_context.validation_context,
                 &[],
             );
             assert!(
                 validation_result.is_ok(),
                 "validation did not pass {:?}",
                 validation_result
+            );
+            assert!(!payload.is_empty());
+
+            // Now test again, but priority is not zero. This should generate an empty payload
+            let (payload, _) = bitcoin_payload_builder.get_self_validating_payload(
+                proposal_context.validation_context,
+                &[],
+                MAX_BLOCK_PAYLOAD_SIZE,
+                1,
+            );
+            assert!(payload.is_empty());
+
+            // Test again, this time priority is not zero, but the byte limit is doubles, such that the block fits.
+            let (payload, _) = bitcoin_payload_builder.get_self_validating_payload(
+                proposal_context.validation_context,
+                &[],
+                NumBytes::new(2 * MAX_BLOCK_PAYLOAD_SIZE.get()),
+                1,
             );
             assert!(!payload.is_empty());
         },
