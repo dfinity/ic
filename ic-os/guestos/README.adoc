@@ -49,3 +49,8 @@ See instructions link:components/README.adoc#[here] on how to make changes to th
 
 For further reading, see the docs in the
 link:docs/README.adoc#[docs/ subdirectory]
+
+== Firewall
+
+The GuestOS firewall can be altered by operators to suit their needs.
+Please consult link:../docs/Network-Configuration.adoc[the documentation for network configuration] for more information.
