@@ -3,9 +3,10 @@ use std::time::Duration;
 use ic_consensus_system_test_utils::upgrade::bless_public_replica_version;
 use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
 use ic_system_test_driver::driver::test_env_api::{
-    GetFirstHealthyNodeSnapshot, HasIcDependencies, HasPublicApiUrl, HasTopologySnapshot,
+    GetFirstHealthyNodeSnapshot, HasTopologySnapshot,
 };
 use slog::info;
+use tokio::runtime::Handle;
 
 use super::{RegistryWrapper, Step};
 
@@ -15,9 +16,10 @@ pub struct EnsureBlessedVersion {
 }
 
 impl Step for EnsureBlessedVersion {
-    async fn execute(
+    fn execute(
         &self,
         env: ic_system_test_driver::driver::test_env::TestEnv,
+        rt: Handle,
         registry: RegistryWrapper,
     ) -> anyhow::Result<()> {
         let blessed_versions = registry
@@ -33,24 +35,24 @@ impl Step for EnsureBlessedVersion {
 
         let nns_node = env.get_first_healthy_system_node_snapshot();
 
-        bless_public_replica_version(
+        rt.block_on(bless_public_replica_version(
             &nns_node,
             &self.version,
             ic_consensus_system_test_utils::upgrade::UpdateImageType::Image,
             ic_consensus_system_test_utils::upgrade::UpdateImageType::Sha256,
             &env.logger(),
-        )
-        .await;
+        ));
 
         // This call updates the local registry
-        env.topology_snapshot()
-            .block_for_newer_registry_version_within_duration(
-                Duration::from_secs(10 * 60),
-                Duration::from_secs(10),
-            )
-            .await?;
+        rt.block_on(
+            env.topology_snapshot()
+                .block_for_newer_registry_version_within_duration(
+                    Duration::from_secs(10 * 60),
+                    Duration::from_secs(10),
+                ),
+        )?;
 
-        registry.sync_with_local_store().await?;
+        rt.block_on(registry.sync_with_local_store())?;
         let blessed_versions = registry
             .get_family_entries::<BlessedReplicaVersions>()?
             .first_entry()

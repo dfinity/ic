@@ -1,9 +1,11 @@
+use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     test_env_api::{read_dependency_from_env_to_string, read_dependency_to_string},
 };
 use ic_tests::qualification::{
-    defs::QualificationExecutor, steps::ensure_blessed_version::EnsureBlessedVersion,
+    defs::QualificationExecutor,
+    steps::{ensure_blessed_version::EnsureBlessedVersion, update_subnet_type::UpdateSubnetType},
     ConfigurableSubnet, ConfigurableUnassignedNodes, IcConfig, SubnetSimple,
 };
 use std::time::Duration;
@@ -17,19 +19,6 @@ pub fn main() -> anyhow::Result<()> {
         Ok(v) => v,
         Err(_) => read_dependency_to_string("testnet/mainnet_nns_revision.txt").map_err(|_| anyhow::anyhow!("Didn't find initial version specified in `testnet/mainnet_nns_revision.txt` nur in `INITIAL_VERSION` env variable"))?,
     };
-
-    let qualifier = QualificationExecutor::new(
-        initial_version.clone(),
-        read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?,
-        tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(16)
-            .max_blocking_threads(16)
-            .enable_all()
-            .build()?,
-        vec![EnsureBlessedVersion {
-            version: initial_version.clone(),
-        }],
-    );
 
     let config = IcConfig {
         subnets: Some(vec![
@@ -48,15 +37,49 @@ pub fn main() -> anyhow::Result<()> {
         ]),
         unassigned_nodes: Some(ConfigurableUnassignedNodes::Simple(4)),
         boundary_nodes: None,
-        initial_version: Some(initial_version),
+        initial_version: Some(initial_version.clone()),
     };
+
+    let to_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?;
 
     SystemTestGroup::new()
         .with_overall_timeout(OVERALL_TIMEOUT)
         .with_setup(|env| ic_tests::qualification::setup(env, config))
         .add_test(ic_system_test_driver::driver::dsl::TestFunction::new(
             "qualification",
-            move |env| qualifier.qualify(env).expect("Failed to qualify"),
+            move |env| {
+                let qualifier = QualificationExecutor::new(
+                    tokio::runtime::Builder::new_multi_thread()
+                        .worker_threads(16)
+                        .max_blocking_threads(16)
+                        .enable_all()
+                        .build()
+                        .expect("Should be able to build runtime"),
+                    vec![
+                        // Ensure that the initial version is blessed
+                        // Since we are using our config this should
+                        // always be the case.
+                        Box::new(EnsureBlessedVersion {
+                            version: initial_version.clone(),
+                        }),
+                        // Ensure that application subnets are on the
+                        // initial version. As the step above, this
+                        // should always be true
+                        Box::new(UpdateSubnetType {
+                            subnet_type: SubnetType::Application,
+                            version: initial_version.clone(),
+                        }),
+                        // Ensure that system subnet is on the
+                        // initial version. As the step above, this
+                        // should always be true
+                        Box::new(UpdateSubnetType {
+                            subnet_type: SubnetType::System,
+                            version: initial_version.clone(),
+                        }),
+                    ],
+                );
+                qualifier.qualify(env).expect("Failed to qualify")
+            },
         ))
         .execute_from_args()
 }

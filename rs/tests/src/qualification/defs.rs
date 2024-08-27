@@ -1,32 +1,22 @@
-use futures::SinkExt;
 use ic_system_test_driver::driver::test_env::TestEnv;
-use tokio::runtime::{Builder, Runtime};
+use tokio::runtime::Runtime;
 
 use super::steps::Step;
 
-pub struct QualificationExecutor<T: Step> {
-    from_version: String,
-    to_version: String,
+pub struct QualificationExecutor {
     rt: Runtime,
-    steps: Vec<T>,
+    steps: Vec<Box<dyn Step>>,
 }
 
-impl<T: Step> QualificationExecutor<T> {
-    pub fn new(from_version: String, to_version: String, rt: Runtime, steps: Vec<T>) -> Self {
-        Self {
-            from_version,
-            to_version,
-            rt,
-            steps,
-        }
+impl QualificationExecutor {
+    pub fn new(rt: Runtime, steps: Vec<Box<dyn Step>>) -> Self {
+        Self { rt, steps }
     }
 
     pub fn qualify(&self, env: TestEnv) -> anyhow::Result<()> {
-        // Ensure blessed initial version
-
-        // Update app subnets
-
-        // Update system subnet
+        for step in &self.steps {
+            step.do_step(env.clone(), self.rt.handle().clone())?
+        }
 
         // Update unassigned nodes
 
