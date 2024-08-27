@@ -569,11 +569,7 @@ pub fn setup_nested_vms(
 
 pub fn start_nested_vms(env: &TestEnv, farm: &Farm, group_name: &str) -> anyhow::Result<()> {
     for node in env.get_all_nested_vms()? {
-        let t_farm = farm.to_owned();
-        let t_vm_name = node.vm_name().to_owned();
-        let t_group_name = group_name.to_owned();
-
-        t_farm.start_vm(&t_group_name, &t_vm_name)?;
+        farm.start_vm(group_name, &node.vm_name())?;
     }
 
     Ok(())
