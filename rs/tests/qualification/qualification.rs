@@ -40,7 +40,10 @@ pub fn main() -> anyhow::Result<()> {
         initial_version: Some(initial_version.clone()),
     };
 
-    let to_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?;
+    let to_version = match std::env::var("TO_VERSION") {
+        Ok(v) => v,
+        Err(_) => read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE").map_err(|_| anyhow::anyhow!("Didn't find version being qualified specified in `ENV_DEPS__IC_VERSION_FILE` nur in `TO_VERSION` env variable"))?,
+    };
 
     SystemTestGroup::new()
         .with_overall_timeout(OVERALL_TIMEOUT)

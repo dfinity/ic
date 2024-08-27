@@ -24,6 +24,12 @@ const DEV_DISK_IMG_TAR_ZST_CAS_URL: &str = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_U
 const CUSTOM_DISK_IMG_SHA: &str = "custom_disk_img_sha";
 const DEV_DISK_IMG_TAR_ZST_SHA256: &str = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256";
 
+const CUSTOM_UPDATE_IMG_TAR_URL: &str = "custom_update_img_tar_url";
+const DEV_UPDATE_IMG_TAR_ZST_CAS_URL: &str = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL";
+
+const CUSTOM_UPDATE_IMG_SHA: &str = "custom_update_img_sha";
+const DEV_UPDATE_IMG_TAR_ZST_SHA256: &str = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_SHA256";
+
 pub const IC_CONFIG: &str = "IC_CONFIG";
 
 const TAR_EXTENSION: &str = ".tar.zst";
@@ -53,8 +59,18 @@ pub fn setup(env: TestEnv, config: IcConfig) {
                 ),
                 (
                     CUSTOM_DISK_IMG_SHA,
-                    fetch_shasum_for_disk_img(v.to_string()),
+                    fetch_shasum_for_img(v.to_string(), "disk"),
                     DEV_DISK_IMG_TAR_ZST_SHA256,
+                ),
+                (
+                    CUSTOM_UPDATE_IMG_TAR_URL,
+                    format!("http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.zst", v),
+                    DEV_UPDATE_IMG_TAR_ZST_CAS_URL,
+                ),
+                (
+                    CUSTOM_UPDATE_IMG_SHA,
+                    fetch_shasum_for_img(v.to_string(), "update"),
+                    DEV_UPDATE_IMG_TAR_ZST_SHA256,
                 ),
             ],
         );
@@ -121,10 +137,10 @@ fn write_file_and_update_env_variable(env: &TestEnv, pairs: Vec<(&str, String, &
     }
 }
 
-fn fetch_shasum_for_disk_img(version: String) -> String {
+fn fetch_shasum_for_img(version: String, image: &str) -> String {
     let url = format!(
-        "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/disk-img/SHA256SUMS",
-        version
+        "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/{}-img/SHA256SUMS",
+        version, image
     );
     let response = reqwest::blocking::get(&url)
         .unwrap_or_else(|e| panic!("Failed to fetch url `{}` with err: {:?}", &url, e));
