@@ -1,4 +1,4 @@
-use crate::in_memory_ledger::{empty_icrc1_in_memory_ledger, verify_ledger_state};
+use crate::in_memory_ledger::{verify_ledger_state, InMemoryLedger};
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
 use ic_agent::identity::{BasicIdentity, Identity};
 use ic_base_types::PrincipalId;
@@ -2516,7 +2516,7 @@ pub fn test_upgrade_serialization(
                     .install_canister(ledger_wasm_mainnet.clone(), init_args.clone(), None)
                     .unwrap();
 
-                let mut in_memory_ledger = empty_icrc1_in_memory_ledger();
+                let mut in_memory_ledger = InMemoryLedger::default();
 
                 let mut tx_index = 0;
                 let mut tx_index_target = INITIAL_TX_BATCH_SIZE;

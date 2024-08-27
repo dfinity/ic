@@ -497,7 +497,3 @@ pub fn verify_ledger_state(env: &StateMachine, ledger_id: CanisterId) {
     expected_ledger_state.verify_balances_and_allowances(env, ledger_id);
     println!("ledger state verified successfully");
 }
-
-pub fn empty_icrc1_in_memory_ledger() -> InMemoryLedger<ApprovalKey, Account, Tokens> {
-    InMemoryLedger::default()
-}
