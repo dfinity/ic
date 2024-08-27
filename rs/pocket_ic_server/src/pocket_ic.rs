@@ -20,7 +20,7 @@ use ic_config::{
 };
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_public::{
-    metrics::HttpHandlerMetrics, CallServiceV2, CallServiceV3, CanisterReadStateServiceBuilder,
+    call_v2, call_v3, metrics::HttpHandlerMetrics, CanisterReadStateServiceBuilder,
     IngressValidatorBuilder, QueryServiceBuilder, SubnetReadStateServiceBuilder,
 };
 use ic_https_outcalls_adapter::{CanisterHttp, Config as HttpsOutcallsConfig};
@@ -1633,13 +1633,13 @@ impl Operation for CallRequest {
                 });
 
                 let svc = match self.version {
-                    CallRequestVersion::V2 => CallServiceV2::new_service(ingress_validator),
+                    CallRequestVersion::V2 => call_v2::new_service(ingress_validator),
                     CallRequestVersion::V3 => {
                         let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
                         let metrics_registry = MetricsRegistry::new();
                         let metrics = HttpHandlerMetrics::new(&metrics_registry);
 
-                        CallServiceV3::new_service(
+                        call_v3::new_service(
                             ingress_validator,
                             subnet.ingress_watcher_handle.clone(),
                             metrics,
