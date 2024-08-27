@@ -1,10 +1,9 @@
+load("//ic-os/components/conformance-tests:defs.bzl", "check_unused_components_test")
 load("boundary-guestos.bzl", boundaryos_component_files = "component_files")
-load("defs.bzl", "check_unused_components_test")
 load("guestos.bzl", guestos_component_files = "component_files")
 load("hostos.bzl", hostos_component_files = "component_files")
 load("setupos.bzl", setupos_component_files = "component_files")
 
-# help: PUBLIC_GUESTOS_EXPORTS necessary? We're already exporting all files.
 PUBLIC_GUESTOS_EXPORTS = [
     "ic/ic.json5.template",
     "networking/dev-certs/canister_http_test_ca.cert",
