@@ -239,6 +239,8 @@ pub enum NotifyErrorCode {
     BadSubnetSelection = 4,
     /// The caller is not allowed to perform the operation.
     Unauthorized = 5,
+    /// Deposit memo field is too long.
+    DepositMemoTooLong = 6,
 }
 
 impl NotifyError {

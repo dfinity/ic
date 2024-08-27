@@ -2,8 +2,8 @@ use candid::{Decode, Encode};
 use canister_test::Canister;
 use cycles_minting_canister::{
     CanisterSettingsArgs, ChangeSubnetTypeAssignmentArgs, CreateCanister, CreateCanisterError,
-    IcpXdrConversionRateCertifiedResponse, NotifyCreateCanister, NotifyError, NotifyMintCyclesArg,
-    NotifyMintCyclesSuccess, SubnetListWithType, SubnetTypesToSubnetsResponse,
+    IcpXdrConversionRateCertifiedResponse, NotifyCreateCanister, NotifyError, NotifyErrorCode,
+    NotifyMintCyclesArg, NotifyMintCyclesSuccess, SubnetListWithType, SubnetTypesToSubnetsResponse,
     UpdateSubnetTypeArgs, BAD_REQUEST_CYCLES_PENALTY, MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES,
     MEMO_TOP_UP_CANISTER,
 };
@@ -992,7 +992,7 @@ fn cmc_notify_mint_cycles() {
         &state_machine,
         Tokens::new(1, 0).unwrap(),
         main_account.subaccount,
-        None,
+        Some(vec![1u8; 32]),
     )
     .unwrap();
     assert_eq!(
@@ -1127,4 +1127,46 @@ fn cmc_notify_mint_cycles() {
     assert_eq!(block_index, block_index_duplicate);
     assert_eq!(minted, minted_duplicate);
     assert_eq!(balance, balance_duplicate);
+
+    // Deposit memo is too long.
+    let transfer_args = TransferArgs {
+        memo: MEMO_MINT_CYCLES,
+        amount: Tokens::new(3, 0).unwrap(),
+        fee: Tokens::from_e8s(10_000),
+        from_subaccount: None,
+        to: AccountIdentifier::new(
+            CYCLES_MINTING_CANISTER_ID.get(),
+            Some(Subaccount::from(&TEST_USER1_PRINCIPAL.clone())),
+        )
+        .to_address(),
+        created_at_time: None,
+    };
+    let block_index = send_transfer(&state_machine, &transfer_args).expect("transfer failed");
+    let notify_args = NotifyMintCyclesArg {
+        block_index,
+        to_subaccount: None,
+        deposit_memo: Some(vec![0; 100]),
+    };
+    let WasmResult::Reply(res) = state_machine
+        .execute_ingress_as(
+            *TEST_USER1_PRINCIPAL,
+            CYCLES_MINTING_CANISTER_ID,
+            "notify_mint_cycles",
+            Encode!(&notify_args).unwrap(),
+        )
+        .unwrap()
+    else {
+        panic!("notify rejected")
+    };
+    let response = Decode!(&res, Result<NotifyMintCyclesSuccess, NotifyError>).unwrap();
+    match response {
+        Err(NotifyError::Other {
+            error_code,
+            error_message,
+        }) => {
+            assert_eq!(error_code, NotifyErrorCode::DepositMemoTooLong as u64);
+            assert!(error_message.contains("exceeds the maximum length"));
+        }
+        _ => panic!("Unexpected response: {:?}", response),
+    }
 }

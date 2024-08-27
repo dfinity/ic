@@ -66,6 +66,8 @@ const ONE_MINUTE_SECONDS: u64 = 60;
 const MAX_NOTIFY_HISTORY: usize = 1_000_000;
 /// The maximum number of old notification statuses we purge in one go.
 const MAX_NOTIFY_PURGE: usize = 100_000;
+/// The maximum memo length.
+const MAX_MEMO_LENGTH: usize = 32;
 
 /// Calls to create_canister get rejected outright if they have obviously too few cycles attached.
 /// This is the minimum amount needed for creating a canister as of October 2023.
@@ -1307,6 +1309,17 @@ async fn notify_mint_cycles(
         owner: caller().into(),
         subaccount: to_subaccount,
     };
+
+    if deposit_memo.as_ref().map_or(0, |memo| memo.len()) > MAX_MEMO_LENGTH {
+        return Err(NotifyError::Other {
+            error_code: NotifyErrorCode::DepositMemoTooLong as u64,
+            error_message: format!(
+                "Memo length {} exceeds the maximum length of {}",
+                deposit_memo.map_or(0, |memo| memo.len()),
+                MAX_MEMO_LENGTH
+            ),
+        });
+    }
 
     let (amount, from) =
         fetch_transaction(block_index, expected_destination_account, MEMO_MINT_CYCLES).await?;
