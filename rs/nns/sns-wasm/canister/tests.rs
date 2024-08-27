@@ -19,10 +19,10 @@ use candid_parser::utils::{service_equal, CandidSource};
 /// there is a different test for that (namely,
 /// candid_changes_are_backwards_compatible). This test does not compare the
 /// current working copy against master. Rather, it only compares ./canister.rs
-/// to registry.did.
+/// to sns-wasm.did.
 #[test]
 fn test_implemented_interface_matches_declared_interface_exactly() {
-    let declared_interface = CandidSource::Text(include_str!("registry.did"));
+    let declared_interface = CandidSource::Text(include_str!("sns-wasm.did"));
 
     // The line below generates did types and service definition from the
     // methods annotated with `candid_method` above. The definition is then
