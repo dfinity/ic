@@ -69,31 +69,27 @@ pub(crate) fn check_endpoint_invariants(
             let valid_endpoint = validate_endpoint(&endpoint, tolerate_unspecified_ip, strict)?;
             // Multiple nodes may have unspecified addresses, so duplicates should be avoided only for specified endpoints
             if !valid_endpoint.0.is_unspecified() && !new_valid_endpoints.insert(valid_endpoint) {
-                let error: Result<(), InvariantCheckError> = Err(InvariantCheckError {
+                return Err(InvariantCheckError {
                     msg: format!(
                         "{error_prefix}: Duplicate endpoint ({:?}, {:?}); previous endpoints: {new_valid_endpoints:?}",
                         &endpoint.ip_addr, &endpoint.port
                     ),
                     source: None,
                 });
-                // TODO: change to `return error;` after NNS1-2228 is closed.
-                println!("WARNING: {error:?}");
             }
         }
 
         // Check that there are _some_ node endpoints
         if new_valid_endpoints.is_empty() {
-            let error: Result<(), InvariantCheckError> = Err(InvariantCheckError {
+            return Err(InvariantCheckError {
                 msg: format!("{error_prefix}: No endpoints to validate"),
                 source: None,
             });
-            // TODO: change to `return error;` after NNS1-2228 is closed.
-            println!("WARNING: {error:?}");
         }
 
         // Check that there is no intersection with other nodes
         if !new_valid_endpoints.is_disjoint(&valid_endpoints) {
-            let error: Result<(), InvariantCheckError> = Err(InvariantCheckError {
+            return Err(InvariantCheckError {
                 msg: format!(
                     "{error_prefix}: Duplicate endpoints detected across nodes; new_valid_endpoints = {}",
                     new_valid_endpoints.iter().map(|x| if valid_endpoints.contains(x) {
@@ -106,8 +102,6 @@ pub(crate) fn check_endpoint_invariants(
                 ),
                 source: None,
             });
-            // TODO: change to `return error;` after NNS1-2228 is closed.
-            println!("WARNING: {error:?}");
         }
 
         // All is good -- add current endpoints to global set
@@ -408,7 +402,7 @@ mod tests {
             .encode_to_vec(),
         );
 
-        assert!(check_endpoint_invariants(&snapshot, true).is_ok());
+        assert_eq!(check_endpoint_invariants(&snapshot, true), Ok(()));
 
         // Add a node with conflicting sockets
         let node_id = NodeId::from(PrincipalId::new_node_test_id(2));
@@ -433,8 +427,10 @@ mod tests {
             .encode_to_vec(),
         );
 
-        // TODO: change to `assert!(check_endpoint_invariants(&snapshot, true).is_err());` after NNS1-2228 is closed.
-        assert!(check_endpoint_invariants(&snapshot, true).is_ok());
+        assert_eq!(check_endpoint_invariants(&snapshot, true), Err(InvariantCheckError {
+            msg: "<TODO: Insert expected error test here>".to_string(),
+            source: None,
+        }));
 
         snapshot.remove(&key);
 
