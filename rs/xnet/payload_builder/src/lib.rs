@@ -1538,10 +1538,10 @@ impl XNetClientImpl {
         // TODO(MR-28) Make timeout configurable.
         let http_client: Client<TlsConnector, Request<XNetRequestBody>> =
             Client::builder(TokioExecutor::new())
-                .pool_idle_timeout(Some(Duration::from_secs(600)))
+                .pool_idle_timeout(Some(Duration::from_secs(60)))
                 .pool_timer(TokioTimer::new())
                 // TODO(NET-1747): don't decrease before the ticket is resolved
-                .pool_max_idle_per_host(100)
+                .pool_max_idle_per_host(1)
                 .build(https);
 
         let response_body_size = metrics_registry.histogram_vec(
