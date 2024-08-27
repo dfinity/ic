@@ -16,10 +16,10 @@ concurrency:
   cancel-in-progress: ${{ github.ref_name != 'master' }}
 
 jobs:
-  bazel-test-macos-arm64:
-    name: Bazel Test Darwin arm64 [Namespace]
+  bazel-test-macos-apple-silicon:
+    name: Bazel Test macOS Apple Silicon
     timeout-minutes: 120
-    runs-on: namespace-profile-darwin-small-cache # profile created in namespace console
+    runs-on: namespace-profile-darwin # profile created in namespace console
     steps:
       - name: Install nsc
         run: |

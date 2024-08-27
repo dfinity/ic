@@ -29,7 +29,6 @@ http = "0.2.12"
 humantime = "2.0"
 humantime-serde = { workspace = true }
 hyper = "0.14.18"
-hyper-rustls = { workspace = true }
 ic-agent = { workspace = true }
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-base-types = { path = "../../types/base_types" }
