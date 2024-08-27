@@ -13,6 +13,13 @@ PUBLIC_GUESTOS_EXPORTS = [
 
 exports_files(PUBLIC_GUESTOS_EXPORTS)
 
+exports_files(
+    glob(
+        ["**"],
+        exclude = PUBLIC_GUESTOS_EXPORTS,
+    ),
+)
+
 used_components = dict()
 
 used_components.update(guestos_component_files)
