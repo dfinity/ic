@@ -1,8 +1,8 @@
-def _check_unused_components_test_impl(ctx):
-    args = []
-    inputs = []
-    outputs = []
+"""
+Rules for check unused components checks.
+"""
 
+def _check_unused_components_test_impl(ctx):
     repo_components = [target.label.name for target in ctx.attr.repo_components]
     used_components = [target.label.name for target in ctx.attr.used_components]
 
