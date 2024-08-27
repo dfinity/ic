@@ -63,7 +63,11 @@ pub enum LegacyLedgerArgument {
 }
 
 fn ledger_mainnet_wasm() -> Vec<u8> {
-    std::fs::read(std::env::var("IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap()
+    #[cfg(not(feature = "u256-tokens"))]
+    let mainnet_wasm = ledger_mainnet_u64_wasm();
+    #[cfg(feature = "u256-tokens")]
+    let mainnet_wasm = ledger_mainnet_u256_wasm();
+    mainnet_wasm
 }
 
 fn ledger_mainnet_u64_wasm() -> Vec<u8> {
@@ -159,7 +163,6 @@ fn test_upgrade() {
     ic_icrc1_ledger_sm_tests::test_upgrade(ledger_wasm(), encode_init_args)
 }
 
-#[cfg_attr(feature = "u256-tokens", ignore)]
 #[test]
 fn test_install_mainnet_ledger_then_upgrade_then_downgrade() {
     ic_icrc1_ledger_sm_tests::test_install_upgrade_downgrade(
@@ -172,7 +175,6 @@ fn test_install_mainnet_ledger_then_upgrade_then_downgrade() {
     )
 }
 
-#[cfg_attr(feature = "u256-tokens", ignore)]
 #[test]
 fn test_install_current_ledger_then_upgrade_then_downgrade_to_mainnet_version() {
     ic_icrc1_ledger_sm_tests::test_install_upgrade_downgrade(
@@ -380,7 +382,6 @@ fn test_ledger_http_request_decoding_quota() {
     );
 }
 
-#[cfg_attr(feature = "u256-tokens", ignore)]
 #[test]
 fn test_block_transformation() {
     ic_icrc1_ledger_sm_tests::icrc1_test_block_transformation(
@@ -398,12 +399,8 @@ fn icrc1_test_upgrade_serialization() {
         .with_transfer_fee(FEE);
     let init_args = Encode!(&LedgerArgument::Init(builder.build())).unwrap();
     let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
-    #[cfg(not(feature = "u256-tokens"))]
-    let ledger_mainnet_wasm = ledger_mainnet_u64_wasm();
-    #[cfg(feature = "u256-tokens")]
-    let ledger_mainnet_wasm = ledger_mainnet_u256_wasm();
     ic_icrc1_ledger_sm_tests::test_upgrade_serialization(
-        ledger_mainnet_wasm,
+        ledger_mainnet_wasm(),
         ledger_wasm(),
         Some(ledger_wasm_upgradetomemorymanager()),
         init_args,
@@ -415,12 +412,8 @@ fn icrc1_test_upgrade_serialization() {
 
 #[test]
 fn icrc1_test_upgrade_serialization_deterministic() {
-    #[cfg(not(feature = "u256-tokens"))]
-    let ledger_mainnet_wasm = ledger_mainnet_u64_wasm();
-    #[cfg(feature = "u256-tokens")]
-    let ledger_mainnet_wasm = ledger_mainnet_u256_wasm();
     ic_icrc1_ledger_sm_tests::icrc1_test_upgrade_serialization_deterministic(
-        ledger_mainnet_wasm,
+        ledger_mainnet_wasm(),
         ledger_wasm(),
         ledger_wasm_upgradetomemorymanager(),
         encode_init_args,
