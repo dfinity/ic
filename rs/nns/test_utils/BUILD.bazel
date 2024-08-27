@@ -78,7 +78,6 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nns/governance:governance--test_feature",
     "//rs/nns/governance/api:api--test_feature",
     "//rs/nns/governance/init:init--test_feature",
     "//rs/nns/gtc:gtc--test_feature",
