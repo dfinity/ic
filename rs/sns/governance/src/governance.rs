@@ -3887,6 +3887,10 @@ impl Governance {
         let mut swap_neurons = vec![];
 
         let Some(neuron_recipes) = request.neuron_recipes else {
+            log!(
+                ERROR,
+                "Swap called claim_swap_neurons, but did not populate `neuron_recipes`."
+            );
             return ClaimSwapNeuronsResponse::new_with_error(ClaimSwapNeuronsError::Internal);
         };
 
