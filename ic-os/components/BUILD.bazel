@@ -1,8 +1,8 @@
+load("boundary-guestos.bzl", boundaryos_component_files = "component_files")
 load("defs.bzl", "check_unused_components_test")
 load("guestos.bzl", guestos_component_files = "component_files")
 load("hostos.bzl", hostos_component_files = "component_files")
 load("setupos.bzl", setupos_component_files = "component_files")
-load("boundary-guestos.bzl", boundaryos_component_files = "component_files")
 
 PUBLIC_GUESTOS_EXPORTS = [
     "ic/ic.json5.template",
@@ -14,14 +14,23 @@ PUBLIC_GUESTOS_EXPORTS = [
 exports_files(PUBLIC_GUESTOS_EXPORTS)
 
 used_components = dict()
+
 used_components.update(guestos_component_files)
+
 used_components.update(hostos_component_files)
+
 used_components.update(setupos_component_files)
+
 used_components.update(boundaryos_component_files)
 
 REPO_COMPONENTS = glob(
     ["**/*"],
-    exclude = ["**/BUILD.bazel", "**/*.bzl", "**/*.md", "**/*.adoc"]
+    exclude = [
+        "**/BUILD.bazel",
+        "**/*.bzl",
+        "**/*.md",
+        "**/*.adoc",
+    ],
 )
 
 check_unused_components_test(

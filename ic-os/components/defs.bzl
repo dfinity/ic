@@ -15,7 +15,7 @@ def _check_unused_components_test_impl(ctx):
     unused_components_file = ctx.actions.declare_file(ctx.label.name + ".unused_components")
     ctx.actions.write(
         output = unused_components_file,
-        content = "\n".join(unused_components)
+        content = "\n".join(unused_components),
     )
 
     if unused_components:
@@ -24,14 +24,14 @@ def _check_unused_components_test_impl(ctx):
     script = ctx.actions.declare_file(ctx.label.name + ".sh")
     ctx.actions.write(
         output = script,
-        content = "echo Unused components check completed"
+        content = "echo Unused components check completed",
     )
 
     return [
         DefaultInfo(
-            files=depset([unused_components_file]),
-            executable=script,
-        )
+            files = depset([unused_components_file]),
+            executable = script,
+        ),
     ]
 
 check_unused_components_test = rule(
