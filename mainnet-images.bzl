@@ -7,14 +7,11 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 MAINNET_REVISION = "6968299131311c836917f0d16d0b1b963526c9b1"
 
 def base_download_url(git_commit_id, variant, update, test):
-    test = "-test" if test else ""
-    component = "update-img" if update else "disk-img"
-
     return "https://download.dfinity.systems/ic/{git_commit_id}/{variant}/{component}{test}/".format(
         git_commit_id = git_commit_id,
         variant = variant,
-        component = component,
-        test = test,
+        component = "update-img" if update else "disk-img",
+        test = "-test" if test else "",
     )
 
 def mainnet_images():
