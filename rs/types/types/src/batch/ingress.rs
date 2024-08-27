@@ -103,14 +103,11 @@ impl IngressPayload {
     // TODO(kpop): run some benchmarks and see if it makes sense to change the type of
     // `[IngressPayload::id_and_pos]`
     pub fn get_by_id(&self, ingress_message_id: &IngressMessageId) -> Option<SignedIngress> {
-        let Some((index, _)) = self
+        let (index, _) = self
             .id_and_pos
             .iter()
             .enumerate()
-            .find(|(_, (id, _))| id == ingress_message_id)
-        else {
-            return None;
-        };
+            .find(|(_, (id, _))| id == ingress_message_id)?;
 
         self.get(index)
             .map(|(_, ingress_message)| ingress_message)
