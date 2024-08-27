@@ -139,7 +139,7 @@ jobs:
             bazel-bep.pb
             profile.json
   bazel-test-macos-intel:
-    name: Bazel Test MacOS Intel
+    name: Bazel Test macOS Intel
     timeout-minutes: 120
     runs-on:
       labels: macOS
