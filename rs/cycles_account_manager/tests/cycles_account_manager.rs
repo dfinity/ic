@@ -17,7 +17,7 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
-    messages::{extract_effective_canister_id, SignedIngressContent},
+    messages::{extract_effective_canister_id, SignedIngressContent, MAX_RESPONSE_COUNT_BYTES},
     nominal_cycles::NominalCycles,
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
 };
@@ -883,7 +883,7 @@ fn withdraw_cycles_for_transfer_checks_reserved_balance() {
 #[test]
 fn withdraw_up_to_respects_freezing_threshold() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let initial_cycles = Cycles::new(2_000_000_000);
+    let initial_cycles = Cycles::new(200_000_000_000);
     let mut system_state = SystemState::new_running_for_testing(
         canister_test_id(1),
         canister_test_id(2).get(),
@@ -893,16 +893,22 @@ fn withdraw_up_to_respects_freezing_threshold() {
     let memory_usage = NumBytes::from(1_000_000);
     let message_memory_usage = NumBytes::from(1_000);
     let compute_allocation = ComputeAllocation::default();
+    let payload_size = NumBytes::from(0);
     system_state.memory_allocation = MemoryAllocation::try_from(NumBytes::from(1 << 20)).unwrap();
-    let freeze_threshold = cycles_account_manager.freeze_threshold_cycles(
+    let untouched_cycles = cycles_account_manager.freeze_threshold_cycles(
         system_state.freeze_threshold,
         system_state.memory_allocation,
         memory_usage,
-        message_memory_usage,
+        message_memory_usage + (MAX_RESPONSE_COUNT_BYTES as u64).into(),
         compute_allocation,
         SMALL_APP_SUBNET_MAX_SIZE,
         system_state.reserved_balance(),
-    );
+    ) + cycles_account_manager
+        .xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE)
+        + cycles_account_manager
+            .xnet_call_bytes_transmitted_fee(payload_size, SMALL_APP_SUBNET_MAX_SIZE)
+        + cycles_account_manager.prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE)
+        + cycles_account_manager.prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE);
 
     // full amount can be withdrawn
     let mut new_balance = system_state.balance();
@@ -910,6 +916,7 @@ fn withdraw_up_to_respects_freezing_threshold() {
     let withdrawn_amount_1 = cycles_account_manager.withdraw_up_to_cycles_for_transfer(
         system_state.freeze_threshold,
         system_state.memory_allocation,
+        payload_size,
         memory_usage,
         message_memory_usage,
         compute_allocation,
@@ -926,6 +933,7 @@ fn withdraw_up_to_respects_freezing_threshold() {
     let withdrawn_cycles_2 = cycles_account_manager.withdraw_up_to_cycles_for_transfer(
         system_state.freeze_threshold,
         system_state.memory_allocation,
+        payload_size,
         memory_usage,
         message_memory_usage,
         compute_allocation,
@@ -935,10 +943,10 @@ fn withdraw_up_to_respects_freezing_threshold() {
         system_state.reserved_balance(),
     );
     assert_eq!(
-        initial_cycles - withdrawn_amount_1 - freeze_threshold,
+        initial_cycles - withdrawn_amount_1 - untouched_cycles,
         withdrawn_cycles_2
     );
-    assert_eq!(freeze_threshold, new_balance);
+    assert_eq!(untouched_cycles, new_balance);
 }
 
 #[test]

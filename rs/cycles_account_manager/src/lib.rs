@@ -417,11 +417,9 @@ impl CyclesAccountManager {
         subnet_size: usize,
         reserved_balance: Cycles,
     ) -> Cycles {
-        let call_perform_cost = self.scale_cost(
-            self.config.xnet_call_fee
-                + self.config.xnet_byte_transmission_fee * current_payload_size_bytes.get(),
-            subnet_size,
-        ) + self.prepayment_for_response_transmission(subnet_size)
+        let call_perform_cost = self.xnet_call_performed_fee(subnet_size)
+            + self.xnet_call_bytes_transmitted_fee(current_payload_size_bytes, subnet_size)
+            + self.prepayment_for_response_transmission(subnet_size)
             + self.prepayment_for_response_execution(subnet_size);
         let memory_used_to_enqueue_message =
             current_payload_size_bytes.max((MAX_RESPONSE_COUNT_BYTES as u64).into());
