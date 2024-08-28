@@ -99,17 +99,10 @@ pub fn create_payload(
         .expect("Couldn't lock DKG pool for reading.")
         .get_validated()
         .filter(|msg| {
-            // Make sure the message relates to one of the ongoing DKGs.
-            last_dkg_summary.configs.contains_key(&msg.content.dkg_id) &&
-                    // The message is from a unique dealer.
-                    match dealers_from_chain.get(&msg.content.dkg_id) {
-                        // If no list of dealers for the given DKG id was found, this must be the
-                        // first dealer for this DKG id and we need the dealing.
-                        None => true,
-                        // If we have a list of dealers for the given DKG Id, make sure the
-                        // new dealer is not on this list.
-                        Some(dealers) => !dealers.contains(&msg.signature.signer)
-                    }
+            // Make sure the message relates to one of the ongoing DKGs and it's from a unique
+            // dealer.
+            last_dkg_summary.configs.contains_key(&msg.content.dkg_id)
+                && !dealers_from_chain.contains(&(msg.content.dkg_id, msg.signature.signer))
         })
         .take(max_dealings_per_block)
         .cloned()

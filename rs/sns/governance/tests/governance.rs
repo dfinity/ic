@@ -1713,10 +1713,11 @@ fn test_claim_swap_neurons_rejects_unauthorized_access() {
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // Build the request, but leave it empty as it is not relevant to the test
-    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![],
-        neuron_recipes: None,
+        neuron_recipes: Some(NeuronRecipes {
+            neuron_recipes: Vec::new(),
+        }),
+        ..Default::default()
     };
 
     // Generate a principal id that should not be authorized to call claim_swap_neurons
@@ -1755,21 +1756,20 @@ fn test_claim_swap_neurons_rejects_unauthorized_access() {
 }
 
 #[test]
-fn test_claim_swap_neurons_reports_invalid_neuron_parameters() {
+fn test_claim_swap_neurons_reports_invalid_neuron_recipes() {
     // Set up the test environment with default sale canister id
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // Create a neuron id so the test can identify the correct item in the response
     let test_neuron_id = NeuronId::new_test_neuron_id(1);
 
-    // Create a request with an invalid NeuronParameter
-    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
+    // Create a request with an invalid NeuronRecipes
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![],
         neuron_recipes: Some(NeuronRecipes::from(vec![NeuronRecipe {
             neuron_id: Some(test_neuron_id.clone()),
             ..Default::default() // The rest of the fields are unset and will fail validation
         }])),
+        ..Default::default()
     };
 
     // Call the method
@@ -1809,9 +1809,7 @@ fn test_claim_swap_neurons_reports_already_existing_neurons() {
 
     // Create a request with a neuron id that should collide with the neuron already inserted into
     // Governance
-    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![],
         neuron_recipes: Some(NeuronRecipes::from(vec![NeuronRecipe {
             neuron_id: Some(neuron_id.clone()),
             controller: Some(user_principal),
@@ -1820,6 +1818,7 @@ fn test_claim_swap_neurons_reports_already_existing_neurons() {
             dissolve_delay_seconds: Some(0),
             followees: Some(NeuronIds::from(vec![])),
         }])),
+        ..Default::default()
     };
 
     let authorized_sale_principal = canister_fixture.get_sale_canister_id();
@@ -1859,9 +1858,7 @@ fn test_claim_swap_neurons_reports_failure_if_neuron_cannot_be_added() {
     let test_neuron_id_failure = NeuronId::new_test_neuron_id(2);
 
     // Create a request with a NeuronParameter should succeed
-    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![],
         neuron_recipes: Some(NeuronRecipes::from(vec![
             NeuronRecipe {
                 neuron_id: Some(test_neuron_id_success.clone()),
@@ -1880,6 +1877,7 @@ fn test_claim_swap_neurons_reports_failure_if_neuron_cannot_be_added() {
                 followees: Some(NeuronIds::from(vec![])),
             },
         ])),
+        ..Default::default()
     };
 
     // Call the method
@@ -1937,13 +1935,12 @@ fn test_claim_swap_neurons_succeeds() {
         followees: Some(NeuronIds::from(vec![NeuronId::new_test_neuron_id(20)])),
     };
 
-    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![],
         neuron_recipes: Some(NeuronRecipes::from(vec![
             direct_participant_neuron_recipe.clone(),
             nf_participant_neuron_recipe.clone(),
         ])),
+        ..Default::default()
     };
 
     // Call the method

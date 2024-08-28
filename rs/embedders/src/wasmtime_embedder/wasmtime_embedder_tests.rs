@@ -212,7 +212,7 @@ fn test_initial_wasmtime_config() {
             "function_references",
             "https://github.com/WebAssembly/function-references/",
             "(module (type $t (func (param i32))) (func $fn (param $f (ref $t))))",
-            "heap types not supported without the gc feature",
+            "function references required for index reference types",
         ),
         // Memory control
         // GC
