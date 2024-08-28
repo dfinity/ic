@@ -391,10 +391,36 @@ mod test {
         );
     }
 
+    async fn create_empty_partition_img(path: &Path) -> Result<()> {
+        Command::new("/usr/bin/dd")
+            .args([
+                "if=/dev/zero",
+                &format!("of={}", path.display()),
+                "bs=1K",
+                "count=256",
+            ])
+            .spawn()
+            .unwrap()
+            .wait()
+            .await?;
+
+        Command::new("/usr/sbin/mkfs.ext4")
+            .args([path.as_os_str()])
+            .spawn()
+            .unwrap()
+            .wait()
+            .await?;
+
+        Ok(())
+    }
+
     #[tokio::test]
     async fn write_read_test() {
         let dir = tempdir().unwrap();
-        let img = Path::new("rs/ic_os/partition_tools/testdata/empty_ext4.img");
+        let img_path = dir.path().join("empty_ext4.img");
+        create_empty_partition_img(&img_path)
+            .await
+            .expect("Could not create test partition image");
 
         let input_file1 = dir.path().join("input.txt");
         let contents1 = b"Hello World!";
@@ -404,7 +430,7 @@ mod test {
         let contents2 = b"Foo Bar";
         fs::write(input_file2.clone(), contents2).await.unwrap();
 
-        let mut partition = ExtPartition::open(img.to_path_buf(), None)
+        let mut partition = ExtPartition::open(img_path.to_path_buf(), None)
             .await
             .expect("Could not open partition");
 

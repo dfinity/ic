@@ -29,7 +29,6 @@ rust_library(
 rust_test(
     name = "partition_tools_test",
     crate = ":partition_tools",
-    data = [":testdata/empty_ext4.img"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
