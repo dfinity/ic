@@ -11381,6 +11381,7 @@ dependencies = [
  "candid",
  "clap 4.4.6",
  "hex",
+ "ic-agent",
  "ic-base-types",
  "ic-crypto-sha2",
  "ic-nervous-system-common",
@@ -11403,6 +11404,7 @@ dependencies = [
  "serde_yaml",
  "tempfile",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]
