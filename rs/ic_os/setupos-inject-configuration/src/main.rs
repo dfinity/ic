@@ -245,7 +245,7 @@ async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Er
     }
 
     if let Some(cpu_mode) = &cfg.cpu_mode {
-        deployment_json.resources.cpu = Some(cpu_mode.to_owned());
+        deployment_json.resources.cpu_mode = Some(cpu_mode.to_owned());
     }
 
     let mut f = File::create(path).context("failed to open deployment config file")?;
