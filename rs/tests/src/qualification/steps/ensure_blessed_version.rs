@@ -32,7 +32,7 @@ impl Step for EnsureBlessedVersion {
             &nns_node,
             &self.version,
             ic_consensus_system_test_utils::upgrade::UpdateImageType::Image,
-            ic_consensus_system_test_utils::upgrade::UpdateImageType::Sha256,
+            ic_consensus_system_test_utils::upgrade::UpdateImageType::Image,
             &env.logger(),
         ));
 

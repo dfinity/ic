@@ -124,12 +124,22 @@ pub fn fetch_unassigned_node_version(endpoint: &IcNodeSnapshot) -> Result<String
     Ok(version)
 }
 
-/// Waits until the node is healthy and running the given replica version.
-/// Panics if the timeout is reached while waiting.
 pub fn assert_assigned_replica_version(
     node: &IcNodeSnapshot,
     expected_version: &str,
     logger: Logger,
+) {
+    assert_assigned_replica_version_with_time(node, expected_version, logger, 600, 10)
+}
+
+/// Waits until the node is healthy and running the given replica version.
+/// Panics if the timeout is reached while waiting.
+pub fn assert_assigned_replica_version_with_time(
+    node: &IcNodeSnapshot,
+    expected_version: &str,
+    logger: Logger,
+    total_secs: u64,
+    backoff_secs: u64,
 ) {
     info!(
         logger,
@@ -154,8 +164,8 @@ pub fn assert_assigned_replica_version(
             expected_version
         ),
         logger.clone(),
-        secs(600),
-        secs(10),
+        secs(total_secs),
+        secs(backoff_secs),
         || match get_assigned_replica_version(node) {
             Ok(ver) if ver == expected_version => {
                 state = State::Finished;

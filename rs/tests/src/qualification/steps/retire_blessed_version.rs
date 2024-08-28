@@ -30,7 +30,7 @@ impl Step for RetireBlessedVersions {
         let versions_to_unelect = self
             .versions
             .iter()
-            .filter(|version| !blessed_versions.contains(&version))
+            .filter(|version| blessed_versions.contains(&version))
             .cloned()
             .collect_vec();
 

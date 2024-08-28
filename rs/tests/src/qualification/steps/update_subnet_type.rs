@@ -1,6 +1,7 @@
 use futures::future::join_all;
 use ic_consensus_system_test_utils::upgrade::{
-    assert_assigned_replica_version, deploy_guestos_to_all_subnet_nodes,
+    assert_assigned_replica_version, assert_assigned_replica_version_with_time,
+    deploy_guestos_to_all_subnet_nodes,
 };
 use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_system_test_driver::driver::test_env_api::{
@@ -110,7 +111,13 @@ async fn assert_version_on_all_nodes(
                 let logger_clone = logger.clone();
                 let version_clone = version.clone();
                 rt.spawn_blocking(move || {
-                    assert_assigned_replica_version(&node, &version_clone, logger_clone)
+                    assert_assigned_replica_version_with_time(
+                        &node,
+                        &version_clone,
+                        logger_clone,
+                        1500,
+                        15,
+                    )
                 })
             })
         })

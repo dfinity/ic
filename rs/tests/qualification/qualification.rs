@@ -49,7 +49,8 @@ pub fn main() -> anyhow::Result<()> {
     };
 
     SystemTestGroup::new()
-        .with_overall_timeout(OVERALL_TIMEOUT)
+        .with_overall_timeout(Duration::from_secs(60 * 60))
+        .with_timeout_per_test(Duration::from_secs(60 * 60))
         .with_setup(|env| ic_tests::qualification::setup(env, config))
         .add_test(ic_system_test_driver::driver::dsl::TestFunction::new(
             "qualification",
