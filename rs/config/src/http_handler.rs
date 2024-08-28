@@ -77,7 +77,7 @@ impl Default for Config {
             port_file_path: None,
             connection_read_timeout_seconds: 1_200, // 20 min
             request_timeout_seconds: 300,           // 5 min
-            http_max_concurrent_streams: 256,
+            http_max_concurrent_streams: 1000,
             max_request_size_bytes: 5 * 1024 * 1024, // 5MB
             max_delegation_certificate_size_bytes: 1024 * 1024, // 1MB
             max_read_state_concurrent_requests: 100,
@@ -88,7 +88,7 @@ impl Default for Config {
             max_query_concurrent_requests: QUERY_EXECUTION_THREADS_TOTAL * 100,
             max_pprof_concurrent_requests: 5,
             ingress_message_certificate_timeout_seconds: 10,
-            max_tracing_flamegraph_concurrent_requests: 10,
+            max_tracing_flamegraph_concurrent_requests: 5,
         }
     }
 }

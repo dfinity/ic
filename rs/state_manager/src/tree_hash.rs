@@ -325,7 +325,6 @@ mod tests {
             subnet_metrics.consumed_cycles_by_deleted_canisters = NominalCycles::from(0);
             subnet_metrics.consumed_cycles_http_outcalls = NominalCycles::from(50_000_000_000);
             subnet_metrics.consumed_cycles_ecdsa_outcalls = NominalCycles::from(100_000_000_000);
-            subnet_metrics.ecdsa_signature_agreements = 2;
             subnet_metrics.num_canisters = 5;
             subnet_metrics.canister_state_bytes = NumBytes::from(5 * 1024 * 1024);
             subnet_metrics.update_transactions_total = 4200;

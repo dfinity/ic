@@ -34,12 +34,13 @@ use ic_types::{
     },
     Height, NodeId, PrincipalId, ReplicaVersion, SubnetId,
 };
+use serde::Deserialize;
 use thiserror::Error;
 
 pub type SubnetIndex = u64;
 pub mod constants;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Deserialize)]
 pub enum SubnetRunningState {
     #[default]
     Active,
@@ -311,9 +312,6 @@ impl SubnetConfig {
             subnet_type: self.subnet_type.into(),
             is_halted: self.running_state == SubnetRunningState::Halted,
             halt_at_cup_height: false,
-            max_instructions_per_message: self.max_instructions_per_message,
-            max_instructions_per_round: self.max_instructions_per_round,
-            max_instructions_per_install_code: self.max_instructions_per_install_code,
             features: Some(self.features.into()),
             max_number_of_canisters: self.max_number_of_canisters,
             ssh_readonly_access: self.ssh_readonly_access,

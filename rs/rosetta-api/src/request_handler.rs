@@ -7,46 +7,46 @@ mod construction_payloads;
 mod construction_preprocess;
 mod construction_submit;
 
-use crate::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
-use crate::ledger_client::pending_proposals_response::PendingProposalsResponse;
-use crate::ledger_client::proposal_info_response::ProposalInfoResponse;
-use crate::models::{
-    AccountBalanceMetadata, CallResponse, NetworkIdentifier, QueryBlockRangeRequest,
-    QueryBlockRangeResponse,
+use crate::{
+    convert,
+    convert::{from_model_account_identifier, neuron_account_from_public_key},
+    errors::{ApiError, Details},
+    ledger_client::{
+        list_known_neurons_response::ListKnownNeuronsResponse,
+        pending_proposals_response::PendingProposalsResponse,
+        proposal_info_response::ProposalInfoResponse, LedgerAccess,
+    },
+    models,
+    models::{
+        amount::tokens_to_amount, AccountBalanceMetadata, AccountBalanceRequest,
+        AccountBalanceResponse, Allow, BalanceAccountType, BlockIdentifier, BlockResponse,
+        BlockTransaction, BlockTransactionResponse, CallResponse, Error, NetworkIdentifier,
+        NetworkOptionsResponse, NetworkStatusResponse, NeuronInfoResponse, NeuronState,
+        NeuronSubaccountComponents, OperationStatus, Operator, PartialBlockIdentifier,
+        QueryBlockRangeRequest, QueryBlockRangeResponse, SearchTransactionsResponse, Version,
+    },
+    request_types::GetProposalInfo,
+    transaction_id::TransactionIdentifier,
+    API_VERSION, MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST, NODE_VERSION,
 };
-use crate::request_types::GetProposalInfo;
-use crate::transaction_id::TransactionIdentifier;
-use crate::{convert, models, API_VERSION, MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST, NODE_VERSION};
-use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
-use ic_ledger_canister_blocks_synchronizer::blocks::RosettaBlocksMode;
-use ic_ledger_canister_blocks_synchronizer::rosetta_block::RosettaBlock;
+use ic_ledger_canister_blocks_synchronizer::{
+    blocks::{HashedBlock, RosettaBlocksMode},
+    rosetta_block::RosettaBlock,
+};
 use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
-use rosetta_core::objects::ObjectMap;
-use tracing::info;
-
-use crate::convert::{from_model_account_identifier, neuron_account_from_public_key};
-use crate::errors::{ApiError, Details};
-use crate::ledger_client::LedgerAccess;
-use crate::models::amount::tokens_to_amount;
-use crate::models::{
-    AccountBalanceRequest, AccountBalanceResponse, Allow, BalanceAccountType, BlockIdentifier,
-    BlockResponse, BlockTransaction, BlockTransactionResponse, Error, NetworkOptionsResponse,
-    NetworkStatusResponse, NeuronInfoResponse, NeuronState, NeuronSubaccountComponents,
-    OperationStatus, Operator, PartialBlockIdentifier, SearchTransactionsResponse, SyncStatus,
-    Version,
-};
-use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
-use ic_types::crypto::DOMAIN_IC_REQUEST;
-use ic_types::messages::MessageId;
-use ic_types::CanisterId;
+use ic_nns_governance_api::pb::v1::manage_neuron::NeuronIdOrSubaccount;
+use ic_types::{crypto::DOMAIN_IC_REQUEST, messages::MessageId, CanisterId};
 use icp_ledger::{Block, BlockIndex};
-use rosetta_core::request_types::MetadataRequest;
-use rosetta_core::response_types::NetworkListResponse;
-use rosetta_core::response_types::{MempoolResponse, MempoolTransactionResponse};
-use std::convert::{TryFrom, TryInto};
-use std::num::TryFromIntError;
-use std::sync::Arc;
+use rosetta_core::{
+    objects::ObjectMap,
+    response_types::{MempoolResponse, MempoolTransactionResponse, NetworkListResponse},
+};
+use std::{
+    convert::{TryFrom, TryInto},
+    num::TryFromIntError,
+    sync::Arc,
+};
 use strum::IntoEnumIterator;
 
 /// The maximum amount of blocks to retrieve in a single search.
@@ -220,7 +220,6 @@ impl RosettaRequestHandler {
                     if storage.contains_block(&lowest_index).map_err(|err| {
                         ApiError::InvalidBlockId(false, format!("{:?}", err).into())
                     })? {
-                        info!("Querying verified blocks");
                         // TODO: Use block range with rosetta blocks
                         for hb in storage
                             .get_hashed_block_range(
@@ -331,7 +330,12 @@ impl RosettaRequestHandler {
             }
             _ => {
                 if self.is_rosetta_blocks_mode_enabled().await {
-                    todo!("Fetching the latest block is not supported yet")
+                    let blocks = self.ledger.read_blocks().await;
+                    let highest_block_index = blocks
+                        .get_highest_rosetta_block_index()
+                        .map_err(ApiError::from)?
+                        .ok_or_else(|| ApiError::BlockchainEmpty(false, Default::default()))?;
+                    self.get_rosetta_block_by_index(highest_block_index).await
                 } else {
                     self.get_latest_verified_block().await
                 }
@@ -365,6 +369,7 @@ impl RosettaRequestHandler {
         block: HashedBlock,
     ) -> Result<rosetta_core::objects::Block, ApiError> {
         let parent_block_id = self.create_parent_block_id(block.index).await?;
+
         let token_symbol = self.ledger.token_symbol();
         hashed_block_to_rosetta_core_block(block, parent_block_id, token_symbol)
     }
@@ -457,12 +462,14 @@ impl RosettaRequestHandler {
             hash: Some(msg.block_identifier.hash),
         });
         let mut block = self.get_block(block_id).await?;
-        // TODO: for Rosetta blocks fetch the right transactions
+
         let transaction = match self.rosetta_blocks_mode().await {
             RosettaBlocksMode::Disabled => block.transactions.remove(0),
-            RosettaBlocksMode::Enabled { .. } => {
-                todo!("/block/transaction not supported in rosetta block mode yet")
-            }
+            RosettaBlocksMode::Enabled { .. } => block
+                .transactions
+                .into_iter()
+                .find(|t| t.transaction_identifier == msg.transaction_identifier)
+                .ok_or_else(|| ApiError::InvalidTransactionId(false, Default::default()))?,
         };
         Ok(BlockTransactionResponse::new(transaction))
     }
@@ -486,10 +493,7 @@ impl RosettaRequestHandler {
     }
 
     /// Get List of Available Networks
-    pub async fn network_list(
-        &self,
-        _metadata_request: MetadataRequest,
-    ) -> Result<NetworkListResponse, ApiError> {
+    pub async fn network_list(&self) -> Result<NetworkListResponse, ApiError> {
         let net_id = self.network_id();
         Ok(NetworkListResponse::new(vec![net_id]))
     }
@@ -559,41 +563,74 @@ impl RosettaRequestHandler {
     ) -> Result<NetworkStatusResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         let blocks = self.ledger.read_blocks().await;
-        let first = blocks.get_first_verified_hashed_block()?;
-        let tip = blocks.get_latest_verified_hashed_block()?;
-        let tip_id = convert::block_id(&tip)?;
-        let tip_timestamp = models::timestamp::from_system_time(
-            Block::decode(tip.block).unwrap().timestamp.into(),
-        )?;
-
-        let genesis_block = blocks.get_hashed_block(&0)?;
-        let genesis_block_id = convert::block_id(&genesis_block)?;
-        let peers = vec![];
-        let oldest_block_id = if first.index != 0 {
-            Some(convert::block_id(&first)?)
-        } else {
-            None
+        let network_status = match blocks.rosetta_blocks_mode {
+            // If rosetta mode is not enabled we simply fetched the latest verified block
+            RosettaBlocksMode::Disabled => {
+                let tip_verified_block = blocks.get_latest_verified_hashed_block()?;
+                let genesis_block = blocks.get_hashed_block(&0)?;
+                let first_verified_block = blocks.get_first_verified_hashed_block()?;
+                let oldest_block_id = if first_verified_block.index != 0 {
+                    Some(convert::block_id(&first_verified_block)?)
+                } else {
+                    None
+                };
+                NetworkStatusResponse::new(
+                    convert::block_id(&tip_verified_block)?,
+                    models::timestamp::from_system_time(
+                        Block::decode(tip_verified_block.block)
+                            .unwrap()
+                            .timestamp
+                            .into(),
+                    )?
+                    .0
+                    .try_into()
+                    .map_err(|err: TryFromIntError| {
+                        ApiError::InternalError(
+                            false,
+                            Details::from(format!("Cannot convert timestamp to u64: {}", err)),
+                        )
+                    })?,
+                    convert::block_id(&genesis_block)?,
+                    oldest_block_id,
+                    None,
+                    vec![],
+                )
+            }
+            RosettaBlocksMode::Enabled {
+                first_rosetta_block_index,
+            } => {
+                // If rosetta blocks mode is enabled we have to check whether the rosetta blocks table has been populated
+                match blocks.get_highest_rosetta_block_index()? {
+                    // If it has been populated we can return the highest rosetta block
+                    Some(highest_rosetta_block_index) => {
+                        let highest_rosetta_block = self
+                            .get_rosetta_block_by_index(highest_rosetta_block_index)
+                            .await?;
+                        // If Rosetta Blocks started only after a certain index then the genesis block as well as the first verified block will be the first icp block
+                        let genesis_block_id = if first_rosetta_block_index > 0 {
+                            self.hashed_block_to_rosetta_core_block(blocks.get_hashed_block(&0)?)
+                                .await?
+                                .block_identifier
+                        } else {
+                            self.get_rosetta_block_by_index(0).await?.block_identifier
+                        };
+                        NetworkStatusResponse::new(
+                            highest_rosetta_block.block_identifier,
+                            highest_rosetta_block.timestamp,
+                            genesis_block_id,
+                            None,
+                            None,
+                            vec![],
+                        )
+                    }
+                    None => {
+                        return Err(ApiError::BlockchainEmpty(false, "RosettaBlocks was activated and there are no RosettaBlocks in the database yet. The synch is ongoing, please wait until the first RosettaBlock is written to the database.".into()));
+                    }
+                }
+            }
         };
 
-        let mut sync_status = SyncStatus::new(tip.index as i64, None);
-        let target = crate::rosetta_server::TARGET_HEIGHT.get();
-        if target != 0 {
-            sync_status.target_index = Some(crate::rosetta_server::TARGET_HEIGHT.get());
-        }
-
-        Ok(NetworkStatusResponse::new(
-            tip_id,
-            tip_timestamp.0.try_into().map_err(|err: TryFromIntError| {
-                ApiError::InternalError(
-                    false,
-                    Details::from(format!("Cannot convert timestamp to u64: {}", err)),
-                )
-            })?,
-            genesis_block_id,
-            oldest_block_id,
-            sync_status,
-            peers,
-        ))
+        Ok(network_status)
     }
 
     async fn get_blocks_range(
@@ -826,7 +863,7 @@ impl RosettaRequestHandler {
     ) -> Result<NeuronInfoResponse, ApiError> {
         let res = self.ledger.neuron_info(neuron_id, verified).await?;
 
-        use ic_nns_governance::pb::v1::NeuronState as PbNeuronState;
+        use ic_nns_governance_api::pb::v1::NeuronState as PbNeuronState;
         let state = match PbNeuronState::try_from(res.state).ok() {
             Some(PbNeuronState::NotDissolving) => NeuronState::NotDissolving,
             Some(PbNeuronState::Spawning) => NeuronState::Spawning,

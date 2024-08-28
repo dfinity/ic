@@ -91,6 +91,9 @@ pub struct NeuronInfo {
     /// of the different states.
     #[prost(enumeration = "NeuronType", optional, tag = "11")]
     pub neuron_type: ::core::option::Option<i32>,
+    /// See the Visibility enum.
+    #[prost(enumeration = "Visibility", optional, tag = "12")]
+    pub visibility: ::core::option::Option<i32>,
 }
 /// A transfer performed from some account to stake a new neuron.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -246,6 +249,9 @@ pub struct Neuron {
     /// of the different states.
     #[prost(enumeration = "NeuronType", optional, tag = "22")]
     pub neuron_type: ::core::option::Option<i32>,
+    /// See the Visibility enum.
+    #[prost(enumeration = "Visibility", optional, tag = "23")]
+    pub visibility: ::core::option::Option<i32>,
     /// At any time, at most one of `when_dissolved` and
     /// `dissolve_delay` are specified.
     ///
@@ -350,6 +356,8 @@ pub struct AbridgedNeuron {
     pub joined_community_fund_timestamp_seconds: ::core::option::Option<u64>,
     #[prost(enumeration = "NeuronType", optional, tag = "22")]
     pub neuron_type: ::core::option::Option<i32>,
+    #[prost(enumeration = "Visibility", optional, tag = "23")]
+    pub visibility: ::core::option::Option<i32>,
     #[prost(oneof = "abridged_neuron::DissolveState", tags = "9, 10")]
     pub dissolve_state: ::core::option::Option<abridged_neuron::DissolveState>,
 }
@@ -552,7 +560,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -637,9 +645,15 @@ pub mod proposal {
         /// Create a new SNS.
         #[prost(message, tag = "24")]
         CreateServiceNervousSystem(super::CreateServiceNervousSystem),
-        /// Calls install_code for a canister (install, reinstall, or upgrade).
+        /// Install, reinstall or upgrade the code of a canister that is controlled by the NNS.
         #[prost(message, tag = "25")]
         InstallCode(super::InstallCode),
+        /// Stop or start a canister that is controlled by the NNS.
+        #[prost(message, tag = "26")]
+        StopOrStartCanister(super::StopOrStartCanister),
+        /// Update the settings of a canister that is controlled by the NNS.
+        #[prost(message, tag = "27")]
+        UpdateCanisterSettings(super::UpdateCanisterSettings),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -741,6 +755,13 @@ pub mod manage_neuron {
         #[prost(bool, tag = "1")]
         pub requested_setting_for_auto_stake_maturity: bool,
     }
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct SetVisibility {
+        #[prost(enumeration = "super::Visibility", optional, tag = "1")]
+        pub visibility: ::core::option::Option<i32>,
+    }
     /// Commands that only configure a given neuron, but do not interact
     /// with the outside world. They all require the caller to be the
     /// controller of the neuron.
@@ -748,7 +769,7 @@ pub mod manage_neuron {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Configure {
-        #[prost(oneof = "configure::Operation", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9")]
+        #[prost(oneof = "configure::Operation", tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10")]
         pub operation: ::core::option::Option<configure::Operation>,
     }
     /// Nested message and enum types in `Configure`.
@@ -777,6 +798,8 @@ pub mod manage_neuron {
             LeaveCommunityFund(super::LeaveCommunityFund),
             #[prost(message, tag = "9")]
             ChangeAutoStakeMaturity(super::ChangeAutoStakeMaturity),
+            #[prost(message, tag = "10")]
+            SetVisibility(super::SetVisibility),
         }
     }
     /// Disburse this neuron's stake: transfer the staked ICP to the
@@ -1411,11 +1434,6 @@ pub struct ProposalData {
     /// This is populated when an OpenSnsTokenSwap proposal is first made.
     #[prost(uint64, optional, tag = "17")]
     pub original_total_community_fund_maturity_e8s_equivalent: ::core::option::Option<u64>,
-    /// This is populated when OpenSnsTokenSwap is executed. It is used when our
-    /// conclude_community_fund_participation Candid method is called to either
-    /// mint ICP, or restore CF neuron maturity.
-    #[prost(message, repeated, tag = "18")]
-    pub cf_participants: ::prost::alloc::vec::Vec<::ic_sns_swap::pb::v1::CfParticipant>,
     /// This gets set to one of the terminal values (i.e. Committed or Aborted)
     /// when the swap canister calls our conclude_community_fund_participation
     /// Candid method. Initially, it is set to Open, because swap is supposed to
@@ -1603,11 +1621,10 @@ pub mod neurons_fund_snapshot {
         /// participation constraints.
         #[prost(bool, optional, tag = "5")]
         pub is_capped: ::core::option::Option<bool>,
-        /// The principal that can manage this neuron.
+        /// The principal that can manage the NNS neuron that participated in the Neurons' Fund.
         #[prost(message, optional, tag = "6")]
         pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
         /// The principals that can vote, propose, and follow on behalf of this neuron.
-        /// TODO(NNS1-3199): Populate this field with the neuron's hotkeys.
         #[prost(message, repeated, tag = "7")]
         pub hotkeys: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
         /// Deprecated. Please use `controller` instead (not `hotkeys`!)
@@ -2359,6 +2376,157 @@ pub mod install_code {
         }
     }
 }
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StopOrStartCanister {
+    /// The target canister ID to call stop_canister or start_canister on. The canister must be
+    /// controlled by NNS Root, and it cannot be NNS Governance or Lifeline. Required.
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(
+        enumeration = "stop_or_start_canister::CanisterAction",
+        optional,
+        tag = "2"
+    )]
+    pub action: ::core::option::Option<i32>,
+}
+/// Nested message and enum types in `StopOrStartCanister`.
+pub mod stop_or_start_canister {
+    /// The action to take on the canister. Required.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration,
+    )]
+    #[repr(i32)]
+    pub enum CanisterAction {
+        Unspecified = 0,
+        Stop = 1,
+        Start = 2,
+    }
+    impl CanisterAction {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                CanisterAction::Unspecified => "CANISTER_ACTION_UNSPECIFIED",
+                CanisterAction::Stop => "CANISTER_ACTION_STOP",
+                CanisterAction::Start => "CANISTER_ACTION_START",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "CANISTER_ACTION_UNSPECIFIED" => Some(Self::Unspecified),
+                "CANISTER_ACTION_STOP" => Some(Self::Stop),
+                "CANISTER_ACTION_START" => Some(Self::Start),
+                _ => None,
+            }
+        }
+    }
+}
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpdateCanisterSettings {
+    /// The target canister ID to call update_settings on. Required.
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// The settings to update. Required.
+    #[prost(message, optional, tag = "2")]
+    pub settings: ::core::option::Option<update_canister_settings::CanisterSettings>,
+}
+/// Nested message and enum types in `UpdateCanisterSettings`.
+pub mod update_canister_settings {
+    /// The controllers of the canister. We use a message to wrap the repeated field because prost does
+    /// not generate `Option<Vec<T>>` for repeated fields.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct Controllers {
+        /// The controllers of the canister.
+        #[prost(message, repeated, tag = "1")]
+        pub controllers: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    }
+    /// The CanisterSettings struct as defined in the ic-interface-spec
+    /// <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.>
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct CanisterSettings {
+        #[prost(message, optional, tag = "1")]
+        pub controllers: ::core::option::Option<Controllers>,
+        #[prost(uint64, optional, tag = "2")]
+        pub compute_allocation: ::core::option::Option<u64>,
+        #[prost(uint64, optional, tag = "3")]
+        pub memory_allocation: ::core::option::Option<u64>,
+        #[prost(uint64, optional, tag = "4")]
+        pub freezing_threshold: ::core::option::Option<u64>,
+        #[prost(enumeration = "LogVisibility", optional, tag = "5")]
+        pub log_visibility: ::core::option::Option<i32>,
+        #[prost(uint64, optional, tag = "6")]
+        pub wasm_memory_limit: ::core::option::Option<u64>,
+    }
+    /// Log visibility of a canister.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration,
+    )]
+    #[repr(i32)]
+    pub enum LogVisibility {
+        Unspecified = 0,
+        /// The log is visible to the controllers of the dapp canister.
+        Controllers = 1,
+        /// The log is visible to the public.
+        Public = 2,
+    }
+    impl LogVisibility {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                LogVisibility::Unspecified => "LOG_VISIBILITY_UNSPECIFIED",
+                LogVisibility::Controllers => "LOG_VISIBILITY_CONTROLLERS",
+                LogVisibility::Public => "LOG_VISIBILITY_PUBLIC",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "LOG_VISIBILITY_UNSPECIFIED" => Some(Self::Unspecified),
+                "LOG_VISIBILITY_CONTROLLERS" => Some(Self::Controllers),
+                "LOG_VISIBILITY_PUBLIC" => Some(Self::Public),
+                _ => None,
+            }
+        }
+    }
+}
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
 /// across upgrades of the NNS governance system.
@@ -2631,6 +2799,9 @@ pub mod governance {
         #[prost(message, optional, tag = "38")]
         pub non_self_authenticating_controller_neuron_subset_metrics:
             ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
+        #[prost(message, optional, tag = "39")]
+        pub public_neuron_subset_metrics:
+            ::core::option::Option<governance_cached_metrics::NeuronSubsetMetrics>,
     }
     /// Nested message and enum types in `GovernanceCachedMetrics`.
     pub mod governance_cached_metrics {
@@ -2902,6 +3073,16 @@ pub struct ListNeurons {
     /// compatibility. Here, being "empty" means 0 stake, 0 maturity and 0 staked maturity.
     #[prost(bool, optional, tag = "3")]
     pub include_empty_neurons_readable_by_caller: ::core::option::Option<bool>,
+    /// If this is set to true, and a neuron in the "requested list" has its
+    /// visibility set to public, then, it will (also) be included in the
+    /// full_neurons field in the response (which is of type ListNeuronsResponse).
+    /// Note that this has no effect on which neurons are in the "requested list".
+    /// In particular, this does not cause all public neurons to become part of the
+    /// requested list. In general, you probably want to set this to true, but
+    /// since this feature was added later, it is opt in to avoid confusing
+    /// existing (unmigrated) callers.
+    #[prost(bool, optional, tag = "4")]
+    pub include_public_neurons_in_full_neurons: ::core::option::Option<bool>,
 }
 /// A response to a `ListNeurons` request.
 ///
@@ -3171,15 +3352,6 @@ pub mod settle_neurons_fund_participation_request {
         Aborted(Aborted),
     }
 }
-/// A list of principals.
-/// Needed to allow prost to generate the equivalent of Optional<Vec<PrincipalId>>.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct Principals {
-    #[prost(message, repeated, tag = "1")]
-    pub principals: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
-}
 /// Handling the Neurons' Fund and transferring some of its maturity to an SNS treasury is
 /// thus the responsibility of the NNS Governance. When a swap succeeds, a Swap canister should send
 /// a `settle_neurons_fund_participation` request to the NNS Governance, specifying its `result`
@@ -3187,8 +3359,8 @@ pub struct Principals {
 /// the Neurons' Fund. However, this distribution also needs to be made available to the SNS Swap
 /// that will use this information to create SNS neurons of an appropriate size for each
 /// Neurons' Fund (as well as direct) participant. That is why in the `committed` case,
-/// the NNS Governance should populate the `neurons_fund_participants` field, while in the `aborted`
-/// case it should be empty.
+/// the NNS Governance provides `neurons_fund_neuron_portions`, while in the `aborted`
+/// case it does not.
 ///
 /// TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
 /// manually propagated to (sns) swap.proto.
@@ -3215,12 +3387,12 @@ pub mod settle_neurons_fund_participation_response {
         /// The amount of Neurons' Fund participation associated with this neuron.
         #[prost(uint64, optional, tag = "2")]
         pub amount_icp_e8s: ::core::option::Option<u64>,
-        /// The principal that can manage this neuron.
+        /// The principal that can manage the NNS neuron that participated in the Neurons' Fund.
         #[prost(message, optional, tag = "6")]
         pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
         /// The principals that can vote, propose, and follow on behalf of this neuron.
         #[prost(message, optional, tag = "7")]
-        pub hotkeys: ::core::option::Option<super::Principals>,
+        pub hotkeys: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Principals>,
         /// Whether the amount maturity amount of Neurons' Fund participation associated with this neuron
         /// has been capped to reflect the maximum participation amount for this SNS swap.
         #[prost(bool, optional, tag = "4")]
@@ -3509,6 +3681,37 @@ pub mod restore_aging_summary {
         }
     }
 }
+/// The historical rewards that were provided to node providers, along with the contextual data
+/// needed to calculate it.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ArchivedMonthlyNodeProviderRewards {
+    /// The version of the rewards data.  These versions are added to accommodate changes to the
+    /// rewards data structure over time.
+    #[prost(oneof = "archived_monthly_node_provider_rewards::Version", tags = "1")]
+    pub version: ::core::option::Option<archived_monthly_node_provider_rewards::Version>,
+}
+/// Nested message and enum types in `ArchivedMonthlyNodeProviderRewards`.
+pub mod archived_monthly_node_provider_rewards {
+    /// The first version of the stored rewards.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct V1 {
+        #[prost(message, optional, tag = "1")]
+        pub rewards: ::core::option::Option<super::MonthlyNodeProviderRewards>,
+    }
+    /// The version of the rewards data.  These versions are added to accommodate changes to the
+    /// rewards data structure over time.
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Version {
+        #[prost(message, tag = "1")]
+        Version1(V1),
+    }
+}
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow
 /// relationships are defined per topic.
@@ -3575,8 +3778,8 @@ pub enum Topic {
     /// creating new subnets, adding and removing subnet nodes, and
     /// splitting subnets.
     SubnetManagement = 7,
-    /// Installing and upgrading “system” canisters that belong to the network.
-    /// For example, upgrading the NNS.
+    /// All proposals to manage NNS-controlled canisters not covered by other topics (Protocol Canister
+    /// Management or Service Nervous System Management).
     NetworkCanisterManagement = 8,
     /// Proposals that update KYC information for regulatory purposes,
     /// for example during the initial Genesis distribution of ICP in the
@@ -3612,11 +3815,11 @@ pub enum Topic {
     ApiBoundaryNodeManagement = 15,
     /// Proposals related to subnet rental.
     SubnetRental = 16,
-    /// Proposals to manage protocol canisters. Those are canisters that are considered part of the IC
-    /// protocol, without which the IC will not be able to function properly.
+    /// All proposals to manage protocol canisters, which are considered part of the ICP protocol and
+    /// are essential for its proper functioning.
     ProtocolCanisterManagement = 17,
-    /// Proposals related to Service Nervous System (SNS) - (1) upgrading SNS-W, (2) upgrading SNS
-    /// Aggregator, and (3) adding WASM's or custom upgrade paths to SNS-W.
+    /// All proposals to manage the canisters of service nervous systems (SNS), including upgrading
+    /// relevant canisters and managing SNS framework canister WASMs through SNS-W.
     ServiceNervousSystemManagement = 18,
 }
 impl Topic {
@@ -3757,6 +3960,58 @@ impl NeuronState {
             "NEURON_STATE_DISSOLVING" => Some(Self::Dissolving),
             "NEURON_STATE_DISSOLVED" => Some(Self::Dissolved),
             "NEURON_STATE_SPAWNING" => Some(Self::Spawning),
+            _ => None,
+        }
+    }
+}
+/// Controls how much information non-controller and non-hot-key principals can
+/// see about this neuron. Currently, if a neuron is private, recent_ballots and
+/// joined_community_fund_timestamp_seconds are redacted when being read by an
+/// unprivileged principal.
+///
+/// <https://forum.dfinity.org/t/request-for-comments-api-changes-for-public-private-neurons/33360>
+///
+/// As of Jul 19, this is not yet enforced, but will be once the plan described
+/// above is fully executed.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum Visibility {
+    Unspecified = 0,
+    Private = 1,
+    Public = 2,
+}
+impl Visibility {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Visibility::Unspecified => "VISIBILITY_UNSPECIFIED",
+            Visibility::Private => "VISIBILITY_PRIVATE",
+            Visibility::Public => "VISIBILITY_PUBLIC",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "VISIBILITY_UNSPECIFIED" => Some(Self::Unspecified),
+            "VISIBILITY_PRIVATE" => Some(Self::Private),
+            "VISIBILITY_PUBLIC" => Some(Self::Public),
             _ => None,
         }
     }

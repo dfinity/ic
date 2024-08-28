@@ -29,7 +29,7 @@ impl Registry {
     ///
     /// This method is called by the governance canister, after a proposal
     /// for updating the elected replica versions has been accepted.
-    pub fn do_revise_elected_replica_versions(
+    pub fn do_revise_elected_guestos_versions(
         &mut self,
         payload: ReviseElectedGuestosVersionsPayload,
     ) {

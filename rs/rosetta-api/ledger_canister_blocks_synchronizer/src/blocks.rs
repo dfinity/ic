@@ -1,4 +1,3 @@
-use self::database_access::INSERT_INTO_TRANSACTIONS_STATEMENT;
 use crate::rosetta_block::RosettaBlock;
 use crate::{iso8601_to_timestamp, timestamp_to_iso8601};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
@@ -6,9 +5,10 @@ use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_ledger_hash_of::HashOf;
 use icp_ledger::{AccountIdentifier, Block, TimeStamp, Tokens, Transaction};
-use rusqlite::{named_params, params, OptionalExtension, Row};
+use rusqlite::{named_params, params, CachedStatement, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashSet};
+use std::cell::RefCell;
+use std::collections::{BTreeMap, HashMap};
 use std::convert::TryInto;
 use std::path::Path;
 use std::sync::Mutex;
@@ -27,176 +27,105 @@ mod database_access {
     };
     use ic_ledger_hash_of::HashOf;
     use icp_ledger::{AccountIdentifier, Block, Operation};
-    use rusqlite::{named_params, params, types::Null, Connection, Error, Statement};
+    use rusqlite::{named_params, params, Connection, Statement};
 
     pub fn push_hashed_block(
         con: &mut Connection,
         hb: &HashedBlock,
     ) -> Result<(), BlockStoreError> {
-        let mut stmt = con
-        .prepare("INSERT INTO blocks (hash, block, parent_hash, idx, verified, timestamp) VALUES (?1, ?2, ?3, ?4, FALSE, ?5)")
-        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        push_hashed_block_execution(hb, &mut stmt)
+        let mut stmt = con.prepare("INSERT INTO blocks (block_hash, encoded_block, parent_hash, block_idx, verified, timestamp, tx_hash, operation_type, from_account, to_account, spender_account, amount, allowance, expected_allowance, fee, created_at_time, expires_at, memo, icrc1_memo) VALUES (
+            :block_hash, :encoded_block, :parent_hash, :block_idx, FALSE, :timestamp, :tx_hash, :operation_type, :from_account, :to_account, :spender_account, :amount, :allowance, :expected_allowance, :fee, :created_at_time, :expires_at, :memo, :icrc1_memo
+            )").map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        execute_insert_block_statement(&mut stmt, hb)
     }
 
-    pub fn push_hashed_block_execution(
+    pub fn execute_insert_block_statement(
+        stmt: &mut Statement,
         hb: &HashedBlock,
-        stmt: &mut Statement,
     ) -> Result<(), BlockStoreError> {
-        let hash = hb.hash.into_bytes().to_vec();
-        let parent_hash = hb.parent_hash.map(|ph| ph.into_bytes().to_vec());
-        stmt.execute(params![
-            hash,
-            hb.block.clone().into_vec(),
-            parent_hash,
-            hb.index,
-            timestamp_to_iso8601(hb.timestamp),
-        ])
-        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        Ok(())
-    }
-
-    pub const INSERT_INTO_TRANSACTIONS_STATEMENT: &str = "INSERT INTO transactions (block_idx, tx_hash, operation_type, from_account, to_account, amount, fee, created_at_time, memo, icrc1_memo, spender_account, allowance, expected_allowance, expires_at) VALUES (:index, :tx_hash, :op, :from, :to, :tokens, :fee, :created_at_time, :memo, :icrc1_memo, :spender, :allowance, :expected_allowance, :expires_at)";
-
-    pub fn push_transaction(
-        connection: &mut Connection,
-        tx: &icp_ledger::Transaction,
-        index: &u64,
-    ) -> Result<(), BlockStoreError> {
-        let mut stmt = connection
-            .prepare(INSERT_INTO_TRANSACTIONS_STATEMENT)
-            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        push_transaction_execution(tx, &mut stmt, index)
-    }
-
-    pub fn push_transaction_execution(
-        tx: &icp_ledger::Transaction,
-        stmt: &mut Statement,
-        index: &u64,
-    ) -> Result<(), BlockStoreError> {
-        let tx_hash = tx.hash().into_bytes().to_vec();
-        let created_at_time = tx.created_at_time.map(timestamp_to_iso8601);
-        let memo = tx.memo.0.to_string();
-        let icrc1_memo = tx.icrc1_memo.as_ref().map(|memo| memo.to_vec());
+        let tx = Block::decode(hb.block.clone())
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?
+            .transaction;
         let operation_type = tx.operation.clone();
+        let mut from_account = None;
+        let mut to_account = None;
+        let mut spender_account = None;
+        let mut amount: Option<String> = None;
+        let mut allowance = None;
+        let mut expected_allowance = None;
+        let mut expires_at = None;
+        let mut fee = None;
+
         match operation_type {
-            Operation::Burn { from, amount, .. } => {
-                let op_string: &str = operation_type.into();
-                let from_account = from.to_hex();
-                let tokens = amount.get_e8s();
-                let to_account = Null;
-                let fees = Null;
-                stmt.execute(named_params! {
-                    ":index": index,
-                    ":tx_hash": tx_hash,
-                    ":op": op_string,
-                    ":from": from_account,
-                    ":to": to_account,
-                    ":tokens": tokens,
-                    ":fee": fees,
-                    ":created_at_time": created_at_time,
-                    ":memo": memo,
-                    ":icrc1_memo": icrc1_memo,
-                })
-                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+            Operation::Burn {
+                from, amount: a, ..
+            } => {
+                from_account = Some(from.to_hex());
+                amount = Some(a.get_e8s().to_string());
             }
-            Operation::Mint { to, amount } => {
-                let op_string: &str = operation_type.into();
-                let from_account = Null;
-                let tokens = amount.get_e8s();
-                let to_account = to.to_hex();
-                let fees = Null;
-                stmt.execute(named_params! {
-                    ":index": index,
-                    ":tx_hash": tx_hash,
-                    ":op": op_string,
-                    ":from": from_account,
-                    ":to": to_account,
-                    ":tokens": tokens,
-                    ":fee": fees,
-                    ":created_at_time": created_at_time,
-                    ":memo": memo,
-                    ":icrc1_memo": icrc1_memo,
-                })
-                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+            Operation::Mint { to, amount: a } => {
+                amount = Some(a.get_e8s().to_string());
+                to_account = Some(to.to_hex());
             }
             Operation::Approve {
                 from,
                 spender,
-                allowance,
-                expected_allowance,
-                expires_at,
-                fee,
+                allowance: al,
+                expected_allowance: eal,
+                expires_at: ea,
+                fee: f,
             } => {
-                let op_string: &str = operation_type.into();
-                let from_account = from.to_hex();
-                let allowance = allowance.get_e8s().to_string();
-                let expected_allowance = expected_allowance.map(|a| a.get_e8s().to_string());
-                let spender_account = spender.to_hex();
-                let expires_at = expires_at.map(timestamp_to_iso8601);
-                let fees = fee.get_e8s();
-                stmt.execute(named_params! {
-                    ":index": index,
-                    ":tx_hash": tx_hash,
-                    ":op": op_string,
-                    ":from": from_account,
-                    ":spender": spender_account,
-                    ":allowance": allowance,
-                    ":expected_allowance": expected_allowance,
-                    ":expires_at": expires_at,
-                    ":fee": fees,
-                    ":created_at_time": created_at_time,
-                    ":memo": memo,
-                    ":icrc1_memo": icrc1_memo,
-                })
-                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+                from_account = Some(from.to_hex());
+                allowance = Some(al.get_e8s().to_string());
+                expected_allowance = eal.map(|eal| eal.get_e8s().to_string());
+                spender_account = Some(spender.to_hex());
+                expires_at = ea.map(timestamp_to_iso8601);
+                fee = Some(f.get_e8s().to_string());
             }
             Operation::Transfer {
                 from,
                 to,
-                amount,
-                fee,
-                ..
+                amount: a,
+                fee: f,
+                spender,
             } => {
-                let op_string: &str = operation_type.into();
-                let from_account = from.to_hex();
-                let tokens = amount.get_e8s();
-                let to_account = to.to_hex();
-                let fees = fee.get_e8s();
-                stmt.execute(named_params! {
-                    ":index": index,
-                    ":tx_hash": tx_hash,
-                    ":op": op_string,
-                    ":from": from_account,
-                    ":to": to_account,
-                    ":tokens": tokens,
-                    ":fee": fees,
-                    ":created_at_time": created_at_time,
-                    ":memo": memo,
-                    ":icrc1_memo": icrc1_memo,
-                })
-                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+                from_account = Some(from.to_hex());
+                amount = Some(a.get_e8s().to_string());
+                to_account = Some(to.to_hex());
+                fee = Some(f.get_e8s().to_string());
+                spender_account = spender.map(|sp| sp.to_hex());
             }
-        }
+        };
+        let params = named_params! {
+            ":block_hash": hb.hash.into_bytes().to_vec(),
+            ":encoded_block": hb.block.clone().into_vec(),
+            ":parent_hash": hb.parent_hash.map(|ph| ph.into_bytes().to_vec()),
+            ":block_idx": hb.index,
+            ":timestamp": timestamp_to_iso8601(hb.timestamp),
+            ":tx_hash": tx.hash().into_bytes().to_vec(),
+            ":operation_type": <Operation as Into<&str>>::into(operation_type),
+            ":from_account": from_account,
+            ":to_account": to_account,
+            ":spender_account": spender_account,
+            ":amount": amount,
+            ":allowance": allowance,
+            ":expected_allowance": expected_allowance,
+            ":fee": fee,
+            ":created_at_time": tx.created_at_time.map(timestamp_to_iso8601),
+            ":expires_at": expires_at,
+            ":memo": tx.memo.0.to_string(),
+            ":icrc1_memo": tx.icrc1_memo.as_ref().map(|memo| memo.to_vec()),
+        };
+        stmt.execute(params)
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         Ok(())
     }
+
     pub fn get_all_block_indices_from_blocks_table(
         connection: &mut Connection,
     ) -> Result<Vec<u64>, BlockStoreError> {
         let mut stmt = connection
-            .prepare("SELECT idx from blocks")
-            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        let indices = stmt
-            .query_map(params![], |row| row.get(0))
-            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        let block_indices: Vec<u64> = indices.map(|x| x.unwrap()).collect();
-        Ok(block_indices)
-    }
-    pub fn get_all_block_indices_from_transactions_table(
-        connection: &mut Connection,
-    ) -> Result<Vec<u64>, BlockStoreError> {
-        let mut stmt = connection
-            .prepare("SELECT block_idx FROM transactions")
+            .prepare("SELECT block_idx from blocks")
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let indices = stmt
             .query_map(params![], |row| row.get(0))
@@ -223,7 +152,7 @@ mod database_access {
         block_idx: &u64,
     ) -> Result<bool, BlockStoreError> {
         let mut stmt = connection
-            .prepare("SELECT Null FROM blocks WHERE idx = ?")
+            .prepare("SELECT Null FROM blocks WHERE block_idx = ?")
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut rows = stmt
             .query(params![block_idx])
@@ -237,7 +166,7 @@ mod database_access {
         connection: &mut Connection,
         block_idx: &u64,
     ) -> Result<icp_ledger::Transaction, BlockStoreError> {
-        let command = "SELECT block from blocks where idx = ?";
+        let command = "SELECT encoded_block from blocks where block_idx = ?";
         let mut stmt = connection
             .prepare(command)
             .map_err(|e| BlockStoreError::Other(e.to_string()))
@@ -261,13 +190,13 @@ mod database_access {
     ) -> Result<HashedBlock, BlockStoreError> {
         let mut statement = con
             .prepare_cached(
-                r#"SELECT hash, block, parent_hash, idx, timestamp
+                r#"SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp
                    FROM blocks
-                   WHERE idx = :idx"#,
+                   WHERE block_idx = :block_idx"#,
             )
             .map_err(|e| format!("Unable to prepare statement: {e:?}"))?;
         let mut blocks = statement
-            .query_map(named_params! { ":idx": block_idx }, |row| {
+            .query_map(named_params! { ":block_idx": block_idx }, |row| {
                 HashedBlock::try_from(row)
             })
             .map_err(|e| format!("Unable to query hashed block {block_idx}: {e:?}"))?;
@@ -277,22 +206,24 @@ mod database_access {
         }
     }
 
-    fn read_hashed_block(
-        con: &mut Connection,
-        command: &str,
-    ) -> Result<Vec<Result<HashedBlock, Error>>, BlockStoreError> {
-        let mut stmt = con.prepare(command).map_err(|e| e.to_string())?;
-        let block = stmt
-            .query_map(params![], |row| HashedBlock::try_from(row))
-            .map_err(|e| e.to_string())?;
-        Ok(block.collect())
+    pub fn read_hashed_blocks<P>(
+        stmt: &mut Statement,
+        params: P,
+    ) -> Result<Vec<HashedBlock>, BlockStoreError>
+    where
+        P: rusqlite::Params,
+    {
+        stmt.query_map(params, |row| HashedBlock::try_from(row))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<HashedBlock>, rusqlite::Error>>()
+            .map_err(|e| BlockStoreError::Other(e.to_string()))
     }
 
     pub fn get_transaction_hash(
         connection: &mut Connection,
         block_idx: &u64,
     ) -> Result<Option<HashOf<icp_ledger::Transaction>>, BlockStoreError> {
-        let command = "SELECT tx_hash from transactions where block_idx = ?";
+        let command = "SELECT tx_hash from blocks where block_idx = ?";
         let mut stmt = connection
             .prepare(command)
             .map_err(|e| BlockStoreError::Other(e.to_string()))
@@ -317,7 +248,7 @@ mod database_access {
         hash: &HashOf<icp_ledger::Transaction>,
     ) -> Result<Vec<u64>, BlockStoreError> {
         let mut stmt = connection
-            .prepare("SELECT block_idx from transactions where tx_hash = ?")
+            .prepare("SELECT block_idx from blocks where tx_hash = ?")
             .map_err(|e| BlockStoreError::Other(e.to_string()))
             .unwrap();
         let mut rows = stmt
@@ -339,7 +270,7 @@ mod database_access {
         hash: &HashOf<EncodedBlock>,
     ) -> Result<u64, BlockStoreError> {
         let mut stmt = connection
-            .prepare("SELECT idx from blocks where hash = ?")
+            .prepare("SELECT block_idx from blocks where block_hash = ?")
             .map_err(|e| BlockStoreError::Other(e.to_string()))
             .unwrap();
         let block_idx = stmt
@@ -357,22 +288,21 @@ mod database_access {
         con: &mut Connection,
         verified: Option<bool>,
     ) -> Result<HashedBlock, BlockStoreError> {
-        let command = match verified {
-            Some(verified) => format!("SELECT hash, block, parent_hash, idx, timestamp from blocks WHERE verified = {} ORDER BY idx ASC Limit 2",verified),
-            None => "SELECT hash, block, parent_hash, idx, timestamp from blocks ORDER BY idx ASC Limit 2".to_string()
-        };
-        let mut blocks = read_hashed_block(con, command.as_str())?.into_iter();
+        let mut stmt = con.prepare_cached(&match verified {
+            Some(verified) => format!("SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp from blocks WHERE verified = {} ORDER BY block_idx ASC Limit 2",verified),
+            None => "SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp from blocks ORDER BY block_idx ASC Limit 2".to_string()
+        }).map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let mut blocks = read_hashed_blocks(&mut stmt, params![])?.into_iter();
         match blocks.next() {
             Some(genesis_block) => match blocks.next() {
                 Some(first_block) => {
-                    let block = first_block.map_err(|e| BlockStoreError::Other(e.to_string()))?;
-                    if block.index > 1 {
-                        Ok(block)
+                    if first_block.index > 1 {
+                        Ok(first_block)
                     } else {
-                        Ok(genesis_block.map_err(|e| BlockStoreError::Other(e.to_string()))?)
+                        Ok(genesis_block)
                     }
                 }
-                None => Ok(genesis_block.map_err(|e| BlockStoreError::Other(e.to_string()))?),
+                None => Ok(genesis_block),
             },
             None => Err(BlockStoreError::Other("Blockchain is empty".to_string())),
         }
@@ -383,15 +313,13 @@ mod database_access {
         con: &mut Connection,
         verified: Option<bool>,
     ) -> Result<HashedBlock, BlockStoreError> {
-        let command = match verified {
-            Some(verified) => format!("SELECT hash, block, parent_hash, idx, timestamp from blocks WHERE verified = {} ORDER BY idx DESC Limit 1",verified),
-            None => "SELECT hash, block, parent_hash, idx, timestamp from blocks ORDER BY idx DESC Limit 1".to_string()
-        };
-        let mut blocks = read_hashed_block(con, command.as_str())?.into_iter();
+        let mut stmt = con.prepare_cached(&match verified {
+            Some(verified) => format!("SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp from blocks WHERE verified = {} ORDER BY block_idx DESC Limit 1",verified),
+            None => "SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp from blocks ORDER BY block_idx DESC Limit 1".to_string()
+        }).map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let mut blocks = read_hashed_blocks(&mut stmt, params![])?.into_iter();
         match blocks.next() {
-            Some(first_block) => {
-                Ok(first_block.map_err(|e| BlockStoreError::Other(e.to_string()))?)
-            }
+            Some(first_block) => Ok(first_block),
             None => Err(BlockStoreError::Other("Blockchain is empty".to_string())),
         }
     }
@@ -656,7 +584,7 @@ mod database_access {
     }
 
     pub fn is_verified(con: &mut Connection, block_idx: &u64) -> Result<bool, BlockStoreError> {
-        let command = "SELECT null from blocks WHERE verified=TRUE AND idx=?";
+        let command = "SELECT null from blocks WHERE verified=TRUE AND block_idx=?";
         let mut stmt = con
             .prepare(command)
             .map_err(|e| BlockStoreError::Other(e.to_string()))
@@ -802,39 +730,30 @@ impl Blocks {
         tx.execute(
             r#"
             CREATE TABLE IF NOT EXISTS blocks (
-                hash BLOB NOT NULL,
-                block BLOB NOT NULL,
+                block_hash BLOB NOT NULL,
+                encoded_block BLOB NOT NULL,
                 parent_hash BLOB,
-                idx INTEGER NOT NULL PRIMARY KEY,
+                block_idx INTEGER NOT NULL PRIMARY KEY,
                 verified BOOLEAN,
-                timestamp TEXT
-            )
-            "#,
-            [],
-        )?;
-        tx.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS transactions (
-                block_idx INTEGER NOT NULL,
+                timestamp TEXT,
                 tx_hash BLOB NOT NULL,
                 operation_type VARCHAR NOT NULL,
                 from_account VARCHAR(64),
                 to_account VARCHAR(64),
                 spender_account VARCHAR(64),
-                amount INTEGER,
+                amount TEXT,
                 allowance TEXT,
                 expected_allowance TEXT,
-                fee INTEGER,
+                fee TEXT,
                 created_at_time TEXT,
                 expires_at TEXT,
                 memo TEXT,
-                icrc1_memo BLOB,
-                PRIMARY KEY(block_idx),
-                FOREIGN KEY(block_idx) REFERENCES blocks(idx)
+                icrc1_memo BLOB
             )
             "#,
             [],
         )?;
+
         tx.execute(
             r#"
             CREATE TABLE IF NOT EXISTS account_balances (
@@ -865,13 +784,37 @@ impl Blocks {
                 r#"
                 CREATE TABLE IF NOT EXISTS rosetta_blocks_transactions (
                     rosetta_block_idx INTEGER NOT NULL REFERENCES rosetta_blocks(rosetta_block_idx),
-                    block_idx INTEGER NOT NULL REFERENCES blocks(idx),
+                    block_idx INTEGER NOT NULL REFERENCES blocks(block_idx),
                     PRIMARY KEY(rosetta_block_idx, block_idx)
                 )
                 "#,
                 [],
             )?;
         }
+
+        tx.execute(
+            r#"
+            CREATE INDEX IF NOT EXISTS block_idx_account_balances 
+            ON account_balances(block_idx)
+            "#,
+            [],
+        )?;
+
+        tx.execute(
+            r#"
+        CREATE INDEX IF NOT EXISTS tx_hash_index 
+        ON blocks(tx_hash)
+        "#,
+            [],
+        )?;
+
+        tx.execute(
+            r#"
+        CREATE INDEX IF NOT EXISTS block_hash_index 
+        ON blocks(block_hash)
+        "#,
+            [],
+        )?;
 
         tx.commit()
     }
@@ -918,7 +861,7 @@ impl Blocks {
         let first_rosetta_block_index = match first_rosetta_block_index {
             Some(first_rosetta_block_index) => first_rosetta_block_index,
             None => connection
-                .query_row("SELECT max(idx) + 1 FROM blocks", [], |row| {
+                .query_row("SELECT max(block_idx) + 1 FROM blocks", [], |row| {
                     row.get::<_, Option<u64>>(0)
                 })?
                 .unwrap_or(0),
@@ -938,16 +881,10 @@ impl Blocks {
             .execute_batch("BEGIN TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
 
-        connection
-            .execute(
-                "DELETE FROM transactions WHERE block_idx > 0 AND block_idx < ?",
-                params![hb.index],
-            )
-            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         database_access::prune_account_balances(&mut connection, &hb.index)?;
         connection
             .execute(
-                "DELETE FROM blocks WHERE idx > 0 AND idx < ?",
+                "DELETE FROM blocks WHERE block_idx > 0 AND block_idx < ?",
                 params![hb.index],
             )
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
@@ -1035,8 +972,6 @@ impl Blocks {
         let mut connection = self.connection.lock().unwrap();
         let mut block_indices =
             database_access::get_all_block_indices_from_blocks_table(&mut connection)?;
-        let mut transaction_block_indices =
-            database_access::get_all_block_indices_from_transactions_table(&mut connection)?;
         let mut account_balances_block_indices =
             database_access::get_all_block_indices_from_account_balances_table(&mut connection)?;
         let vec_sorted_diff = |blocks_indices: &mut [u64],
@@ -1068,40 +1003,15 @@ impl Blocks {
             }
             Ok(result)
         };
-        let mut all_indices: Vec<u64> = block_indices
-            .iter()
-            .cloned()
-            .chain(transaction_block_indices.iter().cloned())
-            .collect();
-        all_indices.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        all_indices.dedup();
+
         block_indices.sort_by(|a, b| a.partial_cmp(b).unwrap());
         block_indices.dedup();
-        transaction_block_indices.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        transaction_block_indices.dedup();
+
         account_balances_block_indices.sort_by(|a, b| a.partial_cmp(b).unwrap());
         account_balances_block_indices.dedup();
-        if !all_indices.is_empty() {
-            let diff = vec_sorted_diff(all_indices.as_mut_slice(), block_indices.as_mut_slice())?;
-            assert!(
-                diff.is_empty(),
-                "Transaction Table has more unique block indizes than Blocks Table"
-            );
-            let difference_transaction_indices: Vec<u64> = vec_sorted_diff(
-                all_indices.as_mut_slice(),
-                transaction_block_indices.as_mut_slice(),
-            )?;
-            for missing_index in difference_transaction_indices {
-                let missing_block =
-                    database_access::get_hashed_block(&mut connection, &missing_index)?;
-                database_access::push_transaction(
-                    &mut connection,
-                    &Block::decode(missing_block.block).unwrap().transaction,
-                    &missing_index,
-                )?;
-            }
+        if !block_indices.is_empty() {
             let difference_account_balances_indices: Vec<u64> = vec_sorted_diff(
-                all_indices.as_mut_slice(),
+                block_indices.as_mut_slice(),
                 account_balances_block_indices.as_mut_slice(),
             )?;
             for missing_index in difference_account_balances_indices {
@@ -1134,13 +1044,11 @@ impl Blocks {
 
     pub fn get_first_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
-
         database_access::get_first_hashed_block(&mut connection, None)
     }
 
     pub fn get_latest_hashed_block(&self) -> Result<HashedBlock, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
-
         database_access::get_latest_hashed_block(&mut connection, None)
     }
 
@@ -1148,6 +1056,7 @@ impl Blocks {
         let mut connection = self.connection.lock().unwrap();
         database_access::get_latest_hashed_block(&mut connection, Some(true))
     }
+
     pub fn get_account_balance(
         &self,
         account: &AccountIdentifier,
@@ -1173,29 +1082,14 @@ impl Blocks {
         if range.end > range.start
             && database_access::contains_block(&mut connection, &range.start).unwrap_or(false)
         {
-            let mut stmt = connection
-                .prepare(
-                    "SELECT hash, block, parent_hash, idx, timestamp FROM blocks WHERE idx >= ? AND idx < ?",
-                )
-                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-            let mut blocks = stmt
-                .query_map(params![range.start, range.end], |row| {
-                    Ok(HashedBlock {
-                        hash: row.get(0).map(|bytes| HashOf::new(vec_into_array(bytes)))?,
-                        block: row.get(1).map(EncodedBlock::from_vec)?,
-                        parent_hash: row.get(2).map(|opt_bytes: Option<Vec<u8>>| {
-                            opt_bytes.map(|bytes| HashOf::new(vec_into_array(bytes)))
-                        })?,
-                        index: row.get(3)?,
-                        timestamp: iso8601_to_timestamp(row.get(4)?),
-                    })
-                })
-                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-            let mut res = Vec::new();
-            while let Some(hb) = blocks.next().map(|block| block.unwrap()) {
-                res.push(hb)
-            }
-            Ok(res)
+            let mut stmt = connection.prepare_cached(r#"SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp FROM blocks WHERE block_idx >= :start AND block_idx < :end"#).map_err(|e| BlockStoreError::Other(e.to_string()))?;
+            database_access::read_hashed_blocks(
+                &mut stmt,
+                named_params! {
+                    ":start":range.start,
+                    ":end":range.end
+                },
+            )
         } else {
             Err(BlockStoreError::Other(format!(
                 "Given block range {}-{} is not allowed or not found in the block store",
@@ -1209,11 +1103,6 @@ impl Blocks {
         con.execute_batch("BEGIN TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
         database_access::push_hashed_block(&mut con, hb)?;
-        database_access::push_transaction(
-            &mut con,
-            &Block::decode(hb.block.clone()).unwrap().transaction,
-            &hb.index,
-        )?;
         database_access::update_balance_book(&mut con, hb)?;
         con.execute_batch("COMMIT TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
@@ -1231,11 +1120,9 @@ impl Blocks {
         connection
             .execute_batch("BEGIN TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
-        let mut stmt_hb =  connection.prepare("INSERT INTO blocks (hash, block, parent_hash, idx, verified, timestamp) VALUES (?1, ?2, ?3, ?4, FALSE, ?5)")
-        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        let mut stmt_tx = connection
-            .prepare(INSERT_INTO_TRANSACTIONS_STATEMENT)
-            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let mut stmt_hb = connection.prepare("INSERT INTO blocks (block_hash, encoded_block, parent_hash, block_idx, verified, timestamp, tx_hash, operation_type, from_account, to_account, spender_account, amount, allowance, expected_allowance, fee, created_at_time, expires_at, memo, icrc1_memo) VALUES (
+            :block_hash, :encoded_block, :parent_hash, :block_idx, FALSE, :timestamp, :tx_hash, :operation_type, :from_account, :to_account, :spender_account, :amount, :allowance, :expected_allowance, :fee, :created_at_time, :expires_at, :memo, :icrc1_memo
+            )").map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut stmt_select =  connection
         .prepare("SELECT block_idx,account,tokens FROM account_balances WHERE account=?1 AND block_idx<=?2 ORDER BY block_idx DESC LIMIT 1")
         .map_err(|e| BlockStoreError::Other(e.to_string()))?;
@@ -1244,7 +1131,7 @@ impl Blocks {
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
 
         for hb in &batch {
-            match database_access::push_hashed_block_execution(hb, &mut stmt_hb) {
+            match database_access::execute_insert_block_statement(&mut stmt_hb, hb) {
                 Ok(_) => (),
                 Err(e) => {
                     connection
@@ -1253,19 +1140,6 @@ impl Blocks {
                     return Err(e);
                 }
             };
-            match database_access::push_transaction_execution(
-                &Block::decode(hb.block.clone()).unwrap().transaction,
-                &mut stmt_tx,
-                &hb.index,
-            ) {
-                Ok(_) => (),
-                Err(e) => {
-                    connection
-                        .execute_batch("ROLLBACK TRANSACTION;")
-                        .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
-                    return Err(e);
-                }
-            }
             match database_access::update_balance_book_execution(
                 hb,
                 &mut stmt_select,
@@ -1331,7 +1205,7 @@ impl Blocks {
                     *block_height
                 };
                 let mut stmt = connection
-                    .prepare("UPDATE blocks SET verified = TRUE WHERE idx >= ?1 AND idx <= ?2")
+                    .prepare("UPDATE blocks SET verified = TRUE WHERE block_idx >= ?1 AND block_idx <= ?2")
                     .map_err(|e| BlockStoreError::Other(e.to_string()))?;
                 stmt.execute(params![verified.index, height])
                     .map_err(|e| BlockStoreError::Other(e.to_string()))?;
@@ -1344,7 +1218,7 @@ impl Blocks {
                     *block_height
                 };
                 let mut stmt = connection
-                    .prepare("UPDATE blocks SET verified = TRUE WHERE idx <= ?")
+                    .prepare("UPDATE blocks SET verified = TRUE WHERE block_idx <= ?")
                     .map_err(|e| BlockStoreError::Other(e.to_string()))?;
                 stmt.execute(params![height])
                     .map_err(|e| BlockStoreError::Other(e.to_string()))?;
@@ -1361,7 +1235,7 @@ impl Blocks {
     fn get_next_rosetta_block_indices(
         &self,
     ) -> Result<Option<RosettaBlockIndices>, BlockStoreError> {
-        let connection = self
+        let connection: std::sync::MutexGuard<rusqlite::Connection> = self
             .connection
             .lock()
             .map_err(|e| format!("Unable to acquire the connection mutex: {e:?}"))?;
@@ -1403,63 +1277,156 @@ impl Blocks {
                 }),
         };
 
-        let mut num_rosetta_blocks_created = 0;
-        let mut block_indices = next_block_indices.first_block_index..=certified_tip_index;
-        let block_index = match block_indices.next() {
-            None => return Ok(()),
-            Some(index) => index,
-        };
+        // Keep track of how many rosetta blocks are being created
+        let num_rosetta_blocks_created = RefCell::new(0);
+
+        // We do not want duplicate transactions that were created in the same consensus round to be added to the same rosetta block. For this we keep track of the already added tx hashes for each rosetta block
+        // We store all transactions for a single rosetta block in the values of this hashmap
+        let icp_transactions_per_rosetta_block = RefCell::new(HashMap::new());
+
+        // A list of all icp block indices that we need to convert to rosetta blocks
+        let block_indices = next_block_indices.first_block_index..=certified_tip_index;
+
+        // We fetch the first icp block to extract the timestamp, the first icp transaction and the first parent_hash of the first rosetta block created
+        let current_rosetta_block_index = RefCell::new(next_block_indices.rosetta_block_index);
         let Block {
             parent_hash,
             timestamp,
-            transaction,
-        } = Block::decode(self.get_hashed_block(&block_index)?.block)?;
+            ..
+        } = Block::decode(
+            self.get_hashed_block(&next_block_indices.first_block_index)?
+                .block,
+        )?;
 
-        let transaction_hash = transaction.hash();
-        let mut rosetta_block = RosettaBlock {
-            index: next_block_indices.rosetta_block_index,
-            parent_hash: parent_hash.map(|h| h.into_bytes()),
-            timestamp,
-            transactions: [(block_index, transaction)].into_iter().collect(),
-        };
-        let mut transactions_hashes = HashSet::new();
-        transactions_hashes.insert(transaction_hash);
-        for block_index in block_indices {
-            let block = self.get_hashed_block(&block_index)?;
-            let transaction = Block::decode(block.block)?.transaction;
-            let transaction_hash = transaction.hash();
-            if block.timestamp == rosetta_block.timestamp
-                && !transactions_hashes.contains(&transaction_hash)
-            {
-                rosetta_block.transactions.insert(block_index, transaction);
-            } else {
-                let next_rosetta_block_index = rosetta_block.index + 1;
-                let parent_hash = rosetta_block.hash();
-                num_rosetta_blocks_created += 1;
-                self.store_rosetta_block(rosetta_block)?;
-                rosetta_block = RosettaBlock {
-                    index: next_rosetta_block_index,
-                    parent_hash: Some(parent_hash),
-                    timestamp: block.timestamp,
-                    transactions: [(block_index, transaction)].into_iter().collect(),
-                };
-                transactions_hashes.clear();
-            }
-            transactions_hashes.insert(transaction_hash);
-        }
-        num_rosetta_blocks_created += 1;
-        let last_rosetta_block_index = rosetta_block.index;
-        self.store_rosetta_block(rosetta_block)?;
+        let current_rosetta_block_parent_hash = RefCell::new(parent_hash);
+        let current_rosetta_block_timestamp = RefCell::new(timestamp);
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
 
-        info!(
-            "Created {num_rosetta_blocks_created} Rosetta Block{}. Ledger blocks indices {:?} added to Rosetta Blocks. Last Rosetta Block was at index {last_rosetta_block_index}",
-            if num_rosetta_blocks_created > 1 {
-                "s"
-            } else {
-                ""
-            },
-            next_block_indices.first_block_index..=certified_tip_index,
+        let sql_tx = connection
+            .transaction()
+            .map_err(|e| format!("Unable to initialize a transaction: {e:?}"))?;
+
+        let mut insert_rosetta_block_stmt = sql_tx
+            .prepare_cached(
+                r#"INSERT INTO rosetta_blocks (rosetta_block_idx, hash, timestamp)
+                VALUES (:idx, :hash, :timestamp)"#,
+            )
+            .unwrap();
+        let mut insert_rosetta_block_transaction_stmt = sql_tx
+            .prepare_cached(
+                r#"INSERT INTO rosetta_blocks_transactions (rosetta_block_idx, block_idx)
+        VALUES (:idx, :block_idx)"#,
+            )
+            .unwrap();
+
+        let mut select_hashed_blocks_stmt = sql_tx
+            .prepare_cached(
+                r#"SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp
+           FROM blocks WHERE block_idx >= :start AND block_idx <= :end"#,
+            )
+            .unwrap();
+
+        // We cannot iterate over all blocks at once so we batch them into 100000 blocks per iteration round.
+        // This way we only load 100000 blocks into memory at a time
+        const ROSETTA_BLOCKS_PROCESSED_PER_ROUND: u64 = 100000;
+        let mut hashed_block_idx_interval = std::ops::RangeInclusive::new(
+            *block_indices.start(),
+            std::cmp::min(
+                *block_indices.end(),
+                block_indices
+                    .start()
+                    .saturating_add(ROSETTA_BLOCKS_PROCESSED_PER_ROUND),
+            ),
         );
+
+        // A helper function to store the current rosetta block and reset the fields
+        let mut flush_transactions =
+            |current_icp_block_timestamp: TimeStamp| -> Result<(), BlockStoreError> {
+                // We want the transactions to be sorted by their icp block index
+                let mut transactions: Vec<(u64, Transaction)> = icp_transactions_per_rosetta_block
+                    .take()
+                    .into_values()
+                    .collect();
+                transactions.sort_by(|(idx1, _), (idx2, _)| idx1.cmp(idx2));
+                let rosetta_block = RosettaBlock {
+                    index: *current_rosetta_block_index.borrow(),
+                    parent_hash: current_rosetta_block_parent_hash
+                        .borrow()
+                        .map(|hash| hash.into_bytes()),
+                    timestamp: *current_rosetta_block_timestamp.borrow(),
+                    transactions: transactions.into_iter().collect(),
+                };
+
+                // Set the fields to the next rosetta block
+                *current_rosetta_block_index.borrow_mut() += 1;
+                *num_rosetta_blocks_created.borrow_mut() += 1;
+                current_rosetta_block_parent_hash.replace(Some(HashOf::new(rosetta_block.hash())));
+                current_rosetta_block_timestamp.replace(current_icp_block_timestamp);
+                icp_transactions_per_rosetta_block.replace(HashMap::new());
+
+                self.store_rosetta_block(
+                    rosetta_block,
+                    &mut insert_rosetta_block_stmt,
+                    &mut insert_rosetta_block_transaction_stmt,
+                )?;
+                Ok(())
+            };
+
+        loop {
+            // We extract the icp block indices from the current interval
+            let hashed_blocks = database_access::read_hashed_blocks(
+                &mut select_hashed_blocks_stmt,
+                named_params! {
+                    ":start":hashed_block_idx_interval.start(),
+                    ":end":hashed_block_idx_interval.end()
+                },
+            )?;
+
+            for block in hashed_blocks.into_iter() {
+                let transaction = Block::decode(block.block)?.transaction;
+                let transaction_hash = transaction.hash();
+                if icp_transactions_per_rosetta_block
+                    .borrow()
+                    .contains_key(&transaction_hash)
+                    || block.timestamp != *current_rosetta_block_timestamp.borrow()
+                {
+                    // The break out criteria for when a rosetta block should be created is either when there are multiple transactions with the same transaction hash that were produced in the same consensus round (i.e. same block timestamp) or if the block timestamp changes (i.e. a new consensus round has started)
+                    flush_transactions(block.timestamp)?;
+                }
+
+                (*icp_transactions_per_rosetta_block.borrow_mut())
+                    .insert(transaction_hash, (block.index, transaction));
+            }
+
+            if *hashed_block_idx_interval.end() == *block_indices.end() {
+                // It is possible that we have reached the end of the block indices but still have transactions that need to be added to a rosetta block
+                flush_transactions(current_rosetta_block_timestamp.clone().into_inner())?;
+                break;
+            }
+
+            // We update the interval to the next batch of blocks
+            hashed_block_idx_interval = std::ops::RangeInclusive::new(
+                hashed_block_idx_interval.end().saturating_add(1),
+                std::cmp::min(
+                    hashed_block_idx_interval
+                        .end()
+                        .saturating_add(ROSETTA_BLOCKS_PROCESSED_PER_ROUND),
+                    *block_indices.end(),
+                ),
+            );
+        }
+
+        // We need to free up the prepared statements before we commit the transaction
+        drop(insert_rosetta_block_stmt);
+        drop(insert_rosetta_block_transaction_stmt);
+        drop(select_hashed_blocks_stmt);
+        sql_tx.commit().unwrap();
+
+        tracing::debug!(
+           "Created {} Rosetta Blocks. Ledger blocks indices {:?} added to Rosetta Blocks. Last Rosetta Block was at index {}",num_rosetta_blocks_created.into_inner(), next_block_indices.first_block_index..=certified_tip_index,current_rosetta_block_index.into_inner().saturating_sub(1));
 
         Ok(())
     }
@@ -1467,25 +1434,12 @@ impl Blocks {
     pub(crate) fn store_rosetta_block(
         &self,
         rosetta_block: RosettaBlock,
+        insert_rosetta_block_stmt: &mut CachedStatement,
+        insert_rosetta_block_transaction_stmt: &mut CachedStatement,
     ) -> Result<(), BlockStoreError> {
-        let mut connection = self
-            .connection
-            .lock()
-            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
-
-        let transaction = connection
-            .transaction()
-            .map_err(|e| format!("Unable to initialize a transaction: {e:?}"))?;
-
         // Store the metainfo of the rosetta block
         {
-            let mut statement = transaction
-                .prepare_cached(
-                    r#"INSERT INTO rosetta_blocks (rosetta_block_idx, hash, timestamp)
-                                VALUES (:idx, :hash, :timestamp)"#,
-                )
-                .map_err(|e| format!("Unable to insert into rosetta_blocks table: {e:?}"))?;
-            let _ = statement
+            let _ = insert_rosetta_block_stmt
                 .execute(named_params! {
                     ":idx": rosetta_block.index,
                     ":hash": rosetta_block.hash(),
@@ -1496,16 +1450,8 @@ impl Blocks {
 
         // Store the blocks that form this rosetta block
         {
-            let mut statement = transaction
-                .prepare_cached(
-                    r#"INSERT INTO rosetta_blocks_transactions (rosetta_block_idx, block_idx)
-                    VALUES (:idx, :block_idx)"#,
-                )
-                .map_err(|e| {
-                    format!("Unable to insert into rosetta_blocks_transactions table: {e:?}")
-                })?;
             for block_index in rosetta_block.transactions.keys() {
-                let _ = statement
+                let _ = insert_rosetta_block_transaction_stmt
                     .execute(named_params! {
                         ":idx": rosetta_block.index,
                         ":block_idx": block_index,
@@ -1516,9 +1462,6 @@ impl Blocks {
             }
         }
 
-        transaction.commit().map_err(|e| {
-            format!("Error while finishing the transaction to store a rosetta block: {e:?}")
-        })?;
         Ok(())
     }
 
@@ -1528,13 +1471,33 @@ impl Blocks {
     ) -> Result<RosettaBlock, BlockStoreError> {
         let (parent_hash, timestamp) =
             self.get_rosetta_block_phash_timestamp(rosetta_block_index)?;
-        let transactions = self.get_rosetta_block_transactions(rosetta_block_index)?;
+        let transactions: BTreeMap<u64, Transaction> =
+            self.get_rosetta_block_transactions(rosetta_block_index)?;
         Ok(RosettaBlock {
             index: rosetta_block_index,
             parent_hash,
             timestamp,
             transactions,
         })
+    }
+
+    pub fn get_highest_rosetta_block_index(&self) -> Result<Option<u64>, BlockStoreError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
+        let block_idx = match connection
+            .prepare_cached(
+                "SELECT rosetta_block_idx FROM rosetta_blocks ORDER BY rosetta_block_idx DESC LIMIT 1",
+            )
+            .map_err(|e| format!("Unable to prepare query: {e:?}"))?.query_map(params![], |row| 
+                row.get(0)
+            ).map_err(|e| BlockStoreError::Other(format!("Unable to select from rosetta_blocks: {e:?}")))?.next(){
+                Some(Ok(block_idx)) => Some(block_idx),
+                Some(Err(e)) => return Err(BlockStoreError::Other(e.to_string())),
+                None =>  None,
+            };
+        Ok(block_idx)
     }
 
     fn get_rosetta_block_phash_timestamp(
@@ -1575,9 +1538,9 @@ impl Blocks {
             .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
         let mut statement = connection
             .prepare_cached(
-                r#"SELECT blocks.idx, block
+                r#"SELECT blocks.block_idx, encoded_block
                    FROM rosetta_blocks_transactions JOIN blocks
-                   ON rosetta_blocks_transactions.block_idx = blocks.idx
+                   ON rosetta_blocks_transactions.block_idx = blocks.block_idx
                    WHERE rosetta_blocks_transactions.rosetta_block_idx=:idx"#,
             )
             .map_err(|e| format!("Unable to select block: {e:?}"))?;
@@ -1685,7 +1648,34 @@ mod tests {
         let mut blocks = Blocks::new_in_memory(true).unwrap();
         blocks.push(&hashed_block0).unwrap();
         blocks.push(&hashed_block1).unwrap();
-        blocks.store_rosetta_block(rosetta_block.clone()).unwrap();
+        let mut connection = blocks.connection.lock().unwrap();
+        let transaction = connection.transaction().unwrap();
+
+        let mut insert_rosetta_block_stmt = transaction
+            .prepare_cached(
+                r#"INSERT INTO rosetta_blocks (rosetta_block_idx, hash, timestamp)
+        VALUES (:idx, :hash, :timestamp)"#,
+            )
+            .unwrap();
+        let mut insert_rosetta_block_transaction_stmt = transaction
+            .prepare_cached(
+                r#"INSERT INTO rosetta_blocks_transactions (rosetta_block_idx, block_idx)
+VALUES (:idx, :block_idx)"#,
+            )
+            .unwrap();
+
+        blocks
+            .store_rosetta_block(
+                rosetta_block.clone(),
+                &mut insert_rosetta_block_stmt,
+                &mut insert_rosetta_block_transaction_stmt,
+            )
+            .unwrap();
+
+        drop(insert_rosetta_block_stmt);
+        drop(insert_rosetta_block_transaction_stmt);
+        transaction.commit().unwrap();
+        drop(connection);
         let actual_rosetta_block = blocks.get_rosetta_block(0).unwrap();
         assert_eq!(rosetta_block, actual_rosetta_block);
     }

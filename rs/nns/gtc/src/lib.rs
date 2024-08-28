@@ -5,10 +5,10 @@ use dfn_core::{
     println,
 };
 use ic_base_types::PrincipalId;
-use ic_crypto_ecdsa_secp256k1::PublicKey;
+use ic_crypto_secp256k1::PublicKey;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance::pb::v1::GovernanceError;
+use ic_nns_governance_api::pb::v1::GovernanceError;
 use sha3::{Digest, Keccak256};
 use std::{collections::HashSet, time::SystemTime};
 
@@ -311,7 +311,7 @@ fn public_key_to_principal(public_key: &PublicKey) -> PrincipalId {
 pub mod test_constants {
     use super::{decode_hex_public_key, public_key_to_gtc_address, public_key_to_principal};
     use ic_base_types::PrincipalId;
-    use ic_crypto_ecdsa_secp256k1::{PrivateKey, PublicKey};
+    use ic_crypto_secp256k1::{PrivateKey, PublicKey};
     use std::str::FromStr;
 
     /// An identity used to make calls to the GTC canister in tests
@@ -337,7 +337,7 @@ pub mod test_constants {
         }
 
         pub fn sign(&self, msg: &[u8]) -> Vec<u8> {
-            self.secret_key().sign_message(msg).to_vec()
+            self.secret_key().sign_message_with_ecdsa(msg).to_vec()
         }
 
         /// Assert that `self.public_key_hex` is the hex-encoding of

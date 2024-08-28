@@ -168,6 +168,7 @@ pub mod wasm_method {
         CanisterInspectMessage = 5,
         CanisterHeartbeat = 6,
         CanisterGlobalTimer = 8,
+        CanisterOnLowWasmMemory = 9,
     }
     impl SystemMethod {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -184,6 +185,9 @@ pub mod wasm_method {
                 SystemMethod::CanisterInspectMessage => "SYSTEM_METHOD_CANISTER_INSPECT_MESSAGE",
                 SystemMethod::CanisterHeartbeat => "SYSTEM_METHOD_CANISTER_HEARTBEAT",
                 SystemMethod::CanisterGlobalTimer => "SYSTEM_METHOD_CANISTER_GLOBAL_TIMER",
+                SystemMethod::CanisterOnLowWasmMemory => {
+                    "SYSTEM_METHOD_CANISTER_ON_LOW_WASM_MEMORY"
+                }
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -197,6 +201,7 @@ pub mod wasm_method {
                 "SYSTEM_METHOD_CANISTER_INSPECT_MESSAGE" => Some(Self::CanisterInspectMessage),
                 "SYSTEM_METHOD_CANISTER_HEARTBEAT" => Some(Self::CanisterHeartbeat),
                 "SYSTEM_METHOD_CANISTER_GLOBAL_TIMER" => Some(Self::CanisterGlobalTimer),
+                "SYSTEM_METHOD_CANISTER_ON_LOW_WASM_MEMORY" => Some(Self::CanisterOnLowWasmMemory),
                 _ => None,
             }
         }
@@ -374,6 +379,7 @@ pub mod execution_task {
         Unspecified = 0,
         Heartbeat = 1,
         Timer = 2,
+        OnLowWasmMemory = 3,
     }
     impl CanisterTask {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -385,6 +391,7 @@ pub mod execution_task {
                 CanisterTask::Unspecified => "CANISTER_TASK_UNSPECIFIED",
                 CanisterTask::Heartbeat => "CANISTER_TASK_HEARTBEAT",
                 CanisterTask::Timer => "CANISTER_TASK_TIMER",
+                CanisterTask::OnLowWasmMemory => "CANISTER_TASK_ON_LOW_WASM_MEMORY",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -393,6 +400,7 @@ pub mod execution_task {
                 "CANISTER_TASK_UNSPECIFIED" => Some(Self::Unspecified),
                 "CANISTER_TASK_HEARTBEAT" => Some(Self::Heartbeat),
                 "CANISTER_TASK_TIMER" => Some(Self::Timer),
+                "CANISTER_TASK_ON_LOW_WASM_MEMORY" => Some(Self::OnLowWasmMemory),
                 _ => None,
             }
         }
@@ -547,6 +555,31 @@ pub struct WasmChunkStoreMetadata {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct LogVisibilityAllowedViewers {
+    #[prost(message, repeated, tag = "1")]
+    pub principals: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct LogVisibilityV2 {
+    #[prost(oneof = "log_visibility_v2::LogVisibilityV2", tags = "1, 2, 3")]
+    pub log_visibility_v2: ::core::option::Option<log_visibility_v2::LogVisibilityV2>,
+}
+/// Nested message and enum types in `LogVisibilityV2`.
+pub mod log_visibility_v2 {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum LogVisibilityV2 {
+        #[prost(int32, tag = "1")]
+        Controllers(i32),
+        #[prost(int32, tag = "2")]
+        Public(i32),
+        #[prost(message, tag = "3")]
+        AllowedViewers(super::LogVisibilityAllowedViewers),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterLogRecord {
     #[prost(uint64, tag = "1")]
     pub idx: u64,
@@ -639,8 +672,8 @@ pub struct CanisterStateBits {
     #[prost(message, optional, tag = "41")]
     pub total_query_stats: ::core::option::Option<TotalQueryStats>,
     /// Log visibility for the canister.
-    #[prost(enumeration = "LogVisibility", tag = "42")]
-    pub log_visibility: i32,
+    #[prost(message, optional, tag = "51")]
+    pub log_visibility_v2: ::core::option::Option<LogVisibilityV2>,
     /// Log records of the canister.
     #[prost(message, repeated, tag = "43")]
     pub canister_log_records: ::prost::alloc::vec::Vec<CanisterLogRecord>,
@@ -656,10 +689,15 @@ pub struct CanisterStateBits {
     /// The next local snapshot ID.
     #[prost(uint64, tag = "46")]
     pub next_snapshot_id: u64,
+    /// Captures the memory usage of all snapshots associated with a canister.
+    #[prost(uint64, tag = "52")]
+    pub snapshots_memory_usage: u64,
     #[prost(int64, tag = "48")]
     pub priority_credit: i64,
     #[prost(enumeration = "LongExecutionMode", tag = "49")]
     pub long_execution_mode: i32,
+    #[prost(uint64, optional, tag = "50")]
+    pub wasm_memory_threshold: ::core::option::Option<u64>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }
@@ -799,35 +837,6 @@ impl CyclesUseCase {
             "CYCLES_USE_CASE_NON_CONSUMED" => Some(Self::NonConsumed),
             "CYCLES_USE_CASE_BURNED_CYCLES" => Some(Self::BurnedCycles),
             "CYCLES_USE_CASE_SCHNORR_OUTCALLS" => Some(Self::SchnorrOutcalls),
-            _ => None,
-        }
-    }
-}
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum LogVisibility {
-    Unspecified = 0,
-    Controllers = 1,
-    Public = 2,
-}
-impl LogVisibility {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            LogVisibility::Unspecified => "LOG_VISIBILITY_UNSPECIFIED",
-            LogVisibility::Controllers => "LOG_VISIBILITY_CONTROLLERS",
-            LogVisibility::Public => "LOG_VISIBILITY_PUBLIC",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "LOG_VISIBILITY_UNSPECIFIED" => Some(Self::Unspecified),
-            "LOG_VISIBILITY_CONTROLLERS" => Some(Self::Controllers),
-            "LOG_VISIBILITY_PUBLIC" => Some(Self::Public),
             _ => None,
         }
     }

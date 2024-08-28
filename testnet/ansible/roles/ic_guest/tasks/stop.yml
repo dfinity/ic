@@ -1,6 +1,5 @@
 ---
-
-- name: stop guest
+- name: Stop guest
   shell: |
     set -eExu
     virsh stop "{{ item }}"
@@ -10,4 +9,4 @@
     label:
   args:
     executable: /bin/bash
-  tags: [ "ic_guest" ]
+  tags: [ic_guest]

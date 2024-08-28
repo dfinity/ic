@@ -3,7 +3,6 @@
 //! Specifically, it constructs all the artifact pools and the Consensus/P2P
 //! time source.
 
-use either::Either;
 use ic_artifact_manager::{create_artifact_handler, create_ingress_handlers};
 use ic_artifact_pool::{
     canister_http_pool::CanisterHttpPoolImpl,
@@ -45,7 +44,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateReader};
 use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_quic_transport::DummyUdpSocket;
+use ic_quic_transport::create_udp_socket;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::types::StateSyncMessage;
@@ -152,13 +151,19 @@ pub fn setup_consensus_and_p2p(
         max_certified_height_tx,
     );
 
-    // StateSync
+    // StateSync receive side => handler definition
     let (state_sync_router, state_sync_manager_rx) = ic_state_sync_manager::build_axum_router(
         state_sync_client.clone(),
         log.clone(),
         metrics_registry,
     );
 
+    // Consensus receive side => handler definition
+
+    // Merge all receive side handlers => router
+    let p2p_router = state_sync_router
+        .merge(p2p_consensus.router())
+        .layer(TraceLayer::new_for_http());
     // Quic transport
     let (_, topology_watcher) = ic_peer_manager::start_peer_manager(
         log.clone(),
@@ -174,9 +179,7 @@ pub fn setup_consensus_and_p2p(
         transport_config.listening_port,
     )
         .into();
-    let p2p_router = state_sync_router
-        .merge(p2p_consensus.router())
-        .layer(TraceLayer::new_for_http());
+
     let quic_transport = Arc::new(ic_quic_transport::QuicTransport::start(
         log,
         metrics_registry,
@@ -185,9 +188,11 @@ pub fn setup_consensus_and_p2p(
         registry_client.clone(),
         node_id,
         topology_watcher.clone(),
-        Either::<_, DummyUdpSocket>::Left(transport_addr),
+        create_udp_socket(rt_handle, transport_addr),
         p2p_router,
     ));
+
+    // Start the main event loops for StateSync and Consensus
 
     let _state_sync_manager = ic_state_sync_manager::start_state_sync_manager(
         log,
@@ -346,7 +351,14 @@ fn start_consensus(
 
         join_handles.push(jh);
 
-        new_p2p_consensus.add_client(consensus_rx, consensus_pool, consensus_gossip, client);
+        let assembler = ic_artifact_downloader::FetchArtifact::new(
+            log.clone(),
+            rt_handle.clone(),
+            consensus_pool,
+            consensus_gossip,
+            metrics_registry.clone(),
+        );
+        new_p2p_consensus.add_client(consensus_rx, client, assembler);
     };
 
     let ingress_sender = {
@@ -362,12 +374,14 @@ fn start_consensus(
         );
 
         join_handles.push(jh);
-        new_p2p_consensus.add_client(
-            ingress_rx,
+        let assembler = ic_artifact_downloader::FetchArtifact::new(
+            log.clone(),
+            rt_handle.clone(),
             artifact_pools.ingress_pool.clone(),
             ingress_prioritizer,
-            client.clone(),
+            metrics_registry.clone(),
         );
+        new_p2p_consensus.add_client(ingress_rx, client.clone(), assembler);
         client
     };
 
@@ -394,12 +408,14 @@ fn start_consensus(
             metrics_registry.clone(),
         );
         join_handles.push(jh);
-        new_p2p_consensus.add_client(
-            certification_rx,
+        let assembler = ic_artifact_downloader::FetchArtifact::new(
+            log.clone(),
+            rt_handle.clone(),
             artifact_pools.certification_pool,
             certifier_gossip,
-            client,
+            metrics_registry.clone(),
         );
+        new_p2p_consensus.add_client(certification_rx, client, assembler);
     };
 
     {
@@ -420,7 +436,14 @@ fn start_consensus(
             metrics_registry.clone(),
         );
         join_handles.push(jh);
-        new_p2p_consensus.add_client(dkg_rx, artifact_pools.dkg_pool, dkg_gossip, client);
+        let assembler = ic_artifact_downloader::FetchArtifact::new(
+            log.clone(),
+            rt_handle.clone(),
+            artifact_pools.dkg_pool,
+            dkg_gossip,
+            metrics_registry.clone(),
+        );
+        new_p2p_consensus.add_client(dkg_rx, client, assembler);
     };
 
     {
@@ -435,14 +458,13 @@ fn start_consensus(
             chain_key_config,
             finalized.payload.as_ref().dkg_interval_start_height(),
             finalized.payload.as_ref().is_summary(),
-            finalized.payload.as_ref().as_ecdsa().is_some(),
+            finalized.payload.as_ref().as_idkg().is_some(),
         );
 
         let idkg_gossip = Arc::new(idkg::IDkgGossipImpl::new(
             subnet_id,
             Arc::clone(&consensus_block_cache),
             Arc::clone(&state_reader),
-            metrics_registry.clone(),
         ));
 
         let (client, jh) = create_artifact_handler(
@@ -463,7 +485,14 @@ fn start_consensus(
 
         join_handles.push(jh);
 
-        new_p2p_consensus.add_client(idkg_rx, artifact_pools.idkg_pool, idkg_gossip, client);
+        let assembler = ic_artifact_downloader::FetchArtifact::new(
+            log.clone(),
+            rt_handle.clone(),
+            artifact_pools.idkg_pool,
+            idkg_gossip,
+            metrics_registry.clone(),
+        );
+        new_p2p_consensus.add_client(idkg_rx, client, assembler);
     };
 
     {
@@ -491,12 +520,14 @@ fn start_consensus(
         );
         join_handles.push(jh);
 
-        new_p2p_consensus.add_client(
-            http_outcalls_rx,
+        let assembler = ic_artifact_downloader::FetchArtifact::new(
+            log.clone(),
+            rt_handle.clone(),
             artifact_pools.canister_http_pool,
             canister_http_gossip,
-            client,
+            metrics_registry.clone(),
         );
+        new_p2p_consensus.add_client(http_outcalls_rx, client, assembler);
     };
 
     (

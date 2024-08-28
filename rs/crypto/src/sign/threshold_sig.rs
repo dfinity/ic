@@ -182,6 +182,7 @@ impl ThresholdSigVerifierInternal {
 ///   indicated by a `CryptoError::InvalidArgument`("unsupported algorithm"))
 /// * conversion of the public coefficients to a BLS12-381 public key fails (as
 ///   indicated by a `CryptoError::MalformedPublicKey`("Invalid public key"))
+///
 /// Given that both cases indicate that the implementations of DKG and threshold
 /// signatures are not aligned and also a caller could not recover from this, we
 /// panic.

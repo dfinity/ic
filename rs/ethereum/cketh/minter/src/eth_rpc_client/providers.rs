@@ -17,7 +17,7 @@ pub(crate) const SEPOLIA_PROVIDERS: [RpcNodeProvider; 2] = [
 const EVM_RPC_SEPOLIA_PROVIDERS: [EvmEthSepoliaService; 2] =
     [EvmEthSepoliaService::Ankr, EvmEthSepoliaService::PublicNode];
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub(crate) enum RpcNodeProvider {
     Ethereum(EthereumProvider),
     Sepolia(SepoliaProvider),

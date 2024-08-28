@@ -1,0 +1,92 @@
+[package]
+name = "consensus-tecdsa-system-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+canister-test = { path = "../../../rust_canisters/canister_test" }
+chrono = { workspace = true }
+futures = { workspace = true }
+ic-agent = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+ic-config = { path = "../../../config" }
+ic-constants = { path = "../../../constants" }
+ic-management-canister-types = { path = "../../../types/management_canister_types" }
+ic-nns-constants = { path = "../../../nns/constants" }
+ic-nns-governance-api = { path = "../../../nns/governance/api" }
+ic-registry-nns-data-provider = { path = "../../../registry/nns_data_provider" }
+ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-sys = { path = "../../../sys" }
+ic-system-test-driver = { path = "../../driver" }
+ic-types = { path = "../../../types/types" }
+ic_consensus_system_test_utils = { path = "../utils" }
+ic_consensus_threshold_sig_system_test_utils = { path = "./utils" }
+itertools = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+registry-canister = { path = "../../../registry/canister" }
+reqwest = { workspace = true }
+serde_json = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
+url = { workspace = true }
+
+[[bin]]
+name = "ic-systest-tecdsa-performance-test"
+path = "tecdsa_performance_test.rs"
+
+[[bin]]
+name = "ic-systest-tecdsa-add-nodes"
+path = "tecdsa_add_nodes_test.rs"
+
+[[bin]]
+name = "ic-systest-tschnorr-message-sizes"
+path = "tschnorr_message_sizes_test.rs"
+
+[[bin]]
+name = "ic-systest-tecdsa-key-rotation"
+path = "tecdsa_key_rotation_test.rs"
+
+[[bin]]
+name = "ic-systest-tecdsa-remove-nodes"
+path = "tecdsa_remove_nodes_test.rs"
+
+[[bin]]
+name = "ic-systest-tecdsa-signature-life-cycle"
+path = "tecdsa_signature_life_cycle_test.rs"
+
+[[bin]]
+name = "ic-systest-tecdsa-signature-fails-without-cycles"
+path = "tecdsa_signature_fails_without_cycles_test.rs"
+
+[[bin]]
+name = "ic-systest-tecdsa-signature-from-nns-without-cycles"
+path = "tecdsa_signature_from_nns_without_cycles_test.rs"
+
+[[bin]]
+name = "ic-systest-tecdsa-signature-from-other-subnet"
+path = "tecdsa_signature_from_other_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-tecdsa-signature-same-subnet"
+path = "tecdsa_signature_same_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-tecdsa-signature-timeout"
+path = "tecdsa_signature_timeout_test.rs"
+
+[[bin]]
+name = "ic-systest-tecdsa-two-signing-subnets"
+path = "tecdsa_two_signing_subnets_test.rs"
+
+[[bin]]
+name = "ic-systest-tecdsa-complaint-test"
+path = "tecdsa_complaint_test.rs"
+
+[features]
+upload_perf_systest_results = []

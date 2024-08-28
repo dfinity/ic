@@ -18,7 +18,6 @@ const FIXED_SEED: u64 = 42;
 mod gen_node_siging_key_pair_tests {
     use super::*;
     use crate::vault::api::CspBasicSignatureKeygenError;
-    use crate::CspPublicKeyStore;
 
     #[test]
     fn should_correctly_generate_node_signing_keys() {
@@ -39,7 +38,8 @@ mod gen_node_siging_key_pair_tests {
             )
         );
         assert_eq!(
-            csp.current_node_public_keys()
+            csp.csp_vault
+                .current_node_public_keys()
                 .expect("Failed to retrieve node public keys")
                 .node_signing_public_key
                 .expect("missing key"),
@@ -86,8 +86,8 @@ mod gen_node_siging_key_pair_tests {
 }
 
 mod gen_key_pair_with_pop_tests {
+    use crate::keygen::utils::committee_signing_pk_to_proto;
     use crate::vault::api::CspMultiSignatureKeygenError;
-    use crate::{api::CspPublicKeyStore, keygen::utils::committee_signing_pk_to_proto};
 
     use super::*;
 
@@ -103,7 +103,8 @@ mod gen_key_pair_with_pop_tests {
         assert_eq!(pop, test_vector.proof_of_possession);
 
         assert_eq!(
-            csp.current_node_public_keys()
+            csp.csp_vault
+                .current_node_public_keys()
                 .expect("Failed to retrieve node public keys")
                 .committee_signing_public_key
                 .expect("missing key"),
@@ -274,7 +275,6 @@ fn should_correctly_convert_tls_cert_hash_as_key_id() {
 mod tls {
     use super::*;
     use crate::vault::api::CspTlsKeygenError;
-    use crate::CspPublicKeyStore;
 
     const NODE_1: u64 = 4241;
 
@@ -294,7 +294,8 @@ mod tls {
             )),
         );
         assert_eq!(
-            &csp.current_node_public_keys()
+            &csp.csp_vault
+                .current_node_public_keys()
                 .expect("Failed to retrieve node public keys")
                 .tls_certificate
                 .expect("missing tls certificate")

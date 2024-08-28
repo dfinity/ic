@@ -7,7 +7,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR,
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_governance::pb::v1::{ManageNeuronResponse, NnsFunction, ProposalStatus, Vote};
+use ic_nns_governance_api::pb::v1::{ManageNeuronResponse, NnsFunction, ProposalStatus, Vote};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},
@@ -66,7 +66,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
                 }),
                 release_package_urls: elect
                     .as_ref()
-                    .map(|_| vec!["http://release_package.tar.gz".to_string()])
+                    .map(|_| vec!["http://release_package.tar.zst".to_string()])
                     .unwrap_or_default(),
                 replica_version_to_elect: elect,
                 guest_launch_measurement_sha256_hex: None,

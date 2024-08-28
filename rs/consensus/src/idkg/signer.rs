@@ -26,7 +26,7 @@ use ic_types::consensus::idkg::{
 use ic_types::consensus::idkg::{schnorr_sig_share_prefix, SchnorrSigShare, SigShare};
 use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCombineSigSharesError;
 use ic_types::crypto::canister_threshold_sig::error::{
-    ThresholdEcdsaSignShareError, ThresholdEcdsaVerifySigShareError,
+    ThresholdEcdsaCreateSigShareError, ThresholdEcdsaVerifySigShareError,
     ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
     ThresholdSchnorrVerifySigShareError,
 };
@@ -41,7 +41,7 @@ use super::utils::{build_signature_inputs, get_context_request_id, update_purge_
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
 enum CreateSigShareError {
-    Ecdsa(ThresholdEcdsaSignShareError),
+    Ecdsa(ThresholdEcdsaCreateSigShareError),
     Schnorr(ThresholdSchnorrCreateSigShareError),
 }
 
@@ -82,7 +82,7 @@ impl CombineSigSharesError {
 }
 
 pub(crate) trait ThresholdSigner: Send {
-    /// The on_state_change() called from the main ECDSA path.
+    /// The on_state_change() called from the main IDKG path.
     fn on_state_change(
         &self,
         idkg_pool: &dyn IDkgPool,
@@ -389,7 +389,7 @@ impl ThresholdSignerImpl {
     ) -> Result<IDkgMessage, CreateSigShareError> {
         match sig_inputs {
             ThresholdSigInputs::Ecdsa(inputs) => {
-                ThresholdEcdsaSigner::sign_share(&*self.crypto, inputs).map_or_else(
+                ThresholdEcdsaSigner::create_sig_share(&*self.crypto, inputs).map_or_else(
                     |err| Err(CreateSigShareError::Ecdsa(err)),
                     |share| {
                         let sig_share = EcdsaSigShare {
@@ -597,7 +597,7 @@ impl ThresholdSigner for ThresholdSignerImpl {
 
 pub(crate) trait ThresholdSignatureBuilder {
     /// Returns the signature for the given context, if it can be successfully
-    /// built from the current sig shares in the ECDSA pool
+    /// built from the current sig shares in the IDKG pool
     fn get_completed_signature(
         &self,
         context: &SignWithThresholdContext,
@@ -988,7 +988,7 @@ mod tests {
             create_request_id(&mut uid_generator, height),
         );
 
-        // Set up the ECDSA pool. Pool has shares for requests 1, 2, 3.
+        // Set up the IDKG pool. Pool has shares for requests 1, 2, 3.
         // Only the share for request 1 is issued by us
         let shares = vec![
             create_signature_share(&key_id, NODE_1, id_1.clone()),
@@ -1343,7 +1343,6 @@ mod tests {
                             Randomness::from([0; 32]),
                             &derivation_path,
                             algorithm_for_key_id(&key_id),
-                            true,
                             &mut rng,
                         );
 
@@ -1429,7 +1428,7 @@ mod tests {
             }),
         );
 
-        // Set up the ECDSA pool
+        // Set up the IDKG pool
         let mut artifacts = Vec::new();
         // A share from a node ahead of us (deferred)
         let message = create_signature_share(&key_id, NODE_2, id_1);
@@ -1532,7 +1531,7 @@ mod tests {
             }),
         );
 
-        // Set up the ECDSA pool
+        // Set up the IDKG pool
         let mut artifacts = Vec::new();
         // A valid share for the first context
         let message = create_signature_share(&key_id, NODE_2, id_1);
@@ -1620,7 +1619,7 @@ mod tests {
             ],
         );
 
-        // Set up the ECDSA pool
+        // Set up the IDKG pool
         let mut artifacts = Vec::new();
         // A share for the first incomplete context (deferred)
         let message = create_signature_share(&key_id, NODE_2, id_1);
@@ -1702,7 +1701,7 @@ mod tests {
 
                 let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
 
-                // Set up the ECDSA pool
+                // Set up the IDKG pool
                 // Validated pool has: {signature share 2, signer = NODE_2}
                 let share = create_signature_share(&key_id, NODE_2, id_2.clone());
                 let change_set = vec![IDkgChangeAction::AddToValidated(share)];
@@ -1973,7 +1972,6 @@ mod tests {
                     Randomness::from(context.nonce.unwrap()),
                     &derivation_path,
                     AlgorithmId::ThresholdEcdsaSecp256k1,
-                    false,
                     &mut rng,
                 );
 
@@ -2011,8 +2009,7 @@ mod tests {
                     .filter_by_receivers(&sig_inputs)
                     .map(|receiver| {
                         receiver.load_tecdsa_sig_transcripts(&sig_inputs);
-                        let share = receiver
-                            .sign_share(&sig_inputs)
+                        let share = ThresholdEcdsaSigner::create_sig_share(receiver, &sig_inputs)
                             .expect("failed to create sig share");
                         EcdsaSigShare {
                             signer_id: receiver.id(),
@@ -2149,8 +2146,7 @@ mod tests {
                     .filter_by_receivers(&sig_inputs)
                     .map(|receiver| {
                         receiver.load_tschnorr_sig_transcripts(&sig_inputs);
-                        let share = receiver
-                            .create_sig_share(&sig_inputs)
+                        let share = ThresholdSchnorrSigner::create_sig_share(receiver, &sig_inputs)
                             .expect("failed to create sig share");
                         SchnorrSigShare {
                             signer_id: receiver.id(),

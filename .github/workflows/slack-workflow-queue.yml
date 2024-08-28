@@ -7,12 +7,15 @@ on:
     paths:
       - '.github/workflows/slack-workflow-queue.yml'
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/20 * * * *"
 
 jobs:
   check-queue:
     name: Check Workflow Wait Queue
-    runs-on: ubuntu-latest
+    runs-on:
+      labels: dind-small
+    container:
+      image: ghcr.io/dfinity/minimal-runner-image:0.1
     steps:
 
       - name: Check for workflows in wait queue
@@ -22,14 +25,14 @@ jobs:
           set -euo pipefail
 
           GITHUB_API_URL="https://api.github.com/repos/${{ github.repository }}/actions/runs"
-          WAIT_THRESHOLD_MINUTES=5
+          WAIT_THRESHOLD_MINUTES=20
           WAIT_THRESHOLD_SECONDS=$((WAIT_THRESHOLD_MINUTES * 60))
 
           # Fetch workflow runs
           WORKFLOW_RUNS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" $GITHUB_API_URL)
           # Check for queued workflows
           CURRENT_TIME=$(date +%s)
-          WORKFLOWS_IN_QUEUE=$(echo $WORKFLOW_RUNS | jq -r '.workflow_runs[] | select(.status == "queued") | {id: .id, run_started_at: .run_started_at}')
+          WORKFLOWS_IN_QUEUE=$(echo $WORKFLOW_RUNS | jq -r '.workflow_runs[] | select(.status == "queued") | {id: .id, name: .name, run_started_at: .run_started_at}')
 
           set -x
           MESSAGE=""
@@ -38,6 +41,12 @@ jobs:
             RUN_STARTED_TIME=$(date -d "$RUN_STARTED_AT" +%s)
             TIME_IN_QUEUE=$((CURRENT_TIME - RUN_STARTED_TIME))
 
+            # exclude workflows with long wait times
+            WORKFLOW_NAME=$(echo "${WORKFLOWS_IN_QUEUE}" | jq -r "select(.id == ${WORKFLOW}) | .name") # Extract name
+            if [ "$WORKFLOW_NAME" = "Schedule Daily" ]; then
+              continue
+            fi
+
             if [ $TIME_IN_QUEUE -ge $WAIT_THRESHOLD_SECONDS ]; then
               WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/runs/${WORKFLOW}"
               MESSAGE="${MESSAGE} <${WORKFLOW_URL}|${WORKFLOW}>"
@@ -45,7 +54,7 @@ jobs:
           done
 
           if [ "$MESSAGE" !=  "" ]; then
-            MESSAGE=":alert: <Workflows in Wait Queue|https://github.com/${{ github.repository }}/actions?query=is%3Aqueued> [> ${WAIT_THRESHOLD_MINUTES} min]: ${MESSAGE}"
+            MESSAGE=":alert: <https://github.com/${{ github.repository }}/actions?query=is%3Aqueued|Workflows in Wait Queue> [> ${WAIT_THRESHOLD_MINUTES} min]: ${MESSAGE}"
           fi
           echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
 

@@ -1,7 +1,7 @@
 #![cfg(target_os = "linux")]
 
 use clap::{Args, Parser};
-use vsock_lib::protocol::{Command, NodeIdData, NotifyData, Payload, UpgradeData};
+use vsock_lib::protocol::{Command, NotifyData, Payload, UpgradeData};
 use vsock_lib::send_command;
 fn main() -> Result<(), String> {
     let cli = Cli::parse();
@@ -38,10 +38,6 @@ struct Cli {
     /// Request hostOS to return its version
     #[clap(long)]
     get_hostos_version: bool,
-
-    /// Request hostOS to set the node ID.
-    #[clap(long, value_name = "NODE_ID")]
-    set_node_id: Option<String>,
 
     /// Set a custom port
     #[clap(long, default_value = "19090")]
@@ -82,8 +78,6 @@ fn get_command(cli: Cli) -> Result<Command, String> {
         Ok(Command::DetachHSM)
     } else if cli.get_hostos_version {
         Ok(Command::GetHostOSVersion)
-    } else if let Some(node_id) = cli.set_node_id {
-        Ok(Command::SetNodeId(NodeIdData { node_id }))
     } else if let Some(url) = cli.upgrade.upgrade {
         if let Some(target_hash) = cli.upgrade.hash {
             Ok(Command::Upgrade(UpgradeData { url, target_hash }))

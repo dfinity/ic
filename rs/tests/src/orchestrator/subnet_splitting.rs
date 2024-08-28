@@ -25,13 +25,19 @@ Success::
 
 end::catalog[] */
 
-use crate::orchestrator::utils::{
+use ic_base_types::SubnetId;
+use ic_consensus_system_test_utils::subnet::assert_subnet_is_healthy;
+use ic_consensus_system_test_utils::{
     rw_message::{
         can_read_msg, cert_state_makes_progress_with_retries, install_nns_and_check_progress,
         store_message,
     },
-    subnet_recovery::*,
+    set_sandbox_env_vars,
 };
+use ic_recovery::{file_sync_helper, get_node_metrics, RecoveryArgs};
+use ic_registry_routing_table::CanisterIdRange;
+use ic_registry_subnet_type::SubnetType;
+use ic_subnet_splitting::subnet_splitting::{StepType, SubnetSplitting, SubnetSplittingArgs};
 use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
@@ -42,16 +48,10 @@ use ic_system_test_driver::{
     },
     util::*,
 };
+use ic_types::{CanisterId, Height, PrincipalId, ReplicaVersion};
 
 use candid::Principal;
-use ic_base_types::SubnetId;
-use ic_recovery::{file_sync_helper, get_node_metrics, RecoveryArgs};
-use ic_registry_routing_table::CanisterIdRange;
-use ic_registry_subnet_type::SubnetType;
-use ic_subnet_splitting::subnet_splitting::{StepType, SubnetSplitting, SubnetSplittingArgs};
-use ic_types::{CanisterId, Height, PrincipalId, ReplicaVersion};
 use slog::{info, Logger};
-
 use std::{thread, time::Duration};
 
 const DKG_INTERVAL: u64 = 9;
@@ -116,7 +116,7 @@ pub fn subnet_splitting_test(env: TestEnv) {
 
     let upload_node_destination = prepare_destination_subnet(&destination_subnet, &logger);
 
-    let recovery_dir = env.get_dependency_path("rs/tests");
+    let recovery_dir = get_dependency_path("rs/tests");
     set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
 
     //

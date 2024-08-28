@@ -2,6 +2,7 @@
 
 use std::{
     collections::{hash_map::Entry, HashMap},
+    marker::PhantomData,
     panic,
     sync::Arc,
     time::Duration,
@@ -11,11 +12,11 @@ use axum::http::Request;
 use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::{artifact_manager::ArtifactProcessorEvent, consensus::ArtifactWithOpt};
+use ic_interfaces::p2p::consensus::{ArtifactAssembler, ArtifactMutation, ArtifactWithOpt};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, Shutdown, Transport};
-use ic_types::artifact::PbArtifact;
+use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
 use prost::Message;
 use tokio::{
     runtime::Handle,
@@ -56,27 +57,35 @@ fn panic_on_join_err<T>(result: Result<T, JoinError>) -> T {
     }
 }
 
-pub(crate) struct ConsensusManagerSender<Artifact: PbArtifact> {
+pub(crate) struct ConsensusManagerSender<Artifact: IdentifiableArtifact, WireArtifact, Assembler> {
     log: ReplicaLogger,
     metrics: ConsensusManagerMetrics,
     rt_handle: Handle,
     transport: Arc<dyn Transport>,
-    adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
+    adverts_to_send: Receiver<ArtifactMutation<Artifact>>,
     slot_manager: AvailableSlotSet,
     current_commit_id: CommitId,
     active_adverts: HashMap<Artifact::Id, (CancellationToken, AvailableSlot)>,
     join_set: JoinSet<()>,
+    assembler: Assembler,
+    marker: PhantomData<WireArtifact>,
 }
 
-impl<Artifact: PbArtifact> ConsensusManagerSender<Artifact> {
+impl<
+        Artifact: IdentifiableArtifact,
+        WireArtifact: PbArtifact,
+        Assembler: ArtifactAssembler<Artifact, WireArtifact>,
+    > ConsensusManagerSender<Artifact, WireArtifact, Assembler>
+{
     pub(crate) fn run(
         log: ReplicaLogger,
         metrics: ConsensusManagerMetrics,
         rt_handle: Handle,
         transport: Arc<dyn Transport>,
-        adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
+        adverts_to_send: Receiver<ArtifactMutation<Artifact>>,
+        assembler: Assembler,
     ) -> Shutdown {
-        let slot_manager = AvailableSlotSet::new(log.clone(), metrics.clone(), Artifact::NAME);
+        let slot_manager = AvailableSlotSet::new(log.clone(), metrics.clone(), WireArtifact::NAME);
 
         let manager = Self {
             log,
@@ -88,6 +97,8 @@ impl<Artifact: PbArtifact> ConsensusManagerSender<Artifact> {
             current_commit_id: CommitId::from(0),
             active_adverts: HashMap::new(),
             join_set: JoinSet::new(),
+            assembler,
+            marker: PhantomData,
         };
 
         Shutdown::spawn_on_with_cancellation(
@@ -103,14 +114,14 @@ impl<Artifact: PbArtifact> ConsensusManagerSender<Artifact> {
                     error!(
                         self.log,
                         "Sender event loop for the P2P client `{:?}` terminated. No more adverts will be sent for this client.",
-                        uri_prefix::<Artifact>()
+                        uri_prefix::<WireArtifact>()
                     );
                     break;
                 }
                 Some(advert) = self.adverts_to_send.recv() => {
                     match advert {
-                        ArtifactProcessorEvent::Artifact(new_artifact) => self.handle_send_advert(new_artifact, cancellation_token.clone()),
-                        ArtifactProcessorEvent::Purge(id) => self.handle_purge_advert(&id),
+                        ArtifactMutation::Insert(new_artifact) => self.handle_send_advert(new_artifact, cancellation_token.clone()),
+                        ArtifactMutation::Remove(id) => self.handle_purge_advert(&id),
                     }
 
                     self.current_commit_id.inc_assign();
@@ -166,7 +177,8 @@ impl<Artifact: PbArtifact> ConsensusManagerSender<Artifact> {
         cancellation_token: CancellationToken,
     ) {
         let id = new_artifact.artifact.id();
-        let attribute = new_artifact.artifact.attribute();
+        let wire_artifact = self.assembler.disassemble_message(new_artifact.artifact);
+        let wire_artifact_id = wire_artifact.id();
         let entry = self.active_adverts.entry(id.clone());
 
         if let Entry::Vacant(entry) = entry {
@@ -182,9 +194,11 @@ impl<Artifact: PbArtifact> ConsensusManagerSender<Artifact> {
                 self.transport.clone(),
                 self.current_commit_id,
                 used_slot.slot_number(),
-                new_artifact,
-                id,
-                attribute,
+                ArtifactWithOpt {
+                    artifact: wire_artifact,
+                    is_latency_sensitive: new_artifact.is_latency_sensitive,
+                },
+                wire_artifact_id,
                 child_token_clone,
             );
 
@@ -206,25 +220,21 @@ impl<Artifact: PbArtifact> ConsensusManagerSender<Artifact> {
         ArtifactWithOpt {
             artifact,
             is_latency_sensitive,
-        }: ArtifactWithOpt<Artifact>,
-        id: Artifact::Id,
-        attribute: Artifact::Attribute,
+        }: ArtifactWithOpt<WireArtifact>,
+        id: WireArtifact::Id,
         cancellation_token: CancellationToken,
     ) {
         let pb_slot_update = pb::SlotUpdate {
             commit_id: commit_id.get(),
             slot_id: slot_number.get(),
             update: Some({
-                let pb_artifact: Artifact::PbMessage = artifact.into();
+                let pb_artifact: WireArtifact::PbMessage = artifact.into();
                 // Try to push artifact if size below threshold or it is latency sensitive.
                 if pb_artifact.encoded_len() < ARTIFACT_PUSH_THRESHOLD_BYTES || is_latency_sensitive
                 {
                     pb::slot_update::Update::Artifact(pb_artifact.encode_to_vec())
                 } else {
-                    pb::slot_update::Update::Advert(pb::Advert {
-                        id: Artifact::PbId::proxy_encode(id),
-                        attribute: Artifact::PbAttribute::proxy_encode(attribute),
-                    })
+                    pb::slot_update::Update::Id(WireArtifact::PbId::proxy_encode(id))
                 }
             }),
         };
@@ -264,7 +274,7 @@ impl<Artifact: PbArtifact> ConsensusManagerSender<Artifact> {
 
                             let send_future = async move {
                                 select! {
-                                    _ = send_advert_to_peer(transport, body, peer, uri_prefix::<Artifact>()) => {},
+                                    _ = send_advert_to_peer(transport, body, peer, uri_prefix::<WireArtifact>()) => {},
                                     _ = child_token.cancelled() => {},
                                 }
                             };
@@ -398,7 +408,26 @@ mod tests {
     use mockall::Sequence;
     use tokio::{runtime::Handle, time::timeout};
 
+    use ic_interfaces::p2p::consensus::{Aborted, Peers};
+
     use super::*;
+
+    #[derive(Clone)]
+    struct IdentityAssembler;
+
+    impl ArtifactAssembler<U64Artifact, U64Artifact> for IdentityAssembler {
+        fn disassemble_message(&self, msg: U64Artifact) -> U64Artifact {
+            msg
+        }
+        async fn assemble_message<P: Peers + Send + 'static>(
+            &self,
+            _id: <U64Artifact as IdentifiableArtifact>::Id,
+            _artifact: Option<(U64Artifact, NodeId)>,
+            _peers: P,
+        ) -> Result<(U64Artifact, NodeId), Aborted> {
+            todo!()
+        }
+    }
 
     /// Verify that advert is sent to multiple peers.
     #[tokio::test]
@@ -419,15 +448,16 @@ mod tests {
                     Ok(())
                 });
 
-            let shutdown = ConsensusManagerSender::<U64Artifact>::run(
+            let shutdown = ConsensusManagerSender::<U64Artifact, U64Artifact, _>::run(
                 log,
                 ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
                 Handle::current(),
                 Arc::new(mock_transport),
                 rx,
+                IdentityAssembler,
             );
 
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -480,15 +510,16 @@ mod tests {
                     Ok(())
                 });
 
-            let shutdown = ConsensusManagerSender::<U64Artifact>::run(
+            let shutdown = ConsensusManagerSender::<U64Artifact, U64Artifact, _>::run(
                 log,
                 ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
                 Handle::current(),
                 Arc::new(mock_transport),
                 rx,
+                IdentityAssembler,
             );
 
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -538,15 +569,16 @@ mod tests {
                     Ok(())
                 });
 
-            let shutdown = ConsensusManagerSender::<U64Artifact>::run(
+            let shutdown = ConsensusManagerSender::<U64Artifact, U64Artifact, _>::run(
                 log,
                 ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
                 Handle::current(),
                 Arc::new(mock_transport),
                 rx,
+                IdentityAssembler,
             );
 
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -583,15 +615,16 @@ mod tests {
                     Ok(())
                 });
 
-            let shutdown = ConsensusManagerSender::<U64Artifact>::run(
+            let shutdown = ConsensusManagerSender::<U64Artifact, U64Artifact, _>::run(
                 log,
                 ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
                 Handle::current(),
                 Arc::new(mock_transport),
                 rx,
+                IdentityAssembler,
             );
             // Send advert and verify commit it.
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -600,7 +633,7 @@ mod tests {
             assert_eq!(commit_id_rx.recv().await.unwrap(), 0);
 
             // Send second advert and observe commit id bump.
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(2, 1024),
                 is_latency_sensitive: false,
             }))
@@ -608,8 +641,8 @@ mod tests {
             .unwrap();
             assert_eq!(commit_id_rx.recv().await.unwrap(), 1);
             // Send purge and new advert and observe commit id increase by 2.
-            tx.send(ArtifactProcessorEvent::Purge(2)).await.unwrap();
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactMutation::Remove(2)).await.unwrap();
+            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(3, 1024),
                 is_latency_sensitive: false,
             }))
@@ -645,16 +678,17 @@ mod tests {
                     Ok(())
                 });
 
-            let shutdown = ConsensusManagerSender::<U64Artifact>::run(
+            let shutdown = ConsensusManagerSender::<U64Artifact, U64Artifact, _>::run(
                 log,
                 ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
                 Handle::current(),
                 Arc::new(mock_transport),
                 rx,
+                IdentityAssembler,
             );
 
             // Send advert and verify commit id.
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -663,7 +697,7 @@ mod tests {
             assert_eq!(commit_id_rx.recv().await.unwrap(), 0);
 
             // Send same advert again. This should be noop.
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -671,7 +705,7 @@ mod tests {
             .unwrap();
 
             // Check that new advert is advertised with correct commit id.
-            tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(2, 1024),
                 is_latency_sensitive: false,
             }))
@@ -711,15 +745,16 @@ mod tests {
                     panic!("Panic in mock transport expectation.");
                 });
 
-            let shutdown =ConsensusManagerSender::<U64Artifact>::run(
+            let shutdown = ConsensusManagerSender::<U64Artifact, U64Artifact, _>::run(
                 log,
                 ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
                 Handle::current(),
                 Arc::new(mock_transport),
                 rx,
+                IdentityAssembler,
             );
 
-        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+        tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
             artifact: U64Artifact::id_to_msg(1, 1024),
             is_latency_sensitive: false,
         }))

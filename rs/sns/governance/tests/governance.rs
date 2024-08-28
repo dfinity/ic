@@ -8,7 +8,7 @@ use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
-use ic_nervous_system_proto::pb::v1::Percentage;
+use ic_nervous_system_proto::pb::v1::{Percentage, Principals};
 use ic_sns_governance::{
     governance::MATURITY_DISBURSEMENT_DELAY_SECONDS,
     neuron::NeuronState,
@@ -18,7 +18,10 @@ use ic_sns_governance::{
             SetDappControllersResponse,
         },
         v1::{
-            claim_swap_neurons_request::NeuronParameters,
+            claim_swap_neurons_request::{
+                neuron_recipe::{self, Participant},
+                NeuronRecipe, NeuronRecipes,
+            },
             claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
             governance_error::ErrorType,
             manage_neuron::{
@@ -30,15 +33,14 @@ use ic_sns_governance::{
                 Command as CommandResponse, DisburseMaturityResponse, MergeMaturityResponse,
                 RegisterVoteResponse, StakeMaturityResponse,
             },
-            neuron,
-            neuron::{DissolveState, Followees},
+            neuron::{self, DissolveState, Followees},
             proposal::Action,
             Account as AccountProto, AddMaturityRequest, Ballot, ClaimSwapNeuronsError,
             ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
             DeregisterDappCanisters, Empty, GovernanceError, ManageNeuronResponse,
             MintTokensRequest, MintTokensResponse, Motion, NervousSystemParameters, Neuron,
-            NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal,
-            ProposalData, ProposalId, RegisterDappCanisters, Vote, WaitForQuietState,
+            NeuronId, NeuronIds, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
+            Proposal, ProposalData, ProposalId, RegisterDappCanisters, Vote, WaitForQuietState,
         },
     },
     types::native_action_ids,
@@ -1712,7 +1714,10 @@ fn test_claim_swap_neurons_rejects_unauthorized_access() {
 
     // Build the request, but leave it empty as it is not relevant to the test
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![],
+        neuron_recipes: Some(NeuronRecipes {
+            neuron_recipes: Vec::new(),
+        }),
+        ..Default::default()
     };
 
     // Generate a principal id that should not be authorized to call claim_swap_neurons
@@ -1751,19 +1756,20 @@ fn test_claim_swap_neurons_rejects_unauthorized_access() {
 }
 
 #[test]
-fn test_claim_swap_neurons_reports_invalid_neuron_parameters() {
+fn test_claim_swap_neurons_reports_invalid_neuron_recipes() {
     // Set up the test environment with default sale canister id
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // Create a neuron id so the test can identify the correct item in the response
     let test_neuron_id = NeuronId::new_test_neuron_id(1);
 
-    // Create a request with an invalid NeuronParameter
+    // Create a request with an invalid NeuronRecipes
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![NeuronParameters {
+        neuron_recipes: Some(NeuronRecipes::from(vec![NeuronRecipe {
             neuron_id: Some(test_neuron_id.clone()),
             ..Default::default() // The rest of the fields are unset and will fail validation
-        }],
+        }])),
+        ..Default::default()
     };
 
     // Call the method
@@ -1804,13 +1810,15 @@ fn test_claim_swap_neurons_reports_already_existing_neurons() {
     // Create a request with a neuron id that should collide with the neuron already inserted into
     // Governance
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![NeuronParameters {
+        neuron_recipes: Some(NeuronRecipes::from(vec![NeuronRecipe {
             neuron_id: Some(neuron_id.clone()),
             controller: Some(user_principal),
+            participant: Some(Participant::Direct(neuron_recipe::Direct {})),
             stake_e8s: Some(E8),
             dissolve_delay_seconds: Some(0),
-            ..Default::default() // The rest of the parameters are not required for this test
-        }],
+            followees: Some(NeuronIds::from(vec![])),
+        }])),
+        ..Default::default()
     };
 
     let authorized_sale_principal = canister_fixture.get_sale_canister_id();
@@ -1851,22 +1859,25 @@ fn test_claim_swap_neurons_reports_failure_if_neuron_cannot_be_added() {
 
     // Create a request with a NeuronParameter should succeed
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![
-            NeuronParameters {
+        neuron_recipes: Some(NeuronRecipes::from(vec![
+            NeuronRecipe {
                 neuron_id: Some(test_neuron_id_success.clone()),
                 controller: Some(PrincipalId::new_user_test_id(1000)),
+                participant: Some(Participant::Direct(neuron_recipe::Direct {})),
                 stake_e8s: Some(E8),
                 dissolve_delay_seconds: Some(0),
-                ..Default::default() // The rest of the parameters are not required for this test
+                followees: Some(NeuronIds::from(vec![])),
             },
-            NeuronParameters {
+            NeuronRecipe {
                 neuron_id: Some(test_neuron_id_failure.clone()),
                 controller: Some(PrincipalId::new_user_test_id(1000)),
+                participant: Some(Participant::Direct(neuron_recipe::Direct {})),
                 stake_e8s: Some(E8),
                 dissolve_delay_seconds: Some(0),
-                ..Default::default() // The rest of the parameters are not required for this test
+                followees: Some(NeuronIds::from(vec![])),
             },
-        ],
+        ])),
+        ..Default::default()
     };
 
     // Call the method
@@ -1900,31 +1911,36 @@ fn test_claim_swap_neurons_succeeds() {
     // Set up the test environment with default sale canister id.
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
-    let direct_participant_neuron_params = NeuronParameters {
+    let direct_participant_neuron_recipe = NeuronRecipe {
         neuron_id: Some(NeuronId::new_test_neuron_id(1)),
         controller: Some(PrincipalId::new_user_test_id(1000)),
-        hotkey: None,
+        participant: Some(Participant::Direct(neuron_recipe::Direct {})),
         stake_e8s: Some(E8),
         dissolve_delay_seconds: Some(0),
-        source_nns_neuron_id: None,
-        followees: vec![NeuronId::new_test_neuron_id(10)],
+        followees: Some(NeuronIds::from(vec![NeuronId::new_test_neuron_id(10)])),
     };
 
-    let cf_participant_neuron_params = NeuronParameters {
+    let nf_participant_nns_neuron_id = 2;
+    let nf_participant_nns_neuron_controller = PrincipalId::new_user_test_id(1002);
+    let nf_participant_neuron_recipe = NeuronRecipe {
         neuron_id: Some(NeuronId::new_test_neuron_id(2)),
         controller: Some(PrincipalId::new_user_test_id(1001)),
-        hotkey: Some(PrincipalId::new_user_test_id(1002)),
+        participant: Some(Participant::NeuronsFund(neuron_recipe::NeuronsFund {
+            nns_neuron_controller: Some(nf_participant_nns_neuron_controller),
+            nns_neuron_id: Some(nf_participant_nns_neuron_id),
+            nns_neuron_hotkeys: Some(Principals::from(vec![PrincipalId::new_user_test_id(1003)])),
+        })),
         stake_e8s: Some(2 * E8),
         dissolve_delay_seconds: Some(ONE_MONTH_SECONDS),
-        source_nns_neuron_id: Some(2),
-        followees: vec![NeuronId::new_test_neuron_id(20)],
+        followees: Some(NeuronIds::from(vec![NeuronId::new_test_neuron_id(20)])),
     };
 
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![
-            direct_participant_neuron_params.clone(),
-            cf_participant_neuron_params.clone(),
-        ],
+        neuron_recipes: Some(NeuronRecipes::from(vec![
+            direct_participant_neuron_recipe.clone(),
+            nf_participant_neuron_recipe.clone(),
+        ])),
+        ..Default::default()
     };
 
     // Call the method
@@ -1945,7 +1961,7 @@ fn test_claim_swap_neurons_succeeds() {
     // Assert that each NeuronParameter has a response and that it has the correct status
     let direct_participant_swap_neuron = swap_neurons
         .iter()
-        .find(|s| s.id == direct_participant_neuron_params.neuron_id)
+        .find(|s| s.id == direct_participant_neuron_recipe.neuron_id)
         .unwrap();
     assert_eq!(
         direct_participant_swap_neuron.status,
@@ -1954,7 +1970,7 @@ fn test_claim_swap_neurons_succeeds() {
 
     let cf_participant_swap_neuron = swap_neurons
         .iter()
-        .find(|s| s.id == cf_participant_neuron_params.neuron_id)
+        .find(|s| s.id == nf_participant_neuron_recipe.neuron_id)
         .unwrap();
     assert_eq!(
         cf_participant_swap_neuron.status,
@@ -1963,19 +1979,19 @@ fn test_claim_swap_neurons_succeeds() {
 
     // Asserts on Direct Participant
     let direct_participant_neuron =
-        canister_fixture.get_neuron(direct_participant_neuron_params.neuron_id.as_ref().unwrap());
+        canister_fixture.get_neuron(direct_participant_neuron_recipe.neuron_id.as_ref().unwrap());
     assert_eq!(
         direct_participant_neuron.id,
-        direct_participant_neuron_params.neuron_id
+        direct_participant_neuron_recipe.neuron_id
     );
     assert_eq!(
         direct_participant_neuron.cached_neuron_stake_e8s,
-        direct_participant_neuron_params.stake_e8s()
+        direct_participant_neuron_recipe.stake_e8s()
     );
     assert_eq!(
         direct_participant_neuron.dissolve_state,
         Some(DissolveState::DissolveDelaySeconds(
-            direct_participant_neuron_params.dissolve_delay_seconds()
+            direct_participant_neuron_recipe.dissolve_delay_seconds()
         ))
     );
     assert_eq!(direct_participant_neuron.source_nns_neuron_id, None);
@@ -1984,37 +2000,40 @@ fn test_claim_swap_neurons_succeeds() {
     assert_eq!(direct_participant_neuron.auto_stake_maturity, None);
     for followees in direct_participant_neuron.followees.values() {
         assert_eq!(
-            followees.followees,
-            direct_participant_neuron_params.followees
+            Some(NeuronIds::from(followees.followees.clone())),
+            direct_participant_neuron_recipe.followees
         );
     }
 
     // Asserts on CF Participant
     let cf_participant_neuron =
-        canister_fixture.get_neuron(cf_participant_neuron_params.neuron_id.as_ref().unwrap());
+        canister_fixture.get_neuron(nf_participant_neuron_recipe.neuron_id.as_ref().unwrap());
     assert_eq!(
         cf_participant_neuron.id,
-        cf_participant_neuron_params.neuron_id
+        nf_participant_neuron_recipe.neuron_id
     );
     assert_eq!(
         cf_participant_neuron.cached_neuron_stake_e8s,
-        cf_participant_neuron_params.stake_e8s()
+        nf_participant_neuron_recipe.stake_e8s()
     );
     assert_eq!(
         cf_participant_neuron.dissolve_state,
         Some(DissolveState::DissolveDelaySeconds(
-            cf_participant_neuron_params.dissolve_delay_seconds()
+            nf_participant_neuron_recipe.dissolve_delay_seconds()
         ))
     );
     assert_eq!(
         cf_participant_neuron.source_nns_neuron_id,
-        cf_participant_neuron_params.source_nns_neuron_id
+        Some(nf_participant_nns_neuron_id)
     );
     assert_eq!(cf_participant_neuron.maturity_e8s_equivalent, 0);
     assert_eq!(cf_participant_neuron.neuron_fees_e8s, 0);
     assert_eq!(cf_participant_neuron.auto_stake_maturity, Some(true));
     for followees in cf_participant_neuron.followees.values() {
-        assert_eq!(followees.followees, cf_participant_neuron_params.followees);
+        assert_eq!(
+            Some(NeuronIds::from(followees.followees.clone())),
+            nf_participant_neuron_recipe.followees
+        );
     }
 }
 

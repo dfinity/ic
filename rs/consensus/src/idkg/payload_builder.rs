@@ -1,4 +1,4 @@
-//! This module implements the ECDSA payload builder.
+//! This module implements the IDKG payload builder.
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::enum_variant_names)]
 #![allow(clippy::result_large_err)]
@@ -6,7 +6,7 @@
 use super::pre_signer::{IDkgTranscriptBuilder, IDkgTranscriptBuilderImpl};
 use super::signer::{ThresholdSignatureBuilder, ThresholdSignatureBuilderImpl};
 use super::utils::{block_chain_reader, get_chain_key_config_if_enabled, InvalidChainCacheError};
-use crate::idkg::metrics::{IDkgPayloadMetrics, CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING};
+use crate::idkg::metrics::{IDkgPayloadMetrics, CRITICAL_ERROR_MASTER_KEY_TRANSCRIPT_MISSING};
 pub(super) use errors::IDkgPayloadError;
 use errors::MembershipError;
 use ic_consensus_utils::crypto::ConsensusCrypto;
@@ -42,7 +42,7 @@ mod pre_signatures;
 pub(super) mod resharing;
 pub(super) mod signatures;
 
-/// Builds the very first ecdsa summary block. This would trigger the subsequent
+/// Builds the very first idkg summary block. This would trigger the subsequent
 /// data blocks to create the initial key transcript.
 pub(crate) fn make_bootstrap_summary(
     subnet_id: SubnetId,
@@ -57,7 +57,7 @@ pub(crate) fn make_bootstrap_summary(
     Some(IDkgPayload::empty(height, subnet_id, key_transcripts))
 }
 
-/// Builds the very first ecdsa summary block. This would trigger the subsequent
+/// Builds the very first idkg summary block. This would trigger the subsequent
 /// data blocks to create the initial key transcript.
 pub(crate) fn make_bootstrap_summary_with_initial_dealings(
     subnet_id: SubnetId,
@@ -85,7 +85,7 @@ pub(crate) fn make_bootstrap_summary_with_initial_dealings(
                 // Leave the feature disabled if the initial dealings are incorrect.
                 warn!(
                     log,
-                    "make_ecdsa_genesis_summary(): failed to unpack initial dealings"
+                    "make_idkg_genesis_summary(): failed to unpack initial dealings"
                 );
 
                 return Err(IDkgPayloadError::InitialIDkgDealingsNotUnmaskedParams(
@@ -97,7 +97,7 @@ pub(crate) fn make_bootstrap_summary_with_initial_dealings(
 
     info!(
         log,
-        "make_ecdsa_genesis_summary(): height = {}, key_transcript = [{:?}]",
+        "make_idkg_genesis_summary(): height = {}, key_transcript = [{:?}]",
         height,
         key_transcripts
     );
@@ -108,7 +108,7 @@ pub(crate) fn make_bootstrap_summary_with_initial_dealings(
     Ok(Some(payload))
 }
 
-/// Creates a threshold ECDSA summary payload.
+/// Creates an IDKG summary payload.
 pub(crate) fn create_summary_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
@@ -131,7 +131,7 @@ pub(crate) fn create_summary_payload(
     // For next interval: context.registry_version from the new summary block
     let next_interval_registry_version = context.registry_version;
 
-    // Get ecdsa_config from registry if it exists
+    // Get chain_key_config from registry if it exists
     let Some(chain_key_config) = get_chain_key_config_if_enabled(
         subnet_id,
         curr_interval_registry_version,
@@ -148,15 +148,15 @@ pub(crate) fn create_summary_payload(
         .collect();
 
     // Get idkg_payload from parent block if it exists
-    let Some(idkg_payload) = parent_block.payload.as_ref().as_data().ecdsa.as_ref() else {
-        // Parent block doesn't have ECDSA payload and feature is enabled.
-        // Create the bootstrap summary block, and create a new key for the given key_id.
+    let Some(idkg_payload) = parent_block.payload.as_ref().as_data().idkg.as_ref() else {
+        // Parent block doesn't have IDKG payload and feature is enabled.
+        // Create the bootstrap summary block, and create new keys for the given key_ids.
         //
         // This is safe because registry's do_update_subnet already ensures that only
         // fresh key_id can be assigned to an existing subnet.
         //
-        // Keys already held by existing subnets can only be re-shared when creating
-        // a new subnet, which means the genesis summary ECDSA payload is not empty
+        // Keys already held by existing subnets can only be re-shared when creating or
+        // recovering a subnet, which means the genesis summary IDKG payload is not empty
         // and we won't reach here.
         info!(
             log,
@@ -221,14 +221,14 @@ fn create_summary_payload_helper(
 
         if created_key_transcript.is_none() {
             if let Some(metrics) = idkg_payload_metrics {
-                metrics.critical_error_ecdsa_key_transcript_missing.inc();
+                metrics.critical_error_master_key_transcript_missing.inc();
             }
 
             error!(
                 log,
                 "{}: Key not created in previous interval, \
                 keep trying in next interval(height = {}), key_transcript = {}",
-                CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING,
+                CRITICAL_ERROR_MASTER_KEY_TRANSCRIPT_MISSING,
                 height,
                 key_transcript
             );
@@ -395,7 +395,7 @@ fn is_time_to_reshare_key_transcript(
     Ok(false)
 }
 
-/// Creates a threshold ECDSA batch payload.
+/// Creates an IDKG batch payload.
 pub(crate) fn create_data_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
@@ -408,8 +408,8 @@ pub(crate) fn create_data_payload(
     idkg_payload_metrics: &IDkgPayloadMetrics,
     log: &ReplicaLogger,
 ) -> Result<idkg::Payload, IDkgPayloadError> {
-    // Return None if parent block does not have ECDSA payload.
-    if parent_block.payload.as_ref().as_ecdsa().is_none() {
+    // Return None if parent block does not have IDKG payload.
+    if parent_block.payload.as_ref().as_idkg().is_none() {
         return Ok(None);
     };
     let summary_block = pool_reader
@@ -470,7 +470,7 @@ pub(crate) fn create_data_payload(
                 && !parent_block
                     .payload
                     .as_ref()
-                    .as_ecdsa()
+                    .as_idkg()
                     .and_then(|idkg_payload| idkg_payload.key_transcripts.get(key_id))
                     .is_some_and(is_key_transcript_created)
             {
@@ -527,7 +527,7 @@ pub(crate) fn create_data_payload_helper(
         .map(|key_config| key_config.key_id.clone())
         .collect();
 
-    let mut idkg_payload = if let Some(prev_payload) = parent_block.payload.as_ref().as_ecdsa() {
+    let mut idkg_payload = if let Some(prev_payload) = parent_block.payload.as_ref().as_idkg() {
         prev_payload.clone()
     } else {
         return Ok(None);
@@ -676,7 +676,7 @@ pub(crate) fn create_data_payload_helper_2(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consensus::batch_delivery::generate_responses_to_sign_with_ecdsa_calls;
+    use crate::consensus::batch_delivery::generate_responses_to_signature_request_contexts;
     use crate::idkg::test_utils::*;
     use crate::idkg::utils::algorithm_for_key_id;
     use crate::idkg::utils::block_chain_reader;
@@ -758,7 +758,7 @@ mod tests {
                 height,
                 BTreeMap::new(),
             ),
-            ecdsa: Some(idkg_summary),
+            idkg: Some(idkg_summary),
         })
     }
 
@@ -779,7 +779,7 @@ mod tests {
         BlockPayload::Data(DataPayload {
             batch: BatchPayload::default(),
             dealings: Dealings::new_empty(dkg_interval_start_height),
-            ecdsa: Some(idkg_payload),
+            idkg: Some(idkg_payload),
         })
     }
 
@@ -1088,7 +1088,7 @@ mod tests {
             },
         );
 
-        // create first ecdsa payload
+        // create first payload
         create_data_payload_helper_2(
             &mut idkg_payload,
             Height::from(5),
@@ -1109,10 +1109,10 @@ mod tests {
         .unwrap();
 
         // Assert that we got a response
-        let response1 = generate_responses_to_sign_with_ecdsa_calls(&idkg_payload);
+        let response1 = generate_responses_to_signature_request_contexts(&idkg_payload);
         assert_eq!(response1.len(), 1);
 
-        // create next ecdsa payload
+        // create next payload
         create_data_payload_helper_2(
             &mut idkg_payload,
             Height::from(5),
@@ -1133,7 +1133,7 @@ mod tests {
         .unwrap();
 
         // assert that same signature isn't delivered again.
-        let response2 = generate_responses_to_sign_with_ecdsa_calls(&idkg_payload);
+        let response2 = generate_responses_to_signature_request_contexts(&idkg_payload);
         assert!(response2.is_empty());
     }
 
@@ -1287,7 +1287,7 @@ mod tests {
             let parent_block_payload = BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
                 dealings: Dealings::new_empty(summary_height),
-                ecdsa: Some(data_payload),
+                idkg: Some(data_payload),
             });
             let parent_block = add_block(
                 parent_block_payload,
@@ -1552,7 +1552,7 @@ mod tests {
             let parent_block_payload = BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
                 dealings: Dealings::new_empty(summary_height),
-                ecdsa: Some(data_payload),
+                idkg: Some(data_payload),
             });
             let parent_block = add_block(
                 parent_block_payload,
@@ -1626,7 +1626,7 @@ mod tests {
 
             let pl = BlockPayload::Summary(SummaryPayload {
                 dkg: Summary::fake(),
-                ecdsa: Some(summary.clone()),
+                idkg: Some(summary.clone()),
             });
             let b = Block::new(
                 CryptoHashOf::from(CryptoHash(Vec::new())),
@@ -1911,7 +1911,6 @@ mod tests {
                         Randomness::from([0; 32]),
                         &derivation_path,
                         algorithm,
-                        false,
                         &mut rng,
                     ))
                 }
@@ -1978,7 +1977,10 @@ mod tests {
                 idkg::KeyTranscriptCreation::Begin
             );
             // Critical error counter should be set to 0
-            assert_eq!(metrics.critical_error_ecdsa_key_transcript_missing.get(), 0);
+            assert_eq!(
+                metrics.critical_error_master_key_transcript_missing.get(),
+                0
+            );
             // pre-signatures and xnet reshares should still be unchanged:
             assert_eq!(
                 payload_0.available_pre_signatures.len(),
@@ -2029,7 +2031,10 @@ mod tests {
                 current_key_transcript.transcript_id(),
             );
             // Critical error counter should be set to 1
-            assert_eq!(metrics.critical_error_ecdsa_key_transcript_missing.get(), 1);
+            assert_eq!(
+                metrics.critical_error_master_key_transcript_missing.get(),
+                1
+            );
             // pre-signatures and xnet reshares should still be unchanged:
             assert_eq!(
                 payload_2.available_pre_signatures.len(),
@@ -2088,7 +2093,10 @@ mod tests {
             );
 
             // Critical error counter should still be set to 1
-            assert_eq!(metrics.critical_error_ecdsa_key_transcript_missing.get(), 1);
+            assert_eq!(
+                metrics.critical_error_master_key_transcript_missing.get(),
+                1
+            );
 
             // Now, pre-signatures and xnet reshares should be purged
             assert!(payload_4.pre_signatures_in_creation.is_empty());

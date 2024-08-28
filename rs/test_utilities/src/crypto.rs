@@ -442,10 +442,10 @@ impl IDkgProtocol for CryptoReturningOk {
 }
 
 impl ThresholdEcdsaSigner for CryptoReturningOk {
-    fn sign_share(
+    fn create_sig_share(
         &self,
         _inputs: &ThresholdEcdsaSigInputs,
-    ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
+    ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaCreateSigShareError> {
         Ok(ThresholdEcdsaSigShare {
             sig_share_raw: vec![],
         })

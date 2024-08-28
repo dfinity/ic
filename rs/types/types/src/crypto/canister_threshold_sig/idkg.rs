@@ -343,7 +343,7 @@ impl IDkgTranscriptParams {
     ///     - s.receivers == t.receivers
     ///     - self.dealers is contained in t.receivers (errors:
     ///       `DealersNotContainedInPreviousReceivers` or
-    /// `WrongTypeForOriginalTranscript`)
+    ///       `WrongTypeForOriginalTranscript`)
     pub fn new(
         transcript_id: IDkgTranscriptId,
         dealers: BTreeSet<NodeId>,
@@ -584,7 +584,7 @@ impl InitialIDkgDealings {
     /// * The `params.operation_type` is `IDkgTranscriptOperation::ReshareOfUnmasked`, otherwise
     ///   the error variant `InvalidTranscriptOperation` is returned.
     /// * The dealings are from nodes in `params.dealers`, otherwise the error variant
-    ///  `DealerNotAllowed` is returned.
+    ///   `DealerNotAllowed` is returned.
     /// * The dealings are for the transcript `params.transcript_id`, otherwise the error variant
     ///   `MismatchingDealing` is returned.
     /// * Only one dealing is provided from each dealer, otherwise the error variant
@@ -714,7 +714,7 @@ pub enum IDkgTranscriptType {
 /// transcript is considered:
 /// * [`Masked`][`IDkgTranscriptType::Masked`] if the commitment perfectly hides the shared value.
 /// * [`Unmasked`][`IDkgTranscriptType::Unmasked`] if the commitment is not perfectly hiding and
-/// may reveal some information about the shared value.
+///   may reveal some information about the shared value.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgTranscript {
@@ -765,11 +765,11 @@ pub enum IDkgTranscriptOperation {
     /// Useful to compute the product transcripts in
     /// [`EcdsaPreSignatureQuadruple`][`crate::crypto::canister_threshold_sig::EcdsaPreSignatureQuadruple`]:
     /// * Given a unmasked transcript for sharing a random value `kappa` and a masked transcript
-    /// for sharing a random value `lambda`, compute the masked transcript for sharing the value
-    /// `kappa * lambda`.
+    ///   for sharing a random value `lambda`, compute the masked transcript for sharing the value
+    ///   `kappa * lambda`.
     /// * Given a unmasked transcript for sharing a random value `alpha` and a masked transcript
-    /// for sharing the aforementioned random value `lambda`, compute the masked transcript for
-    /// sharing the value `alpha * lambda`.
+    ///   for sharing the aforementioned random value `lambda`, compute the masked transcript for
+    ///   sharing the value `alpha * lambda`.
     UnmaskedTimesMasked(IDkgTranscript, IDkgTranscript),
 
     /// Generates a new public/private key pair shared among the replicas.
@@ -1253,8 +1253,8 @@ fn number_of_nodes_from_usize(number: usize) -> Result<NumberOfNodes, TryFromInt
 ///   64-bit-big-endian-integer length)
 /// - IDkgTranscriptId::id, as a big-endian 64-bit integer
 /// - IDkgTranscriptId::source_subnet, as a big-endian 64-bit integer
-/// The registry version, as a big-endian 64-bit integer
-/// The Algorithm ID, as an 8-bit integer value
+/// - The registry version, as a big-endian 64-bit integer
+/// - The Algorithm ID, as an 8-bit integer value
 fn context_data(
     transcript_id: &IDkgTranscriptId,
     registry_version: RegistryVersion,

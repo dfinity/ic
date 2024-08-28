@@ -13,10 +13,12 @@ DEPENDENCIES = [
     "@crate_index//:byte-unit",
     "@crate_index//:clap_3_2_25",
     "@crate_index//:futures",
-    "@crate_index//:http_0_2_12",
+    "@crate_index//:http",
+    "@crate_index//:http-body-util",
+    "@crate_index//:hyper",
+    "@crate_index//:hyper-rustls",
     "@crate_index//:hyper-socks2",
-    "@crate_index//:hyper_0_14_27",
-    "@crate_index//:hyper_rustls_0_24_2",
+    "@crate_index//:hyper-util",
     "@crate_index//:prometheus",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
@@ -72,7 +74,10 @@ rust_binary(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    visibility = ["//ic-os/guestos:__subpackages__"],
+    visibility = [
+        "//ic-os/guestos:__subpackages__",
+        "//rs:release-pkg",
+    ],
     deps = DEPENDENCIES + [":adapter"],
 )
 
@@ -84,7 +89,7 @@ rust_binary(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    visibility = ["//publish:__subpackages__"],
+    visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES + [":adapter_with_http"],
 )
 

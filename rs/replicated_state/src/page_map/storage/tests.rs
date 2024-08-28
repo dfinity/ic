@@ -1485,6 +1485,7 @@ fn overlapping_page_ranges() {
     );
 }
 
+#[cfg(not(feature = "fuzzing_code"))]
 mod proptest_tests {
     use super::*;
     use proptest::collection::vec as prop_vec;

@@ -11,8 +11,8 @@ name = "ic-icrc1-ledger"
 path = "src/main.rs"
 
 [dependencies]
-async-trait = { workspace = true }
 assert_matches = { workspace = true, optional = true }
+async-trait = { workspace = true }
 canbench-rs = { version = "0.1.4", optional = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
@@ -37,12 +37,14 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 
 [dev-dependencies]
+assert_matches = { workspace = true }
 candid_parser = { workspace = true }
 cddl = "0.9.4"
 ic-icrc1-ledger-sm-tests = { path = "sm-tests" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 leb128 = "0.2.4"
+num-bigint = { workspace = true }
 proptest = "1.0"
 
 [features]

@@ -144,18 +144,16 @@ async fn scrape_logs_range_inclusive<F>(
     token_contract_addresses: &[Address],
     from: BlockNumber,
     to: BlockNumber,
+    max_block_spread: u16,
     update_last_scraped_block_number: &F,
 ) -> Option<BlockNumber>
 where
     F: Fn(BlockNumber),
 {
-    /// The maximum block spread is introduced by Cloudflare limits.
-    /// https://developers.cloudflare.com/web3/ethereum-gateway/
-    const MAX_BLOCK_SPREAD: u16 = 799;
     match from.cmp(&to) {
         Ordering::Less | Ordering::Equal => {
             let max_to = from
-                .checked_add(BlockNumber::from(MAX_BLOCK_SPREAD))
+                .checked_add(BlockNumber::from(max_block_spread))
                 .unwrap_or(BlockNumber::MAX);
             let mut last_block_number = min(max_to, to);
             log!(
@@ -276,6 +274,7 @@ async fn scrape_contract_logs<F>(
     token_contract_addresses: &[Address],
     last_block_number: BlockNumber,
     mut last_scraped_block_number: BlockNumber,
+    max_block_spread: u16,
     update_last_scraped_block_number: F,
 ) where
     F: Fn(BlockNumber),
@@ -302,6 +301,7 @@ async fn scrape_contract_logs<F>(
             token_contract_addresses,
             next_block_to_query,
             last_block_number,
+            max_block_spread,
             &update_last_scraped_block_number,
         )
         .await
@@ -314,7 +314,7 @@ async fn scrape_contract_logs<F>(
     }
 }
 
-async fn scrape_eth_logs(last_block_number: BlockNumber) {
+async fn scrape_eth_logs(last_block_number: BlockNumber, max_block_spread: u16) {
     scrape_contract_logs(
         &RECEIVED_ETH_EVENT_TOPIC,
         "ETH",
@@ -322,12 +322,13 @@ async fn scrape_eth_logs(last_block_number: BlockNumber) {
         &[],
         last_block_number,
         read_state(|s| s.last_scraped_block_number),
+        max_block_spread,
         &|last_block_number| mutate_state(|s| s.last_scraped_block_number = last_block_number),
     )
     .await
 }
 
-async fn scrape_erc20_logs(last_block_number: BlockNumber) {
+async fn scrape_erc20_logs(last_block_number: BlockNumber, max_block_spread: u16) {
     let token_contract_addresses =
         read_state(|s| s.ckerc20_tokens.alt_keys().cloned().collect::<Vec<_>>());
     if token_contract_addresses.is_empty() {
@@ -344,6 +345,7 @@ async fn scrape_erc20_logs(last_block_number: BlockNumber) {
         &token_contract_addresses,
         last_block_number,
         read_state(|s| s.last_erc20_scraped_block_number),
+        max_block_spread,
         &|last_block_number| {
             mutate_state(|s| s.last_erc20_scraped_block_number = last_block_number)
         },
@@ -366,8 +368,9 @@ pub async fn scrape_logs() {
             return;
         }
     };
-    scrape_eth_logs(last_block_number).await;
-    scrape_erc20_logs(last_block_number).await;
+    let max_block_spread = read_state(|s| s.max_block_spread_for_logs_scraping());
+    scrape_eth_logs(last_block_number, max_block_spread).await;
+    scrape_erc20_logs(last_block_number, max_block_spread).await;
 }
 
 pub async fn update_last_observed_block_number() -> Option<BlockNumber> {

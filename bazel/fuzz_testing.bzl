@@ -51,7 +51,7 @@ def rust_fuzz_test_binary(name, srcs, rustc_flags = [], sanitizers = [], crate_f
 
     RUSTC_FLAGS_LIBFUZZER = DEFAULT_RUSTC_FLAGS + [
         # This would only work inside the devcontainer
-        "-Clink-arg=/usr/lib/llvm-18/lib/clang/18/lib/x86_64-pc-linux-gnu/libclang_rt.fuzzer.a",
+        "-Clink-arg=/usr/lib/llvm-18/lib/clang/18/lib/linux/libclang_rt.fuzzer-x86_64.a",
     ]
 
     kwargs.setdefault("testonly", True)

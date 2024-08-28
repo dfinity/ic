@@ -56,7 +56,7 @@ pub fn maliciously_alter_changeset(
         .into_iter()
         .flat_map(|action| match action {
             IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(dealing))
-                if malicious_flags.maliciously_corrupt_ecdsa_dealings =>
+                if malicious_flags.maliciously_corrupt_idkg_dealings =>
             {
                 let transcript_id = dealing.idkg_dealing().transcript_id;
                 block_reader
@@ -66,7 +66,7 @@ pub fn maliciously_alter_changeset(
                         pre_signer.resolve_ref(params_ref, &block_reader, "malicious_send_dealing")
                     })
                     .map(|params| {
-                        let dealing = maliciously_corrupt_ecdsa_dealings(
+                        let dealing = maliciously_corrupt_idkg_dealings(
                             pre_signer,
                             pre_signer.node_id,
                             dealing,
@@ -83,7 +83,7 @@ pub fn maliciously_alter_changeset(
 }
 
 /// Helper to corrupt the signed crypto dealing for malicious testing
-fn maliciously_corrupt_ecdsa_dealings(
+fn maliciously_corrupt_idkg_dealings(
     pre_signer: &IDkgPreSignerImpl,
     node_id: NodeId,
     idkg_dealing: SignedIDkgDealing,

@@ -338,9 +338,6 @@ pub struct UpdateSubnetPayload {
     pub is_halted: Option<bool>,
     pub halt_at_cup_height: Option<bool>,
 
-    pub max_instructions_per_message: Option<u64>,
-    pub max_instructions_per_round: Option<u64>,
-    pub max_instructions_per_install_code: Option<u64>,
     pub features: Option<SubnetFeaturesPb>,
 
     /// The following three ecdsa_* fields will soon be deprecated and replaced with chain_* fields.
@@ -543,9 +540,6 @@ fn merge_subnet_record(
         subnet_type,
         is_halted,
         halt_at_cup_height,
-        max_instructions_per_message,
-        max_instructions_per_round,
-        max_instructions_per_install_code,
         features,
         ecdsa_config,
         chain_key_config,
@@ -587,10 +581,6 @@ fn merge_subnet_record(
 
     maybe_set!(subnet_record, is_halted);
     maybe_set!(subnet_record, halt_at_cup_height);
-
-    maybe_set!(subnet_record, max_instructions_per_message);
-    maybe_set!(subnet_record, max_instructions_per_round);
-    maybe_set!(subnet_record, max_instructions_per_install_code);
 
     maybe_set_option!(subnet_record, features);
 
@@ -658,9 +648,6 @@ mod tests {
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: None,
-            max_instructions_per_message: None,
-            max_instructions_per_round: None,
-            max_instructions_per_install_code: None,
             features: None,
             ecdsa_config: None,
             ecdsa_key_signing_enable: None,
@@ -700,9 +687,6 @@ mod tests {
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
             halt_at_cup_height: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
@@ -740,9 +724,6 @@ mod tests {
             subnet_type: None,
             is_halted: Some(true),
             halt_at_cup_height: Some(false),
-            max_instructions_per_message: Some(6_000_000_000),
-            max_instructions_per_round: Some(8_000_000_000),
-            max_instructions_per_install_code: Some(300_000_000_000),
             features: Some(
                 SubnetFeatures {
                     canister_sandboxing: false,
@@ -788,9 +769,6 @@ mod tests {
                 subnet_type: SubnetType::Application.into(),
                 is_halted: true,
                 halt_at_cup_height: false,
-                max_instructions_per_message: 6_000_000_000,
-                max_instructions_per_round: 8_000_000_000,
-                max_instructions_per_install_code: 300_000_000_000,
                 features: Some(
                     SubnetFeatures {
                         canister_sandboxing: false,
@@ -824,9 +802,6 @@ mod tests {
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
             halt_at_cup_height: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
@@ -853,9 +828,6 @@ mod tests {
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: Some(true),
-            max_instructions_per_message: None,
-            max_instructions_per_round: Some(8_000_000_000),
-            max_instructions_per_install_code: None,
             features: None,
             ecdsa_config: None,
             ecdsa_key_signing_enable: None,
@@ -893,9 +865,6 @@ mod tests {
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
                 halt_at_cup_height: true,
-                max_instructions_per_message: 5_000_000_000,
-                max_instructions_per_round: 8_000_000_000,
-                max_instructions_per_install_code: 200_000_000_000,
                 features: None,
                 max_number_of_canisters: 50,
                 ssh_readonly_access: vec![],

@@ -2,6 +2,7 @@ use candid::{CandidType, Decode, Encode, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::{Block, Operation, Transaction};
 use ic_icrc1_ledger::{ChangeFeeCollector, FeatureFlags, InitArgs, LedgerArgument};
+use ic_icrc1_ledger_sm_tests::in_memory_ledger::verify_ledger_state;
 use ic_icrc1_ledger_sm_tests::{
     get_allowance, send_approval, send_transfer_from, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY,
     BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY,
@@ -57,6 +58,16 @@ pub enum LegacyLedgerArgument {
 
 fn ledger_mainnet_wasm() -> Vec<u8> {
     std::fs::read(std::env::var("IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap()
+}
+
+fn ledger_mainnet_u64_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())
+        .unwrap()
+}
+
+fn ledger_mainnet_u256_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())
+        .unwrap()
 }
 
 fn ledger_wasm() -> Vec<u8> {
@@ -351,10 +362,28 @@ fn test_icrc21_standard() {
 //     ic_icrc1_ledger_sm_tests::test_icrc1_test_suite(ledger_wasm(), encode_init_args);
 // }
 
+#[test]
+fn test_ledger_http_request_decoding_quota() {
+    ic_icrc1_ledger_sm_tests::test_ledger_http_request_decoding_quota(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
 #[cfg_attr(feature = "u256-tokens", ignore)]
 #[test]
 fn test_block_transformation() {
     ic_icrc1_ledger_sm_tests::icrc1_test_block_transformation(
+        ledger_mainnet_wasm(),
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[cfg_attr(feature = "u256-tokens", ignore)]
+#[test]
+fn icrc1_test_approval_upgrade() {
+    ic_icrc1_ledger_sm_tests::icrc1_test_approval_upgrade(
         ledger_mainnet_wasm(),
         ledger_wasm(),
         encode_init_args,
@@ -1027,6 +1056,8 @@ fn test_icrc3_get_blocks() {
 
     // multiple ranges
     check_icrc3_get_blocks(vec![(2, 3), (1, 2), (0, 10), (10, 5)]);
+
+    verify_ledger_state(&env, ledger_id);
 }
 
 #[test]
@@ -1541,5 +1572,156 @@ mod verify_written_blocks {
             assert_eq!(ledger_burn, &expected_burn);
             self.ledger
         }
+    }
+}
+
+// TODO: The tests in the following module test the current behavior, but not necessarily the
+//  desired behavior. FI-1389 has been created to consider addressing the current behavior, i.e.,
+//  disallowing upgrading from a WASM of one token type to another. In that case, the tests may
+//  need to be updated.
+mod incompatible_token_type_upgrade {
+    use super::*;
+    use assert_matches::assert_matches;
+    use ic_state_machine_tests::ErrorCode::CanisterCalledTrap;
+    use num_bigint::BigUint;
+
+    fn default_init_args() -> Vec<u8> {
+        Encode!(&LedgerArgument::Init(InitArgs {
+            minting_account: MINTER,
+            fee_collector_account: None,
+            initial_balances: vec![],
+            transfer_fee: FEE.into(),
+            token_name: TOKEN_NAME.to_string(),
+            decimals: Some(DECIMAL_PLACES),
+            token_symbol: TOKEN_SYMBOL.to_string(),
+            metadata: vec![],
+            archive_options: ArchiveOptions {
+                trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
+                num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
+                node_max_memory_size_bytes: None,
+                max_message_size_bytes: None,
+                controller_id: PrincipalId::new_user_test_id(100),
+                more_controller_ids: None,
+                cycles_for_archive_creation: None,
+                max_transactions_per_response: None,
+            },
+            max_memo_length: None,
+            feature_flags: Some(FeatureFlags { icrc2: false }),
+            maximum_number_of_accounts: None,
+            accounts_overflow_trim_quantity: None,
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn should_successfully_upgrade_ledger_from_u64_to_u256_to_u64_wasm() {
+        let env = StateMachine::new();
+        let ledger_id = env
+            .install_canister(ledger_mainnet_u64_wasm(), default_init_args(), None)
+            .unwrap();
+        // Create a large balance
+        transfer(&env, ledger_id, MINTER, account(1), u64::MAX);
+        let mut balance = balance_of(&env, ledger_id, account(1));
+        // Create a large allowance
+        let approval_result = send_approval(
+            &env,
+            ledger_id,
+            account(1).owner,
+            &ApproveArgs {
+                from_subaccount: None,
+                spender: account(2),
+                amount: Nat::from(u64::MAX),
+                expected_allowance: None,
+                expires_at: None,
+                fee: None,
+                memo: None,
+                created_at_time: None,
+            },
+        );
+        assert_eq!(approval_result, Ok(BlockIndex::from(1u64)));
+        balance -= FEE;
+
+        // Try to upgrade the ledger from using a u64 wasm to a u256 wasm
+        let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
+        env.upgrade_canister(ledger_id, ledger_mainnet_u256_wasm(), upgrade_args)
+            .expect("Unable to upgrade the ledger canister");
+
+        // The balance and allowance should not change
+        assert_eq!(balance, balance_of(&env, ledger_id, account(1)));
+        let allowance = get_allowance(&env, ledger_id, account(1), account(2));
+        assert_eq!(allowance.allowance, Nat::from(u64::MAX));
+
+        // Try to upgrade the ledger back to a u64 wasm
+        let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
+        env.upgrade_canister(ledger_id, ledger_mainnet_u64_wasm(), upgrade_args)
+            .expect("Unable to upgrade the ledger canister");
+
+        // The balance and allowance should not change
+        assert_eq!(balance, balance_of(&env, ledger_id, account(1)));
+        let allowance = get_allowance(&env, ledger_id, account(1), account(2));
+        assert_eq!(allowance.allowance, Nat::from(u64::MAX));
+    }
+
+    #[test]
+    fn should_fail_to_upgrade_to_u64_ledger_wasm_if_total_supply_too_large() {
+        let env = StateMachine::new();
+        let ledger_id = env
+            .install_canister(ledger_mainnet_u256_wasm(), default_init_args(), None)
+            .unwrap();
+        transfer(&env, ledger_id, MINTER, account(1), u64::MAX - 100);
+        transfer(&env, ledger_id, MINTER, account(2), u64::MAX - 100);
+        let balance_1 = balance_of(&env, ledger_id, account(1));
+        let balance_2 = balance_of(&env, ledger_id, account(2));
+        assert_eq!(balance_1, u64::MAX - 100);
+        assert_eq!(balance_2, u64::MAX - 100);
+
+        let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
+        assert_matches!(
+            env.upgrade_canister(ledger_id, ledger_mainnet_u64_wasm(), upgrade_args),
+            Err(err)
+            if err.code() == CanisterCalledTrap
+              && err.description().contains("invalid type: enum, expected u64 or { e8s: u64 } struct")
+        );
+    }
+
+    #[test]
+    fn should_fail_to_upgrade_to_u64_ledger_wasm_if_allowance_too_large() {
+        let env = StateMachine::new();
+        let ledger_id = env
+            .install_canister(ledger_mainnet_u256_wasm(), default_init_args(), None)
+            .unwrap();
+        transfer(&env, ledger_id, MINTER, account(1), FEE);
+        let mut balance_1 = balance_of(&env, ledger_id, account(1));
+        let mut big_amount = BigUint::ZERO;
+        big_amount.set_bit(65, true);
+        let approval_result = send_approval(
+            &env,
+            ledger_id,
+            account(1).owner,
+            &ApproveArgs {
+                from_subaccount: None,
+                spender: account(2),
+                amount: Nat::from(big_amount.clone()),
+                expected_allowance: None,
+                expires_at: None,
+                fee: None,
+                memo: None,
+                created_at_time: None,
+            },
+        );
+        assert_eq!(approval_result, Ok(BlockIndex::from(1u64)));
+        balance_1 -= FEE;
+        let allowance_2 = get_allowance(&env, ledger_id, account(1), account(2));
+        assert_eq!(balance_1, balance_of(&env, ledger_id, account(1)));
+        assert_eq!(allowance_2.allowance, Nat::from(big_amount));
+        assert!(allowance_2.allowance > u64::MAX);
+
+        let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
+        assert_matches!(
+            env.upgrade_canister(ledger_id, ledger_mainnet_u64_wasm(), upgrade_args),
+            Err(err)
+            if err.code() == CanisterCalledTrap
+              && err.description().contains("invalid type: enum, expected u64 or { e8s: u64 } struct")
+        );
     }
 }

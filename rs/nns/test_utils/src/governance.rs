@@ -15,8 +15,8 @@ use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_K
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::ROOT_CANISTER_ID;
-use ic_nns_governance::{
-    governance::{BitcoinNetwork, BitcoinSetConfigProposal},
+use ic_nns_governance_api::{
+    bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
     pb::v1::{
         add_or_remove_node_provider::Change,
         manage_neuron::{Command, NeuronIdOrSubaccount},
@@ -124,7 +124,11 @@ pub async fn submit_external_update_proposal(
         )
         .await
         .expect("Error calling the manage_neuron api.");
-    match response.expect("Error making proposal").command.unwrap() {
+    match response
+        .panic_if_error("Error making proposal")
+        .command
+        .unwrap()
+    {
         CommandResponse::MakeProposal(resp) => ProposalId::from(resp.proposal_id.unwrap()),
         other => panic!("Unexpected response: {:?}", other),
     }
@@ -152,7 +156,11 @@ pub async fn submit_external_update_proposal_binary(
     )
     .await;
 
-    match response.expect("Error making proposal").command.unwrap() {
+    match response
+        .panic_if_error("Error making proposal")
+        .command
+        .unwrap()
+    {
         CommandResponse::MakeProposal(resp) => ProposalId::from(resp.proposal_id.unwrap()),
         _ => panic!("Invalid response"),
     }
@@ -286,7 +294,11 @@ pub async fn add_node_provider(nns_canisters: &NnsCanisters<'_>, np: NodeProvide
         .await
         .expect("Error calling the manage_neuron api.");
 
-    let pid = match result.expect("Error making proposal").command.unwrap() {
+    let pid = match result
+        .panic_if_error("Error making proposal")
+        .command
+        .unwrap()
+    {
         CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
         _ => panic!("Invalid response"),
     };

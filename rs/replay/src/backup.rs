@@ -390,7 +390,7 @@ pub(crate) fn deserialize_consensus_artifacts(
         artifacts.push(rt.into_message());
 
         // Insert the finalized notarization.
-        for file_name in &height_artifacts.notarizations.first() {
+        if let Some(file_name) = height_artifacts.notarizations.first() {
             let file = path.join(file_name);
             let not = read_artifact_if_correct_height::<Notarization, pb::Notarization>(
                 &file,

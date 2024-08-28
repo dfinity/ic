@@ -1066,7 +1066,6 @@ callIC ::
   forall s a b.
   (HasCallStack, HasAgentConfig) =>
   (KnownSymbol s) =>
-  ((a -> IO b) ~ (ICManagement IO .! s)) =>
   (Candid.CandidArg a, Candid.CandidArg b) =>
   IC00 ->
   Blob ->
@@ -1084,7 +1083,6 @@ callIC' ::
   forall s a b.
   (HasAgentConfig) =>
   (KnownSymbol s) =>
-  ((a -> IO b) ~ (ICManagement IO .! s)) =>
   (Candid.CandidArg a) =>
   IC00 ->
   Blob ->
@@ -1101,7 +1099,6 @@ callICWithSubnet'' ::
   forall s a b.
   (HasAgentConfig) =>
   (KnownSymbol s) =>
-  ((a -> IO b) ~ (ICManagement IO .! s)) =>
   (Candid.CandidArg a) =>
   Blob ->
   Blob ->
@@ -1115,7 +1112,6 @@ callIC'' ::
   forall s a b.
   (HasAgentConfig) =>
   (KnownSymbol s) =>
-  ((a -> IO b) ~ (ICManagement IO .! s)) =>
   (Candid.CandidArg a) =>
   Blob ->
   Blob ->
@@ -1129,7 +1125,6 @@ callIC''' ::
   forall s a b.
   (HasAgentConfig) =>
   (KnownSymbol s) =>
-  ((a -> IO b) ~ (ICManagement IO .! s)) =>
   (Candid.CandidArg a) =>
   IC00' ->
   Blob ->

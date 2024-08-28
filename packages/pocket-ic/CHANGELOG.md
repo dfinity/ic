@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
+- Support for verified application subnets: the library function `PocketIcBuilder::with_verified_application_subnet` adds a verified application subnet to the PocketIC instance;
+  the library function `PocketIc::get_verified_app_subnets` lists all verified application subnets of the PocketIC instance.
+- The function `PocketIcBuilder::with_log_level` to specify the replica log level of the PocketIC instance.
+
+
+
+## 4.0.0 - 2024-07-22
+
+### Added
 - Module `nonblocking` with asynchronous PocketIc library. The asynchronous function `drop` must be called
   (e.g., `pic.drop().await`) to drop the PocketIc instance. It must be called manually
   as Rust doesn't support asynchronous drop.
@@ -28,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The function `PocketIcBuilder::with_state_dir` to specify a directory in which the state of the PocketIC instance can be preserved across the PocketIC instance lifetime
   (that directory should be empty when specified as `state_dir` for the very first time).
 - The function `PocketIcBuilder::with_nonmainnet_features` to specify that non-mainnet features (e.g., best-effort responses) should be enabled for the PocketIC instance.
+- Support for canister HTTP outcalls: a function `PocketIc::get_canister_http` to retrieve pending canister HTTP outcalls
+  and a function `PocketIc::mock_canister_http_response` to mock a response for a pending canister HTTP outcall.
 
 ### Removed
 - Public field `instance_id` in the synchronous PocketIc library, use the function `instance_id` instead

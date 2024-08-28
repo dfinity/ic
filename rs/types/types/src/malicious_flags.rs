@@ -25,7 +25,7 @@ pub struct MaliciousFlags {
     pub maliciously_disable_execution: bool,
     pub maliciously_corrupt_own_state_at_heights: Vec<u64>,
     pub maliciously_disable_ingress_validation: bool,
-    pub maliciously_corrupt_ecdsa_dealings: bool,
+    pub maliciously_corrupt_idkg_dealings: bool,
     /// Delay execution such that it takes at least [`Duration`] time
     pub maliciously_delay_execution: Option<Duration>,
     /// Delay state sync such that it takes at least [`Duration`] time
@@ -54,10 +54,10 @@ impl MaliciousFlags {
             || self.maliciously_notarize_all
     }
 
-    /// This function is to distinguish maliciousness gated by ecdsa's
+    /// This function is to distinguish maliciousness gated by idkg's
     /// implementation.
-    pub fn is_ecdsa_malicious(&self) -> bool {
-        self.maliciously_corrupt_ecdsa_dealings
+    pub fn is_idkg_malicious(&self) -> bool {
+        self.maliciously_corrupt_idkg_dealings
     }
 
     /// Delay the execution as specified by `maliciously_delay_execution`

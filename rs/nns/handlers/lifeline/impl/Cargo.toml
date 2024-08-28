@@ -16,15 +16,15 @@ name = "lifeline"
 path = "src/main.rs"
 
 [build-dependencies]
-ic-nns-constants = { path = "../../../constants" }
 ic-base-types = { path = "../../../../types/base_types" }
+ic-nns-constants = { path = "../../../constants" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-wasmprinter = "0.2.45"
-flate2 = { workspace = true }
 candid = { workspace = true }
 dfn_candid = {path="../../../../rust_canisters/dfn_candid"}
-ic-nns-common ={path="../../../common"}
+flate2 = { workspace = true }
 ic-nervous-system-clients = { path="../../../../nervous_system/clients" }
 ic-nervous-system-root = { path="../../../../nervous_system/root" }
+ic-nns-common ={path="../../../common"}
 ic-nns-test-utils = { path = "../../../../nns/test_utils" }
+wasmprinter = { workspace = true }

@@ -20,13 +20,13 @@ ic-nns-constants = { path = "../../../nns/constants" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-replicated-state = { path = "../../../replicated_state" }
 ic-system-api = { path = "../../../system_api" }
+ic-test-utilities = { path = "../../../test_utilities" }
 ic-test-utilities-execution-environment = { path = "../../../test_utilities/execution_environment" }
 ic-test-utilities-state = { path = "../../../test_utilities/state" }
 ic-test-utilities-types = { path = "../../../test_utilities/types" }
-ic-test-utilities = { path = "../../../test_utilities" }
 ic-types = { path = "../../../types/types" }
 ic-wasm-types = { path = "../../../types/wasm_types" }
 lazy_static = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-wat = "1.0.52"
+wat = { workspace = true }

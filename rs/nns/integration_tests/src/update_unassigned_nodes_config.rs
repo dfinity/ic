@@ -4,7 +4,7 @@ use ic_nns_common::{
     registry::MAX_NUM_SSH_KEYS,
     types::{NeuronId, ProposalId},
 };
-use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
+use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},

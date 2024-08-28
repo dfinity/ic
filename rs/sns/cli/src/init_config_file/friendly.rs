@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Result};
 use ic_base_types::PrincipalId;
 use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
 use ic_nns_governance::{
@@ -330,7 +331,7 @@ fn parse_image_path(
 }
 
 impl SnsConfigurationFile {
-    pub fn try_convert_to_nns_proposal(&self, base_path: &Path) -> Result<Proposal, String> {
+    pub fn try_convert_to_nns_proposal(&self, base_path: &Path) -> Result<Proposal> {
         // Extract the proposal action from the config file
         let create_service_nervous_system =
             self.try_convert_to_create_service_nervous_system(base_path)?;
@@ -367,7 +368,7 @@ impl SnsConfigurationFile {
             )),
         };
 
-        validate_user_submitted_proposal_fields(&proposal)?;
+        validate_user_submitted_proposal_fields(&proposal).map_err(|e| anyhow!("{}", e))?;
 
         Ok(proposal)
     }
@@ -375,7 +376,7 @@ impl SnsConfigurationFile {
     pub fn try_convert_to_create_service_nervous_system(
         &self,
         base_path: &Path,
-    ) -> Result<CreateServiceNervousSystem, String> {
+    ) -> Result<CreateServiceNervousSystem> {
         // Step 1: Unpack.
         let SnsConfigurationFile {
             name,
@@ -470,14 +471,14 @@ impl SnsConfigurationFile {
 
         // Step 4: Validate.
         if !defects.is_empty() {
-            return Err(format!(
+            return Err(anyhow!(
                 "Unable to convert configuration file to proposal for the following \
                  reason(s):\n  -{}",
                 defects.join("\n  -"),
             ));
         }
         if let Err(err) = SnsInitPayload::try_from(result.clone()) {
-            return Err(format!(
+            return Err(anyhow!(
                 "Unable to convert configuration file to proposal: {}",
                 err,
             ));

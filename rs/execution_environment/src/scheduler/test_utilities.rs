@@ -196,6 +196,12 @@ impl SchedulerTest {
         )
     }
 
+    pub fn execution_cost(&self, num_instructions: NumInstructions) -> Cycles {
+        self.scheduler
+            .cycles_account_manager
+            .execution_cost(num_instructions, self.subnet_size())
+    }
+
     /// Creates a canister with the given balance and allocations.
     /// The `system_task` parameter can be used to optionally enable the
     /// heartbeat by passing `Some(SystemMethod::CanisterHeartbeat)`.
@@ -682,7 +688,7 @@ impl Default for SchedulerTestBuilder {
             idkg_keys: vec![],
             metrics_registry: MetricsRegistry::new(),
             round_summary: None,
-            canister_snapshot_flag: false,
+            canister_snapshot_flag: true,
         }
     }
 }
@@ -744,6 +750,7 @@ impl SchedulerTestBuilder {
         Self { batch_time, ..self }
     }
 
+    #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
     pub fn with_round_summary(self, round_summary: ExecutionRoundSummary) -> Self {
         Self {
             round_summary: Some(round_summary),
@@ -896,6 +903,8 @@ impl SchedulerTestBuilder {
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             self.scheduler_config.heap_delta_rate_limit,
             self.scheduler_config.upload_wasm_chunk_instructions,
+            self.scheduler_config
+                .canister_snapshot_baseline_instructions,
         );
         let scheduler = SchedulerImpl::new(
             self.scheduler_config,

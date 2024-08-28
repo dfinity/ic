@@ -13,8 +13,8 @@ use crate::driver::resource::{
 use crate::driver::test_env::SshKeyGen;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{
-    get_ssh_session_from_env, HasDependencies, HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession,
-    RETRY_BACKOFF, SSH_RETRY_TIMEOUT,
+    get_dependency_path, get_ssh_session_from_env, HasTestEnv, HasVmName, RetrieveIpv4Addr,
+    SshSession, RETRY_BACKOFF, SSH_RETRY_TIMEOUT,
 };
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
 use crate::k8s::datavolume::DataVolumeContentType;
@@ -135,7 +135,7 @@ impl UniversalVm {
             let config_ssh_dir = env.get_universal_vm_config_ssh_dir(&self.name);
             setup_ssh(env, config_ssh_dir.clone())?;
             let config_ssh_img = universal_vm_dir.join(CONF_SSH_IMG_FNAME);
-            create_universal_vm_config_image(env, &config_ssh_dir, &config_ssh_img, "SSH")?;
+            create_universal_vm_config_image(&config_ssh_dir, &config_ssh_img, "SSH")?;
 
             let ssh_config_img_file_spec = AttachImageSpec::new(farm.upload_file(
                 &pot_setup.infra_group_name,
@@ -151,7 +151,7 @@ impl UniversalVm {
                 UniversalVmConfig::Dir(config_dir) => {
                     let config_img = universal_vm_dir.join(CONF_IMG_FNAME);
                     std::fs::create_dir_all(universal_vm_dir)?;
-                    create_universal_vm_config_image(env, config_dir, &config_img, "CONFIG")?;
+                    create_universal_vm_config_image(config_dir, &config_img, "CONFIG")?;
                     config_img
                 }
                 UniversalVmConfig::Img(config_img) => config_img.to_path_buf(),
@@ -238,12 +238,11 @@ impl UniversalVm {
 }
 
 fn create_universal_vm_config_image(
-    env: &TestEnv,
     input_dir: &PathBuf,
     output_img: &Path,
     label: &str,
 ) -> Result<()> {
-    let script_path = env.get_dependency_path("rs/tests/create-universal-vm-config-image.sh");
+    let script_path = get_dependency_path("rs/tests/create-universal-vm-config-image.sh");
     let mut cmd = Command::new(script_path);
 
     // Add /usr/sbin to the PATH env var to give access to required tools like mkfs.vfat.

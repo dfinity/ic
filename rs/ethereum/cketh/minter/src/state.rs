@@ -15,7 +15,7 @@ use crate::tx::GasFeeEstimate;
 use candid::Principal;
 use ic_canister_log::log;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
-use ic_crypto_ecdsa_secp256k1::PublicKey;
+use ic_crypto_secp256k1::PublicKey;
 use ic_ethereum_types::Address;
 use std::cell::RefCell;
 use std::collections::{btree_map, BTreeMap, BTreeSet, HashSet};
@@ -566,6 +566,18 @@ impl State {
 
     pub fn eth_balance(&self) -> &EthBalance {
         &self.eth_balance
+    }
+
+    pub fn max_block_spread_for_logs_scraping(&self) -> u16 {
+        if self.evm_rpc_id.is_some() {
+            // Limit set by the EVM-RPC canister itself, see
+            // https://github.com/internet-computer-protocol/evm-rpc-canister/blob/3cce151d4c1338d83e6741afa354ccf11dff41e8/src/candid_rpc.rs#L192
+            500_u16
+        } else {
+            // The maximum block spread is introduced by Cloudflare limits.
+            // https://developers.cloudflare.com/web3/ethereum-gateway/
+            799_u16
+        }
     }
 }
 

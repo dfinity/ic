@@ -7,11 +7,12 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
 candid = { workspace = true }
 ic-agent = { workspace = true }
-ic-icrc1 = { path = "../../icrc1" }
-ic-icrc-rosetta-client = { path = "../../icrc1/rosetta/client" }
 ic-icrc-rosetta = { path = "../../icrc1/rosetta" }
+ic-icrc-rosetta-client = { path = "../../icrc1/rosetta/client" }
+ic-icrc1 = { path = "../../icrc1" }
 ic-ledger-test-utils = { path = "../test_utils" }
 ic-rosetta-api = { path = "../.." }
 ic-sender-canister = { path = "../../test_utils/sender_canister" }
@@ -20,6 +21,7 @@ icp-ledger = { path = ".." }
 icrc-ledger-agent = { path = "../../../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 ledger-canister = { path = "../ledger" }
+num-traits = { workspace = true }
 pocket-ic = { path = "../../../../packages/pocket-ic" }
 reqwest = { workspace = true }
 rosetta-core = { path = "../../rosetta_core" }
@@ -27,5 +29,4 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-url = "2.2.1"
-num-traits = { workspace = true }
+url = { workspace = true }

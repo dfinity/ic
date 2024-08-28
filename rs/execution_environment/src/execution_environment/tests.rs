@@ -7,9 +7,9 @@ use ic_management_canister_types::{
     self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, CanisterStatusType,
     DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, FetchCanisterLogsRequest, HttpMethod,
-    LogVisibility, MasterPublicKeyId, Method, Payload as Ic00Payload,
+    LogVisibilityV2, MasterPublicKeyId, Method, Payload as Ic00Payload,
     ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SchnorrAlgorithm,
-    SchnorrKeyId, TransformContext, TransformFunc, IC_00,
+    SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext, TransformFunc, IC_00,
 };
 use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -1288,6 +1288,150 @@ fn consistent_stop_canister_calls_after_split() {
     assert_consistent_stop_canister_calls(&state_b, 0);
 }
 
+#[test]
+fn canister_snapshots_after_split() {
+    let subnet_a = subnet_test_id(1);
+    let subnet_b = subnet_test_id(2);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(subnet_a)
+        .with_manual_execution()
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(subnet_a, caller_canister)
+        .build();
+
+    // Create two universal canisters.
+    let canister_id_1 = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000_000))
+        .unwrap();
+    let canister_id_2 = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000_000))
+        .unwrap();
+
+    // Set controllers.
+    let controllers = vec![caller_canister.get(), test.user_id().get()];
+    test.canister_update_controller(canister_id_1, controllers.clone())
+        .unwrap();
+    test.canister_update_controller(canister_id_2, controllers)
+        .unwrap();
+
+    // The snapshots do not exist in the replicated state before the requests.
+    assert_eq!(
+        test.state()
+            .canister_snapshots
+            .list_snapshots(canister_id_1)
+            .len(),
+        0
+    );
+    assert_eq!(
+        test.state()
+            .canister_snapshots
+            .list_snapshots(canister_id_2)
+            .len(),
+        0
+    );
+
+    // Take canister snapshot for each canister.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id_1, None);
+    test.inject_call_to_ic00(
+        Method::TakeCanisterSnapshot,
+        Encode!(&args).unwrap(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id_2, None);
+    test.inject_call_to_ic00(
+        Method::TakeCanisterSnapshot,
+        Encode!(&args).unwrap(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+
+    // Verify the snapshots exist in the replicated state.
+    assert_eq!(
+        test.state()
+            .canister_snapshots
+            .list_snapshots(canister_id_1)
+            .len(),
+        1
+    );
+    assert_eq!(
+        test.state()
+            .canister_snapshots
+            .list_snapshots(canister_id_2)
+            .len(),
+        1
+    );
+
+    // Simulate that there's a checkpoint right before starting the subnet split.
+    // For the purpose of this test, we need to clear heap_delta_estimate and
+    // expected_compiled_wasms cache (a subnet split assumes it happens after a
+    // checkpoint round where these two happen among other things).
+    test.state_mut().metadata.heap_delta_estimate = NumBytes::from(0);
+    test.state_mut().metadata.expected_compiled_wasms.clear();
+
+    // Retain canister 1 on subnet A, migrate canister 2 to subnet B.
+    let routing_table = RoutingTable::try_from(btreemap! {
+        CanisterIdRange {start: canister_id_1, end: canister_id_1} => subnet_a,
+        CanisterIdRange {start: canister_id_2, end: canister_id_2} => subnet_b,
+    })
+    .unwrap();
+
+    // Split subnet A'.
+    let mut state_a = test
+        .state()
+        .clone()
+        .split(subnet_a, &routing_table, None)
+        .unwrap();
+
+    // Restore consistency between canister snapshots tracked by canisters and subnet.
+    state_a.after_split();
+
+    // Split subnet B.
+    let mut state_b = test
+        .state()
+        .clone()
+        .split(subnet_b, &routing_table, None)
+        .unwrap();
+
+    // Restore consistency between canister snapshots tracked by canisters and subnet.
+    state_b.after_split();
+
+    // Splitting the original subnet into subnet A' and subnet B,
+    // canister snapshots should also be moved to the correct subnet.
+
+    assert_eq!(
+        state_a
+            .canister_snapshots
+            .list_snapshots(canister_id_1)
+            .len(),
+        1
+    );
+    assert_eq!(
+        state_a
+            .canister_snapshots
+            .list_snapshots(canister_id_2)
+            .len(),
+        0
+    );
+
+    assert_eq!(
+        state_b
+            .canister_snapshots
+            .list_snapshots(canister_id_2)
+            .len(),
+        1
+    );
+    assert_eq!(
+        state_b
+            .canister_snapshots
+            .list_snapshots(canister_id_1)
+            .len(),
+        0
+    );
+}
+
 /// Helper function asserting that there is an exact match between in-progress
 /// stop canister calls tracked by the subnet call context manager on the one
 /// hand; and by the canisters, on the other.
@@ -1443,6 +1587,68 @@ fn management_canister_xnet_to_nns_called_from_non_nns() {
             format!("Incorrect sender subnet id: {}. Sender should be on the same subnet or on the NNS subnet.", other_subnet)
         );
     }
+}
+
+#[test]
+fn http_request_bound_holds() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        // set number of max in-flight calls to 10
+        .with_max_canister_http_requests_in_flight(10)
+        .build();
+    test.state_mut().metadata.own_subnet_features.http_requests = true;
+
+    // Create payload of the request.
+    let url = "https://".to_string();
+    let response_size_limit = 1000u64;
+    let transform_method_name = "transform".to_string();
+    let transform_context = vec![0, 1, 2];
+    let args = CanisterHttpRequestArgs {
+        url: url.clone(),
+        max_response_bytes: Some(response_size_limit),
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: caller_canister.get().0,
+                method: transform_method_name.clone(),
+            }),
+            context: transform_context.clone(),
+        }),
+    };
+
+    // Create request to HTTP_REQUEST method.
+    let payload = args.clone().encode();
+    test.inject_call_to_ic00(Method::HttpRequest, payload, Cycles::new(1_000_000_000));
+    test.execute_all();
+    // Check that the SubnetCallContextManager contains the request.
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+
+    // Now we try to inject more than the maximum number of requests we allow to be in-flight
+
+    for _ in 0..15 {
+        let payload = args.clone().encode();
+        test.inject_call_to_ic00(Method::HttpRequest, payload, Cycles::new(1_000_000_000));
+    }
+
+    test.execute_all();
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+
+    // Check that the SubnetCallContextManager contains the maximum number but not more
+    assert_eq!(canister_http_request_contexts.len(), 10);
 }
 
 #[test]
@@ -1682,23 +1888,6 @@ fn metrics_are_observed_for_using_deprecated_fields() {
         fetch_int_counter(
             test.metrics_registry(),
             "execution_memory_allocation_in_install_code_total"
-        ),
-        Some(1),
-    );
-
-    let payload = ic00::UpdateSettingsArgs::new(
-        canister_id,
-        ic00::CanisterSettingsArgsBuilder::new()
-            .with_controller(canister_id.into())
-            .build(),
-    );
-
-    test.subnet_message(Method::UpdateSettings, payload.encode())
-        .unwrap();
-    assert_eq!(
-        fetch_int_counter(
-            test.metrics_registry(),
-            "execution_controller_in_update_settings_total"
         ),
         Some(1),
     );
@@ -3397,7 +3586,7 @@ fn test_canister_settings_log_visibility_default_controllers() {
     // Assert.
     assert_eq!(
         canister_status.settings().log_visibility(),
-        LogVisibility::Controllers
+        &LogVisibilityV2::Controllers
     );
 }
 
@@ -3410,7 +3599,7 @@ fn test_canister_settings_log_visibility_create_with_settings() {
         .create_canister_with_settings(
             Cycles::new(1_000_000_000),
             ic00::CanisterSettingsArgsBuilder::new()
-                .with_log_visibility(LogVisibility::Public)
+                .with_log_visibility(LogVisibilityV2::Public)
                 .build(),
         )
         .unwrap();
@@ -3419,7 +3608,7 @@ fn test_canister_settings_log_visibility_create_with_settings() {
     // Assert.
     assert_eq!(
         canister_status.settings().log_visibility(),
-        LogVisibility::Public
+        &LogVisibilityV2::Public
     );
 }
 
@@ -3429,28 +3618,25 @@ fn test_canister_settings_log_visibility_set_to_public() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000));
     // Act.
-    test.set_log_visibility(canister_id, LogVisibility::Public)
+    test.set_log_visibility(canister_id, LogVisibilityV2::Public)
         .unwrap();
     let result = test.canister_status(canister_id);
     let canister_status = CanisterStatusResultV2::decode(&get_reply(result)).unwrap();
     // Assert.
     assert_eq!(
         canister_status.settings().log_visibility(),
-        LogVisibility::Public
+        &LogVisibilityV2::Public
     );
 }
 
 #[test]
-fn test_fetch_canister_logs_should_accept_ingress_message_disabled() {
+fn test_fetch_canister_logs_should_accept_ingress_message() {
     // Arrange.
-    // - disable the fetch_canister_logs API
-    // - set the log visibility to public so any user can read the logs
-    let mut test = ExecutionTestBuilder::new()
-        .with_canister_logging(FlagStatus::Disabled)
-        .build();
+    // Set the log visibility to public so any user can read the logs.
+    let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
     let not_a_controller = user_test_id(42);
-    test.set_log_visibility(canister_id, LogVisibility::Public)
+    test.set_log_visibility(canister_id, LogVisibilityV2::Public)
         .unwrap();
     // Act.
     test.set_user_id(not_a_controller);
@@ -3460,42 +3646,12 @@ fn test_fetch_canister_logs_should_accept_ingress_message_disabled() {
         FetchCanisterLogsRequest::new(canister_id).encode(),
     );
     // Assert.
-    // Expect error because the API is disabled.
+    // Expect error since `fetch_canister_logs` can not be called via ingress messages.
     assert_eq!(
         result,
         Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            "fetch_canister_logs API is only accessible in non-replicated mode"
-        ))
-    );
-}
-
-#[test]
-fn test_fetch_canister_logs_should_accept_ingress_message_enabled() {
-    // Arrange.
-    // - enable the fetch_canister_logs API
-    // - set the log visibility to public so any user can read the logs
-    let mut test = ExecutionTestBuilder::new()
-        .with_canister_logging(FlagStatus::Enabled)
-        .build();
-    let canister_id = test.universal_canister().unwrap();
-    let not_a_controller = user_test_id(42);
-    test.set_log_visibility(canister_id, LogVisibility::Public)
-        .unwrap();
-    // Act.
-    test.set_user_id(not_a_controller);
-    let result = test.should_accept_ingress_message(
-        test.state().metadata.own_subnet_id.into(),
-        Method::FetchCanisterLogs,
-        FetchCanisterLogsRequest::new(canister_id).encode(),
-    );
-    // Assert.
-    // Expect error since `should_accept_ingress_message` is only called in replicated mode which is not supported.
-    assert_eq!(
-        result,
-        Err(UserError::new(
-            ErrorCode::CanisterRejectedMessage,
-            "fetch_canister_logs API is only accessible in non-replicated mode"
+            "ic00 method fetch_canister_logs can not be called via ingress messages"
         ))
     );
 }

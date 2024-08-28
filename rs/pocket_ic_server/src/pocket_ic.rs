@@ -6,38 +6,52 @@ use crate::{copy_dir, BlobStore};
 use askama::Template;
 use axum::{
     extract::State,
-    response::{Html, IntoResponse},
+    response::{Html, IntoResponse, Response as AxumResponse},
 };
 use candid::Decode;
+use futures::future::BoxFuture;
+use futures::FutureExt;
 use hyper::body::Bytes;
 use hyper::header::{HeaderValue, CONTENT_TYPE};
 use hyper::{Method, StatusCode};
 use ic_boundary::{Health, RootKey};
-use ic_config::execution_environment;
-use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::SubnetConfig;
+use ic_config::{
+    execution_environment, flag_status::FlagStatus, http_handler, subnet_config::SubnetConfig,
+};
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_public::{
-    CallServiceV2, CanisterReadStateServiceBuilder, IngressValidatorBuilder, QueryServiceBuilder,
+    call_v2, call_v3, metrics::HttpHandlerMetrics, CanisterReadStateServiceBuilder,
+    IngressValidatorBuilder, QueryServiceBuilder, SubnetReadStateServiceBuilder,
 };
+use ic_https_outcalls_adapter::{CanisterHttp, Config as HttpsOutcallsConfig};
+use ic_https_outcalls_adapter_client::CanisterHttpAdapterClientImpl;
+use ic_https_outcalls_service::canister_http_service_server::CanisterHttpService;
+use ic_https_outcalls_service::canister_http_service_server::CanisterHttpServiceServer;
+use ic_https_outcalls_service::CanisterHttpSendRequest;
+use ic_https_outcalls_service::CanisterHttpSendResponse;
 use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
+use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_interfaces_state_manager::StateReader;
+use ic_logger::ReplicaLogger;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, EcdsaCurve, EcdsaKeyId, MasterPublicKeyId,
     Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs,
 };
+use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
 use ic_registry_keys::make_routing_table_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
+use ic_state_machine_tests::Level;
 use ic_state_machine_tests::{
-    finalize_registry, IngressState, IngressStatus, StateMachine, StateMachineBuilder,
+    finalize_registry, IngressState, IngressStatus, RejectCode, StateMachine, StateMachineBuilder,
     StateMachineConfig, StateMachineStateDir, SubmitIngressError, Time,
 };
 use ic_test_utilities_registry::add_subnet_list_record;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
+    canister_http::{CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponseContent},
     crypto::{BasicSig, BasicSigOf, CryptoResult, Signable},
     messages::{
         CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId as OtherMessageId,
@@ -49,7 +63,8 @@ use ic_types::{
 use ic_validator_ingress_message::StandaloneIngressSigVerifier;
 use itertools::Itertools;
 use pocket_ic::common::rest::{
-    self, BinaryBlob, BlobCompression, DtsFlag, ExtendedSubnetConfigSet, RawAddCycles,
+    self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
+    CanisterHttpResponse, DtsFlag, ExtendedSubnetConfigSet, MockCanisterHttpResponse, RawAddCycles,
     RawCanisterCall, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
     SubnetInstructionConfig, SubnetKind, SubnetSpec, Topology,
 };
@@ -61,7 +76,7 @@ use std::hash::Hash;
 use std::str::FromStr;
 use std::{
     cmp::max,
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     fs::File,
     io::{BufReader, Write},
     path::PathBuf,
@@ -69,8 +84,11 @@ use std::{
     time::{Duration, SystemTime},
 };
 use tempfile::TempDir;
-use tokio::runtime::Runtime;
-use tokio::sync::mpsc;
+use tokio::sync::Mutex as TokioMutex;
+use tokio::{runtime::Runtime, sync::mpsc};
+use tonic::transport::{Channel, Server};
+use tonic::transport::{Endpoint, Uri};
+use tonic::{Code, Request, Response, Status};
 use tower::{
     service_fn,
     util::{BoxCloneService, ServiceExt},
@@ -79,9 +97,26 @@ use tower::{
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
 
+/// The response type for `/api/v2` and `/api/v3` IC endpoint operations.
+pub(crate) type ApiResponse = BoxFuture<'static, (u16, BTreeMap<String, Vec<u8>>, Vec<u8>)>;
+
 /// We assume that the maximum number of subnets on the mainnet is 1024.
 /// Used for generating canister ID ranges that do not appear on mainnet.
 pub const MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET: u64 = 1024;
+
+async fn into_api_response(resp: AxumResponse) -> (u16, BTreeMap<String, Vec<u8>>, Vec<u8>) {
+    (
+        resp.status().into(),
+        resp.headers()
+            .iter()
+            .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
+            .collect(),
+        axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+}
 
 fn compute_subnet_seed(
     ranges: Vec<CanisterIdRange>,
@@ -114,9 +149,12 @@ struct SubnetConfigInternal {
     pub alloc_range: Option<CanisterIdRange>,
 }
 
+pub(crate) type CanisterHttpAdapters = Arc<TokioMutex<HashMap<SubnetId, CanisterHttp>>>;
+
 pub struct PocketIc {
     state_dir: Option<PathBuf>,
     subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
+    canister_http_adapters: CanisterHttpAdapters,
     routing_table: RoutingTable,
     /// Created on initialization and updated if a new subnet is created.
     topology: TopologyInternal,
@@ -132,6 +170,7 @@ pub struct PocketIc {
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     runtime: Arc<Runtime>,
     nonmainnet_features: bool,
+    log_level: Option<Level>,
 }
 
 impl Drop for PocketIc {
@@ -172,6 +211,10 @@ impl Drop for PocketIc {
 }
 
 impl PocketIc {
+    pub(crate) fn canister_http_adapters(&self) -> CanisterHttpAdapters {
+        self.canister_http_adapters.clone()
+    }
+
     pub(crate) fn topology(&self) -> Topology {
         let mut topology = Topology(BTreeMap::new());
         let subnets = self.subnets.read().unwrap();
@@ -217,6 +260,7 @@ impl PocketIc {
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         time: SystemTime,
         nonmainnet_features: bool,
+        log_level: Option<Level>,
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
@@ -241,6 +285,8 @@ impl PocketIc {
         hypervisor_config.embedders_config.min_sandbox_count = 0;
         hypervisor_config.embedders_config.max_sandbox_count = 64;
         hypervisor_config.embedders_config.max_sandbox_idle_time = Duration::from_secs(30);
+        // shorter query stats epoch length for faster query stats aggregation
+        hypervisor_config.query_stats_epoch_length = 60;
         // enable canister debug prints
         hypervisor_config
             .embedders_config
@@ -261,7 +307,7 @@ impl PocketIc {
             .with_time(time)
             .with_state_machine_state_dir(state_machine_state_dir)
             .with_registry_data_provider(registry_data_provider.clone())
-            .with_use_cost_scaling_flag(true)
+            .with_log_level(log_level)
     }
 
     pub(crate) fn new(
@@ -269,6 +315,7 @@ impl PocketIc {
         subnet_configs: ExtendedSubnetConfigSet,
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
+        log_level: Option<Level>,
     ) -> Self {
         let mut range_gen = RangeGen::new();
         let mut routing_table = RoutingTable::new();
@@ -326,7 +373,16 @@ impl PocketIc {
                         spec.get_dts_flag(),
                     )
                 });
-                sys.chain(app)
+                let verified_app = subnet_configs.verified_application.iter().map(|spec| {
+                    (
+                        SubnetKind::VerifiedApplication,
+                        spec.get_state_path(),
+                        spec.get_subnet_id(),
+                        spec.get_instruction_config(),
+                        spec.get_dts_flag(),
+                    )
+                });
+                sys.chain(app).chain(verified_app)
             };
 
             let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
@@ -394,6 +450,7 @@ impl PocketIc {
                 registry_data_provider.clone(),
                 time,
                 nonmainnet_features,
+                log_level,
             );
 
             if let DtsFlag::Disabled = dts_flag {
@@ -466,6 +523,12 @@ impl PocketIc {
             subnet.reload_registry();
         }
 
+        // Update the registry file on disk.
+        if let Some(ref state_dir) = state_dir {
+            let registry_proto_path = PathBuf::from(state_dir).join("registry.proto");
+            registry_data_provider.write_to_file(registry_proto_path);
+        }
+
         // Sync the time on the subnets (if only the NNS subnet is loaded
         // from a snapshot, then its time might diverge).
         // Since time must be monotone, we pick the maximum time.
@@ -491,9 +554,24 @@ impl PocketIc {
         )
         .0;
 
+        let canister_http_adapters = Arc::new(TokioMutex::new(
+            subnets
+                .read()
+                .unwrap()
+                .iter()
+                .map(|(subnet_id, sm)| {
+                    (
+                        *subnet_id,
+                        new_canister_http_adapter(sm.replica_logger.clone(), &sm.metrics_registry),
+                    )
+                })
+                .collect(),
+        ));
+
         Self {
             state_dir,
             subnets,
+            canister_http_adapters,
             routing_table,
             topology,
             randomness: StdRng::seed_from_u64(42),
@@ -502,6 +580,7 @@ impl PocketIc {
             registry_data_provider,
             runtime,
             nonmainnet_features,
+            log_level,
         }
     }
 
@@ -526,6 +605,11 @@ impl PocketIc {
         // If there are none of these, install it on any subnet.
         let random_app_subnet = self.get_random_subnet_of_type(rest::SubnetKind::Application);
         if let Some(subnet) = random_app_subnet {
+            return subnet;
+        }
+        let random_verified_app_subnet =
+            self.get_random_subnet_of_type(rest::SubnetKind::VerifiedApplication);
+        if let Some(subnet) = random_verified_app_subnet {
             return subnet;
         }
         let random_system_subnet = self.get_random_subnet_of_type(rest::SubnetKind::System);
@@ -597,6 +681,7 @@ impl Default for PocketIc {
             },
             None,
             false,
+            None,
         )
     }
 }
@@ -634,6 +719,7 @@ fn conv_type(inp: rest::SubnetKind) -> SubnetType {
     match inp {
         Application | Fiduciary | SNS => SubnetType::Application,
         Bitcoin | II | NNS | System => SubnetType::System,
+        VerifiedApplication => SubnetType::VerifiedApplication,
     }
 }
 
@@ -641,6 +727,7 @@ fn subnet_size(subnet: SubnetKind) -> u64 {
     use rest::SubnetKind::*;
     match subnet {
         Application => 13,
+        VerifiedApplication => 13,
         Fiduciary => 28,
         SNS => 34,
         Bitcoin => 13,
@@ -660,7 +747,7 @@ fn from_range(range: &CanisterIdRange) -> rest::CanisterIdRange {
 fn subnet_kind_canister_range(subnet_kind: SubnetKind) -> Option<Vec<CanisterIdRange>> {
     use rest::SubnetKind::*;
     match subnet_kind {
-        Application | System => None,
+        Application | VerifiedApplication | System => None,
         NNS => Some(vec![
             gen_range("rwlgt-iiaaa-aaaaa-aaaaa-cai", "renrk-eyaaa-aaaaa-aaada-cai"),
             gen_range("qoctq-giaaa-aaaaa-aaaea-cai", "n5n4y-3aaaa-aaaaa-p777q-cai"),
@@ -828,6 +915,229 @@ impl Operation for GetTime {
 
     fn id(&self) -> OpId {
         OpId("get_time".into())
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct GetCanisterHttp;
+
+fn http_method_from(
+    http_method: &ic_types::canister_http::CanisterHttpMethod,
+) -> CanisterHttpMethod {
+    match http_method {
+        ic_types::canister_http::CanisterHttpMethod::GET => CanisterHttpMethod::GET,
+        ic_types::canister_http::CanisterHttpMethod::POST => CanisterHttpMethod::POST,
+        ic_types::canister_http::CanisterHttpMethod::HEAD => CanisterHttpMethod::HEAD,
+    }
+}
+
+fn http_header_from(
+    http_header: &ic_types::canister_http::CanisterHttpHeader,
+) -> CanisterHttpHeader {
+    CanisterHttpHeader {
+        name: http_header.name.clone(),
+        value: http_header.value.clone(),
+    }
+}
+
+fn get_canister_http_requests(pic: &PocketIc) -> Vec<CanisterHttpRequest> {
+    let mut canister_http = vec![];
+    for subnet in pic.subnets.read().unwrap().values() {
+        let mut cur: Vec<_> = subnet
+            .canister_http_request_contexts()
+            .into_iter()
+            .map(|(id, c)| CanisterHttpRequest {
+                subnet_id: subnet.get_subnet_id().get().0,
+                request_id: id.get(),
+                http_method: http_method_from(&c.http_method),
+                url: c.url,
+                headers: c.headers.iter().map(http_header_from).collect(),
+                body: c.body.unwrap_or_default(),
+                max_response_bytes: c.max_response_bytes.map(|b| b.get()),
+            })
+            .collect();
+        canister_http.append(&mut cur);
+    }
+    canister_http
+}
+
+impl Operation for GetCanisterHttp {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let canister_http_requests = get_canister_http_requests(pic);
+        OpOut::CanisterHttp(canister_http_requests)
+    }
+
+    fn id(&self) -> OpId {
+        OpId("get_canister_http".into())
+    }
+}
+
+// START COPY from rs/https_outcalls/client/src/client.rs
+
+#[derive(Clone)]
+pub struct SingleResponseAdapter {
+    response: Result<CanisterHttpSendResponse, (Code, String)>,
+}
+
+impl SingleResponseAdapter {
+    fn new(response: Result<CanisterHttpSendResponse, (Code, String)>) -> Self {
+        Self { response }
+    }
+}
+
+#[tonic::async_trait]
+impl CanisterHttpService for SingleResponseAdapter {
+    async fn canister_http_send(
+        &self,
+        _request: Request<CanisterHttpSendRequest>,
+    ) -> Result<Response<CanisterHttpSendResponse>, Status> {
+        match self.response.clone() {
+            Ok(resp) => Ok(Response::new(resp)),
+            Err((code, msg)) => Err(Status::new(code, msg)),
+        }
+    }
+}
+
+async fn setup_adapter_mock(
+    adapter_response: Result<CanisterHttpSendResponse, (Code, String)>,
+) -> Channel {
+    let (client, server) = tokio::io::duplex(1024);
+    let mock_adapter = SingleResponseAdapter::new(adapter_response);
+    tokio::spawn(async move {
+        Server::builder()
+            .add_service(CanisterHttpServiceServer::new(mock_adapter))
+            .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+            .await
+    });
+
+    let mut client = Some(client);
+    Endpoint::try_from("http://[::]:50051")
+        .unwrap()
+        .connect_with_connector(service_fn(move |_: Uri| {
+            let client = client.take();
+
+            async move {
+                if let Some(client) = client {
+                    Ok(client)
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Client already taken",
+                    ))
+                }
+            }
+        }))
+        .await
+        .unwrap()
+}
+
+// END COPY
+
+fn process_mock_canister_https_response(
+    pic: &PocketIc,
+    mock_canister_http_response: &MockCanisterHttpResponse,
+) -> OpOut {
+    let subnet_id =
+        ic_types::SubnetId::new(ic_types::PrincipalId(mock_canister_http_response.subnet_id));
+    let Some(subnet) = pic.get_subnet_with_id(subnet_id) else {
+        return OpOut::Error(PocketIcError::SubnetNotFound(
+            mock_canister_http_response.subnet_id,
+        ));
+    };
+    let canister_http_request_id =
+        CanisterHttpRequestId::from(mock_canister_http_response.request_id);
+    let contexts = subnet.canister_http_request_contexts();
+    let Some(context) = contexts.get(&canister_http_request_id) else {
+        return OpOut::Error(PocketIcError::InvalidCanisterHttpRequestId((
+            subnet_id,
+            canister_http_request_id,
+        )));
+    };
+    let timeout = context.time + Duration::from_secs(5 * 60);
+    let canister_id = context.request.sender;
+    let content = match &mock_canister_http_response.response {
+        CanisterHttpResponse::CanisterHttpReply(reply) => {
+            let grpc_channel =
+                pic.runtime
+                    .block_on(setup_adapter_mock(Ok(CanisterHttpSendResponse {
+                        status: reply.status.into(),
+                        headers: reply
+                            .headers
+                            .iter()
+                            .map(|h| ic_https_outcalls_service::HttpHeader {
+                                name: h.name.clone(),
+                                value: h.value.clone(),
+                            })
+                            .collect(),
+                        content: reply.body.clone(),
+                    })));
+            let query_handler = subnet.query_handler.clone();
+            let query_handler = BoxCloneService::new(service_fn(move |arg| {
+                let query_handler = query_handler.clone();
+                async {
+                    let r = query_handler
+                        .oneshot(arg)
+                        .await
+                        .expect("Inner service should be alive. I hope.");
+                    Ok(r)
+                }
+            }));
+            let mut client = CanisterHttpAdapterClientImpl::new(
+                pic.runtime.handle().clone(),
+                grpc_channel,
+                query_handler.clone(),
+                1,
+                MetricsRegistry::new(),
+                subnet.get_subnet_type(),
+            );
+            client
+                .send(ic_types::canister_http::CanisterHttpRequest {
+                    timeout,
+                    id: canister_http_request_id,
+                    context: context.clone(),
+                })
+                .unwrap();
+            let response = loop {
+                match client.try_receive() {
+                    Err(_) => std::thread::sleep(Duration::from_millis(10)),
+                    Ok(r) => {
+                        break r;
+                    }
+                }
+            };
+            response.content
+        }
+        CanisterHttpResponse::CanisterHttpReject(reject) => {
+            CanisterHttpResponseContent::Reject(CanisterHttpReject {
+                reject_code: RejectCode::try_from(reject.reject_code).unwrap(),
+                message: reject.message.clone(),
+            })
+        }
+    };
+    subnet.mock_canister_http_response(
+        mock_canister_http_response.request_id,
+        timeout,
+        canister_id,
+        content,
+    );
+    OpOut::NoOutput
+}
+
+#[derive(Clone, Debug)]
+pub struct MockCanisterHttp {
+    pub mock_canister_http_response: MockCanisterHttpResponse,
+}
+
+impl Operation for MockCanisterHttp {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        process_mock_canister_https_response(pic, &self.mock_canister_http_response)
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!(
+            "mock_canister_http({:?})",
+            self.mock_canister_http_response
+        ))
     }
 }
 
@@ -1136,17 +1446,8 @@ impl Operation for DashboardRequest {
                 .into_response(),
         };
 
-        OpOut::RawResponse((
-            resp.status().into(),
-            resp.headers()
-                .iter()
-                .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
-                .collect(),
-            pic.runtime
-                .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
-                .unwrap()
-                .to_vec(),
-        ))
+        let fut: ApiResponse = Box::pin(into_api_response(resp));
+        OpOut::RawResponse(fut.shared())
     }
 
     fn retry_if_busy(&self) -> bool {
@@ -1235,17 +1536,8 @@ impl Operation for StatusRequest {
             .block_on(async { status(State((Arc::new(root_key), Arc::new(PocketHealth)))).await })
             .into_response();
 
-        OpOut::RawResponse((
-            resp.status().into(),
-            resp.headers()
-                .iter()
-                .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
-                .collect(),
-            pic.runtime
-                .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
-                .unwrap()
-                .to_vec(),
-        ))
+        let fut: ApiResponse = Box::pin(into_api_response(resp));
+        OpOut::RawResponse(fut.shared())
     }
 
     fn retry_if_busy(&self) -> bool {
@@ -1260,9 +1552,15 @@ impl Operation for StatusRequest {
     }
 }
 
+pub enum CallRequestVersion {
+    V2,
+    V3,
+}
+
 pub struct CallRequest {
     pub effective_canister_id: CanisterId,
     pub bytes: Bytes,
+    pub version: CallRequestVersion,
 }
 
 #[derive(Clone)]
@@ -1301,6 +1599,7 @@ impl Operation for CallRequest {
                 let ingress_filter = subnet.ingress_filter.clone();
 
                 let ingress_validator = IngressValidatorBuilder::builder(
+                    subnet.replica_logger.clone(),
                     node.node_id,
                     subnet.get_subnet_id(),
                     subnet.registry_client.clone(),
@@ -1320,34 +1619,68 @@ impl Operation for CallRequest {
                 )
                 .build();
 
-                let svc = CallServiceV2::new_service(ingress_validator);
+                // Task that waits for call service to submit the ingress message, and
+                // forwards it to the state machine. The task will automatically terminate
+                // once it submits an ingress message received from the call service to the
+                // `StateMachine`, or if the call service is dropped (in which case `r.recv().await` returns `None`).
+                let subnet_clone = subnet.clone();
+                let ingress_proxy_task = pic.runtime.spawn(async move {
+                    if let Some(UnvalidatedArtifactMutation::Insert((msg, _node_id))) =
+                        r.recv().await
+                    {
+                        subnet_clone.push_signed_ingress(msg);
+                    }
+                });
+
+                let svc = match self.version {
+                    CallRequestVersion::V2 => call_v2::new_service(ingress_validator),
+                    CallRequestVersion::V3 => {
+                        let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
+                        let metrics_registry = MetricsRegistry::new();
+                        let metrics = HttpHandlerMetrics::new(&metrics_registry);
+
+                        call_v3::new_service(
+                            ingress_validator,
+                            subnet.ingress_watcher_handle.clone(),
+                            metrics,
+                            http_handler::Config::default()
+                                .ingress_message_certificate_timeout_seconds,
+                            Arc::new(RwLock::new(delegation)),
+                            subnet.state_manager.clone(),
+                        )
+                    }
+                };
+
+                let api_version = match self.version {
+                    CallRequestVersion::V2 => "v2",
+                    CallRequestVersion::V3 => "v3",
+                };
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)
                     .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
                     .uri(format!(
-                        "/api/v2/canister/{}/call",
+                        "/api/{}/canister/{}/call",
+                        api_version,
                         PrincipalId(self.effective_canister_id.get().into())
                     ))
                     .body(self.bytes.clone().into())
                     .unwrap();
-                let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
 
-                if let Ok(UnvalidatedArtifactMutation::Insert((msg, _node_id))) = r.try_recv() {
-                    subnet.push_signed_ingress(msg);
-                }
+                let fut: ApiResponse = Box::pin(async {
+                    let resp = svc.oneshot(request).await.unwrap();
+                    into_api_response(resp).await
+                });
+                let api_resp = fut.shared();
+                let service_task = pic.runtime.spawn(api_resp.clone());
 
-                OpOut::RawResponse((
-                    resp.status().into(),
-                    resp.headers()
-                        .iter()
-                        .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
-                        .collect(),
-                    pic.runtime
-                        .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
-                        .unwrap()
-                        .to_vec(),
-                ))
+                // For the sake of determinism, we need to wait until one of
+                // `service_task` or `ingress_proxy_task` terminates:
+                // then all the state modifications have been performed
+                // and we can return from the operation.
+                while !service_task.is_finished() && !ingress_proxy_task.is_finished() {}
+
+                OpOut::RawResponse(api_resp)
             }
         }
     }
@@ -1400,8 +1733,9 @@ impl Operation for QueryRequest {
                 subnet.certify_latest_state();
                 let query_handler = subnet.query_handler.clone();
                 let svc = QueryServiceBuilder::builder(
+                    subnet.replica_logger.clone(),
                     node.node_id,
-                    Arc::new(PocketNodeSigner(node.signing_key.clone())),
+                    Arc::new(PocketNodeSigner(node.node_signing_key.clone())),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
                     Arc::new(RwLock::new(delegation)),
@@ -1429,17 +1763,8 @@ impl Operation for QueryRequest {
                     .unwrap();
                 let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
 
-                OpOut::RawResponse((
-                    resp.status().into(),
-                    resp.headers()
-                        .iter()
-                        .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
-                        .collect(),
-                    pic.runtime
-                        .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
-                        .unwrap()
-                        .to_vec(),
-                ))
+                let fut: ApiResponse = Box::pin(into_api_response(resp));
+                OpOut::RawResponse(fut.shared())
             }
         }
     }
@@ -1457,12 +1782,12 @@ impl Operation for QueryRequest {
 }
 
 #[derive(Debug)]
-pub struct ReadStateRequest {
+pub struct CanisterReadStateRequest {
     pub effective_canister_id: CanisterId,
     pub bytes: Bytes,
 }
 
-impl Operation for ReadStateRequest {
+impl Operation for CanisterReadStateRequest {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         match route(
             pic,
@@ -1474,6 +1799,7 @@ impl Operation for ReadStateRequest {
                 let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
                 subnet.certify_latest_state();
                 let svc = CanisterReadStateServiceBuilder::builder(
+                    subnet.replica_logger.clone(),
                     subnet.state_manager.clone(),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
@@ -1492,17 +1818,8 @@ impl Operation for ReadStateRequest {
                     .unwrap();
                 let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
 
-                OpOut::RawResponse((
-                    resp.status().into(),
-                    resp.headers()
-                        .iter()
-                        .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
-                        .collect(),
-                    pic.runtime
-                        .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
-                        .unwrap()
-                        .to_vec(),
-                ))
+                let fut: ApiResponse = Box::pin(into_api_response(resp));
+                OpOut::RawResponse(fut.shared())
             }
         }
     }
@@ -1516,9 +1833,57 @@ impl Operation for ReadStateRequest {
         self.bytes.hash(&mut hasher);
         let hash = Digest(hasher.finish());
         OpId(format!(
-            "read_state({},{})",
+            "canister_read_state({},{})",
             self.effective_canister_id, hash,
         ))
+    }
+}
+
+#[derive(Debug)]
+pub struct SubnetReadStateRequest {
+    pub subnet_id: SubnetId,
+    pub bytes: Bytes,
+}
+
+impl Operation for SubnetReadStateRequest {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        match route(pic, EffectivePrincipal::SubnetId(self.subnet_id), false) {
+            Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
+            Ok(subnet) => {
+                let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
+                subnet.certify_latest_state();
+                let svc = SubnetReadStateServiceBuilder::builder(
+                    Arc::new(RwLock::new(delegation)),
+                    subnet.state_manager.clone(),
+                )
+                .build_service();
+
+                let request = axum::http::Request::builder()
+                    .method(Method::POST)
+                    .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
+                    .uri(format!(
+                        "/api/v2/subnet/{}/read_state",
+                        PrincipalId(self.subnet_id.get().into())
+                    ))
+                    .body(self.bytes.clone().into())
+                    .unwrap();
+                let resp = pic.runtime.block_on(svc.oneshot(request)).unwrap();
+
+                let fut: ApiResponse = Box::pin(into_api_response(resp));
+                OpOut::RawResponse(fut.shared())
+            }
+        }
+    }
+
+    fn retry_if_busy(&self) -> bool {
+        true
+    }
+
+    fn id(&self) -> OpId {
+        let mut hasher = Sha256::new();
+        self.bytes.hash(&mut hasher);
+        let hash = Digest(hasher.finish());
+        OpId(format!("subnet_read_state({},{})", self.subnet_id, hash,))
     }
 }
 
@@ -1920,6 +2285,7 @@ fn route(
                         pic.registry_data_provider.clone(),
                         time,
                         pic.nonmainnet_features,
+                        pic.log_level,
                     );
                     let sm = builder.build_with_subnets(pic.subnets.clone());
                     // We insert the new subnet into the routing table.
@@ -1965,11 +2331,22 @@ fn route(
                         // all the state machines have a consistent view of the registry.
                         subnet.reload_registry();
                     }
+                    // Update the registry file on disk.
+                    if let Some(ref state_dir) = pic.state_dir {
+                        let registry_proto_path = PathBuf::from(state_dir).join("registry.proto");
+                        pic.registry_data_provider
+                            .write_to_file(registry_proto_path);
+                    }
                     // We need to execute a round on the new subnet to make its state certified.
                     // To keep the PocketIC instance time in sync, we execute a round on all subnets.
                     for subnet in pic.subnets.read().unwrap().values() {
                         subnet.execute_round();
                     }
+                    // We update the canister http adapters.
+                    pic.canister_http_adapters.blocking_lock().insert(
+                        sm.get_subnet_id(),
+                        new_canister_http_adapter(sm.replica_logger.clone(), &sm.metrics_registry),
+                    );
                     Ok(sm)
                 } else {
                     // If the request is not an update call to create a canister using the provisional API,
@@ -2037,6 +2414,24 @@ fn systemtime_to_unix_epoch_nanos(st: SystemTime) -> u64 {
         .unwrap()
 }
 
+fn new_canister_http_adapter(
+    log: ReplicaLogger,
+    metrics_registry: &MetricsRegistry,
+) -> CanisterHttp {
+    // Socks client setup
+    // We don't really use the Socks client in PocketIC as we set `socks_proxy_allowed: false` in the request,
+    // but we still have to provide one when constructing the production `CanisterHttp` object
+    // and thus we use a reserved (and invalid) proxy IP address.
+    let config = HttpsOutcallsConfig {
+        http_connect_timeout_secs: 2,
+        http_request_timeout_secs: 2,
+        socks_proxy: "http://240.0.0.0:8080".to_string(),
+        ..Default::default()
+    };
+
+    CanisterHttp::new(config, log, metrics_registry)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2088,10 +2483,12 @@ mod tests {
         let unix_time_ns = 1640995200000000000; // 1st Jan 2022
         let time = Time::from_nanos_since_unix_epoch(unix_time_ns);
         compute_assert_state_change(&mut pic, SetTime { time });
-        let expected_time = OpOut::Time(unix_time_ns);
         let actual_time = compute_assert_state_immutable(&mut pic, GetTime {});
 
-        assert_eq!(expected_time, actual_time);
+        match actual_time {
+            OpOut::Time(actual_time_ns) => assert_eq!(unix_time_ns, actual_time_ns),
+            _ => panic!("Unexpected OpOut: {:?}", actual_time),
+        };
     }
 
     #[test]
@@ -2205,6 +2602,7 @@ mod tests {
             },
             None,
             false,
+            None,
         );
         let canister_id = pic.any_subnet().create_canister(None);
 

@@ -106,8 +106,6 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_paused_install_code: Histogram,
     pub(super) canister_aborted_install_code: Histogram,
     pub(super) inducted_messages: IntCounterVec,
-    // TODO(CON-1302): Remove metric once `threshold_signature_agreements` is rolled out.
-    pub(super) ecdsa_signature_agreements: IntGauge,
     pub(super) threshold_signature_agreements: IntGaugeVec,
     pub(super) delivered_pre_signatures: HistogramVec,
     pub(super) completed_signature_request_contexts: IntCounterVec,
@@ -226,24 +224,20 @@ impl SchedulerMetrics {
                 "Number of cycles consumed by use cases.",
                 &["use_case"],
             ),
-            ecdsa_signature_agreements: metrics_registry.int_gauge(
-                "replicated_state_ecdsa_signature_agreements_total",
-                "Total number of ECDSA signature agreements created",
-            ),
             threshold_signature_agreements: metrics_registry.int_gauge_vec(
                 "replicated_state_threshold_signature_agreements_total",
                 "Total number of threshold signature agreements created by key Id",
                 &["key_id"],
             ),
             delivered_pre_signatures: metrics_registry.histogram_vec(
-                "execution_ecdsa_delivered_quadruples",
-                "Number of ECDSA quadruples delivered to execution by key ID",
+                "execution_idkg_delivered_pre_signatures",
+                "Number of IDkg pre-signatures delivered to execution by key ID",
                 vec![0.0, 1.0, 2.0, 5.0, 10.0, 15.0, 20.0],
                 &["key_id"],
             ),
             completed_signature_request_contexts: metrics_registry.int_counter_vec(
-                "execution_completed_sign_with_ecdsa_contexts_total",
-                "Total number of completed sign with ECDSA contexts by key ID",
+                "execution_completed_signature_request_contexts_total",
+                "Total number of completed signature request contexts by key ID",
                 &["key_id"],
             ),
             input_queue_messages: metrics_registry.int_gauge_vec(
@@ -450,8 +444,8 @@ impl SchedulerMetrics {
                 metrics_registry,
             ),
             round_update_signature_request_contexts_duration: duration_histogram(
-                "execution_round_update_sign_with_ecdsa_contexts_duration_seconds",
-                "The duration of updating sign with ecdsa contexts in seconds.",
+                "execution_round_update_signature_request_contexts_duration_seconds",
+                "The duration of updating signature request contexts in seconds.",
                 metrics_registry,
             ),
             round_inner: ScopedMetrics {

@@ -5,13 +5,13 @@ load("@io_bazel_rules_docker//docker/package_managers:download_pkgs.bzl", "downl
 load("@io_bazel_rules_docker//docker/package_managers:install_pkgs.bzl", "install_pkgs")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "symlink_dir", "symlink_dir_test", "symlink_dirs")
-load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES", "mainnet_nns_canisters", "mainnet_sns_canisters", "qualifying_nns_canisters", "qualifying_sns_canisters", "tip_nns_canisters", "tip_sns_canisters")
+load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES")
 load(":system_tests.bzl", "uvm_config_image")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 exports_files([
-    "src/cow_safety.wasm",
+    "src/memory_safety.wasm",
     "src/message.wasm",
 ])
 
@@ -31,14 +31,10 @@ rust_library(
     aliases = ALIASES,
     compile_data = [
         "//ic-os/components:ic/ic.json5.template",
-        "src/consensus/cow_safety.wasm",
+        "src/memory_safety.wasm",
         "src/counter.wat",
         "src/ledger_tests/transaction_ledger_correctness.wasm",
     ],
-    crate_features = select({
-        "//bazel:upload_perf_systest_results_enabled": ["upload_perf_systest_results"],
-        "//conditions:default": [],
-    }),
     crate_name = "ic_tests",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -104,30 +100,6 @@ filegroup(
     srcs = glob(["dashboards/**/*"]),
 )
 
-tip_nns_canisters(
-    name = "tip-nns-canisters",
-)
-
-mainnet_nns_canisters(
-    name = "mainnet-nns-canisters",
-)
-
-qualifying_nns_canisters(
-    name = "qualifying-nns-canisters",
-)
-
-tip_sns_canisters(
-    name = "tip-sns-canisters",
-)
-
-mainnet_sns_canisters(
-    name = "mainnet-sns-canisters",
-)
-
-qualifying_sns_canisters(
-    name = "qualifying-sns-canisters",
-)
-
 symlink_dir(
     name = "recovery/binaries",
     testonly = True,
@@ -168,6 +140,9 @@ copy_file(
     name = "static-file-server_image",
     src = "@static-file-server//image",
     out = "static-file-server.tar",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 exports_files([
@@ -277,30 +252,46 @@ symlink_dirs(
         "//rs/universal_canister/impl:universal_canister.wasm.gz": "test-data",
         "//rs/tests:wabt-tests": "test-data",
     },
+    visibility = [
+        "//rs:system-tests-pkg",
+        "//rs/pocket_ic_server:__pkg__",
+    ],
 )
 
 copy_file(
     name = "coredns_image",
     src = "@coredns//image",
     out = "coredns.tar",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 copy_file(
     name = "pebble_image",
     src = "@pebble//image",
     out = "pebble.tar",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 copy_file(
     name = "python3_image",
     src = "@python3//image",
     out = "python3.tar",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 copy_file(
     name = "openssl_image",
     src = "@alpine_openssl//image",
     out = "openssl.tar",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 uvm_config_image(

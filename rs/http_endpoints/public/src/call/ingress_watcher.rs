@@ -1,6 +1,6 @@
 use crate::metrics::HttpHandlerMetrics;
 use ic_async_utils::JoinMap;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{info, ReplicaLogger};
 use ic_types::{messages::MessageId, Height};
 use std::{
     cmp::max,
@@ -115,7 +115,7 @@ enum MessageExecutionStatus {
 /// Invariants:
 /// - 1:1 mapping of keys in `message_statuses` and `cancellations`.
 /// - 1:1 mapping of keys in `message_statuses` with execution status as completed and `completed_execution_heights`.
-pub(crate) struct IngressWatcher {
+pub struct IngressWatcher {
     log: ReplicaLogger,
     metrics: HttpHandlerMetrics,
     rt_handle: Handle,
@@ -132,7 +132,7 @@ pub(crate) struct IngressWatcher {
 }
 
 impl IngressWatcher {
-    pub(crate) fn start(
+    pub fn start(
         rt_handle: Handle,
         log: ReplicaLogger,
         metrics: HttpHandlerMetrics,
@@ -247,7 +247,7 @@ impl IngressWatcher {
                 }
 
                 _ = self.cancellation_token.cancelled() => {
-                    error!(
+                    info!(
                         self.log,
                         "Ingress watcher event loop cancelled.",
                     );

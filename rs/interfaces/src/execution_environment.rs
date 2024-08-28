@@ -1210,7 +1210,7 @@ pub trait Scheduler: Send {
     ///   use during an execution round.
     /// * `max_instructions_per_round`: max number of instructions a single
     ///   round on a single thread can
-    /// consume.
+    ///   consume.
     /// * `max_instructions_per_message`: max number of instructions a single
     ///   message execution can consume.
     ///

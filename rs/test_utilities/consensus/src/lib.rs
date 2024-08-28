@@ -146,7 +146,7 @@ pub fn make_genesis(summary: dkg::Summary) -> CatchUpPackage {
             crypto_hash,
             BlockPayload::Summary(SummaryPayload {
                 dkg: summary,
-                ecdsa: None,
+                idkg: None,
             }),
         ),
         height,

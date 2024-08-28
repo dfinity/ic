@@ -31,7 +31,7 @@ The Bazel command used to build the HostOS/GuestOS images also generates a HostO
 
     $ bazel build //ic-os/{hostos,guestos}/envs/<TARGET>/...
 
-This command will output `update-img.tar{.gz,.zst}` in `/ic/bazel-bin/ic-os/{hostos,guestos}/envs/{prod,dev,dev-malicious}`, which is the tar archive of the HostOS/GuestOS update image.
+This command will output `update-img.tar.zst` in `/ic/bazel-bin/ic-os/{hostos,guestos}/envs/{prod,dev,dev-malicious}`, which is the tar archive of the HostOS/GuestOS update image.
 
 Note that the upgrade images include only the boot and root partitions in a tar archive. Full images, on the other hand, include the entire partition table.
 

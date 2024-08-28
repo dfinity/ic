@@ -17,6 +17,7 @@ ic-cup-explorer = { path = "../cup_explorer" }
 ic-http-utils = { path = "../http_utils" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
@@ -29,7 +30,6 @@ ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-replay = { path = "../replay" }
 ic-state-manager = { path = "../state_manager" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-types = { path = "../types/types" }
 prost = { workspace = true }
 reqwest = { workspace = true }
@@ -42,13 +42,13 @@ slog-term = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 tokio = { workspace = true }
-url = { version = "2.1.1", features = ["serde"] }
+url = { workspace = true }
 
 [dev-dependencies]
-tempfile = { workspace = true }
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
+tempfile = { workspace = true }
 
 [[bin]]
 name = "ic-recovery"

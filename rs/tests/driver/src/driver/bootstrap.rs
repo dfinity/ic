@@ -9,8 +9,11 @@ use crate::driver::{
     resource::AllocatedVm,
     test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
     test_env_api::{
-        HasDependencies, HasIcDependencies, HasTopologySnapshot, IcNodeContainer,
-        InitialReplicaVersion, NodesInfo,
+        get_dependency_path, get_elasticsearch_hosts, get_ic_os_update_img_sha256,
+        get_ic_os_update_img_url, get_mainnet_ic_os_update_img_url,
+        get_malicious_ic_os_update_img_sha256, get_malicious_ic_os_update_img_url,
+        read_dependency_from_env_to_string, read_dependency_to_string, HasIcDependencies,
+        HasTopologySnapshot, IcNodeContainer, InitialReplicaVersion, NodesInfo,
     },
     test_setup::InfraProvider,
 };
@@ -19,18 +22,17 @@ use crate::k8s::images::*;
 use crate::k8s::tnet::{TNet, TNode};
 use crate::util::block_on;
 use anyhow::{bail, Result};
-use flate2::{write::GzEncoder, Compression};
 use ic_base_types::NodeId;
 use ic_prep_lib::{
     internet_computer::{IcConfig, InitializedIc, TopologyConfig},
     node::{InitializedNode, NodeConfiguration, NodeIndex},
     subnet_configuration::SubnetConfig,
 };
+use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::ReplicaVersion;
-use registry_canister::mutations::node_management::do_update_node_ipv4_config_directly::IPv4Config;
 use slog::{info, warn, Logger};
 use std::{
     collections::BTreeMap,
@@ -44,6 +46,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 use url::Url;
+use zstd::stream::write::Encoder;
 
 pub type UnassignedNodes = BTreeMap<NodeIndex, NodeConfiguration>;
 pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;
@@ -54,7 +57,7 @@ const JAEGER_ADDR_PATH: &str = "jaeger_addr";
 const SOCKS_PROXY_PATH: &str = "socks_proxy";
 
 fn mk_compressed_img_path() -> std::string::String {
-    format!("{}.gz", CONF_IMG_FNAME)
+    format!("{}.zst", CONF_IMG_FNAME)
 }
 
 pub fn init_ic(
@@ -86,9 +89,9 @@ pub fn init_ic(
 
     let replica_version = if ic.with_mainnet_config {
         let mainnet_nns_revisions_path = "testnet/mainnet_nns_revision.txt".to_string();
-        test_env.read_dependency_to_string(mainnet_nns_revisions_path.clone())?
+        read_dependency_to_string(mainnet_nns_revisions_path.clone())?
     } else {
-        test_env.read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?
+        read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?
     };
 
     let replica_version = ReplicaVersion::try_from(replica_version.clone())?;
@@ -177,19 +180,16 @@ pub fn init_ic(
                 "Using malicious guestos update image for IC config."
             );
             (
-                test_env.get_malicious_ic_os_update_img_sha256()?,
-                test_env.get_malicious_ic_os_update_img_url()?,
+                get_malicious_ic_os_update_img_sha256()?,
+                get_malicious_ic_os_update_img_url()?,
             )
         } else if ic.with_mainnet_config {
             (
                 test_env.get_mainnet_ic_os_update_img_sha256()?,
-                test_env.get_mainnet_ic_os_update_img_url()?,
+                get_mainnet_ic_os_update_img_url()?,
             )
         } else {
-            (
-                test_env.get_ic_os_update_img_sha256()?,
-                test_env.get_ic_os_update_img_url()?,
-            )
+            (get_ic_os_update_img_sha256()?, get_ic_os_update_img_url()?)
         }
     };
     let mut ic_config = IcConfig::new(
@@ -212,13 +212,6 @@ pub fn init_ic(
     );
 
     ic_config.set_use_specified_ids_allocation_range(specific_ids);
-
-    if InfraProvider::read_attribute(test_env) == InfraProvider::K8s {
-        ic_config.set_whitelisted_prefixes(Some("::/0".to_string()));
-        ic_config.set_whitelisted_ports(Some(
-            "22,2497,4100,7070,8080,9090,9091,9100,19100,19531".to_string(),
-        ));
-    }
 
     info!(test_env.logger(), "Initializing via {:?}", &ic_config);
 
@@ -418,8 +411,8 @@ fn create_config_disk_image(
     group_name: &str,
 ) -> anyhow::Result<()> {
     let img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
-    let script_path = test_env
-        .get_dependency_path("ic-os/components/hostos-scripts/build-bootstrap-config-image.sh");
+    let script_path =
+        get_dependency_path("ic-os/components/hostos-scripts/build-bootstrap-config-image.sh");
     let mut cmd = Command::new(script_path);
     let local_store_path = test_env
         .prep_dir(ic_name)
@@ -484,9 +477,10 @@ fn create_config_disk_image(
         );
         cmd.arg("--ipv4_address").arg(format!(
             "{}/{:?}",
-            ipv4_config.ip_addr, ipv4_config.prefix_length
+            ipv4_config.ip_addr(),
+            ipv4_config.prefix_length()
         ));
-        cmd.arg("--ipv4_gateway").arg(&ipv4_config.gateway_ip_addr);
+        cmd.arg("--ipv4_gateway").arg(ipv4_config.gateway_ip_addr());
     }
 
     if let Some(domain) = domain {
@@ -503,7 +497,7 @@ fn create_config_disk_image(
             .arg(ssh_authorized_pub_keys_dir);
     }
 
-    let elasticsearch_hosts: Vec<String> = test_env.get_elasticsearch_hosts()?;
+    let elasticsearch_hosts: Vec<String> = get_elasticsearch_hosts()?;
     info!(
         test_env.logger(),
         "ElasticSearch hosts are {:?}", elasticsearch_hosts
@@ -546,7 +540,7 @@ fn create_config_disk_image(
     let mut img_file = File::open(img_path)?;
     let compressed_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
     let compressed_img_file = File::create(compressed_img_path.clone())?;
-    let mut encoder = GzEncoder::new(compressed_img_file, Compression::default());
+    let mut encoder = Encoder::new(compressed_img_file, 0)?;
     let _ = io::copy(&mut img_file, &mut encoder)?;
     let mut write_stream = encoder.finish()?;
     write_stream.flush()?;
@@ -580,11 +574,11 @@ fn configure_setupos_image(
     nns_url: &Url,
     nns_public_key: &str,
 ) -> anyhow::Result<PathBuf> {
-    let setupos_image = env.get_dependency_path("ic-os/setupos/envs/dev/disk-img.tar.zst");
-    let setupos_inject_configs = env
-        .get_dependency_path("rs/ic_os/setupos-inject-configuration/setupos-inject-configuration");
+    let setupos_image = get_dependency_path("ic-os/setupos/envs/dev/disk-img.tar.zst");
+    let setupos_inject_configs =
+        get_dependency_path("rs/ic_os/setupos-inject-configuration/setupos-inject-configuration");
     let setupos_disable_checks =
-        env.get_dependency_path("rs/ic_os/setupos-disable-checks/setupos-disable-checks");
+        get_dependency_path("rs/ic_os/setupos-disable-checks/setupos-disable-checks");
 
     let nested_vm = env.get_nested_vm(name)?;
 
@@ -653,7 +647,7 @@ fn configure_setupos_image(
         .arg("--cpu-mode")
         .arg(cpu_mode)
         .arg("--nns-url")
-        .arg(&nns_url.to_string())
+        .arg(nns_url.to_string())
         .arg("--nns-public-key")
         .arg(nns_public_key)
         .env(path_key, &new_path);
@@ -676,7 +670,7 @@ fn configure_setupos_image(
 
     let mut img_file = File::open(&uncompressed_image)?;
     let configured_image_file = File::create(configured_image.clone())?;
-    let mut encoder = GzEncoder::new(configured_image_file, Compression::default());
+    let mut encoder = Encoder::new(configured_image_file, 0)?;
     let _ = io::copy(&mut img_file, &mut encoder)?;
     let mut write_stream = encoder.finish()?;
     write_stream.flush()?;

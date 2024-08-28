@@ -1,7 +1,7 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 exports_files([
     "src/message.wasm",
@@ -30,6 +30,10 @@ rust_library(
         "@crate_index//:strum_macros",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    visibility = [
+        "//rs:system-tests-pkg",
+        "//rs/ic_os/launch-single-vm:__pkg__",
+    ],
     deps = [
         # Keep sorted.
         "//packages/icrc-ledger-types:icrc_ledger_types",
@@ -55,7 +59,7 @@ rust_library(
         "//rs/nns/cmc",
         "//rs/nns/common",
         "//rs/nns/constants",
-        "//rs/nns/governance",
+        "//rs/nns/governance/api",
         "//rs/nns/gtc",
         "//rs/nns/handlers/lifeline/impl:lifeline",
         "//rs/nns/handlers/root/impl:root",
@@ -66,6 +70,7 @@ rust_library(
         "//rs/prep",
         "//rs/protobuf",
         "//rs/registry/canister",
+        "//rs/registry/canister/api",
         "//rs/registry/client",
         "//rs/registry/helpers",
         "//rs/registry/keys",
@@ -87,7 +92,6 @@ rust_library(
         "//rs/rosetta-api/rosetta_core:rosetta-core",
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/dfn_candid",
-        "//rs/rust_canisters/dfn_core",
         "//rs/rust_canisters/dfn_protobuf",
         "//rs/rust_canisters/http_types",
         "//rs/rust_canisters/on_wire",
@@ -118,13 +122,12 @@ rust_library(
         "@crate_index//:clap",
         "@crate_index//:crossbeam-channel",
         "@crate_index//:ed25519-dalek",
-        "@crate_index//:flate2",
         "@crate_index//:futures",
         "@crate_index//:hex",
         "@crate_index//:http_0_2_12",
         "@crate_index//:humantime",
+        "@crate_index//:humantime-serde",
         "@crate_index//:hyper_0_14_27",
-        "@crate_index//:hyper_rustls_0_24_2",
         "@crate_index//:ic-agent",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",
@@ -173,5 +176,6 @@ rust_library(
         "@crate_index//:url",
         "@crate_index//:walkdir",
         "@crate_index//:wat",
+        "@crate_index//:zstd",
     ],
 )

@@ -5,7 +5,7 @@ use crate::{
 };
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_protobuf::types::v1 as pb;
+use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::{
     convert::TryFrom,
@@ -44,7 +44,8 @@ impl From<&IngressPayload> for pb::IngressPayload {
 }
 
 impl TryFrom<pb::IngressPayload> for IngressPayload {
-    type Error = String;
+    type Error = ProxyDecodeError;
+
     fn try_from(payload: pb::IngressPayload) -> Result<Self, Self::Error> {
         Ok(Self {
             id_and_pos: payload
@@ -54,13 +55,12 @@ impl TryFrom<pb::IngressPayload> for IngressPayload {
                     Ok((
                         IngressMessageId::new(
                             Time::from_nanos_since_unix_epoch(ingress_offset.expiry),
-                            MessageId::try_from(ingress_offset.message_id.as_slice())
-                                .map_err(|e| format!("{:?}", e))?,
+                            MessageId::try_from(ingress_offset.message_id.as_slice())?,
                         ),
                         ingress_offset.offset,
                     ))
                 })
-                .collect::<Result<Vec<_>, String>>()?,
+                .collect::<Result<Vec<_>, Self::Error>>()?,
             buffer: payload.buffer,
         })
     }

@@ -26,6 +26,7 @@ rust_library(
         "//rs/protobuf",
         "//rs/types/base_types",
         "//rs/types/error_types",
+        "//rs/utils",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:num-traits",

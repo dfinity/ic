@@ -45,6 +45,29 @@ fn secret_key_serialization_round_trips() {
 }
 
 #[test]
+fn secret_key_generation_from_seed_is_stable() {
+    let tests = [
+        (
+            "",
+            "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce",
+        ),
+        (
+            "abcdef",
+            "d5d81c66c3b1a0efb49e980ebc5629c352342dc3332c0697cbeeb55f892a8526",
+        ),
+        (
+            "03fc46909ddfe5ed2f37af7923d846ecab53f962a83e4fc30be550671ceab3e6",
+            "f3c92b5fe0c39a07b23447427a092f43cca5d03ad5a2b41658426ec5dcd493e2",
+        ),
+    ];
+
+    for (seed, expected_key) in tests {
+        let sk = PrivateKey::generate_from_seed(&hex::decode(seed).unwrap());
+        assert_eq!(hex::encode(sk.serialize_raw()), expected_key);
+    }
+}
+
+#[test]
 fn pkcs8_v2_rep_includes_the_public_key() {
     let mut rng = &mut test_rng();
     let sk = PrivateKey::generate_using_rng(&mut rng);
@@ -124,7 +147,7 @@ fn batch_verification_works() {
     // Check that empty batches are accepted
     assert!(PublicKey::batch_verify(&[], &[], &[], rng).is_ok());
 
-    for batch_size in 1..15 {
+    for batch_size in (1..30).chain([50, 75, 100]) {
         let sk = (0..batch_size)
             .map(|_| PrivateKey::generate_using_rng(rng))
             .collect::<Vec<_>>();
@@ -159,6 +182,18 @@ fn batch_verification_works() {
 
         // Fix the corrupted message
         msg[corrupted_msg_idx][corrupted_msg_byte] ^= corrupted_msg_mask;
+
+        // Corrupt a random public key and check that the batch fails:
+        let corrupted_pk_idx = rng.gen::<usize>() % batch_size;
+        let correct_pk = pk[corrupted_pk_idx];
+        let wrong_pk = PrivateKey::generate_using_rng(rng).public_key();
+        assert_ne!(correct_pk, wrong_pk);
+        pk[corrupted_pk_idx] = wrong_pk;
+        assert!(!batch_verifies(&msg, &sigs, &pk, rng));
+        // Fix the corrupted public key
+        pk[corrupted_pk_idx] = correct_pk;
+        // We fixed the public key so the batch should verify again:
+        debug_assert!(batch_verifies(&msg, &sigs, &pk, rng));
 
         if batch_size > 1 {
             // Swapping a key causes batch verification to fail:
@@ -394,6 +429,46 @@ fn private_derivation_is_compatible_with_public_derivation() {
         let derived_sig = derived_sk.sign_message(&msg);
 
         assert!(derived_pk.verify_signature(&msg, &derived_sig).is_ok());
+    }
+}
+
+#[test]
+fn private_derivation_also_works_for_derived_keys() {
+    let rng = &mut test_rng();
+
+    for _ in 0..100 {
+        let master_sk = PrivateKey::generate_using_rng(rng);
+
+        let chain_code = rng.gen::<[u8; 32]>();
+        let path_len = 2 + rng.gen::<usize>() % 32;
+        let path = (0..path_len)
+            .map(|_| rng.gen::<u32>())
+            .collect::<Vec<u32>>();
+
+        // First derive directly from a normal key
+        let (derived_sk, cc_sk) =
+            master_sk.derive_subkey_with_chain_code(&DerivationPath::new_bip32(&path), &chain_code);
+
+        // Now derive with the path split in half
+
+        let split = rng.gen::<usize>() % (path_len - 1);
+        let path1 = DerivationPath::new_bip32(&path[..split]);
+        let path2 = DerivationPath::new_bip32(&path[split..]);
+
+        // Derive the intermediate secret key and chain code
+        let (isk, icc) = master_sk.derive_subkey_with_chain_code(&path1, &chain_code);
+
+        // From the intermediate key, use the second part of the path to derive the final key
+
+        let (fsk, fcc) = isk.derive_subkey_with_chain_code(&path2, &icc);
+
+        assert_eq!(hex::encode(fcc), hex::encode(cc_sk));
+
+        // We can't serialize the keys so instead compare their respective public keys
+        assert_eq!(
+            hex::encode(fsk.public_key().serialize_raw()),
+            hex::encode(derived_sk.public_key().serialize_raw())
+        );
     }
 }
 

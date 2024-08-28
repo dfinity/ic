@@ -59,7 +59,7 @@ use strum::{AsRefStr, FromRepr, IntoEnumIterator};
 /// There are 3 kind of LMDB databases used:
 ///
 /// 1. An "artifacts" database maps IdKey to bincode encoded bytes for fast
-/// serialization and deserialization:
+///    serialization and deserialization:
 ///
 /// ```text
 /// artifacts
@@ -69,7 +69,7 @@ use strum::{AsRefStr, FromRepr, IntoEnumIterator};
 /// ```
 ///
 /// 2. A set of index databases, one for each message type. Each one of them
-/// maps a HeightKey to a set of IdKeys:
+///    maps a HeightKey to a set of IdKeys:
 ///
 /// ```text
 /// --------------------------
@@ -105,10 +105,10 @@ pub(crate) struct PersistentHeightIndexedPool<T> {
 /// We differentiate between 3 types:
 ///
 /// 1. Object that is serialized and stored in the pool. This can include
-/// additional data such as timestamp.
+///    additional data such as timestamp.
 ///
 /// 2. Artifact::Message is the message type (usually an enum) of each
-/// ArtifactKind. It can be casted into individual messages using TryFrom.
+///    ArtifactKind. It can be casted into individual messages using TryFrom.
 ///
 /// 3. Individual message type.
 pub(crate) trait PoolArtifact: Sized {
@@ -649,7 +649,7 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
             }
 
             // update meta
-            let meta = if meta.max <= height_key {
+            let meta = if meta.max < height_key {
                 None
             } else {
                 tx_get_key(tx, index_db, GetOp::First)?.map(|key| Meta {
@@ -1033,12 +1033,12 @@ impl PoolArtifact for ConsensusMessage {
                 Box::new(move || match payload_type {
                     PayloadType::Summary => BlockPayload::Summary(SummaryPayload {
                         dkg: dkg::Summary::default(),
-                        ecdsa: None,
+                        idkg: None,
                     }),
                     PayloadType::Data => BlockPayload::Data(DataPayload {
                         batch: BatchPayload::default(),
                         dealings: dkg::Dealings::new_empty(start_height),
-                        ecdsa: None,
+                        idkg: None,
                     }),
                 }),
             );
@@ -1189,6 +1189,7 @@ impl PersistentHeightIndexedPool<ConsensusMessage> {
                     let type_key = match artifact_type {
                         PurgeableArtifactType::NotarizationShare => TypeKey::NotarizationShare,
                         PurgeableArtifactType::FinalizationShare => TypeKey::FinalizationShare,
+                        PurgeableArtifactType::EquivocationProof => TypeKey::EquivocationProof,
                     };
 
                     purged.extend(
@@ -1579,13 +1580,13 @@ impl crate::certification_pool::MutablePoolSection
 ///
 /// Two kinds of look up are possible with this:
 /// 1. Look up by full key of <16 bytes prefix + id data>, which would return the matching
-/// artifact if present.
+///    artifact if present.
 /// 2. Look up by prefix match. This can return 0 or more entries, as several artifacts may share
-/// the same prefix. The caller is expected to filter the returned entries as needed. The look up
-/// by prefix makes some frequent queries more efficient (e.g) to know if a node has already
-/// issued a support for a <transcript Id, dealer Id>, we could iterate through all the entries
-/// in the support pool looking for a matching artifact. Instead, this implementation allows
-/// us to issue a single prefix query for prefix = <transcript Id, dealer Id + support signer Id>.
+///    the same prefix. The caller is expected to filter the returned entries as needed. The look up
+///    by prefix makes some frequent queries more efficient (e.g) to know if a node has already
+///    issued a support for a <transcript Id, dealer Id>, we could iterate through all the entries
+///    in the support pool looking for a matching artifact. Instead, this implementation allows
+///    us to issue a single prefix query for prefix = <transcript Id, dealer Id + support signer Id>.
 #[derive(Debug)]
 pub(crate) struct IDkgIdKey(Vec<u8>);
 
@@ -2594,6 +2595,36 @@ mod tests {
                 );
                 assert_consistency(&pool);
             }
+        });
+    }
+
+    #[test]
+    fn test_purge_below_maximum_element() {
+        run_persistent_pool_test("test_purge_below_maximum_element", |config, log| {
+            const MAX_HEIGHT: Height = Height::new(10);
+            let mut pool = PersistentHeightIndexedPool::new_consensus_pool(
+                config.clone(),
+                /*read_only=*/ false,
+                log.clone(),
+            );
+            let rb_ops = random_beacon_ops(1..=MAX_HEIGHT.get());
+            pool.mutate(rb_ops.clone());
+            assert_eq!(pool.random_beacon().size(), rb_ops.ops.len());
+
+            // purge artifacts strictly below the maximum element (at height 10)
+            let mut purge_ops = PoolSectionOps::new();
+            purge_ops.purge_below(MAX_HEIGHT);
+            pool.mutate(purge_ops);
+
+            // verify that the artifacts have been purged
+            assert_eq!(
+                pool.random_beacon().height_range(),
+                Some(HeightRange {
+                    min: MAX_HEIGHT,
+                    max: MAX_HEIGHT
+                })
+            );
+            assert_consistency(&pool);
         });
     }
 

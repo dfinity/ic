@@ -10,16 +10,19 @@ documentation.workspace = true
 anyhow = { workspace = true }
 candid = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
+ic-mainnet-nns-recovery = { path = "../../nns/ic_mainnet_nns_recovery" }
 ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }
-tests = { path = "../.." }
-ic-mainnet-nns-recovery = { path = "../../nns/ic_mainnet_nns_recovery" }
 ic-xrc-types = "1.0.0"
-slog = { workspace = true }
-xrc-mock = { path = "../../../rosetta-api/tvl/xrc_mock" }
-serde_json = { workspace = true }
+ic_consensus_system_test_utils = { path = "../../consensus/utils" }
+reqwest = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
+slog = { workspace = true }
+tests = { path = "../.." }
+url = { workspace = true }
+xrc-mock = { path = "../../../rosetta-api/tvl/xrc_mock" }
 
 [[bin]]
 name = "large"

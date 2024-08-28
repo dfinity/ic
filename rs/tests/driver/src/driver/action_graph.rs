@@ -315,13 +315,13 @@ impl Node {
 
 impl Node {
     /// * A node is failed at most once <= all transitions from failed are
-    /// cyclic.
+    ///   cyclic.
     ///
     /// * A node is stopped at most once <= there is only one transition leading
-    /// to Stopped.
+    ///   to Stopped.
     ///
     /// * A node is started at most once <= there is only one transition leading
-    /// to the Running state.
+    ///   to the Running state.
     #[rustfmt::skip]
     fn apply_effect(&self, action: Effect) -> (Self, Option<Cond>) {
         use Effect::*;

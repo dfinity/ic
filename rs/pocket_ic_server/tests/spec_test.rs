@@ -14,8 +14,8 @@ use tempfile::NamedTempFile;
 const LOCALHOST: &str = "127.0.0.1";
 
 const EXCLUDED: &[&str] = &[
-    // blocked on canister https outcalls in PocketIC
-    "$0 ~ /canister http outcalls/",
+    // we do not enforce https in PocketIC
+    "$0 ~ /url must start with https:/",
     // replica issues
     "$0 ~ /wrong effective canister id.in management call/",
     "$0 ~ /access denied with different effective canister id/",

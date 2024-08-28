@@ -1,10 +1,9 @@
 //! Module that deals with ingress messages
-mod call_v2;
-mod call_v3;
-pub(crate) mod ingress_watcher;
+pub mod call_v2;
+pub mod call_v3;
+mod ingress_watcher;
 
-pub use call_v2::CallServiceV2;
-pub use call_v3::CallServiceV3;
+pub use ingress_watcher::{IngressWatcher, IngressWatcherHandle};
 
 use crate::{
     common::{build_validator, validation_error_to_http_error},
@@ -15,7 +14,7 @@ use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_error_types::UserError;
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, replica_logger::no_op_logger, warn, ReplicaLogger};
+use ic_logger::{error, warn, ReplicaLogger};
 use ic_registry_client_helpers::{
     crypto::root_of_trust::RegistryRootOfTrustProvider,
     provisional_whitelist::ProvisionalWhitelistRegistry,
@@ -39,7 +38,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use tower::ServiceExt;
 
 pub struct IngressValidatorBuilder {
-    log: Option<ReplicaLogger>,
+    log: ReplicaLogger,
     node_id: NodeId,
     subnet_id: SubnetId,
     malicious_flags: Option<MaliciousFlags>,
@@ -52,6 +51,7 @@ pub struct IngressValidatorBuilder {
 
 impl IngressValidatorBuilder {
     pub fn builder(
+        log: ReplicaLogger,
         node_id: NodeId,
         subnet_id: SubnetId,
         registry_client: Arc<dyn RegistryClient>,
@@ -61,7 +61,7 @@ impl IngressValidatorBuilder {
         ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     ) -> Self {
         Self {
-            log: None,
+            log,
             node_id,
             subnet_id,
             malicious_flags: None,
@@ -73,18 +73,13 @@ impl IngressValidatorBuilder {
         }
     }
 
-    pub fn with_logger(mut self, log: ReplicaLogger) -> Self {
-        self.log = Some(log);
-        self
-    }
-
     pub(crate) fn with_malicious_flags(mut self, malicious_flags: MaliciousFlags) -> Self {
         self.malicious_flags = Some(malicious_flags);
         self
     }
 
     pub fn build(self) -> IngressValidator {
-        let log = self.log.unwrap_or(no_op_logger());
+        let log = self.log;
         IngressValidator {
             log: log.clone(),
             node_id: self.node_id,

@@ -8,7 +8,7 @@ DEPENDENCIES = [
     "//rs/interfaces/registry",
     "//rs/nns/common",
     "//rs/nns/constants",
-    "//rs/nns/governance",
+    "//rs/nns/governance/api",
     "//rs/nns/test_utils",
     "//rs/registry/local_store",
     "//rs/registry/proto_data_provider",

@@ -123,9 +123,9 @@ impl MaliciousBehaviour {
         })
     }
 
-    pub fn set_maliciously_corrupt_ecdsa_dealings(self) -> Self {
+    pub fn set_maliciously_corrupt_idkg_dealings(self) -> Self {
         self.set_malicious_behaviour(|mut s| {
-            s.malicious_flags.maliciously_corrupt_ecdsa_dealings = true;
+            s.malicious_flags.maliciously_corrupt_idkg_dealings = true;
             s
         })
     }

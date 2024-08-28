@@ -24,6 +24,7 @@ use ic_protobuf::registry::{
     routing_table::v1::RoutingTable as RoutingTablePB,
     subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord},
 };
+use ic_registry_canister_api::AddNodePayload;
 use ic_registry_keys::{
     make_blessed_replica_versions_key, make_catch_up_package_contents_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
@@ -51,8 +52,7 @@ use on_wire::bytes;
 use prost::Message;
 use rand::RngCore;
 use registry_canister::mutations::node_management::{
-    common::make_add_node_registry_mutations,
-    do_add_node::{connection_endpoint_from_string, AddNodePayload},
+    common::make_add_node_registry_mutations, do_add_node::connection_endpoint_from_string,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
@@ -271,7 +271,7 @@ pub fn invariant_compliant_mutation_with_subnet_id(
         }
     };
     const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
-    let release_package_url = "http://release_package.tar.gz".to_string();
+    let release_package_url = "http://release_package.tar.zst".to_string();
     let replica_version_id = ReplicaVersion::default().to_string();
     let replica_version = ReplicaVersionRecord {
         release_package_sha256_hex: MOCK_HASH.into(),
@@ -518,7 +518,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
 
     let replica_version_id = ReplicaVersion::default().to_string();
     const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
-    let release_package_url = "http://release_package.tar.gz".to_string();
+    let release_package_url = "http://release_package.tar.zst".to_string();
     let replica_version = ReplicaVersionRecord {
         release_package_sha256_hex: MOCK_HASH.into(),
         release_package_urls: vec![release_package_url],

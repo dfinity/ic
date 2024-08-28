@@ -149,6 +149,12 @@ pub fn execute_update(
             time,
             helper.call_context_id(),
         ),
+        CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) => ApiType::system_task(
+            IC_00.get(),
+            SystemMethod::CanisterOnLowWasmMemory,
+            time,
+            helper.call_context_id(),
+        ),
     };
 
     let memory_usage = helper.canister().memory_usage();
@@ -333,7 +339,9 @@ impl UpdateHelper {
         let initial_cycles_balance = canister.system_state.balance();
 
         match original.call_or_task {
-            CanisterCallOrTask::Call(_) | CanisterCallOrTask::Task(CanisterTask::Heartbeat) => {}
+            CanisterCallOrTask::Call(_)
+            | CanisterCallOrTask::Task(CanisterTask::Heartbeat)
+            | CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) => {}
             CanisterCallOrTask::Task(CanisterTask::GlobalTimer) => {
                 // The global timer is one-off.
                 canister.system_state.global_timer = CanisterTimer::Inactive;
