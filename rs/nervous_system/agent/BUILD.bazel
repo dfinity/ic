@@ -7,6 +7,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/clients",
     "//rs/nns/constants",
     "//rs/nns/sns-wasm",
+    "//rs/sns/governance",
     "//rs/types/base_types",
     "@crate_index//:anyhow",
     "@crate_index//:candid",
