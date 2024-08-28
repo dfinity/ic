@@ -21,6 +21,7 @@ pub struct IcConfig {
     hostname: String,
     node_operator_private_key_path: Option<String>,
 
+    // todo: update file paths to Path
     ic_crypto_path: Option<String>,
     ic_state_path: Option<String>,
     ic_registry_local_store_path: Option<String>,
