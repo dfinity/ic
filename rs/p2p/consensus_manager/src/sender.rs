@@ -322,7 +322,7 @@ async fn send_advert_to_peer(
             .body(message.clone())
             .expect("Building from typed values");
 
-        if let Ok(_) = transport.rpc(&peer, request).await {
+        if transport.rpc(&peer, request).await.is_ok() {
             return;
         }
 
