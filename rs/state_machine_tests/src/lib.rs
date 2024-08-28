@@ -163,6 +163,7 @@ use std::{
     convert::TryFrom,
     fmt,
     io::{self, stderr},
+    net::Ipv6Addr,
     path::{Path, PathBuf},
     str::FromStr,
     string::ToString,
@@ -311,12 +312,12 @@ fn make_nodes_registry(
         let node_record = NodeRecord {
             node_operator_id: vec![0],
             xnet: Some(ConnectionEndpoint {
-                ip_addr: "2a00:fb01:400:42:5000:22ff:fe5e:e3c4".into(),
-                port: 5678,
+                ip_addr: node.xnet_ip_addr.to_string(),
+                port: 2497,
             }),
             http: Some(ConnectionEndpoint {
-                ip_addr: "2a00:fb01:400:42:5000:22ff:fe5e:e3c4".into(),
-                port: 1234,
+                ip_addr: node.http_ip_addr.to_string(),
+                port: 8080,
             }),
             hostos_version_id: None,
             chip_id: None,
@@ -751,19 +752,20 @@ pub struct StateMachineNode {
     pub committee_signing_key: ic_crypto_ed25519::PrivateKey,
     pub dkg_dealing_encryption_key: ic_crypto_ed25519::PrivateKey,
     pub idkg_mega_encryption_key: ic_crypto_ed25519::PrivateKey,
+    pub http_ip_addr: Ipv6Addr,
+    pub xnet_ip_addr: Ipv6Addr,
 }
 
-impl From<u64> for StateMachineNode {
-    fn from(i: u64) -> Self {
-        let mut bytes = [0; 32];
-        bytes[..8].copy_from_slice(&(4 * i).to_le_bytes());
-        let node_signing_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&bytes);
-        bytes[..8].copy_from_slice(&(4 * i + 1).to_le_bytes());
-        let committee_signing_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&bytes);
-        bytes[..8].copy_from_slice(&(4 * i + 2).to_le_bytes());
-        let dkg_dealing_encryption_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&bytes);
-        bytes[..8].copy_from_slice(&(4 * i + 3).to_le_bytes());
-        let idkg_mega_encryption_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&bytes);
+impl StateMachineNode {
+    fn new(rng: &mut StdRng) -> Self {
+        let node_signing_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
+        let committee_signing_key = ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
+        let dkg_dealing_encryption_key =
+            ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
+        let idkg_mega_encryption_key =
+            ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
+        let http_ip_addr = Ipv6Addr::from(rng.gen::<[u16; 8]>());
+        let xnet_ip_addr = Ipv6Addr::from(rng.gen::<[u16; 8]>());
         Self {
             node_id: PrincipalId::new_self_authenticating(
                 &node_signing_key.public_key().serialize_rfc8410_der(),
@@ -773,6 +775,8 @@ impl From<u64> for StateMachineNode {
             committee_signing_key,
             dkg_dealing_encryption_key,
             idkg_mega_encryption_key,
+            http_ip_addr,
+            xnet_ip_addr,
         }
     }
 }
@@ -1465,9 +1469,9 @@ impl StateMachine {
                 .schnorr_signature_fee = schnorr_signature_fee;
         }
 
-        let node_offset: u32 = StdRng::from_seed(seed).gen();
-        let nodes: Vec<StateMachineNode> = (0..subnet_size as u32)
-            .map(|i| ((node_offset + i) as u64).into())
+        let mut node_rng = StdRng::from_seed(seed);
+        let nodes: Vec<StateMachineNode> = (0..subnet_size)
+            .map(|_| StateMachineNode::new(&mut node_rng))
             .collect();
         let (ni_dkg_transcript, secret_key) =
             dummy_initial_dkg_transcript_with_master_key(&mut StdRng::from_seed(seed));
