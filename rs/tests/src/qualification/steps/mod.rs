@@ -1,13 +1,18 @@
+use std::str::FromStr;
 use std::{collections::BTreeMap, sync::Arc};
 
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry::RegistryValue;
 use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
+use ic_registry_client_helpers::node::NodeRecord;
+use ic_registry_client_helpers::node::NodeRegistry;
+use ic_registry_keys::NODE_RECORD_KEY_PREFIX;
 use ic_registry_keys::SUBNET_RECORD_KEY_PREFIX;
 use ic_registry_local_registry::LocalRegistry;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_types::RegistryVersion;
+use ic_types::{NodeId, PrincipalId};
 use slog::{error, info};
 use tokio::runtime::Handle;
 
@@ -69,6 +74,10 @@ impl RegistryEntry for SubnetRecord {
     const KEY_PREFIX: &'static str = SUBNET_RECORD_KEY_PREFIX;
 }
 
+impl RegistryEntry for NodeRecord {
+    const KEY_PREFIX: &'static str = NODE_RECORD_KEY_PREFIX;
+}
+
 #[derive(Clone)]
 pub struct RegistryWrapper {
     inner: Arc<LocalRegistry>,
@@ -94,11 +103,26 @@ impl RegistryWrapper {
     }
 
     fn get_blessed_versins(&self) -> anyhow::Result<Vec<String>> {
-        self.get_family_entries::<BlessedReplicaVersions>()?
+        Ok(self
+            .get_family_entries::<BlessedReplicaVersions>()?
             .first_entry()
             .ok_or(anyhow::anyhow!("No blessed replica versions found"))?
             .get()
             .to_owned()
+            .blessed_version_ids)
+    }
+
+    fn get_subnet_id_from_node_id(
+        &self,
+        principal: &String,
+    ) -> anyhow::Result<Option<PrincipalId>> {
+        Ok(self
+            .inner
+            .get_subnet_id_from_node_id(
+                NodeId::new(PrincipalId::from_str(principal)?),
+                self.get_latest_version(),
+            )?
+            .map(|s| s.get()))
     }
 
     fn get_latest_version(&self) -> RegistryVersion {

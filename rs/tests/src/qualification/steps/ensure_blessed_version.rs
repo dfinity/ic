@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use ic_consensus_system_test_utils::upgrade::bless_public_replica_version;
-use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
 use ic_system_test_driver::driver::test_env_api::{
     GetFirstHealthyNodeSnapshot, HasTopologySnapshot,
 };

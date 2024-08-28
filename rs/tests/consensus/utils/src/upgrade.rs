@@ -242,8 +242,8 @@ async fn bless_replica_version_with_sha(
         &governance_canister,
         proposal_sender.clone(),
         test_neuron_id,
-        replica_version,
-        sha256.clone(),
+        Some(replica_version),
+        Some(sha256.clone()),
         upgrade_url,
         vec![],
     )
@@ -331,8 +331,8 @@ pub async fn bless_replica_version_with_urls(
         &governance_canister,
         proposal_sender.clone(),
         test_neuron_id,
-        replica_version,
-        sha256,
+        Some(replica_version),
+        Some(sha256),
         release_package_urls,
         vec![],
     )
