@@ -1707,7 +1707,7 @@ impl Validator {
                 .pool()
                 .validated()
                 .equivocation_proof()
-                .get_by_height_range(range_to_validate.clone())
+                .get_by_height_range(range_to_validate)
                 .map(|proof| (proof.signer, proof.height)),
         );
 
