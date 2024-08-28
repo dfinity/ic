@@ -794,23 +794,6 @@ impl SandboxSafeSystemState {
         cycles_change.apply(self.initial_cycles_balance)
     }
 
-    /// Computes the current cycles limit under which the canister gets frozen.
-    pub(super) fn freezing_threshold_cycles(
-        &self,
-        memory_usage: NumBytes,
-        message_memory_usage: NumBytes,
-    ) -> Cycles {
-        self.cycles_account_manager.freeze_threshold_cycles(
-            self.freeze_threshold,
-            self.memory_allocation,
-            memory_usage,
-            message_memory_usage,
-            self.compute_allocation,
-            self.subnet_size,
-            self.reserved_balance(),
-        )
-    }
-
     /// Computes the current reserved balance of the canister based
     /// on the initial value and the changes during the execution.
     pub(super) fn reserved_balance(&self) -> Cycles {
