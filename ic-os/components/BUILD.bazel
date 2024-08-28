@@ -26,15 +26,7 @@ exports_files(
     ],
 )
 
-used_components = dict()
-
-used_components.update(guestos_component_files)
-
-used_components.update(hostos_component_files)
-
-used_components.update(setupos_component_files)
-
-used_components.update(boundaryos_component_files)
+used_components = guestos_component_files | hostos_component_files | setupos_component_files | boundaryos_component_files
 
 REPO_COMPONENTS = glob(
     ["**/*"],
