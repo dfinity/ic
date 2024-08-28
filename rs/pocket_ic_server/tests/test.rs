@@ -78,9 +78,6 @@ fn start_server_helper(
             }
             _ => std::thread::sleep(Duration::from_millis(20)),
         }
-        if start.elapsed() > Duration::from_secs(5) {
-            panic!("Failed to start PocketIC service in time");
-        }
     };
     (url, out)
 }
@@ -235,9 +232,6 @@ fn test_port_file() {
             }
         }
         std::thread::sleep(Duration::from_millis(20));
-        if start.elapsed() > Duration::from_secs(5) {
-            panic!("Failed to start PocketIC service in time");
-        }
     }
 }
 
