@@ -18,17 +18,9 @@ impl QualificationExecutor {
             step.do_step(env.clone(), self.rt.handle().clone())?
         }
 
-        // Update unassigned nodes
-
         // workload test
 
         // xnet test
-
-        // Downgrade app subnets
-
-        // Downgrade system subnet
-
-        // Downgrade unassigned nodes
 
         // workload test
 

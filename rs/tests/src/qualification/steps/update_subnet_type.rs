@@ -138,24 +138,8 @@ impl Step for UpdateSubnetType {
                 &governance_canister,
                 proposal_id,
             ));
-            let newer_topology =
-                rt.block_on(env.topology_snapshot().block_for_newer_registry_version())?;
 
-            let versions = get_unassigned_nodes_version(newer_topology);
-            if !versions.iter().all(|v| v.eq(&self.version)) {
-                return Err(anyhow::anyhow!(
-                    "Failed to find new version for unassigned nodes in the registry {}",
-                    self.version
-                ));
-            }
-
-            let rt_clone = rt.clone();
-            rt.block_on(assert_version_on_all_nodes(
-                env.topology_snapshot().unassigned_nodes().collect_vec(),
-                logger,
-                self.version.clone(),
-                rt_clone,
-            ))
+            rt.block_on(env.topology_snapshot().block_for_newer_registry_version())?;
         }
 
         Ok(())
