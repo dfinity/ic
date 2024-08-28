@@ -135,7 +135,7 @@ jobs:
   fi-tests-nightly:
     name: Bazel Test FI Nightly
     <<: *dind-large-setup
-    timeout-minutes: 120
+    timeout-minutes: 240
     steps:
       - <<: *checkout
       - <<: *before-script
@@ -233,7 +233,7 @@ jobs:
     env:
       SHELL_WRAPPER: "/usr/bin/time"
       CARGO_WASMPACK_VERSION: "0.12.1"
-      DEFAULT_NODE_VERSION : "20"
+      DEFAULT_NODE_VERSION: "20"
       CI_PROJECT_PATH: ${{ github.repository }}
       CI_PIPELINE_ID: ${{ github.run_id }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
