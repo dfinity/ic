@@ -1313,24 +1313,32 @@ impl PoolRefillTask {
 
                 match query_result {
                     Ok(slice) => {
-                        let res = if witness_begin != msg_begin {
-                            // Pulled a stream suffix, append to pooled slice.
-                            pool.lock()
-                                .unwrap()
-                                .append(subnet_id, slice, registry_version, log)
-                        } else {
-                            // Pulled a complete stream, replace pooled slice (if any).
-                            pool.lock()
-                                .unwrap()
-                                .put(subnet_id, slice, registry_version, log)
-                        };
-                        let status = match res {
-                            Ok(()) => STATUS_SUCCESS,
-                            Err(e) => e.to_label_value(),
-                        };
+                        let logger = log.clone();
+                        let fut = tokio::task::spawn_blocking(move || {
+                            if witness_begin != msg_begin {
+                                // Pulled a stream suffix, append to pooled slice.
+                                pool.lock()
+                                    .unwrap()
+                                    .append(subnet_id, slice, registry_version, log)
+                            } else {
+                                // Pulled a complete stream, replace pooled slice (if any).
+                                pool.lock()
+                                    .unwrap()
+                                    .put(subnet_id, slice, registry_version, log)
+                            }
+                        });
+                        match fut.await {
+                            Ok(res) => {
+                                let status = match res {
+                                    Ok(()) => STATUS_SUCCESS,
+                                    Err(e) => e.to_label_value(),
+                                };
 
-                        metrics.observe_query_slice_duration(status, proximity, since);
-                        metrics.observe_pull_attempt(status);
+                                metrics.observe_query_slice_duration(status, proximity, since);
+                                metrics.observe_pull_attempt(status);
+                            }
+                            Err(err) => warn!(logger, "Failed to join pool refill blocking thread: {}", err),
+                        };
                     }
 
                     Err(e) => {
