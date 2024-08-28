@@ -6,14 +6,21 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/types/types",
     "@crate_index//:anyhow",
+    "@crate_index//:clap",
 ]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+]
+
+ALIASES = {}
 
 rust_library(
     name = "config",
     srcs = glob(
         ["src/**/*.rs"],
     ),
-    aliases = {},
+    aliases = ALIASES,
     crate_name = "config",
     edition = "2021",
     proc_macro_deps = [],

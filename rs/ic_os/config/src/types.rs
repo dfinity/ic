@@ -1,4 +1,5 @@
 use ic_types::malicious_behaviour::MaliciousBehaviour;
+use std::path::PathBuf;
 
 pub struct SetuposConfig {
     hostos_config: HostOSConfig,
@@ -41,16 +42,24 @@ pub struct Networking {
     domain: Option<String>,
 }
 
+
 impl SetuposConfig {
     pub fn new(
         vm_memory: u32,
         vm_cpu: String,
-        nns_public_key_path: String,
+        nns_public_key_path: PathBuf,
         nns_url: String,
         elasticsearch_hosts: String,
         elasticsearch_tags: Option<String>,
         hostname: String,
-        node_operator_private_key_path: Option<String>,
+        node_operator_private_key_path: Option<PathBuf>,
+        ipv6_address: String,
+        ipv6_gateway: String,
+        ipv4_address: Option<String>,
+        ipv4_gateway: Option<String>,
+        domain: Option<String>,
+        // todo: change verbose to a bool
+        verbose: Option<String>,
         ic_crypto_path: Option<String>,
         ic_state_path: Option<String>,
         ic_registry_local_store_path: Option<String>,
@@ -62,11 +71,6 @@ impl SetuposConfig {
         bitcoind_addr: Option<String>,
         jaeger_addr: Option<String>,
         socks_proxy: Option<String>,
-        ipv6_address: String,
-        ipv6_gateway: String,
-        ipv4_address: Option<String>,
-        ipv4_gateway: Option<String>,
-        domain: Option<String>,
     ) -> Self {
         let ic_config = IcConfig::new(
             nns_public_key_path,
@@ -75,6 +79,11 @@ impl SetuposConfig {
             elasticsearch_tags,
             hostname,
             node_operator_private_key_path,
+            ipv6_address,
+            ipv6_gateway,
+            ipv4_address,
+            ipv4_gateway,
+            domain,
             ic_crypto_path,
             ic_state_path,
             ic_registry_local_store_path,
@@ -86,11 +95,6 @@ impl SetuposConfig {
             bitcoind_addr,
             jaeger_addr,
             socks_proxy,
-            ipv6_address,
-            ipv6_gateway,
-            ipv4_address,
-            ipv4_gateway,
-            domain,
         );
 
         let hostos_config = HostOSConfig::new(vm_memory, vm_cpu, ic_config);
@@ -111,12 +115,17 @@ impl HostOSConfig {
 
 impl IcConfig {
     pub fn new(
-        nns_public_key_path: String,
+        nns_public_key_path: PathBuf,
         nns_url: String,
         elasticsearch_hosts: String,
         elasticsearch_tags: Option<String>,
         hostname: String,
         node_operator_private_key_path: Option<String>,
+        ipv6_address: String,
+        ipv6_gateway: String,
+        ipv4_address: Option<String>,
+        ipv4_gateway: Option<String>,
+        domain: Option<String>,
         ic_crypto_path: Option<String>,
         ic_state_path: Option<String>,
         ic_registry_local_store_path: Option<String>,
@@ -128,11 +137,6 @@ impl IcConfig {
         bitcoind_addr: Option<String>,
         jaeger_addr: Option<String>,
         socks_proxy: Option<String>,
-        ipv6_address: String,
-        ipv6_gateway: String,
-        ipv4_address: Option<String>,
-        ipv4_gateway: Option<String>,
-        domain: Option<String>,
     ) -> Self {
         let networking = Networking::new(
             ipv6_address,

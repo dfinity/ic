@@ -6,3 +6,8 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 ic-types = { path = "../../types/types" }
+clap = { workspace = true }
+
+[[bin]]
+name = "config_tool"
+path = "src/main.rs"
