@@ -71,7 +71,7 @@ thread_local! {
         MemoryManager::init(DefaultMemoryImpl::default())
     );
 
-    // The memory where the swap canister must write and read its state during an upgrade.
+    // The memory where the ledger must write and read its state during an upgrade.
     pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
         RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
 }
