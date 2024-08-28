@@ -5279,6 +5279,9 @@ fn test_seed_neuron_split() {
     assert_eq!(child_neuron.dissolve_state, parent_neuron.dissolve_state);
     assert_eq!(child_neuron.kyc_verified, true);
     assert_eq!(child_neuron.neuron_type, Some(NeuronType::Seed as i32));
+
+    #[cfg(feature = "tla")]
+    tla::check_traces();
 }
 
 // Spawn neurons has the least priority in the periodic tasks, so we need to run
