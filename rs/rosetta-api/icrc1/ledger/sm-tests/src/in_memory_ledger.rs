@@ -66,11 +66,11 @@ pub struct InMemoryLedger<K, AccountId, Tokens>
 where
     K: Ord,
 {
-    pub balances: HashMap<AccountId, Tokens>,
-    pub allowances: HashMap<K, Allowance<Tokens>>,
-    pub total_supply: Tokens,
-    pub fee_collector: Option<AccountId>,
-    pub burns_without_spender: Option<BurnsWithoutSpender<AccountId>>,
+    balances: HashMap<AccountId, Tokens>,
+    allowances: HashMap<K, Allowance<Tokens>>,
+    total_supply: Tokens,
+    fee_collector: Option<AccountId>,
+    burns_without_spender: Option<BurnsWithoutSpender<AccountId>>,
 }
 
 impl<K, AccountId, Tokens> InMemoryLedgerState for InMemoryLedger<K, AccountId, Tokens>
