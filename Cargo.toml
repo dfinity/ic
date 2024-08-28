@@ -19,6 +19,7 @@ members = [
     "rs/bitcoin/ckbtc/minter",
     "rs/bitcoin/ckbtc/kyt",
     "rs/bitcoin/consensus",
+    "rs/bitcoin/kyt",
     "rs/bitcoin/mock",
     "rs/bitcoin/replica_types",
     "rs/boundary_node/canary_proxy",
@@ -58,7 +59,6 @@ members = [
     "rs/crypto",
     "rs/crypto/ecdsa_secp256r1",
     "rs/crypto/ed25519",
-    "rs/crypto/extended_bip32",
     "rs/crypto/for_verification_only",
     "rs/crypto/iccsa",
     "rs/crypto/internal/crypto_lib/basic_sig/der_utils",
@@ -160,6 +160,7 @@ members = [
     "rs/monitoring/logger",
     "rs/monitoring/metrics",
     "rs/monitoring/pprof",
+    "rs/nervous_system/agent",
     "rs/nervous_system/clients",
     "rs/nervous_system/collections/union_multi_map",
     "rs/nervous_system/common",
@@ -253,6 +254,8 @@ members = [
     "rs/replicated_state",
     "rs/rosetta-api",
     "rs/rosetta-api/rosetta_core",
+    "rs/rosetta-api/runner",
+    "rs/rosetta-api/client",
     "rs/rosetta-api/icp_ledger",
     "rs/rosetta-api/icp_ledger/archive",
     "rs/rosetta-api/icp_ledger/ledger",
@@ -387,6 +390,7 @@ members = [
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
+    "rs/registry/node_provider_rewards",
 ]
 
 resolver = "2"
@@ -550,6 +554,7 @@ k256 = { version = "0.13.3", default-features = false, features = [
 ] }
 lazy_static = "1.4.0"
 libc = "0.2.155"
+libflate = "2.0.0"
 libnss = "0.5.0"
 local-ip-address = "0.5.6"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
@@ -640,7 +645,7 @@ tempfile = "3.12.0"
 thiserror = "1.0.62"
 threadpool = "1.8.1"
 time = { version = "0.3.36", features = ["formatting"] }
-tokio = { version = "1.39.2", features = ["full"] }
+tokio = { version = "1.39.3", features = ["full"] }
 tokio-metrics = "0.3.1"
 tokio-rustls = { version = "0.26.0", default-features = false, features = [
     "ring",
@@ -670,6 +675,12 @@ turmoil = "0.6.3"
 url = { version = "2.5.2", features = ["serde"] }
 uuid = { version = "1.10.0", features = ["v4", "serde"] }
 walkdir = "=2.3.3"
+walrus = "0.21.1"
+wasm-encoder = { version =  "0.212.0", features = ["wasmparser"] }
+wasmparser = "0.212.0"
+wasmprinter = "0.212.0"
+wast = "212.0.0"
+wat = "=1.212.0"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
@@ -678,4 +689,4 @@ zstd = "0.13.2"
 [workspace.dependencies.ic-wasm]
 default-features = false
 features = ["exe"]
-version = "^0.7.1"
+version = "^0.8.1"

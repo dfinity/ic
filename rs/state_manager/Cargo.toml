@@ -31,6 +31,7 @@ ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-utils-thread = { path = "../utils/thread" }
+ic-validate-eq = { path = "../utils/validate_eq" }
 nix = { workspace = true }
 parking_lot = "0.12.1"
 prometheus = { workspace = true }

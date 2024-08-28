@@ -1,7 +1,8 @@
 use super::*;
-use ic_crypto_internal_csp::api::{CspSigVerifier, CspSigner};
+use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::SigConverter;
+use ic_crypto_internal_csp::vault::api::PublicRandomSeedGeneratorError;
 
 #[cfg(test)]
 mod tests;
@@ -44,8 +45,8 @@ impl BasicSigVerifierInternal {
         Ok(BasicSignatureBatch { signatures_map })
     }
 
-    pub fn verify_basic_sig_batch<S: CspSigVerifier, H: Signable>(
-        csp_signer: &S,
+    pub fn verify_basic_sig_batch<H: Signable>(
+        vault: &dyn CspVault,
         registry: &dyn RegistryClient,
         signatures: &BasicSignatureBatch<H>,
         message: &H,
@@ -53,48 +54,55 @@ impl BasicSigVerifierInternal {
     ) -> CryptoResult<()> {
         if signatures.signatures_map.is_empty() {
             return Err(CryptoError::InvalidArgument {
-            message:
-                "Empty BasicSignatureBatch. At least one signature should be included in the batch."
-                    .to_string(),
-        });
+                message: "Empty BasicSignatureBatch. At least one signature should be included in the batch.".to_string(),
+            });
         };
-        let mut pk_sig_pairs =
-            Vec::<(CspPublicKey, CspSignature)>::with_capacity(signatures.signatures_map.len());
-        let mut first_algorithm_id: Option<AlgorithmId> = None;
+
+        let message = message.as_signed_bytes();
+        let mut msgs = Vec::with_capacity(signatures.signatures_map.len());
+        let mut sigs = Vec::with_capacity(signatures.signatures_map.len());
+        let mut keys = Vec::with_capacity(signatures.signatures_map.len());
 
         for (signer, signature) in signatures.signatures_map.iter() {
             let pk_proto =
                 key_from_registry(registry, *signer, KeyPurpose::NodeSigning, registry_version)?;
 
-            let this_algorithm_id = AlgorithmId::from(pk_proto.algorithm);
-            match first_algorithm_id {
-                Some(algorithm_id) => {
-                    if algorithm_id != this_algorithm_id {
-                        return Err(CryptoError::InvalidArgument {
-                        message: format!(
-                            "Inconsistent input AlgorithmIds in batched basic sig verification: {}, {}",
-                            algorithm_id, this_algorithm_id
-                        ),
-                    });
-                    }
-                }
-                None => first_algorithm_id = Some(this_algorithm_id),
+            let pubkey_alg = AlgorithmId::from(pk_proto.algorithm);
+            if pubkey_alg != AlgorithmId::Ed25519 {
+                return Err(CryptoError::AlgorithmNotSupported {
+                    algorithm: pubkey_alg,
+                    reason: "Only Ed25519 is supported in batched basic sig verification."
+                        .to_string(),
+                });
             }
+            let pk = ic_crypto_ed25519::PublicKey::deserialize_raw(&pk_proto.key_value).map_err(
+                |e| CryptoError::MalformedPublicKey {
+                    algorithm: AlgorithmId::Ed25519,
+                    key_bytes: Some(pk_proto.key_value),
+                    internal_error: e.to_string(),
+                },
+            )?;
 
-            let csp_pk = CspPublicKey::try_from(pk_proto)?;
-            let csp_sig = SigConverter::for_target(this_algorithm_id).try_from_basic(signature)?;
-            pk_sig_pairs.push((csp_pk, csp_sig));
+            msgs.push(&message[..]);
+            sigs.push(&signature.get_ref().0[..]);
+            keys.push(pk);
         }
-        // `first_algorithm_id.expect()` does not panic because it's guaranteed that there was at least one valid AlgorithmId by
-        // 1) it's checked that `signature_map` is not empty, and
-        // 2) it's checked that at least `pk_proto` is well-formed,
-        // and thus `this_algorithm_id` is never `None` at this point in code.
-        csp_signer.verify_batch(
-            &pk_sig_pairs[..],
-            &message.as_signed_bytes(),
-            first_algorithm_id.expect("Something went wrong with the AlgorithmId assignment"),
-        )?;
-        Ok(())
+
+        let seed = vault.new_public_seed().map_err(|e| match e {
+            PublicRandomSeedGeneratorError::TransientInternalError { internal_error } => {
+                CryptoError::TransientInternalError { internal_error }
+            }
+        })?;
+        let rng = &mut seed.into_rng();
+
+        ic_crypto_ed25519::PublicKey::batch_verify(&msgs, &sigs, &keys, rng).map_err(|e| {
+            CryptoError::SignatureVerification {
+                algorithm: AlgorithmId::Ed25519,
+                public_key_bytes: vec![],
+                sig_bytes: vec![],
+                internal_error: e.to_string(),
+            }
+        })
     }
 }
 

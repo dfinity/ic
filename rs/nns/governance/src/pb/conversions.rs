@@ -2898,7 +2898,12 @@ impl From<pb::InstallCode> for pb_api::InstallCode {
         let wasm_module_hash = item
             .wasm_module
             .map(|wasm_module| super::calculate_hash(&wasm_module).to_vec());
-        let arg_hash = item.arg.map(|arg| super::calculate_hash(&arg).to_vec());
+        let arg = item.arg.unwrap_or_default();
+        let arg_hash = if arg.is_empty() {
+            Some(vec![])
+        } else {
+            Some(super::calculate_hash(&arg).to_vec())
+        };
 
         Self {
             canister_id: item.canister_id,
@@ -4825,6 +4830,14 @@ impl From<pb_api::ProposalRewardStatus> for pb::ProposalRewardStatus {
             pb_api::ProposalRewardStatus::ReadyToSettle => pb::ProposalRewardStatus::ReadyToSettle,
             pb_api::ProposalRewardStatus::Settled => pb::ProposalRewardStatus::Settled,
             pb_api::ProposalRewardStatus::Ineligible => pb::ProposalRewardStatus::Ineligible,
+        }
+    }
+}
+
+impl From<ic_nns_governance_api::test_api::TimeWarp> for crate::TimeWarp {
+    fn from(value: ic_nns_governance_api::test_api::TimeWarp) -> Self {
+        Self {
+            delta_s: value.delta_s,
         }
     }
 }

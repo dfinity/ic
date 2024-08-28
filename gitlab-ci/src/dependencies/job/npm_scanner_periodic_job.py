@@ -64,30 +64,6 @@ REPOS_TO_SCAN = [
         DEFAULT_NODE_VERSION,
     ),
     Repository(
-        "cycles-wallet",
-        "https://github.com/dfinity/cycles-wallet",
-        [
-            Project(
-                name="cycles-wallet",
-                path="cycles-wallet",
-                owner=Team.SDK_TEAM,
-            )
-        ],
-        DEFAULT_NODE_VERSION,
-    ),
-    Repository(
-        "rosetta-client",
-        "https://github.com/dfinity/rosetta-client",
-        [
-            Project(
-                name="rosetta-client",
-                path="rosetta-client",
-                owner=Team.FINANCIAL_INTEGRATIONS_TEAM,
-            )
-        ],
-        DEFAULT_NODE_VERSION,
-    ),
-    Repository(
         "hardware-wallet-cli",
         "https://github.com/dfinity/hardware-wallet-cli",
         [

@@ -356,10 +356,7 @@ rust_ic_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-# This test has tag "manual", which means it only runs when you explicitly specify it. In addition,
-# this requires a couple of environment variables.
-#
-# To run this test,
+# Run this test as follows:
 #
 #     bazel \
 #         test \
