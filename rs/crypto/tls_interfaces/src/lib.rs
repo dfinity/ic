@@ -91,20 +91,6 @@ impl TryFrom<X509PublicKeyCert> for TlsPublicKeyCert {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-/// The certificate offered by the peer is malformed.
-pub struct MalformedPeerCertificateError {
-    pub internal_error: String,
-}
-
-impl MalformedPeerCertificateError {
-    pub fn new(internal_error: &str) -> Self {
-        Self {
-            internal_error: internal_error.to_string(),
-        }
-    }
-}
-
 /// Implementors provide methods for generating rustls configurations that
 /// restrict the tls peers that are accepted.
 pub trait TlsConfig {

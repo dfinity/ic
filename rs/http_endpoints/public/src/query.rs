@@ -21,8 +21,7 @@ use ic_interfaces::{
     execution_environment::{QueryExecutionError, QueryExecutionService},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, replica_logger::no_op_logger, ReplicaLogger};
-use ic_metrics::MetricsRegistry;
+use ic_logger::{error, ReplicaLogger};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_types::{
     ingress::WasmResult,
@@ -56,7 +55,7 @@ pub struct QueryService {
 }
 
 pub struct QueryServiceBuilder {
-    log: Option<ReplicaLogger>,
+    log: ReplicaLogger,
     node_id: NodeId,
     signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
@@ -75,6 +74,7 @@ impl QueryService {
 
 impl QueryServiceBuilder {
     pub fn builder(
+        log: ReplicaLogger,
         node_id: NodeId,
         signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
         registry_client: Arc<dyn RegistryClient>,
@@ -83,7 +83,7 @@ impl QueryServiceBuilder {
         query_execution_service: QueryExecutionService,
     ) -> Self {
         Self {
-            log: None,
+            log,
             node_id,
             signer,
             health_status: None,
@@ -93,11 +93,6 @@ impl QueryServiceBuilder {
             registry_client,
             query_execution_service,
         }
-    }
-
-    pub fn with_logger(mut self, log: ReplicaLogger) -> Self {
-        self.log = Some(log);
-        self
     }
 
     pub(crate) fn with_malicious_flags(mut self, malicious_flags: MaliciousFlags) -> Self {
@@ -114,8 +109,7 @@ impl QueryServiceBuilder {
     }
 
     pub fn build_router(self) -> Router {
-        let log = self.log.unwrap_or(no_op_logger());
-        let _default_metrics_registry = MetricsRegistry::default();
+        let log = self.log;
         let state = QueryService {
             log: log.clone(),
             node_id: self.node_id,

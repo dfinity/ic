@@ -100,30 +100,10 @@ mod tests {
     use super::*;
 
     use crate::pb::v1::governance_error::ErrorType;
+
+    use candid::Decode;
     use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 
-    #[cfg(feature = "test")]
-    use candid::Decode;
-
-    #[cfg(not(feature = "test"))]
-    #[test]
-    fn stop_or_start_canister_disabled() {
-        let stop_or_start_canister = StopOrStartCanister {
-            canister_id: Some(CYCLES_MINTING_CANISTER_ID.get()),
-            action: Some(CanisterAction::Stop as i32),
-        };
-
-        assert_eq!(
-            stop_or_start_canister.validate(),
-            Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "Proposal invalid because of StopOrStartCanister proposal is not yet supported"
-                    .to_string(),
-            ))
-        );
-    }
-
-    #[cfg(feature = "test")]
     #[test]
     fn test_invalid_stop_or_start_canister() {
         let valid_stop_or_start_canister = StopOrStartCanister {
@@ -205,7 +185,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "test")]
     #[test]
     fn test_stop_or_start_cycles_minting_canister() {
         for (canister_action, payload_canister_action) in &[
@@ -241,7 +220,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "test")]
     #[test]
     fn test_start_lifeline_canister() {
         let stop_or_start_canister = StopOrStartCanister {
@@ -272,7 +250,6 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "test")]
     #[test]
     fn test_start_canister_topic_mapping() {
         use ic_base_types::CanisterId;

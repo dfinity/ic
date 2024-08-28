@@ -90,7 +90,6 @@ impl TargetCanister {
                     PathBuf::from("packages/icrc-ledger_types"),
                     PathBuf::from("rs/rosetta-api/icp_ledger/index"),
                     PathBuf::from("rs/rosetta-api/icp_ledger/src"),
-                    PathBuf::from("rs/rosetta-api/icrc1/index-ng"),
                     PathBuf::from("rs/rosetta-api/ledger_canister_core/src"),
                     PathBuf::from("rs/rosetta-api/ledger_core"),
                     PathBuf::from("rs/rust_canisters/http_types"),
@@ -119,7 +118,7 @@ impl TargetCanister {
     pub fn artifact_file_name(&self) -> &str {
         match &self {
             TargetCanister::CkBtcArchive => "ic-icrc1-archive.wasm.gz",
-            TargetCanister::CkBtcIndex => "ic-icrc1-index.wasm.gz",
+            TargetCanister::CkBtcIndex => "ic-icrc1-index-ng.wasm.gz",
             TargetCanister::CkBtcKyt => "ic-ckbtc-kyt.wasm.gz",
             TargetCanister::CkBtcLedger => "ic-icrc1-ledger.wasm.gz",
             TargetCanister::CkBtcMinter => "ic-ckbtc-minter.wasm.gz",

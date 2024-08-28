@@ -59,8 +59,10 @@ use ic_replicated_state::{
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
-    crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey, PublicKey},
-    crypto::threshold_sig::ni_dkg::NiDkgTargetId,
+    crypto::{
+        canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey, PublicKey},
+        threshold_sig::ni_dkg::NiDkgTargetId,
+    },
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         extract_effective_canister_id, CanisterCall, CanisterCallOrTask, CanisterMessage,
@@ -920,7 +922,30 @@ impl ExecutionEnvironment {
                                             canister_http_request_context.max_response_bytes,
                                             registry_settings.subnet_size,
                                         );
-                                    if request.payment < http_request_fee {
+                                    // Here we make sure that we do not let upper layers open new
+                                    // http calls while the maximum number of calls is in-flight.
+                                    // Later, in the http adapter we also have a bounded queue of
+                                    // the same size, but this queue alone is not enough as it is
+                                    // used as the interface between DSM and consensus, and the latter
+                                    // consumes requests from this queue upon the request processing
+                                    // start. This means more elements can be added to the queue, while
+                                    // previous requests are still in-flight.
+                                    if state
+                                        .metadata
+                                        .subnet_call_context_manager
+                                        .canister_http_request_contexts
+                                        .len()
+                                        >= self.config.max_canister_http_requests_in_flight
+                                    {
+                                        let err = Err(UserError::new(
+                                            ErrorCode::CanisterRejectedMessage,
+                                            format!("max number ({}) of http requests in-flight reached.", self.config.max_canister_http_requests_in_flight),
+                                        ));
+                                        ExecuteSubnetMessageResult::Finished {
+                                            response: err,
+                                            refund: msg.take_cycles(),
+                                        }
+                                    } else if request.payment < http_request_fee {
                                         let err = Err(UserError::new(
                                                         ErrorCode::CanisterRejectedMessage,
                                                         format!(
@@ -2118,7 +2143,7 @@ impl ExecutionEnvironment {
         };
 
         let snapshot_id = args.snapshot_id();
-        let (instructions_used, result) = self.canister_manager.load_canister_snapshot(
+        let (result, instructions_used) = self.canister_manager.load_canister_snapshot(
             subnet_size,
             sender,
             &old_canister,

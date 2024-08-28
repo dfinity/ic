@@ -4,9 +4,6 @@
 
 # [Misc]
 /.devcontainer/           @dfinity/idx
-/.github/                 @dfinity/idx
-/.github/workflows        @dfinity/idx
-/.github/CODEOWNERS       @dfinity/ic-owners-owners
 /buf.yaml                 @dfinity/ic-message-routing-owners
 /cpp/                     @dfinity/node
 /hs/                      @dfinity/utopia
@@ -64,20 +61,19 @@ go_deps.bzl               @dfinity/idx
 # [metrics-proxy]
 /ic-os/components/monitoring/metrics-proxy/      @dfinity/dre
 
+# [GitHub-Ci]
+/.github/                                                                @dfinity/idx
+/.github/workflows/                                                      @dfinity/idx
+/.github/workflows/rosetta-release.yml                                   @dfinity/finint
+/.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
+
 # [GitLab-CI]
 /.pre-commit-config.yaml                                                @dfinity/idx
 /pre-commit/                                                            @dfinity/idx
-/.gitlab-ci.yml                                                         @dfinity/idx
-/.gitlab/                                                               @dfinity/idx
-/.gitlab/CODEOWNERS                                                     @dfinity/ic-owners-owners
 /gitlab-ci/                                                             @dfinity/idx
 /gitlab-ci/src/std-fs-check/                                            @dfinity/node
 /gitlab-ci/src/dependencies/                                            @dfinity/product-security
-/gitlab-ci/config/dependencies.yml                                      @dfinity/product-security
 /gitlab-ci/src/gen_gitlab_cargo_pipeline/farm_rate_limit.py             @dfinity/idx
-/gitlab-ci/config/child-pipeline--benchmark.yml                         @dfinity/execution
-/gitlab-ci/config/spawn-pipeline--benchmark.yml                         @dfinity/execution
-/gitlab-ci/config/rosetta.yml                                           @dfinity/finint
 
 # [Testnet]
 /testnet/                                                  @dfinity/node @dfinity/dre

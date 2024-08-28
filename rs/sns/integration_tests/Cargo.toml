@@ -23,6 +23,7 @@ cycles-minting-canister = { path = "../../nns/cmc" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 ic-base-types = { path = "../../types/base_types" }
+ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
 ic-ledger-canister-core = { path = "../../rosetta-api/ledger_canister_core" }
@@ -44,6 +45,7 @@ pretty-bytes = "0.2.2"
 proptest = "1.0"
 prost = { workspace = true }
 rand = { workspace = true }
+serde_bytes = { workspace = true }
 serde_yaml = { workspace = true }
 
 # Dependencies required to compile the tests.
@@ -78,4 +80,4 @@ pretty_assertions = { workspace = true }
 rust_decimal = "1.25"
 rust_decimal_macros = "1.25"
 tokio = { workspace = true }
-wat = "1.0.52"
+wat = { workspace = true }

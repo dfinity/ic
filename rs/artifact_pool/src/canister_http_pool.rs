@@ -7,7 +7,8 @@ use crate::{
 use ic_interfaces::{
     canister_http::{CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool},
     p2p::consensus::{
-        ArtifactWithOpt, ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+        ArtifactMutation, ArtifactWithOpt, ChangeResult, MutablePool, UnvalidatedArtifact,
+        ValidatedPoolReader,
     },
 };
 use ic_logger::{warn, ReplicaLogger};
@@ -114,15 +115,14 @@ impl MutablePool<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
         change_set: CanisterHttpChangeSet,
     ) -> ChangeResult<CanisterHttpResponseShare> {
         let changed = !change_set.is_empty();
-        let mut artifacts_with_opt = Vec::new();
-        let mut purged = Vec::new();
+        let mut mutations = vec![];
         for action in change_set {
             match action {
                 CanisterHttpChangeAction::AddToValidated(share, content) => {
-                    artifacts_with_opt.push(ArtifactWithOpt {
+                    mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
                         artifact: share.clone(),
                         is_latency_sensitive: true,
-                    });
+                    }));
                     self.validated.insert(share, ());
                     self.content
                         .insert(ic_types::crypto::crypto_hash(&content), content);
@@ -134,7 +134,7 @@ impl MutablePool<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
                 }
                 CanisterHttpChangeAction::RemoveValidated(id) => {
                     if self.validated.remove(&id).is_some() {
-                        purged.push(id);
+                        mutations.push(ArtifactMutation::Remove(id));
                     }
                 }
                 CanisterHttpChangeAction::RemoveUnvalidated(id) => {
@@ -154,8 +154,7 @@ impl MutablePool<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
             }
         }
         ChangeResult {
-            purged,
-            artifacts_with_opt,
+            mutations,
             poll_immediately: changed,
         }
     }
@@ -253,9 +252,12 @@ mod tests {
             CanisterHttpChangeAction::AddToValidated(fake_share(456), fake_response(456)),
         ]);
 
-        assert_eq!(result.artifacts_with_opt[0].artifact.id(), id);
+        assert!(
+            matches!(&result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == id)
+        );
+        assert!(matches!(&result.mutations[1], ArtifactMutation::Insert(_)));
         assert!(result.poll_immediately);
-        assert!(result.purged.is_empty());
+        assert_eq!(result.mutations.len(), 2);
         assert_eq!(share, pool.lookup_validated(&id).unwrap());
         assert_eq!(share, pool.get(&id).unwrap());
         assert_eq!(
@@ -268,9 +270,9 @@ mod tests {
             CanisterHttpChangeAction::RemoveContent(content_hash.clone()),
         ]);
 
-        assert!(result.artifacts_with_opt.is_empty());
+        assert_eq!(result.mutations.len(), 1);
         assert!(result.poll_immediately);
-        assert_eq!(result.purged[0], id);
+        assert!(matches!(&result.mutations[0], ArtifactMutation::Remove(x) if *x == id));
         assert!(pool.lookup_validated(&id).is_none());
         assert!(pool.get_response_content_by_hash(&content_hash).is_none());
         assert_eq!(pool.get_validated_shares().count(), 1);
@@ -294,7 +296,10 @@ mod tests {
 
         assert!(pool.lookup_validated(&id2).is_none());
         assert!(result.poll_immediately);
-        assert!(result.purged.is_empty());
+        assert!(!result
+            .mutations
+            .iter()
+            .any(|x| matches!(x, ArtifactMutation::Remove(_))));
         assert_eq!(share1, pool.lookup_validated(&id1).unwrap());
     }
 
@@ -313,8 +318,7 @@ mod tests {
 
         assert!(pool.lookup_unvalidated(&id).is_none());
         assert!(result.poll_immediately);
-        assert!(result.purged.is_empty());
-        assert!(result.artifacts_with_opt.is_empty());
+        assert!(result.mutations.is_empty());
     }
 
     #[test]
@@ -333,7 +337,6 @@ mod tests {
 
         assert!(pool.lookup_unvalidated(&id).is_none());
         assert!(result.poll_immediately);
-        assert!(result.purged.is_empty());
-        assert!(result.artifacts_with_opt.is_empty());
+        assert!(result.mutations.is_empty());
     }
 }
