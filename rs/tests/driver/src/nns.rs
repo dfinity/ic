@@ -2,8 +2,8 @@
 
 use ic_types::hostos_version::HostosVersion;
 use registry_canister::mutations::{
-    do_update_elected_hostos_versions::UpdateElectedHostosVersionsPayload,
-    do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
+    do_update_elected_hostos_versions::ReviseElectedHostosVersionsPayload,
+    do_update_nodes_hostos_version::DeployHostosToSomeNodes,
 };
 
 use crate::{
@@ -22,7 +22,7 @@ use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
     ManageNeuron, ManageNeuronResponse, NnsFunction, ProposalInfo, ProposalStatus, Vote,
 };
@@ -683,8 +683,7 @@ pub async fn submit_update_elected_hostos_versions_proposal(
         sender,
         neuron_id,
         NnsFunction::ReviseElectedHostosVersions,
-        // TODO[NNS1-3000]: Rename Registry APIs for consistency with NNS Governance.
-        UpdateElectedHostosVersionsPayload {
+        ReviseElectedHostosVersionsPayload {
             hostos_version_to_elect: Some(String::from(version)),
             release_package_sha256_hex: Some(sha256.clone()),
             release_package_urls: upgrade_urls,
@@ -725,8 +724,7 @@ pub async fn submit_update_nodes_hostos_version_proposal(
         sender,
         neuron_id,
         NnsFunction::DeployHostosToSomeNodes,
-        // TODO[NNS1-3000]: Rename Registry APIs according to NNS1-3000
-        UpdateNodesHostosVersionPayload {
+        DeployHostosToSomeNodes {
             node_ids: node_ids.clone(),
             hostos_version_id: Some(String::from(version.clone())),
         },

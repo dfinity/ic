@@ -67,6 +67,11 @@ fn run_unit_test(
         .output()
         .unwrap_or_else(|e| panic!("Could not execute unit test binary {binary:?}: {e:?}"));
     info!(logger, "Command output: {:?}", output);
+    info!(
+        logger,
+        "Command output stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(
         output.status.success(),
         "Command failed: with status {:?}",
@@ -77,7 +82,7 @@ fn run_unit_test(
     // Fragile, but better than nothing.
     assert!(
         std::str::from_utf8(&output.stdout).unwrap().contains("1 passed"),
-        "Trying to execute {} from {:?}, but no test with such name was found.\nCheck that you don't have a typo in the name of the target module or test?",
+        "Trying to execute {} from {:?}, but no test with such name was found.\nCheck that you don't have a typo in the name of the target module or test, and that the test is availalable in the provided version?",
         test_name,
         binary.file_name().unwrap(),
     );
@@ -86,7 +91,7 @@ fn run_unit_test(
 
 fn download_mainnet_binary(
     binary_name: &str,
-    version: String,
+    version: &str,
     target_dir: &Path,
     log: &Logger,
 ) -> PathBuf {
@@ -98,7 +103,7 @@ fn download_mainnet_binary(
         || async {
             download_binary(
                 log,
-                ReplicaVersion::try_from(version.clone()).unwrap(),
+                ReplicaVersion::try_from(version).unwrap(),
                 binary_name.into(),
                 target_dir,
             )
@@ -140,27 +145,73 @@ fn test_one_direction(
     );
 }
 
+enum TestType {
+    #[allow(dead_code)]
+    SelfTestOnly,
+    Bidirectional {
+        published_binary: String,
+        mainnet_version: String,
+    },
+}
+
 struct TestCase {
-    published_binary: String,
     test_binary: String,
     test_module: String,
+    test_type: TestType,
 }
 
 impl TestCase {
-    fn new(published_binary: &str, test_binary: &str, test_module: &str) -> Self {
+    fn new(test_type: TestType, test_binary: &str, test_module: &str) -> Self {
         Self {
-            published_binary: published_binary.to_string(),
             test_binary: test_binary.to_string(),
             test_module: test_module.to_string(),
+            test_type,
         }
     }
 
-    pub fn bidirectional_test(&self, mainnet_version: String, logger: &Logger) {
+    pub fn run(&self, logger: &Logger) {
+        match &self.test_type {
+            TestType::Bidirectional {
+                published_binary,
+                mainnet_version,
+            } => {
+                self.self_test(logger);
+                self.bidirectional_test(mainnet_version, published_binary, logger)
+            }
+            TestType::SelfTestOnly => {
+                self.self_test(logger);
+            }
+        }
+    }
+
+    fn self_test(&self, logger: &Logger) {
+        let test_binary = data_dependency_file(&self.test_binary);
+        info!(
+            logger,
+            "Testing self-compatibility of module {}", self.test_module
+        );
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let tmp_dir_path = tmp_dir.path();
+        test_one_direction(
+            &test_binary,
+            &test_binary,
+            &self.test_module,
+            tmp_dir_path,
+            logger,
+        );
+    }
+
+    fn bidirectional_test(
+        &self,
+        mainnet_version: &str,
+        published_binary_name: &str,
+        logger: &Logger,
+    ) {
         let download_dir = tempfile::tempdir().unwrap();
         let download_dir_path = download_dir.path();
         let published_binary = download_mainnet_binary(
-            &self.published_binary,
-            mainnet_version.clone(),
+            published_binary_name,
+            mainnet_version,
             download_dir_path,
             logger,
         );
@@ -170,11 +221,10 @@ impl TestCase {
             "Testing module {} with the mainnet commit {} and published binary {}",
             self.test_module,
             mainnet_version,
-            self.published_binary
+            published_binary_name,
         );
         for (direction, from, to) in [
             ("upgrade", &published_binary, &test_binary),
-            ("current self-compatibility", &test_binary, &test_binary),
             ("downgrade", &test_binary, &published_binary),
         ] {
             info!(logger, "Testing {}", direction);
@@ -193,15 +243,8 @@ struct Subnets {
 fn test(env: TestEnv) {
     let logger = env.logger();
 
-    let test_case = TestCase::new(
-        "replicated-state-test",
-        "ic/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
-        "canister_state::queues::tests::mainnet_compatibility_tests::basic_test",
-    );
-
-    let versions_json = env
-        .read_dependency_to_string("testnet/mainnet_revisions.json")
-        .expect("mainnet IC versions");
+    let versions_json =
+        read_dependency_to_string("testnet/mainnet_revisions.json").expect("mainnet IC versions");
 
     let parsed: Subnets =
         serde_json::from_str(&versions_json).expect("Can't parse the mainnet revisions JSON");
@@ -209,8 +252,29 @@ fn test(env: TestEnv) {
 
     info!(logger, "Mainnet versions: {:?}", mainnet_versions);
 
-    for mainnet_version in mainnet_versions {
-        test_case.bidirectional_test(mainnet_version, &logger)
+    let tests = mainnet_versions
+        .iter()
+        .map(|v| {
+            TestCase::new(
+                TestType::Bidirectional {
+                    published_binary: "replicated-state-test".to_string(),
+                    mainnet_version: v.clone(),
+                },
+                "ic/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
+                "canister_state::queues::tests::mainnet_compatibility_tests::basic_test",
+            )
+        })
+        .chain([TestCase::new(
+            TestType::Bidirectional {
+                published_binary: "replicated-state-test".to_string(),
+                mainnet_version: "2d220277bda0b29c90c48eac66fd56beeed59c11".to_string(),
+            },
+            "ic/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
+            "canister_state::queues::tests::mainnet_compatibility_tests::input_order_test",
+        )]);
+
+    for t in tests {
+        t.run(&logger);
     }
 }
 

@@ -8,7 +8,7 @@ use crate::{
         settle_neurons_fund_participation_result,
         sns_neuron_recipe::{ClaimedStatus, Investor},
         BuyerState, CfInvestment, CfNeuron, CfParticipant, DirectInvestment,
-        ErrorRefundIcpResponse, FinalizeSwapResponse, Init, Lifecycle, NeuronId as SaleNeuronId,
+        ErrorRefundIcpResponse, FinalizeSwapResponse, Init, Lifecycle, NeuronId as SwapNeuronId,
         Params, SetDappControllersCallResult, SetModeCallResult,
         SettleNeuronsFundParticipationResult, SnsNeuronRecipe, SweepResult, TransferableAmount,
     },
@@ -250,10 +250,6 @@ impl Init {
         if self.max_icp_e8s.is_some() {
             // 19
             obsolete_field_names.push("max_icp_e8s".to_string());
-        }
-        if self.neurons_fund_participants.is_some() {
-            // 27
-            obsolete_field_names.push("neurons_fund_participants".to_string());
         }
         if obsolete_field_names.is_empty() {
             Ok(())
@@ -712,7 +708,7 @@ impl CfInvestment {
 }
 
 impl SnsNeuronRecipe {
-    pub fn validate(&self) -> Result<(), String> {
+    pub(crate) fn validate(&self) -> Result<(), String> {
         if let Some(sns) = &self.sns {
             sns.validate()?;
         } else {
@@ -1065,7 +1061,7 @@ impl SettleNeuronsFundParticipationResult {
 
 // TODO NNS1-1589: Implementation will not longer be needed when swap.proto can depend on
 // SNS governance.proto
-impl From<[u8; 32]> for SaleNeuronId {
+impl From<[u8; 32]> for SwapNeuronId {
     fn from(value: [u8; 32]) -> Self {
         Self { id: value.to_vec() }
     }
@@ -1073,25 +1069,16 @@ impl From<[u8; 32]> for SaleNeuronId {
 
 // TODO NNS1-1589: Implementation will not longer be needed when swap.proto can depend on
 // SNS governance.proto
-impl From<NeuronId> for SaleNeuronId {
+impl From<NeuronId> for SwapNeuronId {
     fn from(neuron_id: NeuronId) -> Self {
         Self { id: neuron_id.id }
     }
 }
 
-// TODO NNS1-1589: Implementation will not longer be needed when swap.proto can depend on
-// SNS governance.proto
-impl TryInto<NeuronId> for SaleNeuronId {
-    type Error = String;
-
-    fn try_into(self) -> Result<NeuronId, Self::Error> {
-        match Subaccount::try_from(self.id) {
-            Ok(subaccount) => Ok(NeuronId::from(subaccount)),
-            Err(err) => Err(format!(
-                "Followee could not be parsed into NeuronId. Err {:?}",
-                err
-            )),
-        }
+impl From<SwapNeuronId> for NeuronId {
+    fn from(src: SwapNeuronId) -> Self {
+        let SwapNeuronId { id } = src;
+        NeuronId { id }
     }
 }
 

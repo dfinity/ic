@@ -32,11 +32,8 @@ use std::{
     collections::{BTreeSet, HashMap},
     fmt::Debug,
     future::Future,
-    io::IoSliceMut,
     net::SocketAddr,
-    pin::Pin,
     sync::{Arc, RwLock},
-    task::{Context, Poll},
 };
 
 use anyhow::anyhow;
@@ -46,15 +43,13 @@ use axum::{
     Router,
 };
 use bytes::Bytes;
-use either::Either;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use phantom_newtype::AmountOf;
-use quinn::{AsyncUdpSocket, UdpPoller};
-use quinn_udp::{RecvMeta, Transmit};
+use quinn::AsyncUdpSocket;
 use tokio::sync::watch;
 use tokio_util::{sync::CancellationToken, task::task_tracker::TaskTracker};
 use tracing::instrument;
@@ -67,6 +62,7 @@ mod connection_manager;
 mod metrics;
 mod request_handler;
 mod utils;
+pub use crate::connection_manager::create_udp_socket;
 
 #[derive(Clone)]
 pub struct Shutdown {
@@ -139,7 +135,7 @@ impl QuicTransport {
         // The receiver is passed here mainly to be consistent with other managers that also
         // require receivers on construction.
         topology_watcher: watch::Receiver<SubnetTopology>,
-        udp_socket: Either<SocketAddr, impl AsyncUdpSocket>,
+        udp_socket: Arc<dyn AsyncUdpSocket>,
         // Make sure this is respected https://docs.rs/axum/latest/axum/struct.Router.html#a-note-about-performance
         router: Router,
     ) -> QuicTransport {
@@ -247,36 +243,6 @@ impl From<MessagePriority> for i32 {
             MessagePriority::High => 1,
             MessagePriority::Low => 0,
         }
-    }
-}
-
-/// This is a workaround for being able to initiate quic transport
-/// with both a real and virtual udp socket. This is needed due
-/// to an inconsistency with the quinn API. This is fixed upstream
-/// and can be removed with quinn 0.11.0.
-/// https://github.com/quinn-rs/quinn/pull/1595
-#[derive(Debug)]
-pub struct DummyUdpSocket;
-
-impl AsyncUdpSocket for DummyUdpSocket {
-    fn create_io_poller(self: Arc<Self>) -> Pin<Box<dyn UdpPoller>> {
-        todo!()
-    }
-
-    fn try_send(&self, _transmit: &Transmit<'_>) -> std::io::Result<()> {
-        todo!()
-    }
-
-    fn poll_recv(
-        &self,
-        _cx: &mut Context<'_>,
-        _bufs: &mut [IoSliceMut<'_>],
-        _meta: &mut [RecvMeta],
-    ) -> Poll<std::io::Result<usize>> {
-        todo!()
-    }
-    fn local_addr(&self) -> std::io::Result<SocketAddr> {
-        todo!()
     }
 }
 

@@ -1,7 +1,7 @@
 use candid::{Decode, Encode};
 use canister_test::Canister;
 use cycles_minting_canister::{
-    ChangeSubnetTypeAssignmentArgs, CreateCanister, CreateCanisterError,
+    CanisterSettingsArgs, ChangeSubnetTypeAssignmentArgs, CreateCanister, CreateCanisterError,
     IcpXdrConversionRateCertifiedResponse, NotifyCreateCanister, NotifyError, NotifyMintCyclesArg,
     NotifyMintCyclesSuccess, SubnetListWithType, SubnetTypesToSubnetsResponse,
     UpdateSubnetTypeArgs, BAD_REQUEST_CYCLES_PENALTY, CYCLES_LEDGER_CANISTER_ID,
@@ -11,8 +11,10 @@ use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
+// TODO(EXC-1687): remove temporary alias `Ic00CanisterSettingsArgs`.
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
+    CanisterIdRecord, CanisterInfoResponse, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
+    CanisterSettingsArgsBuilder, CanisterStatusResultV2,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
@@ -22,7 +24,7 @@ use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePaylo
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_INDEX_IN_NNS_SUBNET,
 };
-use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
+use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{submit_external_update_proposal, wait_for_final_state},
@@ -293,6 +295,30 @@ fn canister_status(
     )
 }
 
+fn canister_info(
+    machine: &StateMachine,
+    universal_canister: CanisterId,
+    target: CanisterId,
+) -> CanisterInfoResponse {
+    let canister_info = wasm()
+        .call_with_cycles(
+            CanisterId::ic_00(),
+            "canister_info",
+            call_args().other_side(Encode!(&CanisterIdRecord::from(target)).unwrap()),
+            0_u128.into(),
+        )
+        .build();
+
+    if let WasmResult::Reply(res) = machine
+        .execute_ingress(universal_canister, "update", canister_info)
+        .unwrap()
+    {
+        Decode!(&res, CanisterInfoResponse).unwrap()
+    } else {
+        panic!("canister_info failed")
+    }
+}
+
 /// Test notify_create_canister with different canister settings
 #[test]
 fn test_cmc_notify_create_with_settings() {
@@ -314,6 +340,7 @@ fn test_cmc_notify_create_with_settings() {
         neuron.principal_id,
         neuron.neuron_id,
     );
+    let universal_canister = set_up_universal_canister(&state_machine, Some(u128::MAX.into()));
 
     //default settings
     let canister = notify_create_canister(&state_machine, None);
@@ -371,8 +398,8 @@ fn test_cmc_notify_create_with_settings() {
                 .build(),
         ),
     );
-    let status = canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister);
-    assert!(status.unwrap_err().contains("Canister's controllers: \n"));
+    let info = canister_info(&state_machine, universal_canister, canister);
+    assert!(info.controllers().is_empty());
 
     //specify compute allocation
     let canister = notify_create_canister(
@@ -450,8 +477,11 @@ fn test_cmc_cycles_create_with_settings() {
         10_000_000_000_000,
     )
     .unwrap();
-    let status = canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister).unwrap_err();
-    assert!(status.contains(&format!("Canister's controllers: {}\n", universal_canister)));
+    let status = canister_status(&state_machine, universal_canister.get(), canister).unwrap();
+    assert_eq!(status.controllers(), vec![universal_canister.get()]);
+    assert_eq!(status.compute_allocation(), 0);
+    assert_eq!(status.memory_allocation(), 0);
+    assert_eq!(status.freezing_threshold(), 2592000);
 
     //specify single controller
     let canister = cmc_create_canister_with_cycles(
@@ -512,8 +542,8 @@ fn test_cmc_cycles_create_with_settings() {
         10_000_000_000_000,
     )
     .unwrap();
-    let status = canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister);
-    assert!(status.unwrap_err().contains("Canister's controllers: \n"));
+    let info = canister_info(&state_machine, universal_canister, canister);
+    assert!(info.controllers().is_empty());
 
     //specify compute allocation
     let canister = cmc_create_canister_with_cycles(
@@ -663,7 +693,7 @@ fn send_transfer(env: &StateMachine, arg: &TransferArgs) -> Result<BlockIndex, T
 /// subaccount of the CMC, which then tries to create a canister with the provided settings.
 fn notify_create_canister(
     state_machine: &StateMachine,
-    settings: Option<CanisterSettingsArgs>,
+    settings: Option<Ic00CanisterSettingsArgs>,
 ) -> CanisterId {
     let transfer_args = TransferArgs {
         memo: MEMO_CREATE_CANISTER,
@@ -685,7 +715,7 @@ fn notify_create_canister(
         controller: *TEST_USER1_PRINCIPAL,
         subnet_type: None,
         subnet_selection: None,
-        settings,
+        settings: settings.map(CanisterSettingsArgs::from),
     };
 
     if let WasmResult::Reply(res) = state_machine
@@ -766,13 +796,13 @@ fn cycles_ledger_balance_of(state_machine: &StateMachine, account: Account) -> u
 fn cmc_create_canister_with_cycles(
     state_machine: &StateMachine,
     universal_canister: CanisterId,
-    settings: Option<CanisterSettingsArgs>,
+    settings: Option<Ic00CanisterSettingsArgs>,
     subnet_type: Option<String>,
     cycles: u128,
 ) -> Result<CanisterId, CreateCanisterError> {
     #[allow(deprecated)]
     let create_args = Encode!(&CreateCanister {
-        settings,
+        settings: settings.map(CanisterSettingsArgs::from),
         subnet_type,
         subnet_selection: None,
     })

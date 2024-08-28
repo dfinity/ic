@@ -7,43 +7,46 @@ mod construction_payloads;
 mod construction_preprocess;
 mod construction_submit;
 
-use crate::convert::{from_model_account_identifier, neuron_account_from_public_key};
-use crate::errors::{ApiError, Details};
-use crate::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
-use crate::ledger_client::pending_proposals_response::PendingProposalsResponse;
-use crate::ledger_client::proposal_info_response::ProposalInfoResponse;
-use crate::ledger_client::LedgerAccess;
-use crate::models::amount::tokens_to_amount;
-use crate::models::{
-    AccountBalanceMetadata, CallResponse, NetworkIdentifier, QueryBlockRangeRequest,
-    QueryBlockRangeResponse,
+use crate::{
+    convert,
+    convert::{from_model_account_identifier, neuron_account_from_public_key},
+    errors::{ApiError, Details},
+    ledger_client::{
+        list_known_neurons_response::ListKnownNeuronsResponse,
+        pending_proposals_response::PendingProposalsResponse,
+        proposal_info_response::ProposalInfoResponse, LedgerAccess,
+    },
+    models,
+    models::{
+        amount::tokens_to_amount, AccountBalanceMetadata, AccountBalanceRequest,
+        AccountBalanceResponse, Allow, BalanceAccountType, BlockIdentifier, BlockResponse,
+        BlockTransaction, BlockTransactionResponse, CallResponse, Error, NetworkIdentifier,
+        NetworkOptionsResponse, NetworkStatusResponse, NeuronInfoResponse, NeuronState,
+        NeuronSubaccountComponents, OperationStatus, Operator, PartialBlockIdentifier,
+        QueryBlockRangeRequest, QueryBlockRangeResponse, SearchTransactionsResponse, Version,
+    },
+    request_types::GetProposalInfo,
+    transaction_id::TransactionIdentifier,
+    API_VERSION, MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST, NODE_VERSION,
 };
-use crate::models::{
-    AccountBalanceRequest, AccountBalanceResponse, Allow, BalanceAccountType, BlockIdentifier,
-    BlockResponse, BlockTransaction, BlockTransactionResponse, Error, NetworkOptionsResponse,
-    NetworkStatusResponse, NeuronInfoResponse, NeuronState, NeuronSubaccountComponents,
-    OperationStatus, Operator, PartialBlockIdentifier, SearchTransactionsResponse, Version,
+use ic_ledger_canister_blocks_synchronizer::{
+    blocks::{HashedBlock, RosettaBlocksMode},
+    rosetta_block::RosettaBlock,
 };
-use crate::request_types::GetProposalInfo;
-use crate::transaction_id::TransactionIdentifier;
-use crate::{convert, models, API_VERSION, MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST, NODE_VERSION};
-use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
-use ic_ledger_canister_blocks_synchronizer::blocks::RosettaBlocksMode;
-use ic_ledger_canister_blocks_synchronizer::rosetta_block::RosettaBlock;
 use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
-use ic_types::crypto::DOMAIN_IC_REQUEST;
-use ic_types::messages::MessageId;
-use ic_types::CanisterId;
+use ic_nns_governance_api::pb::v1::manage_neuron::NeuronIdOrSubaccount;
+use ic_types::{crypto::DOMAIN_IC_REQUEST, messages::MessageId, CanisterId};
 use icp_ledger::{Block, BlockIndex};
-use rosetta_core::objects::ObjectMap;
-use rosetta_core::request_types::MetadataRequest;
-use rosetta_core::response_types::NetworkListResponse;
-use rosetta_core::response_types::{MempoolResponse, MempoolTransactionResponse};
-use std::convert::{TryFrom, TryInto};
-use std::num::TryFromIntError;
-use std::sync::Arc;
+use rosetta_core::{
+    objects::ObjectMap,
+    response_types::{MempoolResponse, MempoolTransactionResponse, NetworkListResponse},
+};
+use std::{
+    convert::{TryFrom, TryInto},
+    num::TryFromIntError,
+    sync::Arc,
+};
 use strum::IntoEnumIterator;
 
 /// The maximum amount of blocks to retrieve in a single search.
@@ -490,10 +493,7 @@ impl RosettaRequestHandler {
     }
 
     /// Get List of Available Networks
-    pub async fn network_list(
-        &self,
-        _metadata_request: MetadataRequest,
-    ) -> Result<NetworkListResponse, ApiError> {
+    pub async fn network_list(&self) -> Result<NetworkListResponse, ApiError> {
         let net_id = self.network_id();
         Ok(NetworkListResponse::new(vec![net_id]))
     }
@@ -863,7 +863,7 @@ impl RosettaRequestHandler {
     ) -> Result<NeuronInfoResponse, ApiError> {
         let res = self.ledger.neuron_info(neuron_id, verified).await?;
 
-        use ic_nns_governance::pb::v1::NeuronState as PbNeuronState;
+        use ic_nns_governance_api::pb::v1::NeuronState as PbNeuronState;
         let state = match PbNeuronState::try_from(res.state).ok() {
             Some(PbNeuronState::NotDissolving) => NeuronState::NotDissolving,
             Some(PbNeuronState::Spawning) => NeuronState::Spawning,

@@ -36,6 +36,8 @@ pub const CYCLES_LEDGER_INDEX_CANISTER_INDEX: u64 = 0x2100003;
 // Bitcoin canisters are deployed to the `w4rem` subnet
 pub const BITCOIN_TESTNET_CANISTER_INDEX: u64 = 0x1a00001;
 pub const BITCOIN_MAINNET_CANISTER_INDEX: u64 = 0x1a00004;
+// SNS Aggregator canister is deployed to the `x33ed` (SNS) subnet.
+pub const SNS_AGGREGATOR_CANISTER_INDEX: u64 = 0x2000010;
 
 /// WARNING: This list is incomplete. In particular, this does NOT include
 /// ledger archive, nor ledger index.
@@ -124,6 +126,9 @@ pub const BITCOIN_TESTNET_CANISTER_ID: CanisterId =
 /// 0x1_a00_004 (27_262_980): ghsi2-tqaaa-aaaan-aaaca-cai
 pub const BITCOIN_MAINNET_CANISTER_ID: CanisterId =
     CanisterId::from_u64(BITCOIN_MAINNET_CANISTER_INDEX);
+/// 0x2_000_010 (33_554_448): 3r4gx-wqaaa-aaaaq-aaaia-cai
+pub const SNS_AGGREGATOR_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(SNS_AGGREGATOR_CANISTER_INDEX);
 
 /// WARNING: This list is incomplete. In particular, this does NOT include
 /// ledger archive, nor ledger index.
@@ -153,6 +158,11 @@ const NNS_GOVERNANCE_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 10 * 1024 * 1024
 
 // The default memory allocation to set for the remaining NNS canister (1GiB)
 const NNS_DEFAULT_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 1024 * 1024 * 1024;
+
+/// The current value is 4 GiB, s.t. the SNS framework canisters never hit the soft memory limit.
+/// This mitigates the risk that an SNS Governance canister runs out of memory and proposals cannot
+/// be passed anymore.
+pub const DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT: u64 = 1 << 32;
 
 /// Returns the memory allocation of the given nns canister.
 pub fn memory_allocation_of(canister_id: CanisterId) -> u64 {

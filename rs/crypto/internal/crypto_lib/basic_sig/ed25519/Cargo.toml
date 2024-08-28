@@ -10,18 +10,18 @@ documentation.workspace = true
 base64 = { workspace = true }
 curve25519-dalek = { workspace = true }
 hex = { workspace = true }
-ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
-ic-crypto-internal-seed = { path = "../../../crypto_lib/seed" }
 ic-crypto-ed25519 = { path = "../../../../ed25519" }
-ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
+ic-crypto-internal-seed = { path = "../../../crypto_lib/seed" }
+ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
+ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-protobuf = { path = "../../../../../protobuf" }
 ic-types = { path = "../../../../../types/types" }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }
 simple_asn1 = { workspace = true }
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

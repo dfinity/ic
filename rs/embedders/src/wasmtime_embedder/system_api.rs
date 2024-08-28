@@ -762,10 +762,7 @@ pub(crate) fn syscalls<
         .func_wrap("ic0", "stable_size", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::STABLE_SIZE)?;
-                with_system_api(&mut caller, |s| s.ic0_stable_size()).and_then(|s| {
-                    i32::try_from(s)
-                        .map_err(|e| anyhow::Error::msg(format!("ic0_stable_size failed: {}", e)))
-                })
+                with_system_api(&mut caller, |s| s.ic0_stable_size())
             }
         })
         .unwrap();
@@ -817,10 +814,7 @@ pub(crate) fn syscalls<
         .func_wrap("ic0", "stable64_size", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::STABLE64_SIZE)?;
-                with_system_api(&mut caller, |s| s.ic0_stable64_size()).and_then(|s| {
-                    i64::try_from(s)
-                        .map_err(|e| anyhow::Error::msg(format!("ic0_stable64_size failed: {}", e)))
-                })
+                with_system_api(&mut caller, |s| s.ic0_stable64_size())
             }
         })
         .unwrap();
@@ -928,11 +922,7 @@ pub(crate) fn syscalls<
         .func_wrap("ic0", "canister_cycle_balance", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::CANISTER_CYCLE_BALANCE)?;
-                with_system_api(&mut caller, |s| s.ic0_canister_cycle_balance()).and_then(|s| {
-                    i64::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0_canister_cycle_balance failed: {}", e))
-                    })
-                })
+                with_system_api(&mut caller, |s| s.ic0_canister_cycle_balance())
             }
         })
         .unwrap();
@@ -958,11 +948,7 @@ pub(crate) fn syscalls<
         .func_wrap("ic0", "msg_cycles_available", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_AVAILABLE)?;
-                with_system_api(&mut caller, |s| s.ic0_msg_cycles_available()).and_then(|s| {
-                    i64::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0_msg_cycles_available failed: {}", e))
-                    })
-                })
+                with_system_api(&mut caller, |s| s.ic0_msg_cycles_available())
             }
         })
         .unwrap();
@@ -988,11 +974,7 @@ pub(crate) fn syscalls<
         .func_wrap("ic0", "msg_cycles_refunded", {
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::MSG_CYCLES_REFUNDED)?;
-                with_system_api(&mut caller, |s| s.ic0_msg_cycles_refunded()).and_then(|s| {
-                    i64::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0_msg_cycles_refunded failed: {}", e))
-                    })
-                })
+                with_system_api(&mut caller, |s| s.ic0_msg_cycles_refunded())
             }
         })
         .unwrap();
@@ -1205,10 +1187,7 @@ pub(crate) fn syscalls<
     linker
         .func_wrap("ic0", "mint_cycles", {
             move |mut caller: Caller<'_, StoreData>, amount: u64| {
-                with_system_api(&mut caller, |s| s.ic0_mint_cycles(amount)).and_then(|s| {
-                    i64::try_from(s)
-                        .map_err(|e| anyhow::Error::msg(format!("ic0_mint_cycles failed: {}", e)))
-                })
+                with_system_api(&mut caller, |s| s.ic0_mint_cycles(amount))
             }
         })
         .unwrap();

@@ -14,19 +14,19 @@ ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-client = { path = "../../../canister_client" }
 ic-config = { path = "../../../config" }
-ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
 ic-http-utils = { path = "../../../http_utils" }
 ic-management-canister-types = { path = "../../../types/management_canister_types" }
 ic-nervous-system-common-test-keys = { path = "../../../nervous_system/common/test_keys" }
 ic-nns-common = { path = "../../../nns/common" }
 ic-nns-constants = { path = "../../../nns/constants" }
-ic-nns-governance = { path = "../../../nns/governance" }
+ic-nns-governance-api = { path = "../../../nns/governance/api" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-registry-keys = { path = "../../../registry/keys" }
 ic-registry-nns-data-provider = { path = "../../../registry/nns_data_provider" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
+ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
 leb128 = "0.2.5"
 openssh-keys = "0.5.0"
 prost = { workspace = true }
@@ -38,4 +38,4 @@ slog = { workspace = true }
 ssh2 = "0.9.4"
 tempfile = { workspace = true }
 tokio = { workspace = true }
-url = "2.1.1"
+url = { workspace = true }

@@ -120,10 +120,7 @@ lazy_static! {
         subnet_memory_saturation: ResourceSaturation::default(),
     };
     static ref DROP_MEMORY_GROW_CONST_COST: u64 = instruction_to_cost(&wasmparser::Operator::Drop)
-        + instruction_to_cost(&wasmparser::Operator::MemoryGrow {
-            mem: 0,
-            mem_byte: 0,
-        })
+        + instruction_to_cost(&wasmparser::Operator::MemoryGrow { mem: 0 })
         + instruction_to_cost(&wasmparser::Operator::I32Const { value: 0 });
     static ref UNREACHABLE_COST: u64 = instruction_to_cost(&wasmparser::Operator::Unreachable);
 }
@@ -297,6 +294,7 @@ fn canister_manager_config(
         NumBytes::from(10 * 1024 * 1024),
         SchedulerConfig::application_subnet().upload_wasm_chunk_instructions,
         ic_config::embedders::Config::default().wasm_max_size,
+        SchedulerConfig::application_subnet().canister_snapshot_baseline_instructions,
     )
 }
 

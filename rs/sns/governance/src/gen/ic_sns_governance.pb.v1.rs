@@ -2524,14 +2524,14 @@ pub struct ClaimSwapNeuronsRequest {
     pub neuron_recipes: ::core::option::Option<claim_swap_neurons_request::NeuronRecipes>,
     /// The set of parameters that define the neurons created in `claim_swap_neurons`. For
     /// each NeuronParameter, one neuron will be created.
-    /// Deprecated. Use \[`recipes`\] instead.
+    /// Deprecated. Use \[`neuron_recipes`\] instead.
+    #[deprecated]
     #[prost(message, repeated, tag = "1")]
     pub neuron_parameters: ::prost::alloc::vec::Vec<claim_swap_neurons_request::NeuronParameters>,
 }
 /// Nested message and enum types in `ClaimSwapNeuronsRequest`.
 pub mod claim_swap_neurons_request {
-    /// NeuronParameters groups parameters for creating a neuron in the
-    /// `claim_swap_neurons` method.
+    /// This type has been replaced by NeuronRecipe and should not be used.
     /// TODO(NNS1-3198): Remove this message once `NeuronRecipe` is used systematically.
     #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
@@ -2664,7 +2664,7 @@ pub struct ClaimSwapNeuronsResponse {
 pub mod claim_swap_neurons_response {
     /// The ok result from `claim_swap_neurons. For every requested neuron,
     /// a SwapNeuron message is returned, and should equal the count of
-    /// `ClaimSwapNeuronsRequest.neuron_parameters`.
+    /// `ClaimSwapNeuronsRequest.neuron_recipes`.
     #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2674,7 +2674,7 @@ pub mod claim_swap_neurons_response {
     }
     /// SwapNeuron associates the status of a neuron attempting to be
     /// claimed with a NeuronId. The `id` field will correspond with a
-    /// `ClaimSwapNeuronsRequest.neuron_parameters.neuron_id` field in
+    /// `ClaimSwapNeuronsRequest.neuron_recipes.neuron_id` field in
     /// the request object used in `claim_swap_neurons`.
     #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]

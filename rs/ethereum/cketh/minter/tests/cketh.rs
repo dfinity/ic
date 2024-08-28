@@ -1069,6 +1069,8 @@ fn should_retrieve_minter_info() {
         .setup;
     let info_after_withdrawal = cketh.get_minter_info();
     let price = cketh.eip_1559_transaction_price_expecting_ok(None);
+    let debited_amount =
+        withdrawal_amount - (price.max_transaction_fee - GAS_USED * EFFECTIVE_GAS_PRICE);
     assert_eq!(
         info_after_withdrawal,
         MinterInfo {
@@ -1077,6 +1079,9 @@ fn should_retrieve_minter_info() {
                 max_priority_fee_per_gas: price.max_priority_fee_per_gas,
                 timestamp: price.timestamp.unwrap(),
             }),
+            eth_balance: info_after_deposit
+                .eth_balance
+                .map(|balance| balance - debited_amount),
             ..info_after_deposit
         }
     );

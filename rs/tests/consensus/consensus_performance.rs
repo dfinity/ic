@@ -45,22 +45,22 @@
 //
 // Happy testing!
 
-use ic_consensus_system_test_utils::{
-    limit_tc_ssh_command, rw_message::install_nns_with_customizations_and_check_progress,
-};
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
 use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::test_env_api::SshSession;
-use ic_system_test_driver::driver::test_env_api::{HasDependencies, IcNodeSnapshot};
+use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
+    simulate_network::{FixedNetworkSimulation, SimulateNetwork},
     test_env::TestEnv,
-    test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsCustomizations},
+    test_env_api::{
+        read_dependency_from_env_to_string, HasTopologySnapshot, IcNodeContainer, NnsCustomizations,
+    },
 };
 use ic_system_test_driver::generic_workload_engine;
 use ic_system_test_driver::generic_workload_engine::metrics::{
@@ -96,6 +96,9 @@ const INGRESS_MESSAGES_SUM_METRIC: &str = "consensus_ingress_messages_delivered_
 // Network parameters
 const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(200); // artificial added latency
+const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
+    .with_latency(LATENCY)
+    .with_bandwidth(BANDWIDTH_MBITS);
 
 fn setup(env: TestEnv) {
     PrometheusVm::default()
@@ -133,16 +136,8 @@ fn setup(env: TestEnv) {
 
     let topology_snapshot = env.topology_snapshot();
     let (app_subnet, _) = get_app_subnet_and_node(&topology_snapshot);
-    for node in app_subnet.nodes() {
-        let session = node
-            .block_on_ssh_session()
-            .expect("Failed to ssh into node");
-        node.block_on_bash_script_from_session(
-            &session,
-            &limit_tc_ssh_command(BANDWIDTH_MBITS, LATENCY),
-        )
-        .expect("Failed to execute bash script from session");
-    }
+
+    app_subnet.apply_network_settings(NETWORK_SIMULATION);
 }
 
 fn test(env: TestEnv, message_size: usize, rps: f64) {
@@ -282,8 +277,7 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
     }
 
     if cfg!(feature = "upload_perf_systest_results") {
-        let branch_version = env
-            .read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
+        let branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
             .expect("tip-of-branch IC version");
 
         rt.block_on(persist_metrics(

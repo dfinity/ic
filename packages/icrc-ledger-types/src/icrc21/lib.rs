@@ -13,13 +13,14 @@ use candid::{Nat, Principal};
 use itertools::Itertools;
 use num_traits::{Pow, ToPrimitive};
 use serde_bytes::ByteBuf;
-use strum;
-use strum::EnumString;
+use strum::IntoEnumIterator;
+use strum::{self, EnumIter};
+use strum::{Display, EnumString};
 
 // Maximum number of bytes that an argument to an ICRC-1 ledger function can have when passed to the ICRC-21 endpoint.
 pub const MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES: u16 = 500;
 
-#[derive(Debug, EnumString)]
+#[derive(Debug, EnumString, EnumIter, Display)]
 enum Icrc21Function {
     #[strum(serialize = "icrc1_transfer")]
     Transfer,
@@ -51,10 +52,8 @@ impl ConsentMessageBuilder {
         let icrc21_function =
             icrc21_function
                 .parse::<Icrc21Function>()
-                .map_err(|err| Icrc21Error::GenericError {
-                    error_code: Nat::from(500u64),
-                    description: format!("Invalid ICRC21 function: {:?}", err),
-                })?;
+                .map_err(|err| Icrc21Error::UnsupportedCanisterCall(ErrorInfo {                    description: format!("The function provided is not supported: {}.\n Supported functions for ICRC-21 are: {:?}.\n Error is: {:?}",icrc21_function,Icrc21Function::iter().map(|f|f.to_string()).collect::<Vec<String>>(),err)})
+                )?;
 
         Ok(Self {
             function: icrc21_function,
@@ -481,8 +480,8 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
         display_message_builder = display_message_builder.with_display_type(display_type);
     }
 
-    let consent_message = match consent_msg_request.method.as_str() {
-        "icrc1_transfer" => {
+    let consent_message = match display_message_builder.function {
+        Icrc21Function::Transfer => {
             let TransferArg {
                 memo,
                 amount,
@@ -509,7 +508,7 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
             }
             display_message_builder.build()
         }
-        "icrc2_transfer_from" => {
+        Icrc21Function::TransferFrom => {
             let TransferFromArgs {
                 memo,
                 amount,
@@ -538,7 +537,7 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
             }
             display_message_builder.build()
         }
-        "icrc2_approve" => {
+        Icrc21Function::Approve => {
             let ApproveArgs {
                 memo,
                 amount,
@@ -577,11 +576,6 @@ pub fn build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
                     display_message_builder.with_expected_allowance(expected_allowance);
             }
             display_message_builder.build()
-        }
-        method => {
-            return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                description: format!("Unsupported method: {}", method),
-            }))
         }
     }?;
 

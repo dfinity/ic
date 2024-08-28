@@ -47,4 +47,7 @@ copy_file(
     name = "minica_image",
     src = "@minica//image",
     out = "minica.tar",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )

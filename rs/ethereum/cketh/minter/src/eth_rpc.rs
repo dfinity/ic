@@ -3,13 +3,17 @@
 
 use crate::endpoints::CandidBlockTag;
 use crate::eth_rpc_client::responses::TransactionReceipt;
+use crate::eth_rpc_client::SingleCallError;
 use crate::eth_rpc_error::{sanitize_send_raw_transaction_result, Parser};
 use crate::logs::{DEBUG, TRACE_HTTP};
 use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::{mutate_state, State};
 use candid::{candid_method, CandidType, Principal};
 use ethnum;
-use evm_rpc_client::types::candid::HttpOutcallError as EvmHttpOutcallError;
+use evm_rpc_client::types::candid::{
+    HttpOutcallError as EvmHttpOutcallError,
+    SendRawTransactionStatus as EvmSendRawTransactionStatus,
+};
 use ic_canister_log::log;
 use ic_cdk::api::call::{call_with_payment128, RejectionCode};
 use ic_cdk::api::management_canister::http_request::{
@@ -121,6 +125,19 @@ pub enum SendRawTransactionResult {
     InsufficientFunds,
     NonceTooLow,
     NonceTooHigh,
+}
+
+impl From<EvmSendRawTransactionStatus> for SendRawTransactionResult {
+    fn from(value: EvmSendRawTransactionStatus) -> Self {
+        match value {
+            EvmSendRawTransactionStatus::Ok(_) => SendRawTransactionResult::Ok,
+            EvmSendRawTransactionStatus::InsufficientFunds => {
+                SendRawTransactionResult::InsufficientFunds
+            }
+            EvmSendRawTransactionStatus::NonceTooLow => SendRawTransactionResult::NonceTooLow,
+            EvmSendRawTransactionStatus::NonceTooHigh => SendRawTransactionResult::NonceTooHigh,
+        }
+    }
 }
 
 impl HttpResponsePayload for SendRawTransactionResult {
@@ -645,7 +662,7 @@ pub async fn call<I, O>(
     method: impl Into<String>,
     params: I,
     mut response_size_estimate: ResponseSizeEstimate,
-) -> HttpOutcallResult<JsonRpcResult<O>>
+) -> Result<O, SingleCallError>
 where
     I: Serialize,
     O: DeserializeOwned + HttpResponsePayload,
@@ -714,14 +731,22 @@ where
             Err((code, message)) if is_response_too_large(&code, &message) => {
                 let new_estimate = response_size_estimate.adjust();
                 if response_size_estimate == new_estimate {
-                    return Err(HttpOutcallError::IcError { code, message });
+                    return Err(SingleCallError::from(HttpOutcallError::IcError {
+                        code,
+                        message,
+                    }));
                 }
                 log!(DEBUG, "The {eth_method} response didn't fit into {response_size_estimate} bytes, retrying with {new_estimate}");
                 response_size_estimate = new_estimate;
                 retries += 1;
                 continue;
             }
-            Err((code, message)) => return Err(HttpOutcallError::IcError { code, message }),
+            Err((code, message)) => {
+                return Err(SingleCallError::from(HttpOutcallError::IcError {
+                    code,
+                    message,
+                }))
+            }
         };
 
         log!(
@@ -740,22 +765,29 @@ where
         // If the server is not available, it will sometimes (wrongly) return HTML that will fail parsing as JSON.
         let http_status_code = http_status_code(&response);
         if !is_successful_http_code(&http_status_code) {
-            return Err(HttpOutcallError::InvalidHttpJsonRpcResponse {
-                status: http_status_code,
-                body: String::from_utf8_lossy(&response.body).to_string(),
-                parsing_error: None,
-            });
+            return Err(SingleCallError::from(
+                HttpOutcallError::InvalidHttpJsonRpcResponse {
+                    status: http_status_code,
+                    body: String::from_utf8_lossy(&response.body).to_string(),
+                    parsing_error: None,
+                },
+            ));
         }
 
         let reply: JsonRpcReply<O> = serde_json::from_slice(&response.body).map_err(|e| {
-            HttpOutcallError::InvalidHttpJsonRpcResponse {
+            SingleCallError::from(HttpOutcallError::InvalidHttpJsonRpcResponse {
                 status: http_status_code,
                 body: String::from_utf8_lossy(&response.body).to_string(),
                 parsing_error: Some(e.to_string()),
-            }
+            })
         })?;
 
-        return Ok(reply.result);
+        return match reply.result {
+            JsonRpcResult::Result(result) => Ok(result),
+            JsonRpcResult::Error { code, message } => {
+                Err(SingleCallError::JsonRpcError { code, message })
+            }
+        };
     }
 }
 

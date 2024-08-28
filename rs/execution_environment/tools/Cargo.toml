@@ -4,12 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+clap = { version = "3.2.25", features = ["derive"] }
+eyre = "0.6.8"
 ic-config = { path = "../../config" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-system-api = { path = "../../system_api" }
 ic-types = { path = "../../types/types" }
-clap = { version = "3.2.25", features = ["derive"] }
-eyre = "0.6.8"
 serde = { workspace = true }
 serde_json = { workspace = true }
 

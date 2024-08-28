@@ -4,11 +4,9 @@ use crate::helpers::{
 use crate::types::{ProposalMetadata, ProposalPayload};
 use crate::ProposalTitle;
 use async_trait::async_trait;
-use candid::{CandidType, Deserialize};
 use clap::Parser;
 use ic_admin_derive::derive_common_proposal_fields;
 use ic_canister_client::{Agent, Sender};
-use ic_config::subnet_config::SchedulerConfig;
 use ic_management_canister_types::MasterPublicKeyId;
 use ic_nns_common::types::NeuronId;
 use ic_prep_lib::subnet_configuration::get_default_config_params;
@@ -17,68 +15,9 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{NodeId, PrincipalId, ReplicaVersion};
 use registry_canister::mutations::do_create_subnet;
-use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use url::Url;
-
-/// This is a copy of `CreateSubnetPayload`. It's used to provide
-/// forward compatibility for the proposal to create a new subnet in case it's used
-/// with an older Registry version, which still has the fields around instruction
-/// limits as required.
-///
-/// Should be removed once the Registry is upgraded to a version that does not
-/// contain the instruction limits in the subnet record.
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
-pub struct CreateSubnetPayload {
-    /// The list of node IDs that will be part of the new subnet.
-    pub node_ids: Vec<NodeId>,
-
-    pub subnet_id_override: Option<PrincipalId>,
-
-    pub max_ingress_bytes_per_message: u64,
-    pub max_ingress_messages_per_block: u64,
-    pub max_block_payload_size: u64,
-    pub unit_delay_millis: u64,
-    pub initial_notary_delay_millis: u64,
-    pub replica_version_id: std::string::String,
-    pub dkg_interval_length: u64,
-    pub dkg_dealings_per_block: u64,
-
-    pub start_as_nns: bool,
-
-    pub subnet_type: SubnetType,
-
-    pub is_halted: bool,
-
-    pub max_instructions_per_message: u64,
-    pub max_instructions_per_round: u64,
-    pub max_instructions_per_install_code: u64,
-
-    pub features: SubnetFeaturesPb,
-
-    pub max_number_of_canisters: u64,
-    pub ssh_readonly_access: Vec<String>,
-    pub ssh_backup_access: Vec<String>,
-
-    // Deprecated. Please use `chain_key_config` instead.
-    //
-    // TODO[NNS1-3022]: Make this field obsolete.
-    pub ecdsa_config: Option<do_create_subnet::EcdsaInitialConfig>,
-
-    pub chain_key_config: Option<do_create_subnet::InitialChainKeyConfig>,
-
-    // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
-    pub ingress_bytes_per_block_soft_cap: u64,
-    pub gossip_max_artifact_streams_per_peer: u32,
-    pub gossip_max_chunk_wait_ms: u32,
-    pub gossip_max_duplicity: u32,
-    pub gossip_max_chunk_size: u32,
-    pub gossip_receive_check_cache_size: u32,
-    pub gossip_pfn_evaluation_period_ms: u32,
-    pub gossip_registry_poll_period_ms: u32,
-    pub gossip_retransmission_request_ms: u32,
-}
 
 /// Sub-command to submit a proposal to create a new subnet.
 #[derive_common_proposal_fields]
@@ -145,21 +84,6 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     /// blocks
     #[clap(long)]
     pub is_halted: bool,
-
-    /// The maximum number of instructions a message can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[clap(long)]
-    pub max_instructions_per_message: Option<u64>,
-
-    /// The maximum number of instructions a round can execute.
-    /// See the comments in `subnet_config.rs` for more details.
-    #[clap(long)]
-    pub max_instructions_per_round: Option<u64>,
-
-    /// The maximum number of instructions an `install_code` message can
-    /// execute. See the comments in `subnet_config.rs` for more details.
-    #[clap(long)]
-    pub max_instructions_per_install_code: Option<u64>,
 
     /// Configuration for chain key:
     /// A list of chain key configurations to be requested from other subnets for this subnet,
@@ -303,16 +227,6 @@ impl ProposeToCreateSubnetCmd {
             self.dkg_interval_length
                 .get_or_insert(subnet_config.dkg_interval_length.get());
         }
-        // Set default scheduler parameters.
-        {
-            let scheduler_config = SchedulerConfig::default_for_subnet_type(self.subnet_type);
-            self.max_instructions_per_message
-                .get_or_insert(scheduler_config.max_instructions_per_message.get());
-            self.max_instructions_per_round
-                .get_or_insert(scheduler_config.max_instructions_per_round.get());
-            self.max_instructions_per_install_code
-                .get_or_insert(scheduler_config.max_instructions_per_install_code.get());
-        }
         // Other default parameters.
         {
             self.replica_version_id
@@ -322,7 +236,7 @@ impl ProposeToCreateSubnetCmd {
         }
     }
 
-    fn new_payload(&self) -> CreateSubnetPayload {
+    fn new_payload(&self) -> do_create_subnet::CreateSubnetPayload {
         let node_ids = self
             .node_ids
             .clone()
@@ -345,7 +259,7 @@ impl ProposeToCreateSubnetCmd {
             })
         };
 
-        CreateSubnetPayload {
+        do_create_subnet::CreateSubnetPayload {
             node_ids,
             subnet_id_override: self.subnet_id_override,
             max_ingress_bytes_per_message: self.max_ingress_bytes_per_message.unwrap_or_default(),
@@ -363,12 +277,6 @@ impl ProposeToCreateSubnetCmd {
             start_as_nns: self.start_as_nns,
             subnet_type: self.subnet_type,
             is_halted: self.is_halted,
-
-            max_instructions_per_message: self.max_instructions_per_message.unwrap_or_default(),
-            max_instructions_per_round: self.max_instructions_per_round.unwrap_or_default(),
-            max_instructions_per_install_code: self
-                .max_instructions_per_install_code
-                .unwrap_or_default(),
 
             features: SubnetFeaturesPb::from(self.features.expect("features must be specified.")),
             ssh_readonly_access: self.ssh_readonly_access.clone(),
@@ -392,8 +300,8 @@ impl ProposeToCreateSubnetCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
-    async fn payload(&self, _: &Agent) -> CreateSubnetPayload {
+impl ProposalPayload<do_create_subnet::CreateSubnetPayload> for ProposeToCreateSubnetCmd {
+    async fn payload(&self, _: &Agent) -> do_create_subnet::CreateSubnetPayload {
         self.new_payload()
     }
 }
@@ -407,8 +315,8 @@ mod tests {
 
     use super::*;
 
-    fn minimal_create_payload() -> CreateSubnetPayload {
-        CreateSubnetPayload {
+    fn minimal_create_payload() -> do_create_subnet::CreateSubnetPayload {
+        do_create_subnet::CreateSubnetPayload {
             ..Default::default()
         }
     }
@@ -439,9 +347,6 @@ mod tests {
             replica_version_id: None,
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
-            max_instructions_per_message: None,
-            max_instructions_per_round: None,
-            max_instructions_per_install_code: None,
             initial_chain_key_configs_to_request: None,
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
@@ -485,7 +390,7 @@ mod tests {
         };
         assert_eq!(
             cmd.new_payload(),
-            CreateSubnetPayload {
+            do_create_subnet::CreateSubnetPayload {
                 chain_key_config: Some(do_create_subnet::InitialChainKeyConfig {
                     key_configs: vec![
                         do_create_subnet::KeyConfigRequest {

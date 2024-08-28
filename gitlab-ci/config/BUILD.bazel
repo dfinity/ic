@@ -1,5 +1,0 @@
-filegroup(
-    name = "zz_generated",
-    srcs = ["zz-generated-gitlab-ci.yaml"],
-    visibility = ["//visibility:public"],
-)

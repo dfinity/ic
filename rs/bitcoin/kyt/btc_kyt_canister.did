@@ -1,0 +1,7 @@
+type tx_id = text;
+
+type bitcoin_address = text;
+
+service : {
+    get_inputs: (tx_id) -> (vec bitcoin_address);
+}
