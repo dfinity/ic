@@ -104,6 +104,25 @@ mod test {
             }
         });
 
+        static DEPLOYMENT_VALUE: Lazy<Value> = Lazy::new(|| {
+          json!({
+                "deployment": {
+                  "name": "mainnet"
+                },
+                "logging": {
+                  "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
+                },
+                "nns": {
+                  "url": "https://dfinity.org/"
+                },
+                "resources": {
+                  "memory": "490",
+                  "cpu_mode": "kvm"
+                }
+              }
+          )
+      });
+
     const DEPLOYMENT_STR_NO_CPU_MODE: &str = r#"{
   "deployment": {
     "name": "mainnet"
@@ -118,24 +137,6 @@ mod test {
     "memory": "490"
   }
 }"#;
-
-    static DEPLOYMENT_VALUE_NO_CPU_MODE: Lazy<Value> = Lazy::new(|| {
-        json!({
-              "deployment": {
-                "name": "mainnet"
-              },
-              "logging": {
-                "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
-              },
-              "nns": {
-                "url": "https://dfinity.org/"
-              },
-              "resources": {
-                "memory": "490"
-              }
-            }
-        )
-    });
 
     static DEPLOYMENT_STRUCT_NO_CPU_MODE: Lazy<DeploymentJson> = Lazy::new(|| {
         DeploymentJson {
@@ -243,9 +244,9 @@ mod test {
         // DeserializeOwned is used by serde_json::from_reader, which is the
         // main entrypoint of this code, in practice.
         let parsed_deployment: DeploymentJson =
-            { serde_json::from_value(DEPLOYMENT_VALUE_NO_CPU_MODE.clone()).unwrap() };
+            { serde_json::from_value(DEPLOYMENT_VALUE.clone()).unwrap() };
 
-        assert_eq!(*DEPLOYMENT_STRUCT_NO_CPU_MODE, parsed_deployment);
+        assert_eq!(*DEPLOYMENT_STRUCT, parsed_deployment);
     }
 
     #[test]
