@@ -53,15 +53,15 @@ const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 const WHITELISTED_SUBNETS_FOR_SYNCHRONOUS_CALL_V3: [&str; 1] =
     ["snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae"];
 
+/// Returns true if the subnet is whitelisted to serve synchronous responses to v3
+/// update calls.
 fn subnet_is_whitelisted_for_synchronous_call_v3(subnet_id: &SubnetId) -> bool {
     WHITELISTED_SUBNETS_FOR_SYNCHRONOUS_CALL_V3
         .iter()
-        .map(|s| {
-            let principal_id = PrincipalId::from_str(s).expect("Whitelist has valid principal ids");
-
-            SubnetId::from(principal_id)
+        .any(|s| match PrincipalId::from_str(s) {
+            Ok(principal_id) => SubnetId::from(principal_id) == *subnet_id,
+            Err(_) => false,
         })
-        .any(|subnet| subnet == *subnet_id)
 }
 
 /// Create the consensus pool directory (if none exists)
