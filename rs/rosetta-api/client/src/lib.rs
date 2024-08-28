@@ -46,13 +46,11 @@ impl RosettaClient {
 
         let status = response.status();
         if status.is_client_error() || status.is_server_error() {
-            println!("Error Response: {:?}", response);
             bail!(response
                 .json::<String>()
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to parse error: {}", e))?)
         } else {
-            println!("Response: {:?}", response);
             Ok(response
                 .json()
                 .await

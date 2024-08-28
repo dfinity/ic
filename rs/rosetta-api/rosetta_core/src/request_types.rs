@@ -402,26 +402,6 @@ impl SearchTransactionsRequestBuilder {
         }
     }
 
-    pub fn with_operator(mut self, operator: Operator) -> Self {
-        self.operator = Some(operator);
-        self
-    }
-
-    pub fn with_max_block(mut self, max_block: i64) -> Self {
-        self.max_block = Some(max_block);
-        self
-    }
-
-    pub fn with_offset(mut self, offset: i64) -> Self {
-        self.offset = Some(offset);
-        self
-    }
-
-    pub fn with_limit(mut self, limit: i64) -> Self {
-        self.limit = Some(limit);
-        self
-    }
-
     pub fn with_transaction_identifier(
         mut self,
         transaction_identifier: TransactionIdentifier,
@@ -432,36 +412,6 @@ impl SearchTransactionsRequestBuilder {
 
     pub fn with_account_identifier(mut self, account_identifier: AccountIdentifier) -> Self {
         self.account_identifier = Some(account_identifier);
-        self
-    }
-
-    pub fn with_coin_identifier(mut self, coin_identifier: CoinIdentifier) -> Self {
-        self.coin_identifier = Some(coin_identifier);
-        self
-    }
-
-    pub fn with_currency(mut self, currency: Currency) -> Self {
-        self.currency = Some(currency);
-        self
-    }
-
-    pub fn with_status(mut self, status: String) -> Self {
-        self.status = Some(status);
-        self
-    }
-
-    pub fn with_type_(mut self, type_: String) -> Self {
-        self.type_ = Some(type_);
-        self
-    }
-
-    pub fn with_address(mut self, address: String) -> Self {
-        self.address = Some(address);
-        self
-    }
-
-    pub fn with_success(mut self, success: bool) -> Self {
-        self.success = Some(success);
         self
     }
 
