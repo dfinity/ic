@@ -237,37 +237,37 @@ impl AsErrorHelp for WasmValidationError {
             },
             WasmValidationError::TooManyFunctions { .. } => ErrorHelp::UserError {
                 suggestion: "Try spliting this canister into multiple canisters.".to_string(),
-                doc_link: "wasm-module-too-many-functions".to_string(),
+                doc_link: doc_ref("wasm-module-too-many-functions"),
             },
             WasmValidationError::TooManyGlobals { .. } => ErrorHelp::UserError {
                 suggestion: "Try collecting multiple globals into a single \
                 structured which can be stored on the heap."
                     .to_string(),
-                doc_link: "wasm-module-too-many-globals".to_string(),
+                doc_link: doc_ref("wasm-module-too-many-globals"),
             },
             WasmValidationError::FunctionComplexityTooHigh { .. } => ErrorHelp::UserError {
                 suggestion: "Try breaking large functions up into multiple \
                 smaller functions."
                     .to_string(),
-                doc_link: "wasm-module-function-complexity-too-high".to_string(),
+                doc_link: doc_ref("wasm-module-function-complexity-too-high"),
             },
             WasmValidationError::FunctionTooLarge { .. } => ErrorHelp::UserError {
                 suggestion: "Try breaking large functions up into multiple \
                 smaller functions."
                     .to_string(),
-                doc_link: "wasm-module-function-too-large".to_string(),
+                doc_link: doc_ref("wasm-module-function-too-large"),
             },
             WasmValidationError::CodeSectionTooLarge { .. } => ErrorHelp::UserError {
                 suggestion: "Try shrinking the module code section using tools like \
                 `ic-wasm` or splitting the logic across multiple canisters."
                     .to_string(),
-                doc_link: "wasm-module-code-section-too-large".to_string(),
+                doc_link: doc_ref("wasm-module-code-section-too-large"),
             },
             WasmValidationError::ModuleTooLarge { .. } => ErrorHelp::UserError {
                 suggestion: "Try shrinking the module using tools like \
                 `ic-wasm` or splitting the logic across multiple canisters."
                     .to_string(),
-                doc_link: "wasm-module-too-large".to_string(),
+                doc_link: doc_ref("wasm-module-too-large"),
             },
         }
     }
