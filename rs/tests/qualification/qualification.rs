@@ -49,8 +49,8 @@ pub fn main() -> anyhow::Result<()> {
     };
 
     SystemTestGroup::new()
-        .with_overall_timeout(Duration::from_secs(60 * 60))
-        .with_timeout_per_test(Duration::from_secs(60 * 60))
+        .with_overall_timeout(OVERALL_TIMEOUT)
+        .with_timeout_per_test(OVERALL_TIMEOUT)
         .with_setup(|env| ic_tests::qualification::setup(env, config))
         .add_test(ic_system_test_driver::driver::dsl::TestFunction::new(
             "qualification",
@@ -73,14 +73,21 @@ pub fn main() -> anyhow::Result<()> {
                         // initial version. As the step above, this
                         // should always be true
                         Box::new(UpdateSubnetType {
-                            subnet_type: SubnetType::Application,
+                            subnet_type: Some(SubnetType::Application),
                             version: initial_version.clone(),
                         }),
                         // Ensure that system subnet is on the
                         // initial version. As the step above, this
                         // should always be true
                         Box::new(UpdateSubnetType {
-                            subnet_type: SubnetType::System,
+                            subnet_type: Some(SubnetType::System),
+                            version: initial_version.clone(),
+                        }),
+                        // Ensure that unassigned nodes are on the
+                        // initial version. As the step above, this
+                        // should always be true
+                        Box::new(UpdateSubnetType {
+                            subnet_type: None,
                             version: initial_version.clone(),
                         }),
                         // Ensure that the new version is blessed
@@ -90,17 +97,23 @@ pub fn main() -> anyhow::Result<()> {
                         // Ensure that application subnets are on the
                         // new version.
                         Box::new(UpdateSubnetType {
-                            subnet_type: SubnetType::Application,
+                            subnet_type: Some(SubnetType::Application),
                             version: to_version.clone(),
                         }),
                         // Ensure that system subnet is on the
                         // new version.
                         Box::new(UpdateSubnetType {
-                            subnet_type: SubnetType::System,
+                            subnet_type: Some(SubnetType::System),
+                            version: to_version.clone(),
+                        }),
+                        // Ensure that unassigned nodes are on the
+                        // new version.
+                        Box::new(UpdateSubnetType {
+                            subnet_type: None,
                             version: to_version.clone(),
                         }),
                         // Retire the initial versions because
-                        // it used a disk-img
+                        // to ensure it uses update-img
                         Box::new(RetireBlessedVersions {
                             versions: vec![initial_version.clone()],
                         }),
@@ -111,11 +124,15 @@ pub fn main() -> anyhow::Result<()> {
                         }),
                         // Downgrade to the inital version
                         Box::new(UpdateSubnetType {
-                            subnet_type: SubnetType::Application,
+                            subnet_type: Some(SubnetType::Application),
                             version: initial_version.clone(),
                         }),
                         Box::new(UpdateSubnetType {
-                            subnet_type: SubnetType::System,
+                            subnet_type: Some(SubnetType::System),
+                            version: initial_version.clone(),
+                        }),
+                        Box::new(UpdateSubnetType {
+                            subnet_type: None,
                             version: initial_version.clone(),
                         }),
                     ],
