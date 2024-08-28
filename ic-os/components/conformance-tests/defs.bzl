@@ -47,12 +47,14 @@ def _check_unused_components_test_impl(ctx):
     )
 
     if unused_components:
-        fail("Unused components found: {}".format(", ".join(unused_components)))
+        content = "echo Unused components check failed; echo Unused components:; echo {}; exit 1".format(", ".join(unused_components))
+    else:
+        content = "echo Unused components check completed"
 
     script = ctx.actions.declare_file(ctx.label.name + ".sh")
     ctx.actions.write(
         output = script,
-        content = "echo Unused components check completed",
+        content = content,
     )
 
     return [
