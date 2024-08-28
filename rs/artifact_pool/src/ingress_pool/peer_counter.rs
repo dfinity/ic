@@ -1,6 +1,7 @@
-use std::collections::BTreeMap;
+use std::collections::{btree_map::Entry, BTreeMap};
 
 use ic_interfaces::ingress_pool::IngressPoolObject;
+use ic_logger::{warn, ReplicaLogger};
 use ic_types::{CountBytes, NodeId};
 
 #[derive(Clone)]
@@ -12,18 +13,18 @@ pub(super) struct PeerCounters {
 
 impl PeerCounters {
     /// Create a new [`PeerCounters`] without any limits on the number/size of messages.
-    pub(super) fn new() -> Self {
+    pub(super) fn new(log: ReplicaLogger) -> Self {
         Self {
-            bytes_counters: PeerCounter::new(),
-            count_counters: PeerCounter::new(),
+            bytes_counters: PeerCounter::new(log.clone()),
+            count_counters: PeerCounter::new(log),
         }
     }
 
     /// Create a new [`PeerCounters`] with the provided limits on the number/size of messages.
-    pub(super) fn new_with_limits(max_bytes: usize, max_count: usize) -> Self {
+    pub(super) fn new_with_limits(log: ReplicaLogger, max_bytes: usize, max_count: usize) -> Self {
         Self {
-            bytes_counters: PeerCounter::new_with_limit(max_bytes),
-            count_counters: PeerCounter::new_with_limit(max_count),
+            bytes_counters: PeerCounter::new_with_limit(log.clone(), max_bytes),
+            count_counters: PeerCounter::new_with_limit(log, max_count),
         }
     }
 
@@ -50,20 +51,23 @@ impl PeerCounters {
 struct PeerCounter {
     counter_per_peer: BTreeMap<NodeId, usize>,
     limit: Option<usize>,
+    log: ReplicaLogger,
 }
 
 impl PeerCounter {
-    fn new() -> Self {
+    fn new(log: ReplicaLogger) -> Self {
         Self {
             counter_per_peer: BTreeMap::default(),
             limit: None,
+            log,
         }
     }
 
-    fn new_with_limit(limit: usize) -> Self {
+    fn new_with_limit(log: ReplicaLogger, limit: usize) -> Self {
         Self {
             counter_per_peer: BTreeMap::default(),
             limit: Some(limit),
+            log,
         }
     }
 
@@ -72,10 +76,21 @@ impl PeerCounter {
     }
 
     fn subtract(&mut self, peer_id: NodeId, count: usize) {
-        *self.counter_per_peer.entry(peer_id).or_default() -= count;
+        match self.counter_per_peer.entry(peer_id) {
+            Entry::Occupied(mut entry) => {
+                let counter = entry.get_mut();
+                *counter = counter.saturating_sub(count);
 
-        if self.counter_per_peer.get(&peer_id) == Some(&0) {
-            self.counter_per_peer.remove(&peer_id);
+                if *counter == 0 {
+                    entry.remove_entry();
+                }
+            }
+            Entry::Vacant(_) => {
+                warn!(
+                    self.log,
+                    "Attempting to subtract the counter for unknown peer: {}", peer_id
+                );
+            }
         }
     }
 
@@ -92,6 +107,7 @@ impl PeerCounter {
 
 #[cfg(test)]
 mod tests {
+    use ic_logger::no_op_logger;
     use ic_test_utilities_types::{
         ids::{NODE_1, NODE_2},
         messages::SignedIngressBuilder,
@@ -101,7 +117,7 @@ mod tests {
 
     #[test]
     fn observe_test() {
-        let mut peer_counters = PeerCounters::new();
+        let mut peer_counters = PeerCounters::new(no_op_logger());
         let ingress_message_1 = fake_ingress_pool_object(NODE_1, 1);
         let ingress_message_2 = fake_ingress_pool_object(NODE_2, 2);
         let ingress_message_3 = fake_ingress_pool_object(NODE_2, 3);
@@ -123,7 +139,7 @@ mod tests {
 
     #[test]
     fn forget_test() {
-        let mut peer_counters = PeerCounters::new();
+        let mut peer_counters = PeerCounters::new(no_op_logger());
         let ingress_message_1 = fake_ingress_pool_object(NODE_1, 1);
         let ingress_message_2 = fake_ingress_pool_object(NODE_2, 2);
         let ingress_message_3 = fake_ingress_pool_object(NODE_2, 3);
@@ -151,7 +167,7 @@ mod tests {
         let ingress_message_1 = fake_ingress_pool_object(NODE_1, 1);
         let ingress_message_2 = fake_ingress_pool_object(NODE_1, 2);
         let message_size = ingress_message_1.count_bytes();
-        let mut peer_counters = PeerCounters::new_with_limits(2 * message_size, 1);
+        let mut peer_counters = PeerCounters::new_with_limits(no_op_logger(), 2 * message_size, 1);
 
         peer_counters.observe(&ingress_message_1);
         peer_counters.observe(&ingress_message_2);
@@ -164,7 +180,8 @@ mod tests {
         let ingress_message_1 = fake_ingress_pool_object(NODE_1, 1);
         let ingress_message_2 = fake_ingress_pool_object(NODE_1, 2);
         let message_size = ingress_message_1.count_bytes();
-        let mut peer_counters = PeerCounters::new_with_limits(2 * message_size - 1, 2);
+        let mut peer_counters =
+            PeerCounters::new_with_limits(no_op_logger(), 2 * message_size - 1, 2);
 
         peer_counters.observe(&ingress_message_1);
         peer_counters.observe(&ingress_message_2);
@@ -178,7 +195,7 @@ mod tests {
         let ingress_message_2 = fake_ingress_pool_object(NODE_1, 2);
         let ingress_message_3 = fake_ingress_pool_object(NODE_2, 3);
         let message_size = ingress_message_1.count_bytes();
-        let mut peer_counters = PeerCounters::new_with_limits(2 * message_size, 2);
+        let mut peer_counters = PeerCounters::new_with_limits(no_op_logger(), 2 * message_size, 2);
 
         peer_counters.observe(&ingress_message_1);
         peer_counters.observe(&ingress_message_2);

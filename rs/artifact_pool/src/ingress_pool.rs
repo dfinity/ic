@@ -55,9 +55,9 @@ impl<T: AsRef<IngressPoolObject>> CountBytes for IngressPoolSection<T> {
 }
 
 impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
-    fn new(metrics: PoolMetrics) -> IngressPoolSection<T> {
+    fn new(log: ReplicaLogger, metrics: PoolMetrics) -> IngressPoolSection<T> {
         IngressPoolSection {
-            peer_counters: PeerCounters::new(),
+            peer_counters: PeerCounters::new(log),
             artifacts: BTreeMap::new(),
             metrics,
             byte_size: 0,
@@ -65,12 +65,13 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
     }
 
     fn new_with_limits(
+        log: ReplicaLogger,
         metrics: PoolMetrics,
         max_bytes: usize,
         max_count: usize,
     ) -> IngressPoolSection<T> {
         IngressPoolSection {
-            peer_counters: PeerCounters::new_with_limits(max_bytes, max_count),
+            peer_counters: PeerCounters::new_with_limits(log, max_bytes, max_count),
             artifacts: BTreeMap::new(),
             metrics,
             byte_size: 0,
@@ -226,15 +227,15 @@ impl IngressPoolImpl {
                 "Number of throttled ingress messages",
             ),
             validated: IngressPoolSection::new_with_limits(
+                log.clone(),
                 PoolMetrics::new(metrics_registry.clone(), POOL_INGRESS, POOL_TYPE_VALIDATED),
                 config.ingress_pool_max_bytes,
                 config.ingress_pool_max_count,
             ),
-            unvalidated: IngressPoolSection::new(PoolMetrics::new(
-                metrics_registry,
-                POOL_INGRESS,
-                POOL_TYPE_UNVALIDATED,
-            )),
+            unvalidated: IngressPoolSection::new(
+                log.clone(),
+                PoolMetrics::new(metrics_registry, POOL_INGRESS, POOL_TYPE_UNVALIDATED),
+            ),
             node_id,
             log,
         }
@@ -400,6 +401,7 @@ mod tests {
     use ic_constants::MAX_INGRESS_TTL;
     use ic_interfaces::p2p::consensus::MutablePool;
     use ic_interfaces::time_source::TimeSource;
+    use ic_logger::no_op_logger;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{ids::node_test_id, messages::SignedIngressBuilder};
@@ -410,11 +412,10 @@ mod tests {
     #[test]
     fn test_insert_in_ingress_pool() {
         with_test_replica_logger(|_log| {
-            let mut ingress_pool = IngressPoolSection::new(PoolMetrics::new(
-                MetricsRegistry::new(),
-                POOL_INGRESS,
-                "default",
-            ));
+            let mut ingress_pool = IngressPoolSection::new(
+                no_op_logger(),
+                PoolMetrics::new(MetricsRegistry::new(), POOL_INGRESS, "default"),
+            );
             let ingress_msg = SignedIngressBuilder::new().build();
             let message_id = IngressMessageId::from(&ingress_msg);
 
