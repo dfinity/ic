@@ -45,6 +45,10 @@ impl PeerCounters {
     pub(super) fn exceeds_limit(&self, peer_id: &NodeId) -> bool {
         self.bytes_counters.exceeds_limit(peer_id) || self.count_counters.exceeds_limit(peer_id)
     }
+
+    pub(super) fn count_total_bytes(&self) -> usize {
+        self.bytes_counters.total()
+    }
 }
 
 #[derive(Clone)]
@@ -102,6 +106,10 @@ impl PeerCounter {
                 .unwrap_or_default()
                 > limit
         })
+    }
+
+    fn total(&self) -> usize {
+        self.counter_per_peer.values().sum()
     }
 }
 

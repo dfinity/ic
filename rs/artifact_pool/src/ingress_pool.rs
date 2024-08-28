@@ -41,17 +41,10 @@ struct IngressPoolSection<T: AsRef<IngressPoolObject>> {
     /// associated functions [`insert`], [`remove`] and [`purge_below`].
     artifacts: BTreeMap<IngressMessageId, T>,
     metrics: PoolMetrics,
-    /// Note: The byte size is updated incrementally as a side-effect of insert, remove
+    /// Note: `peer_counters` is updated incrementally as a side-effect of insert, remove
     /// and purge invocations. Never modify the artifacts map directly! Use the
     /// associated functions [`insert`], [`remove`] and [`purge_below`]
-    byte_size: usize,
     peer_counters: PeerCounters,
-}
-
-impl<T: AsRef<IngressPoolObject>> CountBytes for IngressPoolSection<T> {
-    fn count_bytes(&self) -> usize {
-        self.byte_size
-    }
 }
 
 impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
@@ -60,7 +53,6 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
             peer_counters: PeerCounters::new(log),
             artifacts: BTreeMap::new(),
             metrics,
-            byte_size: 0,
         }
     }
 
@@ -74,7 +66,6 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
             peer_counters: PeerCounters::new_with_limits(log, max_bytes, max_count),
             artifacts: BTreeMap::new(),
             metrics,
-            byte_size: 0,
         }
     }
 
@@ -87,20 +78,19 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
         let new_artifact_size = artifact.as_ref().count_bytes();
         self.metrics
             .observe_insert(new_artifact_size, INGRESS_MESSAGE_ARTIFACT_TYPE);
-        self.byte_size += new_artifact_size;
         self.peer_counters.observe(artifact.as_ref());
 
         if let Some(previous) = self.artifacts.insert(message_id, artifact) {
-            let prev_size = previous.as_ref().count_bytes();
-            self.byte_size -= prev_size;
             self.peer_counters.forget(previous.as_ref());
 
-            self.metrics
-                .observe_duplicate(prev_size, INGRESS_MESSAGE_ARTIFACT_TYPE);
+            self.metrics.observe_duplicate(
+                previous.as_ref().count_bytes(),
+                INGRESS_MESSAGE_ARTIFACT_TYPE,
+            );
         }
 
         // SAFETY: Checking byte size invariant
-        section_ok(self);
+        self.assert_section_ok();
     }
 
     fn remove(&mut self, message_id: &IngressMessageId) -> Option<T> {
@@ -111,7 +101,6 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
             .start_timer();
         let removed = self.artifacts.remove(message_id);
         if let Some(artifact) = &removed {
-            self.byte_size -= artifact.as_ref().count_bytes();
             self.peer_counters.forget(artifact.as_ref());
             self.metrics.observe_remove(
                 artifact.as_ref().count_bytes(),
@@ -119,7 +108,7 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
             );
         }
         // SAFETY: Checking byte size invariant
-        section_ok(self);
+        self.assert_section_ok();
         removed
     }
 
@@ -137,13 +126,12 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
         std::mem::swap(&mut to_remove, &mut self.artifacts);
         for artifact in to_remove.values() {
             let artifact_size = artifact.as_ref().count_bytes();
-            self.byte_size -= artifact_size;
             self.peer_counters.forget(artifact.as_ref());
             self.metrics
                 .observe_remove(artifact_size, INGRESS_MESSAGE_ARTIFACT_TYPE);
         }
         // SAFETY: Checking byte size invariant
-        section_ok(self);
+        self.assert_section_ok();
         Box::new(to_remove.into_values())
     }
 
@@ -155,16 +143,16 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
             .map(|item| item.as_ref().count_bytes())
             .sum()
     }
-}
 
-/// Helper function to concisely validate that the real byte size of the pool section
-/// (obtained by accumulating all btreemap values) is identical to count_bytes()
-fn section_ok<T: AsRef<IngressPoolObject>>(section: &IngressPoolSection<T>) {
-    debug_assert_eq!(
-        section.count_bytes(),
-        section.count_bytes_slow(),
-        "invariant violated: byte_size == real size of btreemap"
-    );
+    /// Helper function to concisely validate that the real byte size of the pool section
+    /// (obtained by accumulating all btreemap values) is identical to count_bytes()
+    fn assert_section_ok(&self) {
+        debug_assert_eq!(
+            self.peer_counters.count_total_bytes(),
+            self.count_bytes_slow(),
+            "invariant violated: byte_size == real size of btreemap"
+        );
+    }
 }
 
 impl<T: AsRef<IngressPoolObject> + HasTimestamp> PoolSection<T> for IngressPoolSection<T> {
