@@ -410,9 +410,10 @@ fn can_validate_too_many_exported_functions() {
     let wasm = wat2wasm(&many_exported_functions(1001)).unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::UserInvalidExportSection(
-            "The number of exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds 1000.".to_string()
-        ))
+        Err(WasmValidationError::TooManyExports {
+            defined: 1001,
+            allowed: 1000
+        })
     );
 }
 

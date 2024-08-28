@@ -945,10 +945,14 @@ fn validate_export_section(
                 }
             }
         }
+
         if number_exported_functions > max_number_exported_functions {
-            let err = format!("The number of exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds {}.", max_number_exported_functions);
-            return Err(WasmValidationError::UserInvalidExportSection(err));
+            return Err(WasmValidationError::TooManyExports {
+                defined: number_exported_functions,
+                allowed: max_number_exported_functions,
+            });
         }
+
         if sum_exported_function_name_lengths > max_sum_exported_function_name_lengths {
             let err = format!("The sum of `<name>` lengths in exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds {}.", max_sum_exported_function_name_lengths);
             return Err(WasmValidationError::UserInvalidExportSection(err));

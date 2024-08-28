@@ -66,6 +66,8 @@ pub enum WasmValidationError {
     UserInvalidExportSection(String),
     /// Same function name is exported multiple times (with different types).
     DuplicateExport { name: String },
+    /// There are too many exports defined in the module.
+    TooManyExports { defined: usize, allowed: usize },
     /// Module contains an invalid data section
     InvalidDataSection(String),
     /// Module contains an invalid custom section
@@ -125,6 +127,9 @@ impl std::fmt::Display for WasmValidationError {
                     "Duplicate function '{name}' exported multiple times \
                         with different call types: update, query, or composite_query."
                 )
+            }
+            Self::TooManyExports { defined, allowed } => {
+                write!(f, "The number of exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` is {defined} which exceeds {allowed}.")
             }
             Self::InvalidDataSection(err) => {
                 write!(f, "Wasm module has an invalid data section. {err}")
@@ -207,6 +212,10 @@ impl AsErrorHelp for WasmValidationError {
                 call type, e.g. `{name}_update`, `{name}_query`, etc."
                 ),
                 doc_link: doc_ref("wasm-module-duplicate-exports"),
+            },
+            WasmValidationError::TooManyExports { .. } => ErrorHelp::UserError {
+                suggestion: "Try combining multiple endpoints into a single endpoint.".to_string(),
+                doc_link: doc_ref("wasm-module-exports-too-many-methods"),
             },
             WasmValidationError::UserInvalidExportSection(_) => ErrorHelp::UserError {
                 suggestion: "".to_string(),
