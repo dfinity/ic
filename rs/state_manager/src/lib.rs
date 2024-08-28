@@ -2315,7 +2315,6 @@ impl StateManagerImpl {
             .iter()
             .map(|s| s.height)
             .filter(|h| h.get() != 0)
-            .chain(states.states_metadata.keys().copied())
             .min();
         if let Some(min_resident_height) = min_resident_height {
             self.metrics
