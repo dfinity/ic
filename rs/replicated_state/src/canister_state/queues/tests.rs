@@ -2580,7 +2580,7 @@ fn has_expired_deadlines_reports_correctly() {
 
     let time1 = Time::from_secs_since_unix_epoch(1).unwrap();
     canister_queues
-        .push_output_request(Arc::new(RequestBuilder::default().build()), time0)
+        .push_output_request(request(NO_DEADLINE).into(), time0)
         .unwrap();
 
     let current_time = time0 + REQUEST_LIFETIME;
@@ -2588,6 +2588,26 @@ fn has_expired_deadlines_reports_correctly() {
 
     let current_time = time1 + REQUEST_LIFETIME;
     assert!(canister_queues.has_expired_deadlines(current_time));
+
+    // Pop the output request.
+    canister_queues.output_into_iter().next().unwrap();
+    assert!(!canister_queues.has_expired_deadlines(current_time));
+
+    let time100 = coarse_time(100);
+    let time101 = Time::from_secs_since_unix_epoch(101).unwrap();
+
+    // Enqueue an inbound best-effort response. No expired deadlines, as inbound
+    // responses don't expire.
+    canister_queues
+        .push_input(response(time100).into(), LocalSubnet)
+        .unwrap();
+    assert!(!canister_queues.has_expired_deadlines(time101));
+
+    // But an inbound best-effort request does expire.
+    canister_queues
+        .push_input(request(time100).into(), LocalSubnet)
+        .unwrap();
+    assert!(canister_queues.has_expired_deadlines(time101));
 }
 
 /// Tests `time_out_messages` on an instance of `CanisterQueues` that contains exactly 4 output messages.
