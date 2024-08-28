@@ -36,7 +36,7 @@ use ic_types::{
 use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::{
-    collections::HashSet,
+    str::FromStr,
     sync::{Arc, RwLock},
 };
 use tokio::sync::{
@@ -50,16 +50,20 @@ const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 
 /// The subnets that can serve synchronous responses to update calls received
 /// on the `/api/v3/.../call`` endpoint.
-const WHITELISTED_SUBNETS_FOR_SYNCHRONOUS_CALL_V3: HashSet<SubnetId> = {
-    const WHITE_LISTED_SUBNETS: [str; 1] =
-        ["snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae"];
+const WHITELISTED_SUBNETS_FOR_SYNCHRONOUS_CALL_V3: [&str; 1] =
+    ["snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae"];
 
-    HashSet::from_iter(
-        WHITE_LISTED_SUBNETS
-            .iter()
-            .map(|s| SubnetId::from(PrincipalId::try_from(*s).expect("Subnet ID is valid."))),
-    )
-};
+fn subnet_is_whitelisted_for_synchronous_call_v3(subnet_id: &SubnetId) -> bool {
+    WHITELISTED_SUBNETS_FOR_SYNCHRONOUS_CALL_V3
+        .iter()
+        .map(|s| {
+            let principal_id =
+                PrincipalId::from_str(*s).expect("Whitelist has valid principal ids");
+
+            SubnetId::from(principal_id)
+        })
+        .any(|subnet| subnet == *subnet_id)
+}
 
 /// Create the consensus pool directory (if none exists)
 fn create_consensus_pool_dir(config: &Config) {
@@ -340,8 +344,6 @@ pub fn construct_ic_stack(
         max_certified_height_tx,
     );
     // ---------- PUBLIC ENDPOINT DEPS FOLLOW ----------
-    let enable_synchronous_v3_handler =
-        WHITELISTED_SUBNETS_FOR_SYNCHRONOUS_CALL_V3.contains(&subnet_id);
     ic_http_endpoints_public::start_server(
         rt_handle_http.clone(),
         metrics_registry,
@@ -367,7 +369,7 @@ pub fn construct_ic_stack(
         tracing_handle,
         max_certified_height_rx,
         finalized_ingress_height_rx,
-        enable_synchronous_v3_handler,
+        subnet_is_whitelisted_for_synchronous_call_v3(&subnet_id),
     );
 
     Ok((
