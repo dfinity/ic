@@ -927,7 +927,7 @@ impl PageMap {
         assert!(checkpointed_page_map.page_delta.is_empty());
         assert!(checkpointed_page_map.unflushed_delta.is_empty());
         assert!(!checkpointed_page_map.is_loaded());
-        assert_eq!(
+        debug_assert_eq!(
             self.num_host_pages(),
             checkpointed_page_map.num_host_pages()
         );
