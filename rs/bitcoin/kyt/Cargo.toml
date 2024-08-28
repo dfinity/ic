@@ -1,13 +1,21 @@
 [package]
-name = "btc-kyt-canister"
+name = "ic-btc-kyt"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 description.workspace = true
 documentation.workspace = true
 
+[[bin]]
+name = "ic-btc-kyt-canister"
+path = "src/main.rs"
+
 [dependencies]
-bitcoin = { workspace = true }
+bitcoin = { version = "0.32.2", default-features = false }
 candid = { workspace = true }
 futures = { workspace = true }
 ic-cdk = { workspace = true }
+
+[dev-dependencies]
+ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
+pocket-ic = { path = "../../../packages/pocket-ic" } 

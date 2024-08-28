@@ -16,7 +16,6 @@ use crate::{
 };
 use axum::Router;
 use bytes::BytesMut;
-use either::Either;
 use futures::{future::BoxFuture, FutureExt};
 use ic_artifact_downloader::FetchArtifact;
 use ic_artifact_manager::run_artifact_processor;
@@ -376,13 +375,13 @@ pub fn add_transport_to_sim<F>(
                         consensus.clone(),
                         consensus.clone().read().unwrap().clone(),
                     );
-                let pfn_producer = Arc::new(consensus.clone().read().unwrap().clone());
+                let bouncer_factory = Arc::new(consensus.clone().read().unwrap().clone());
 
                 let downloader = FetchArtifact::new(
                     log.clone(),
                     tokio::runtime::Handle::current(),
                     consensus,
-                    pfn_producer,
+                    bouncer_factory,
                     MetricsRegistry::default(),
                 );
                 consensus_builder.add_client(
@@ -405,7 +404,7 @@ pub fn add_transport_to_sim<F>(
                 registry_client,
                 peer,
                 topology_watcher_clone.clone(),
-                Either::Right(custom_udp),
+                Arc::new(custom_udp),
                 router.unwrap_or_default(),
             ));
 

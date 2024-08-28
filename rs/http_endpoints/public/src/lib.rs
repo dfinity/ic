@@ -14,7 +14,6 @@ mod pprof;
 mod query;
 mod read_state;
 mod status;
-mod threads;
 mod tracing_flamegraph;
 
 cfg_if::cfg_if! {
@@ -25,9 +24,7 @@ cfg_if::cfg_if! {
     }
 }
 
-pub use call::{
-    CallServiceV2, CallServiceV3, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle,
-};
+pub use call::{call_v2, call_v3, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle};
 pub use common::cors_layer;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
@@ -302,6 +299,7 @@ pub fn start_server(
     tracing_handle: ReloadHandles,
     certified_height_watcher: watch::Receiver<Height>,
     completed_execution_messages_rx: Receiver<(MessageId, Height)>,
+    enable_synchronous_call_handler_for_v3_endpoint: bool,
 ) {
     let listen_addr = config.listen_addr;
     info!(log, "Starting HTTP server...");
@@ -337,7 +335,6 @@ pub fn start_server(
     .with_malicious_flags(malicious_flags.clone())
     .build();
 
-    let call_router = call::CallServiceV2::new_router(call_handler.clone());
     let (ingress_watcher_handle, _) = IngressWatcher::start(
         rt_handle.clone(),
         log.clone(),
@@ -347,14 +344,33 @@ pub fn start_server(
         CancellationToken::new(),
     );
 
-    let call_v3_router = call::CallServiceV3::new_router(
-        call_handler,
-        ingress_watcher_handle,
-        metrics.clone(),
-        config.ingress_message_certificate_timeout_seconds,
-        delegation_from_nns.clone(),
-        state_reader.clone(),
-    );
+    let call_router =
+        call_v2::new_router(call_handler.clone(), Some(ingress_watcher_handle.clone()));
+
+    let call_v3_router = if enable_synchronous_call_handler_for_v3_endpoint {
+        call_v3::new_router(
+            call_handler,
+            ingress_watcher_handle,
+            metrics.clone(),
+            config.ingress_message_certificate_timeout_seconds,
+            delegation_from_nns.clone(),
+            state_reader.clone(),
+        )
+    } else {
+        call_v3::new_asynchronous_call_service_router(
+            call_handler.clone(),
+            Some(ingress_watcher_handle.clone()),
+        )
+        // We only want to enforce the global concurrency limit for the asynchronous call handler.
+        .layer(
+            ServiceBuilder::new()
+                .layer(HandleErrorLayer::new(map_box_error_to_response))
+                .load_shed()
+                .layer(GlobalConcurrencyLimitLayer::new(
+                    config.max_call_concurrent_requests,
+                )),
+        )
+    };
 
     let query_router = QueryServiceBuilder::builder(
         log.clone(),
@@ -1124,10 +1140,8 @@ mod tests {
             "success".to_string()
         }
         let http_handler = HttpHandler {
-            call_router: Router::new()
-                .route(call::CallServiceV2::route(), axum::routing::post(dummy)),
-            call_v3_router: Router::new()
-                .route(call::CallServiceV3::route(), axum::routing::post(dummy)),
+            call_router: Router::new().route(call_v2::route(), axum::routing::post(dummy)),
+            call_v3_router: Router::new().route(call_v3::route(), axum::routing::post(dummy)),
             query_router: Router::new()
                 .route(QueryService::route(), axum::routing::post(dummy_cbor)),
             catchup_router: Router::new().route(

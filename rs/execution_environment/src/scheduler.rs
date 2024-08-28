@@ -534,7 +534,7 @@ impl SchedulerImpl {
         state
     }
 
-    /// Invokes `ExecutionEnvironmnet` to execute a subnet message.
+    /// Invokes `ExecutionEnvironment` to execute a subnet message.
     fn execute_subnet_message(
         &self,
         msg: CanisterMessage,
@@ -665,7 +665,7 @@ impl SchedulerImpl {
 
         // Start iteration loop:
         //      - Execute subnet messages.
-        //      - Execute hearbeat and global timer tasks.
+        //      - Execute heartbeat and global timer tasks.
         //      - Execute canisters input messages in parallel.
         //      - Induct messages on the same subnet.
         let mut state = loop {

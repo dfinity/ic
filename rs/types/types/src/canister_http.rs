@@ -60,10 +60,10 @@ use ic_protobuf::{
     state::system_metadata::v1 as pb_metadata,
 };
 use serde::{Deserialize, Serialize};
-use std::{convert::Infallible, time::Duration};
 use std::{
     convert::{TryFrom, TryInto},
     mem::size_of,
+    time::Duration,
 };
 use strum_macros::EnumIter;
 
@@ -620,11 +620,9 @@ pub type CanisterHttpResponseShare =
 impl IdentifiableArtifact for CanisterHttpResponseShare {
     const NAME: &'static str = "canisterhttp";
     type Id = CanisterHttpResponseId;
-    type Attribute = ();
     fn id(&self) -> Self::Id {
         self.clone()
     }
-    fn attribute(&self) -> Self::Attribute {}
 }
 
 impl PbArtifact for CanisterHttpResponseShare {
@@ -632,8 +630,6 @@ impl PbArtifact for CanisterHttpResponseShare {
     type PbIdError = ProxyDecodeError;
     type PbMessage = ic_protobuf::types::v1::CanisterHttpShare;
     type PbMessageError = ProxyDecodeError;
-    type PbAttribute = ();
-    type PbAttributeError = Infallible;
 }
 
 /// A signature of of [`CanisterHttpResponseMetadata`].

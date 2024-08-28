@@ -1,0 +1,37 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/nervous_system/clients",
+    "//rs/nns/constants",
+    "//rs/nns/sns-wasm",
+    "@crate_index//:anyhow",
+    "@crate_index//:candid",
+    "@crate_index//:ic-agent",
+    "@crate_index//:serde",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+]
+
+DEV_DEPENDENCIES = DEPENDENCIES + [
+]
+
+MACRO_DEPENDENCIES = [
+]
+
+rust_library(
+    name = "agent",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_nervous_system_agent",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "agent_test",
+    crate = ":agent",
+    deps = DEV_DEPENDENCIES,
+)

@@ -10,7 +10,6 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 bytes = { workspace = true }
-either = "1.6.0"
 futures = { workspace = true }
 ic-async-utils = { path = "../../async_utils" }
 ic-base-types = { path = "../../types/base_types" }
@@ -24,10 +23,10 @@ phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
 prost = { workspace = true }
 quinn = { workspace = true }
-quinn-udp = { workspace = true }
 rustls = { workspace = true }
 slog = { workspace = true }
 socket2 = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-metrics = { workspace = true }
 tokio-util = { workspace = true }
