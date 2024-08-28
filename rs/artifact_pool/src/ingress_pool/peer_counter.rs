@@ -94,6 +94,13 @@ impl PeerCounter {
                     self.log,
                     "Attempting to subtract the counter for unknown peer: {}", peer_id
                 );
+
+                if cfg!(debug_assertions) {
+                    panic!(
+                        "Attempting to subtract the counter for unknown peer: {}",
+                        peer_id
+                    );
+                }
             }
         }
     }
