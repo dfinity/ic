@@ -6,6 +6,7 @@ pub fn doc_ref(section: &str) -> String {
         section
     )
 }
+
 pub enum ErrorHelp {
     UserError {
         suggestion: String,
@@ -63,6 +64,8 @@ pub enum WasmValidationError {
     InvalidExportSection(String),
     /// Module contains an invalid export section caused by a user error.
     UserInvalidExportSection(String),
+    /// Same function name is exported multiple times (with different types).
+    DuplicateExport { name: String },
     /// Module contains an invalid data section
     InvalidDataSection(String),
     /// Module contains an invalid custom section
@@ -115,6 +118,13 @@ impl std::fmt::Display for WasmValidationError {
             }
             Self::UserInvalidExportSection(err) => {
                 write!(f, "Wasm module has an invalid export section. {}", err)
+            }
+            Self::DuplicateExport { name } => {
+                write!(
+                    f,
+                    "Duplicate function '{name}' exported multiple times \
+                        with different call types: update, query, or composite_query."
+                )
             }
             Self::InvalidDataSection(err) => {
                 write!(f, "Wasm module has an invalid data section. {err}")
@@ -191,6 +201,13 @@ impl AsErrorHelp for WasmValidationError {
             | WasmValidationError::InvalidGlobalSection(_)
             | WasmValidationError::UnsupportedWasmInstruction { .. }
             | WasmValidationError::TooManyCustomSections { .. } => ErrorHelp::ToolchainError,
+            WasmValidationError::DuplicateExport { name } => ErrorHelp::UserError {
+                suggestion: format!(
+                    "Try defining different versions of the function for each \
+                call type, e.g. `{name}_update`, `{name}_query`, etc."
+                ),
+                doc_link: doc_ref("wasm-module-duplicate-exports"),
+            },
             WasmValidationError::UserInvalidExportSection(_) => ErrorHelp::UserError {
                 suggestion: "".to_string(),
                 doc_link: "".to_string(),

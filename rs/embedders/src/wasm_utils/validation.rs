@@ -905,11 +905,9 @@ fn validate_export_section(
                     func_name = parts[0];
                     let unmangled_func_name = parts[1];
                     if seen_funcs.contains(unmangled_func_name) {
-                        return Err(WasmValidationError::UserInvalidExportSection(format!(
-                            "Duplicate function '{}' exported multiple times \
-                             with different call types: update, query, or composite_query.",
-                            unmangled_func_name
-                        )));
+                        return Err(WasmValidationError::DuplicateExport {
+                            name: unmangled_func_name.to_string(),
+                        });
                     }
                     seen_funcs.insert(unmangled_func_name);
                     number_exported_functions += 1;

@@ -334,11 +334,9 @@ fn can_validate_duplicate_update_and_query_methods() {
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::UserInvalidExportSection(
-            "Duplicate function 'read' exported multiple times \
-             with different call types: update, query, or composite_query."
-                .to_string()
-        ))
+        Err(WasmValidationError::DuplicateExport {
+            name: "read".to_string()
+        })
     );
 }
 
@@ -353,11 +351,9 @@ fn can_validate_duplicate_update_and_composite_query_methods() {
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::UserInvalidExportSection(
-            "Duplicate function 'read' exported multiple times \
-             with different call types: update, query, or composite_query."
-                .to_string()
-        ))
+        Err(WasmValidationError::DuplicateExport {
+            name: "read".to_string()
+        })
     );
 }
 
@@ -372,11 +368,9 @@ fn can_validate_duplicate_query_and_composite_query_methods() {
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::UserInvalidExportSection(
-            "Duplicate function 'read' exported multiple times \
-             with different call types: update, query, or composite_query."
-                .to_string()
-        ))
+        Err(WasmValidationError::DuplicateExport {
+            name: "read".to_string()
+        })
     );
 }
 
