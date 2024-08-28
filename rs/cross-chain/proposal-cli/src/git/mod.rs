@@ -102,10 +102,11 @@ impl GitRepository {
         from: &GitCommitHash,
         to: &GitCommitHash,
     ) -> ReleaseNotes {
+        const FORMAT_PARAMS: &str = "%C(auto) %h %s";
         let mut git_log = self.git();
         git_log
             .arg("log")
-            .arg("--format=%C(auto) %h %s")
+            .arg(format!("--format={}", FORMAT_PARAMS))
             .arg(format!("{}..{}", from, to))
             .arg("--");
         for repo_dir in canister.git_log_dirs() {
@@ -118,7 +119,7 @@ impl GitRepository {
             .chain(git_log.get_args())
             .fold(String::new(), |acc, arg| acc + " " + arg.to_str().unwrap())
             .trim()
-            .to_string();
+            .replace(FORMAT_PARAMS, format!("'{}'", FORMAT_PARAMS).as_str());
 
         let output = String::from_utf8_lossy(&log.stdout)
             .lines()

@@ -4,7 +4,7 @@ This document describes the contents of the GuestOS *config* partition (*/dev/vd
 
 Currently, all contents in the config partition are stored as plain-text without integrity protection.
 
-These files are stored in `/boot/config` or `/var/lib/ic`. To see where each configuration file is stored, refer to link:../components/init/bootstrap-ic-node[bootstrap-ic-node]
+These files are stored in `/boot/config` or `/var/lib/ic`. To see where each configuration file is stored, refer to link:../../components/init/bootstrap-ic-node/guestos/bootstrap-ic-node.sh[bootstrap-ic-node]
 
 == Production configuration files
 

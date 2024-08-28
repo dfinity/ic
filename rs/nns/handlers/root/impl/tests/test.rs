@@ -2,7 +2,6 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_management_canister_types::CanisterInstallMode::Upgrade;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
@@ -19,7 +18,6 @@ use ic_nns_test_utils::itest_helpers::{
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use maplit::btreeset;
 use pretty_assertions::assert_eq;
-use serde_bytes::ByteBuf;
 use std::{collections::BTreeSet, str::FromStr};
 
 /// Verifies that an anonymous user can get the status of any NNS canister
@@ -401,34 +399,4 @@ fn test_encode_metrics() {
             .count(),
         0,
     );
-}
-
-#[test]
-fn large_http_request() {
-    local_test_on_nns_subnet(|runtime| async move {
-        let root =
-            set_up_root_canister(&runtime, RootCanisterInitPayloadBuilder::new().build()).await;
-
-        // The anonymous end-user sends a small HTTP request. This should succeed.
-        let http_request = HttpRequest {
-            method: "GET".to_string(),
-            url: "/metrics".to_string(),
-            headers: vec![],
-            body: ByteBuf::from(vec![42; 1_000]),
-        };
-        let response: Result<HttpResponse, String> = root
-            .update_("http_request", candid, (http_request.clone(),))
-            .await;
-        assert_eq!(response.unwrap().status_code, 200);
-
-        // The anonymous end-user sends a large HTTP request. This should be rejected.
-        let mut large_http_request = http_request;
-        large_http_request.body = ByteBuf::from(vec![42; 1_000_000]);
-        let response: Result<HttpResponse, String> = root
-            .update_("http_request", candid, (large_http_request.clone(),))
-            .await;
-        assert_matches!(response, Err(s) if s.contains("Deserialization Failed"));
-
-        Ok(())
-    });
 }

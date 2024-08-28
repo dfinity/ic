@@ -13,12 +13,12 @@ use ic_interfaces::{
         UnvalidatedIngressArtifact, ValidatedIngressArtifact,
     },
     p2p::consensus::{
-        ArtifactMutation, ArtifactWithOpt, ChangeResult, MutablePool, Priority, PriorityFn,
-        PriorityFnFactory, UnvalidatedArtifact, ValidatedPoolReader,
+        ArtifactMutation, ArtifactWithOpt, Bouncer, BouncerFactory, BouncerValue, ChangeResult,
+        MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
     },
     time_source::TimeSource,
 };
-use ic_logger::{debug, trace, ReplicaLogger};
+use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::IngressMessageId,
@@ -140,16 +140,6 @@ fn section_ok<T: AsRef<IngressPoolObject>>(section: &IngressPoolSection<T>) {
     );
 }
 
-impl<T: AsRef<IngressPoolObject>> Default for IngressPoolSection<T> {
-    fn default() -> Self {
-        Self::new(PoolMetrics::new(
-            MetricsRegistry::new(),
-            POOL_INGRESS,
-            "default",
-        ))
-    }
-}
-
 impl<T: AsRef<IngressPoolObject> + HasTimestamp> PoolSection<T> for IngressPoolSection<T> {
     fn get(&self, message_id: &IngressMessageId) -> Option<&T> {
         self.artifacts.get(message_id)
@@ -224,24 +214,6 @@ impl IngressPoolImpl {
             log,
         }
     }
-
-    /// Remove an artifact from unvalidated pool and remove it from peer_index
-    /// Return the removed artifact and its size.
-    fn remove_unvalidated(
-        &mut self,
-        message_id: &IngressMessageId,
-    ) -> Option<(UnvalidatedIngressArtifact, usize)> {
-        match self.unvalidated.remove(message_id) {
-            Some(unvalidated_artifact) => {
-                let size = unvalidated_artifact.message.signed_ingress.count_bytes();
-                Some((unvalidated_artifact, size))
-            }
-            None => {
-                trace!(self.log, "Did not find artifact in peer_index");
-                None
-            }
-        }
-    }
 }
 
 impl IngressPool for IngressPoolImpl {
@@ -297,12 +269,12 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
         let mut mutations = vec![];
         for change_action in change_set {
             match change_action {
-                ChangeAction::MoveToValidated((message_id, source_node_id)) => {
+                ChangeAction::MoveToValidated(message_id) => {
                     // remove it from unvalidated pool and remove it from peer_index, move it
                     // to the validated pool
-                    match self.remove_unvalidated(&message_id) {
-                        Some((unvalidated_artifact, size)) => {
-                            if source_node_id == self.node_id {
+                    match self.unvalidated.remove(&message_id) {
+                        Some(unvalidated_artifact) => {
+                            if unvalidated_artifact.peer_id == self.node_id {
                                 mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
                                     artifact: unvalidated_artifact.message.signed_ingress.clone(),
                                     is_latency_sensitive: false,
@@ -315,10 +287,6 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                                     timestamp: unvalidated_artifact.timestamp,
                                 },
                             );
-                            debug!(
-                                self.log,
-                                "Ingress pool: move {} bytes from unvalidated to validated", size
-                            );
                         }
                         None => {
                             unreachable!(
@@ -329,21 +297,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
                     }
                 }
                 ChangeAction::RemoveFromUnvalidated(message_id) => {
-                    match self.remove_unvalidated(&message_id) {
-                        Some((_, size)) => {
-                            debug!(
-                                self.log,
-                                "Ingress pool: remove {} bytes from unvalidated", size
-                            );
-                        }
-                        None => {
-                            debug!(
-                                self.log,
-                                "Ingress pool: attempt to remove non-existent unvalidated ingress message {}",
-                                message_id
-                            );
-                        }
-                    }
+                    self.unvalidated.remove(&message_id);
                 }
                 ChangeAction::RemoveFromValidated(message_id) => {
                     match self.validated.remove(&message_id) {
@@ -418,8 +372,8 @@ impl IngressPrioritizer {
     }
 }
 
-impl PriorityFnFactory<SignedIngress, IngressPoolImpl> for IngressPrioritizer {
-    fn get_priority_function(&self, pool: &IngressPoolImpl) -> PriorityFn<IngressMessageId> {
+impl BouncerFactory<SignedIngress, IngressPoolImpl> for IngressPrioritizer {
+    fn new_bouncer(&self, pool: &IngressPoolImpl) -> Bouncer<IngressMessageId> {
         // EXPLANATION: Because ingress messages are included in blocks, consensus
         // does not rely on ingress gossip for correctness. Ingress gossip exists to
         // reduce latency in cases where replicas don't have enough ingress messages
@@ -428,16 +382,16 @@ impl PriorityFnFactory<SignedIngress, IngressPoolImpl> for IngressPrioritizer {
         // Please note that all P2P ingress messages will be dropped if 'exceeds_threshold'
         // returns true until the next invocation of 'get_priority_function'.
         if pool.exceeds_threshold() {
-            return Box::new(move |_| Priority::Drop);
+            return Box::new(move |_| BouncerValue::Unwanted);
         }
         let time_source = self.time_source.clone();
         Box::new(move |ingress_id| {
             let start = time_source.get_relative_time();
             let range = start..=start + MAX_INGRESS_TTL;
             if range.contains(&ingress_id.expiry()) {
-                Priority::FetchNow
+                BouncerValue::Wants
             } else {
-                Priority::Drop
+                BouncerValue::Unwanted
             }
         })
     }
@@ -459,7 +413,11 @@ mod tests {
     #[test]
     fn test_insert_in_ingress_pool() {
         with_test_replica_logger(|_log| {
-            let mut ingress_pool = IngressPoolSection::default();
+            let mut ingress_pool = IngressPoolSection::new(PoolMetrics::new(
+                MetricsRegistry::new(),
+                POOL_INGRESS,
+                "default",
+            ));
             let ingress_msg = SignedIngressBuilder::new().build();
             let message_id = IngressMessageId::from(&ingress_msg);
 
@@ -644,7 +602,7 @@ mod tests {
                 );
 
                 let changeset = vec![
-                    ChangeAction::MoveToValidated((message_id0.clone(), node_test_id(0))),
+                    ChangeAction::MoveToValidated(message_id0.clone()),
                     ChangeAction::RemoveFromUnvalidated(message_id1.clone()),
                 ];
                 let result = ingress_pool.apply_changes(changeset);
@@ -707,10 +665,7 @@ mod tests {
                         peer_id: node_test_id(peer_id),
                         timestamp: time_source.get_relative_time(),
                     });
-                    changeset.push(ChangeAction::MoveToValidated((
-                        message_id,
-                        node_test_id(peer_id),
-                    )));
+                    changeset.push(ChangeAction::MoveToValidated(message_id));
                 }
                 assert_eq!(ingress_pool.unvalidated().size(), initial_count);
                 let result = ingress_pool.apply_changes(changeset);
