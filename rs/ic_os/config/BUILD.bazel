@@ -4,6 +4,7 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/types/types",
     "@crate_index//:anyhow",
 ]
 

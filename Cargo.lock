@@ -2354,6 +2354,7 @@ name = "config"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "ic-types",
 ]
 
 [[package]]
