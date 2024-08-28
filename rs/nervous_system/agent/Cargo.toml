@@ -11,6 +11,7 @@ path = "src/lib.rs"
 anyhow = { workspace = true }
 candid = { workspace = true }
 ic-agent = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
 ic-nervous-system-clients = { path = "../clients" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-sns-wasm = { path = "../../nns/sns-wasm" }
