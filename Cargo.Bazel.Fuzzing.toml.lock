@@ -3136,7 +3136,7 @@ dependencies = [
  "dyn-clone",
  "ed25519-dalek",
  "educe",
- "erased-serde",
+ "erased-serde 0.3.31",
  "escargot",
  "ethers-core",
  "ethnum",
@@ -9033,7 +9033,7 @@ dependencies = [
  "crossterm",
  "itertools 0.12.0",
  "lru 0.12.3",
- "paste 1.0.14",
+ "paste",
  "stability",
  "strum 0.26.2",
  "unicode-segmentation",
@@ -12806,7 +12806,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e48a53791691ab099e5e2ad123536d0fff50652600abaf43bbf952894110d0be"
 dependencies = [
  "windows-core 0.52.0",
- "windows-targets 0.52.0",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]

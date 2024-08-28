@@ -1,5 +1,5 @@
 {
-  "checksum": "a1f76f7855d49a42801141166bc4ea0999089a707d9a8f91d950eda29c5b4023",
+  "checksum": "9b6d972c831f3c7402027fd3e1f77136f6d1616906f3d837c8bd81961614f0b8",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -36014,7 +36014,7 @@
               "target": "ratatui"
             },
             {
-              "id": "regex 1.10.5",
+              "id": "regex 1.10.6",
               "target": "regex"
             },
             {
@@ -70175,6 +70175,44 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "tuple_list 0.1.3": {
+      "name": "tuple_list",
+      "version": "0.1.3",
+      "package_url": "https://github.com/VFLashM/tuple_list/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tuple_list/0.1.3/download",
+          "sha256": "141fb9f71ee586d956d7d6e4d5a9ef8e946061188520140f7591b668841d502e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tuple_list",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tuple_list",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.1.3"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "turmoil 0.6.3": {
       "name": "turmoil",
       "version": "0.6.3",
@@ -75500,7 +75538,7 @@
               "target": "windows_core"
             },
             {
-              "id": "windows-targets 0.52.0",
+              "id": "windows-targets 0.52.6",
               "target": "windows_targets"
             }
           ],
@@ -80866,7 +80904,7 @@
     "tower_governor 0.1.0",
     "tracing 0.1.40",
     "tracing-appender 0.2.3",
-    "tracing-flame 0.2.0",ß
+    "tracing-flame 0.2.0",
     "tracing-opentelemetry 0.24.0",
     "tracing-serde 0.1.3",
     "tracing-slog 0.2.0",

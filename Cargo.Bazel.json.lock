@@ -1,5 +1,5 @@
 {
-  "checksum": "6fc19c391d6fc5ee83c6383b3f8410b4f2bd189026655397f94a88830e709342",
+  "checksum": "96a31dfa86692e08c998b1a45f7d97933986cb8af4f79276f7a3b8bc68949407",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -35956,7 +35956,7 @@
               "target": "ratatui"
             },
             {
-              "id": "regex 1.10.5",
+              "id": "regex 1.10.6",
               "target": "regex"
             },
             {
@@ -70431,6 +70431,44 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "tuple_list 0.1.3": {
+      "name": "tuple_list",
+      "version": "0.1.3",
+      "package_url": "https://github.com/VFLashM/tuple_list/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tuple_list/0.1.3/download",
+          "sha256": "141fb9f71ee586d956d7d6e4d5a9ef8e946061188520140f7591b668841d502e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tuple_list",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tuple_list",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.1.3"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "turmoil 0.6.3": {
       "name": "turmoil",
       "version": "0.6.3",
@@ -75728,7 +75766,7 @@
               "target": "windows_core"
             },
             {
-              "id": "windows-targets 0.52.0",
+              "id": "windows-targets 0.52.6",
               "target": "windows_targets"
             }
           ],
