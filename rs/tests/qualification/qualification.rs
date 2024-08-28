@@ -1,14 +1,10 @@
 use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_system_test_driver::driver::{
-    group::SystemTestGroup,
-    test_env_api::{read_dependency_from_env_to_string, read_dependency_to_string},
+    group::SystemTestGroup, test_env_api::read_dependency_to_string,
 };
 use ic_tests::qualification::{
     defs::QualificationExecutor,
-    steps::{
-        ensure_blessed_version::EnsureBlessedVersion,
-        retire_blessed_version::RetireBlessedVersions, update_subnet_type::UpdateSubnetType,
-    },
+    steps::{ensure_blessed_version::EnsureBlessedVersion, update_subnet_type::UpdateSubnetType},
     ConfigurableSubnet, ConfigurableUnassignedNodes, IcConfig, SubnetSimple,
 };
 use std::time::Duration;
