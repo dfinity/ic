@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use axum::Router;
 use ic_base_types::NodeId;
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{info, ReplicaLogger};
 use quinn::{Connection, RecvStream, SendStream};
 use tower::ServiceExt;
 use tracing::instrument;
@@ -22,7 +22,7 @@ use tracing::instrument;
 use crate::{
     metrics::{
         QuicTransportMetrics, ERROR_TYPE_ACCEPT, ERROR_TYPE_APP, ERROR_TYPE_FINISH,
-        ERROR_TYPE_READ, ERROR_TYPE_STOPPED, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI, STREAM_TYPE_UNI,
+        ERROR_TYPE_READ, ERROR_TYPE_STOPPED, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI,
     },
     utils::{read_request, write_response},
     ConnId,
