@@ -10,6 +10,6 @@
   },
   "resources": {
     "memory": "490",
-    "cpu_mode": "kvm"
+    "cpu": "kvm"
   }
 }

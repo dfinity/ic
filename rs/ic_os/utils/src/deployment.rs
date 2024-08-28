@@ -36,7 +36,7 @@ pub struct Resources {
     #[serde_as(as = "DisplayFromStr")]
     pub memory: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub cpu_mode: Option<String>,
+    pub cpu: Option<String>,
 }
 
 pub fn read_deployment_file(deployment_json: &Path) -> Result<DeploymentJson> {
@@ -91,7 +91,7 @@ mod test {
       },
       "resources": {
         "memory": "490",
-        "cpu_mode": "kvm"
+        "cpu": "kvm"
       }
     }"#;
 
@@ -100,7 +100,7 @@ mod test {
             deployment: Deployment { name: "mainnet".to_string() },
             logging: Logging { hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string() },
             nns: Nns { url: vec![Url::parse("https://dfinity.org").unwrap()] },
-            resources: Resources { memory: 490, cpu_mode: Some("kvm".to_string()) },
+            resources: Resources { memory: 490, cpu: Some("kvm".to_string()) },
         }
     });
 
@@ -117,13 +117,13 @@ mod test {
               },
               "resources": {
                 "memory": "490",
-                "cpu_mode": "kvm"
+                "cpu": "kvm"
               }
             }
         )
     });
 
-    const DEPLOYMENT_STR_NO_CPU_MODE: &str = r#"{
+    const DEPLOYMENT_STR_NO_CPU: &str = r#"{
   "deployment": {
     "name": "mainnet"
   },
@@ -138,12 +138,12 @@ mod test {
   }
 }"#;
 
-    static DEPLOYMENT_STRUCT_NO_CPU_MODE: Lazy<DeploymentJson> = Lazy::new(|| {
+    static DEPLOYMENT_STRUCT_NO_CPU: Lazy<DeploymentJson> = Lazy::new(|| {
         DeploymentJson {
             deployment: Deployment { name: "mainnet".to_string() },
             logging: Logging { hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string() },
             nns: Nns { url: vec![Url::parse("https://dfinity.org").unwrap()] },
-            resources: Resources { memory: 490, cpu_mode: None },
+            resources: Resources { memory: 490, cpu: None },
         }
     });
 
@@ -159,7 +159,7 @@ mod test {
   },
   "resources": {
     "memory": "490",
-    "cpu_mode": "qemu"
+    "cpu": "qemu"
   }
 }"#;
 
@@ -168,7 +168,7 @@ mod test {
             deployment: Deployment { name: "mainnet".to_string() },
             logging: Logging { hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string() },
             nns: Nns { url: vec![Url::parse("https://dfinity.org").unwrap()] },
-            resources: Resources { memory: 490, cpu_mode: Some("qemu".to_string()) },
+            resources: Resources { memory: 490, cpu: Some("qemu".to_string()) },
         }
     });
 
@@ -207,7 +207,7 @@ mod test {
           deployment: Deployment { name: "mainnet".to_string() },
           logging: Logging { hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string() },
           nns: Nns { url: vec![Url::parse("http://[2001:920:401a:1710:5000:6aff:fee4:19cd]:8080").unwrap(), Url::parse("http://[2600:3006:1400:1500:5000:19ff:fe38:c418]:8080").unwrap(), Url::parse("http://[2600:2c01:21:0:5000:27ff:fe23:4839]:8080").unwrap()] },
-          resources: Resources { memory: 490, cpu_mode: None },
+          resources: Resources { memory: 490, cpu: None },
       }
     });
 
@@ -218,9 +218,9 @@ mod test {
         assert_eq!(*DEPLOYMENT_STRUCT, parsed_deployment);
 
         let parsed_deployment: DeploymentJson =
-            { serde_json::from_str(DEPLOYMENT_STR_NO_CPU_MODE).unwrap() };
+            { serde_json::from_str(DEPLOYMENT_STR_NO_CPU).unwrap() };
 
-        assert_eq!(*DEPLOYMENT_STRUCT_NO_CPU_MODE, parsed_deployment);
+        assert_eq!(*DEPLOYMENT_STRUCT_NO_CPU, parsed_deployment);
 
         let parsed_cpu_deployment: DeploymentJson =
             { serde_json::from_str(QEMU_CPU_DEPLOYMENT_STR).unwrap() };
@@ -253,9 +253,9 @@ mod test {
     #[test]
     fn write_deployment() {
         let written_deployment =
-            serde_json::to_string_pretty::<DeploymentJson>(&DEPLOYMENT_STRUCT_NO_CPU_MODE).unwrap();
+            serde_json::to_string_pretty::<DeploymentJson>(&DEPLOYMENT_STRUCT_NO_CPU).unwrap();
 
-        assert_eq!(DEPLOYMENT_STR_NO_CPU_MODE, written_deployment);
+        assert_eq!(DEPLOYMENT_STR_NO_CPU, written_deployment);
 
         let written_cpu_deployment =
             serde_json::to_string_pretty::<DeploymentJson>(&QEMU_CPU_DEPLOYMENT_STRUCT).unwrap();
