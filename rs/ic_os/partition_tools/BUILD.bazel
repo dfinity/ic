@@ -6,6 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:anyhow",
     "@crate_index//:clap",
+    "@crate_index//:itertools",
     "@crate_index//:pcre2",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
@@ -28,6 +29,7 @@ rust_library(
 rust_test(
     name = "partition_tools_test",
     crate = ":partition_tools",
+    data = [":testdata/empty_ext4.img"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
