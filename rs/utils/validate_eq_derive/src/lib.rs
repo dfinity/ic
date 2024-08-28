@@ -15,12 +15,12 @@ use syn::Data::Struct;
 ///     divergence.
 
 enum ValidateEqFieldAttr {
-    /// Compare using .eq() and return field name if diverges.
+    /// Compare using .eq() and return field name if it diverges.
     CompareWithPartialEq,
-    /// Call .validate_eq(); in case of deivergence return the field name and the underlying
+    /// Call .validate_eq(); in case of divergence, return the field name and the underlying
     /// divergence error string.
     CompareWithValidateEq,
-    /// Ignore for ValidateEq
+    /// Ignore for ValidateEq.
     Ignore,
 }
 
