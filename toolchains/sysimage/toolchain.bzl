@@ -2,6 +2,37 @@
 Tools for building IC OS image.
 """
 
+# Similar to ctx.actions.run but runs the command wrapped in the ic-os build process
+# wrapper that sets up the environment. Can only be used in rules defined by
+# _icos_build_rule.
+def _run_with_icos_wrapper(
+        ctx,
+        executable,
+        arguments = [],
+        tools = [],
+        execution_requirements = {},
+        **kwargs):
+    ctx.actions.run(
+        executable = ctx.executable._icos_build_proc_wrapper,
+        arguments = [executable] + arguments,
+        tools = tools + [ctx.attr._icos_build_proc_wrapper.files_to_run],
+        execution_requirements = execution_requirements |
+                                 {"supports-graceful-termination": "1"},
+        **kwargs
+    )
+
+def _icos_build_rule(attrs = {}, **kwargs):
+    return rule(
+        attrs = attrs |
+                {"_icos_build_proc_wrapper": attr.label(
+                    default = ":proc_wrapper",
+                    executable = True,
+                    cfg = "exec",
+                    allow_files = True,
+                )},
+        **kwargs
+    )
+
 def _build_container_base_image_impl(ctx):
     args = []
     inputs = []
@@ -31,8 +62,9 @@ def _build_container_base_image_impl(ctx):
 
     tool = ctx.attr._tool
 
-    ctx.actions.run(
-        executable = tool.files_to_run,
+    _run_with_icos_wrapper(
+        ctx,
+        executable = ctx.executable._tool.path,
         arguments = args,
         inputs = inputs,
         outputs = outputs,
@@ -46,7 +78,7 @@ def _build_container_base_image_impl(ctx):
         runfiles = ctx.runfiles(outputs),
     )]
 
-build_container_base_image = rule(
+build_container_base_image = _icos_build_rule(
     implementation = _build_container_base_image_impl,
     attrs = {
         "context_files": attr.label_list(
@@ -104,8 +136,9 @@ def _build_container_filesystem_impl(ctx):
 
     tool = ctx.attr._tool
 
-    ctx.actions.run(
-        executable = tool.files_to_run,
+    _run_with_icos_wrapper(
+        ctx,
+        executable = ctx.executable._tool.path,
         arguments = args,
         inputs = inputs,
         outputs = outputs,
@@ -117,7 +150,7 @@ def _build_container_filesystem_impl(ctx):
         runfiles = ctx.runfiles(outputs),
     )]
 
-build_container_filesystem = rule(
+build_container_filesystem = _icos_build_rule(
     implementation = _build_container_filesystem_impl,
     attrs = {
         "context_files": attr.label_list(
@@ -170,7 +203,8 @@ def _vfat_image_impl(ctx):
         args.append(input_target.files.to_list()[0].path + ":" + install_target)
         inputs += input_target.files.to_list()
 
-    ctx.actions.run(
+    _run_with_icos_wrapper(
+        ctx,
         executable = tool.path,
         arguments = args,
         inputs = inputs,
@@ -180,7 +214,7 @@ def _vfat_image_impl(ctx):
 
     return [DefaultInfo(files = depset([out]))]
 
-vfat_image = rule(
+vfat_image = _icos_build_rule(
     implementation = _vfat_image_impl,
     attrs = {
         "src": attr.label(
@@ -237,7 +271,8 @@ def _fat32_image_impl(ctx):
     if ctx.attr.label:
         args += ["-l", ctx.attr.label]
 
-    ctx.actions.run(
+    _run_with_icos_wrapper(
+        ctx,
         executable = tool.path,
         arguments = args,
         inputs = inputs,
@@ -247,7 +282,7 @@ def _fat32_image_impl(ctx):
 
     return [DefaultInfo(files = depset([out]))]
 
-fat32_image = rule(
+fat32_image = _icos_build_rule(
     implementation = _fat32_image_impl,
     attrs = {
         "src": attr.label(
@@ -307,7 +342,8 @@ def _ext4_image_impl(ctx):
     if len(ctx.attr.strip_paths) > 0:
         args += ["--strip-paths"] + ctx.attr.strip_paths
 
-    ctx.actions.run(
+    _run_with_icos_wrapper(
+        ctx,
         executable = tool.path,
         arguments = args,
         inputs = inputs,
@@ -317,7 +353,7 @@ def _ext4_image_impl(ctx):
 
     return [DefaultInfo(files = depset([out]))]
 
-ext4_image = rule(
+ext4_image = _icos_build_rule(
     implementation = _ext4_image_impl,
     attrs = {
         "src": attr.label(
@@ -377,7 +413,8 @@ def _inject_files_impl(ctx):
         args.append(input_target.files.to_list()[0].path + ":" + install_target)
         inputs += input_target.files.to_list()
 
-    ctx.actions.run(
+    _run_with_icos_wrapper(
+        ctx,
         executable = tool.path,
         arguments = args,
         inputs = inputs,
@@ -387,7 +424,7 @@ def _inject_files_impl(ctx):
 
     return [DefaultInfo(files = depset([out]))]
 
-inject_files = rule(
+inject_files = _icos_build_rule(
     implementation = _inject_files_impl,
     attrs = {
         "base": attr.label(
@@ -436,7 +473,8 @@ def _disk_image_impl(ctx):
 
     args += partition_files
 
-    ctx.actions.run(
+    _run_with_icos_wrapper(
+        ctx,
         executable = tool_file.path,
         arguments = args,
         inputs = [in_layout] + partitions,
@@ -446,7 +484,7 @@ def _disk_image_impl(ctx):
 
     return [DefaultInfo(files = depset([out]))]
 
-disk_image = rule(
+disk_image = _icos_build_rule(
     implementation = _disk_image_impl,
     attrs = {
         "layout": attr.label(
@@ -487,7 +525,8 @@ def _lvm_image_impl(ctx):
 
     args += partition_files
 
-    ctx.actions.run(
+    _run_with_icos_wrapper(
+        ctx,
         executable = tool_file.path,
         arguments = args,
         inputs = [in_layout] + partitions,
@@ -497,7 +536,7 @@ def _lvm_image_impl(ctx):
 
     return [DefaultInfo(files = depset([out]))]
 
-lvm_image = rule(
+lvm_image = _icos_build_rule(
     implementation = _lvm_image_impl,
     attrs = {
         "layout": attr.label(
@@ -530,22 +569,29 @@ def _upgrade_image_impl(ctx):
     in_version_file = ctx.files.version_file[0]
     out = ctx.actions.declare_file(ctx.label.name)
 
-    ctx.actions.run_shell(
+    _run_with_icos_wrapper(
+        ctx,
+        executable = "python3",
         inputs = [in_boot_partition, in_root_partition, in_version_file],
         outputs = [out],
-        command = "python3 %s -b %s -r %s -v %s -o %s --dflate %s" % (
+        arguments = [
             tool_file.path,
+            "-b",
             in_boot_partition.path,
+            "-r",
             in_root_partition.path,
+            "-v",
             in_version_file.path,
+            "-o",
             out.path,
+            "--dflate",
             dflate.path,
-        ),
+        ],
     )
 
     return [DefaultInfo(files = depset([out]))]
 
-upgrade_image = rule(
+upgrade_image = _icos_build_rule(
     implementation = _upgrade_image_impl,
     attrs = {
         "boot_partition": attr.label(
