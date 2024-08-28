@@ -576,14 +576,14 @@ fn get_mode_(request: GetMode) -> GetModeResponse {
 /// only callable by the Swap canister that was deployed along with this
 /// SNS Governance canister.
 ///
-/// This API takes a request of multiple `NeuronParameters` that provide
+/// This API takes a request of multiple `NeuronRecipes` that provide
 /// the configurable parameters of the to-be-created neurons. Since these neurons
 /// are responsible for the decentralization of an SNS during the Swap, there are
 /// a few differences in neuron creation that occur in comparison to the normal
 /// `ManageNeuron::ClaimOrRefresh` API. See `Governance::claim_swap_neurons` for
 /// more details.
 ///
-/// This method is idempotent. If called with a `NeuronParameters` of an already
+/// This method is idempotent. If called with a `NeuronRecipes` of an already
 /// created Neuron, the `ClaimSwapNeuronsResponse.skipped_claims` field will be
 /// incremented and execution will continue.
 #[export_name = "canister_update claim_swap_neurons"]

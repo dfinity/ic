@@ -55,8 +55,6 @@ LIB_DEPENDENCIES = [
     "@crate_index//:http",
     "@crate_index//:http-body-util",
     "@crate_index//:hyper",
-    "@crate_index//:hyper-rustls",
-    "@crate_index//:hyper-socks2",
     "@crate_index//:hyper-util",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-cdk",

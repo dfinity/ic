@@ -937,6 +937,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23ce669cd6c8588f79e15cf450314f9638f967fc5770ff1c7c1deb0925ea7cfa"
 
 [[package]]
+name = "base58ck"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c8d66485a3a2ea485c1913c4572ce0256067a5377ac8c75c4960e1cda98605f"
+dependencies = [
+ "bitcoin-internals",
+ "bitcoin_hashes 0.14.0",
+]
+
+[[package]]
 name = "base64"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -989,6 +999,12 @@ name = "bech32"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d86b93f97252c47b41663388e6d155714a9d0c398b99f1005cbc5f978b29f445"
+
+[[package]]
+name = "bech32"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d965446196e3b7decd44aa7ee49e31d630118f90ef12f97900f262eb915c951d"
 
 [[package]]
 name = "beef"
@@ -1146,10 +1162,48 @@ dependencies = [
 ]
 
 [[package]]
+name = "bitcoin"
+version = "0.32.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea507acc1cd80fc084ace38544bbcf7ced7c2aa65b653b102de0ce718df668f6"
+dependencies = [
+ "base58ck",
+ "bech32 0.11.0",
+ "bitcoin-internals",
+ "bitcoin-io",
+ "bitcoin-units",
+ "bitcoin_hashes 0.14.0",
+ "hex-conservative",
+ "hex_lit",
+ "secp256k1 0.29.0",
+]
+
+[[package]]
+name = "bitcoin-internals"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30bdbe14aa07b06e6cfeffc529a1f099e5fbe249524f8125358604df99a4bed2"
+
+[[package]]
+name = "bitcoin-io"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "340e09e8399c7bd8912f495af6aa58bea0c9214773417ffaa8f6460f93aaee56"
+
+[[package]]
 name = "bitcoin-private"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73290177011694f38ec25e165d0387ab7ea749a4b81cd4c80dae5988229f7a57"
+
+[[package]]
+name = "bitcoin-units"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5285c8bcaa25876d07f37e3d30c303f2609179716e11d688f51e8f1fe70063e2"
+dependencies = [
+ "bitcoin-internals",
+]
 
 [[package]]
 name = "bitcoin_hashes"
@@ -1168,6 +1222,16 @@ checksum = "5d7066118b13d4b20b23645932dfb3a81ce7e29f95726c2036fa33cd7b092501"
 dependencies = [
  "bitcoin-private",
  "serde",
+]
+
+[[package]]
+name = "bitcoin_hashes"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb18c03d0db0247e147a21a6faafd5a7eb851c743db062de72018b6b7e8e4d16"
+dependencies = [
+ "bitcoin-io",
+ "hex-conservative",
 ]
 
 [[package]]
@@ -4598,6 +4662,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hex-conservative"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5313b072ce3c597065a808dbf612c4c8e8590bdbf8b579508bf7a762c5eae6cd"
+dependencies = [
+ "arrayvec 0.7.4",
+]
+
+[[package]]
 name = "hex-literal"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5621,6 +5694,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-btc-kyt"
+version = "0.9.0"
+dependencies = [
+ "bitcoin 0.32.2",
+ "candid",
+ "futures",
+ "ic-cdk 0.13.5",
+ "ic-test-utilities-load-wasm",
+ "pocket-ic",
+]
+
+[[package]]
 name = "ic-btc-replica-types"
 version = "0.9.0"
 dependencies = [
@@ -6618,14 +6703,6 @@ dependencies = [
  "thiserror",
  "wycheproof",
  "zeroize",
-]
-
-[[package]]
-name = "ic-crypto-extended-bip32"
-version = "0.9.0"
-dependencies = [
- "hex",
- "ic-crypto-internal-threshold-sig-ecdsa",
 ]
 
 [[package]]
@@ -9297,8 +9374,10 @@ dependencies = [
  "anyhow",
  "candid",
  "ic-agent",
+ "ic-nervous-system-clients",
  "ic-nns-constants",
  "ic-sns-wasm",
+ "serde",
  "tempfile",
  "tokio",
 ]
@@ -10587,6 +10666,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-registry-node-provider-rewards"
+version = "0.9.0"
+dependencies = [
+ "ic-base-types",
+ "ic-protobuf",
+]
+
+[[package]]
 name = "ic-registry-proto-data-provider"
 version = "0.9.0"
 dependencies = [
@@ -11489,7 +11576,6 @@ dependencies = [
  "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
- "ic-nns-constants",
  "ic-sns-root-protobuf-generator",
  "ic-sns-swap",
  "ic-test-utilities-compare-dirs",
@@ -12059,7 +12145,6 @@ dependencies = [
  "humantime",
  "humantime-serde",
  "hyper 0.14.26",
- "hyper-rustls 0.27.2",
  "ic-agent",
  "ic-artifact-pool",
  "ic-base-types",
@@ -12896,12 +12981,9 @@ dependencies = [
 name = "ic-xnet-endpoint"
 version = "0.9.0"
 dependencies = [
- "axum 0.7.5",
  "bytes",
  "crossbeam-channel",
- "hyper 1.4.1",
- "hyper-util",
- "ic-async-utils",
+ "hyper 0.14.26",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
  "ic-interfaces-certified-stream-store",
@@ -12919,6 +13001,7 @@ dependencies = [
  "ic-test-utilities-metrics",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-xnet-hyper",
  "maplit",
  "prometheus",
  "prost",
@@ -12928,8 +13011,6 @@ dependencies = [
  "slog",
  "threadpool",
  "tokio",
- "tokio-rustls 0.26.0",
- "tower",
  "url",
 ]
 
@@ -12937,14 +13018,14 @@ dependencies = [
 name = "ic-xnet-hyper"
 version = "0.9.0"
 dependencies = [
- "hyper 1.4.1",
- "hyper-rustls 0.27.2",
- "hyper-util",
+ "hyper 0.14.26",
  "ic-crypto-tls-interfaces",
+ "ic-crypto-utils-tls",
+ "ic-interfaces-registry",
  "ic-xnet-uri",
+ "socket2 0.5.7",
  "tokio",
  "tokio-rustls 0.26.0",
- "tower",
 ]
 
 [[package]]
@@ -12954,9 +13035,8 @@ dependencies = [
  "assert_matches",
  "async-trait",
  "axum 0.7.5",
- "http-body-util",
- "hyper 1.4.1",
- "hyper-util",
+ "hyper 0.14.26",
+ "ic-async-utils",
  "ic-base-types",
  "ic-canonical-state",
  "ic-config",
@@ -13000,7 +13080,6 @@ dependencies = [
  "reqwest 0.12.5",
  "slog",
  "tempfile",
- "thiserror",
  "tokio",
  "url",
 ]
@@ -13009,7 +13088,7 @@ dependencies = [
 name = "ic-xnet-uri"
 version = "0.9.0"
 dependencies = [
- "http 1.1.0",
+ "http 0.2.12",
  "ic-types",
 ]
 
@@ -16298,8 +16377,6 @@ dependencies = [
  "http 1.1.0",
  "http-body-util",
  "hyper 1.4.1",
- "hyper-rustls 0.27.2",
- "hyper-socks2",
  "hyper-util",
  "ic-agent",
  "ic-boundary",
@@ -17360,6 +17437,7 @@ dependencies = [
  "ic-registry-client-fake",
  "ic-registry-keys",
  "ic-registry-nns-data-provider",
+ "ic-registry-node-provider-rewards",
  "ic-registry-proto-data-provider",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
@@ -18213,6 +18291,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "secp256k1"
+version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e0cc0f1cf93f4969faf3ea1c7d8a9faed25918d96affa959720823dfe86d4f3"
+dependencies = [
+ "bitcoin_hashes 0.12.0",
+ "secp256k1-sys 0.10.0",
+]
+
+[[package]]
 name = "secp256k1-sys"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -18235,6 +18323,15 @@ name = "secp256k1-sys"
 version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5d1746aae42c19d583c3c1a8c646bfad910498e2051c551a7f2e3c0c9fbb7eb"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "secp256k1-sys"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1433bd67156263443f14d603720b082dd3121779323fce20cba2aa07b874bc1b"
 dependencies = [
  "cc",
 ]
@@ -19277,10 +19374,6 @@ dependencies = [
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
  "ic-nns-constants",
- "ic-nns-governance",
- "ic-sns-governance",
- "ic-sns-swap",
- "ic-sns-wasm",
  "rgb",
  "serde",
  "tempfile",

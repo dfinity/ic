@@ -20,7 +20,6 @@ use crate::{
             SetDappControllersResponse,
         },
         v1::{
-            claim_swap_neurons_request::NeuronRecipes,
             claim_swap_neurons_response::SwapNeuron,
             get_neuron_response, get_proposal_response,
             governance::{
@@ -3836,9 +3835,9 @@ impl Governance {
     /// Preconditions:
     /// - The caller must be the Sale canister deployed along with this SNS Governance
     ///   canister.
-    /// - Each NeuronParameters' `stake_e8s` is at least neuron_minimum_stake_e8s
+    /// - Each NeuronRecipe's `stake_e8s` is at least neuron_minimum_stake_e8s
     ///   as defined in the `NervousSystemParameters`
-    /// - Each NeuronParameters' `followees` does not exceed max_followees_per_function
+    /// - Each NeuronRecipe's `followees` does not exceed max_followees_per_function
     ///   as defined in the `NervousSystemParameters`
     /// - There is available memory in the Governance canister for the newly created
     ///   Neuron.
@@ -3887,14 +3886,23 @@ impl Governance {
 
         let mut swap_neurons = vec![];
 
-        // TODO(NNS1-3198): Simplify this code after `NeuronParameters` is made obsolete.
-        let neuron_recipes_from_new_source = request.neuron_recipes;
+        let Some(neuron_recipes) = request.neuron_recipes else {
+            log!(
+                ERROR,
+                "Swap called claim_swap_neurons, but did not populate `neuron_recipes`."
+            );
+            return ClaimSwapNeuronsResponse::new_with_error(ClaimSwapNeuronsError::Internal);
+        };
+
+        // TODO(NNS1-3198): Remove this after `NeuronParameters` is fully removed
         #[allow(deprecated)]
-        let neuron_recipes_from_legacy_source =
-            Some(NeuronRecipes::from(request.neuron_parameters));
-        let neuron_recipes = neuron_recipes_from_new_source
-            .or(neuron_recipes_from_legacy_source)
-            .unwrap_or_default();
+        if !request.neuron_parameters.is_empty() {
+            log!(
+                ERROR,
+                "NeuronParameters is obselete. Please use NeuronRecipes instead."
+            );
+            return ClaimSwapNeuronsResponse::new_with_error(ClaimSwapNeuronsError::Internal);
+        }
 
         for neuron_recipe in Vec::<_>::from(neuron_recipes) {
             match neuron_recipe.validate(

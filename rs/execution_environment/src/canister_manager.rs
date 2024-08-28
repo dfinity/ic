@@ -2047,23 +2047,23 @@ impl CanisterManager {
         round_limits: &mut RoundLimits,
         origin: CanisterChangeOrigin,
         long_execution_already_in_progress: &IntCounter,
-    ) -> (NumInstructions, Result<CanisterState, CanisterManagerError>) {
+    ) -> (Result<CanisterState, CanisterManagerError>, NumInstructions) {
         let canister_id = canister.canister_id();
         // Check sender is a controller.
         if let Err(err) = validate_controller(canister, &sender) {
-            return (NumInstructions::new(0), Err(err));
+            return (Err(err), NumInstructions::new(0));
         }
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
             && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
         {
             return (
-                NumInstructions::new(0),
                 Err(CanisterManagerError::CanisterHeapDeltaRateLimited {
                     canister_id,
                     value: canister.scheduler_state.heap_delta_debit,
                     limit: self.config.heap_delta_rate_limit,
                 }),
+                NumInstructions::new(0),
             );
         }
 
@@ -2072,22 +2072,22 @@ impl CanisterManager {
             None => {
                 // If not found, the operation fails due to invalid parameters.
                 return (
-                    NumInstructions::new(0),
                     Err(CanisterManagerError::CanisterSnapshotNotFound {
                         canister_id,
                         snapshot_id,
                     }),
+                    NumInstructions::new(0),
                 );
             }
             Some(snapshot) => {
                 // Verify the provided snapshot id belongs to this canister.
                 if snapshot.canister_id() != canister_id {
                     return (
-                        NumInstructions::new(0),
                         Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
                             canister_id,
                             snapshot_id,
                         }),
+                        NumInstructions::new(0),
                     );
                 }
                 snapshot
@@ -2106,8 +2106,8 @@ impl CanisterManager {
                     "[EXC-BUG] Attempted to start a new `load_canister_snapshot` execution while the previous execution is still in progress for {}.", canister_id
                 );
                 return (
-                    NumInstructions::new(0),
                     Err(CanisterManagerError::LongExecutionAlreadyInProgress { canister_id }),
+                    NumInstructions::new(0),
                 );
             }
         }
@@ -2140,7 +2140,7 @@ impl CanisterManager {
                 Ok(execution_state) => execution_state,
                 Err(err) => {
                     let err = CanisterManagerError::from((canister_id, err));
-                    return (instructions_used, Err(err));
+                    return (Err(err), instructions_used);
                 }
             };
 
@@ -2160,11 +2160,11 @@ impl CanisterManager {
         let memory_allocation_given = canister.memory_limit(self.config.max_canister_memory_size);
         if new_memory_usage > memory_allocation_given {
             return (
-                instructions_used,
                 Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
                     memory_allocation_given: canister.memory_allocation(),
                     memory_usage_needed: new_memory_usage,
                 }),
+                instructions_used,
             );
         }
 
@@ -2188,8 +2188,8 @@ impl CanisterManager {
             Ok(prepaid_cycles) => prepaid_cycles,
             Err(err) => {
                 return (
-                    instructions_used,
                     Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err)),
+                    instructions_used,
                 )
             }
         };
@@ -2228,7 +2228,7 @@ impl CanisterManager {
         }
         state.metadata.heap_delta_estimate += new_canister.heap_delta();
 
-        (instructions_used, Ok(new_canister))
+        (Ok(new_canister), instructions_used)
     }
 
     /// Returns the canister snapshots list, or

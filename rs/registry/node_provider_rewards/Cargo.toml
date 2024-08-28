@@ -1,0 +1,11 @@
+[package]
+name = "ic-registry-node-provider-rewards"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+
+[dependencies]
+ic-base-types = { path = "../../types/base_types/" }
+ic-protobuf = { path = "../../protobuf" }

@@ -4,7 +4,6 @@ use crate::{
     batch::{BatchPayload, ValidationContext},
     crypto::threshold_sig::ni_dkg::NiDkgId,
     crypto::*,
-    replica_config::ReplicaConfig,
     replica_version::ReplicaVersion,
     signature::*,
     *,
@@ -68,7 +67,7 @@ pub trait IsShare {
     fn is_share(&self) -> bool;
 }
 
-/// Abstract messages with hash attribute. The [`hash`] implementation is expected
+/// Abstract messages with hash attribute. The `hash` implementation is expected
 /// to return an existing hash value, instead of computing one.
 pub trait HasHash {
     fn hash(&self) -> &CryptoHash;
@@ -338,11 +337,11 @@ impl BlockMetadata {
         self.subnet_id
     }
 
-    pub fn from_block(block: &HashedBlock, config: &ReplicaConfig) -> Self {
+    pub fn from_block(block: &HashedBlock, subnet_id: SubnetId) -> Self {
         Self {
             version: block.version().clone(),
             height: block.height(),
-            subnet_id: config.subnet_id,
+            subnet_id,
             hash: block.get_hash().clone(),
         }
     }
@@ -350,12 +349,18 @@ impl BlockMetadata {
     /// Creates a signed block metadata instance from a given block proposal.
     pub fn signed_from_proposal(
         proposal: &BlockProposal,
-        config: &ReplicaConfig,
+        subnet_id: SubnetId,
     ) -> Signed<Self, BasicSignature<Self>> {
         Signed {
-            content: Self::from_block(&proposal.content, config),
+            content: Self::from_block(&proposal.content, subnet_id),
             signature: proposal.signature.clone(),
         }
+    }
+}
+
+impl HasHash for BlockMetadata {
+    fn hash(&self) -> &CryptoHash {
+        self.hash.get_ref()
     }
 }
 

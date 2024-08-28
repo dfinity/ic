@@ -2143,7 +2143,7 @@ impl ExecutionEnvironment {
         };
 
         let snapshot_id = args.snapshot_id();
-        let (instructions_used, result) = self.canister_manager.load_canister_snapshot(
+        let (result, instructions_used) = self.canister_manager.load_canister_snapshot(
             subnet_size,
             sender,
             &old_canister,
