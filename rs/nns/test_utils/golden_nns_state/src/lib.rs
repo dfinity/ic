@@ -1,12 +1,9 @@
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
-use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{
-    StateMachine, StateMachineBuilder, StateMachineConfig, StateMachineStateDir,
-};
-
 use ic_config::flag_status::FlagStatus;
+use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
+use ic_registry_subnet_type::SubnetType;
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use std::ops::RangeInclusive;
 use std::{
     path::{Path, PathBuf},
@@ -119,52 +116,32 @@ fn new_state_machine_with_golden_state_or_panic(setup_config: SetupConfig) -> St
     state_machine
 }
 
-/// A directory for storing the golden state which can be either a temporary directory or a cached
-/// directory which can be used across multiple tests.
-enum StateDir {
-    // A temporary directory that will be deleted after the test is done.
-    Temp(TempDir),
-    // A directory that will be cached and reused across tests.
-    Cache(PathBuf),
-}
-
-impl StateMachineStateDir for StateDir {
-    fn path(&self) -> PathBuf {
-        match self {
-            Self::Temp(temp_dir) => temp_dir.path().to_path_buf(),
-            Self::Cache(path) => path.clone(),
-        }
-    }
-}
-
 fn maybe_download_golden_nns_state_or_panic(
     scp_location: ScpLocation,
     archive_state_dir_name: &str,
-) -> StateDir {
-    let maybe_use_cached_state_dir = std::env::var_os("USE_CACHED_STATE_DIR");
-
-    match maybe_use_cached_state_dir {
-        Some(cached_state_dir) => {
-            let destination = PathBuf::from(cached_state_dir).join(archive_state_dir_name);
-            if !destination.exists() {
-                std::fs::create_dir(&destination)
-                    .unwrap_or_else(|_| panic!("Failed to create directory {destination:?}"));
-                download_and_untar_golden_nns_state_or_panic(
-                    scp_location,
-                    archive_state_dir_name,
-                    &destination,
+) -> TempDir {
+    match std::env::var_os("USE_EXISTING_STATE_DIR") {
+        Some(existing_state_dir_name) => {
+            let existing_state_dir = PathBuf::from(existing_state_dir_name.clone());
+            let existing_state = existing_state_dir.join(archive_state_dir_name);
+            let destination_dir = TempDir::new_in(&existing_state_dir).unwrap();
+            if !existing_state.exists() {
+                panic!(
+                    "USE_EXISTING_STATE_DIR is set to {:?}, but {:?} does not exist",
+                    existing_state_dir_name, existing_state
                 );
             }
-            StateDir::Cache(destination)
+            std::fs::rename(&existing_state, &destination_dir).unwrap();
+            destination_dir
         }
         None => {
-            let state_dir = bazel_test_compatible_temp_dir_or_panic();
+            let bazel_temp_dir = bazel_test_compatible_temp_dir_or_panic();
             download_and_untar_golden_nns_state_or_panic(
                 scp_location,
                 archive_state_dir_name,
-                state_dir.path(),
+                &bazel_temp_dir.path(),
             );
-            StateDir::Temp(state_dir)
+            bazel_temp_dir
         }
     }
 }
