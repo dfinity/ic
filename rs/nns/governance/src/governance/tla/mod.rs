@@ -106,9 +106,10 @@ macro_rules! tla_get_globals {
     };
 }
 
-/// Checks a trace against the model
+/// Checks a trace against the model.
+///
 /// It's assumed that the corresponding model is called `<PID>_Apalache.tla`, where PID is the
-/// PID`used in the `Update` value.
+/// `process_id`` field used in the `Update` value for the corresponding method.
 pub fn check_traces() {
     let traces = {
         // Introduce a scope to drop the write lock immediately, in order
@@ -153,7 +154,12 @@ pub fn check_traces() {
         }
         for handle in handles {
             handle.join().unwrap().unwrap_or_else(|e| {
-                println!("Possible divergence from the TLA model detected while checking the state pair:\n{:#?}\nwith constants:\n{:#?}", e.pair, e.constants);
+                println!("Possible divergence from the TLA model detected when interacting with the ledger!");
+                println!("If you did not expect to change the interaction between governance and the ledger, reconsider whether your change is safe. You can find additional data on the step that triggered the error below.");
+                println!("If you are confident that your change is correct, please contact the #formal-models Slack channel and describe the problem.");
+                println!("You can edit nervous_system/common/feature_flags.bzl to disable TLA checks in the CI and get on with your business.");
+                println!("-------------------");
+                println!("Error occured while checking the state pair:\n{:#?}\nwith constants:\n{:#?}", e.pair, e.constants);
                 println!("Apalache returned:\n{:#?}", e.apalache_error);
                 panic!("Apalache check failed")
             });
