@@ -9453,6 +9453,7 @@ dependencies = [
  "anyhow",
  "candid",
  "ic-agent",
+ "ic-base-types",
  "ic-nervous-system-clients",
  "ic-nns-constants",
  "ic-sns-wasm",
