@@ -1,10 +1,9 @@
 use itertools::Itertools;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::thread;
 
 use super::Governance;
 use crate::storage::with_stable_neuron_indexes;
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 
 pub use tla_instrumentation::{
     Destination, GlobalState, InstrumentationState, Label, ResolvedStatePair,
@@ -21,7 +20,11 @@ pub use ic_nervous_system_common::{tla_log_locals, tla_log_request, tla_log_resp
 
 use std::path::PathBuf;
 
-use icp_ledger::{AccountIdentifier, Subaccount};
+use icp_ledger::Subaccount;
+
+mod common;
+mod split_neuron;
+pub use split_neuron::split_neuron_desc;
 
 fn neuron_global(gov: &Governance) -> TlaValue {
     let neuron_map: BTreeMap<u64, TlaValue> = gov
@@ -103,141 +106,9 @@ macro_rules! tla_get_globals {
     };
 }
 
-fn function_domain_union(
-    state_pairs: &Vec<ResolvedStatePair>,
-    field_name: &str,
-) -> BTreeSet<TlaValue> {
-    state_pairs.iter().flat_map(|pair| {
-        match (pair.start.get(field_name), pair.end.get(field_name)) {
-            (Some(TlaValue::Function(sf)), Some(TlaValue::Function(ef))) => {
-                sf.keys().chain(ef.keys()).cloned()
-            }
-            _ => {
-                panic!("Field {} not found in the start or end state, or not a function, when computing the union", field_name)
-            }
-        }
-    }
-    ).collect()
-}
-
-fn governance_account_id() -> TlaValue {
-    AccountIdentifier::new(
-        ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
-        None,
-    )
-    .to_string()
-    .as_str()
-    .to_tla_value()
-}
-
-fn default_account() -> TlaValue {
-    "".to_tla_value()
-}
-
-fn post_process_trace(trace: &mut Vec<ResolvedStatePair>) {
-    for ResolvedStatePair {
-        ref mut start,
-        ref mut end,
-    } in trace
-    {
-        for state in &mut [start, end] {
-            state
-                .0
-                 .0
-                .remove("transaction_fee")
-                .expect("Didn't record the transaction fee");
-            state
-                .0
-                 .0
-                .remove("min_stake")
-                .expect("Didn't record the min stake");
-            if !state.0 .0.contains_key("governance_to_ledger") {
-                state.0 .0.insert(
-                    "governance_to_ledger".to_string(),
-                    TlaValue::Seq(Vec::new()),
-                );
-            }
-            if !state.0 .0.contains_key("ledger_to_governance") {
-                state.0 .0.insert(
-                    "ledger_to_governance".to_string(),
-                    TlaValue::Set(BTreeSet::new()),
-                );
-            }
-        }
-    }
-}
-
-fn extract_split_neuron_constants(
-    pid: &str,
-    trace: &Vec<ResolvedStatePair>,
-) -> TlaConstantAssignment {
-    let constants = BTreeMap::from([
-        (
-            "Neuron_Ids".to_string(),
-            function_domain_union(trace, "neuron").to_tla_value(),
-        ),
-        (
-            "MIN_STAKE".to_string(),
-            trace
-                .first()
-                .map(|pair| {
-                    pair.start
-                        .get("min_stake")
-                        .expect("min_stake not recorded")
-                        .clone()
-                })
-                .unwrap_or(0_u64.to_tla_value()),
-        ),
-        (
-            "TRANSACTION_FEE".to_string(),
-            trace
-                .first()
-                .map(|pair| {
-                    pair.start
-                        .get("transaction_fee")
-                        .expect("transaction_fee not recorded")
-                        .clone()
-                })
-                .unwrap_or(0_u64.to_tla_value()),
-        ),
-        ("Minting_Account_Id".to_string(), governance_account_id()),
-        (
-            "Split_Neuron_Process_Ids".to_string(),
-            BTreeSet::from([pid]).to_tla_value(),
-        ),
-        ("Governance_Account_Ids".to_string(), {
-            let mut ids = function_domain_union(trace, "neuron_id_by_account");
-            ids.insert(governance_account_id());
-            ids.to_tla_value()
-        }),
-    ]);
-    TlaConstantAssignment { constants }
-}
-
-pub fn split_neuron_desc() -> Update {
-    const PID: &str = "Split_Neuron_PID";
-    let default_locals = VarAssignment::new()
-        .add("sn_amount", 0_u64.to_tla_value())
-        .add("sn_parent_neuron_id", 0_u64.to_tla_value())
-        .add("sn_child_neuron_id", 0_u64.to_tla_value())
-        .add("sn_child_account_id", default_account());
-
-    Update {
-        default_start_locals: default_locals.clone(),
-        default_end_locals: default_locals,
-        start_label: Label::new("SplitNeuron1"),
-        end_label: Label::new("Done"),
-        process_id: PID.to_string(),
-        canister_name: "governance".to_string(),
-        post_process: |trace| {
-            let constants = extract_split_neuron_constants(PID, trace);
-            post_process_trace(trace);
-            constants
-        },
-    }
-}
-
-// TODO: use a different model for each update
+/// Checks a trace against the model
+/// It's assumed that the corresponding model is called `<PID>_Apalache.tla`, where PID is the
+/// PID`used in the `Update` value.
 pub fn check_traces() {
     let traces = {
         // Introduce a scope to drop the write lock immediately, in order
@@ -251,22 +122,21 @@ pub fn check_traces() {
     // Construct paths to the data files
     let apalache = PathBuf::from(&runfiles_dir).join("tla_apalache/bin/apalache-mc");
     let tla_models_path = PathBuf::from(&runfiles_dir).join("ic/rs/nns/governance/tla");
-    let split_neuron_model = tla_models_path.join("Split_Neuron_Apalache.tla");
 
     let chunk_size = 20;
     let all_pairs = traces.into_iter().flat_map(|t| {
         t.state_pairs
             .into_iter()
-            .map(move |p| (t.constants.clone(), p))
+            .map(move |p| (t.update.clone(), t.constants.clone(), p))
     });
     let chunks = all_pairs.chunks(chunk_size);
     for chunk in &chunks {
         let mut handles = vec![];
-        for (constants, pair) in chunk {
+        for (update, constants, pair) in chunk {
             let apalache = apalache.clone();
             let constants = constants.clone();
             let pair = pair.clone();
-            let tla_module = split_neuron_model.clone();
+            let tla_module = tla_models_path.join(format!("{}_Apalache.tla", update.process_id));
             let handle = thread::spawn(move || {
                 check_tla_code_link(
                     &apalache,
