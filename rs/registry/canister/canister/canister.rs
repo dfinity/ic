@@ -1,10 +1,10 @@
 use candid::{candid_method, Decode};
 use dfn_candid::{candid, candid_one};
 use dfn_core::{
-    api::{arg_data, data_certificate, reply, trap_with},
+    api::{arg_data, caller, data_certificate, reply, trap_with},
     over, over_async, stable,
 };
-use ic_base_types::NodeId;
+use ic_base_types::{NodeId, PrincipalId, PrincipalIdClass};
 use ic_certified_map::{AsHashTree, HashTree};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_protobuf::registry::{
@@ -19,14 +19,13 @@ use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
     deserialize_get_value_request,
     pb::v1::{
-        registry_error::Code, CertifiedResponse, RegistryAtomicMutateResponse, RegistryDelta,
+        registry_error::Code, CertifiedResponse, RegistryAtomicMutateResponse,
         RegistryError, RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
         RegistryGetLatestVersionResponse, RegistryGetValueResponse,
     },
     serialize_atomic_mutate_response, serialize_get_changes_since_response,
     serialize_get_value_response,
 };
-use ic_types::PrincipalId;
 use prost::Message;
 use registry_canister::{
     certification::{current_version_tree, hash_tree_to_proto},
@@ -186,34 +185,50 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 
 #[export_name = "canister_query get_changes_since"]
 fn get_changes_since() {
-    let response_pb = match deserialize_get_changes_since_request(arg_data()) {
-        Ok(version) => {
-            let registry = registry();
+    fn main() -> Result<RegistryGetChangesSinceResponse, (Code, String)> {
+        if caller().class() == Ok(PrincipalIdClass::Opaque) {
+            return Err((Code::Authorization, "Caller must not be opaque.".to_string()));
+        }
 
-            let max_versions = registry
-                .count_fitting_deltas(version, MAX_REGISTRY_DELTAS_SIZE)
-                .min(MAX_VERSIONS_PER_QUERY);
+        let version = match deserialize_get_changes_since_request(arg_data()) {
+            Ok(ok) => ok,
+            Err(err) => {
+                return Err((Code::MalformedMessage, err.to_string()));
+            }
+        };
 
+        let registry = registry();
+
+        let max_versions = registry
+            .count_fitting_deltas(version, MAX_REGISTRY_DELTAS_SIZE)
+            .min(MAX_VERSIONS_PER_QUERY);
+
+        Ok(RegistryGetChangesSinceResponse {
+            error: None,
+            version: registry.latest_version(),
+            deltas: registry.get_changes_since(version, Some(max_versions)),
+        })
+    }
+
+    let response = match main() {
+        Ok(ok) => ok,
+        Err((code, reason)) => {
+            let code = code as i32;
             RegistryGetChangesSinceResponse {
-                error: None,
-                version: registry.latest_version(),
-                deltas: registry.get_changes_since(version, Some(max_versions)),
+                error: Some(RegistryError {
+                    code,
+                    reason,
+                    key: vec![],
+                }),
+                ..Default::default()
             }
         }
-        Err(error) => RegistryGetChangesSinceResponse {
-            error: Some(RegistryError {
-                code: Code::MalformedMessage as i32,
-                reason: error.to_string(),
-                key: Vec::<u8>::default(),
-            }),
-            version: 0,
-            deltas: Vec::<RegistryDelta>::default(),
-        },
     };
-    let bytes =
-        serialize_get_changes_since_response(response_pb).expect("Error serializing response");
 
-    reply(&bytes);
+    let response: Vec<u8> = serialize_get_changes_since_response(response)
+        .expect("Error serializing response");
+
+    reply(&response);
 }
 
 #[export_name = "canister_query get_certified_changes_since"]
