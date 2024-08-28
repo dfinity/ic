@@ -14,6 +14,7 @@ rust_library(
         "@crate_index//:candid",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
     ],
 )
 
@@ -29,6 +30,7 @@ rust_canister(
         ":btc_kyt",
         "@crate_index//:bitcoin_0_32",
         "@crate_index//:candid",
+        "@crate_index//:candid_parser",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
     ],
