@@ -18,10 +18,12 @@ anyhow = { workspace = true }
 base64 = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
+futures = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
+ic-nervous-system-agent = { path = "../../nervous_system/agent" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nervous-system-humanize = { path = "../../nervous_system/humanize" }

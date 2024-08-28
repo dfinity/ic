@@ -36,9 +36,11 @@ use tempfile::NamedTempFile;
 
 pub mod deploy;
 pub mod init_config_file;
+pub mod list;
 pub mod neuron_id_to_candid_subaccount;
 pub mod prepare_canisters;
 pub mod propose;
+mod table;
 pub mod unit_helpers;
 mod utils;
 
@@ -78,6 +80,8 @@ pub enum SubCommand {
     Propose(ProposeArgs),
     /// Converts a Neuron ID to a blob for use in ManageNeuron.
     NeuronIdToCandidSubaccount(NeuronIdToCandidSubaccountArgs),
+    /// List SNSes
+    List(list::ListArgs),
 }
 
 impl CliArgs {
