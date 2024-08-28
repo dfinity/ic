@@ -1041,7 +1041,7 @@ fn test_call_cycles_add_up_to() {
         api.get_allocated_message_bytes() + (MAX_RESPONSE_COUNT_BYTES as u64).into(),
         api.get_compute_allocation(),
         SMALL_APP_SUBNET_MAX_SIZE,
-        system_state.reserved_balance,
+        system_state.reserved_balance(),
     ) + cycles_account_manager
         .xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE)
         + cycles_account_manager
@@ -1074,7 +1074,7 @@ fn test_call_cycles_add_up_to() {
         api.get_allocated_message_bytes() + (MAX_RESPONSE_COUNT_BYTES as u64).into(),
         api.get_compute_allocation(),
         SMALL_APP_SUBNET_MAX_SIZE,
-        system_state.reserved_balance,
+        system_state.reserved_balance(),
     ) + cycles_account_manager
         .xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE)
         + cycles_account_manager
