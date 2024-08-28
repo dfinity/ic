@@ -62,8 +62,6 @@ pub enum WasmValidationError {
     InvalidImportSection(String),
     /// Module contains an invalid export section
     InvalidExportSection(String),
-    /// Module contains an invalid export section caused by a user error.
-    UserInvalidExportSection(String),
     /// Same function name is exported multiple times (with different types).
     DuplicateExport { name: String },
     /// There are too many exports defined in the module.
@@ -119,9 +117,6 @@ impl std::fmt::Display for WasmValidationError {
             }
             Self::InvalidExportSection(err) => {
                 write!(f, "Wasm module has an invalid export section. {err}")
-            }
-            Self::UserInvalidExportSection(err) => {
-                write!(f, "Wasm module has an invalid export section. {}", err)
             }
             Self::DuplicateExport { name } => {
                 write!(
@@ -239,10 +234,6 @@ impl AsErrorHelp for WasmValidationError {
             WasmValidationError::ExportedNamesTooLong { .. } => ErrorHelp::UserError {
                 suggestion: "Try using shorter method names.".to_string(),
                 doc_link: doc_ref("wasm-module-sum-of-exported-name-lengths-too-large"),
-            },
-            WasmValidationError::UserInvalidExportSection(_) => ErrorHelp::UserError {
-                suggestion: "".to_string(),
-                doc_link: "".to_string(),
             },
             WasmValidationError::TooManyFunctions { .. } => ErrorHelp::UserError {
                 suggestion: "".to_string(),
