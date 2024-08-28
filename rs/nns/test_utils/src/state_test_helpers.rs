@@ -46,11 +46,12 @@ use ic_nns_governance_api::pb::v1::{
         JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey, Split, StakeMaturity,
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
-    Empty, ExecuteNnsFunction, Governance, GovernanceError, InstallCodeRequest, ListNeurons,
-    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
-    ListProposalInfo, ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest,
-    ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
-    NnsFunction, ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
+    Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+    Governance, GovernanceError, InstallCodeRequest, ListNeurons, ListNeuronsResponse,
+    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfo,
+    ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
+    ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
 };
 use ic_nns_handler_lifeline_interface::UpgradeRootProposal;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
@@ -1328,12 +1329,15 @@ pub fn nns_get_migrations(state_machine: &StateMachine) -> Migrations {
     Decode!(&reply, Migrations).unwrap()
 }
 
-pub fn nns_list_proposals(state_machine: &StateMachine) -> ListProposalInfoResponse {
+pub fn nns_list_proposals(
+    state_machine: &StateMachine,
+    request: ListProposalInfo,
+) -> ListProposalInfoResponse {
     let result = state_machine
         .execute_ingress(
             GOVERNANCE_CANISTER_ID,
             "list_proposals",
-            Encode!(&ListProposalInfo::default()).unwrap(),
+            Encode!(&request).unwrap(),
         )
         .unwrap();
 
@@ -1446,6 +1450,31 @@ pub fn list_deployed_snses(state_machine: &StateMachine) -> ListDeployedSnsesRes
     };
 
     Decode!(&result, ListDeployedSnsesResponse).unwrap()
+}
+
+pub fn get_neurons_fund_audit_info(
+    state_machine: &StateMachine,
+    proposal_id: ProposalId,
+) -> GetNeuronsFundAuditInfoResponse {
+    let result = state_machine
+        .execute_ingress_as(
+            PrincipalId::new_anonymous(),
+            GOVERNANCE_CANISTER_ID,
+            "get_neurons_fund_audit_info",
+            Encode!(&GetNeuronsFundAuditInfoRequest {
+                nns_proposal_id: Some(proposal_id)
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => {
+            panic!("Call to get_neurons_fund_audit_info failed: {:#?}", s)
+        }
+    };
+
+    Decode!(&result, GetNeuronsFundAuditInfoResponse).unwrap()
 }
 
 pub fn list_neurons(
