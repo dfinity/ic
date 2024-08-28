@@ -57,8 +57,7 @@ fn subnet_is_whitelisted_for_synchronous_call_v3(subnet_id: &SubnetId) -> bool {
     WHITELISTED_SUBNETS_FOR_SYNCHRONOUS_CALL_V3
         .iter()
         .map(|s| {
-            let principal_id =
-                PrincipalId::from_str(*s).expect("Whitelist has valid principal ids");
+            let principal_id = PrincipalId::from_str(s).expect("Whitelist has valid principal ids");
 
             SubnetId::from(principal_id)
         })
