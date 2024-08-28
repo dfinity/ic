@@ -17,6 +17,7 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
+    "//rs/nervous_system/common/test_utils",
     "//rs/nervous_system/root",
     "//rs/nns/cmc",
     "//rs/nns/common",
@@ -66,7 +67,6 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nns/governance",
     "//rs/nns/governance/api",
     "//rs/nns/governance/init",
     "//rs/nns/gtc",
@@ -78,7 +78,6 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nns/governance:governance--test_feature",
     "//rs/nns/governance/api:api--test_feature",
     "//rs/nns/governance/init:init--test_feature",
     "//rs/nns/gtc:gtc--test_feature",

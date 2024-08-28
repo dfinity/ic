@@ -185,6 +185,8 @@ thread_local! {
     // the feature has been released, it will go through its "probation" period.
     // If that goes well, then, this can be deleted.
     static IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+
+    static ARE_SET_VISIBILITY_PROPOSALS_ENABLED: Cell<bool> = const { Cell::new(true) };
 }
 
 pub fn is_private_neuron_enforcement_enabled() -> bool {
@@ -199,6 +201,20 @@ pub fn temporarily_enable_private_neuron_enforcement() -> Temporary {
 /// Only integration tests should use this.
 pub fn temporarily_disable_private_neuron_enforcement() -> Temporary {
     Temporary::new(&IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED, false)
+}
+
+pub fn are_set_visibility_proposals_enabled() -> bool {
+    ARE_SET_VISIBILITY_PROPOSALS_ENABLED.with(|ok| ok.get())
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_enable_set_visibility_proposals() -> Temporary {
+    Temporary::new(&ARE_SET_VISIBILITY_PROPOSALS_ENABLED, true)
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_disable_set_visibility_proposals() -> Temporary {
+    Temporary::new(&ARE_SET_VISIBILITY_PROPOSALS_ENABLED, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {
@@ -928,7 +944,7 @@ impl NeuronSubsetMetricsPb {
 }
 
 fn enable_new_canister_management_topics() -> bool {
-    cfg!(feature = "test")
+    true
 }
 
 #[cfg(test)]

@@ -53,23 +53,6 @@ impl IDkgClientMetrics {
 }
 
 #[derive(Clone)]
-pub struct IDkgGossipMetrics {
-    pub dropped_adverts: IntCounterVec,
-}
-
-impl IDkgGossipMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
-        Self {
-            dropped_adverts: metrics_registry.int_counter_vec(
-                "idkg_priority_fn_dropped_adverts",
-                "IDkg adverts dropped by priority fn",
-                &["type"],
-            ),
-        }
-    }
-}
-
-#[derive(Clone)]
 pub struct IDkgPreSignerMetrics {
     pub on_state_change_duration: HistogramVec,
     pub pre_sign_metrics: IntCounterVec,

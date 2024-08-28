@@ -182,8 +182,6 @@ function download_registry_canisters() {
     "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
         --git-rev "${GIT_REVISION}" --remote-path=canisters --out="${IC_PREP_DIR}/canisters"
 
-    find "${IC_PREP_DIR}/canisters/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {}"
-
     rsync -a --delete "${IC_PREP_DIR}/canisters/" "${OUTPUT}/canisters/"
 }
 

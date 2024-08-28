@@ -5,6 +5,8 @@ use crate::{
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{CanisterId, NumBytes, SnapshotId, Time};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::CanisterModule;
 
 use std::{
@@ -16,8 +18,9 @@ use std::{
 ///
 /// Additionally, keeps track of all the accumulated changes
 /// since the last flush to the disk.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ValidateEq)]
 pub struct CanisterSnapshots {
+    #[validate_eq(CompareWithValidateEq)]
     snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
     /// Snapshot operations are consumed by the `StateManager` in order to
     /// correctly represent backups and restores in the next checkpoint.
@@ -249,9 +252,10 @@ impl CanisterSnapshots {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
 pub struct PageMemory {
     /// The contents of this memory.
+    #[validate_eq(Ignore)]
     pub page_map: PageMap,
     /// The size of the memory in wasm pages. This does not indicate how much
     /// data is stored in the `page_map`, only the number of pages the memory
@@ -275,18 +279,21 @@ impl From<&PageMemory> for Memory {
 }
 
 /// Contains all information related to a canister's execution state.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
 pub struct ExecutionStateSnapshot {
     /// The raw canister module.
+    #[validate_eq(Ignore)]
     pub wasm_binary: CanisterModule,
     /// Snapshot of stable memory.
+    #[validate_eq(CompareWithValidateEq)]
     pub stable_memory: PageMemory,
     /// Snapshot of wasm memory.
+    #[validate_eq(CompareWithValidateEq)]
     pub wasm_memory: PageMemory,
 }
 
 /// Contains all information related to a canister snapshot.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
 pub struct CanisterSnapshot {
     /// Identifies the canister to which this snapshot belongs.
     canister_id: CanisterId,
@@ -299,7 +306,9 @@ pub struct CanisterSnapshot {
     /// The certified data blob belonging to the canister.
     certified_data: Vec<u8>,
     /// Snapshot of chunked store.
+    #[validate_eq(CompareWithValidateEq)]
     chunk_store: WasmChunkStore,
+    #[validate_eq(CompareWithValidateEq)]
     execution_snapshot: ExecutionStateSnapshot,
 }
 

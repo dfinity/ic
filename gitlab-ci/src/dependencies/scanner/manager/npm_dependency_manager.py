@@ -249,7 +249,7 @@ class NPMDependencyManager(DependencyManager):
                         vulnerable_dependency=vulnerable_dependency,
                         vulnerabilities=vulnerabilities,
                         first_level_dependencies=first_level_dependencies,
-                        projects=[project.name],
+                        projects=[project.path],
                         risk_assessor=[],
                         score=score,
                     )

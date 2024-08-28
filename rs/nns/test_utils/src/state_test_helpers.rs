@@ -47,10 +47,10 @@ use ic_nns_governance_api::pb::v1::{
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
     Empty, ExecuteNnsFunction, Governance, GovernanceError, InstallCodeRequest, ListNeurons,
-    ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, MakeProposalRequest,
-    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
-    MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, ProposalActionRequest, ProposalInfo,
-    RewardNodeProviders, Vote,
+    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
+    ListProposalInfo, ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest,
+    ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
+    NnsFunction, ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
 };
 use ic_nns_handler_lifeline_interface::UpgradeRootProposal;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
@@ -361,7 +361,7 @@ pub fn get_canister_status(
 
 pub fn get_root_canister_status(machine: &StateMachine) -> Result<CanisterStatusResultV2, String> {
     machine
-        .canister_status_as(PrincipalId::from(ROOT_CANISTER_ID), ROOT_CANISTER_ID)
+        .canister_status_as(PrincipalId::from(LIFELINE_CANISTER_ID), ROOT_CANISTER_ID)
         .unwrap()
 }
 
@@ -1390,6 +1390,26 @@ pub fn nns_get_most_recent_monthly_node_provider_rewards(
     };
 
     Decode!(&result, Option<MonthlyNodeProviderRewards>).unwrap()
+}
+
+pub fn nns_list_node_provider_rewards(
+    state_machine: &StateMachine,
+    list_node_provider_rewards_request: ListNodeProviderRewardsRequest,
+) -> ListNodeProviderRewardsResponse {
+    let result = state_machine
+        .execute_ingress(
+            GOVERNANCE_CANISTER_ID,
+            "list_node_provider_rewards",
+            Encode!(&list_node_provider_rewards_request).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Call to list_node_provider_rewards failed: {:#?}", s),
+    };
+
+    Decode!(&result, ListNodeProviderRewardsResponse).unwrap()
 }
 
 pub fn nns_get_network_economics_parameters(state_machine: &StateMachine) -> NetworkEconomics {

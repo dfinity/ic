@@ -5,6 +5,7 @@ use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use pcre2::bytes::Regex;
 use tempfile::{tempdir, TempDir};
+use tokio::fs;
 use tokio::fs::File;
 use tokio::io::{self, AsyncReadExt, AsyncSeekExt, SeekFrom};
 use tokio::process::Command;
@@ -25,18 +26,21 @@ impl Partition for ExtPartition {
     /// Open an ext4 partition for writing, via debugfs
     async fn open(image: PathBuf, index: Option<usize>) -> Result<Self> {
         let backing_dir = tempdir()?;
+        let output_path = backing_dir.path().join(STORE_NAME);
 
         let mut input = File::open(&image).await?;
-        let mut output = File::create(backing_dir.path().join(STORE_NAME)).await?;
 
         if let Some(index) = index {
+            let mut output = File::create(output_path).await?;
             let offset = partition::check_offset(&image, index).await?;
             let length = partition::check_length(&image, index).await?;
 
             input.seek(SeekFrom::Start(offset)).await?;
             io::copy(&mut input.take(length), &mut output).await?;
         } else {
-            io::copy(&mut input, &mut output).await?;
+            // Tokio's io::copy is several times slower than fs::copy, therefore we use fs::copy
+            // on the fast path if no seeking is necessary.
+            fs::copy(&image, &output_path).await?;
         }
 
         Ok(ExtPartition {
@@ -48,16 +52,21 @@ impl Partition for ExtPartition {
 
     /// Close an ext4 partition, and write back to the input disk
     async fn close(self) -> Result<()> {
-        let mut input = File::open(&self.backing_dir.path().join(STORE_NAME)).await?;
-        let mut output = File::options().write(true).open(&self.original).await?;
+        let input_path = self.backing_dir.path().join(STORE_NAME);
+        let output_path = self.original;
 
         if let Some(index) = self.index {
-            let offset = partition::check_offset(&self.original, index).await?;
+            let mut input = File::open(&input_path).await?;
+            let mut output = File::options().write(true).open(&output_path).await?;
+            let offset = partition::check_offset(&output_path, index).await?;
 
             output.seek(SeekFrom::Start(offset)).await?;
+            io::copy(&mut input, &mut output).await?;
+        } else {
+            // Tokio's io::copy is several times slower than fs::copy, therefore we use fs::copy
+            // on the fast path if no seeking is necessary.
+            fs::copy(&input_path, &output_path).await?;
         }
-
-        io::copy(&mut input, &mut output).await?;
 
         Ok(())
     }

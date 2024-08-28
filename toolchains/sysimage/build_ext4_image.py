@@ -8,11 +8,9 @@
 #   build_ext4_image -s 10M -o partition.img.tzst -p boot -i dockerimg.tar -S file_contexts
 #
 import argparse
-import atexit
 import os
 import subprocess
 import sys
-import tempfile
 
 
 def limit_file_contexts(file_contexts, base_path):
@@ -175,8 +173,9 @@ def main():
     if limit_prefix and limit_prefix[0] == "/":
         limit_prefix = limit_prefix[1:]
 
-    tmpdir = tempfile.mkdtemp(prefix="icosbuild")
-    atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
+    tmpdir = os.getenv("ICOS_TMPDIR")
+    if not tmpdir:
+        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
     if file_contexts_file:
         original_file_contexts = open(file_contexts_file, "r").read()
