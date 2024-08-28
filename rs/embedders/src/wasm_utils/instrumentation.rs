@@ -904,6 +904,8 @@ pub(super) struct SpecialIndices {
     pub count_clean_pages_fn: Option<u32>,
     pub start_fn_ix: Option<u32>,
     pub stable_memory_index: u32,
+    pub afl_instrument_prev_location: u32, 
+    pub afl_instrument_mem_ptr: u32,
 }
 
 /// Takes a Wasm binary and inserts the instructions metering and memory grow
@@ -937,6 +939,32 @@ pub(super) fn instrument(
     let mut extra_strs: Vec<String> = Vec::new();
     module = export_mutable_globals(module, &mut extra_strs);
 
+    // Inject two new globals 
+    // prev_location => mutable: true, value: 0
+    // mem_ptr => mutable: true, value: 0
+
+    let prev_location = Global {
+        ty: GlobalType {
+            content_type: ValType::I32,
+            mutable : true, 
+            shared: false, 
+        },
+        init_expr: Operator::I32Const { value: 0 }
+    };
+
+    let mem_ptr = Global {
+        ty: GlobalType {
+            content_type: ValType::I32,
+            mutable : true, 
+            shared: false, 
+        },
+        init_expr: Operator::I32Const { value: 0 }
+    };
+
+    // all previous indexes are fixed
+    module.globals.push(prev_location);
+    module.globals.push(mem_ptr);
+
     let mut num_imported_functions = 0;
     let mut num_imported_globals = 0;
     for imp in &module.imports {
@@ -957,6 +985,10 @@ pub(super) fn instrument(
     let dirty_pages_counter_ix;
     let accessed_pages_counter_ix;
     let count_clean_pages_fn;
+    // index is (import + export)
+    let afl_instrument_prev_location = num_globals - 1;
+    let afl_instrument_mem_ptr = num_globals;
+
     match wasm_native_stable_memory {
         FlagStatus::Enabled => {
             dirty_pages_counter_ix = Some(num_globals + 1);
@@ -978,6 +1010,8 @@ pub(super) fn instrument(
         count_clean_pages_fn,
         start_fn_ix: module.start,
         stable_memory_index,
+        afl_instrument_prev_location,
+        afl_instrument_mem_ptr,
     };
 
     if special_indices.start_fn_ix.is_some() {
