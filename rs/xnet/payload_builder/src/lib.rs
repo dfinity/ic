@@ -1337,7 +1337,10 @@ impl PoolRefillTask {
                                 metrics.observe_query_slice_duration(status, proximity, since);
                                 metrics.observe_pull_attempt(status);
                             }
-                            Err(err) => warn!(logger, "Failed to join pool refill blocking thread: {}", err),
+                            Err(err) => warn!(
+                                logger,
+                                "Failed to join pool refill blocking thread: {}", err
+                            ),
                         };
                     }
 
