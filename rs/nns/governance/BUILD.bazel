@@ -121,9 +121,9 @@ DEV_DEPENDENCIES = [
     "@crate_index//:prometheus-parse",
     "@crate_index//:proptest",
     "@crate_index//:tempfile",
+    "@crate_index//:tla_instrumentation",
     "@crate_index//:tokio",
     "@crate_index//:tokio-test",
-    "@crate_index//:tla_instrumentation",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
@@ -171,13 +171,13 @@ rust_library(
     crate_features = test_with_tla(),
     crate_name = "ic_nns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES + [
-        "@crate_index//:tla_instrumentation_proc_macros"
+        "@crate_index//:tla_instrumentation_proc_macros",
     ],
     version = "0.9.0",
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [
         ":build_script",
         "@crate_index//:tla_instrumentation",
-        "@crate_index//:tokio"
+        "@crate_index//:tokio",
     ],
 )
 
@@ -342,7 +342,11 @@ rust_test_suite_with_extra_srcs(
     ),
     aliases = ALIASES,
     crate_features = test_with_tla(),
-    data = ["tests/neurons.csv", "@tla_apalache//:contents", ":tla_models"],
+    data = [
+        "tests/neurons.csv",
+        ":tla_models",
+        "@tla_apalache//:contents",
+    ],
     env = {
         "NEURON_CSV_PATH": "rs/nns/governance/tests/neurons.csv",
     },
