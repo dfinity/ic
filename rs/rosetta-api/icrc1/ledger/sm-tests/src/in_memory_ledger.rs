@@ -388,6 +388,7 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct BurnsWithoutSpender<AccountId> {
     pub minter: AccountId,
     pub burn_indexes: Vec<usize>,
