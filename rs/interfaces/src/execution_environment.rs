@@ -810,8 +810,10 @@ pub trait SystemApi {
     /// canister invokes `ic0.call_new` or returns without invoking
     /// `ic0.call_perform`).
     ///
-    /// The number of cycles added to the call will be `<= amount` and will
-    /// not put the canister's cycles balance below the freezing limit.
+    /// The number of cycles added to the call will be `<= amount` and such that a
+    /// subsequent `ic0.call_perform` will not fail because of insufficient cycles
+    /// balance (assuming no `ic0.call_data_append` is called between
+    /// `ic0.call_cycles_add128_up_to` and `ic0.call_perform`).
     ///
     /// This system call also copies the actual amount of cycles that were moved
     /// onto the call represented by a 128-bit value starting at the location

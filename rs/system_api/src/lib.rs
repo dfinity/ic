@@ -1136,14 +1136,6 @@ impl SystemApiImpl {
         self.memory_usage.allocated_message_memory
     }
 
-    /// Cycles limit under which the canister gets frozen.
-    pub fn get_freezing_threshold_cylces(&self) -> Cycles {
-        self.sandbox_safe_system_state.freezing_threshold_cycles(
-            self.get_current_memory_usage(),
-            self.get_allocated_message_bytes(),
-        )
-    }
-
     fn error_for(&self, method_name: &str) -> HypervisorError {
         HypervisorError::UserContractViolation {
             error: format!(

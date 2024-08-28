@@ -930,7 +930,7 @@ fn withdraw_up_to_respects_freezing_threshold() {
 
     // freezing threshold limits the amount that can be withdrawn
     let withdraw_amount_2 = Cycles::new(u128::MAX);
-    let withdrawn_cycles_2 = cycles_account_manager.withdraw_up_to_cycles_for_transfer(
+    let withdrawn_amount_2 = cycles_account_manager.withdraw_up_to_cycles_for_transfer(
         system_state.freeze_threshold,
         system_state.memory_allocation,
         payload_size,
@@ -944,7 +944,7 @@ fn withdraw_up_to_respects_freezing_threshold() {
     );
     assert_eq!(
         initial_cycles - withdrawn_amount_1 - untouched_cycles,
-        withdrawn_cycles_2
+        withdrawn_amount_2
     );
     assert_eq!(untouched_cycles, new_balance);
 }

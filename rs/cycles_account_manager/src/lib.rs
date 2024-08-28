@@ -776,7 +776,6 @@ impl CyclesAccountManager {
             subnet_size,
         ) + prepayment_for_response_transmission;
 
-        // todo: can this be deduplicated?
         let fee = transmission_fee + prepayment_for_response_execution;
 
         self.withdraw_with_threshold(
