@@ -133,7 +133,6 @@ impl ICRC1Ledger for IcpLedgerCanister {
 
 #[async_trait]
 impl IcpLedger for IcpLedgerCanister {
-    // TODO(oggy): add a tla_function here to properly stack labels
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
@@ -142,7 +141,6 @@ impl IcpLedger for IcpLedgerCanister {
         to: AccountIdentifier,
         memo: u64,
     ) -> Result<u64, NervousSystemError> {
-        // TODO(oggy): make some macros for nicer record/fn construction
         tla_log_request!(
             "WaitForTransfer",
             Destination::new("ledger"),
