@@ -18,9 +18,13 @@ const OVERALL_TIMEOUT: Duration = Duration::from_secs(2 * 60 * 60);
 
 pub fn main() -> anyhow::Result<()> {
     // setup env variable for config
-    let initial_version = match std::env::var("INITIAL_VERSION") {
+    let old_version = match std::env::var("OLD_VERSION") {
         Ok(v) => v,
         Err(_) => read_dependency_to_string("testnet/mainnet_nns_revision.txt").map_err(|_| anyhow::anyhow!("Didn't find initial version specified in `testnet/mainnet_nns_revision.txt` nur in `INITIAL_VERSION` env variable"))?,
+    };
+    let new_version = match std::env::var("NEW_VERSION") {
+        Ok(v) => Some(v),
+        Err(_) => None,
     };
 
     let config = IcConfig {
@@ -40,12 +44,29 @@ pub fn main() -> anyhow::Result<()> {
         ]),
         unassigned_nodes: Some(ConfigurableUnassignedNodes::Simple(4)),
         boundary_nodes: None,
-        initial_version: Some(initial_version.clone()),
+        // If both versions are specified its safe to start from
+        // the old version. If we didn't specify the new version
+        // it means that we are running from the tip of the branch
+        // and images will not be present.
+        initial_version: new_version.as_ref().map(|_| old_version.clone()),
     };
 
-    let to_version = match std::env::var("TO_VERSION") {
-        Ok(v) => v,
-        Err(_) => read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE").map_err(|_| anyhow::anyhow!("Didn't find version being qualified specified in `ENV_DEPS__IC_VERSION_FILE` nur in `TO_VERSION` env variable"))?,
+    // If both versions are specified do:
+    //  1. upgrade
+    //  2. testing
+    //  3. downgrade
+    //  4. testing
+    // If only old version is specified:
+    //  1. downgrade
+    //  2. testing
+    //  3. upgrade
+    //  4. testing
+    let (initial_version, to_version) = match new_version {
+        Some(new_version) => (old_version, new_version),
+        None => (
+            "0000000000000000000000000000000000000000".to_string(),
+            old_version,
+        ),
     };
 
     SystemTestGroup::new()
@@ -111,16 +132,6 @@ pub fn main() -> anyhow::Result<()> {
                         Box::new(UpdateSubnetType {
                             subnet_type: None,
                             version: to_version.clone(),
-                        }),
-                        // Retire the initial versions because
-                        // to ensure it uses update-img
-                        Box::new(RetireBlessedVersions {
-                            versions: vec![initial_version.clone()],
-                        }),
-                        // Re-bless the initial version with
-                        // update-imgs
-                        Box::new(EnsureBlessedVersion {
-                            version: initial_version.clone(),
                         }),
                         // Downgrade to the inital version
                         Box::new(UpdateSubnetType {
