@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+/// Create a link to this section of the Execution Errors documentation.
 pub fn doc_ref(section: &str) -> String {
     format!(
         "http://internetcomputer.org/docs/current/references/execution-errors#{}",
