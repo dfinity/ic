@@ -8,7 +8,6 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 bytes = { workspace = true }
-either = "1.6.0"
 futures = { workspace = true }
 ic-artifact-downloader = { path = "../../p2p/artifact_downloader" }
 ic-artifact-manager = { path = "../../p2p/artifact_manager" }

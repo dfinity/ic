@@ -34,7 +34,6 @@ use std::{
 };
 
 use axum::{middleware::from_fn_with_state, Router};
-use either::Either;
 use futures::StreamExt;
 use ic_async_utils::JoinMap;
 use ic_base_types::NodeId;
@@ -48,7 +47,7 @@ use ic_metrics::MetricsRegistry;
 use quinn::{
     crypto::rustls::{QuicClientConfig, QuicServerConfig},
     AsyncUdpSocket, ConnectError, Connection, ConnectionError, Endpoint, EndpointConfig, Incoming,
-    VarInt,
+    Runtime, TokioRuntime, VarInt,
 };
 use rustls::pki_types::CertificateDer;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
@@ -190,6 +189,25 @@ impl std::fmt::Display for ConnectionEstablishError {
     }
 }
 
+pub fn create_udp_socket(rt: &Handle, addr: SocketAddr) -> Arc<dyn AsyncUdpSocket> {
+    let _guard = rt.enter();
+    let socket2 = Socket::new(Domain::for_address(addr), Type::DGRAM, Some(Protocol::UDP))
+        .expect("Failed to create udp socket");
+
+    // Set socket send/recv buffer size. Setting these explicitly makes sure that a
+    // sufficiently large value is used. Increasing these buffers can help with high packet loss.
+    #[cfg(target_os = "linux")]
+    let _ = socket2.set_recv_buffer_size(UDP_BUFFER_SIZE);
+    #[cfg(target_os = "linux")]
+    let _ = socket2.set_send_buffer_size(UDP_BUFFER_SIZE);
+
+    socket2
+        .bind(&SockAddr::from(addr))
+        .expect("Failed to bind to UDP socket");
+
+    TokioRuntime::wrap_udp_socket(&TokioRuntime, socket2.into()).unwrap()
+}
+
 pub(crate) fn start_connection_manager(
     log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
@@ -199,7 +217,7 @@ pub(crate) fn start_connection_manager(
     node_id: NodeId,
     peer_map: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
     watcher: tokio::sync::watch::Receiver<SubnetTopology>,
-    socket: Either<SocketAddr, impl AsyncUdpSocket>,
+    socket: Arc<dyn AsyncUdpSocket>,
     router: Router,
 ) -> Shutdown {
     let topology = watcher.borrow().clone();
@@ -241,52 +259,15 @@ pub(crate) fn start_connection_manager(
     ));
     server_config.transport_config(transport_config.clone());
 
-    // Start endpoint
-    let endpoint = match socket {
-        Either::Left(addr) => {
-            let socket2 = Socket::new(Domain::for_address(addr), Type::DGRAM, Some(Protocol::UDP))
-                .expect("Failed to create udp socket");
-
-            // Set socket send/recv buffer size. Setting these explicitly makes sure that a
-            // sufficiently large value is used. Increasing these buffers can help with high packet loss.
-            #[cfg(target_os = "linux")]
-            if let Err(e) = socket2.set_recv_buffer_size(UDP_BUFFER_SIZE) {
-                info!(log, "Failed to set receive udp buffer. {}", e)
-            }
-            #[cfg(target_os = "linux")]
-            if let Err(e) = socket2.set_send_buffer_size(UDP_BUFFER_SIZE) {
-                info!(log, "Failed to set send udp buffer. {}", e)
-            }
-            info!(
-                log,
-                "Udp receive buffer size: {:?}",
-                socket2.recv_buffer_size()
-            );
-            info!(
-                log,
-                "Udp send buffer size: {:?}",
-                socket2.send_buffer_size()
-            );
-            socket2
-                .bind(&SockAddr::from(addr))
-                .expect("Failed to bind to UDP socket");
-
-            let _enter_guard = rt.enter();
-            Endpoint::new(
-                endpoint_config,
-                Some(server_config),
-                socket2.into(),
-                Arc::new(quinn::TokioRuntime),
-            )
-            .expect("Failed to create endpoint")
-        }
-        Either::Right(async_udp_socket) => Endpoint::new_with_abstract_socket(
+    let endpoint = {
+        let _guard = rt.enter();
+        Endpoint::new_with_abstract_socket(
             endpoint_config,
             Some(server_config),
-            Arc::new(async_udp_socket),
+            socket,
             Arc::new(quinn::TokioRuntime),
         )
-        .expect("Failed to create endpoint"),
+        .expect("Failed to create endpoint")
     };
     let manager = ConnectionManager {
         log: log.clone(),

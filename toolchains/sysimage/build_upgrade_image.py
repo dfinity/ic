@@ -6,12 +6,10 @@
 #   build_upgrade_image -o upgrade.tar.zst -b boot.img.tzst -r root.img.tzst -v version.txt
 #
 import argparse
-import atexit
 import os
 import shutil
 import subprocess
 import sys
-import tempfile
 
 
 def main():
@@ -29,8 +27,9 @@ def main():
     boot_image = args.boot
     version_file = args.versionfile
 
-    tmpdir = tempfile.mkdtemp(prefix="icosbuild")
-    atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
+    tmpdir = os.getenv("ICOS_TMPDIR")
+    if not tmpdir:
+        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
     boot_path = os.path.join(tmpdir, "boot.img")
     subprocess.run(["tar", "xf", boot_image, "--transform=s/partition.img/boot.img/", "-C", tmpdir], check=True)

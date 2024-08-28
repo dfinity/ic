@@ -40,6 +40,7 @@ rust_library(
         "//rs/types/types",
         "//rs/utils",
         "//rs/utils/thread",
+        "//rs/utils/validate_eq",
         "@crate_index//:bit-vec",
         "@crate_index//:crossbeam-channel",
         "@crate_index//:hex",

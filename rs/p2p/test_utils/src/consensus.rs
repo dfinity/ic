@@ -6,8 +6,8 @@ use std::{
 };
 
 use ic_interfaces::p2p::consensus::{
-    ArtifactMutation, ArtifactWithOpt, ChangeResult, ChangeSetProducer, MutablePool, Priority,
-    PriorityFnFactory, UnvalidatedArtifact, ValidatedPoolReader,
+    ArtifactMutation, ArtifactWithOpt, BouncerFactory, BouncerValue, ChangeResult,
+    ChangeSetProducer, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
 };
 use ic_logger::ReplicaLogger;
 use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
@@ -20,11 +20,9 @@ pub struct U64Artifact(Vec<u8>);
 impl IdentifiableArtifact for U64Artifact {
     const NAME: &'static str = "artifact";
     type Id = u64;
-    type Attribute = ();
     fn id(&self) -> Self::Id {
         u64::from_le_bytes(self.0[..8].try_into().unwrap())
     }
-    fn attribute(&self) -> Self::Attribute {}
 }
 
 impl From<U64Artifact> for Vec<u8> {
@@ -42,9 +40,7 @@ impl PbArtifact for U64Artifact {
     type PbMessage = Vec<u8>;
     type PbIdError = Infallible;
     type PbMessageError = Infallible;
-    type PbAttributeError = Infallible;
     type PbId = u64;
-    type PbAttribute = ();
 }
 
 impl U64Artifact {
@@ -287,14 +283,11 @@ impl ValidatedPoolReader<U64Artifact> for TestConsensus<U64Artifact> {
     }
 }
 
-impl PriorityFnFactory<U64Artifact, TestConsensus<U64Artifact>> for TestConsensus<U64Artifact> {
-    fn get_priority_function(
+impl BouncerFactory<U64Artifact, TestConsensus<U64Artifact>> for TestConsensus<U64Artifact> {
+    fn new_bouncer(
         &self,
         _pool: &TestConsensus<U64Artifact>,
-    ) -> ic_interfaces::p2p::consensus::PriorityFn<
-        <U64Artifact as IdentifiableArtifact>::Id,
-        <U64Artifact as IdentifiableArtifact>::Attribute,
-    > {
-        Box::new(|_, _| Priority::FetchNow)
+    ) -> ic_interfaces::p2p::consensus::Bouncer<<U64Artifact as IdentifiableArtifact>::Id> {
+        Box::new(|_| BouncerValue::Wants)
     }
 }

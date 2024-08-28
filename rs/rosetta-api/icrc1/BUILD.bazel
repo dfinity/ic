@@ -129,7 +129,8 @@ rust_test(
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm)",
         },
         tags = [
-            "manual",  # CI should not be downloading fiduciary_state.tar.zst or sns_state.tar.zst.
+            "fi_tests_nightly",  # Run this test in the fi-tests-nightly GitHub Action job.
+            "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
             "requires-network",  # Because mainnet state is downloaded (and used).
         ],
         deps = [

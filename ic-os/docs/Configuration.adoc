@@ -5,7 +5,7 @@ Each IC-OS has a 100 MB config partition. All IC-OS config partitions are initia
 In production, configuration is propagated from a partition on the USB installer through each of SetupOS, HostOS and GuestOS:
 
 * SetupOS reads and validates its configuration files from `/config/`
-* SetupOS copies its configuration files from `/config/` to `/var/ic/config/`
+* SetupOS copies sanitized configuration files from `/config/` to `/var/ic/config/`
 * SetupOS copies its configuration files from `/var/ic/config/` to the HostOS config partition.
 * HostOS reads the configuration files from `/boot/config`. These files are used to populate the GuestOS config partition through a more complicated process described below.
 
@@ -13,7 +13,14 @@ In production, configuration is propagated from a partition on the USB installer
 
 === SetupOS -> HostOS
 
-SetupOS validates, sanitizes, and copies all of its configuration files to the HostOS config partition. Refer to link:../components/setupos-scripts/config.sh[config.sh] link:../components/setupos-scripts/devices.sh[devices.sh]
+SetupOS validates, sanitizes, and copies all of its configuration files to the HostOS config partition:
+  config.ini                      # Data center-specific network settings
+  ssh_authorized_keys             # SSH private keys
+  node_operator_private_key.pem   # Node Operator private key created in the Node Provider onboarding
+  deployment.json                 # Deployment-specific configurations
+  nns_public_key.pem              # NNS public key
+
+Refer to link:../components/setupos-scripts/config.sh[config.sh] link:../components/setupos-scripts/devices.sh[devices.sh]
 
 === HostOS -> GuestOS
 
@@ -29,17 +36,13 @@ GuestOS then reads from `ic-bootstrap.tar` (link:../components/init/bootstrap-ic
 * *System state:* Node initialization material (initial registry & keys) is copied directly into target directories for replica use.
 * *Config partition:* All other contents of the injected config are copied into the `/boot/config` directory. These configurations need to be available on subsequent boots (not just the first boot of the system), and need to be preserved across upgrades.
 ** The contents of `/boot/config` are then used in various ways to parameterize system services as they start. For example, ssh keys are installed to target accounts, network settings are applied by network set-up scripts, etc.
-** For the IC, the `generate-replica-config.sh` script uses the `ic.json5.template` file to produce the configuration required by the replica (also cf. service file definition). Template placeholders are populated with information from `/boot/config` and elsewhere.
+** `generate-replica-config.sh` uses `ic.json5.template` to produce the replica configuration (also cf. service file definition). Template placeholders are populated with information from `/boot/config`.
 
 [NOTE]
 GuestOS only reads a predefined set of files from the bootstrap config image (i.e., it "sanitizes" the bootstrap config image).
 
 [NOTE]
 The reason for the bootstrap config image redirection is to ensure that GuestOS maintains control over what goes onto its config partition. Theoretically, a malicious Node Technician could modify their HostOS image and place any file onto the bootstrap config image. However, GuestOS will only copy a predefined set of files to its config partition.
-
-== SetupOS and HostOS configuration files
-
-To learn more about the SetupOS and HostOS configuration files, link:ConfigStore-SetupOSHostOS.adoc[see the SetupOS and HostOS ConfigStore.adoc]
 
 == GuestOS configuration files
 

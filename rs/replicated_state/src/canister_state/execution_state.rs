@@ -435,6 +435,7 @@ impl NextScheduledMethod {
 pub struct ExecutionState {
     /// The path where Canister memory is located. Needs to be stored in
     /// ExecutionState in order to perform the exec system call.
+    #[validate_eq(Ignore)]
     pub canister_root: std::path::PathBuf,
 
     /// Session state Nonce. If occupied, runtime is already

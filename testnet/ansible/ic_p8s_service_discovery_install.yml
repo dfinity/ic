@@ -29,6 +29,8 @@
         validate_certs: false
         headers:
           Content-Type: application/json
+      retries: 50  # 50 times
+      delay: 5  # every 5 secons
 
     - name: Generate scrape configurations for [boundary_nodes]
       vars:
@@ -57,4 +59,6 @@
         - process_exporter
         - nginx
         - vector
+      retries: 50  # 50 times
+      delay: 5  # every 5 secons
       when: "'boundary' in groups"

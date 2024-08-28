@@ -5,7 +5,8 @@ You create an empty IC instance by instantiating `PocketIc`:
 let pic = PocketIc::new();
 ```
 This constructor will discover an already running instance of the PocketIC Server or launch a fresh one.
-It then requests a fresh instance and serves as a unique reference to that instance. When the value is dropped, the instance on the PocketIC Server will be deleted. 
+It then requests a fresh instance and serves as a unique reference to that instance. When the value is dropped, the instance on the PocketIC Server will be deleted.
+To silence the PocketIC server output (in particular, canister and replica logs), you can set the environment variable `POCKET_IC_MUTE_SERVER` (to an arbitrary value).
 
 This design promotes *test isolation*, and we recommend to use one `PocketIc` instance per test.
 However, it is still possible to share a `PocketIc` instance between tests, but you do so at your own risk concerning 1) determinism and 2) performance (concurrent tests may block each other).
