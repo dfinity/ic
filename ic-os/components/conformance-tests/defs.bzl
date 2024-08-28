@@ -34,9 +34,7 @@ def _check_unused_components_test_impl(ctx):
     repo_components = [component.label.name for component in ctx.attr.repo_components]
     used_components = [component.label.name for component in ctx.attr.used_components]
 
-    # ADDITIONAL_USED_COMPONENT_FILES are files used for testing and development
-    ADDITIONAL_USED_COMPONENT_FILES = ["networking/dev-certs/canister_http_test_ca.key", "networking/dev-certs/root_cert_gen.sh"]
-    used_components += ADDITIONAL_USED_COMPONENT_FILES
+    used_components += ctx.attr.ignored_repo_components
 
     unused_components = [file for file in repo_components if file not in used_components]
 
@@ -64,6 +62,7 @@ check_unused_components_test = rule(
         "repo_components": attr.label_list(
             allow_files = True,
         ),
+        "ignored_repo_components": attr.string_list(),
         "used_components": attr.label_list(
             allow_files = True,
         ),
