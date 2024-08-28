@@ -284,10 +284,20 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
         for change_action in change_set {
             match change_action {
                 ChangeAction::MoveToValidated(message_id) => {
-                    // remove it from unvalidated pool and remove it from peer_index, move it
-                    // to the validated pool
+                    // If there is no space in the validated section, ignore the [`ChangeAction`].
+                    if self
+                        .unvalidated
+                        .get(&message_id)
+                        .is_some_and(|artifact| self.validated.exceeds_limit(&artifact.peer_id))
+                    {
+                        continue;
+                    }
+
+                    // Remove it from unvalidated pool and move it to the validated pool
                     match self.unvalidated.remove(&message_id) {
                         Some(unvalidated_artifact) => {
+                            // Advertize the artifact only if we got the ingress message from a
+                            // boundary node.
                             if unvalidated_artifact.peer_id == self.node_id {
                                 mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
                                     artifact: unvalidated_artifact.message.signed_ingress.clone(),
