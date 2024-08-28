@@ -194,12 +194,6 @@ impl Transport for QuicTransport {
         peer.rpc(request).await
     }
 
-    #[instrument(skip(self, request))]
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), anyhow::Error> {
-        let peer = self.get_conn_handle(peer_id)?;
-        peer.push(request).await
-    }
-
     fn peers(&self) -> Vec<(NodeId, ConnId)> {
         self.conn_handles
             .read()
@@ -221,8 +215,6 @@ pub trait Transport: Send + Sync {
         peer_id: &NodeId,
         request: Request<Bytes>,
     ) -> Result<Response<Bytes>, anyhow::Error>;
-
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), anyhow::Error>;
 
     fn peers(&self) -> Vec<(NodeId, ConnId)>;
 }

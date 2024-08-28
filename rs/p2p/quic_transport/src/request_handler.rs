@@ -50,35 +50,6 @@ pub(crate) async fn run_stream_acceptor(
              _ = quic_metrics_scrape.tick() => {
                 metrics.collect_quic_connection_stats(&connection, &peer_id);
             }
-            uni = connection.accept_uni() => {
-                match uni {
-                    Ok(uni_rx) => {
-                        inflight_requests.spawn(
-                            metrics.request_task_monitor.instrument(
-                                handle_uni_stream(
-                                    log.clone(),
-                                    peer_id,
-                                    conn_id,
-                                    metrics.clone(),
-                                    router.clone(),
-                                    uni_rx,
-                                )
-                            )
-                        );
-                    }
-                    Err(e) => {
-                        info!(log, "Error accepting uni dir stream {}", e.to_string());
-                        metrics
-                            .request_handle_errors_total
-                            .with_label_values(&[
-                                STREAM_TYPE_UNI,
-                                ERROR_TYPE_ACCEPT,
-                            ])
-                            .inc();
-                        break;
-                    }
-                }
-            },
             bi = connection.accept_bi() => {
                 match bi {
                     Ok((bi_tx, bi_rx)) => {
@@ -109,6 +80,7 @@ pub(crate) async fn run_stream_acceptor(
                     }
                 }
             },
+            _ = connection.accept_uni() => {},
             _ = connection.read_datagram() => {},
             Some(completed_request) = inflight_requests.join_next() => {
                 if let Err(err) = completed_request {
@@ -189,50 +161,6 @@ async fn handle_bi_stream(
         metrics
             .request_handle_errors_total
             .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_STOPPED])
-            .inc();
-    }
-}
-
-#[instrument(skip(log, metrics, router, uni_rx))]
-async fn handle_uni_stream(
-    log: ReplicaLogger,
-    peer_id: NodeId,
-    conn_id: ConnId,
-    metrics: QuicTransportMetrics,
-    router: Router,
-    uni_rx: RecvStream,
-) {
-    let mut request = match read_request(uni_rx).await {
-        Ok(request) => request,
-        Err(e) => {
-            info!(every_n_seconds => 60, log, "Failed to read request from uni stream: {}", e);
-            metrics
-                .request_handle_errors_total
-                .with_label_values(&[STREAM_TYPE_UNI, ERROR_TYPE_READ])
-                .inc();
-            return;
-        }
-    };
-
-    request.extensions_mut().insert::<NodeId>(peer_id);
-    request.extensions_mut().insert::<ConnId>(conn_id);
-
-    let response = router.oneshot(request).await.expect("Infallible");
-    // Record application level errors.
-    if !response.status().is_success() {
-        let status = response.status();
-        let error = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .map(|b| String::from_utf8_lossy(&b).to_string())
-            .unwrap_or("Failed to get error string".to_string());
-
-        error!(
-            log,
-            "Application error for uni stream: status {} error {}", status, error
-        );
-        metrics
-            .request_handle_errors_total
-            .with_label_values(&[STREAM_TYPE_UNI, ERROR_TYPE_APP])
             .inc();
     }
 }
