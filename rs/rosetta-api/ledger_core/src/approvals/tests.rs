@@ -3,7 +3,6 @@ use std::collections::HashSet;
 use super::*;
 use crate::timestamp::TimeStamp;
 use crate::tokens::Tokens;
-use serde::{Deserialize, Serialize};
 use std::cmp;
 
 fn ts(n: u64) -> TimeStamp {
@@ -14,25 +13,10 @@ fn tokens(n: u64) -> Tokens {
     Tokens::from_e8s(n)
 }
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash, Clone, Default, PartialOrd, Ord)]
 struct Account(u64);
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-struct Key(u64, u64);
-
-impl From<(&Account, &Account)> for Key {
-    fn from((a, s): (&Account, &Account)) -> Self {
-        Self(a.0, s.0)
-    }
-}
-
-impl From<Key> for (Account, Account) {
-    fn from(key: Key) -> Self {
-        (Account(key.0), Account(key.1))
-    }
-}
-
-type TestAllowanceTable = AllowanceTable<Key, Account, Tokens>;
+type TestAllowanceTable = AllowanceTable<HeapAllowancesData<Account, Tokens>>;
 
 #[test]
 fn allowance_table_default() {

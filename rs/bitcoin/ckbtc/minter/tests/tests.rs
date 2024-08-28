@@ -153,16 +153,22 @@ fn range_to_txid(range: std::ops::RangeInclusive<u8>) -> Txid {
     vec_to_txid(range.collect::<Vec<u8>>())
 }
 
+fn new_state_machine() -> StateMachine {
+    StateMachineBuilder::new()
+        .with_master_ecdsa_public_key()
+        .build()
+}
+
 #[test]
 fn test_install_ckbtc_minter_canister() {
-    let env = StateMachine::new();
+    let env = new_state_machine();
     let ledger_id = install_ledger(&env);
     install_minter(&env, ledger_id);
 }
 
 #[test]
 fn test_wrong_upgrade_parameter() {
-    let env = StateMachine::new();
+    let env = new_state_machine();
 
     // wrong init args
 
@@ -222,7 +228,7 @@ fn test_wrong_upgrade_parameter() {
 
 #[test]
 fn test_upgrade_read_only() {
-    let env = StateMachine::new();
+    let env = new_state_machine();
     let ledger_id = install_ledger(&env);
     let minter_id = install_minter(&env, ledger_id);
 
@@ -288,7 +294,7 @@ fn test_upgrade_read_only() {
 
 #[test]
 fn test_upgrade_restricted() {
-    let env = StateMachine::new();
+    let env = new_state_machine();
     let ledger_id = install_ledger(&env);
     let minter_id = install_minter(&env, ledger_id);
 
@@ -502,7 +508,7 @@ fn update_balance_should_return_correct_confirmations() {
 
 #[test]
 fn test_illegal_caller() {
-    let env = StateMachine::new();
+    let env = new_state_machine();
     let ledger_id = install_ledger(&env);
     let minter_id = install_minter(&env, ledger_id);
 
@@ -555,7 +561,7 @@ pub fn get_btc_address(
 fn test_minter() {
     use bitcoin::Address;
 
-    let env = StateMachine::new();
+    let env = new_state_machine();
     let args = MinterArg::Init(CkbtcMinterInitArgs {
         btc_network: Network::Regtest.into(),
         ecdsa_key_name: "master_ecdsa_public_key".into(),
@@ -630,6 +636,7 @@ impl CkBtcSetup {
     pub fn new_with(btc_network: Network) -> Self {
         let bitcoin_id = bitcoin_canister_id(btc_network);
         let env = StateMachineBuilder::new()
+            .with_master_ecdsa_public_key()
             .with_default_canister_range()
             .with_extra_canister_range(bitcoin_id..=bitcoin_id)
             .build();

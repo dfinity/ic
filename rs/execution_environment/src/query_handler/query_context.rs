@@ -20,7 +20,7 @@ use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, SubnetAvailableMemory, SystemApiCallCounters,
 };
 use ic_interfaces_state_manager::Labeled;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{error, info, ReplicaLogger};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -175,11 +175,11 @@ impl<'a> QueryContext<'a> {
     /// - If it produces a response return the response.
     ///
     /// - If it does not produce a response and does not send further queries,
-    /// then return a response indicating that the canister did not reply.
+    ///   then return a response indicating that the canister did not reply.
     ///
     /// - If it does not produce a response and produces additional
-    /// inter-canister queries, process them till there is a response or the
-    /// call graph finishes with no reply.
+    ///   inter-canister queries, process them till there is a response or the
+    ///   call graph finishes with no reply.
     pub(super) fn run<'b>(
         &mut self,
         query: Query,
@@ -232,6 +232,14 @@ impl<'a> QueryContext<'a> {
         if let WasmMethod::Query(_) = &method {
             if let Err(err) = &result {
                 if err.code() == ErrorCode::CanisterContractViolation && legacy_icqc_enabled {
+                    if self.own_subnet_type == SubnetType::System {
+                        info!(
+                            self.log,
+                            "Canister's {} query method {} is using the legacy ICQC feature.",
+                            canister_id,
+                            method,
+                        );
+                    }
                     let measurement_scope =
                         MeasurementScope::nested(&metrics.query_retry_call, measurement_scope);
                     let old_canister = self.state.get_ref().get_active_canister(&canister_id)?;

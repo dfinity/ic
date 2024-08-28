@@ -31,9 +31,12 @@ use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use prost::Message;
 use std::cell::RefCell;
 
+type CanisterRuntime = CdkRuntime;
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
 
-type CanisterRuntime = CdkRuntime;
+thread_local! {
+    static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
+}
 
 struct CanisterEnvironment {}
 
@@ -83,10 +86,6 @@ fn create_ledger_client() -> RealLedgerCanisterClient {
         .expect("Expected the ledger_canister_id to be convertible to a CanisterId");
 
     RealLedgerCanisterClient::new(ledger_canister_id)
-}
-
-thread_local! {
-    static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
 }
 
 #[candid_method(init)]
@@ -192,6 +191,7 @@ fn list_sns_canisters(_request: ListSnsCanistersRequest) -> ListSnsCanistersResp
     })
 }
 
+/// This function will return immediately, and the actual upgrade will be performed in the background.
 #[candid_method(update)]
 #[update]
 fn change_canister(request: ChangeCanisterRequest) {
@@ -212,9 +212,24 @@ fn change_canister(request: ChangeCanisterRequest) {
     //
     // To implement "acknowledge without actually completing the work", we use
     // spawn to do the real work in the background.
-    CanisterRuntime::spawn_future(ic_nervous_system_root::change_canister::change_canister::<
-        CanisterRuntime,
-    >(request));
+    CanisterRuntime::spawn_future(async move {
+        let change_canister_result =
+            ic_nervous_system_root::change_canister::change_canister::<CanisterRuntime>(request)
+                .await;
+        // We don't want to panic in here, or the log messages will be lost when
+        // the state rolls back.
+        match change_canister_result {
+            Ok(()) => {
+                log!(
+                    INFO,
+                    "change_canister: Canister change completed successfully."
+                );
+            }
+            Err(err) => {
+                log!(ERROR, "change_canister: Canister change failed: {err}");
+            }
+        };
+    });
 }
 
 /// This function is deprecated, and `register_dapp_canisters` should be used
@@ -352,7 +367,7 @@ async fn heartbeat() {
 }
 
 // Resources to serve for a given http_request
-#[query(hidden = true)]
+#[query(hidden = true, decoding_quota = 10000)]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),
@@ -384,50 +399,11 @@ fn __get_candid_interface_tmp_hack() -> String {
     include_str!("root.did").to_string()
 }
 
-#[cfg(any(target_arch = "wasm32", test))]
-fn main() {}
-
-/// When run on native, this prints the candid service definition of this
-/// canister, from the methods annotated with `candid_method` above.
-///
-/// Note that `cargo test` calls `main`, and `export_service` (which defines
-/// `__export_service` in the current scope) needs to be called exactly once. So
-/// in addition to `not(target_arch = "wasm32")` we have a `not(test)` guard here
-/// to avoid calling `export_service`, which we need to call in the test below.
-#[cfg(not(any(target_arch = "wasm32", test)))]
 fn main() {
-    // The line below generates did types and service definition from the
-    // methods annotated with `candid_method` above. The definition is then
-    // obtained with `__export_service()`.
-    candid::export_service!();
-    std::print!("{}", __export_service());
+    // This block is intentionally left blank.
 }
 
+// In order for some of the test(s) within this mod to work,
+// this MUST occur at the end.
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A test that fails if the API was updated but the candid definition was not.
-    #[test]
-    fn check_candid_interface_definition_file() {
-        let did_path = std::path::PathBuf::from(
-            std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env var undefined"),
-        )
-        .join("canister/root.did");
-
-        let did_contents = String::from_utf8(std::fs::read(did_path).unwrap()).unwrap();
-
-        // See comments in main above
-        candid::export_service!();
-        let expected = __export_service();
-
-        if did_contents != expected {
-            panic!(
-                "Generated candid definition does not match canister/root.did. \
-                 Run `bazel run :generate_did > canister/root.did` (no nix and/or direnv) or \
-                 `cargo run --bin sns-root-canister > canister/root.did` in \
-                 rs/sns/root to update canister/root.did."
-            )
-        }
-    }
-}
+mod tests;

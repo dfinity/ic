@@ -2,16 +2,10 @@ use dfn_candid::candid;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR,
+    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR,
 };
-use ic_nns_common::{
-    registry::encode_or_panic,
-    types::{NeuronId, ProposalId},
-};
-use ic_nns_governance::{
-    init::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
-    pb::v1::{ManageNeuronResponse, NnsFunction, ProposalStatus, Vote},
-};
+use ic_nns_common::types::{NeuronId, ProposalId};
+use ic_nns_governance_api::pb::v1::{ManageNeuronResponse, NnsFunction, ProposalStatus, Vote};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},
@@ -23,6 +17,7 @@ use ic_registry_keys::make_subnet_record_key;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
 use ic_types::ReplicaVersion;
+use prost::Message;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use std::str::FromStr;
 
@@ -50,9 +45,6 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
                 halt_at_cup_height: false,
-                max_instructions_per_message: 5_000_000_000,
-                max_instructions_per_round: 7_000_000_000,
-                max_instructions_per_install_code: 200_000_000_000,
                 features: None,
                 max_number_of_canisters: 100,
                 ssh_readonly_access: vec![],
@@ -68,7 +60,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 .with_initial_mutations(vec![RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         key.as_bytes(),
-                        encode_or_panic(&initial_subnet_record),
+                        initial_subnet_record.encode_to_vec(),
                     )],
                     preconditions: vec![],
                 }])
@@ -89,22 +81,10 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 initial_notary_delay_millis: None,
                 dkg_interval_length: Some(10),
                 dkg_dealings_per_block: Some(1),
-                max_artifact_streams_per_peer: None,
-                max_chunk_wait_ms: None,
-                max_duplicity: None,
-                max_chunk_size: None,
-                receive_check_cache_size: None,
-                pfn_evaluation_period_ms: None,
-                registry_poll_period_ms: None,
-                retransmission_request_ms: None,
-                set_gossip_config_to_default: false,
                 start_as_nns: None,
                 subnet_type: None,
                 is_halted: Some(true),
                 halt_at_cup_height: Some(true),
-                max_instructions_per_message: None,
-                max_instructions_per_round: Some(8_000_000_000),
-                max_instructions_per_install_code: None,
                 features: None,
                 ecdsa_config: None,
                 ecdsa_key_signing_enable: None,
@@ -115,6 +95,16 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 chain_key_config: None,
                 chain_key_signing_enable: None,
                 chain_key_signing_disable: None,
+                // Deprecated section follows
+                max_artifact_streams_per_peer: None,
+                max_chunk_wait_ms: None,
+                max_duplicity: None,
+                max_chunk_size: None,
+                receive_check_cache_size: None,
+                pfn_evaluation_period_ms: None,
+                registry_poll_period_ms: None,
+                retransmission_request_ms: None,
+                set_gossip_config_to_default: Default::default(),
             };
 
             let proposal_id: ProposalId = submit_external_update_proposal(
@@ -176,9 +166,6 @@ fn test_submit_and_accept_update_subnet_proposal() {
                     subnet_type: SubnetType::Application.into(),
                     is_halted: true,
                     halt_at_cup_height: true,
-                    max_instructions_per_message: 5_000_000_000,
-                    max_instructions_per_round: 8_000_000_000,
-                    max_instructions_per_install_code: 200_000_000_000,
                     features: None,
                     max_number_of_canisters: 200,
                     ssh_readonly_access: vec!["pub_key_0".to_string()],

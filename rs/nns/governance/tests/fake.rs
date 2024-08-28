@@ -392,7 +392,6 @@ impl Environment for FakeDriver {
                         sns_token_e8s: None,    // TODO[NNS1-2339]
                         neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
                         nns_proposal_id: None,  // TODO[NNS1-2339]
-                        neurons_fund_participants: None, // TODO[NNS1-2339]
                         should_auto_finalize: Some(true),
                         neurons_fund_participation_constraints: None,
                         neurons_fund_participation: None,
@@ -455,7 +454,8 @@ impl Environment for FakeDriver {
                 NodeProvidersMonthlyXdrRewards {
                     rewards: hashmap! {
                         PrincipalId::new_user_test_id(1).to_string() => NODE_PROVIDER_REWARD,
-                    }
+                    },
+                    registry_version: Some(5)
                 }
             ))
             .unwrap());

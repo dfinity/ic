@@ -44,7 +44,6 @@ use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    artifact_kind::IngressArtifact,
     batch::RawQueryStats,
     consensus::certification::{Certification, CertificationContent},
     crypto::{
@@ -55,7 +54,7 @@ use ic_types::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
     },
     malicious_flags::MaliciousFlags,
-    messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
+    messages::{CertificateDelegation, MessageId, Query, SignedIngress, SignedIngressContent},
     signature::ThresholdSignature,
     time::UNIX_EPOCH,
     CryptoHashOfPartialState, Height, RegistryVersion,
@@ -366,7 +365,7 @@ mock! {
 
 pub struct HttpEndpointHandles {
     pub ingress_filter: IngressFilterHandle,
-    pub ingress_rx: UnboundedReceiver<UnvalidatedArtifactMutation<IngressArtifact>>,
+    pub ingress_rx: UnboundedReceiver<UnvalidatedArtifactMutation<SignedIngress>>,
     pub query_execution: QueryExecutionHandle,
     pub terminal_state_ingress_messages: Sender<(MessageId, Height)>,
     pub certified_height_watcher: watch::Sender<Height>,
@@ -498,6 +497,7 @@ impl HttpEndpointBuilder {
             ic_tracing::ReloadHandles::new(tracing_subscriber::reload::Layer::new(vec![]).1),
             certified_height_watcher_rx,
             terminal_state_ingress_messages_rx,
+            true,
         );
 
         HttpEndpointHandles {

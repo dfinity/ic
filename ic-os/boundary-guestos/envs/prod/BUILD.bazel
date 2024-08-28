@@ -1,8 +1,6 @@
 load("//ic-os:defs.bzl", "boundary_node_icos_build")
 load("//ic-os/boundary-guestos:defs.bzl", "image_deps")
 
-exports_files(["build_container_filesystem_config.txt"])
-
 # The macro contains several targets.
 # Check
 #       //ic-os/boundary-guestos/BUILD.bazel for examples

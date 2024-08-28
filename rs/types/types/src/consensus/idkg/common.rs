@@ -42,7 +42,7 @@ use super::{
 pub type PseudoRandomId = [u8; 32];
 
 /// RequestId is used for two purposes:
-/// 1. to identify the matching request in sign_with_ecdsa_contexts.
+/// 1. to identify the matching request in signature request contexts.
 /// 2. to identify which pre-signature the request is matched to.
 ///
 /// Pre-signatures must be matched with requests in the same order as requests
@@ -643,8 +643,8 @@ impl TryFrom<&pb::UnmaskedTimesMaskedParams> for UnmaskedTimesMaskedParams {
 
 pub type TranscriptLookupError = String;
 
-/// Wrapper to access the ECDSA related info from the blocks.
-pub trait EcdsaBlockReader: Send + Sync {
+/// Wrapper to access the IDKG related info from the blocks.
+pub trait IDkgBlockReader: Send + Sync {
     /// Returns the height of the tip
     fn tip_height(&self) -> Height;
 
@@ -705,7 +705,7 @@ impl IDkgTranscriptOperationRef {
     /// Resolves the refs to get the IDkgTranscriptOperation.
     pub fn translate(
         &self,
-        resolver: &dyn EcdsaBlockReader,
+        resolver: &dyn IDkgBlockReader,
     ) -> Result<IDkgTranscriptOperation, TranscriptOperationError> {
         match self {
             Self::Random => Ok(IDkgTranscriptOperation::Random),
@@ -940,7 +940,7 @@ impl IDkgTranscriptParamsRef {
     /// Resolves the refs to get the IDkgTranscriptParams.
     pub fn translate(
         &self,
-        resolver: &dyn EcdsaBlockReader,
+        resolver: &dyn IDkgBlockReader,
     ) -> Result<IDkgTranscriptParams, TranscriptParamsError> {
         let operation_type = self
             .operation_type_ref
@@ -1146,7 +1146,7 @@ impl ThresholdSigInputsRef {
         }
     }
 
-    pub fn translate(&self, resolver: &dyn EcdsaBlockReader) -> ThresholdSigInputsResult {
+    pub fn translate(&self, resolver: &dyn IDkgBlockReader) -> ThresholdSigInputsResult {
         match self {
             ThresholdSigInputsRef::Ecdsa(inputs_ref) => inputs_ref
                 .translate(resolver)

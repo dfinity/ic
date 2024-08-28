@@ -14,10 +14,10 @@ ic-cycles-account-manager = { path = "../../cycles_account_manager" }
 ic-embedders = { path = "../../embedders" }
 ic-error-types = { path = "../../types/error_types" }
 ic-execution-environment = { path = "../../execution_environment" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-logger = { path = "../../monitoring/logger" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-query-stats = { path = "../../query_stats" }
 ic-registry-provisional-whitelist = { path = "../../registry/provisional_whitelist" }
@@ -27,7 +27,6 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-system-api = { path = "../../system_api" }
 ic-test-utilities = { path = ".." }
-ic-test-utilities-time = { path = "../time" }
 ic-test-utilities-types = { path = "../types" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
@@ -38,4 +37,4 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-wat = "1.0.52"
+wat = { workspace = true }

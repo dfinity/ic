@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 COMMON_DEPS = [
+    # Keep sorted.
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:ic-stable-structures",

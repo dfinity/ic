@@ -5,14 +5,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-stream = "0.3.2"
 byte-unit = "4.0.14"
 clap = { version = "3.2.25", features = ["derive"] }
 futures = { workspace = true }
-http = "0.2.12"
-hyper = { version = "0.14.18", features = ["full"] }
-hyper-socks2 = "^0.8.0"
+http = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
 hyper-rustls = { workspace = true }
+hyper-socks2 = { workspace = true }
 ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics/server" }
 ic-async-utils = { path = "../../async_utils" }
 ic-config = { path = "../../config" }
@@ -29,8 +30,12 @@ tonic = { workspace = true }
 tower = { workspace = true }
 
 [dev-dependencies]
+async-stream = { workspace = true }
 once_cell = "1.13.1"
 rand = { workspace = true }
-warp = { version = "0.3.6", features = ["tls"] }
-uuid = { version = "1.3.0", features = ["v4"] }
 tempfile = { workspace = true }
+uuid = { workspace = true }
+warp = { version = "0.3.6", features = ["tls"] }
+
+[features]
+http = []

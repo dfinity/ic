@@ -8,6 +8,7 @@ rust_library(
     crate_name = "ic_registry_local_store",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/interfaces/registry",
         "//rs/registry/proto",
         "//rs/sys",
@@ -20,6 +21,7 @@ rust_test(
     name = "local_store_test",
     crate = ":local_store",
     deps = [
+        # Keep sorted.
         "//rs/registry/local_store/artifacts",
         "@crate_index//:rand",
         "@crate_index//:tempfile",

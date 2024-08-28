@@ -36,6 +36,7 @@ tokio = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+axum = { workspace = true }
 ic-config = { path = "../../config" }
 ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
 ic-interfaces-certified-stream-store-mocks = { path = "../../interfaces/certified_stream_store/mocks" }
@@ -57,5 +58,4 @@ nix = { workspace = true }
 proptest = "1.0"
 reqwest = { workspace = true }
 tempfile = { workspace = true }
-axum = { workspace = true }
-url = "2.1.1"
+url = { workspace = true }

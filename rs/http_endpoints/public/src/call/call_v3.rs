@@ -1,11 +1,12 @@
 //! Module that deals with requests to /api/v3/canister/.../call.
 
 use super::{
+    call_v2::{self, Accepted, AsynchronousCallHandlerState, CallV2Response},
     ingress_watcher::{IngressWatcherHandle, SubscriptionError},
     IngressError, IngressValidator,
 };
 use crate::{
-    common::{into_cbor, Cbor},
+    common::{into_cbor, Cbor, WithTimeout},
     metrics::{
         HttpHandlerMetrics, CALL_V3_EARLY_RESPONSE_CERTIFICATION_TIMEOUT,
         CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
@@ -16,7 +17,7 @@ use crate::{
 };
 use axum::{
     body::Body,
-    extract::{DefaultBodyLimit, State},
+    extract::{self, DefaultBodyLimit, State},
     response::{IntoResponse, Response},
     Router,
 };
@@ -43,11 +44,28 @@ use std::{
 use tokio_util::time::FutureExt;
 use tower::{util::BoxCloneService, ServiceBuilder};
 
-enum CallV3Response {
+const LOG_EVERY_N_SECONDS: i32 = 10;
+
+/// The timeout duration used when creating a subscriber for the ingres message,
+/// by calling [`IngressWatcherHandle::subscribe_for_certification`].
+const SUBSCRIPTION_TIMEOUT: Duration = Duration::from_secs(1);
+
+pub(crate) enum CallV3Response {
     Certificate(Certificate),
-    UserError(UserError),
     Accepted(&'static str),
+    UserError(UserError),
     HttpError(HttpError),
+}
+
+#[derive(Clone)]
+
+struct SynchronousCallHandlerState {
+    ingress_watcher_handle: IngressWatcherHandle,
+    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    metrics: HttpHandlerMetrics,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    ingress_message_certificate_timeout_seconds: u64,
+    call_handler: IngressValidator,
 }
 
 impl IntoResponse for CallV3Response {
@@ -105,79 +123,66 @@ impl From<IngressError> for CallV3Response {
     }
 }
 
-#[derive(Clone)]
-pub struct CallServiceV3 {
-    ingress_watcher_handle: IngressWatcherHandle,
-    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-    metrics: HttpHandlerMetrics,
-    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    ingress_message_certificate_timeout_seconds: u64,
-    call_handler: IngressValidator,
+pub(crate) fn route() -> &'static str {
+    "/api/v3/canister/:effective_canister_id/call"
 }
 
-impl CallServiceV3 {
-    pub(crate) fn route() -> &'static str {
-        "/api/v3/canister/:effective_canister_id/call"
-    }
+pub(crate) fn new_router(
+    call_handler: IngressValidator,
+    ingress_watcher_handle: IngressWatcherHandle,
+    metrics: HttpHandlerMetrics,
+    ingress_message_certificate_timeout_seconds: u64,
+    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+) -> Router {
+    let call_service = SynchronousCallHandlerState {
+        delegation_from_nns,
+        ingress_watcher_handle,
+        metrics,
+        ingress_message_certificate_timeout_seconds,
+        call_handler,
+        state_reader,
+    };
 
-    pub(crate) fn new_router(
-        call_handler: IngressValidator,
-        ingress_watcher_handle: IngressWatcherHandle,
-        metrics: HttpHandlerMetrics,
-        ingress_message_certificate_timeout_seconds: u64,
-        delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    ) -> Router {
-        let call_service = Self {
-            delegation_from_nns,
-            ingress_watcher_handle,
-            metrics,
-            ingress_message_certificate_timeout_seconds,
-            call_handler,
-            state_reader,
-        };
+    Router::new().route_service(
+        route(),
+        axum::routing::post(call_sync_v3)
+            .with_state(call_service)
+            .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
+    )
+}
 
-        Router::new().route_service(
-            Self::route(),
-            axum::routing::post(call_sync_v3)
-                .with_state(call_service)
-                .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
-        )
-    }
-
-    #[allow(dead_code)]
-    pub fn new_service(
-        call_handler: IngressValidator,
-        ingress_watcher_handle: IngressWatcherHandle,
-        metrics: HttpHandlerMetrics,
-        ingress_message_certificate_timeout_seconds: u64,
-        delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    ) -> BoxCloneService<Request<Body>, Response, Infallible> {
-        let router = Self::new_router(
-            call_handler,
-            ingress_watcher_handle,
-            metrics,
-            ingress_message_certificate_timeout_seconds,
-            delegation_from_nns,
-            state_reader,
-        );
-        BoxCloneService::new(router.into_service())
-    }
+pub fn new_service(
+    call_handler: IngressValidator,
+    ingress_watcher_handle: IngressWatcherHandle,
+    metrics: HttpHandlerMetrics,
+    ingress_message_certificate_timeout_seconds: u64,
+    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+) -> BoxCloneService<Request<Body>, Response, Infallible> {
+    let router = new_router(
+        call_handler,
+        ingress_watcher_handle,
+        metrics,
+        ingress_message_certificate_timeout_seconds,
+        delegation_from_nns,
+        state_reader,
+    );
+    BoxCloneService::new(router.into_service())
 }
 
 /// Handles a call to /api/v3/canister/../call
 async fn call_sync_v3(
     axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
-    State(CallServiceV3 {
+    State(SynchronousCallHandlerState {
         call_handler,
         ingress_watcher_handle,
         metrics,
         ingress_message_certificate_timeout_seconds,
         state_reader,
         delegation_from_nns,
-    }): State<CallServiceV3>,
-    request: Cbor<HttpRequestEnvelope<HttpCallContent>>,
+    }): State<SynchronousCallHandlerState>,
+    WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
 ) -> CallV3Response {
     let log = call_handler.log.clone();
 
@@ -191,11 +196,9 @@ async fn call_sync_v3(
 
     let message_id = ingress_submitter.message_id();
 
-    let timeout = Duration::from_secs(ingress_message_certificate_timeout_seconds);
-
     let certification_subscriber = match ingress_watcher_handle
         .subscribe_for_certification(message_id.clone())
-        .timeout(timeout)
+        .timeout(SUBSCRIPTION_TIMEOUT)
         .await
     {
         Ok(Ok(message_subscriber)) => Ok(message_subscriber),
@@ -210,6 +213,7 @@ async fn call_sync_v3(
             // TODO: Send a warning or notification.
             // This probably means that the ingress watcher panicked.
             error!(
+                every_n_seconds => LOG_EVERY_N_SECONDS,
                 log,
                 "Error while waiting for subscriber of ingress message: {}", error_message
             );
@@ -220,6 +224,7 @@ async fn call_sync_v3(
         }
         Err(_) => {
             warn!(
+                every_n_seconds => LOG_EVERY_N_SECONDS,
                 log,
                 "Timed out while submitting a certification subscription.";
             );
@@ -250,7 +255,9 @@ async fn call_sync_v3(
 
     match certification_subscriber
         .wait_for_certification()
-        .timeout(timeout)
+        .timeout(Duration::from_secs(
+            ingress_message_certificate_timeout_seconds,
+        ))
         .await
     {
         Ok(()) => (),
@@ -320,4 +327,41 @@ async fn call_sync_v3(
         signature: Blob(signature),
         delegation: delegation_from_nns,
     })
+}
+
+pub(crate) fn new_asynchronous_call_service_router(
+    ingress_validator: IngressValidator,
+    ingress_watcher_handle: Option<IngressWatcherHandle>,
+) -> Router {
+    Router::new().route_service(
+        route(),
+        axum::routing::post(async_v3_handler)
+            .with_state(AsynchronousCallHandlerState::new(
+                ingress_validator,
+                ingress_watcher_handle,
+            ))
+            .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
+    )
+}
+
+/// Temporary wrapper to serve V3 requests with V2 the implementation,
+/// while we do a gradual rollout of the V3 implementation.
+async fn async_v3_handler(
+    effective_canister_id: extract::Path<CanisterId>,
+    state: State<AsynchronousCallHandlerState>,
+    request: WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
+) -> CallV3Response {
+    /// Allows us to map the response of the response of a v2 call to a v3 response.
+    impl From<CallV2Response> for CallV3Response {
+        fn from(v2_response: CallV2Response) -> Self {
+            match v2_response {
+                Ok(Accepted) => CallV3Response::Accepted(""),
+                Err(IngressError::UserError(user_error)) => CallV3Response::UserError(user_error),
+                Err(IngressError::HttpError(http_error)) => CallV3Response::HttpError(http_error),
+            }
+        }
+    }
+    call_v2::handler(effective_canister_id, state, request)
+        .await
+        .into()
 }

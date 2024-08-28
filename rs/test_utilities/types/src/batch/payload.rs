@@ -79,7 +79,7 @@ mod tests {
             BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
                 dealings: Dealings::new_empty(Height::from(0)),
-                ecdsa: None,
+                idkg: None,
             }),
         );
         let vec = serde_cbor::ser::to_vec(&payload_0).unwrap();
@@ -105,7 +105,7 @@ mod tests {
             BlockPayload::Data(DataPayload {
                 batch: batch_payload_0,
                 dealings: dkg::Dealings::new_empty(Height::new(0)),
-                ecdsa: None,
+                idkg: None,
             }),
         );
         let vec = serde_cbor::ser::to_vec(&payload_0).unwrap();

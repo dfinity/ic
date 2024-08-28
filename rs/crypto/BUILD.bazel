@@ -12,7 +12,9 @@ load("//bazel:defs.bzl", "rust_bench")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/config",
+    "//rs/crypto/ed25519",
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
     "//rs/crypto/internal/crypto_lib/seed",
@@ -23,9 +25,9 @@ DEPENDENCIES = [
     "//rs/crypto/internal/logmon",
     "//rs/crypto/node_key_validation/tls_cert_validation",
     "//rs/crypto/standalone-sig-verifier",
-    "//rs/crypto/tecdsa",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/utils/basic_sig",
+    "//rs/crypto/utils/canister_threshold_sig",
     "//rs/crypto/utils/tls",
     "//rs/interfaces",
     "//rs/interfaces/registry",
@@ -38,10 +40,9 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:bincode",
     "@crate_index//:clap_3_2_25",
-    "@crate_index//:ed25519-consensus",
     "@crate_index//:hex",
     "@crate_index//:parking_lot",
-    "@crate_index//:rustls_0_21_12",
+    "@crate_index//:rustls",
     "@crate_index//:serde",
     "@crate_index//:slog",
     "@crate_index//:strum",
@@ -50,14 +51,15 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
     "@crate_index//:strum_macros",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/certification/test-utils",
     "//rs/crypto/ecdsa_secp256r1",
-    "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/for_verification_only",
     "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
@@ -70,20 +72,21 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/internal/test_vectors",
     "//rs/crypto/node_key_generation",
     "//rs/crypto/node_key_validation",
+    "//rs/crypto/secp256k1",
     "//rs/crypto/sha2",
     "//rs/crypto/temp_crypto",
     "//rs/crypto/test_utils",
-    "//rs/crypto/test_utils/tls",
     "//rs/crypto/test_utils/canister_sigs",
     "//rs/crypto/test_utils/canister_threshold_sigs",
+    "//rs/crypto/test_utils/csp",
     "//rs/crypto/test_utils/keygen",
     "//rs/crypto/test_utils/keys",
-    "//rs/crypto/test_utils/csp",
     "//rs/crypto/test_utils/local_csp_vault",
     "//rs/crypto/test_utils/metrics",
     "//rs/crypto/test_utils/multi_sigs",
     "//rs/crypto/test_utils/ni-dkg",
     "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/crypto/test_utils/tls",
     "//rs/crypto/tree_hash",
     "//rs/interfaces/registry/mocks",
     "//rs/registry/client",
@@ -108,6 +111,7 @@ DEV_DEPENDENCIES = [
 ]
 
 MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:proptest-derive",
 ]
 
@@ -133,6 +137,7 @@ rust_binary(
     srcs = ["src/bin/ic-crypto-csp.rs"],
     crate_name = "ic_crypto_csp",
     deps = [
+        # Keep sorted.
         "//rs/async_utils",
         "//rs/config",
         "//rs/crypto/internal/crypto_service_provider",

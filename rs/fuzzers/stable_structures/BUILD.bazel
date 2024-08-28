@@ -9,6 +9,7 @@ rust_fuzz_test_binary_afl(
         "fuzz_targets/stable_btreemap_multiple_ops_persistent.rs",
     ],
     deps = [
+        # Keep sorted.
         "@crate_index//:arbitrary",
         "@crate_index//:ic-stable-structures",
         "@crate_index//:libfuzzer-sys",
@@ -26,6 +27,7 @@ rust_fuzz_test_binary_afl(
         "fuzz_targets/stable_minheap_multiple_ops_persistent.rs",
     ],
     deps = [
+        # Keep sorted.
         "@crate_index//:arbitrary",
         "@crate_index//:ic-stable-structures",
         "@crate_index//:libfuzzer-sys",

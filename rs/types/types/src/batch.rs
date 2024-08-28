@@ -25,7 +25,7 @@ use crate::{
     Height, Randomness, RegistryVersion, SubnetId, Time,
 };
 use ic_base_types::NodeId;
-use ic_btc_types_internal::BitcoinAdapterResponse;
+use ic_btc_replica_types::BitcoinAdapterResponse;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::MasterPublicKeyId;
@@ -245,7 +245,6 @@ mod tests {
     fn default_batch_payload_is_empty() {
         assert_eq!(IngressPayload::default().count_bytes(), 0);
         assert_eq!(SelfValidatingPayload::default().count_bytes(), 0);
-        assert_eq!(CanisterHttpPayload::default().count_bytes(), 0);
     }
 
     #[test]

@@ -144,7 +144,6 @@ type UpgradeArgs = record {
     change_fee_collector : opt ChangeFeeCollector;
     max_memo_length : opt nat16;
     feature_flags : opt FeatureFlags;
-    maximum_number_of_accounts: opt nat64;
     accounts_overflow_trim_quantity: opt nat64;
     change_archive_options : opt ChangeArchiveOptions;
 };
@@ -427,6 +426,7 @@ type ICRC3DataCertificate = record {
 
 type icrc21_consent_message_metadata = record {
     language: text;
+    utc_offset_minutes: opt int16;
 };
 
 type icrc21_consent_message_spec = record {

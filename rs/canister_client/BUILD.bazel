@@ -17,10 +17,11 @@ package(default_visibility = [
 ])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canister_client/sender",
     "//rs/canonical_state",
     "//rs/certification",
-    "//rs/crypto/ecdsa_secp256k1",
+    "//rs/crypto/secp256k1",
     "//rs/crypto/tree_hash",
     "//rs/protobuf",
     "//rs/tree_deserializer",
@@ -29,7 +30,7 @@ DEPENDENCIES = [
     "@crate_index//:backoff",
     "@crate_index//:futures-util",
     "@crate_index//:hyper_0_14_27",
-    "@crate_index//:hyper-rustls",
+    "@crate_index//:hyper_rustls_0_24_2",
     "@crate_index//:itertools",
     "@crate_index//:prost",
     "@crate_index//:rustls_0_21_12",
@@ -42,10 +43,11 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/certification/test-utils",
-    "//rs/crypto/test_utils/tls",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/test_utils/root_of_trust",
+    "//rs/crypto/test_utils/tls",
     "//rs/test_utilities",
     "//rs/test_utilities/types",
     "//rs/validator",

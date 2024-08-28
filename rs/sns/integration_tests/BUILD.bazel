@@ -6,22 +6,23 @@ package(default_visibility = ["//visibility:public"])
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nns/cmc",
     "//rs/registry/subnet_type:subnet_type",
+    "//rs/rosetta-api/icp_ledger/ledger",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/ledger",
-    "//rs/rosetta-api/icp_ledger/ledger",
-    "//rs/rosetta-api/ledger_core",
     "//rs/rosetta-api/ledger_canister_core",
+    "//rs/rosetta-api/ledger_core",
+    "//rs/rust_canisters/canister_test",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/canister_test",
-    "//rs/state_machine_tests",
     "//rs/sns/root",
+    "//rs/state_machine_tests",
     "//rs/test_utilities/load_wasm",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
@@ -52,10 +53,12 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 
 BASE_DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canister_client/sender",
     "//rs/crypto",
     "//rs/nervous_system/clients",
@@ -64,6 +67,7 @@ BASE_DEV_DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/protobuf",
     "//rs/rosetta-api/icp_ledger",
+    "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/governance:build_script",
     "@crate_index//:assert_matches",
@@ -72,6 +76,7 @@ BASE_DEV_DEPENDENCIES = [
     "@crate_index//:num-traits",
     "@crate_index//:pretty_assertions",
     "@crate_index//:rust_decimal",
+    "@crate_index//:serde_bytes",
     "@crate_index//:tokio",
     "@crate_index//:wat",
 ]
@@ -88,7 +93,7 @@ BASE_DEV_DEPENDENCIES = [
 # ]
 
 TEST_DEV_DEPENDENCIES = BASE_DEV_DEPENDENCIES + [
-    "//rs/nns/governance:governance--test_feature",
+    "//rs/nns/governance/api:api--test_feature",
     "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/nns/test_utils:test_utils--test_feature",
     "//rs/sns/governance:governance--test_feature",
@@ -96,6 +101,7 @@ TEST_DEV_DEPENDENCIES = BASE_DEV_DEPENDENCIES + [
 ]
 
 MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:rust_decimal_macros",
 ]
 
@@ -119,6 +125,7 @@ rust_canister(
     srcs = ["test_canisters/test_dapp_canister.rs"],
     service_file = ":test_canisters/empty.did",
     deps = [
+        # Keep sorted.
         "//rs/rust_canisters/dfn_candid",
         "//rs/rust_canisters/dfn_core",
     ],
@@ -129,6 +136,7 @@ rust_canister(
     srcs = ["test_canisters/sns_governance_mem_test_canister.rs"],
     service_file = ":test_canisters/empty.did",
     deps = [
+        # Keep sorted.
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/nervous_system/common",
         "//rs/rosetta-api/icrc1",
@@ -142,6 +150,7 @@ rust_canister(
 )
 
 DATA_DEPS = [
+    # Keep sorted.
     ":sns-governance-mem-test-canister",
     ":sns-test-dapp-canister",
     "//rs/nervous_system/common/test_canister",
@@ -149,11 +158,11 @@ DATA_DEPS = [
     "//rs/nns/governance:governance-canister-test",
     "//rs/nns/gtc:genesis-token-canister",
     "//rs/nns/handlers/root/impl:root-canister",
-    "//rs/nns/sns-wasm:sns-wasm-canister",
     "//rs/nns/integration_tests:unstoppable-canister",
+    "//rs/nns/sns-wasm:sns-wasm-canister",
     "//rs/registry/canister:registry-canister",
-    "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
     "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
+    "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
     "//rs/rosetta-api/icrc1/archive:archive_canister",
     "//rs/rosetta-api/icrc1/index:index_canister",
     "//rs/rosetta-api/icrc1/index-ng:index_ng_canister",

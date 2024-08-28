@@ -280,7 +280,6 @@ fn get_balance(account: Account) -> Tokens {
 }
 
 /// A helper function to change the balance of an account.
-/// It removes an account balance if the balance is 0.
 fn change_balance(account: Account, f: impl FnOnce(Tokens) -> Tokens) {
     let key = balance_key(account);
     let new_balance = f(get_balance(account));
@@ -1069,7 +1068,7 @@ fn list_subaccounts(args: ListSubaccountsArgs) -> Vec<Subaccount> {
     })
 }
 
-#[query(hidden = true)]
+#[query(hidden = true, decoding_quota = 10000)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =

@@ -1,12 +1,9 @@
-#![allow(unused)] // TODO(NNS1-2409): Re-enable once we add code to migrate indexes.
-
 use crate::{
     account_id_index::NeuronAccountIdIndex,
     known_neuron_index::{AddKnownNeuronError, KnownNeuronIndex, RemoveKnownNeuronError},
     neuron::Neuron,
     neuron_store::NeuronStoreError,
     pb::v1::Topic,
-    storage::validate_stable_btree_map,
     subaccount_index::NeuronSubaccountIndex,
 };
 use ic_base_types::PrincipalId;
@@ -16,13 +13,11 @@ use ic_nervous_system_governance::index::{
         NeuronFollowingIndex, StableNeuronFollowingIndex,
     },
     neuron_principal::{
-        add_neuron_id_principal_ids, remove_neuron_id_principal_ids, NeuronPrincipalIndex,
-        StableNeuronPrincipalIndex,
+        add_neuron_id_principal_ids, remove_neuron_id_principal_ids, StableNeuronPrincipalIndex,
     },
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_stable_structures::VectorMemory;
 use icp_ledger::AccountIdentifier;
 use std::{
     collections::{BTreeSet, HashSet},
@@ -669,10 +664,6 @@ where
         &self.account_id
     }
 
-    pub fn account_id_mut(&mut self) -> &mut NeuronAccountIdIndex<Memory> {
-        &mut self.account_id
-    }
-
     /// Validates that some of the data in stable storage can be read, in order to prevent broken
     /// schema. Should only be called in post_upgrade.
     pub fn validate(&self) {
@@ -684,6 +675,10 @@ where
     }
 }
 
+#[cfg(test)]
+use ic_stable_structures::VectorMemory;
+
+#[cfg(test)]
 pub(crate) fn new_heap_based() -> StableNeuronIndexes<VectorMemory> {
     StableNeuronIndexesBuilder {
         subaccount: VectorMemory::default(),

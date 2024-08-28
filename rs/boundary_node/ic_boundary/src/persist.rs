@@ -48,7 +48,7 @@ fn principal_bytes_to_u256(p: &[u8]) -> u256 {
 // But going u256 makes it future proof and according to spec
 #[derive(Debug, PartialEq, Eq)]
 pub struct RouteSubnet {
-    pub id: String,
+    pub id: Principal,
     pub range_start: u256,
     pub range_end: u256,
     pub nodes: Vec<Arc<Node>>,
@@ -67,6 +67,32 @@ impl RouteSubnet {
         }
 
         Ok(nodes)
+    }
+
+    // max acceptable number of malicious nodes in a subnet
+    pub fn fault_tolerance_factor(&self) -> usize {
+        (self.nodes.len() - 1) / 3
+    }
+
+    pub fn pick_n_out_of_m_closest(
+        &self,
+        n: usize,
+        m: usize,
+    ) -> Result<Vec<Arc<Node>>, ErrorCause> {
+        // nodes should already be sorted by latency after persist() invocation
+        let m = std::cmp::min(m, self.nodes.len());
+        let nodes = &self.nodes[0..m];
+
+        let picked_nodes = nodes
+            .choose_multiple(&mut rand::thread_rng(), n)
+            .map(Arc::clone)
+            .collect::<Vec<_>>();
+
+        if picked_nodes.is_empty() {
+            return Err(ErrorCause::NoHealthyNodes);
+        }
+
+        Ok(picked_nodes)
     }
 }
 
@@ -148,12 +174,13 @@ impl Persist for Persister {
         let mut rt_subnets = subnets
             .into_iter()
             .flat_map(|subnet| {
-                let id = subnet.id.to_string();
-                let nodes = subnet.nodes;
+                let mut nodes = subnet.nodes;
+                // Sort nodes by latency before publishing to avoid sorting on each retry_request() call.
+                nodes.sort_by(|a, b| a.avg_latency_secs.partial_cmp(&b.avg_latency_secs).unwrap());
 
                 subnet.ranges.into_iter().map(move |range| {
                     Arc::new(RouteSubnet {
-                        id: id.clone(),
+                        id: subnet.id,
                         range_start: principal_bytes_to_u256(range.start.as_slice()),
                         range_end: principal_bytes_to_u256(range.end.as_slice()),
                         nodes: nodes.clone(),
@@ -164,7 +191,7 @@ impl Persist for Persister {
 
         let subnet_map = rt_subnets
             .iter()
-            .map(|subnet| (Principal::from_text(&subnet.id).unwrap(), subnet.clone()))
+            .map(|subnet| (subnet.id, subnet.clone()))
             .collect::<HashMap<_, _>>();
 
         // Sort subnets by range_start for the binary search to work in lookup()

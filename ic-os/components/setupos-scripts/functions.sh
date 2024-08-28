@@ -11,22 +11,24 @@ function log_and_halt_installation_on_error() {
     local log_message="${2}"
 
     if [ "${exit_code}" -ne 0 ]; then
-        echo -e "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-        echo "--------------------------------------------------------------------------------"
-        echo "                       INTERNET COMPUTER - SETUP - FAILED"
-        echo "--------------------------------------------------------------------------------"
-        echo -e "\n\n\n\n"
-        echo "        Please consult the wiki guide: Troubleshooting Node Deployment Errors."
-        echo -e "\n\n\n\n"
-        echo "--------------------------------------------------------------------------------"
-        echo "                                     ERROR"
-        echo "--------------------------------------------------------------------------------"
-        echo -e "\n\n"
-        echo "${log_message}"
-        echo -e "\n\n"
-        echo "--------------------------------------------------------------------------------"
-        echo "                                     ERROR"
-        echo "--------------------------------------------------------------------------------"
+        {
+            echo -e "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+            echo "--------------------------------------------------------------------------------"
+            echo "                       INTERNET COMPUTER - SETUP - FAILED"
+            echo "--------------------------------------------------------------------------------"
+            echo -e "\n\n\n\n"
+            echo "        Please consult the wiki guide: Troubleshooting Node Deployment Errors."
+            echo -e "\n\n\n\n"
+            echo "--------------------------------------------------------------------------------"
+            echo "                                     ERROR"
+            echo "--------------------------------------------------------------------------------"
+            echo -e "\n\n"
+            echo "${log_message}"
+            echo -e "\n\n"
+            echo "--------------------------------------------------------------------------------"
+            echo "                                     ERROR"
+            echo "--------------------------------------------------------------------------------"
+        } 1>&2
         sleep infinity
     fi
 }

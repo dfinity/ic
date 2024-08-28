@@ -23,7 +23,7 @@
 
 use anyhow::Result;
 use ic_mainnet_nns_recovery::{setup, OVERALL_TIMEOUT, PER_TEST_TIMEOUT};
-use ic_tests::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::group::SystemTestGroup;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()

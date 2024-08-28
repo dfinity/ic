@@ -210,13 +210,11 @@ mod git_commit_hash {
 }
 
 mod validate_config {
-    use crate::candid::{CyclesManagement, InitArg};
+    use crate::candid::InitArg;
+    use crate::state::test_fixtures::{arb_init_arg, arb_principal};
     use crate::state::{InvalidStateError, State};
-    use candid::Principal;
-    use proptest::arbitrary::any;
-    use proptest::collection::{vec, SizeRange};
-    use proptest::prelude::Strategy;
-    use proptest::{option, proptest};
+    use proptest::collection::vec;
+    use proptest::proptest;
 
     proptest! {
         #[test]
@@ -239,44 +237,62 @@ mod validate_config {
            assert_eq!(result, Err(InvalidStateError::TooManyAdditionalControllers{max: 9, actual: additional_controllers.len()}));
         }
     }
+}
 
-    pub fn arb_init_arg(size: impl Into<SizeRange>) -> impl Strategy<Value = InitArg> {
-        // at most 10 principals, including the orchestrator's principal
-        (
-            vec(arb_principal(), size),
-            option::of(arb_principal()),
-            option::of(arb_cycles_management()),
-        )
-            .prop_map(
-                |(more_controller_ids, minter_id, cycles_management)| InitArg {
-                    more_controller_ids,
-                    minter_id,
-                    cycles_management,
-                },
-            )
+mod schema_upgrades {
+    use crate::candid::CyclesManagement;
+    use crate::scheduler::Task;
+    use crate::state::test_fixtures::arb_state;
+    use crate::state::{decode, encode, ManagedCanisters, State};
+    use candid::{Deserialize, Principal};
+    use proptest::proptest;
+    use serde::Serialize;
+    use std::collections::BTreeSet;
+
+    #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+    pub struct StatePreviousVersion {
+        managed_canisters: ManagedCanisters,
+        cycles_management: CyclesManagement,
+        more_controller_ids: Vec<Principal>,
+        minter_id: Option<Principal>,
+        /// Locks preventing concurrent execution timer tasks
+        pub active_tasks: BTreeSet<Task>,
     }
 
-    fn arb_principal() -> impl Strategy<Value = Principal> {
-        vec(any::<u8>(), 0..=29).prop_map(|bytes| Principal::from_slice(&bytes))
+    impl From<State> for StatePreviousVersion {
+        fn from(
+            State {
+                managed_canisters,
+                cycles_management,
+                more_controller_ids,
+                minter_id,
+                active_tasks,
+                ledger_suite_version: _,
+            }: State,
+        ) -> Self {
+            Self {
+                managed_canisters,
+                cycles_management,
+                more_controller_ids,
+                minter_id,
+                active_tasks,
+            }
+        }
     }
 
-    fn arb_cycles_management() -> impl Strategy<Value = CyclesManagement> {
-        (arb_nat(), arb_nat(), arb_nat(), arb_nat()).prop_map(
-            |(
-                cycles_for_ledger_creation,
-                cycles_for_archive_creation,
-                cycles_for_index_creation,
-                cycles_top_up_increment,
-            )| CyclesManagement {
-                cycles_for_ledger_creation,
-                cycles_for_archive_creation,
-                cycles_for_index_creation,
-                cycles_top_up_increment,
-            },
-        )
-    }
+    proptest! {
+        #[test]
+        fn should_be_able_to_upgrade_state(state in arb_state()) {
+            let state_before_upgrade: StatePreviousVersion = state.into();
 
-    fn arb_nat() -> impl Strategy<Value = candid::Nat> {
-        any::<u64>().prop_map(candid::Nat::from)
+            let serialized_state_before_upgrade = encode(&state_before_upgrade);
+            let state_after_upgrade: State = decode(serialized_state_before_upgrade.as_slice());
+
+            assert_eq!(state_before_upgrade, state_after_upgrade.clone().into());
+            assert_eq!(
+                state_after_upgrade.ledger_suite_version,
+                None
+            );
+        }
     }
 }

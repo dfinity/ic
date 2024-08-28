@@ -4,9 +4,9 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use ic_tests::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::systest;
 use ic_tests::nns_tests::sns_deployment::{setup, test};
-use ic_tests::systest;
 
 fn main() -> Result<()> {
     let max_group_lifetime = Duration::from_secs(55 * 60);

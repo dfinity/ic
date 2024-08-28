@@ -14,6 +14,7 @@ use std::collections::BTreeMap;
 /// Internally, an entry `(Key, AltKey, V)` is stored as two entries in two separate maps:
 /// * `(Key, AltKey)` in a BTreeMap<Key, AltKey>
 /// * `(AltKey, V)` in a BTreeMap<AltKey, V>
+///
 /// Meaning that the alternative key is duplicated, but not the primary key. This allows to easily remove
 /// data given the primary key since with only 2 map lookups we have the chain `Key -> AltKey -> V`.
 /// In contrast, this structure is not thought to allow efficient removal by the alternative key

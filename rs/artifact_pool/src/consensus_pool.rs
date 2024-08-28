@@ -16,7 +16,7 @@ use ic_interfaces::{
         ConsensusPoolCache, ConsensusTime, HeightIndexedPool, HeightRange, PoolSection,
         PurgeableArtifactType, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
-    p2p::consensus::{ChangeResult, MutablePool, ValidatedPoolReader},
+    p2p::consensus::{ArtifactMutation, ChangeResult, MutablePool, ValidatedPoolReader},
     time_source::TimeSource,
 };
 use ic_logger::{warn, ReplicaLogger};
@@ -24,10 +24,7 @@ use ic_metrics::buckets::linear_buckets;
 use ic_protobuf::types::v1 as pb;
 use ic_types::crypto::CryptoHashOf;
 use ic_types::NodeId;
-use ic_types::{
-    artifact::ArtifactKind, artifact::ConsensusMessageId, artifact_kind::ConsensusArtifact,
-    consensus::*, Height, SubnetId, Time,
-};
+use ic_types::{artifact::ConsensusMessageId, consensus::*, Height, SubnetId, Time};
 use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
 use std::time::Instant;
 use std::{marker::PhantomData, sync::Arc, time::Duration};
@@ -308,7 +305,7 @@ impl UncachedConsensusPoolImpl {
                     log,
                 ),
             ) as Box<_>,
-            #[cfg(feature = "rocksdb_backend")]
+            #[cfg(target_os = "macos")]
             PersistentPoolBackend::RocksDB(config) => Box::new(
                 crate::rocksdb_pool::PersistentHeightIndexedPool::new_consensus_pool(config, log),
             ) as Box<_>,
@@ -684,7 +681,7 @@ impl ConsensusPool for ConsensusPoolImpl {
     }
 }
 
-impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
+impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
     type ChangeSet = ChangeSet;
 
     fn insert(&mut self, unvalidated_artifact: UnvalidatedConsensusArtifact) {
@@ -700,12 +697,12 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
         self.apply_changes_unvalidated(ops);
     }
 
-    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<ConsensusArtifact> {
+    fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<ConsensusMessage> {
         let changed = !change_set.is_empty();
         let updates = self.cache.prepare(&change_set);
         let mut unvalidated_ops = PoolSectionOps::new();
         let mut validated_ops = PoolSectionOps::new();
-        let mut artifacts_with_opt = Vec::new();
+        let mut mutations = vec![];
         // DO NOT Add a default nop. Explicitly mention all cases.
         // This helps with keeping this readable and obvious what
         // change is causing tests to break.
@@ -713,10 +710,10 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
             match change_action {
                 ChangeAction::AddToValidated(to_add) => {
                     self.record_instant(&to_add);
-                    artifacts_with_opt.push(ArtifactWithOpt {
-                        advert: ConsensusArtifact::message_to_advert(&to_add.msg),
+                    mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
+                        artifact: to_add.msg.clone(),
                         is_latency_sensitive: is_latency_sensitive(&to_add.msg),
-                    });
+                    }));
                     validated_ops.insert(to_add);
                 }
                 ChangeAction::RemoveFromValidated(to_remove) => {
@@ -724,10 +721,10 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
                 }
                 ChangeAction::MoveToValidated(to_move) => {
                     if !to_move.is_share() {
-                        artifacts_with_opt.push(ArtifactWithOpt {
-                            advert: ConsensusArtifact::message_to_advert(&to_move),
+                        mutations.push(ArtifactMutation::Insert(ArtifactWithOpt {
+                            artifact: to_move.clone(),
                             is_latency_sensitive: false,
-                        });
+                        }));
                     }
                     let msg_id = to_move.get_id();
                     let timestamp = self.unvalidated.get_timestamp(&msg_id).unwrap_or_else(|| {
@@ -793,7 +790,11 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
             .max_height()
             .unwrap_or_default();
         self.apply_changes_unvalidated(unvalidated_ops);
-        let purged = self.apply_changes_validated(validated_ops);
+        mutations.extend(
+            self.apply_changes_validated(validated_ops)
+                .drain(..)
+                .map(ArtifactMutation::Remove),
+        );
 
         if let Some(backup) = &self.backup {
             self.backup_artifacts(backup, latest_finalization_height, artifacts_for_backup);
@@ -804,8 +805,7 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
         }
 
         ChangeResult {
-            purged,
-            artifacts_with_opt,
+            mutations,
             poll_immediately: changed,
         }
     }
@@ -829,7 +829,7 @@ fn is_latency_sensitive(msg: &ConsensusMessage) -> bool {
     }
 }
 
-impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
+impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
     fn get(&self, id: &ConsensusMessageId) -> Option<ConsensusMessage> {
         self.validated.get(id)
     }
@@ -1028,6 +1028,7 @@ mod tests {
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
+        artifact::IdentifiableArtifact,
         batch::ValidationContext,
         consensus::{BlockProposal, RandomBeacon},
         crypto::{crypto_hash, CryptoHash, CryptoHashOf},
@@ -1186,30 +1187,29 @@ mod tests {
                 }),
             ];
             let result = pool.apply_changes(changeset);
-            assert!(result.purged.is_empty());
-            assert_eq!(result.artifacts_with_opt.len(), 2);
+            assert_eq!(result.mutations.len(), 2);
             assert!(result.poll_immediately);
-            assert_eq!(
-                result.artifacts_with_opt[0].advert.id,
-                random_beacon_2.get_id()
-            );
-            assert_eq!(
-                result.artifacts_with_opt[1].advert.id,
-                random_beacon_3.get_id()
-            );
+            assert!(matches!(
+                &result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == random_beacon_2.get_id()));
+            assert!(matches!(
+                &result.mutations[1], ArtifactMutation::Insert(x) if x.artifact.id() == random_beacon_3.get_id()));
 
             let result =
                 pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
-            assert!(result.artifacts_with_opt.is_empty());
+            assert!(!result
+                .mutations
+                .iter()
+                .any(|x| matches!(x, ArtifactMutation::Insert(_))));
             // purging genesis CUP & beacon + validated beacon at height 2
-            assert_eq!(result.purged.len(), 3);
-            assert!(result.purged.contains(&random_beacon_2.get_id()));
+            assert_eq!(result.mutations.len(), 3);
+            assert!(result.mutations.iter().any(
+                |x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_2.get_id())
+            ));
             assert!(result.poll_immediately);
 
             let result =
                 pool.apply_changes(vec![ChangeAction::PurgeUnvalidatedBelow(Height::from(3))]);
-            assert!(result.artifacts_with_opt.is_empty());
-            assert!(result.purged.is_empty());
+            assert_eq!(result.mutations.len(), 0);
             assert!(result.poll_immediately);
 
             let result = pool.apply_changes(vec![]);
@@ -1268,21 +1268,22 @@ mod tests {
             // share 3 should be added to the validated pool and create an advert
             // share 2 should be moved to the validated pool and not create an advert
             // share 1 should remain in the unvalidated pool
-            assert!(result.purged.is_empty());
-            assert_eq!(result.artifacts_with_opt.len(), 1);
+            assert_eq!(result.mutations.len(), 1);
             assert!(result.poll_immediately);
-            assert_eq!(
-                result.artifacts_with_opt[0].advert.id,
-                random_beacon_share_3.get_id()
-            );
+            assert!(matches!(
+                &result.mutations[0], ArtifactMutation::Insert(x) if x.artifact.id() == random_beacon_share_3.get_id()
+            ));
 
             let result =
                 pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
-            assert!(result.artifacts_with_opt.is_empty());
+            assert!(!result
+                .mutations
+                .iter()
+                .any(|x| matches!(x, ArtifactMutation::Insert(_))));
             // purging genesis CUP & beacon + 2 validated beacon shares
-            assert_eq!(result.purged.len(), 4);
-            assert!(result.purged.contains(&random_beacon_share_2.get_id()));
-            assert!(result.purged.contains(&random_beacon_share_3.get_id()));
+            assert_eq!(result.mutations.len(), 4);
+            assert!(result.mutations.iter().any(|x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_share_2.get_id())));
+            assert!(result.mutations.iter().any(|x| matches!(x, ArtifactMutation::Remove(id) if *id == random_beacon_share_3.get_id())));
             assert!(result.poll_immediately);
         })
     }
@@ -1814,7 +1815,7 @@ mod tests {
                 path.join("2").join("random_tape.bin").exists(),
                 "random tape at height 2 was backed up"
             );
-            // notarization at height 2 was not backed up becasue this is height is not
+            // notarization at height 2 was not backed up because this height is not
             // finalized
             assert!(!notarization_path.exists());
             assert_eq!(
@@ -2192,18 +2193,18 @@ mod tests {
             check_iterator(&pool, pool.as_cache().finalized_block(), vec![2, 1, 0]);
 
             // Two notarized rounds added
+            pool.insert_validated(pool.make_next_beacon());
             let block = pool.make_next_block();
             pool.insert_validated(block.clone());
             pool.notarize(&block);
 
+            pool.insert_validated(pool.make_next_beacon());
             let block = pool.make_next_block();
             pool.insert_validated(block.clone());
             pool.notarize(&block);
             check_iterator(&pool, block.clone().into(), vec![4, 3, 2, 1, 0]);
 
             pool.finalize(&block);
-            pool.insert_validated(pool.make_next_beacon());
-            pool.insert_validated(pool.make_next_beacon());
             pool.insert_validated(pool.make_next_tape());
             pool.insert_validated(pool.make_next_tape());
             check_iterator(&pool, block.into(), vec![4, 3, 2, 1, 0]);

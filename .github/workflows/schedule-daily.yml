@@ -1,10 +1,8 @@
 name: Schedule Daily
-
 on:
   schedule:
     - cron: "0 1 * * *"
   workflow_dispatch:
-
 env:
   AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
@@ -15,53 +13,23 @@ env:
   CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
-  CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
+  CI_MERGE_REQUEST_TARGET_BRANCH_NAME: ${{ github.ref_name }} # this workflow will always run on the default branch
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
   DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
   BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
   BUILDEVENT_DATASET: "github-ci-dfinity"
-
 jobs:
-  # TODO: there was some issue with this job so commented out for now:
-  #
-  # rust-benchmarks:
-  #   runs-on:
-  #     labels: bazel-runner-large
-  #   container:
-  #     image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
-  #   timeout-minutes: 720 # 12 hours
-  #   if: ${{ vars.RUN_CI == 'true' }}
-  #   strategy:
-  #     matrix:
-  #       targets: ["//rs/crypto/...", "//rs/state_manager/..."]
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v4
-  #     - name: Run Rust Benchmarks
-  #       id: rust-benchmarks
-  #       shell: bash
-  #       run: |
-  #         ./gitlab-ci/src/ci-scripts/rust-benchmarks.sh
-  #       env:
-  #         BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-  #         BAZEL_COMMAND: "run"
-  #         BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
-  #         RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-  #         RUST_BACKTRACE: "full"
-  #         TARGETS: ${{ matrix.targets }}
-
   cut-release-candidate:
     name: Cut RC
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.repository }}
+          ref: ${{ github.ref }}
           token: ${{ secrets.IDX_PUSH_TO_PR }}
       - name: Cut Release Candidate
         shell: bash
@@ -69,22 +37,62 @@ jobs:
           git config --global user.email "infra+github-automation@dfinity.org"
           git config --global user.name "IDX GitLab Automation"
 
-          RC_BRANCH_NAME="rc--$(date '+%Y-%m-%d_%H-%M')--github"
+          RC_BRANCH_NAME="rc--$(date '+%Y-%m-%d_%H-%M')"
           git switch --force-create "$RC_BRANCH_NAME" HEAD
           git push --force --set-upstream origin "$RC_BRANCH_NAME"
-
-  bazel-test-bare-metal:
-    name: Bazel Test Bare Metal
+  rust-benchmarks:
+    name: Bazel Run Rust Benchmarks
     runs-on:
-      group: dind-large
+      # see linux-x86-64 runner group
+      labels: rust-benchmarks
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
-    timeout-minutes: 120
-    # TODO: enable when zh1 is active again
-    if: ${{ vars.RUN_CI == 'true' && false }}
+      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      # running on bare metal machine using ubuntu user
+      options: --user ubuntu -v /cache:/cache
+    timeout-minutes: 720 # 12 hours
+    strategy:
+      matrix:
+        targets:
+          - "//rs/crypto/..."
+          - "//rs/state_manager/..."
+          - "//rs/certification/..."
+          - "//rs/boundary_node/ic_boundary/..."
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Before script
+        id: before-script
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+      - name: Run Rust Benchmarks
+        id: rust-benchmarks
+        shell: bash
+        run: |
+          ./gitlab-ci/src/ci-scripts/rust-benchmarks.sh
+        env:
+          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
+          BAZEL_COMMAND: "run"
+          BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
+          RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
+          RUST_BACKTRACE: "full"
+          TARGETS: ${{ matrix.targets }}
+  bazel-test-bare-metal:
+    name: Bazel Test Bare Metal
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
+    timeout-minutes: 120
+    runs-on:
+      group: zh1
+      labels: dind-large
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Before script
+        id: before-script
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/before-script.sh
       - name: Run Bazel Launch Bare Metal
         shell: bash
         run: |
@@ -104,15 +112,54 @@ jobs:
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           ZH2_DLL01_CSV_SECRETS: "${{ secrets.ZH2_DLL01_CSV_SECRETS }}"
           ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
-
-  nns-tests-nightly:
-    name: NNS Tests Nightly
+  fi-tests-nightly:
+    name: Bazel Test FI Nightly
     runs-on:
-      group: dind-large
+      group: zh1
+      labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:5bd0f059ad6e21966e9c644516b6ecd52d5ed44f1b18a76b91b59740a9d639a2
+      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Before script
+        id: before-script
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+      - name: Run FI Tests Nightly
+        id: bazel-test-all
+        uses: ./.github/actions/bazel-test-all/
+        with:
+          BAZEL_COMMAND: "test"
+          BAZEL_TARGETS: "//rs/rosetta-api/..."
+          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
+          BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=fi_tests_nightly --test_env=SSH_AUTH_SOCK --test_timeout=7200"
+          HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Upload bazel-bep
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
+  nns-tests-nightly:
+    name: Bazel Test NNS Nightly
+    runs-on:
+      group: zh1
+      labels: dind-large
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
     timeout-minutes: 20
-    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -127,6 +174,109 @@ jobs:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "//rs/nns/..."
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS: "--keep_going --verbose_failures --test_tag_filters=nns_tests_nightly --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all"
+          BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=nns_tests_nightly --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Upload bazel-bep
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
+  system-tests-benchmarks-nightly:
+    name: Bazel System Test Benchmarks
+    runs-on:
+      group: zh1
+      labels: dind-large
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
+    timeout-minutes: 480
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Before script
+        id: before-script
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+      - name: Set Benchmark Targets
+        shell: bash
+        run: |
+          set -xeuo pipefail
+          echo "BENCHMARK_TARGETS=$(bazel query 'attr(tags, system_test_benchmark, //rs/...)' | tr '\n' ' ')" >> $GITHUB_ENV
+      - name: Test System Test Benchmarks
+        id: bazel-system-test-benchmarks
+        uses: ./.github/actions/bazel-test-all/
+        with:
+          BAZEL_COMMAND: "test"
+          BAZEL_TARGETS: ${{ env.BENCHMARK_TARGETS }}
+          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
+          # note: there's just one performance cluster, so the job can't be parallelized
+          BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_benchmark --//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1"
+          HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
+      - name: Upload bazel-bep
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
+  dependency-scan-nightly:
+    name: Dependency Scan Nightly
+    runs-on:
+      group: zh1
+      labels: dind-large
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:2e888bc60c34a3654cd696982b3b662f033a9dc85fa2ca60697023afe5a4b02b
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
+    timeout-minutes: 60
+    permissions:
+      actions: write
+    env:
+      SHELL_WRAPPER: "/usr/bin/time"
+      CARGO_WASMPACK_VERSION: "0.12.1"
+      DEFAULT_NODE_VERSION: "20"
+      CI_PROJECT_PATH: ${{ github.repository }}
+      CI_PIPELINE_ID: ${{ github.run_id }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
+      GITHUB_REF: ${{ github.ref }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Before script
+        id: before-script
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+      - name: Setup environment deps
+        id: setup-environment-deps
+        shell: bash
+        run: |
+          pip3 install --ignore-installed -r requirements.txt
+          cargo install wasm-pack --version "${CARGO_WASMPACK_VERSION}"
+          source "${NVM_DIR}/nvm.sh"
+          nvm use ${DEFAULT_NODE_VERSION}
+          node --version
+          npm --version
+      - name: Run Dependency Scan Nightly
+        id: dependency-scan-nightly
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
+          cd gitlab-ci/src/dependencies/
+          $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_periodic_job.py
+          $SHELL_WRAPPER python3 job/npm_scanner_periodic_job.py
+          $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py

@@ -6,7 +6,7 @@ use ic_ledger_canister_core::{
     ledger::{LedgerContext, LedgerTransaction, TxApplyError},
 };
 use ic_ledger_core::{
-    approvals::{Allowance, Approvals},
+    approvals::Allowance,
     block::{BlockIndex, BlockType},
     timestamp::TimeStamp,
     tokens::{CheckedAdd, CheckedSub, Tokens},

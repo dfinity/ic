@@ -28,8 +28,9 @@ use ic_validator::{
 };
 use serde::{Deserialize, Serialize};
 use serde_cbor::value::Value as CBOR;
-use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::{collections::BTreeMap, time::Duration};
+use tokio::time::timeout;
 use tower::{load_shed::error::Overloaded, timeout::error::Elapsed, BoxError};
 use tower_http::cors::{CorsLayer, Vary};
 
@@ -37,6 +38,10 @@ pub const CONTENT_TYPE_CBOR: &str = "application/cbor";
 pub const CONTENT_TYPE_PROTOBUF: &str = "application/x-protobuf";
 pub const CONTENT_TYPE_SVG: &str = "image/svg+xml";
 pub const CONTENT_TYPE_TEXT: &str = "text/plain; charset=utf-8";
+/// If the request body is not received/parsed within
+/// `max_request_receive_seconds`, then the request will be rejected and
+/// [`408 Request Timeout`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/408) will be returned to the user.
+pub(crate) const MAX_REQUEST_RECEIVE_TIMEOUT: Duration = Duration::from_secs(300);
 
 pub(crate) fn get_root_threshold_public_key(
     log: &ReplicaLogger,
@@ -176,6 +181,31 @@ where
                 StatusCode::BAD_REQUEST,
                 format!("Unexpected content-type, expected {}.", CONTENT_TYPE_CBOR),
             ))
+        }
+    }
+}
+
+pub(crate) struct WithTimeout<E>(pub E);
+
+#[async_trait::async_trait]
+impl<S, E> FromRequest<S> for WithTimeout<E>
+where
+    S: Send + Sync,
+    E: FromRequest<S>,
+{
+    type Rejection = axum::response::Response;
+    async fn from_request(req: axum::extract::Request, s: &S) -> Result<Self, Self::Rejection> {
+        match timeout(MAX_REQUEST_RECEIVE_TIMEOUT, E::from_request(req, s)).await {
+            Ok(Ok(bytes)) => Ok(WithTimeout(bytes)),
+            Ok(Err(err)) => Err(err.into_response()),
+            Err(_) => Err((
+                StatusCode::REQUEST_TIMEOUT,
+                format!(
+                    "receiving request took longer than {}s",
+                    MAX_REQUEST_RECEIVE_TIMEOUT.as_secs()
+                ),
+            )
+                .into_response()),
         }
     }
 }

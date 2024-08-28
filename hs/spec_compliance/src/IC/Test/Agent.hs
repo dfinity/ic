@@ -221,12 +221,13 @@ data AgentConfig = AgentConfig
     tc_manager :: Manager,
     tc_endPoint :: String,
     tc_subnets :: [AgentSubnetConfig],
+    tc_httpbin_proto :: String,
     tc_httpbin :: String,
     tc_timeout :: Int
   }
 
-makeAgentConfig :: Bool -> String -> [AgentSubnetConfig] -> String -> Int -> IO AgentConfig
-makeAgentConfig allow_self_signed_certs ep' subnets httpbin' to = do
+makeAgentConfig :: Bool -> String -> [AgentSubnetConfig] -> String -> String -> Int -> IO AgentConfig
+makeAgentConfig allow_self_signed_certs ep' subnets httpbin_proto httpbin' to = do
   let validate = \ca_store -> if allow_self_signed_certs then \_ _ _ -> return [] else C.validateDefault (C.makeCertificateStore $ (C.listCertificates ca_store))
   let client_params =
         (defaultParamsClient "" B.empty)
@@ -254,6 +255,7 @@ makeAgentConfig allow_self_signed_certs ep' subnets httpbin' to = do
         tc_manager = manager,
         tc_endPoint = ep,
         tc_subnets = subnets,
+        tc_httpbin_proto = httpbin_proto,
         tc_httpbin = httpbin,
         tc_timeout = to
       }
@@ -271,6 +273,7 @@ fixUrl msg x
 preFlight :: OptionSet -> IO AgentConfig
 preFlight os = do
   let Endpoint ep = lookupOption os
+  let HttpbinProto httpbin_proto = lookupOption os
   let Httpbin httpbin = lookupOption os
   let PollTimeout to = lookupOption os
   let AllowSelfSignedCerts allow_self_signed_certs = lookupOption os
@@ -278,7 +281,7 @@ preFlight os = do
   let test_agent_subnet_config = AgentSubnetConfig (rawEntityId test_id) (map (fixUrl "node") test_nodes) test_ranges
   let PeerSubnet (peer_id, _, _, peer_ranges, peer_nodes) = lookupOption os
   let peer_agent_subnet_config = AgentSubnetConfig (rawEntityId peer_id) (map (fixUrl "node") peer_nodes) peer_ranges
-  makeAgentConfig allow_self_signed_certs ep [test_agent_subnet_config, peer_agent_subnet_config] httpbin to
+  makeAgentConfig allow_self_signed_certs ep [test_agent_subnet_config, peer_agent_subnet_config] httpbin_proto httpbin to
 
 -- Yes, implicit arguments are frowned upon. But they are also very useful.
 
@@ -1063,7 +1066,6 @@ callIC ::
   forall s a b.
   (HasCallStack, HasAgentConfig) =>
   (KnownSymbol s) =>
-  ((a -> IO b) ~ (ICManagement IO .! s)) =>
   (Candid.CandidArg a, Candid.CandidArg b) =>
   IC00 ->
   Blob ->
@@ -1081,7 +1083,6 @@ callIC' ::
   forall s a b.
   (HasAgentConfig) =>
   (KnownSymbol s) =>
-  ((a -> IO b) ~ (ICManagement IO .! s)) =>
   (Candid.CandidArg a) =>
   IC00 ->
   Blob ->
@@ -1098,7 +1099,6 @@ callICWithSubnet'' ::
   forall s a b.
   (HasAgentConfig) =>
   (KnownSymbol s) =>
-  ((a -> IO b) ~ (ICManagement IO .! s)) =>
   (Candid.CandidArg a) =>
   Blob ->
   Blob ->
@@ -1112,7 +1112,6 @@ callIC'' ::
   forall s a b.
   (HasAgentConfig) =>
   (KnownSymbol s) =>
-  ((a -> IO b) ~ (ICManagement IO .! s)) =>
   (Candid.CandidArg a) =>
   Blob ->
   Blob ->
@@ -1126,7 +1125,6 @@ callIC''' ::
   forall s a b.
   (HasAgentConfig) =>
   (KnownSymbol s) =>
-  ((a -> IO b) ~ (ICManagement IO .! s)) =>
   (Candid.CandidArg a) =>
   IC00' ->
   Blob ->

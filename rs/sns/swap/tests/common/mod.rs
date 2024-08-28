@@ -240,9 +240,22 @@ pub fn create_generic_sns_neuron_recipes(count: u64) -> Vec<SnsNeuronRecipe> {
 
 pub fn create_generic_cf_participants(count: u64) -> Vec<CfParticipant> {
     (1..count + 1)
-        .map(|i| CfParticipant {
-            hotkey_principal: i2principal_id_string(i),
-            cf_neurons: vec![CfNeuron::try_new(i, E8).unwrap()],
+        .map(|i| {
+            let i = i * 3;
+            #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
+            CfParticipant {
+                controller: Some(PrincipalId::new_user_test_id(i)),
+                hotkey_principal: PrincipalId::new_user_test_id(i).to_string(),
+                cf_neurons: vec![CfNeuron::try_new(
+                    i,
+                    E8,
+                    vec![
+                        PrincipalId::new_user_test_id(i + 1),
+                        PrincipalId::new_user_test_id(i + 2),
+                    ],
+                )
+                .unwrap()],
+            }
         })
         .collect()
 }

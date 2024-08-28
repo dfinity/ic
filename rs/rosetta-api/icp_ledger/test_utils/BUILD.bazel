@@ -9,6 +9,7 @@ rust_library(
     crate_name = "ic_ledger_test_utils",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//packages/pocket-ic",
         "//rs/nns/constants",
@@ -16,6 +17,9 @@ rust_library(
         "//rs/rosetta-api/icp_ledger/index:ic-icp-index",
         "//rs/rosetta-api/ledger_core",
         "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_protobuf",
+        "//rs/rust_canisters/on_wire",
+        "//rs/state_machine_tests",
         "//rs/types/base_types",
         "@crate_index//:candid",
         "@crate_index//:candid_parser",

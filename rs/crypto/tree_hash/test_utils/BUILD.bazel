@@ -4,14 +4,16 @@ load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "@crate_index//:assert_matches",
+    # Keep sorted.
     "//rs/crypto/tree_hash",
+    "@crate_index//:assert_matches",
     "@crate_index//:proptest",
     "@crate_index//:rand",
     "@crate_index//:thiserror",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/test_utils/reproducible_rng",
 ]
 

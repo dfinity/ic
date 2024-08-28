@@ -37,7 +37,7 @@ fn check_generated_files() {
 
     let gen = manifest_dir.join("src/gen");
 
-    match compare(&gen, out_dir.path()) {
+    match compare(out_dir.path(), &gen) {
         Ok(_) => (),
         Err(CompareError::PathsDiffer { .. }) => {
             panic!(

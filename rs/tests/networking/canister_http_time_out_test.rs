@@ -24,12 +24,11 @@ use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types::{
     BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc,
 };
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::driver::test_env::TestEnv;
-use ic_tests::driver::test_env_api::{retry_async, READY_WAIT_TIMEOUT, RETRY_BACKOFF};
-use ic_tests::retry_with_msg_async;
-use ic_tests::systest;
-use ic_tests::util::*;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{READY_WAIT_TIMEOUT, RETRY_BACKOFF};
+use ic_system_test_driver::systest;
+use ic_system_test_driver::util::*;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::info;
 
@@ -75,7 +74,7 @@ pub fn test(env: TestEnv) {
         let p = proxy_canister.clone();
         let r = request.clone();
         // Retry till we get success response
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("calling send_request of proxy canister {}", p.canister_id()),
             &env.logger(),
             READY_WAIT_TIMEOUT,
@@ -106,7 +105,7 @@ pub fn test(env: TestEnv) {
         request.request.url.clone_from(&url_to_fail);
         let r = request.clone();
         let p = proxy_canister.clone();
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("calling send_request of proxy canister {}", p.canister_id()),
             &env.logger(),
             READY_WAIT_TIMEOUT,

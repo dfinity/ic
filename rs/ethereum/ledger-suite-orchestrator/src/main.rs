@@ -31,6 +31,7 @@ fn get_orchestrator_info() -> OrchestratorInfo {
         cycles_management: s.cycles_management().clone(),
         more_controller_ids: s.more_controller_ids().to_vec(),
         minter_id: s.minter_id().cloned(),
+        ledger_suite_version: s.ledger_suite_version().cloned().map(|v| v.into()),
     })
 }
 
@@ -178,6 +179,12 @@ fn http_request(
                     "Size of the stable memory allocated by this canister.",
                 )?;
 
+                w.encode_gauge(
+                    "ledger_suite_orchestrator_heap_memory_bytes",
+                    heap_memory_size_bytes() as f64,
+                    "Size of the heap memory allocated by this canister.",
+                )?;
+
                 w.gauge_vec("cycle_balance", "Cycle balance of this canister.")?
                     .value(
                         &[("canister", "ledger-suite-orchestrator")],
@@ -234,6 +241,18 @@ fn http_request(
         }
         _ => HttpResponseBuilder::not_found().build(),
     }
+}
+
+/// Returns the amount of heap memory in bytes that has been allocated.
+#[cfg(target_arch = "wasm32")]
+pub fn heap_memory_size_bytes() -> usize {
+    const WASM_PAGE_SIZE_BYTES: usize = 65536;
+    core::arch::wasm32::memory_size(0) * WASM_PAGE_SIZE_BYTES
+}
+
+#[cfg(not(any(target_arch = "wasm32")))]
+pub fn heap_memory_size_bytes() -> usize {
+    0
 }
 
 fn main() {}

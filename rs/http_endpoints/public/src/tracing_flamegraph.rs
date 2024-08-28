@@ -47,7 +47,7 @@ pub(crate) async fn tracing_flamegraph_handle(
         reload_handles.pop();
 
         drop(guard);
-        let data: Vec<u8> = writer.reset();
+        let data = writer.reset();
         let _ = tx.send(data);
     });
 

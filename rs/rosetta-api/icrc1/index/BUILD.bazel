@@ -5,6 +5,7 @@ load("//bazel:defs.bzl", "rust_ic_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/ledger",
@@ -22,6 +23,7 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
     "@crate_index//:ic-cdk-macros",
 ]
@@ -52,6 +54,7 @@ rust_canister(
     },
     service_file = ":index.did",
     deps = [
+        # Keep sorted.
         ":index",
         "//rs/rust_canisters/http_types",
     ] + DEPENDENCIES,
@@ -91,6 +94,7 @@ rust_ic_test(
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister.wasm)",
     },
     deps = [
+        # Keep sorted.
         ":index",
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
@@ -100,6 +104,7 @@ rust_ic_test(
         "//rs/rosetta-api/icrc1/tokens_u64",
         "//rs/rosetta-api/ledger_canister_core",
         "//rs/rosetta-api/ledger_core",
+        "//rs/rosetta-api/test_utils",
         "//rs/rust_canisters/http_types",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",

@@ -1,22 +1,22 @@
+use canister_test::PrincipalId;
+use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::bootstrap::setup_and_start_nested_vms;
+use ic_system_test_driver::driver::farm::Farm;
+use ic_system_test_driver::driver::ic::InternetComputer;
+use ic_system_test_driver::driver::nested::{NestedNode, NestedVms};
+use ic_system_test_driver::driver::resource::{
+    allocate_resources, get_resource_request_for_nested_nodes,
+};
+use ic_system_test_driver::driver::test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute};
+use ic_system_test_driver::driver::test_env_api::*;
+use ic_system_test_driver::driver::test_setup::GroupSetup;
+use ic_system_test_driver::nns::add_nodes_to_subnet;
+use ic_system_test_driver::util::{block_on, get_nns_node};
+use ic_types::hostos_version::HostosVersion;
+use slog::info;
 use std::str::FromStr;
 use std::time::Duration;
-
-use canister_test::PrincipalId;
-use slog::info;
-
-use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::bootstrap::setup_and_start_nested_vms;
-use ic_tests::driver::farm::Farm;
-use ic_tests::driver::ic::InternetComputer;
-use ic_tests::driver::nested::{NestedNode, NestedVms};
-use ic_tests::driver::resource::{allocate_resources, get_resource_request_for_nested_nodes};
-use ic_tests::driver::test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute};
-use ic_tests::driver::test_env_api::*;
-use ic_tests::driver::test_setup::GroupSetup;
-use ic_tests::nns::add_nodes_to_subnet;
-use ic_tests::orchestrator::utils::rw_message::install_nns_and_check_progress;
-use ic_tests::util::{block_on, get_nns_node};
-use ic_types::hostos_version::HostosVersion;
 
 mod util;
 use util::{check_hostos_version, elect_hostos_version, update_nodes_hostos_version};
@@ -110,13 +110,12 @@ pub fn registration(env: TestEnv) {
 pub fn upgrade(env: TestEnv) {
     let logger = env.logger();
 
-    let original_version = env
-        .read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
+    let original_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
         .expect("tip-of-branch IC version");
 
     let target_version = HostosVersion::try_from(format!("{original_version}-test")).unwrap();
-    let url = env.get_hostos_update_img_test_url().unwrap();
-    let sha256 = env.get_hostos_update_img_test_sha256().unwrap();
+    let url = get_hostos_update_img_test_url().unwrap();
+    let sha256 = get_hostos_update_img_test_sha256().unwrap();
 
     let initial_topology = env.topology_snapshot();
     setup_nested_vms(env.clone());

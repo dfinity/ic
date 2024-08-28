@@ -7,7 +7,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// timestamp is stored in milliseconds because some blockchains produce blocks
 /// more often than once a second.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct Timestamp(pub i64);
 
 pub fn from_system_time(timestamp: SystemTime) -> Result<Timestamp, ApiError> {

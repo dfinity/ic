@@ -19,11 +19,7 @@ Runbook::
 
 end::catalog[] */
 
-use crate::{
-    ckbtc::lib::ADDRESS_LENGTH,
-    driver::{test_env::TestEnv, universal_vm::UniversalVms},
-    util::UniversalCanister,
-};
+use crate::ckbtc::lib::ADDRESS_LENGTH;
 use assert_matches::assert_matches;
 use bitcoincore_rpc::{
     bitcoin::{Address, Amount, Txid},
@@ -37,6 +33,10 @@ use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError};
 use ic_ckbtc_minter::updates::update_balance::UtxoStatus::Checked;
 use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
+use ic_system_test_driver::{
+    driver::{test_env::TestEnv, universal_vm::UniversalVms},
+    util::UniversalCanister,
+};
 use ic_universal_canister::{management, wasm};
 use icrc_ledger_agent::{CallMode, Icrc1Agent, Icrc1AgentError};
 use icrc_ledger_types::{

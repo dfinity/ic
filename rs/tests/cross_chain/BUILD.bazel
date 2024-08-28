@@ -1,16 +1,14 @@
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test_nns")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 CANISTER_RUNTIME_DEPS = [
+    # Keep sorted.
     "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
-    "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz",
-    "//rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
-    "//rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz",
 ]
 
-system_test(
+system_test_nns(
     name = "ic_xc_ledger_suite_orchestrator_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -21,7 +19,6 @@ system_test(
         BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
         CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )

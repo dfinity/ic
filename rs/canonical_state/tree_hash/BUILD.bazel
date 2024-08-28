@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/crypto/tree_hash",
     "@crate_index//:itertools",
     "@crate_index//:leb128",
@@ -11,6 +12,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canonical_state/tree_hash/test_utils",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash/test_utils",

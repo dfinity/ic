@@ -19,6 +19,7 @@ pub(crate) const ERROR_TYPE_ACCEPT: &str = "accept";
 pub(crate) const ERROR_TYPE_OPEN: &str = "open";
 pub(crate) const ERROR_TYPE_APP: &str = "app";
 pub(crate) const ERROR_TYPE_FINISH: &str = "finish";
+pub(crate) const ERROR_TYPE_STOPPED: &str = "stopped";
 pub(crate) const ERROR_TYPE_READ: &str = "read";
 pub(crate) const ERROR_TYPE_WRITE: &str = "write";
 pub(crate) const STREAM_TYPE_BIDI: &str = "bidi";

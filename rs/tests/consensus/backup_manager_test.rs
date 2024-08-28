@@ -28,27 +28,30 @@ use ic_backup::{
     config::{ColdStorage, Config, SubnetConfig},
 };
 use ic_base_types::SubnetId;
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
+use ic_consensus_system_test_utils::{
+    rw_message::install_nns_and_check_progress,
+    ssh_access::{
+        generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
+        wait_until_authentication_is_granted, AuthMean,
+    },
+    subnet::enable_chain_key_on_subnet,
+    upgrade::{
+        assert_assigned_replica_version, bless_public_replica_version,
+        deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
+    },
+};
+use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
+use ic_management_canister_types::{
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+};
 use ic_recovery::file_sync_helper::{download_binary, write_file};
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::{
+use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::*,
-    },
-    orchestrator::utils::{
-        rw_message::install_nns_and_check_progress,
-        ssh_access::{
-            generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
-            wait_until_authentication_is_granted, AuthMean,
-        },
-        subnet_recovery::{enable_chain_key_on_subnet, run_chain_key_signature_test},
-        upgrade::{
-            assert_assigned_replica_version, bless_public_replica_version,
-            deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
-        },
     },
     systest,
     util::{block_on, get_nns_node, MessageCanister, UniversalCanister},
@@ -126,7 +129,7 @@ pub fn test(env: TestEnv) {
     fs::create_dir_all(&backup_binaries_dir).expect("failure creating backup binaries directory");
 
     // Copy all the binaries needed for the replay of the current version in order to avoid downloading them
-    let testing_dir = env.get_dependency_path("rs/tests");
+    let testing_dir = get_dependency_path("rs/tests");
     let binaries_path = testing_dir.join("backup/binaries");
     copy_file(&binaries_path, &backup_binaries_dir, "ic-replay");
     copy_file(&binaries_path, &backup_binaries_dir, "sandbox_launcher");
@@ -137,8 +140,7 @@ pub fn test(env: TestEnv) {
         log,
         "Download the binaries needed for replay of the mainnet version"
     );
-    let mainnet_version = env
-        .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
+    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt")
         .expect("could not read mainnet version!");
 
     // Download all the binaries needed for the replay of the mainnet version
@@ -170,10 +172,7 @@ pub fn test(env: TestEnv) {
         &nns_canister,
         env.topology_snapshot().root_subnet_id(),
         None,
-        vec![
-            MasterPublicKeyId::Ecdsa(make_key(KEY_ID1)),
-            MasterPublicKeyId::Ecdsa(make_key(KEY_ID2)),
-        ],
+        make_key_ids_for_all_schemes(),
         &log,
     );
 
@@ -523,12 +522,19 @@ fn download_binary_file(
     .expect("error downloading binaty");
 }
 
-const KEY_ID1: &str = "secp256k1";
-const KEY_ID2: &str = "secp256k1_2";
-
-fn make_key(name: &str) -> EcdsaKeyId {
-    EcdsaKeyId {
-        curve: EcdsaCurve::Secp256k1,
-        name: name.to_string(),
-    }
+fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
+    vec![
+        MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "some_ecdsa_key".to_string(),
+        }),
+        MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Ed25519,
+            name: "some_eddsa_key".to_string(),
+        }),
+        MasterPublicKeyId::Schnorr(SchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+            name: "some_bip340_key".to_string(),
+        }),
+    ]
 }

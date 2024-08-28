@@ -5,6 +5,7 @@ use crate::framework::{
     malicious, setup_subnet, ComponentModifier, ConsensusDependencies, ConsensusInstance,
     ConsensusRunner, ConsensusRunnerConfig, StopPredicate,
 };
+use framework::test_threshold_key_ids;
 use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::consensus_pool::ConsensusPool;
 use ic_interfaces::messaging::MessageRouting;
@@ -40,7 +41,7 @@ fn single_node_is_live() {
 }
 
 #[test]
-fn ecdsa_pubkey_is_produced() -> Result<(), String> {
+fn master_pubkeys_are_produced() -> Result<(), String> {
     ConsensusRunnerConfig::new_from_env(4, 0)
         .and_then(|config| config.parse_extra_config())
         .map(|mut config| {
@@ -48,7 +49,7 @@ fn ecdsa_pubkey_is_produced() -> Result<(), String> {
             if config.num_rounds < 60 {
                 config.num_rounds = 60;
             }
-            assert!(run_n_rounds_and_check_pubkey(config, Vec::new(), true));
+            assert!(run_n_rounds_and_check_pubkeys(config, Vec::new(), true));
         })
 }
 
@@ -192,7 +193,7 @@ fn majority_maliciouly_finalize_all_would_diverge() -> Result<(), String> {
 }
 
 #[test]
-fn minority_maliciouly_ecdsa_dealers_would_pass() -> Result<(), String> {
+fn minority_maliciouly_idkg_dealers_would_pass() -> Result<(), String> {
     ConsensusRunnerConfig::new_from_env(4, 0)
         .and_then(|config| config.parse_extra_config())
         .map(|mut config| {
@@ -206,12 +207,12 @@ fn minority_maliciouly_ecdsa_dealers_would_pass() -> Result<(), String> {
             let mut malicious: Vec<ComponentModifier> = Vec::new();
             for _ in 0..rng.gen_range(1..=f) {
                 let malicious_flags = MaliciousFlags {
-                    maliciously_corrupt_ecdsa_dealings: true,
+                    maliciously_corrupt_idkg_dealings: true,
                     ..MaliciousFlags::default()
                 };
                 malicious.push(malicious::with_malicious_flags(malicious_flags));
             }
-            assert!(run_n_rounds_and_check_pubkey(config, malicious, true))
+            assert!(run_n_rounds_and_check_pubkeys(config, malicious, true))
         })
 }
 
@@ -320,7 +321,7 @@ fn run_n_rounds_and_collect_hashes(
     hashes.as_ref().take()
 }
 
-fn run_n_rounds_and_check_pubkey(
+fn run_n_rounds_and_check_pubkeys(
     config: ConsensusRunnerConfig,
     modifiers: Vec<ComponentModifier>,
     finish: bool,
@@ -333,7 +334,14 @@ fn run_n_rounds_and_check_pubkey(
         let Some(batch) = batches.last() else {
             return false;
         };
-        if !batch.idkg_subnet_public_keys.is_empty() {
+
+        let mut found_keys = 0;
+        for key_id in test_threshold_key_ids() {
+            if batch.idkg_subnet_public_keys.contains_key(&key_id) {
+                found_keys += 1
+            }
+        }
+        if found_keys == test_threshold_key_ids().len() {
             *pubkey_exists_clone.borrow_mut() = true;
         }
         *pubkey_exists_clone.borrow()

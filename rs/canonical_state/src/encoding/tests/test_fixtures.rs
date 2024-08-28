@@ -13,15 +13,25 @@ use ic_types::{
 use std::collections::VecDeque;
 
 pub fn stream_header(certification_version: CertificationVersion) -> StreamHeader {
-    let reject_signals = if certification_version < CertificationVersion::V8 {
-        VecDeque::new()
-    } else {
-        vec![
+    use CertificationVersion::*;
+    let reject_signals = match certification_version {
+        version if version < V8 => VecDeque::new(),
+        version if version < V19 => vec![
             RejectSignal::new(RejectReason::CanisterMigrating, 10.into()),
             RejectSignal::new(RejectReason::CanisterMigrating, 200.into()),
             RejectSignal::new(RejectReason::CanisterMigrating, 250.into()),
         ]
-        .into()
+        .into(),
+        _ => vec![
+            RejectSignal::new(RejectReason::CanisterMigrating, 10.into()),
+            RejectSignal::new(RejectReason::CanisterNotFound, 200.into()),
+            RejectSignal::new(RejectReason::OutOfMemory, 250.into()),
+            RejectSignal::new(RejectReason::CanisterStopping, 251.into()),
+            RejectSignal::new(RejectReason::CanisterStopped, 252.into()),
+            RejectSignal::new(RejectReason::QueueFull, 253.into()),
+            RejectSignal::new(RejectReason::Unknown, 254.into()),
+        ]
+        .into(),
     };
     let flags = StreamFlags {
         deprecated_responses_only: certification_version >= CertificationVersion::V17,

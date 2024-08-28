@@ -26,16 +26,12 @@ use ic_management_canister_types::{
     BoundedHttpHeaders, CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext,
     TransformFunc,
 };
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::RETRY_BACKOFF};
+use ic_system_test_driver::systest;
+use ic_system_test_driver::util::block_on;
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::messages::RequestBuilder;
-use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::driver::{
-    test_env::TestEnv,
-    test_env_api::{retry_async, RETRY_BACKOFF},
-};
-use ic_tests::retry_with_msg_async;
-use ic_tests::systest;
-use ic_tests::util::block_on;
 use ic_types::canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUEST_BYTES};
 use ic_types::time::UNIX_EPOCH;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
@@ -468,7 +464,7 @@ pub fn test(env: TestEnv) {
                 |response| {
                     let err_response = response.clone().unwrap_err();
                     matches!(err_response.0, RejectionCode::SysTransient)
-                        && err_response.1.contains("Connection refused")
+                        && err_response.1.contains("client error (Connect)")
                 },
             )
             .await,
@@ -495,7 +491,7 @@ where
     F: Fn(&Result<RemoteHttpResponse, (RejectionCode, String)>) -> bool,
 {
     info!(logger.clone(), "Running correctness test: {}", test_name);
-    let test_result = retry_with_msg_async!(
+    let test_result = ic_system_test_driver::retry_with_msg_async!(
         format!(
             "checking send_request of proxy canister {}",
             proxy_canister.canister_id()

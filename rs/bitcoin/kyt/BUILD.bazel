@@ -1,0 +1,54 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "btc_kyt",
+    srcs = ["src/lib.rs"],
+    crate_name = "ic_btc_kyt",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:bitcoin_0_32",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:ic-cdk",
+    ],
+)
+
+rust_canister(
+    name = "btc_kyt_canister",
+    srcs = [
+        "src/main.rs",
+    ],
+    proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
+    service_file = "btc_kyt_canister.did",
+    deps = [
+        # Keep sorted.
+        ":btc_kyt",
+        "@crate_index//:bitcoin_0_32",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:ic-cdk",
+    ],
+)
+
+rust_ic_test(
+    name = "integration_test",
+    srcs = ["tests/tests.rs"],
+    data = [":btc_kyt_canister"],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/bitcoin/kyt",
+        "IC_BTC_KYT_CANISTER_WASM_PATH": "$(rootpath :btc_kyt_canister)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+    },
+    deps = [
+        # Keep sorted.
+        ":btc_kyt",
+        "//packages/pocket-ic",
+        "//rs/pocket_ic_server:pocket-ic-server",
+        "//rs/test_utilities/load_wasm",
+        "@crate_index//:candid",
+    ],
+)

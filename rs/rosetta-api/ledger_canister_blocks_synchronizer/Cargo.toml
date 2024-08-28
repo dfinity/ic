@@ -9,29 +9,29 @@ description = "Synchronizes a local copy of the ledger blocks with the ledger"
 async-trait = { workspace = true }
 candid = { workspace = true }
 chrono = { workspace = true }
+ciborium = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 ic-agent = { workspace = true }
 ic-certification = { path = "../../certification" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 ic-types = { path = "../../types/types" }
 icp-ledger = { path = "../icp_ledger" }
+leb128 = "0.2.5"
 on_wire = { path = "../../rust_canisters/on_wire" }
 rusqlite = { version = "~0.28.0", features = ["bundled"] }
 serde = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-url = "2.2.1"
+url = { workspace = true }
 
 [dev-dependencies]
-actix-rt = "2.2.0"
-actix-web = { version = "4.0.1", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "cookies"] }
+actix-rt = "2.10.0"
 ic-ledger-canister-blocks-synchronizer-test-utils = { path = "test_utils" }
 proptest = "1.0"
-serde_bytes = { workspace = true }
 
 [lib]
 path = "src/lib.rs"
-

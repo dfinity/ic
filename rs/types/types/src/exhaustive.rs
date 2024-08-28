@@ -4,13 +4,14 @@ use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::{QuadrupleInCreation, ThresholdEcdsaSigInputsRef};
 use crate::consensus::idkg::{
-    CompletedReshareRequest, CompletedSignature, EcdsaKeyTranscript, EcdsaPayload,
-    EcdsaUIDGenerator, HasMasterPublicKeyId, IDkgReshareRequest, KeyTranscriptCreation,
-    MaskedTranscript, PreSigId, PseudoRandomId, RandomTranscriptParams,
-    RandomUnmaskedTranscriptParams, RequestId, ReshareOfMaskedParams, ReshareOfUnmaskedParams,
-    UnmaskedTimesMaskedParams, UnmaskedTranscript, UnmaskedTranscriptWithAttributes,
+    CompletedReshareRequest, CompletedSignature, HasMasterPublicKeyId, IDkgPayload,
+    IDkgReshareRequest, IDkgUIDGenerator, MaskedTranscript, MasterKeyTranscript, PreSigId,
+    PseudoRandomId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId,
+    ReshareOfMaskedParams, ReshareOfUnmaskedParams, UnmaskedTimesMaskedParams, UnmaskedTranscript,
 };
-use crate::consensus::{BlockPayload, ConsensusMessageHashable};
+use crate::consensus::{
+    Block, BlockPayload, CatchUpShareContent, ConsensusMessageHashable, Payload, SummaryPayload,
+};
 use crate::consensus::{CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon};
 use crate::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgDealers, IDkgDealing, IDkgReceivers, IDkgTranscript,
@@ -22,14 +23,18 @@ use crate::crypto::threshold_sig::ni_dkg::{
     NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
 };
 use crate::crypto::{
-    crypto_hash, AlgorithmId, BasicSig, BasicSigOf, CombinedThresholdSig, CombinedThresholdSigOf,
-    CryptoHash, CryptoHashOf, CryptoHashable, Signed,
+    crypto_hash, AlgorithmId, BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf,
+    CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, CryptoHashable,
+    IndividualMultiSig, IndividualMultiSigOf, Signed, ThresholdSigShare, ThresholdSigShareOf,
 };
-use crate::signature::{BasicSignature, BasicSignatureBatch, ThresholdSignature};
+use crate::signature::{
+    BasicSignature, BasicSignatureBatch, MultiSignature, MultiSignatureShare, ThresholdSignature,
+    ThresholdSignatureShare,
+};
 use crate::xnet::CertifiedStreamSlice;
 use crate::{CryptoHashOfState, ReplicaVersion};
 use ic_base_types::{CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId};
-use ic_btc_types_internal::{
+use ic_btc_replica_types::{
     BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, BitcoinReject,
     GetSuccessorsResponseComplete, SendTransactionResponse,
 };
@@ -392,20 +397,60 @@ impl<V: ExhaustiveSet + CryptoHashable> ExhaustiveSet for Hashed<CryptoHashOf<V>
     }
 }
 
+#[derive(Clone)]
+struct HashedSummaryBlock {
+    summary_block: HashedBlock,
+}
+
+impl ExhaustiveSet for HashedSummaryBlock {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        let summary_payloads = SummaryPayload::exhaustive_set(rng);
+        let mut index = 0;
+
+        Block::exhaustive_set(rng)
+            .into_iter()
+            .map(|mut block| {
+                let summary = match block.payload.as_ref() {
+                    BlockPayload::Summary(summary) => summary.clone(),
+                    BlockPayload::Data(_) => {
+                        let summary = summary_payloads[index % summary_payloads.len()].clone();
+                        index += 1;
+                        summary
+                    }
+                };
+                block.payload = Payload::new(crypto_hash, BlockPayload::Summary(summary));
+
+                Self {
+                    summary_block: Hashed::new(crypto_hash, block),
+                }
+            })
+            .collect()
+    }
+}
+
 impl ExhaustiveSet for CatchUpContent {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         let registry_versions = Option::<RegistryVersion>::exhaustive_set(rng);
-        <(HashedBlock, HashedRandomBeacon, CryptoHashOfState)>::exhaustive_set(rng)
+        <(HashedSummaryBlock, HashedRandomBeacon, CryptoHashOfState)>::exhaustive_set(rng)
             .into_iter()
             .enumerate()
-            .map(|(i, tuple)| {
+            .map(|(i, (block, random_beacon, state_hash))| {
                 Self::new(
-                    tuple.0,
-                    tuple.1,
-                    tuple.2,
+                    block.summary_block,
+                    random_beacon,
+                    state_hash,
                     registry_versions[i % registry_versions.len()],
                 )
             })
+            .collect()
+    }
+}
+
+impl ExhaustiveSet for CatchUpShareContent {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        <CatchUpContent>::exhaustive_set(rng)
+            .iter()
+            .map(|cup| cup.into())
             .collect()
     }
 }
@@ -482,7 +527,13 @@ impl ExhaustiveSet for CryptoHash {
     }
 }
 
-impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignature<T>> {
+impl<T> ExhaustiveSet for BasicSigOf<T> {
+    fn exhaustive_set<R: RngCore + CryptoRng>(_rng: &mut R) -> Vec<Self> {
+        vec![BasicSigOf::new(BasicSig(vec![1, 2, 3]))]
+    }
+}
+
+impl<T: ExhaustiveSet, U: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignature<U>> {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         <(T, NodeId)>::exhaustive_set(rng)
             .into_iter()
@@ -496,6 +547,7 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignature<T>> {
             .collect()
     }
 }
+
 impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignatureBatch<T>> {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         let signatures_map: BTreeMap<_, _> = NodeId::exhaustive_set(rng)
@@ -526,6 +578,53 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, ThresholdSignature<T>> {
                         1, 2, 3, 4, 5, 6,
                     ])),
                     signer,
+                },
+            })
+            .collect()
+    }
+}
+
+impl<T: ExhaustiveSet, U: ExhaustiveSet> ExhaustiveSet for Signed<T, ThresholdSignatureShare<U>> {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        <(T, NodeId)>::exhaustive_set(rng)
+            .into_iter()
+            .map(|(content, signer)| Self {
+                content,
+                signature: ThresholdSignatureShare {
+                    signature: ThresholdSigShareOf::new(ThresholdSigShare(vec![1, 2, 3, 4, 5, 6])),
+                    signer,
+                },
+            })
+            .collect()
+    }
+}
+
+impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, MultiSignatureShare<T>> {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        <(T, NodeId)>::exhaustive_set(rng)
+            .into_iter()
+            .map(|(content, signer)| Self {
+                content,
+                signature: MultiSignatureShare {
+                    signature: IndividualMultiSigOf::new(IndividualMultiSig(vec![
+                        1, 2, 3, 4, 5, 6,
+                    ])),
+                    signer,
+                },
+            })
+            .collect()
+    }
+}
+
+impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, MultiSignature<T>> {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        <(T, Vec<NodeId>)>::exhaustive_set(rng)
+            .into_iter()
+            .map(|(content, signers)| Self {
+                content,
+                signature: MultiSignature {
+                    signature: CombinedMultiSigOf::new(CombinedMultiSig(vec![1, 2, 3, 4, 5, 6])),
+                    signers,
                 },
             })
             .collect()
@@ -728,44 +827,22 @@ impl ExhaustiveSet for QuadrupleInCreation {
 
 #[derive(Clone)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct DerivedIDkgReshareRequest {
-    pub key_id: MasterPublicKeyId,
-    pub receiving_node_ids: Vec<NodeId>,
-    pub registry_version: RegistryVersion,
-}
-
-impl ExhaustiveSet for IDkgReshareRequest {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        DerivedIDkgReshareRequest::exhaustive_set(rng)
-            .into_iter()
-            .map(|r| IDkgReshareRequest {
-                key_id: None,
-                master_key_id: r.key_id,
-                receiving_node_ids: r.receiving_node_ids,
-                registry_version: r.registry_version,
-            })
-            .collect()
-    }
-}
-
-#[derive(Clone)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct DerivedEcdsaPayload {
+pub struct DerivedIDkgPayload {
     pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
     pub available_pre_signatures: BTreeMap<PreSigId, PreSignatureRef>,
     pub pre_signatures_in_creation: BTreeMap<PreSigId, PreSignatureInCreation>,
-    pub uid_generator: EcdsaUIDGenerator,
+    pub uid_generator: IDkgUIDGenerator,
     pub idkg_transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     pub ongoing_xnet_reshares: BTreeMap<IDkgReshareRequest, ReshareOfUnmaskedParams>,
     pub xnet_reshare_agreements: BTreeMap<IDkgReshareRequest, CompletedReshareRequest>,
-    pub key_transcripts: BTreeMap<MasterPublicKeyId, EcdsaKeyTranscript>,
+    pub key_transcripts: BTreeMap<MasterPublicKeyId, MasterKeyTranscript>,
 }
 
-impl ExhaustiveSet for EcdsaPayload {
+impl ExhaustiveSet for IDkgPayload {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        DerivedEcdsaPayload::exhaustive_set(rng)
+        DerivedIDkgPayload::exhaustive_set(rng)
             .into_iter()
-            .map(|payload| EcdsaPayload {
+            .map(|payload| IDkgPayload {
                 signature_agreements: payload.signature_agreements,
                 available_pre_signatures: payload.available_pre_signatures,
                 pre_signatures_in_creation: payload.pre_signatures_in_creation,
@@ -774,28 +851,6 @@ impl ExhaustiveSet for EcdsaPayload {
                 ongoing_xnet_reshares: payload.ongoing_xnet_reshares,
                 xnet_reshare_agreements: payload.xnet_reshare_agreements,
                 key_transcripts: replace_by_singleton_if_empty(payload.key_transcripts, rng),
-            })
-            .collect()
-    }
-}
-
-#[derive(Clone)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct DerivedEcdsaKeyTranscript {
-    pub current: Option<UnmaskedTranscriptWithAttributes>,
-    pub next_in_creation: KeyTranscriptCreation,
-    pub master_key_id: MasterPublicKeyId,
-}
-
-impl ExhaustiveSet for EcdsaKeyTranscript {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        DerivedEcdsaKeyTranscript::exhaustive_set(rng)
-            .into_iter()
-            .map(|r| EcdsaKeyTranscript {
-                deprecated_key_id: None,
-                master_key_id: r.master_key_id,
-                current: r.current,
-                next_in_creation: r.next_in_creation,
             })
             .collect()
     }
@@ -882,7 +937,7 @@ impl HasId<RequestId> for ThresholdEcdsaSigInputsRef {}
 impl HasId<PreSigId> for PreSignatureInCreation {}
 impl HasId<PreSigId> for PreSignatureRef {}
 
-impl HasId<MasterPublicKeyId> for EcdsaKeyTranscript {
+impl HasId<MasterPublicKeyId> for MasterKeyTranscript {
     fn get_id(&self) -> Option<MasterPublicKeyId> {
         Some(self.key_id())
     }
@@ -893,6 +948,8 @@ mod tests {
     use std::{fs, path::PathBuf};
 
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+
+    use crate::consensus::ConsensusMessage;
 
     use super::*;
 
@@ -957,6 +1014,23 @@ mod tests {
             assert_eq!(
                 cup, &new_cup,
                 "deserialized block is different from original"
+            );
+        }
+    }
+
+    #[test]
+    fn verify_exhaustive_consensus_message() {
+        let set = ConsensusMessage::exhaustive_set(&mut reproducible_rng());
+        println!("Number of consensus message variants: {}", set.len());
+        for msg in &set {
+            // serialize -> deserialize round-trip
+            let bytes = pb::ConsensusMessage::from(msg.clone()).encode_to_vec();
+            let proto_msg = pb::ConsensusMessage::decode(bytes.as_slice()).unwrap();
+            let new_msg = ConsensusMessage::try_from(proto_msg).unwrap();
+
+            assert_eq!(
+                msg, &new_msg,
+                "deserialized consensus message is different from original"
             );
         }
     }

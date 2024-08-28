@@ -8,6 +8,7 @@ rust_library(
     crate_name = "ic_system_api",
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//rs/config",
         "//rs/constants",
         "//rs/cycles_account_manager",
@@ -26,6 +27,7 @@ rust_library(
         "//rs/utils",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
+        "@crate_index//:itertools",
         "@crate_index//:prometheus",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
@@ -37,6 +39,7 @@ rust_test(
     name = "system_api_test",
     crate = ":system_api",
     deps = [
+        # Keep sorted.
         "//rs/test_utilities/types",
         "@crate_index//:assert_matches",
         "@crate_index//:maplit",
@@ -44,11 +47,15 @@ rust_test(
 )
 
 INTEGRATION_TEST_DEPS = [
+    # Keep sorted.
     ":system_api",
     "//rs/config",
     "//rs/constants",
+    "//rs/cycles_account_manager",
     "//rs/interfaces",
     "//rs/monitoring/logger",
+    "//rs/nns/constants",
+    "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/test_utilities",
@@ -60,9 +67,6 @@ INTEGRATION_TEST_DEPS = [
     "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
-    "//rs/nns/constants",
-    "//rs/cycles_account_manager",
-    "//rs/registry/routing_table",
     "@crate_index//:maplit",
     "@crate_index//:more-asserts",
     "@crate_index//:strum",

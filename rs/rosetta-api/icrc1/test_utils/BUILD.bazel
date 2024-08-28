@@ -3,16 +3,19 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//packages/ic-ledger-hash-of",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/constants",
+    "//rs/crypto/ed25519",
+    "//rs/crypto/secp256k1",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/rosetta-api/ledger_core",
     "//rs/rosetta-api/rosetta_core:rosetta-core",
+    "//rs/types/types",
     "@crate_index//:candid",
-    "@crate_index//:ed25519-consensus",
     "@crate_index//:ic-agent",
     "@crate_index//:num-traits",
     "@crate_index//:proptest",

@@ -28,7 +28,7 @@ Environment=RUST_BACKTRACE=1
 # Remember to update 'rs/default.nix' for nix-shell users
 # Remember to update 'src/dfx/src/actors/replica.rs' in the sdk repo for dfx users
 Environment=RUST_MIN_STACK=8192000
-ExecStartPre=+/opt/ic/bin/generate-replica-config.sh -n /boot/config/network.conf -c /boot/config/nns.conf -b /boot/config/backup.conf -l /boot/config/log.conf -m /boot/config/malicious_behavior.conf -q /boot/config/query_stats.conf -t /boot/config/jaeger_addr.conf -i /opt/ic/share/ic.json5.template -o /run/ic-node/config/ic.json5
+ExecStartPre=+/opt/ic/bin/generate-replica-config.sh -n /boot/config/network.conf -c /boot/config/nns.conf -b /boot/config/backup.conf -m /boot/config/malicious_behavior.conf -q /boot/config/query_stats.conf -t /boot/config/jaeger_addr.conf -i /opt/ic/share/ic.json5.template -o /run/ic-node/config/ic.json5
 ExecStart=/opt/ic/bin/orchestrator --replica-binary-dir /var/lib/ic/data/images --cup-dir /var/lib/ic/data/cups --replica-config-file /run/ic-node/config/ic.json5 --enable-provisional-registration --ic-binary-directory /opt/ic/bin --orchestrator-data-directory /var/lib/ic/data/orchestrator --version-file /opt/ic/share/version.txt
 LimitNOFILE=16777216
 Restart=always

@@ -7,7 +7,6 @@ use ic_interfaces_registry::RegistryClient;
 use ic_management_canister_types::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
-use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::{
     itest_helpers::{
         forward_call_via_universal_canister, local_test_on_nns_subnet_with_mutations,
@@ -44,11 +43,11 @@ use ic_types::{
     signature::BasicSignature,
     Height, RegistryVersion, ReplicaVersion,
 };
+use prost::Message;
 use rand::{CryptoRng, Rng, RngCore};
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::{
-        common::decode_registry_value,
         do_create_subnet::{CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest},
         do_recover_subnet::{
             InitialChainKeyConfig, KeyConfig, KeyConfigRequest, RecoverSubnetPayload,
@@ -254,15 +253,17 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed_legacy() {
 
         // Here we discover the IC's subnet ID (from our test harness)
         // and then modify it to hold the key and sign for it.
-        let mut subnet_list_record = decode_registry_value::<SubnetListRecord>(
+        let mut subnet_list_record = SubnetListRecord::decode(
             fake_client
                 .get_value(
                     &make_subnet_list_record_key(),
                     fake_client.get_latest_version(),
                 )
                 .unwrap()
-                .unwrap(),
-        );
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
 
         let subnet_to_recover_subnet_id = subnet_test_id(1003);
 
@@ -278,15 +279,17 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed_legacy() {
         let system_subnet_principal = subnet_principals.first().unwrap();
 
         let system_subnet_id = SubnetId::new(*system_subnet_principal);
-        let mut subnet_record = decode_registry_value::<SubnetRecord>(
+        let mut subnet_record = SubnetRecord::decode(
             fake_client
                 .get_value(
                     &make_subnet_record_key(system_subnet_id),
                     fake_client.get_latest_version(),
                 )
                 .unwrap()
-                .unwrap(),
-        );
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
             key_configs: vec![KeyConfigInternal {
                 key_id: MasterPublicKeyId::Ecdsa(key_1.clone()),
@@ -300,7 +303,7 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed_legacy() {
         let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
             mutations: vec![upsert(
                 make_subnet_record_key(system_subnet_id),
-                encode_or_panic(&subnet_record),
+                subnet_record.encode_to_vec(),
             )],
             preconditions: vec![],
         };
@@ -322,11 +325,11 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed_legacy() {
         let mut mutations = vec![
             upsert(
                 make_subnet_record_key(subnet_to_recover_subnet_id).into_bytes(),
-                encode_or_panic(&subnet_to_recover),
+                subnet_to_recover.encode_to_vec(),
             ),
             upsert(
                 make_subnet_list_record_key().into_bytes(),
-                encode_or_panic(&subnet_list_record),
+                subnet_list_record.encode_to_vec(),
             ),
         ];
         mutations.append(&mut subnet_threshold_signing_pk_and_cup_mutations);
@@ -465,15 +468,17 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
 
         // Here we discover the IC's subnet ID (from our test harness)
         // and then modify it to hold the key and sign for it.
-        let mut subnet_list_record = decode_registry_value::<SubnetListRecord>(
+        let mut subnet_list_record = SubnetListRecord::decode(
             fake_client
                 .get_value(
                     &make_subnet_list_record_key(),
                     fake_client.get_latest_version(),
                 )
                 .unwrap()
-                .unwrap(),
-        );
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
 
         let subnet_to_recover_subnet_id = subnet_test_id(1003);
 
@@ -489,15 +494,17 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
         let system_subnet_principal = subnet_principals.first().unwrap();
 
         let system_subnet_id = SubnetId::new(*system_subnet_principal);
-        let mut subnet_record = decode_registry_value::<SubnetRecord>(
+        let mut subnet_record = SubnetRecord::decode(
             fake_client
                 .get_value(
                     &make_subnet_record_key(system_subnet_id),
                     fake_client.get_latest_version(),
                 )
                 .unwrap()
-                .unwrap(),
-        );
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
             key_configs: vec![KeyConfigInternal {
                 key_id: key_id.clone(),
@@ -511,7 +518,7 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
         let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
             mutations: vec![upsert(
                 make_subnet_record_key(system_subnet_id),
-                encode_or_panic(&subnet_record),
+                subnet_record.encode_to_vec(),
             )],
             preconditions: vec![],
         };
@@ -533,11 +540,11 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
         let mut mutations = vec![
             upsert(
                 make_subnet_record_key(subnet_to_recover_subnet_id).into_bytes(),
-                encode_or_panic(&subnet_to_recover),
+                subnet_to_recover.encode_to_vec(),
             ),
             upsert(
                 make_subnet_list_record_key().into_bytes(),
-                encode_or_panic(&subnet_list_record),
+                subnet_list_record.encode_to_vec(),
             ),
         ];
         mutations.append(&mut subnet_threshold_signing_pk_and_cup_mutations);
@@ -687,15 +694,17 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list_legacy() {
 
         // Here we discover the IC's subnet ID (from our test harness)
         // and then modify it to hold the key and sign for it.
-        let mut subnet_list_record = decode_registry_value::<SubnetListRecord>(
+        let mut subnet_list_record = SubnetListRecord::decode(
             fake_client
                 .get_value(
                     &make_subnet_list_record_key(),
                     fake_client.get_latest_version(),
                 )
                 .unwrap()
-                .unwrap(),
-        );
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
 
         let subnet_to_recover_subnet_id = subnet_test_id(1003);
 
@@ -711,15 +720,17 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list_legacy() {
         let system_subnet_principal = subnet_principals.first().unwrap();
 
         let system_subnet_id = SubnetId::new(*system_subnet_principal);
-        let mut subnet_record = decode_registry_value::<SubnetRecord>(
+        let mut subnet_record = SubnetRecord::decode(
             fake_client
                 .get_value(
                     &make_subnet_record_key(system_subnet_id),
                     fake_client.get_latest_version(),
                 )
                 .unwrap()
-                .unwrap(),
-        );
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
 
         let ecdsa_config = EcdsaConfig {
             quadruples_to_create_in_advance: 1,
@@ -735,7 +746,7 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list_legacy() {
         let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
             mutations: vec![upsert(
                 make_subnet_record_key(system_subnet_id),
-                encode_or_panic(&subnet_record),
+                subnet_record.encode_to_vec(),
             )],
             preconditions: vec![],
         };
@@ -757,11 +768,11 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list_legacy() {
         let mut mutations = vec![
             upsert(
                 make_subnet_record_key(subnet_to_recover_subnet_id).into_bytes(),
-                encode_or_panic(&subnet_to_recover),
+                subnet_to_recover.encode_to_vec(),
             ),
             upsert(
                 make_subnet_list_record_key().into_bytes(),
-                encode_or_panic(&subnet_list_record),
+                subnet_list_record.encode_to_vec(),
             ),
         ];
         mutations.append(&mut subnet_threshold_signing_pk_and_cup_mutations);
@@ -777,9 +788,10 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list_legacy() {
             preconditions: vec![],
             mutations: vec![insert(
                 make_chain_key_signing_subnet_list_key(&MasterPublicKeyId::Ecdsa(key_1.clone())),
-                encode_or_panic(&ChainKeySigningSubnetList {
+                ChainKeySigningSubnetList {
                     subnets: vec![subnet_id_into_protobuf(subnet_to_recover_subnet_id)],
-                }),
+                }
+                .encode_to_vec(),
             )],
         };
 
@@ -885,15 +897,17 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
 
         // Here we discover the IC's subnet ID (from our test harness)
         // and then modify it to hold the key and sign for it.
-        let mut subnet_list_record = decode_registry_value::<SubnetListRecord>(
+        let mut subnet_list_record = SubnetListRecord::decode(
             fake_client
                 .get_value(
                     &make_subnet_list_record_key(),
                     fake_client.get_latest_version(),
                 )
                 .unwrap()
-                .unwrap(),
-        );
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
 
         let subnet_to_recover_subnet_id = subnet_test_id(1003);
 
@@ -909,15 +923,17 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
         let system_subnet_principal = subnet_principals.first().unwrap();
 
         let system_subnet_id = SubnetId::new(*system_subnet_principal);
-        let mut subnet_record = decode_registry_value::<SubnetRecord>(
+        let mut subnet_record = SubnetRecord::decode(
             fake_client
                 .get_value(
                     &make_subnet_record_key(system_subnet_id),
                     fake_client.get_latest_version(),
                 )
                 .unwrap()
-                .unwrap(),
-        );
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
 
         subnet_record.chain_key_config = {
             let chain_key_config_pb = ChainKeyConfigPb {
@@ -935,7 +951,7 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
         let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
             mutations: vec![upsert(
                 make_subnet_record_key(system_subnet_id),
-                encode_or_panic(&subnet_record),
+                subnet_record.encode_to_vec(),
             )],
             preconditions: vec![],
         };
@@ -957,11 +973,11 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
         let mut mutations = vec![
             upsert(
                 make_subnet_record_key(subnet_to_recover_subnet_id).into_bytes(),
-                encode_or_panic(&subnet_to_recover),
+                subnet_to_recover.encode_to_vec(),
             ),
             upsert(
                 make_subnet_list_record_key().into_bytes(),
-                encode_or_panic(&subnet_list_record),
+                subnet_list_record.encode_to_vec(),
             ),
         ];
         mutations.append(&mut subnet_threshold_signing_pk_and_cup_mutations);
@@ -977,9 +993,10 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
             preconditions: vec![],
             mutations: vec![insert(
                 make_chain_key_signing_subnet_list_key(&key_id),
-                encode_or_panic(&ChainKeySigningSubnetList {
+                ChainKeySigningSubnetList {
                     subnets: vec![subnet_id_into_protobuf(subnet_to_recover_subnet_id)],
-                }),
+                }
+                .encode_to_vec(),
             )],
         };
 
@@ -1116,15 +1133,17 @@ fn test_recover_subnet_resets_the_halt_at_cup_height_flag() {
         subnet_to_recover.halt_at_cup_height = true;
         subnet_to_recover.is_halted = false;
 
-        let mut subnet_list_record = decode_registry_value::<SubnetListRecord>(
+        let mut subnet_list_record = SubnetListRecord::decode(
             fake_client
                 .get_value(
                     &make_subnet_list_record_key(),
                     fake_client.get_latest_version(),
                 )
                 .unwrap()
-                .unwrap(),
-        );
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
 
         let subnet_to_recover_subnet_id = subnet_test_id(1003);
 
@@ -1146,11 +1165,11 @@ fn test_recover_subnet_resets_the_halt_at_cup_height_flag() {
         let mut mutations = vec![
             upsert(
                 make_subnet_record_key(subnet_to_recover_subnet_id).into_bytes(),
-                encode_or_panic(&subnet_to_recover),
+                subnet_to_recover.encode_to_vec(),
             ),
             upsert(
                 make_subnet_list_record_key().into_bytes(),
-                encode_or_panic(&subnet_list_record),
+                subnet_list_record.encode_to_vec(),
             ),
         ];
         mutations.append(&mut subnet_threshold_signing_pk_and_cup_mutations);
@@ -1328,15 +1347,17 @@ fn test_recover_subnet_resets_cup_contents() {
 
         // Here we discover the IC's subnet ID (from our test harness)
         // and then modify it to hold the key and sign for it.
-        let mut subnet_list_record = decode_registry_value::<SubnetListRecord>(
+        let mut subnet_list_record = SubnetListRecord::decode(
             fake_client
                 .get_value(
                     &make_subnet_list_record_key(),
                     fake_client.get_latest_version(),
                 )
                 .unwrap()
-                .unwrap(),
-        );
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
 
         let subnet_to_recover_subnet_id = subnet_test_id(1003);
 
@@ -1352,15 +1373,17 @@ fn test_recover_subnet_resets_cup_contents() {
         let system_subnet_principal = subnet_principals.first().unwrap();
 
         let system_subnet_id = SubnetId::new(*system_subnet_principal);
-        let mut subnet_record = decode_registry_value::<SubnetRecord>(
+        let mut subnet_record = SubnetRecord::decode(
             fake_client
                 .get_value(
                     &make_subnet_record_key(system_subnet_id),
                     fake_client.get_latest_version(),
                 )
                 .unwrap()
-                .unwrap(),
-        );
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
             key_configs: vec![KeyConfigInternal {
                 key_id: key_id.clone(),
@@ -1374,7 +1397,7 @@ fn test_recover_subnet_resets_cup_contents() {
         let modify_base_subnet_mutate = RegistryAtomicMutateRequest {
             mutations: vec![upsert(
                 make_subnet_record_key(system_subnet_id),
-                encode_or_panic(&subnet_record),
+                subnet_record.encode_to_vec(),
             )],
             preconditions: vec![],
         };
@@ -1401,7 +1424,7 @@ fn test_recover_subnet_resets_cup_contents() {
                 .map(|mutation| {
                     if mutation.key == cup_contents_key {
                         let mut cup_contents =
-                            decode_registry_value::<CatchUpPackageContents>(mutation.value);
+                            CatchUpPackageContents::decode(mutation.value.as_slice()).unwrap();
                         cup_contents.ecdsa_initializations = {
                             let mut rng = reproducible_rng();
                             let initial_dealings = dummy_initial_idkg_dealing_for_tests(
@@ -1415,7 +1438,7 @@ fn test_recover_subnet_resets_cup_contents() {
                             };
                             vec![ecdsa_init]
                         };
-                        insert(cup_contents_key.clone(), encode_or_panic(&cup_contents))
+                        insert(cup_contents_key.clone(), cup_contents.encode_to_vec())
                     } else {
                         mutation
                     }
@@ -1429,11 +1452,11 @@ fn test_recover_subnet_resets_cup_contents() {
         let mut mutations = vec![
             upsert(
                 make_subnet_record_key(subnet_to_recover_subnet_id).into_bytes(),
-                encode_or_panic(&subnet_to_recover),
+                subnet_to_recover.encode_to_vec(),
             ),
             upsert(
                 make_subnet_list_record_key().into_bytes(),
-                encode_or_panic(&subnet_list_record),
+                subnet_list_record.encode_to_vec(),
             ),
         ];
 

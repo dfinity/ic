@@ -8,16 +8,16 @@ documentation.workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
-bincode = "1.2.1"
+bincode = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
-ed25519-consensus = "2.0.1"
 hex = { workspace = true }
 ic-adapter-metrics-server = { path = "../monitoring/adapter_metrics/server" }
 ic-async-utils = { path = "../async_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
+ic-crypto-secp256k1 = { path = "secp256k1" }
 ic-crypto-ecdsa-secp256r1 = { path = "ecdsa_secp256r1" }
-ic-crypto-ecdsa-secp256k1 = { path = "ecdsa_secp256k1" }
+ic-crypto-ed25519 = { path = "ed25519" }
 ic-crypto-interfaces-sig-verification = { path = "interfaces/sig_verification" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-internal-csp = { path = "internal/crypto_service_provider" }
@@ -40,9 +40,7 @@ ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-types = { path = "../types/types" }
 parking_lot = "0.12.1"
-# We use the `dangerous_configuration` flag for rustls to be able to set custom `ClientCertVerifier` and
-# `ServerCertVerifier` in order to verify node certificates.
-rustls = { version = "0.21.12", features = ["dangerous_configuration"] }
+rustls = { workspace = true, features = ["std"] }
 serde = { workspace = true }
 slog = { workspace = true }
 strum = { workspace = true }
@@ -56,8 +54,8 @@ criterion = { workspace = true }
 ic-certification-test-utils = { path = "../certification/test-utils" }
 ic-crypto-for-verification-only = { path = "for_verification_only" }
 ic-crypto-internal-basic-sig-der-utils = { path = "internal/crypto_lib/basic_sig/der_utils" }
-ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "internal/crypto_lib/basic_sig/ecdsa_secp256r1" }
 ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "internal/crypto_lib/basic_sig/ecdsa_secp256k1" }
+ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "internal/crypto_lib/basic_sig/ecdsa_secp256r1" }
 ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "internal/crypto_lib/basic_sig/rsa_pkcs1" }
 ic-crypto-internal-csp-proptest-utils = { path = "internal/crypto_service_provider/csp_proptest_utils" }
 ic-crypto-internal-csp-test-utils = { path = "internal/csp_test_utils" }
@@ -67,10 +65,8 @@ ic-crypto-internal-tls = { path = "internal/crypto_lib/tls" }
 ic-crypto-node-key-generation = { path = "node_key_generation" }
 ic-crypto-node-key-validation = { path = "node_key_validation" }
 ic-crypto-sha2 = { path = "sha2" }
-ic-crypto-tecdsa = { path = "tecdsa" }
 ic-crypto-temp-crypto = { path = "temp_crypto" }
 ic-crypto-test-utils = { path = "test_utils" }
-ic-crypto-test-utils-tls = { path = "test_utils/tls" }
 ic-crypto-test-utils-canister-sigs = { path = "test_utils/canister_sigs" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "test_utils/canister_threshold_sigs" }
 ic-crypto-test-utils-csp = { path = "test_utils/csp" }
@@ -81,7 +77,9 @@ ic-crypto-test-utils-metrics = { path = "test_utils/metrics" }
 ic-crypto-test-utils-multi-sigs = { path = "test_utils/multi_sigs" }
 ic-crypto-test-utils-ni-dkg = { path = "test_utils/ni-dkg" }
 ic-crypto-test-utils-reproducible-rng = { path = "test_utils/reproducible_rng" }
+ic-crypto-test-utils-tls = { path = "test_utils/tls" }
 ic-crypto-tree-hash = { path = "tree_hash" }
+ic-crypto-utils-canister-threshold-sig = { path = "utils/canister_threshold_sig" }
 ic-interfaces-registry-mocks = { path = "../interfaces/registry/mocks" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-fake = { path = "../registry/fake" }
@@ -99,7 +97,7 @@ prost = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 rsa = "0.9.2"
-sha2 = "0.10.2"
+sha2 = { workspace = true }
 simple_asn1 = { workspace = true }
 
 [[bench]]

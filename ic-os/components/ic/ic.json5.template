@@ -159,13 +159,10 @@
     logger: {
         // The node id to append to log lines.
         node_id: {{ node_index }},
-        // The datacenter id to append to log lines.
-        dc_id: 200,
         // The log level to use.
         level: "info",
         // The format of emitted log lines
         format: "json",
-        debug_overrides: {{ replica_log_debug_overrides }},
     },
 
     // ==================================
@@ -191,14 +188,17 @@
     flags dynamic\n\
   }\n\
 \n\
+  counter rate_limit_v4_counter {}\n\
+  counter connection_limit_v4_counter {}\n\
+\n\
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
     iif lo accept\n\
-    ct state new add @rate_limit { ip saddr limit rate over 1000/minute burst 500 packets } log prefix \"Drop - rate limit: \" drop\n\
+    ct state new add @rate_limit { ip saddr limit rate over 1000/minute burst 500 packets } counter name rate_limit_v4_counter drop\n\
     #  Notes about the rule below:\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip address.\n\
     #   - The rule drops all new connections that goes over the configured limit.\n\
-    ct state new add @connection_limit { ip saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } log prefix \"Drop - connection limit: \" drop\n\
+    ct state new add @connection_limit { ip saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } counter name connection_limit_v4_counter drop\n\
     icmp type parameter-problem accept\n\
     icmp type echo-request accept\n\
     icmp type echo-reply accept\n\
@@ -234,16 +234,19 @@ table ip6 filter {\n\
     flags dynamic\n\
   }\n\
 \n\
+  counter rate_limit_v6_counter {}\n\
+  counter connection_limit_v6_counter {}\n\
+\n\
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
     iif lo accept\n\
     ct state { invalid } drop\n\
     ct state { established, related } accept\n\
-    ct state new add @rate_limit { ip6 saddr limit rate over 1000/minute burst 500 packets } log prefix \"Drop - rate limit: \" drop\n\
+    ct state new add @rate_limit { ip6 saddr limit rate over 1000/minute burst 500 packets } counter name rate_limit_v6_counter drop\n\
     #  Notes about the rule below:\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip6 address.\n\
     #   - The rule drops all new connections that goes over the configured limit.\n\
-    ct state new add @connection_limit { ip6 saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } log prefix \"Drop - connection limit: \" drop\n\
+    ct state new add @connection_limit { ip6 saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } counter name connection_limit_v6_counter drop\n\
     icmpv6 type destination-unreachable accept\n\
     icmpv6 type packet-too-big accept\n\
     icmpv6 type time-exceeded accept\n\
@@ -353,6 +356,7 @@ table ip6 filter {\n\
             "2a0b:21c0:b002:2::/64",
             "2a0f:cd00:0002::/56",
             "fd00:2:1:1::/64",
+            "fda6:8d22:43e1::/48",
           ],
           ports: [22, 2497, 4100, 7070, 8080, 9090, 9091, 9100, 19100, 19531],
           action: 1,
@@ -385,15 +389,18 @@ table ip6 filter {\n\
     size 65535\n\
   }\n\
 \n\
+  counter rate_limit_v4_counter {}\n\
+  counter connection_limit_v4_counter {}\n\
+\n\
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
     iif lo accept\n\
     ip saddr @blackhole drop\n\
-    ct state new add @rate_limit { ip saddr limit rate over 2000/minute burst 1000 packets } log prefix \"Drop - rate limit: \" drop\n\
+    ct state new add @rate_limit { ip saddr limit rate over 2000/minute burst 1000 packets } counter name rate_limit_v4_counter drop\n\
     #  Notes about the rule below:\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip address.\n\
     #   - The rule drops all new connections that goes over the configured limit.\n\
-    ct state new add @connection_limit { ip saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } log prefix \"Drop - connection limit: \" drop\n\
+    ct state new add @connection_limit { ip saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } counter name connection_limit_v4_counter drop\n\
     icmp type { echo-reply, destination-unreachable, source-quench, echo-request, time-exceeded } accept\n\
     ct state invalid drop\n\
     ct state { established, related } accept\n\
@@ -436,15 +443,18 @@ table ip6 filter {\n\
     size 65535\n\
   }\n\
 \n\
+  counter rate_limit_v6_counter {}\n\
+  counter connection_limit_v6_counter {}\n\
+\n\
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
     iif lo accept\n\
     ip6 saddr @blackhole6 drop\n\
-    ct state new add @rate_limit { ip6 saddr limit rate over 2000/minute burst 1000 packets } log prefix \"Drop - rate limit: \" drop\n\
+    ct state new add @rate_limit { ip6 saddr limit rate over 2000/minute burst 1000 packets } counter name rate_limit_v6_counter drop\n\
     #  Notes about the rule below:\n\
     #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip6 address.\n\
     #   - The rule drops all new connections that goes over the configured limit.\n\
-    ct state new add @connection_limit { ip6 saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } log prefix \"Drop - connection limit: \" drop\n\
+    ct state new add @connection_limit { ip6 saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } counter name connection_limit_v6_counter drop\n\
     icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept\n\
     ct state { invalid } drop\n\
     ct state { established, related } accept\n\

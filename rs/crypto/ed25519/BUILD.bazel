@@ -3,20 +3,23 @@ load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test", "rus
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:curve25519-dalek",
     "@crate_index//:ed25519-dalek",
     "@crate_index//:hkdf",
     "@crate_index//:pem",
     "@crate_index//:rand",
-    "@crate_index//:sha2",
+    "@crate_index//:thiserror",
     "@crate_index//:zeroize",
 ]
 
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:hex",
     "@crate_index//:hex-literal",
+    "@crate_index//:rand_chacha",
     "@crate_index//:wycheproof",
 ]
 
@@ -51,6 +54,7 @@ rust_test_suite(
     name = "ed25519_integration",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
+    compile_data = glob(["tests/data/*"]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":ed25519"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

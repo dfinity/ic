@@ -31,6 +31,7 @@ ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-utils-thread = { path = "../utils/thread" }
+ic-validate-eq = { path = "../utils/validate_eq" }
 nix = { workspace = true }
 parking_lot = "0.12.1"
 prometheus = { workspace = true }
@@ -45,7 +46,7 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = { workspace = true }
 tree-deserializer = { path = "../tree_deserializer" }
-uuid = { version = "1.2.1", features = ["v4", "serde"] }
+uuid = { workspace = true }
 
 [lib]
 bench = false

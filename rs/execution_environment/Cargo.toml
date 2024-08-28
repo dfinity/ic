@@ -16,15 +16,15 @@ ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-crypto-prng = { path = "../crypto/prng" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
-ic-crypto-tecdsa = { path = "../crypto/tecdsa" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
+ic-crypto-utils-canister-threshold-sig = { path = "../crypto/utils/canister_threshold_sig" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-embedders = { path = "../embedders" }
 ic-error-types = { path = "../types/error_types" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-logger = { path = "../monitoring/logger" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-query-stats = { path = "../query_stats" }
@@ -49,13 +49,14 @@ prometheus = { workspace = true }
 rand = { workspace = true }
 scoped_threadpool = "0.1.*"
 serde = { workspace = true }
-serde_cbor = { workspace = true }
 serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
 slog = { workspace = true }
 strum = { workspace = true }
 threadpool = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
@@ -64,25 +65,26 @@ criterion = { workspace = true }
 execution-environment-bench = { path = "benches/lib" }
 ic-btc-test-utils = { workspace = true }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-execution-environment = { path = "../test_utilities/execution_environment" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-state = { path = "../test_utilities/state" }
-ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 ic-wasm-types = { path = "../types/wasm_types" }
+itertools = { workspace = true }
 libflate = "1.1.2"
 maplit = "1.0.2"
 more-asserts = "0.3.1"
 proptest = "1.0"
 tempfile = { workspace = true }
 test-strategy = "0.3.1"
-wat = "1.0.52"
-wasmparser = "0.201.0"
+wasmparser = { workspace = true }
+wat = { workspace = true }
 
 [build-dependencies]
 escargot = "0.5"

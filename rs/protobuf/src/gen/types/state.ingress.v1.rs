@@ -203,6 +203,7 @@ pub enum ErrorCode {
     CanisterWasmModuleNotFound = 537,
     CanisterAlreadyInstalled = 538,
     CanisterWasmMemoryLimitExceeded = 539,
+    ReservedCyclesLimitIsTooLow = 540,
 }
 impl ErrorCode {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -294,6 +295,7 @@ impl ErrorCode {
             ErrorCode::CanisterWasmMemoryLimitExceeded => {
                 "ERROR_CODE_CANISTER_WASM_MEMORY_LIMIT_EXCEEDED"
             }
+            ErrorCode::ReservedCyclesLimitIsTooLow => "ERROR_CODE_RESERVED_CYCLES_LIMIT_IS_TOO_LOW",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -381,6 +383,9 @@ impl ErrorCode {
             "ERROR_CODE_CANISTER_ALREADY_INSTALLED" => Some(Self::CanisterAlreadyInstalled),
             "ERROR_CODE_CANISTER_WASM_MEMORY_LIMIT_EXCEEDED" => {
                 Some(Self::CanisterWasmMemoryLimitExceeded)
+            }
+            "ERROR_CODE_RESERVED_CYCLES_LIMIT_IS_TOO_LOW" => {
+                Some(Self::ReservedCyclesLimitIsTooLow)
             }
             _ => None,
         }

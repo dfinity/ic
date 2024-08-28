@@ -1,6 +1,7 @@
 use canister_test::{Project, Wasm};
 
 pub mod pocket_ic_helpers;
+pub mod state_machine_helpers;
 
 /// Build Wasm for NNS Ledger canister
 pub fn build_ledger_wasm() -> Wasm {

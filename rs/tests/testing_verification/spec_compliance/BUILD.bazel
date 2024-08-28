@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 rust_library(
     name = "spec_compliance",
@@ -8,15 +8,20 @@ rust_library(
     srcs = ["spec_compliance.rs"],
     crate_name = "spec_compliance",
     target_compatible_with = ["@platforms//os:linux"],
+    visibility = [
+        "//rs:system-tests-pkg",
+        "//rs/pocket_ic_server:__pkg__",
+    ],
     deps = [
+        # Keep sorted.
         "//rs/registry/routing_table",
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/tests",
+        "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/networking/canister_http",
         "//rs/types/types",
-        "@crate_index//:hyper-rustls",
-        "@crate_index//:hyper_0_14_27",
+        "@crate_index//:reqwest",
         "@crate_index//:slog",
     ],
 )

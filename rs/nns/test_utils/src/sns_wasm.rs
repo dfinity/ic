@@ -6,25 +6,24 @@ use candid::{Decode, Encode};
 use canister_test::Project;
 use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
+use ic_nervous_system_common_test_utils::wasm_helpers;
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance::{
-    init::TEST_NEURON_1_ID,
-    pb::v1::{
-        manage_neuron::{Command, NeuronIdOrSubaccount},
-        manage_neuron_response::Command as CommandResponse,
-        proposal, ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal,
-        ProposalInfo, ProposalStatus,
-    },
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron::{Command, NeuronIdOrSubaccount},
+    manage_neuron_response::Command as CommandResponse,
+    proposal, ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal,
+    ProposalInfo, ProposalStatus,
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
     GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetSnsSubnetIdsRequest,
-    GetSnsSubnetIdsResponse, GetWasmRequest, GetWasmResponse, InsertUpgradePathEntriesRequest,
-    ListDeployedSnsesRequest, ListDeployedSnsesResponse, SnsCanisterType, SnsUpgrade, SnsVersion,
-    SnsWasm, UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
+    GetSnsSubnetIdsResponse, GetWasmMetadataRequest, GetWasmMetadataResponse, GetWasmRequest,
+    GetWasmResponse, InsertUpgradePathEntriesRequest, ListDeployedSnsesRequest,
+    ListDeployedSnsesResponse, SnsCanisterType, SnsUpgrade, SnsVersion, SnsWasm,
+    UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
 };
 use ic_state_machine_tests::StateMachine;
 use maplit::btreemap;
@@ -35,14 +34,10 @@ use std::{
 };
 
 /// Get a valid tiny WASM for use in tests of a particular SnsCanisterType.
-/// The WASM is the gzip encoding of the trivial WASM 0061736d01000000.
 pub fn test_wasm(canister_type: SnsCanisterType, modify_with: Option<u8>) -> SnsWasm {
     create_modified_sns_wasm(
         &SnsWasm {
-            wasm: hex::decode(
-                "1f8b0808f5a434660003612e7761736d0063482cce656460600000ce334b1c08000000",
-            )
-            .unwrap(),
+            wasm: wasm_helpers::gzip_wasm(wasm_helpers::SMALLEST_VALID_WASM_BYTES),
             canister_type: canister_type.into(),
             ..SnsWasm::default()
         },
@@ -91,6 +86,26 @@ pub fn add_wasm(
 
     // Ensure we get the expected response
     Decode!(&response, AddWasmResponse).unwrap()
+}
+
+pub fn get_wasm_metadata(
+    env: &StateMachine,
+    sns_wasm_canister_id: CanisterId,
+    hash: &[u8; 32],
+) -> GetWasmMetadataResponse {
+    let response = update(
+        env,
+        sns_wasm_canister_id,
+        "get_wasm_metadata",
+        Encode!(&GetWasmMetadataRequest {
+            hash: Some(hash.to_vec()),
+        })
+        .unwrap(),
+    )
+    .unwrap();
+
+    // Ensure we get the expected response
+    Decode!(&response, GetWasmMetadataResponse).unwrap()
 }
 
 /// Make add_wasm request to a canister in the StateMachine
@@ -310,8 +325,10 @@ pub fn get_next_sns_version(
     Decode!(&response_bytes, GetNextSnsVersionResponse).unwrap()
 }
 
-/// Adds non-functional wasms to the SNS-WASM canister (to avoid expensive init process in certain tests)
-/// To add additional dummy wasms, set "group_number" to Some(1) or Some(2) to get additional distinct entries.
+/// Adds non-functional WASMs to the SNS-WASM canister (useful for avoiding expensive init process
+/// in certain tests). The optional argument `group_number` specifies which group of WASMs you are
+/// adding so that they will have different content and therefore different hashes; setting
+/// `group_number` to `None` is appropriate in tests that call this function just once.
 pub fn add_dummy_wasms_to_sns_wasms(
     machine: &StateMachine,
     group_number: Option<u8>,

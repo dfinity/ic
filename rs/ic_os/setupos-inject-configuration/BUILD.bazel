@@ -1,18 +1,19 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/ic_os/partition_tools",
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
     "@crate_index//:url",
-    "//rs/ic_os/partition_tools",
 ]
 
 DEV_DEPENDENCIES = []
@@ -24,6 +25,10 @@ rust_binary(
     srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
     deps = DEPENDENCIES,
 )
 

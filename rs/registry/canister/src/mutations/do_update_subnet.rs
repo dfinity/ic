@@ -1,8 +1,4 @@
-use crate::{
-    common::LOG_PREFIX,
-    mutations::common::{encode_or_panic, has_duplicates},
-    registry::Registry,
-};
+use crate::{common::LOG_PREFIX, mutations::common::has_duplicates, registry::Registry};
 use candid::{CandidType, Deserialize};
 use dfn_core::println;
 use ic_base_types::{subnet_id_into_protobuf, SubnetId};
@@ -17,6 +13,7 @@ use ic_registry_subnet_features::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
+use prost::Message;
 use serde::Serialize;
 use std::collections::HashSet;
 
@@ -38,7 +35,7 @@ impl Registry {
 
         let subnet_record_mutation = upsert(
             make_subnet_record_key(subnet_id).into_bytes(),
-            encode_or_panic(&new_subnet_record),
+            new_subnet_record.encode_to_vec(),
         );
 
         let mut mutations = vec![subnet_record_mutation];
@@ -303,7 +300,7 @@ impl Registry {
 
             mutations.push(upsert(
                 make_chain_key_signing_subnet_list_key(master_public_key_id).into_bytes(),
-                encode_or_panic(&chain_key_signing_list_for_key),
+                chain_key_signing_list_for_key.encode_to_vec(),
             ));
         }
         mutations
@@ -334,17 +331,6 @@ pub struct UpdateSubnetPayload {
     pub dkg_interval_length: Option<u64>,
     pub dkg_dealings_per_block: Option<u64>,
 
-    pub max_artifact_streams_per_peer: Option<u32>,
-    pub max_chunk_wait_ms: Option<u32>,
-    pub max_duplicity: Option<u32>,
-    pub max_chunk_size: Option<u32>,
-    pub receive_check_cache_size: Option<u32>,
-    pub pfn_evaluation_period_ms: Option<u32>,
-    pub registry_poll_period_ms: Option<u32>,
-    pub retransmission_request_ms: Option<u32>,
-
-    pub set_gossip_config_to_default: bool,
-
     pub start_as_nns: Option<bool>,
 
     pub subnet_type: Option<SubnetType>,
@@ -352,9 +338,6 @@ pub struct UpdateSubnetPayload {
     pub is_halted: Option<bool>,
     pub halt_at_cup_height: Option<bool>,
 
-    pub max_instructions_per_message: Option<u64>,
-    pub max_instructions_per_round: Option<u64>,
-    pub max_instructions_per_install_code: Option<u64>,
     pub features: Option<SubnetFeaturesPb>,
 
     /// The following three ecdsa_* fields will soon be deprecated and replaced with chain_* fields.
@@ -373,6 +356,17 @@ pub struct UpdateSubnetPayload {
 
     pub ssh_readonly_access: Option<Vec<String>>,
     pub ssh_backup_access: Option<Vec<String>>,
+
+    // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
+    pub max_artifact_streams_per_peer: Option<u32>,
+    pub max_chunk_wait_ms: Option<u32>,
+    pub max_duplicity: Option<u32>,
+    pub max_chunk_size: Option<u32>,
+    pub receive_check_cache_size: Option<u32>,
+    pub pfn_evaluation_period_ms: Option<u32>,
+    pub registry_poll_period_ms: Option<u32>,
+    pub retransmission_request_ms: Option<u32>,
+    pub set_gossip_config_to_default: bool,
 }
 
 #[derive(CandidType, Clone, Default, Deserialize, Debug, Eq, PartialEq, Serialize)]
@@ -546,12 +540,17 @@ fn merge_subnet_record(
         subnet_type,
         is_halted,
         halt_at_cup_height,
-        max_instructions_per_message,
-        max_instructions_per_round,
-        max_instructions_per_install_code,
         features,
         ecdsa_config,
         chain_key_config,
+        ecdsa_key_signing_enable: _,
+        ecdsa_key_signing_disable: _,
+        chain_key_signing_enable: _,
+        chain_key_signing_disable: _,
+        max_number_of_canisters,
+        ssh_readonly_access,
+        ssh_backup_access,
+        // Deprecated/unused values follow
         max_artifact_streams_per_peer: _,
         max_chunk_wait_ms: _,
         max_duplicity: _,
@@ -561,13 +560,6 @@ fn merge_subnet_record(
         registry_poll_period_ms: _,
         retransmission_request_ms: _,
         set_gossip_config_to_default: _,
-        ecdsa_key_signing_enable: _,
-        ecdsa_key_signing_disable: _,
-        chain_key_signing_enable: _,
-        chain_key_signing_disable: _,
-        max_number_of_canisters,
-        ssh_readonly_access,
-        ssh_backup_access,
     } = payload;
 
     let features: Option<SubnetFeaturesPb> = features.map(|v| SubnetFeatures::from(v).into());
@@ -589,10 +581,6 @@ fn merge_subnet_record(
 
     maybe_set!(subnet_record, is_halted);
     maybe_set!(subnet_record, halt_at_cup_height);
-
-    maybe_set!(subnet_record, max_instructions_per_message);
-    maybe_set!(subnet_record, max_instructions_per_round);
-    maybe_set!(subnet_record, max_instructions_per_install_code);
 
     maybe_set_option!(subnet_record, features);
 
@@ -656,22 +644,10 @@ mod tests {
             initial_notary_delay_millis: None,
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
-            max_artifact_streams_per_peer: None,
-            max_chunk_wait_ms: None,
-            max_duplicity: None,
-            max_chunk_size: None,
-            receive_check_cache_size: None,
-            pfn_evaluation_period_ms: None,
-            registry_poll_period_ms: None,
-            retransmission_request_ms: None,
-            set_gossip_config_to_default: false,
             start_as_nns: None,
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: None,
-            max_instructions_per_message: None,
-            max_instructions_per_round: None,
-            max_instructions_per_install_code: None,
             features: None,
             ecdsa_config: None,
             ecdsa_key_signing_enable: None,
@@ -682,6 +658,16 @@ mod tests {
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
+            // Deprecated/unused values follow
+            max_artifact_streams_per_peer: None,
+            max_chunk_wait_ms: None,
+            max_duplicity: None,
+            max_chunk_size: None,
+            receive_check_cache_size: None,
+            pfn_evaluation_period_ms: None,
+            registry_poll_period_ms: None,
+            retransmission_request_ms: None,
+            set_gossip_config_to_default: Default::default(),
         }
     }
 
@@ -701,9 +687,6 @@ mod tests {
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
             halt_at_cup_height: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
@@ -737,22 +720,10 @@ mod tests {
             initial_notary_delay_millis: Some(200),
             dkg_interval_length: Some(8),
             dkg_dealings_per_block: Some(1),
-            max_artifact_streams_per_peer: Some(0),
-            max_chunk_wait_ms: Some(10),
-            max_duplicity: Some(5),
-            max_chunk_size: Some(1024),
-            receive_check_cache_size: Some(500),
-            pfn_evaluation_period_ms: Some(5000),
-            registry_poll_period_ms: Some(4000),
-            retransmission_request_ms: Some(7000),
-            set_gossip_config_to_default: false,
             start_as_nns: Some(true),
             subnet_type: None,
             is_halted: Some(true),
             halt_at_cup_height: Some(false),
-            max_instructions_per_message: Some(6_000_000_000),
-            max_instructions_per_round: Some(8_000_000_000),
-            max_instructions_per_install_code: Some(300_000_000_000),
             features: Some(
                 SubnetFeatures {
                     canister_sandboxing: false,
@@ -770,6 +741,16 @@ mod tests {
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
+            // Deprecated/unused values follow
+            max_artifact_streams_per_peer: None,
+            max_chunk_wait_ms: None,
+            max_duplicity: None,
+            max_chunk_size: None,
+            receive_check_cache_size: None,
+            pfn_evaluation_period_ms: None,
+            registry_poll_period_ms: None,
+            retransmission_request_ms: None,
+            set_gossip_config_to_default: Default::default(),
         };
 
         assert_eq!(
@@ -788,9 +769,6 @@ mod tests {
                 subnet_type: SubnetType::Application.into(),
                 is_halted: true,
                 halt_at_cup_height: false,
-                max_instructions_per_message: 6_000_000_000,
-                max_instructions_per_round: 8_000_000_000,
-                max_instructions_per_install_code: 300_000_000_000,
                 features: Some(
                     SubnetFeatures {
                         canister_sandboxing: false,
@@ -824,9 +802,6 @@ mod tests {
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
             halt_at_cup_height: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
@@ -849,22 +824,10 @@ mod tests {
             initial_notary_delay_millis: None,
             dkg_interval_length: Some(2),
             dkg_dealings_per_block: Some(1),
-            max_artifact_streams_per_peer: Some(0),
-            max_chunk_wait_ms: Some(10),
-            max_duplicity: None,
-            max_chunk_size: None,
-            receive_check_cache_size: Some(200),
-            pfn_evaluation_period_ms: None,
-            registry_poll_period_ms: None,
-            retransmission_request_ms: None,
-            set_gossip_config_to_default: false,
             start_as_nns: None,
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: Some(true),
-            max_instructions_per_message: None,
-            max_instructions_per_round: Some(8_000_000_000),
-            max_instructions_per_install_code: None,
             features: None,
             ecdsa_config: None,
             ecdsa_key_signing_enable: None,
@@ -875,8 +838,17 @@ mod tests {
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
+            // Deprecated/unused values follow
+            max_artifact_streams_per_peer: None,
+            max_chunk_wait_ms: None,
+            max_duplicity: None,
+            max_chunk_size: None,
+            receive_check_cache_size: None,
+            pfn_evaluation_period_ms: None,
+            registry_poll_period_ms: None,
+            retransmission_request_ms: None,
+            set_gossip_config_to_default: Default::default(),
         };
-
         assert_eq!(
             merge_subnet_record(subnet_record, payload),
             SubnetRecordPb {
@@ -893,9 +865,6 @@ mod tests {
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
                 halt_at_cup_height: true,
-                max_instructions_per_message: 5_000_000_000,
-                max_instructions_per_round: 8_000_000_000,
-                max_instructions_per_install_code: 200_000_000_000,
                 features: None,
                 max_number_of_canisters: 50,
                 ssh_readonly_access: vec![],

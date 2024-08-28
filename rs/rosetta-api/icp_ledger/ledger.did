@@ -350,7 +350,6 @@ type Value = variant {
 };
 
 type UpgradeArgs = record {
-  maximum_number_of_accounts : opt nat64;
   icrc1_minting_account : opt Account;
   feature_flags : opt FeatureFlags;
 };
@@ -427,6 +426,7 @@ type TransferFromError = variant {
 
 type icrc21_consent_message_metadata = record {
     language: text;
+    utc_offset_minutes: opt int16;
 };
 
 type icrc21_consent_message_spec = record {

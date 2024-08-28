@@ -218,7 +218,7 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
                 Canister called `ic0.trap` with message: did not find blob on stack.\n\
                 Consider gracefully handling failures from this canister or altering the canister to \
                 handle exceptions. See documentation: \
-                https://internetcomputer.org/docs/current/references/execution-errors#trapped-explicitly"
+                http://internetcomputer.org/docs/current/references/execution-errors#trapped-explicitly"
                     .to_string()
             }),
             dapp_canisters_transfer_result: Some(DappCanistersTransferResult {

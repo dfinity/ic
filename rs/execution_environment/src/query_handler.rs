@@ -14,7 +14,6 @@ use crate::{
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
 use candid::Encode;
-use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
@@ -51,10 +50,8 @@ use tower::{util::BoxCloneService, Service};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
 use ic_management_canister_types::{
-    BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, FetchCanisterLogsRequest,
-    FetchCanisterLogsResponse, LogVisibility, Payload, QueryMethod,
+    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2, Payload, QueryMethod,
 };
-use ic_replicated_state::NetworkTopology;
 
 /// Convert an object into CBOR binary.
 fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
@@ -188,10 +185,10 @@ impl InternalHttpQueryHandler {
         self.local_query_execution_stats.set_epoch(epoch);
     }
 
-    /// Handle a query of type `ICQuery`.
+    /// Handle a query of type `Query`.
     pub fn query(
         &self,
-        mut query: Query,
+        query: Query,
         state: Labeled<Arc<ReplicatedState>>,
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
@@ -199,28 +196,13 @@ impl InternalHttpQueryHandler {
 
         // Update the query receiver if the query is for the management canister.
         if query.receiver == CanisterId::ic_00() {
-            let network = match QueryMethod::from_str(&query.method_name) {
-                Ok(QueryMethod::BitcoinGetUtxosQuery) => {
-                    BitcoinGetUtxosArgs::decode(&query.method_payload)?.network
-                }
-                Ok(QueryMethod::BitcoinGetBalanceQuery) => {
-                    BitcoinGetBalanceArgs::decode(&query.method_payload)?.network
-                }
+            match QueryMethod::from_str(&query.method_name) {
                 Ok(QueryMethod::FetchCanisterLogs) => {
-                    return match self.config.embedders_config.feature_flags.canister_logging {
-                        FlagStatus::Enabled => fetch_canister_logs(
-                            query.source(),
-                            state.get_ref(),
-                            FetchCanisterLogsRequest::decode(&query.method_payload)?,
-                        ),
-                        FlagStatus::Disabled => Err(UserError::new(
-                            ErrorCode::CanisterContractViolation,
-                            format!(
-                                "{} API is not enabled on this subnet",
-                                QueryMethod::FetchCanisterLogs
-                            ),
-                        )),
-                    }
+                    return fetch_canister_logs(
+                        query.source(),
+                        state.get_ref(),
+                        FetchCanisterLogsRequest::decode(&query.method_payload)?,
+                    );
                 }
                 Err(_) => {
                     return Err(UserError::new(
@@ -229,9 +211,6 @@ impl InternalHttpQueryHandler {
                     ));
                 }
             };
-
-            query.receiver =
-                route_bitcoin_message(network, &state.get_ref().metadata.network_topology)?;
         }
 
         let query_stats_collector = if self.config.query_stats_aggregation == FlagStatus::Enabled {
@@ -303,32 +282,9 @@ impl InternalHttpQueryHandler {
     }
 }
 
-fn route_bitcoin_message(
-    network: BitcoinNetwork,
-    network_topology: &NetworkTopology,
-) -> Result<CanisterId, UserError> {
-    let canister_id = match network {
-        // Route to the bitcoin canister if it exists, otherwise return the error.
-        BitcoinNetwork::Testnet
-        | BitcoinNetwork::testnet
-        | BitcoinNetwork::Regtest
-        | BitcoinNetwork::regtest => {
-            network_topology
-                .bitcoin_testnet_canister_id
-                .ok_or(UserError::new(
-                    ErrorCode::CanisterNotHostedBySubnet,
-                    "Bitcoin testnet canister is not installed.".to_string(),
-                ))?
-        }
-        BitcoinNetwork::Mainnet | BitcoinNetwork::mainnet => network_topology
-            .bitcoin_mainnet_canister_id
-            .ok_or(UserError::new(
-                ErrorCode::CanisterNotHostedBySubnet,
-                "Bitcoin mainnet canister is not installed.".to_string(),
-            ))?,
-    };
-    Ok(canister_id)
-}
+// TODO(EXC-1678): remove after release.
+/// Feature flag to enable/disable allowed viewers for canister log visibility.
+const ALLOWED_VIEWERS_ENABLED: bool = false;
 
 fn fetch_canister_logs(
     sender: PrincipalId,
@@ -343,10 +299,19 @@ fn fetch_canister_logs(
         )
     })?;
 
-    match canister.log_visibility() {
-        LogVisibility::Public => Ok(()),
-        LogVisibility::Controllers if canister.controllers().contains(&sender) => Ok(()),
-        LogVisibility::Controllers => Err(UserError::new(
+    let log_visibility = match canister.log_visibility() {
+        // If the feature is disabled override `AllowedViewers` with default value.
+        LogVisibilityV2::AllowedViewers(_) if !ALLOWED_VIEWERS_ENABLED => {
+            &LogVisibilityV2::default()
+        }
+        other => other,
+    };
+    match log_visibility {
+        LogVisibilityV2::Public => Ok(()),
+        LogVisibilityV2::Controllers if canister.controllers().contains(&sender) => Ok(()),
+        LogVisibilityV2::AllowedViewers(principals) if principals.get().contains(&sender) => Ok(()),
+        LogVisibilityV2::AllowedViewers(_) if canister.controllers().contains(&sender) => Ok(()),
+        LogVisibilityV2::AllowedViewers(_) | LogVisibilityV2::Controllers => Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
             format!(
                 "Caller {} is not allowed to query ic00 method {}",

@@ -8,7 +8,7 @@ use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{CanisterStatus, ExecutionTask, SystemState};
 use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
-use ic_management_canister_types::{CanisterStatusType, LogVisibility};
+use ic_management_canister_types::{CanisterStatusType, LogVisibilityV2};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::TotalQueryStats;
 use ic_types::methods::SystemMethod;
@@ -20,6 +20,8 @@ use ic_types::{
     MemoryAllocation, NumBytes, PrincipalId, Time,
 };
 use ic_types::{LongExecutionMode, NumInstructions};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use phantom_newtype::AmountOf;
 pub use queues::{CanisterQueues, DEFAULT_QUEUE_CAPACITY};
 use std::collections::BTreeSet;
@@ -29,7 +31,7 @@ use std::time::Duration;
 
 use self::execution_state::NextScheduledMethod;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
 /// State maintained by the scheduler.
 pub struct SchedulerState {
     /// The last full round that a canister got the chance to execute. This
@@ -109,9 +111,10 @@ impl SchedulerState {
 }
 
 /// The full state of a single canister.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, ValidateEq)]
 pub struct CanisterState {
     /// See `SystemState` for documentation.
+    #[validate_eq(CompareWithValidateEq)]
     pub system_state: SystemState,
 
     /// See `ExecutionState` for documentation.
@@ -120,9 +123,11 @@ pub struct CanisterState {
     /// an actual wasm module. A valid canister is not required to contain a
     /// Wasm module. Canisters without Wasm modules can exist as a store of
     /// ICP; temporarily when they are being upgraded, etc.
+    #[validate_eq(CompareWithValidateEq)]
     pub execution_state: Option<ExecutionState>,
 
     /// See `SchedulerState` for documentation.
+    #[validate_eq(CompareWithValidateEq)]
     pub scheduler_state: SchedulerState,
 }
 
@@ -153,8 +158,8 @@ impl CanisterState {
         &self.system_state.controllers
     }
 
-    pub fn log_visibility(&self) -> LogVisibility {
-        self.system_state.log_visibility
+    pub fn log_visibility(&self) -> &LogVisibilityV2 {
+        &self.system_state.log_visibility
     }
 
     /// Returns the difference in time since the canister was last charged for resource allocations.
@@ -217,6 +222,7 @@ impl CanisterState {
             (None, true) => NextExecution::StartNew,
             (Some(ExecutionTask::Heartbeat), _) => NextExecution::StartNew,
             (Some(ExecutionTask::GlobalTimer), _) => NextExecution::StartNew,
+            (Some(ExecutionTask::OnLowWasmMemory), _) => NextExecution::StartNew,
             (Some(ExecutionTask::AbortedExecution { .. }), _)
             | (Some(ExecutionTask::PausedExecution { .. }), _) => NextExecution::ContinueLong,
             (Some(ExecutionTask::AbortedInstallCode { .. }), _)
@@ -236,6 +242,7 @@ impl CanisterState {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
+            | Some(ExecutionTask::OnLowWasmMemory)
             | Some(ExecutionTask::PausedExecution { .. })
             | Some(ExecutionTask::PausedInstallCode(..))
             | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
@@ -249,6 +256,7 @@ impl CanisterState {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
+            | Some(ExecutionTask::OnLowWasmMemory)
             | Some(ExecutionTask::PausedInstallCode(..))
             | Some(ExecutionTask::AbortedExecution { .. })
             | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
@@ -262,6 +270,7 @@ impl CanisterState {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
+            | Some(ExecutionTask::OnLowWasmMemory)
             | Some(ExecutionTask::PausedExecution { .. })
             | Some(ExecutionTask::AbortedExecution { .. })
             | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
@@ -275,6 +284,7 @@ impl CanisterState {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
+            | Some(ExecutionTask::OnLowWasmMemory)
             | Some(ExecutionTask::PausedExecution { .. })
             | Some(ExecutionTask::PausedInstallCode(..))
             | Some(ExecutionTask::AbortedExecution { .. }) => false,
@@ -346,17 +356,17 @@ impl CanisterState {
 
     /// Checks the constraints that a canister should always respect.
     /// These invariants will be verified at the end of each execution round.
-    pub fn check_invariants(&self, default_limit: NumBytes) -> Result<(), StateError> {
+    pub fn check_invariants(&self, default_limit: NumBytes) -> Result<(), String> {
         let memory_used = self.memory_usage();
         let memory_limit = self.memory_limit(default_limit);
 
         if memory_used > memory_limit {
-            return Err(StateError::InvariantBroken(format!(
-                "Memory of canister {} exceeds the limit allowed: used {}, allowed {}",
+            return Err(format!(
+                "Invariant broken: Memory of canister {} exceeds the limit allowed: used {}, allowed {}",
                 self.canister_id(),
                 memory_used,
                 memory_limit
-            )));
+            ));
         }
 
         self.system_state.check_invariants()
@@ -364,12 +374,18 @@ impl CanisterState {
 
     /// The amount of memory currently being used by the canister.
     ///
-    /// This only includes execution memory (heap, stable, globals, Wasm),
-    /// canister history memory and wasm chunk storage.
+    /// This includes execution memory (heap, stable, globals, Wasm),
+    /// canister history memory, wasm chunk storage and snapshots that
+    /// belong to this canister.
+    ///
+    /// This amount is used to periodically charge the canister for the memory
+    /// resources it consumes and can be used to calculate the canister's
+    /// idle cycles burn rate and freezing threshold in cycles.
     pub fn memory_usage(&self) -> NumBytes {
         self.execution_memory_usage()
             + self.canister_history_memory_usage()
             + self.wasm_chunk_store_memory_usage()
+            + self.system_state.snapshots_memory_usage
     }
 
     /// Returns the amount of execution memory (heap, stable, globals, Wasm)
@@ -404,8 +420,11 @@ impl CanisterState {
         self.system_state.wasm_chunk_store.memory_usage()
     }
 
-    /// Returns the memory usage of a snapshot created based on the current canister's state.
-    pub fn snapshot_memory_usage(&self) -> NumBytes {
+    /// Returns the snapshot size estimation in bytes based on the current canister's state.
+    ///
+    /// It represents the memory usage of a snapshot that would be created at the time of the call
+    /// and would return a different value if the canister's state changes after the call.
+    pub fn snapshot_size_bytes(&self) -> NumBytes {
         let execution_usage = self
             .execution_state
             .as_ref()
@@ -428,6 +447,11 @@ impl CanisterState {
     /// Returns the current memory allocation of the canister.
     pub fn memory_allocation(&self) -> MemoryAllocation {
         self.system_state.memory_allocation
+    }
+
+    /// Returns the current Wasm memory threshold of the canister.
+    pub fn wasm_memory_threshold(&self) -> NumBytes {
+        self.system_state.wasm_memory_threshold
     }
 
     /// Returns the canister's memory limit: its reservation, if set; else the
@@ -459,6 +483,12 @@ impl CanisterState {
     /// system method.
     pub fn exports_global_timer_method(&self) -> bool {
         self.exports_method(&WasmMethod::System(SystemMethod::CanisterGlobalTimer))
+    }
+
+    /// Returns true if the canister exports the `canister_on_low_wasm_memory`
+    /// system method.
+    pub fn exports_on_low_wasm_memory(&self) -> bool {
+        self.exports_method(&WasmMethod::System(SystemMethod::CanisterOnLowWasmMemory))
     }
 
     /// Returns true if the canister exports the given Wasm method.
@@ -527,6 +557,7 @@ impl CanisterState {
             ExecutionTask::AbortedInstallCode { .. } => false,
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
+            | ExecutionTask::OnLowWasmMemory
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_)
             | ExecutionTask::AbortedExecution { .. } => true,
@@ -562,6 +593,16 @@ impl CanisterState {
     pub fn set_log(&mut self, other: CanisterLog) {
         self.system_state.canister_log = other;
     }
+
+    /// Returns the cumulative amount of heap delta represented by this canister's state.
+    /// This is the amount that will need to be persisted during the next
+    /// checkpoint and counts the delta since previous checkpoint.
+    pub fn heap_delta(&self) -> NumBytes {
+        self.execution_state
+            .as_ref()
+            .map_or(NumBytes::from(0), |es| es.heap_delta())
+            + self.system_state.wasm_chunk_store.heap_delta()
+    }
 }
 
 /// The result of `next_execution()` function.
@@ -571,7 +612,7 @@ impl CanisterState {
 /// - `ContinueLong`: the canister has a long-running execution and will
 ///   continue it.
 /// - `ContinueInstallCode`: the canister has a long-running execution of
-/// `install_code` subnet message and will continue it.
+///   `install_code` subnet message and will continue it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NextExecution {
     None,
@@ -600,5 +641,5 @@ pub fn num_bytes_try_from(pages: NumWasmPages) -> Result<NumBytes, String> {
 }
 
 pub mod testing {
-    pub use super::queues::testing::{new_canister_queues_for_test, CanisterQueuesTesting};
+    pub use super::queues::testing::{new_canister_output_queues_for_test, CanisterQueuesTesting};
 }

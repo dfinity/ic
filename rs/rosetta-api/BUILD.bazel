@@ -9,16 +9,17 @@ load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//rs/canister_client",
     "//rs/constants",
-    "//rs/crypto/ecdsa_secp256k1",
+    "//rs/crypto/secp256k1",
     "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/nns/common",
     "//rs/nns/constants",
-    "//rs/nns/governance",
+    "//rs/nns/governance/api",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_canister_blocks_synchronizer:ledger_canister_blocks_synchronizer_lib",
     "//rs/rosetta-api/ledger_canister_core",
@@ -54,16 +55,18 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/rust_canisters/dfn_macro",
     "@crate_index//:async-trait",
     "@crate_index//:strum_macros",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/ed25519",
     "//rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
     "//rs/rosetta-api/test_utils",
     "//rs/types/base_types",
-    "@crate_index//:ed25519-consensus",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:proptest",
@@ -75,7 +78,7 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {
 }
 
-ROSETTA_VERSION = "2.0.0"
+ROSETTA_VERSION = "2.1.0"
 
 rust_library(
     name = "rosetta-api",
@@ -91,6 +94,16 @@ rust_binary(
     name = "ic-rosetta-api",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = ROSETTA_VERSION,
+    deps = DEPENDENCIES + [":rosetta-api"],
+)
+
+rust_binary(
+    name = "ic-rosetta-api-rosetta-blocks",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_features = ["rosetta-blocks"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = ROSETTA_VERSION,
     deps = DEPENDENCIES + [":rosetta-api"],
@@ -192,6 +205,9 @@ container_image(
     name = "rosetta_image_base",
     base = "@rust_base//image",
     tags = ["manual"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     tars = [
         ":passwd_tar",
         ":data_tar",
@@ -212,6 +228,9 @@ container_image(
     ],
     ports = ["8080"],
     tags = ["manual"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     user = "rosetta",
     workdir = "/home/rosetta",
 )

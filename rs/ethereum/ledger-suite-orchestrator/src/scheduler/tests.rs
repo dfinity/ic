@@ -5,8 +5,8 @@ use crate::scheduler::tests::mock::MockCanisterRuntime;
 use crate::scheduler::{cycles_to_u128, InstallLedgerSuiteArgs, Task, TaskError, TaskExecution};
 use crate::state::test_fixtures::new_state;
 use crate::state::{
-    read_state, Canisters, GitCommitHash, IndexCanister, LedgerCanister, ManagedCanisterStatus,
-    State, WasmHash, ARCHIVE_NODE_BYTECODE, INDEX_BYTECODE, LEDGER_BYTECODE,
+    read_state, Canisters, GitCommitHash, IndexCanister, LedgerCanister, LedgerSuiteVersion,
+    ManagedCanisterStatus, State, WasmHash, ARCHIVE_NODE_BYTECODE, INDEX_BYTECODE, LEDGER_BYTECODE,
 };
 use crate::storage::{mutate_wasm_store, record_icrc1_ledger_suite_wasms, TASKS};
 use candid::Principal;
@@ -148,7 +148,7 @@ async fn should_install_ledger_suite_with_additional_controllers() {
         })
         .unwrap(),
     );
-    register_embedded_wasms();
+    let _version = register_embedded_wasms();
 
     let mut runtime = MockCanisterRuntime::new();
 
@@ -1383,10 +1383,10 @@ fn task_queue_from_state() -> Vec<TaskExecution> {
 
 fn init_state() {
     crate::state::init_state(new_state());
-    register_embedded_wasms();
+    let _version = register_embedded_wasms();
 }
 
-fn register_embedded_wasms() {
+fn register_embedded_wasms() -> LedgerSuiteVersion {
     mutate_wasm_store(|s| {
         record_icrc1_ledger_suite_wasms(s, 1_620_328_630_000_000_000, GitCommitHash::default())
     })
@@ -1396,6 +1396,7 @@ fn register_embedded_wasms() {
 fn usdc_install_args() -> InstallLedgerSuiteArgs {
     InstallLedgerSuiteArgs {
         contract: usdc(),
+        minter_id: MINTER_PRINCIPAL,
         ledger_init_arg: ledger_init_arg(),
         ledger_compressed_wasm_hash: read_ledger_wasm_hash(),
         index_compressed_wasm_hash: read_index_wasm_hash(),
@@ -1403,24 +1404,12 @@ fn usdc_install_args() -> InstallLedgerSuiteArgs {
 }
 
 fn ledger_init_arg() -> LedgerInitArg {
-    use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
-
     LedgerInitArg {
-        minting_account: LedgerAccount {
-            owner: Principal::anonymous(),
-            subaccount: None,
-        },
-        fee_collector_account: None,
-        initial_balances: vec![],
         transfer_fee: 10_000_u32.into(),
-        decimals: None,
+        decimals: 6,
         token_name: "Chain Key USDC".to_string(),
         token_symbol: "ckUSDC".to_string(),
         token_logo: "".to_string(),
-        max_memo_length: None,
-        feature_flags: None,
-        maximum_number_of_accounts: None,
-        accounts_overflow_trim_quantity: None,
     }
 }
 
@@ -1670,26 +1659,42 @@ mod mock {
 }
 
 mod install_ledger_suite_args {
-    use crate::candid::{AddErc20Arg, LedgerInitArg};
-    use crate::scheduler::tests::usdc_metadata;
+    use crate::candid::{AddErc20Arg, InitArg, LedgerInitArg};
+    use crate::scheduler::tests::{usdc_metadata, MINTER_PRINCIPAL};
     use crate::scheduler::{ChainId, Erc20Token, InstallLedgerSuiteArgs, InvalidAddErc20ArgError};
-    use crate::state::test_fixtures::new_state;
-    use crate::state::{GitCommitHash, IndexWasm, LedgerWasm, State};
-    use crate::storage::test_fixtures::empty_task_queue;
-    use crate::storage::test_fixtures::empty_wasm_store;
+    use crate::state::test_fixtures::{expect_panic_with_message, new_state, new_state_from};
+    use crate::state::{GitCommitHash, IndexWasm, LedgerSuiteVersion, LedgerWasm, WasmHash};
+    use crate::storage::test_fixtures::{
+        embedded_ledger_suite_version, empty_task_queue, empty_wasm_store,
+    };
     use crate::storage::{record_icrc1_ledger_suite_wasms, WasmStore};
     use assert_matches::assert_matches;
-    use candid::{Nat, Principal};
+    use candid::Nat;
     use proptest::collection::vec;
     use proptest::{prop_assert_eq, proptest};
 
     const ERC20_CONTRACT_ADDRESS: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 
     #[test]
-    fn should_error_if_contract_is_already_managed() {
-        let mut state = new_state();
+    fn should_error_if_minter_id_missing() {
+        let state = new_state();
         let wasm_store = wasm_store_with_icrc1_ledger_suite();
-        let arg = valid_add_erc20_arg(&state, &wasm_store);
+
+        assert_matches!(
+            InstallLedgerSuiteArgs::validate_add_erc20(&state, &wasm_store, valid_add_erc20_arg()),
+            Err(InvalidAddErc20ArgError::InternalError( error )) if error.contains("minter principal")
+        );
+    }
+
+    #[test]
+    fn should_error_if_contract_is_already_managed() {
+        let mut state = new_state_from(InitArg {
+            minter_id: Some(MINTER_PRINCIPAL),
+            ..Default::default()
+        });
+        let wasm_store = wasm_store_with_icrc1_ledger_suite();
+        state.update_ledger_suite_version(embedded_ledger_suite_version());
+        let arg = valid_add_erc20_arg();
         let contract: Erc20Token = arg.contract.clone().try_into().unwrap();
         state.record_new_erc20_token(contract.clone(), usdc_metadata());
 
@@ -1732,9 +1737,10 @@ mod install_ledger_suite_args {
 
         #[test]
         fn should_error_on_invalid_ethereum_address(invalid_address in "0x[0-9a-fA-F]{0,39}|[0-9a-fA-F]{41,}") {
-            let state = new_state();
+            let mut state = new_state();
             let wasm_store = wasm_store_with_icrc1_ledger_suite();
-            let mut arg = valid_add_erc20_arg(&state, &wasm_store);
+            state.update_ledger_suite_version(embedded_ledger_suite_version());
+            let mut arg = valid_add_erc20_arg();
             arg.contract.address = invalid_address;
             assert_matches!(
                 InstallLedgerSuiteArgs::validate_add_erc20(&state, &wasm_store, arg),
@@ -1744,9 +1750,10 @@ mod install_ledger_suite_args {
 
         #[test]
         fn should_error_on_large_chain_id(offset in 0_u128..=u64::MAX as u128) {
-            let state = new_state();
+            let mut state = new_state();
             let wasm_store = wasm_store_with_icrc1_ledger_suite();
-            let mut arg = valid_add_erc20_arg(&state, &wasm_store);
+            state.update_ledger_suite_version(embedded_ledger_suite_version());
+            let mut arg = valid_add_erc20_arg();
             arg.contract.chain_id = Nat::from((u64::MAX as u128) + offset);
 
             assert_matches!(
@@ -1757,10 +1764,67 @@ mod install_ledger_suite_args {
     }
 
     #[test]
-    fn should_accept_valid_erc20_arg() {
-        let state = new_state();
+    fn should_panic_when_ledger_suite_version_missing() {
+        let state = new_state_from(InitArg {
+            minter_id: Some(MINTER_PRINCIPAL),
+            ..Default::default()
+        });
         let wasm_store = wasm_store_with_icrc1_ledger_suite();
-        let arg = valid_add_erc20_arg(&state, &wasm_store);
+        assert_eq!(state.ledger_suite_version(), None);
+
+        expect_panic_with_message(
+            || {
+                InstallLedgerSuiteArgs::validate_add_erc20(
+                    &state,
+                    &wasm_store,
+                    valid_add_erc20_arg(),
+                )
+            },
+            "ledger suite version missing",
+        );
+    }
+
+    #[test]
+    fn should_panic_when_ledger_suite_version_not_in_wasm_store() {
+        for version in [
+            LedgerSuiteVersion {
+                ledger_compressed_wasm_hash: WasmHash::default(),
+                ..embedded_ledger_suite_version()
+            },
+            LedgerSuiteVersion {
+                index_compressed_wasm_hash: WasmHash::default(),
+                ..embedded_ledger_suite_version()
+            },
+        ] {
+            let mut state = new_state_from(InitArg {
+                minter_id: Some(MINTER_PRINCIPAL),
+                ..Default::default()
+            });
+            state.update_ledger_suite_version(version);
+            let wasm_store = wasm_store_with_icrc1_ledger_suite();
+
+            expect_panic_with_message(
+                || {
+                    InstallLedgerSuiteArgs::validate_add_erc20(
+                        &state,
+                        &wasm_store,
+                        valid_add_erc20_arg(),
+                    )
+                },
+                "wasm hash missing",
+            );
+        }
+    }
+
+    #[test]
+    fn should_accept_valid_erc20_arg() {
+        let mut state = new_state_from(InitArg {
+            minter_id: Some(MINTER_PRINCIPAL),
+            ..Default::default()
+        });
+        let wasm_store = wasm_store_with_icrc1_ledger_suite();
+        state.update_ledger_suite_version(embedded_ledger_suite_version());
+        let arg = valid_add_erc20_arg();
         let ledger_init_arg = arg.ledger_init_arg.clone();
 
         let result = InstallLedgerSuiteArgs::validate_add_erc20(&state, &wasm_store, arg).unwrap();
@@ -1769,6 +1833,7 @@ mod install_ledger_suite_args {
             result,
             InstallLedgerSuiteArgs {
                 contract: Erc20Token(ChainId(1), ERC20_CONTRACT_ADDRESS.parse().unwrap()),
+                minter_id: MINTER_PRINCIPAL,
                 ledger_init_arg,
                 ledger_compressed_wasm_hash: LedgerWasm::from(crate::state::LEDGER_BYTECODE)
                     .hash()
@@ -1780,46 +1845,20 @@ mod install_ledger_suite_args {
         );
     }
 
-    fn valid_add_erc20_arg(state: &State, wasm_store: &WasmStore) -> AddErc20Arg {
-        use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
-
-        let arg = AddErc20Arg {
+    fn valid_add_erc20_arg() -> AddErc20Arg {
+        AddErc20Arg {
             contract: crate::candid::Erc20Contract {
                 chain_id: Nat::from(1_u8),
                 address: ERC20_CONTRACT_ADDRESS.to_string(),
             },
             ledger_init_arg: LedgerInitArg {
-                minting_account: LedgerAccount {
-                    owner: Principal::anonymous(),
-                    subaccount: None,
-                },
-                fee_collector_account: None,
-                initial_balances: vec![],
                 transfer_fee: 10_000_u32.into(),
-                decimals: None,
+                decimals: 6,
                 token_name: "USD Coin".to_string(),
                 token_symbol: "USDC".to_string(),
                 token_logo: "".to_string(),
-                max_memo_length: None,
-                feature_flags: None,
-                maximum_number_of_accounts: None,
-                accounts_overflow_trim_quantity: None,
             },
-            git_commit_hash: "6a8e5fca2c6b4e12966638c444e994e204b42989".to_string(),
-            ledger_compressed_wasm_hash: LedgerWasm::from(crate::state::LEDGER_BYTECODE)
-                .hash()
-                .to_string(),
-            index_compressed_wasm_hash: IndexWasm::from(crate::state::INDEX_BYTECODE)
-                .hash()
-                .to_string(),
-        };
-        assert_matches!(
-            InstallLedgerSuiteArgs::validate_add_erc20(state, wasm_store, arg.clone()),
-            Ok(_),
-            "BUG: invalid add erc20: {:?}",
-            arg
-        );
-        arg
+        }
     }
 
     fn wasm_store_with_icrc1_ledger_suite() -> WasmStore {
@@ -1830,7 +1869,7 @@ mod install_ledger_suite_args {
                 1_620_328_630_000_000_000,
                 GitCommitHash::default(),
             ),
-            Ok(())
+            Ok(embedded_ledger_suite_version())
         );
         store
     }

@@ -29,8 +29,8 @@ use ic_state_manager::{state_sync::StateSync, StateManagerImpl};
 use ic_tracing::ReloadHandles;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
-    artifact_kind::IngressArtifact,
     consensus::{CatchUpPackage, HasHeight},
+    messages::SignedIngress,
     Height, NodeId, SubnetId,
 };
 use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
@@ -44,6 +44,10 @@ use tokio::sync::{
 /// The buffer size for the channel that [`IngressHistoryWriterImpl`] uses to send
 /// the message id and height of messages that complete execution.
 const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
+
+/// If enable traffic to `api/v3/call` will be routed to the v3 call handler.
+/// Otherwise requests will be routed to the v2 call handler.
+const ENABLE_V3_CALL_HANDLER: bool = false;
 
 /// Create the consensus pool directory (if none exists)
 fn create_consensus_pool_dir(config: &Config) {
@@ -75,7 +79,7 @@ pub fn construct_ic_stack(
     // TODO: remove next three return values since they are used only in tests
     Arc<dyn StateReader<State = ReplicatedState>>,
     QueryExecutionService,
-    UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     Vec<Box<dyn JoinGuard>>,
     XNetEndpoint,
 )> {
@@ -187,6 +191,8 @@ pub fn construct_ic_stack(
 
     let (completed_execution_messages_tx, finalized_ingress_height_rx) =
         channel(COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE);
+    let max_canister_http_requests_in_flight =
+        config.hypervisor.max_canister_http_requests_in_flight;
 
     let execution_services = ExecutionServices::setup_execution(
         log.clone(),
@@ -279,6 +285,7 @@ pub fn construct_ic_stack(
         metrics_registry,
         config.adapters_config,
         execution_services.query_execution_service.clone(),
+        max_canister_http_requests_in_flight,
         log.clone(),
         subnet_type,
     );
@@ -346,6 +353,7 @@ pub fn construct_ic_stack(
         tracing_handle,
         max_certified_height_rx,
         finalized_ingress_height_rx,
+        ENABLE_V3_CALL_HANDLER,
     );
 
     Ok((

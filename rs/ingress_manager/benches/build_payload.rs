@@ -164,11 +164,7 @@ fn prepare(
             peer_id: node_test_id(peer_id),
             timestamp: time_source.get_relative_time(),
         });
-        changeset.push(ChangeAction::MoveToValidated((
-            message_id,
-            node_test_id(peer_id),
-            0,
-        )));
+        changeset.push(ChangeAction::MoveToValidated(message_id));
     }
     pool.apply_changes(changeset);
     assert_eq!(pool.unvalidated().size(), 0);

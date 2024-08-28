@@ -18,11 +18,13 @@ Runbook::
 
 end::catalog[] */
 
-use crate::canister_api::{CallMode, GenericRequest};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer};
-use crate::util::spawn_round_robin_workload_engine;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+};
+use ic_system_test_driver::util::spawn_round_robin_workload_engine;
 
 use slog::{debug, info, Logger};
 

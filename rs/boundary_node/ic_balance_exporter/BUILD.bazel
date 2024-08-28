@@ -1,8 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
-
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:anyhow",
     "@crate_index//:axum",
     "@crate_index//:candid",
@@ -25,11 +24,13 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
     "@crate_index//:indoc",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:tempfile",
 ]
 
@@ -42,6 +43,7 @@ rust_binary(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES,
 )
 

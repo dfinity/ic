@@ -40,26 +40,24 @@
 
 use anyhow::Result;
 
+use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::boundary_node::BoundaryNodeVm;
-use ic_tests::driver::ic::{
+use ic_system_test_driver::driver::boundary_node::BoundaryNodeVm;
+use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
 };
-use ic_tests::driver::{
+use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
     group::SystemTestGroup,
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{
-        await_boundary_node_healthy, HasTopologySnapshot, IcNodeContainer, NnsCanisterWasmStrategy,
-    },
+    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, IcNodeContainer},
 };
+use ic_system_test_driver::sns_client::add_all_wasms_to_sns_wasm;
 use ic_tests::nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, install_sns_aggregator, nns_dapp_customizations,
     set_authorized_subnets, set_icp_xdr_exchange_rate, set_sns_subnet,
 };
-use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
-use ic_tests::sns_client::add_all_wasms_to_sns_wasm;
 
 const NUM_FULL_CONSENSUS_APP_SUBNETS: u64 = 1;
 const NUM_SINGLE_NODE_APP_SUBNETS: u64 = 1;
@@ -98,7 +96,6 @@ pub fn setup(env: TestEnv) {
     // set up NNS canisters
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         nns_dapp_customizations(),
     );
 
@@ -149,7 +146,7 @@ pub fn setup(env: TestEnv) {
             set_sns_subnet(&env, sns_subnet.subnet_id);
 
             // upload SNS canister WASMs to the SNS-W canister
-            add_all_wasms_to_sns_wasm(&env, NnsCanisterWasmStrategy::TakeBuiltFromSources);
+            add_all_wasms_to_sns_wasm(&env);
 
             // install II, NNS dapp, and Subnet Rental Canister
             install_ii_nns_dapp_and_subnet_rental(&env, &bn_name, Some(sns_aggregator_canister_id));

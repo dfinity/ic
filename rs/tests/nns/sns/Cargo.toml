@@ -10,8 +10,8 @@ documentation.workspace = true
 anyhow = { workspace = true }
 ic-nervous-system-common = { path = "../../../nervous_system/common" }
 ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
-ic-nns-governance = { path = "../../../nns/governance" }
 ic-sns-swap = { path = "../../../sns/swap" }
+ic-system-test-driver = { path = "../../driver" }
 rust_decimal = "1.25"
 slog = { workspace = true }
 tests = { path = "../../" }
@@ -53,22 +53,5 @@ name = "ic-systest-sns-launchpad-aggregator-load-test"
 path = "launchpad_aggregator_load_test.rs"
 
 [[bin]]
-name = "ic-systest-sns-payment-flow-with-finalization-test"
-path = "payment_flow_with_finalization_test.rs"
-
-[[bin]]
-name = "ic-systest-sns-one-proposal-payment-flow-with-finalization-test"
-path = "payment_flow_with_finalization_test.rs"
-
-[[bin]]
-name = "ic-systest-sns-one-proposal-neurons-fund-swap-participation-test"
-path = "neurons_fund_swap_participation_test.rs"
-
-[[bin]]
-name = "ic-systest-sns-one-proposal-overpayment-fail-test"
-path = "overpayment_fail_test.rs"
-
-[[bin]]
 name = "ic-systest-sns-payment-flow-load-test"
 path = "payment_flow_load_test.rs"
-

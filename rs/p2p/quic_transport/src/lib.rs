@@ -43,7 +43,6 @@ use axum::{
     Router,
 };
 use bytes::Bytes;
-use either::Either;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_registry::RegistryClient;
@@ -63,6 +62,7 @@ mod connection_manager;
 mod metrics;
 mod request_handler;
 mod utils;
+pub use crate::connection_manager::create_udp_socket;
 
 #[derive(Clone)]
 pub struct Shutdown {
@@ -135,7 +135,7 @@ impl QuicTransport {
         // The receiver is passed here mainly to be consistent with other managers that also
         // require receivers on construction.
         topology_watcher: watch::Receiver<SubnetTopology>,
-        udp_socket: Either<SocketAddr, impl AsyncUdpSocket>,
+        udp_socket: Arc<dyn AsyncUdpSocket>,
         // Make sure this is respected https://docs.rs/axum/latest/axum/struct.Router.html#a-note-about-performance
         router: Router,
     ) -> QuicTransport {
@@ -243,39 +243,6 @@ impl From<MessagePriority> for i32 {
             MessagePriority::High => 1,
             MessagePriority::Low => 0,
         }
-    }
-}
-
-/// This is a workaround for being able to initiate quic transport
-/// with both a real and virtual udp socket. This is needed due
-/// to an inconsistency with the quinn API. This is fixed upstream
-/// and can be removed with quinn 0.11.0.
-/// https://github.com/quinn-rs/quinn/pull/1595
-#[derive(Debug)]
-pub struct DummyUdpSocket;
-
-impl AsyncUdpSocket for DummyUdpSocket {
-    fn poll_send(
-        &self,
-        _state: &quinn::udp::UdpState,
-        _cx: &mut std::task::Context,
-        _transmits: &[quinn::udp::Transmit],
-    ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        todo!()
-    }
-    fn poll_recv(
-        &self,
-        _cx: &mut std::task::Context,
-        _bufs: &mut [std::io::IoSliceMut<'_>],
-        _meta: &mut [quinn::udp::RecvMeta],
-    ) -> std::task::Poll<std::io::Result<usize>> {
-        todo!()
-    }
-    fn local_addr(&self) -> std::io::Result<SocketAddr> {
-        todo!()
-    }
-    fn may_fragment(&self) -> bool {
-        todo!()
     }
 }
 

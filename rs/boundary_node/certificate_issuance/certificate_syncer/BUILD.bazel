@@ -1,8 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
-package(default_visibility = ["//visibility:public"])
-
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:anyhow",
     "@crate_index//:axum",
     "@crate_index//:candid",
@@ -11,24 +10,26 @@ DEPENDENCIES = [
     "@crate_index//:mockall",
     "@crate_index//:nix",
     "@crate_index//:opentelemetry",
-    "@crate_index//:opentelemetry_sdk",
     "@crate_index//:opentelemetry-prometheus",
+    "@crate_index//:opentelemetry_sdk",
     "@crate_index//:prometheus",
     "@crate_index//:reqwest",
-    "@crate_index//:serde_json",
     "@crate_index//:serde",
+    "@crate_index//:serde_json",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
-    "@crate_index//:tracing-subscriber",
     "@crate_index//:tracing",
+    "@crate_index//:tracing-subscriber",
     "@crate_index//:x509-parser",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:tempfile",
 ]
 
@@ -37,6 +38,7 @@ rust_binary(
     srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
+    visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES,
 )
 

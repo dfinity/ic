@@ -15,8 +15,13 @@ use mmap::{PageAllocatorId, PageAllocatorInner, PageInner};
 
 pub use self::page_allocator_registry::PageAllocatorRegistry;
 use super::{FileDescriptor, FileOffset, PageAllocatorFileDescriptor};
+use ic_sys::PAGE_SIZE;
 
 static ALLOCATED_PAGES: PageCounter = PageCounter::new();
+
+/// Any allocation that is larger than this threshold will be copied in parallel
+/// instead of the sequential code for smaller allocations.
+const MIN_MEMORY_ALLOCATION_FOR_PARALLEL_COPY: usize = 64 * 1024 * 1024;
 
 /// A clonable wrapper around a 4KiB memory page implementation.
 /// It is mostly immutable after creation with the only exception of `Buffer`
@@ -84,6 +89,11 @@ impl PageAllocator {
     /// iterator. Knowing the page count beforehand allows the page allocator
     /// to optimize allocation.
     pub fn allocate(&self, pages: &[(PageIndex, &PageBytes)]) -> Vec<(PageIndex, Page)> {
+        // If the pages that need to be allocated and copied are more than MIN_MEMORY_ALLOCATION_FOR_PARALLEL_COPY,
+        // then we can call the fastpath allocator, which does parallel copying.
+        if pages.len() * PAGE_SIZE >= MIN_MEMORY_ALLOCATION_FOR_PARALLEL_COPY {
+            return PageAllocatorInner::allocate_fastpath(&self.0, pages);
+        }
         PageAllocatorInner::allocate(&self.0, pages)
     }
 
@@ -153,7 +163,7 @@ pub fn allocated_pages_count() -> usize {
 /// It contains sufficient information to reconstruct the page allocator
 /// in another process ensuring that there are no two page allocators
 /// with the same id.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct PageAllocatorSerialization {
     pub id: PageAllocatorId,
     pub fd: FileDescriptor,
@@ -182,7 +192,7 @@ pub struct PageSerialization {
 ///
 /// This validation is also useful for checking that the page transfer between
 /// the sandbox and the replica processes works properly.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq)]
 pub struct PageValidation {
     // The index of a non-zero two-byte word in the page.
     // It is zero if no such word exists.
@@ -193,7 +203,7 @@ pub struct PageValidation {
 }
 
 /// Serialization-friendly representation of an mmap-based page.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct MmapPageSerialization {
     pub page_index: PageIndex,
     pub file_offset: FileOffset,
@@ -207,7 +217,7 @@ pub struct MmapPageSerialization {
 /// Each page is represented by its offset in the file. The length of the file is
 /// sent along to simplify deserialization. It is guaranteed that the file
 /// offsets of all pages are smaller than the length of the file.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct PageDeltaSerialization {
     file_len: FileOffset,
     pages: Vec<MmapPageSerialization>,

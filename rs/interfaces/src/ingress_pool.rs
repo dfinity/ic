@@ -3,7 +3,7 @@ use crate::{consensus_pool::ValidatedArtifact, p2p::consensus::UnvalidatedArtifa
 use ic_types::{
     artifact::IngressMessageId,
     messages::{MessageId, SignedIngress},
-    CountBytes, NodeId, Time,
+    CountBytes, Time,
 };
 
 // tag::interface[]
@@ -56,14 +56,12 @@ pub type UnvalidatedIngressArtifact = UnvalidatedArtifact<IngressPoolObject>;
 /// Change set for processing unvalidated ingress messages
 pub type ChangeSet = Vec<ChangeAction>;
 
-pub type IngressChangeArtifact = (IngressMessageId, NodeId, usize);
-
 /// Change actions applicable to the ingress pool.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[allow(clippy::large_enum_variant)]
 pub enum ChangeAction {
     /// Moves an artifact from the unvalidated to validated section of the pool
-    MoveToValidated(IngressChangeArtifact),
+    MoveToValidated(IngressMessageId),
     /// Removes an artifact from the unvalidated pool section.
     RemoveFromUnvalidated(IngressMessageId),
     /// Removes an artifact from the validated pool section.

@@ -836,7 +836,6 @@ mod tests {
             .replace("{{ ipv6_address }}", "::")
             .replace("{{ backup_retention_time_secs }}", "0")
             .replace("{{ backup_purging_interval_secs }}", "0")
-            .replace("{{ replica_log_debug_overrides }}", "[]")
             .replace("{{ nns_url }}", "http://www.fakeurl.com/")
             .replace("{{ malicious_behavior }}", "null")
             .replace("{{ query_stats_aggregation }}", "\"Enabled\"")
@@ -904,7 +903,7 @@ mod tests {
     /// 1) two node records - one for the specified node + another one,
     /// 2) a bunch of firewall rules,
     /// 3) a Subnet record,
-    /// and returns a registry client.
+    ///    and returns a registry client.
     fn set_up_registry(role: Role, node: NodeId) -> Arc<FakeRegistryClient> {
         let registry_version = RegistryVersion::new(1);
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());

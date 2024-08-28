@@ -1,13 +1,13 @@
 #[rustfmt::skip]
 
 use anyhow::Result;
-use ic_tests::{
-    certificate_orchestrator::{
-        access_control_test, certificate_export_test, config, expiration_test, registration_test,
-        renewal_expiration_test, retry_test, task_queue_test,
-    },
+use ic_system_test_driver::{
     driver::group::{SystemTestGroup, SystemTestSubGroup},
     systest,
+};
+use ic_tests::certificate_orchestrator::{
+    access_control_test, certificate_export_test, config, expiration_test, registration_test,
+    renewal_expiration_test, retry_test, task_queue_test,
 };
 
 fn main() -> Result<()> {

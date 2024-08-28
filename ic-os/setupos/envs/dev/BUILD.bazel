@@ -2,8 +2,6 @@ load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/dev-tools/bare_metal_deployment:tools.bzl", "launch_bare_metal")
 load("//ic-os/setupos:defs.bzl", "image_deps")
 
-exports_files(["build_container_filesystem_config.txt"])
-
 # The macro contains several targets.
 # Check
 #       //ic-os/setupos/BUILD.bazel for examples
@@ -14,7 +12,10 @@ icos_build(
     image_deps_func = image_deps,
     upgrades = False,
     upload_prefix = "setup-os",
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
     vuln_scan = False,
 )
 

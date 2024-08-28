@@ -1,35 +1,32 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("//rs/tests:common.bzl", "symlink_dir")
+load("//bazel:defs.bzl", "symlink_dir")
 
 package(default_visibility = ["//visibility:public"])
 
 # See rs/nervous_system/feature_test.md
 DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/nervous_system/agent",
+    "//rs/nervous_system/clients",
     "//rs/nns/common",
     "//rs/nns/constants",
-    "//rs/nns/governance",
-    "//rs/nns/sns-wasm",
-    "//rs/sns/governance",
-    "//rs/sns/swap",
-    "//rs/nervous_system/clients",
     "//rs/types/base_types",
     "@crate_index//:anyhow",
     "@crate_index//:candid",
     "@crate_index//:colored",
+    "@crate_index//:futures",
     "@crate_index//:ic-agent",
+    "@crate_index//:ic-wasm__ic-wasm",
     "@crate_index//:rgb",
     "@crate_index//:serde",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
-    "@crate_index//:futures",
-    "@crate_index//:ic-wasm__ic-wasm",
 ]
 
 rust_binary(
     name = "sync-with-released-nevous-system-wasms",
     srcs = [
         "src/main.rs",
-        "src/sns_wasm_utils.rs",
     ],
     args = ["$(location //:mainnet-canisters.bzl) $(location @crate_index//:ic-wasm__ic-wasm)"],
     data = [

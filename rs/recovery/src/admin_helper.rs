@@ -1,7 +1,8 @@
 use crate::NeuronArgs;
 use ic_base_types::{NodeId, RegistryVersion};
-use ic_management_canister_types::EcdsaKeyId;
+use ic_registry_subnet_features::ChainKeyConfig;
 use ic_types::{Height, ReplicaVersion, SubnetId};
+use serde::Serialize;
 use url::Url;
 
 use std::{
@@ -20,6 +21,14 @@ pub struct RegistryParams {
     pub registry_store_uri: Url,
     pub registry_store_hash: String,
     pub registry_version: RegistryVersion,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct KeyConfigRequest {
+    subnet_id: SubnetId,
+    key_id: String,
+    pre_signatures_to_create_in_advance: String,
+    max_queue_size: String,
 }
 
 /// Struct simplyfiying the creation of `ic-admin` commands for a given NNS [Url].
@@ -160,10 +169,9 @@ impl AdminHelper {
         subnet_id: SubnetId,
         checkpoint_height: Height,
         state_hash: String,
-        ecdsa_key_ids: Vec<EcdsaKeyId>,
+        chain_key_config: Option<(ChainKeyConfig, SubnetId)>,
         replacement_nodes: &[NodeId],
         registry_params: Option<RegistryParams>,
-        ecdsa_subnet_id: Option<SubnetId>,
         time: SystemTime,
     ) -> IcAdmin {
         let mut ic_admin = self.get_ic_admin_cmd_base();
@@ -174,18 +182,35 @@ impl AdminHelper {
             .add_argument("height", checkpoint_height)
             .add_argument("state-hash", state_hash);
 
-        if !ecdsa_key_ids.is_empty() {
-            let ecdsa_subnet = ecdsa_subnet_id
-                .map(|id| format!(r#", "subnet_id": "{}""#, id))
+        if let Some((config, subnet_id)) = chain_key_config {
+            let key_requests = config
+                .key_configs
+                .iter()
+                .map(|key_config| KeyConfigRequest {
+                    subnet_id,
+                    key_id: key_config.key_id.to_string(),
+                    pre_signatures_to_create_in_advance: key_config
+                        .pre_signatures_to_create_in_advance
+                        .to_string(),
+                    max_queue_size: key_config.max_queue_size.to_string(),
+                })
+                .collect::<Vec<_>>();
+            let key_requests_string = serde_json::to_string(&key_requests)
+                .map_err(|err| eprintln!("Generating key_requests_string failed with {}", err))
                 .unwrap_or_default();
 
-            let keys = ecdsa_key_ids
-                .iter()
-                .map(|k| format!(r#"{{ "key_id": "{}"{} }}"#, k, ecdsa_subnet))
-                .collect::<Vec<String>>()
-                .join(" , ");
-
-            ic_admin.add_argument("ecdsa-keys-to-request", format!("'[ {} ]'", keys));
+            if !key_requests.is_empty() {
+                ic_admin.add_argument(
+                    "initial-chain-key-configs-to-request",
+                    format!("'{}'", key_requests_string),
+                );
+            }
+            if let Some(idkg_key_rotation_period_ms) = config.idkg_key_rotation_period_ms {
+                ic_admin.add_argument("idkg-key-rotation-period-ms", idkg_key_rotation_period_ms);
+            }
+            if let Some(signature_request_timeout_ns) = config.signature_request_timeout_ns {
+                ic_admin.add_argument("signature-request-timeout-ns", signature_request_timeout_ns);
+            }
         }
 
         if !replacement_nodes.is_empty() {
@@ -315,6 +340,10 @@ mod tests {
     use super::*;
 
     use ic_base_types::PrincipalId;
+    use ic_management_canister_types::{
+        EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+    };
+    use ic_registry_subnet_features::KeyConfig;
     use std::{str::FromStr, time::Duration};
 
     const FAKE_IC_ADMIN_DIR: &str = "/fake/ic/admin/dir/";
@@ -403,9 +432,8 @@ mod tests {
                 subnet_id_from_str(FAKE_SUBNET_ID_1),
                 Height::from(666),
                 "fake_state_hash".to_string(),
-                vec![],
-                &[],
                 None,
+                &[],
                 None,
                 UNIX_EPOCH + Duration::from_nanos(123456),
             )
@@ -425,15 +453,34 @@ mod tests {
 
     #[test]
     fn get_propose_to_update_recovery_cup_command_maximum_options_test() {
+        let chain_key_config = ChainKeyConfig {
+            key_configs: vec![
+                KeyConfig {
+                    key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                        curve: EcdsaCurve::Secp256k1,
+                        name: "test_key_1".to_string(),
+                    }),
+                    pre_signatures_to_create_in_advance: 77,
+                    max_queue_size: 30,
+                },
+                KeyConfig {
+                    key_id: MasterPublicKeyId::Schnorr(SchnorrKeyId {
+                        algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+                        name: "test_key_2".to_string(),
+                    }),
+                    pre_signatures_to_create_in_advance: 12,
+                    max_queue_size: 32,
+                },
+            ],
+            signature_request_timeout_ns: Some(123_456),
+            idkg_key_rotation_period_ms: Some(321_654),
+        };
         let result = fake_admin_helper_with_neuron_args()
             .get_propose_to_update_recovery_cup_command(
                 subnet_id_from_str(FAKE_SUBNET_ID_1),
                 Height::from(666),
                 "fake_state_hash".to_string(),
-                vec![
-                    EcdsaKeyId::from_str("Secp256k1:some_key_1").unwrap(),
-                    EcdsaKeyId::from_str("Secp256k1:some_key_2").unwrap(),
-                ],
+                Some((chain_key_config, subnet_id_from_str(FAKE_SUBNET_ID_2))),
                 &[node_id_from_str(FAKE_NODE_ID)],
                 Some(RegistryParams {
                     registry_store_uri: Url::try_from("https://fake_registry_store_uri.com")
@@ -441,7 +488,6 @@ mod tests {
                     registry_store_hash: "fake_registry_store_hash".to_string(),
                     registry_version: RegistryVersion::from(666),
                 }),
-                Some(subnet_id_from_str(FAKE_SUBNET_ID_2)),
                 UNIX_EPOCH + Duration::from_nanos(123456),
             )
             .join(" ");
@@ -457,7 +503,11 @@ mod tests {
             --subnet-index gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
             --height 666 \
             --state-hash fake_state_hash \
-            --ecdsa-keys-to-request '[ { \"key_id\": \"Secp256k1:some_key_1\", \"subnet_id\": \"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\" } , { \"key_id\": \"Secp256k1:some_key_2\", \"subnet_id\": \"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\" } ]' \
+            --initial-chain-key-configs-to-request '[\
+                {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"ecdsa:Secp256k1:test_key_1\",\"pre_signatures_to_create_in_advance\":\"77\",\"max_queue_size\":\"30\"},\
+                {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"schnorr:Bip340Secp256k1:test_key_2\",\"pre_signatures_to_create_in_advance\":\"12\",\"max_queue_size\":\"32\"}]' \
+            --idkg-key-rotation-period-ms 321654 \
+            --signature-request-timeout-ns 123456 \
             --replacement-nodes \"nqpqw-cp42a-rmdsx-fpui3-ncne5-kzq6o-m67an-w25cx-zu636-lcf2v-fqe\" \
             --registry-store-uri https://fake_registry_store_uri.com/ \
             --registry-store-hash fake_registry_store_hash \

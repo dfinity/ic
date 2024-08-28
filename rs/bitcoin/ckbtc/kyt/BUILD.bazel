@@ -9,6 +9,7 @@ rust_library(
     srcs = ["src/lib.rs"],
     crate_name = "ic_ckbtc_kyt",
     deps = [
+        # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:serde",
     ],
@@ -27,6 +28,7 @@ rust_canister(
     proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     service_file = "kyt.did",
     deps = [
+        # Keep sorted.
         ":kyt",
         "//rs/rust_canisters/http_types",
         "@crate_index//:askama",
@@ -62,6 +64,7 @@ rust_ic_test(
         "IC_CKBTC_KYT_WASM_PATH": "$(rootpath :kyt_canister)",
     },
     deps = [
+        # Keep sorted.
         ":kyt",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",

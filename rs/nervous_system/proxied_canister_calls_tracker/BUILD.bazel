@@ -3,10 +3,12 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test",
 package(default_visibility = ["//rs/nervous_system:default_visibility"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/types/base_types",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:maplit",
     "@crate_index//:pretty_assertions",
     "@crate_index//:tokio",

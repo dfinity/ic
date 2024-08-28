@@ -59,6 +59,8 @@ struct Args {
     #[arg(short, long)]
     ledger_id: CanisterId,
 
+    /// The symbol of the ICRC-1 token.
+    /// If set Rosetta will check the symbol against the ledger it connects to. If the symbol does not match, it will exit.
     #[arg(long)]
     icrc1_symbol: Option<String>,
 
@@ -80,7 +82,7 @@ struct Args {
     store_type: StoreType,
 
     /// The file to use for the store if [store_type] is file.
-    #[arg(short = 'f', long, default_value = "db.sqlite")]
+    #[arg(short = 'f', long, default_value = "/data/db.sqlite")]
     store_file: PathBuf,
 
     /// The network type that rosetta connects to.
@@ -316,6 +318,23 @@ async fn main() -> Result<()> {
     });
 
     let metadata = load_metadata(&args, &icrc1_agent, &storage).await?;
+    if let Some(token_symbol) = args.icrc1_symbol.clone() {
+        if metadata.symbol != token_symbol {
+            bail!(
+                "Provided symbol does not match symbol retrieved in online mode. Expected: {}, Got: {}",
+                metadata.symbol, token_symbol
+            );
+        }
+    }
+
+    info!(
+        "ICRC Rosetta is connected to the ICRC-1 ledger: {}",
+        args.ledger_id
+    );
+    info!(
+        "The token symbol of the ICRC-1 ledger is: {}",
+        metadata.symbol
+    );
 
     let shared_state = Arc::new(AppState {
         icrc1_agent: icrc1_agent.clone(),
@@ -346,6 +365,7 @@ async fn main() -> Result<()> {
     let app = Router::new()
         .route("/ready", get(ready))
         .route("/health", get(health))
+        .route("/call", post(call))
         .route("/network/list", post(network_list))
         .route("/network/options", post(network_options))
         .route("/network/status", post(network_status))

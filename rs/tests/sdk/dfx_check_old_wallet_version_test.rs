@@ -1,12 +1,12 @@
 use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::{
+use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
-    test_env_api::{HasDependencies, HasTopologySnapshot, IcNodeContainer},
+    test_env_api::{get_dependency_path, HasTopologySnapshot, IcNodeContainer},
 };
-use ic_tests::systest;
+use ic_system_test_driver::systest;
 use sdk_system_tests::{config::configure_local_network, dfx::DfxCommandContext};
 use slog::info;
 use std::fs;
@@ -59,7 +59,7 @@ fn test(env: TestEnv) {
     dfx.version();
 
     let wallet_wasm_path: PathBuf =
-        fs::canonicalize(env.clone().get_dependency_path(WALLET_CANISTER_0_7_2_WASM)).unwrap();
+        fs::canonicalize(get_dependency_path(WALLET_CANISTER_0_7_2_WASM)).unwrap();
 
     info!(
         log,

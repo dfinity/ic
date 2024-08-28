@@ -4,13 +4,12 @@
 name: Container IC Base Images
 
 on:
-  # TODO: Enable prior to migration
-  # schedule:
-  #   - cron: "0 8 * * 4"
+  schedule:
+    - cron: "0 8 * * 4"
   workflow_dispatch:
-  # TODO: Change to pull_request_target
   pull_request:
     paths:
+      - '.github/workflows/container-base-images.yml'
       - '**/Dockerfile.base'
       - '**/packages.common'
       - '**/packages.dev'
@@ -21,6 +20,7 @@ concurrency:
 
 permissions:
   pull-requests: write
+  packages: write
   contents: write
 
 jobs:
@@ -28,7 +28,6 @@ jobs:
     name: Build Base Container Image
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    if: ${{ vars.RUN_CI == 'true' }}
     strategy:
       matrix:
         include:
@@ -71,11 +70,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@a530e948adbeb357dbca95a7f8845d385edf4438 # v3
 
-      - name: Login to Docker Hub
+      - name: Login to GHCR
         uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
         with:
-          username: ${{ secrets.DOCKER_HUB_USER }}
-          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Base Image
         uses: docker/build-push-action@eb539f44b153603ccbfbd98e2ab9d4d0dcaf23a4 # v5
@@ -84,7 +84,7 @@ jobs:
           context: ${{ matrix.CONTEXT }}
           file: ${{ matrix.CONTEXT }}/Dockerfile.base
           push: ${{ github.ref_name == 'master' }}
-          tags: dfinity/${{ matrix.IMAGE }}:${{ env.DATE }}
+          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.IMAGE }}:${{ env.DATE }}
           build-args: ${{ matrix.BUILD_ARGS }}
 
       - name: Collect SHA256 Digest
@@ -92,7 +92,7 @@ jobs:
         run: |
           set -xeuo pipefail
           mkdir -p "$(dirname artifacts/${{ matrix.REFFILE }})"
-          echo docker.io/dfinity/${{matrix.IMAGE}}@${{ steps.build-base-image.outputs.imageid }} \
+          echo ghcr.io/dfinity/${{matrix.IMAGE}}@${{ steps.build-base-image.outputs.imageid }} \
             > artifacts/${{ matrix.REFFILE }}
 
       - name: Upload SHA256 Digest Artifact
@@ -107,7 +107,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [build-base-image]
-    if: ${{ vars.RUN_CI == 'true' && github.ref_name == 'master' }}
+    if: ${{ github.ref_name == 'master' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -134,10 +134,13 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@6d6857d36972b65feb161a90e484f2984215f83e # v6.0.5
         with:
-          # TODO: change to master prior to migration
-          base: mirroring
+          token: ${{ secrets.IDX_PUSH_TO_PR }}
+          base: master
           branch: base-image-refs-update-${{ env.DATE }}
           delete-branch: true
-          title: Update Base Image Refs [${{ env.DATE }}]
-          body: Updating base container image references.
-          draft: true
+          title: "chore: Update Base Image Refs [${{ env.DATE }}]"
+          body: |
+            Updating base container image references.
+
+            Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          draft: false

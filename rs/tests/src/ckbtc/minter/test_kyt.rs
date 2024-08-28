@@ -1,20 +1,13 @@
+use crate::ckbtc::lib::{
+    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
+    install_ledger, install_minter, set_kyt_api_key, subnet_sys, upgrade_kyt,
+    BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL,
+};
 use crate::ckbtc::minter::utils::{
     assert_account_balance, assert_burn_transaction, assert_mint_transaction, assert_no_new_utxo,
     assert_no_transaction, ensure_wallet, generate_blocks, get_btc_address, get_btc_client,
     send_to_btc_address, start_canister, stop_canister, upgrade_canister, wait_for_bitcoin_balance,
     wait_for_ledger_balance, wait_for_mempool_change, BTC_BLOCK_REWARD,
-};
-use crate::{
-    ckbtc::lib::{
-        activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
-        install_ledger, install_minter, set_kyt_api_key, subnet_sys, upgrade_kyt,
-        BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL,
-    },
-    driver::{
-        test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, IcNodeContainer},
-    },
-    util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
 };
 use bitcoincore_rpc::RpcApi;
 use candid::Nat;
@@ -25,6 +18,13 @@ use ic_ckbtc_kyt::KytMode;
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError};
 use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
+use ic_system_test_driver::{
+    driver::{
+        test_env::TestEnv,
+        test_env_api::{HasPublicApiUrl, IcNodeContainer},
+    },
+    util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
+};
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
@@ -56,7 +56,7 @@ pub fn test_kyt(env: TestEnv) {
 
     block_on(async {
         let runtime = runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
-        install_bitcoin_canister(&runtime, &logger, &env).await;
+        install_bitcoin_canister(&runtime, &logger).await;
 
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
@@ -68,15 +68,13 @@ pub fn test_kyt(env: TestEnv) {
         let kyt_id = install_kyt(
             &mut kyt_canister,
             &logger,
-            &env,
             Principal::from(minting_user),
             vec![agent_principal],
         )
         .await;
         set_kyt_api_key(&agent, &kyt_id.get().0, "fake key".to_string()).await;
-        let ledger_id = install_ledger(&env, &mut ledger_canister, minting_user, &logger).await;
-        let minter_id =
-            install_minter(&env, &mut minter_canister, ledger_id, &logger, 0, kyt_id).await;
+        let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
+        let minter_id = install_minter(&mut minter_canister, ledger_id, &logger, 0, kyt_id).await;
         let minter = Principal::from(minter_id.get());
 
         let ledger = Principal::from(ledger_id.get());

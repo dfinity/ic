@@ -3,11 +3,12 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:addr",
     "@crate_index//:candid",
     "@crate_index//:ic-stable-structures",
-    "@crate_index//:serde_bytes",
     "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
     "@crate_index//:thiserror",
 ]
 

@@ -16,7 +16,8 @@ use ic_cketh_minter::state::transactions::{
 };
 use ic_cketh_minter::state::State;
 use ic_cketh_minter::tx::{
-    Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest, TransactionPrice,
+    Eip1559Signature, Eip1559TransactionRequest, GasFeeEstimate, SignedEip1559TransactionRequest,
+    TransactionPrice,
 };
 use ic_ethereum_types::Address;
 use maplit::{btreemap, btreeset};
@@ -515,7 +516,7 @@ fn should_display_pending_transactions_sorted_by_decreasing_cketh_ledger_burn_in
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
                 "ckUSDC",
                 "2_000_000",
-                "Sent(0xb5115ef5e39db0cfca5589ac2dca8a91e59825af1216c01826fbf39c3eaeb0c2)",
+                "Sent(0xd3718b4fa5863af0e14c99e1e7c05bb893fd5662215d378990077c1937372b9b)",
             ],
         )
         .has_pending_transactions(
@@ -557,7 +558,11 @@ fn should_display_finalized_transactions_sorted_by_decreasing_cketh_ledger_burn_
 
     let dashboard = {
         let mut state = initial_state_with_usdc_support();
-        let deposit = received_eth_event();
+        let deposit = ReceivedEthEvent {
+            //enough for withdrawals
+            value: Wei::from(1_000_000_000_000_000_000_u128),
+            ..received_eth_event()
+        };
         apply_state_transition(&mut state, &EventType::AcceptedDeposit(deposit.clone()));
         apply_state_transition(
             &mut state,
@@ -625,9 +630,9 @@ fn should_display_finalized_transactions_sorted_by_decreasing_cketh_ledger_burn_
     };
 
     DashboardAssert::assert_that(dashboard)
-        .has_eth_balance("8_835_000_000_000_000")
-        .has_total_effective_tx_fees("107_000_000_000_000")
-        .has_total_unspent_tx_fees("107_000_000_000_000")
+        .has_eth_balance("983_900_000_000_015_000")
+        .has_total_effective_tx_fees("15_041_999_999_985_000")
+        .has_total_unspent_tx_fees("15_042_000_000_015_000")
         .has_erc20_balance(&ckusdc(), "9_999_999_999_998_000_000")
         .has_finalized_transactions(
             1,
@@ -636,9 +641,9 @@ fn should_display_finalized_transactions_sorted_by_decreasing_cketh_ledger_burn_
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
                 "ckUSDC",
                 "2_000_000",
-                "65_000_000_000_000",
+                "14_999_999_999_985_000",
                 "5558738",
-                "0xe0e5b9da5c1e550501f9ded95c65741b18eec0873db82bb416293b8a42207071",
+                "0xf438be51eb1fa6b1f68611ab23fab4386623013dbc8cf7791f639981542ba8c3",
                 "Success",
             ],
         )
@@ -703,7 +708,12 @@ fn should_display_reimbursed_requests() {
 
     let dashboard = {
         let mut state = initial_state_with_usdc_support();
-        let deposit = received_eth_event();
+        let deposit = ReceivedEthEvent {
+            //enough for withdrawals
+            value: Wei::from(1_000_000_000_000_000_000_u128),
+            ..received_eth_event()
+        };
+
         apply_state_transition(&mut state, &EventType::AcceptedDeposit(deposit.clone()));
         apply_state_transition(
             &mut state,
@@ -835,9 +845,9 @@ fn should_display_reimbursed_requests() {
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
                 "ckUSDC",
                 "2_000_000",
-                "65_000_000_000_000",
+                "14_999_999_999_985_000",
                 "5558738",
-                "0x132db1a0a7d5fd70b73fc4b36bce26d3c0625bcfafe0a17b4016de6acaa1852c",
+                "0x93ad3beb667849ae5cf0198e49e0d36110bded50eb92e8124e059f31ef0658d2",
                 "Failure",
             ],
         )
@@ -848,9 +858,9 @@ fn should_display_reimbursed_requests() {
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
                 "ckUSDC",
                 "2_000_000",
-                "65_000_000_000_000",
+                "14_999_999_999_985_000",
                 "5558738",
-                "0xb5115ef5e39db0cfca5589ac2dca8a91e59825af1216c01826fbf39c3eaeb0c2",
+                "0xd3718b4fa5863af0e14c99e1e7c05bb893fd5662215d378990077c1937372b9b",
                 "Failure",
             ],
         )
@@ -901,7 +911,7 @@ fn should_display_reimbursed_requests() {
                 "123",
                 "ckUSDC",
                 "2_000_000",
-                "0xb5115ef5e39db0cfca5589ac2dca8a91e59825af1216c01826fbf39c3eaeb0c2",
+                "0xd3718b4fa5863af0e14c99e1e7c05bb893fd5662215d378990077c1937372b9b",
                 "Reimbursed",
             ],
         )
@@ -1125,15 +1135,15 @@ fn ckerc20_withdrawal_flow(
 ) {
     let withdrawal_request =
         ckerc20_withdrawal_request_with_index(cketh_ledger_burn_index, ckerc20_token);
-    let fee = TransactionPrice {
+    let gas_fee = GasFeeEstimate {
+        base_fee_per_gas: WeiPerGas::from(250_000_000_u64),
         max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
-        max_fee_per_gas: WeiPerGas::from(2_000_000_000_u64),
-        gas_limit: GasAmount::from(65_000_u32),
     };
     let transaction = create_transaction(
         &withdrawal_request.clone().into(),
         nonce,
-        fee,
+        gas_fee,
+        GasAmount::from(65_000_u32),
         EthereumNetwork::Sepolia,
     )
     .unwrap();

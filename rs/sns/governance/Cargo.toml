@@ -87,6 +87,7 @@ prost-build = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+candid_parser = { workspace = true }
 futures = { workspace = true }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }

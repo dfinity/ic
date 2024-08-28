@@ -1,18 +1,16 @@
 use crate::{
-    common::LOG_PREFIX,
-    mutations::common::{check_replica_version_is_blessed, decode_registry_value, encode_or_panic},
-    registry::Registry,
+    common::LOG_PREFIX, mutations::common::check_replica_version_is_blessed, registry::Registry,
 };
 
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use serde::Serialize;
-
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
+use prost::Message;
+use serde::Serialize;
 
 impl Registry {
     pub fn do_deploy_guestos_to_all_subnet_nodes(
@@ -34,13 +32,12 @@ impl Registry {
                 version: _,
                 deletion_marker: _,
             }) => {
-                let mut subnet_record =
-                    decode_registry_value::<SubnetRecord>(subnet_record_vec.clone());
+                let mut subnet_record = SubnetRecord::decode(subnet_record_vec.as_slice()).unwrap();
                 subnet_record.replica_version_id = payload.replica_version_id;
                 RegistryMutation {
                     mutation_type: registry_mutation::Type::Update as i32,
                     key: subnet_key.as_bytes().to_vec(),
-                    value: encode_or_panic(&subnet_record),
+                    value: subnet_record.encode_to_vec(),
                 }
             }
             None => panic!("Error while fetching the subnet record"),

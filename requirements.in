@@ -32,6 +32,7 @@ termcolor>=1.1.0
 toml
 tqdm
 uuid
+PyGithub==2.3.0
 # gitlab_statistics
 pandas
 #policy-monitoring
@@ -46,7 +47,6 @@ honeycomb-beeline
 junit-xml
 libhoney
 mypy
-pygithub
 pylint
 pytest-shutil
 retry

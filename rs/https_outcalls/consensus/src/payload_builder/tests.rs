@@ -3,12 +3,11 @@
 //!
 //! Some tests are run over a range of subnet configurations to check for corner cases.
 
+use super::{parse, CanisterHttpPayloadBuilderImpl};
 use crate::payload_builder::{
     divergence_response_into_reject,
     parse::{bytes_to_payload, payload_to_bytes},
 };
-
-use super::CanisterHttpPayloadBuilderImpl;
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
 use ic_error_types::RejectCode;
@@ -32,8 +31,7 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    artifact_kind::CanisterHttpArtifact,
-    batch::{CanisterHttpPayload, ValidationContext},
+    batch::{CanisterHttpPayload, ValidationContext, MAX_CANISTER_HTTP_PAYLOAD_SIZE},
     canister_http::{
         CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpResponse,
         CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseMetadata,
@@ -59,6 +57,15 @@ use std::{
 
 /// The maximum subnet size up to which we will check the functionality of the canister http feature.
 const MAX_SUBNET_SIZE: usize = 40;
+
+#[test]
+fn default_payload_serializes_to_empty_vec() {
+    assert!(parse::payload_to_bytes(
+        &CanisterHttpPayload::default(),
+        NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64)
+    )
+    .is_empty());
+}
 
 /// Check that a single well formed request with shares makes it through the block maker
 #[test]
@@ -874,7 +881,7 @@ fn test_response_and_metadata_full(
 }
 /// Replicates the behaviour of receiving and successfully validating a share over the network
 pub(crate) fn add_received_shares_to_pool(
-    pool: &mut dyn MutablePool<CanisterHttpArtifact, ChangeSet = CanisterHttpChangeSet>,
+    pool: &mut dyn MutablePool<CanisterHttpResponseShare, ChangeSet = CanisterHttpChangeSet>,
     shares: Vec<CanisterHttpResponseShare>,
 ) {
     for share in shares {
@@ -890,7 +897,7 @@ pub(crate) fn add_received_shares_to_pool(
 
 /// Replicates the behaviour of adding your own share (and content) to the pool
 pub(crate) fn add_own_share_to_pool(
-    pool: &mut dyn MutablePool<CanisterHttpArtifact, ChangeSet = CanisterHttpChangeSet>,
+    pool: &mut dyn MutablePool<CanisterHttpResponseShare, ChangeSet = CanisterHttpChangeSet>,
     share: &CanisterHttpResponseShare,
     content: &CanisterHttpResponse,
 ) {
@@ -971,7 +978,6 @@ pub(crate) fn test_config_with_http_feature<T>(
         let Dependencies {
             crypto,
             registry,
-            membership,
             pool,
             canister_http_pool,
             state_manager,
@@ -987,7 +993,6 @@ pub(crate) fn test_config_with_http_feature<T>(
             pool.get_cache(),
             crypto,
             state_manager,
-            membership,
             subnet_test_id(0),
             registry,
             &MetricsRegistry::new(),

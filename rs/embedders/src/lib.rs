@@ -46,7 +46,7 @@ pub struct InstanceRunResult {
 
 /// The results of compiling a Canister which need to be passed back to the main
 /// replica process.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct CompilationResult {
     /// The number of instructions in the canister's largest function.
     pub largest_function_instruction_count: NumInstructions,
@@ -54,8 +54,6 @@ pub struct CompilationResult {
     pub compilation_time: Duration,
     /// The maximum function complexity found in the canister's wasm module.
     pub max_complexity: u64,
-    /// The number of tables declared in the module.
-    pub num_tables: usize,
 }
 
 impl CompilationResult {
@@ -64,7 +62,6 @@ impl CompilationResult {
             largest_function_instruction_count: NumInstructions::new(0),
             compilation_time: Duration::from_millis(1),
             max_complexity: 0,
-            num_tables: 0,
         }
     }
 }

@@ -1,10 +1,12 @@
 /* tag::catalog[]
 end::catalog[] */
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
-use crate::util::block_on;
-use crate::util::{assert_reject, create_and_install, escape_for_wat, UniversalCanister};
 use ic_agent::agent::RejectCode;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
+use ic_system_test_driver::util::block_on;
+use ic_system_test_driver::util::{
+    assert_reject, create_and_install, escape_for_wat, UniversalCanister,
+};
 use ic_types::CanisterId;
 use ic_universal_canister::{call_args, wasm};
 

@@ -4,16 +4,16 @@ use ic_base_types::CanisterId;
 use ic_management_canister_types::{CanisterInstallMode, CanisterStatusType};
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
+    TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
+    TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance::{
-    init::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
+use ic_nns_governance_api::{
     pb::v1::{
         manage_neuron_response::Command as CommandResponse, NnsFunction, ProposalStatus, Vote,
     },
-    proposals::proposal_submission::create_external_update_proposal_candid,
+    proposal_helpers::create_external_update_proposal_candid,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,

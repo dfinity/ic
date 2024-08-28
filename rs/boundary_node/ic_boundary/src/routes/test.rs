@@ -8,6 +8,9 @@ use axum::{
     Router,
 };
 use ethnum::u256;
+use http::header::{
+    HeaderName, HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS,
+};
 use ic_types::{
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
@@ -41,7 +44,7 @@ pub fn test_route_subnet_with_id(id: String, n: usize) -> RouteSubnet {
     let zero = 0u32;
 
     RouteSubnet {
-        id: Principal::from_text(id).unwrap().to_string(),
+        id: Principal::from_text(id).unwrap(),
         range_start: u256::from(zero),
         range_end: u256::from(zero),
         nodes,
@@ -50,6 +53,17 @@ pub fn test_route_subnet_with_id(id: String, n: usize) -> RouteSubnet {
 
 pub fn test_route_subnet(n: usize) -> RouteSubnet {
     test_route_subnet_with_id("f7crg-kabae".into(), n)
+}
+
+fn assert_header(headers: &http::HeaderMap, name: HeaderName, expected_value: &str) {
+    assert!(headers.contains_key(&name), "Header {} is missing", name);
+    assert_eq!(
+        headers.get(&name).unwrap(),
+        &HeaderValue::from_str(expected_value).unwrap(),
+        "Header {} does not match expected value: {}",
+        name,
+        expected_value,
+    );
 }
 
 #[derive(Clone)]
@@ -365,7 +379,7 @@ async fn test_status() -> Result<(), Error> {
 
     assert_eq!(resp.status(), StatusCode::OK);
 
-    let (_parts, body) = resp.into_parts();
+    let (parts, body) = resp.into_parts();
     let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
 
     let health: HttpStatusResponse = serde_cbor::from_slice(&body)?;
@@ -374,6 +388,11 @@ async fn test_status() -> Result<(), Error> {
         Some(ReplicaHealthStatus::Healthy)
     );
     assert_eq!(health.root_key.as_deref(), Some(&root_key),);
+
+    let headers = parts.headers;
+    assert_header(&headers, CONTENT_TYPE, "application/cbor");
+    assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
+    assert_header(&headers, X_FRAME_OPTIONS, "DENY");
 
     // Test starting
     proxy_router.set_health(ReplicaHealthStatus::Starting);
@@ -388,7 +407,7 @@ async fn test_status() -> Result<(), Error> {
 
     assert_eq!(resp.status(), StatusCode::OK);
 
-    let (_parts, body) = resp.into_parts();
+    let (parts, body) = resp.into_parts();
     let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
 
     let health: HttpStatusResponse = serde_cbor::from_slice(&body)?;
@@ -397,12 +416,17 @@ async fn test_status() -> Result<(), Error> {
         Some(ReplicaHealthStatus::Starting)
     );
 
+    let headers = parts.headers;
+    assert_header(&headers, CONTENT_TYPE, "application/cbor");
+    assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
+    assert_header(&headers, X_FRAME_OPTIONS, "DENY");
+
     Ok(())
 }
 
 #[tokio::test]
 async fn test_all_call_types() -> Result<(), Error> {
-    let (mut app, subnets) = setup_test_router(false, false, 10, 1, 1024);
+    let (mut app, subnets) = setup_test_router(false, false, 10, 1, 1024, None);
     let node = subnets[0].nodes[0].clone();
 
     let sender = Principal::from_text("sqjm4-qahae-aq").unwrap();
@@ -440,71 +464,21 @@ async fn test_all_call_types() -> Result<(), Error> {
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
+    let (parts, body) = resp.into_parts();
+
     // Check response headers
-    assert_eq!(
-        resp.headers()
-            .get(HEADER_IC_NODE_ID)
-            .unwrap()
-            .to_str()
-            .unwrap(),
-        node.id.to_string()
-    );
+    let headers = parts.headers;
+    assert_header(&headers, HEADER_IC_NODE_ID, &node.id.to_string());
+    assert_header(&headers, HEADER_IC_SUBNET_ID, &node.subnet_id.to_string());
+    assert_header(&headers, HEADER_IC_SUBNET_TYPE, node.subnet_type.as_ref());
+    assert_header(&headers, HEADER_IC_SENDER, &sender.to_string());
+    assert_header(&headers, HEADER_IC_CANISTER_ID, &canister_id.to_string());
+    assert_header(&headers, HEADER_IC_METHOD_NAME, "foobar");
+    assert_header(&headers, HEADER_IC_REQUEST_TYPE, "query");
+    assert_header(&headers, CONTENT_TYPE, "application/cbor");
+    assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
+    assert_header(&headers, X_FRAME_OPTIONS, "DENY");
 
-    assert_eq!(
-        resp.headers()
-            .get(HEADER_IC_SUBNET_ID)
-            .unwrap()
-            .to_str()
-            .unwrap(),
-        node.subnet_id.to_string()
-    );
-
-    assert_eq!(
-        resp.headers()
-            .get(HEADER_IC_SUBNET_TYPE)
-            .unwrap()
-            .to_str()
-            .unwrap(),
-        node.subnet_type.as_ref()
-    );
-
-    assert_eq!(
-        resp.headers()
-            .get(HEADER_IC_SENDER)
-            .unwrap()
-            .to_str()
-            .unwrap(),
-        sender.to_string(),
-    );
-
-    assert_eq!(
-        resp.headers()
-            .get(HEADER_IC_CANISTER_ID)
-            .unwrap()
-            .to_str()
-            .unwrap(),
-        canister_id.to_string(),
-    );
-
-    assert_eq!(
-        resp.headers()
-            .get(HEADER_IC_METHOD_NAME)
-            .unwrap()
-            .to_str()
-            .unwrap(),
-        "foobar",
-    );
-
-    assert_eq!(
-        resp.headers()
-            .get(HEADER_IC_REQUEST_TYPE)
-            .unwrap()
-            .to_str()
-            .unwrap(),
-        "query",
-    );
-
-    let (_parts, body) = resp.into_parts();
     let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, "a".repeat(1024));
@@ -534,6 +508,43 @@ async fn test_all_call_types() -> Result<(), Error> {
         .method("POST")
         .uri(format!(
             "http://localhost/api/v2/canister/{canister_id}/call"
+        ))
+        .body(Body::from(body))
+        .unwrap();
+
+    let resp = app.call(request).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::ACCEPTED);
+
+    let (_parts, body) = resp.into_parts();
+    let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
+    let body = String::from_utf8_lossy(&body);
+    assert_eq!(body, "a".repeat(1024));
+
+    // Test call v3
+    let content = HttpCallContent::Call {
+        update: HttpCanisterUpdate {
+            canister_id: Blob(canister_id.get().as_slice().to_vec()),
+            method_name: "foobar".to_string(),
+            arg: Blob(vec![]),
+            sender: Blob(sender.as_slice().to_vec()),
+            nonce: None,
+            ingress_expiry: 1234,
+        },
+    };
+
+    let envelope = HttpRequestEnvelope::<HttpCallContent> {
+        content,
+        sender_delegation: None,
+        sender_pubkey: None,
+        sender_sig: None,
+    };
+
+    let body = serde_cbor::to_vec(&envelope).unwrap();
+
+    let request = Request::builder()
+        .method("POST")
+        .uri(format!(
+            "http://localhost/api/v3/canister/{canister_id}/call"
         ))
         .body(Body::from(body))
         .unwrap();
@@ -576,17 +587,15 @@ async fn test_all_call_types() -> Result<(), Error> {
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
-    // Make sure that the canister_id is there even if the CBOR does not have it
-    assert_eq!(
-        resp.headers()
-            .get(HEADER_IC_CANISTER_ID)
-            .unwrap()
-            .to_str()
-            .unwrap(),
-        canister_id.to_string(),
-    );
+    let (parts, body) = resp.into_parts();
 
-    let (_parts, body) = resp.into_parts();
+    // Check response headers
+    let headers = parts.headers;
+    // Make sure that the canister_id is there even if the CBOR does not have it
+    assert_header(&headers, HEADER_IC_CANISTER_ID, &canister_id.to_string());
+    assert_header(&headers, CONTENT_TYPE, "application/cbor");
+    assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
+    assert_header(&headers, X_FRAME_OPTIONS, "DENY");
     let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, "a".repeat(1024));
@@ -623,17 +632,15 @@ async fn test_all_call_types() -> Result<(), Error> {
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
-    // Make sure that the subnet_id is there even if the CBOR does not have it
-    assert_eq!(
-        resp.headers()
-            .get(HEADER_IC_SUBNET_ID)
-            .unwrap()
-            .to_str()
-            .unwrap(),
-        subnet_id.to_string(),
-    );
+    let (parts, body) = resp.into_parts();
 
-    let (_parts, body) = resp.into_parts();
+    // Check response headers
+    let headers = parts.headers;
+    // Make sure that the subnet_id is there even if the CBOR does not have it
+    assert_header(&headers, HEADER_IC_SUBNET_ID, &subnet_id.to_string());
+    assert_header(&headers, CONTENT_TYPE, "application/cbor");
+    assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
+    assert_header(&headers, X_FRAME_OPTIONS, "DENY");
     let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, "a".repeat(1024));

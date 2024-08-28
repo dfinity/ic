@@ -24,25 +24,27 @@ Success:: nodes can be added/killed to/within the existing subnet.
 
 end::catalog[] */
 
-use crate::{
-    consensus::catch_up_test::{await_node_certified_height, get_certified_height},
+use canister_test;
+use ic_base_types::NodeId;
+use ic_consensus_system_test_utils::{
+    node::{await_node_certified_height, get_node_certified_height},
+    rw_message::install_nns_and_check_progress,
+};
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_governance_api::pb::v1::NnsFunction;
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, HasVm},
     },
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
-    orchestrator::utils::rw_message::install_nns_and_check_progress,
     util::{
         assert_create_agent, block_on, get_app_subnet_and_node, get_nns_node, runtime_from_url,
         MessageCanister,
     },
 };
-use canister_test;
-use ic_base_types::NodeId;
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance::pb::v1::NnsFunction;
-use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use slog::info;
@@ -138,7 +140,7 @@ pub fn test(env: TestEnv) {
 
     // Wait for 3 DKG intervals to ensure that added nodes have actually joined consensus.
     let target_height =
-        get_certified_height(&app_node, logger.clone()).get() + DKG_INTERVAL_LENGTH * 3;
+        get_node_certified_height(&app_node, logger.clone()).get() + DKG_INTERVAL_LENGTH * 3;
     for n in newly_assigned_nodes.iter() {
         await_node_certified_height(n, Height::from(target_height), logger.clone());
     }
@@ -210,7 +212,8 @@ pub fn test(env: TestEnv) {
     newly_assigned_nodes[kill_nodes_count].vm().start();
     info!(logger, "Wait for subnet to restart");
     // Wait for 1 DKG interval to ensure that subnet makes progress again.
-    let target_height = get_certified_height(&app_node, logger.clone()).get() + DKG_INTERVAL_LENGTH;
+    let target_height =
+        get_node_certified_height(&app_node, logger.clone()).get() + DKG_INTERVAL_LENGTH;
     await_node_certified_height(&app_node, Height::from(target_height), logger.clone());
 
     // Assert that `update` call to the canister succeeds again.

@@ -541,11 +541,13 @@ struct Metrics {
     ///  - NI-DKG keys
     ///  - iDKG keys
     ///  - TLS certificates and secret keys
+    ///
     /// The above keys are not kept track of separately, merely a total number of stored keys.
     /// The counters keep track of which locations these keys are stored in:
     ///  - Registry
     ///  - Local public key store
     ///  - Local secret key store (SKS)
+    ///
     /// Additionally, the number of iDKG dealing encryption public keys that are stored locally are
     /// also kept track of in the gauge vector.
     pub crypto_key_counts: IntGaugeVec,

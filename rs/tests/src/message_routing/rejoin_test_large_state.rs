@@ -24,16 +24,18 @@ use super::rejoin_test::{
     fetch_metrics, store_and_read_stable, SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT,
     SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM,
 };
-use crate::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResources};
-use crate::driver::pot_dsl::{PotSetupFn, SysTestFn};
-use crate::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
+use crate::message_routing::common::{install_statesync_test_canisters, modify_canister_heap};
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{
+    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResources,
+};
+use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
+use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, IcNodeSnapshot,
 };
-use crate::message_routing::common::{install_statesync_test_canisters, modify_canister_heap};
-use crate::util::{block_on, runtime_from_url, UniversalCanister};
-use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::util::{block_on, runtime_from_url, UniversalCanister};
 use ic_types::Height;
 use slog::info;
 use std::time::Duration;

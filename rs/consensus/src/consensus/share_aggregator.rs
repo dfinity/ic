@@ -3,23 +3,22 @@
 //! from random beacon shares, Notarizations from notarization shares and
 //! Finalizations from finalization shares.
 use crate::consensus::random_tape_maker::RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE;
-use ic_consensus_utils::crypto::ConsensusCrypto;
-use ic_consensus_utils::membership::Membership;
-use ic_consensus_utils::pool_reader::PoolReader;
 use ic_consensus_utils::{
     active_high_threshold_transcript, active_low_threshold_transcript, aggregate,
+    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
     registry_version_at_height,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_logger::ReplicaLogger;
-use ic_types::consensus::{
-    CatchUpContent, ConsensusMessage, ConsensusMessageHashable, FinalizationContent, HasHeight,
-    RandomTapeContent,
+use ic_types::{
+    consensus::{
+        CatchUpContent, ConsensusMessage, ConsensusMessageHashable, FinalizationContent, HasHeight,
+        RandomTapeContent,
+    },
+    crypto::Signed,
+    Height,
 };
-use ic_types::crypto::Signed;
-use ic_types::Height;
-use std::cmp::min;
-use std::sync::Arc;
+use std::{cmp::min, sync::Arc};
 
 /// The ShareAggregator is responsible for aggregating shares of random beacons,
 /// notarizations, and finalizations into full objects

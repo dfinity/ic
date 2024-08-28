@@ -150,6 +150,7 @@ impl From<ErrorCode> for RejectCode {
             InsufficientCyclesInMemoryGrow => CanisterError,
             ReservedCyclesLimitExceededInMemoryAllocation => CanisterError,
             ReservedCyclesLimitExceededInMemoryGrow => CanisterError,
+            ReservedCyclesLimitIsTooLow => CanisterError,
             InsufficientCyclesInMessageMemoryGrow => CanisterError,
             CanisterMethodNotFound => CanisterError,
             CanisterWasmModuleNotFound => CanisterError,
@@ -229,6 +230,7 @@ pub enum ErrorCode {
     CanisterWasmModuleNotFound = 537,
     CanisterAlreadyInstalled = 538,
     CanisterWasmMemoryLimitExceeded = 539,
+    ReservedCyclesLimitIsTooLow = 540,
 }
 
 impl TryFrom<ErrorCodeProto> for ErrorCode {
@@ -325,6 +327,9 @@ impl TryFrom<ErrorCodeProto> for ErrorCode {
             ErrorCodeProto::CanisterWasmMemoryLimitExceeded => {
                 Ok(ErrorCode::CanisterWasmMemoryLimitExceeded)
             }
+            ErrorCodeProto::ReservedCyclesLimitIsTooLow => {
+                Ok(ErrorCode::ReservedCyclesLimitIsTooLow)
+            }
         }
     }
 }
@@ -412,6 +417,7 @@ impl From<ErrorCode> for ErrorCodeProto {
             ErrorCode::CanisterWasmMemoryLimitExceeded => {
                 ErrorCodeProto::CanisterWasmMemoryLimitExceeded
             }
+            ErrorCode::ReservedCyclesLimitIsTooLow => ErrorCodeProto::ReservedCyclesLimitIsTooLow,
         }
     }
 }
@@ -528,6 +534,7 @@ impl UserError {
             | ErrorCode::InsufficientCyclesInMemoryGrow
             | ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
             | ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
+            | ErrorCode::ReservedCyclesLimitIsTooLow
             | ErrorCode::InsufficientCyclesInMessageMemoryGrow
             | ErrorCode::CanisterSnapshotNotFound
             | ErrorCode::CanisterHeapDeltaRateLimited
@@ -601,7 +608,7 @@ mod tests {
                 402, 403, 404, 405, 406, 407, 408,
                 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512, 513, 514,
                 517, 520, 521, 522, 524, 525, 526, 527, 528, 529, 530, 531, 532,
-                533, 534, 535, 536, 537, 538, 539
+                533, 534, 535, 536, 537, 538, 539, 540,
             ]
         );
     }

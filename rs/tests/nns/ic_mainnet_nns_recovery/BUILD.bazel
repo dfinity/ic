@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-tests-pkg"])
 
 rust_library(
     name = "ic_mainnet_nns_recovery",
@@ -9,13 +9,14 @@ rust_library(
     crate_name = "ic_mainnet_nns_recovery",
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = [
+        # Keep sorted.
         "//rs/canister_client",
         "//rs/canister_client/sender",
         "//rs/nervous_system/common",
         "//rs/nervous_system/common/test_keys",
         "//rs/nns/cmc",
         "//rs/nns/common",
-        "//rs/nns/governance",
+        "//rs/nns/governance/api",
         "//rs/nns/sns-wasm",
         "//rs/nns/test_utils",
         "//rs/registry/subnet_type",
@@ -23,6 +24,8 @@ rust_library(
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/dfn_candid",
         "//rs/tests",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",

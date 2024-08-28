@@ -1,6 +1,8 @@
 use candid::{Nat, Principal};
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
+use ic_crypto_ed25519::{PrivateKey as Ed25519SecretKey, PrivateKeyFormat};
+use ic_crypto_secp256k1::PrivateKey as Secp256k1PrivateKey;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_icrc1::{Block, Operation, Transaction};
 use ic_ledger_core::block::BlockType;
@@ -14,9 +16,11 @@ use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use num_traits::cast::ToPrimitive;
 use proptest::prelude::*;
 use proptest::sample::select;
+use rand::Rng;
+use rand::RngCore;
 use rand::SeedableRng;
-use rand_chacha::ChaCha20Rng;
-use rosetta_core::models::Ed25519KeyPair;
+use rosetta_core::models::Secp256k1KeyPair;
+use rosetta_core::models::{Ed25519KeyPair, RosettaSupportedKeyPair};
 use rosetta_core::objects::Currency;
 use rosetta_core::objects::ObjectMap;
 use serde_bytes::ByteBuf;
@@ -32,8 +36,7 @@ pub const E8: u64 = 100_000_000;
 pub const DEFAULT_TRANSFER_FEE: u64 = 10_000;
 
 pub fn minter_identity() -> BasicIdentity {
-    let mut rng = reproducible_rng();
-    let keypair = Ed25519KeyPair::generate(&mut rng);
+    let keypair = Ed25519KeyPair::generate(reproducible_rng().next_u64());
     BasicIdentity::from_pem(keypair.to_pem().as_bytes()).unwrap()
 }
 
@@ -508,9 +511,8 @@ fn amount_strategy() -> impl Strategy<Value = u64> {
 }
 
 fn basic_identity_strategy() -> impl Strategy<Value = BasicIdentity> {
-    prop::array::uniform32(0u8..).prop_map(|ran| {
-        let mut rng = ChaCha20Rng::from_seed(ran);
-        let keypair = Ed25519KeyPair::generate(&mut rng);
+    prop::num::u64::ANY.prop_map(|ran| {
+        let keypair = Ed25519KeyPair::generate(ran);
         BasicIdentity::from_pem(keypair.to_pem().as_bytes()).unwrap()
     })
 }
@@ -1096,13 +1098,57 @@ pub fn construction_payloads_request_metadata() -> impl Strategy<Value = ObjectM
         })
 }
 
+pub trait KeyPairGenerator<K: RosettaSupportedKeyPair> {
+    fn generate(seed: u64) -> K;
+}
+
+impl KeyPairGenerator<Ed25519KeyPair> for Ed25519KeyPair {
+    fn generate(seed: u64) -> Ed25519KeyPair {
+        let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
+        let secret_key = Ed25519SecretKey::generate_using_rng(&mut rng);
+        Ed25519KeyPair::deserialize_raw(&secret_key.serialize_raw())
+            .expect("failed to deserialize secret_key")
+    }
+}
+
+impl KeyPairGenerator<Secp256k1KeyPair> for Secp256k1KeyPair {
+    fn generate(seed: u64) -> Secp256k1KeyPair {
+        let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
+        let secret_key = Secp256k1PrivateKey::generate_using_rng(&mut rng);
+        Secp256k1KeyPair::deserialize_sec1(&secret_key.serialize_sec1())
+            .expect("failed to deserialize secret_key")
+    }
+}
+
+impl KeyPairGenerator<Arc<BasicIdentity>> for Arc<BasicIdentity> {
+    fn generate(seed: u64) -> Arc<BasicIdentity> {
+        let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
+        let secret_key = Ed25519SecretKey::generate_using_rng(&mut rng);
+        Arc::new(
+            BasicIdentity::from_pem(std::io::Cursor::new(
+                secret_key
+                    .serialize_pkcs8_pem(PrivateKeyFormat::Pkcs8v2)
+                    .into_bytes(),
+            ))
+            .unwrap(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::KeyPairGenerator;
     use crate::{minter_identity, valid_transactions_strategy};
+    use ic_agent::identity::BasicIdentity;
+    use ic_types::PrincipalId;
     use proptest::{
         strategy::{Strategy, ValueTree},
         test_runner::TestRunner,
     };
+    use rand::RngCore;
+    use rosetta_core::models::Ed25519KeyPair;
+    use rosetta_core::models::RosettaSupportedKeyPair;
+    use rosetta_core::objects::PublicKey;
     use std::sync::Arc;
     use std::time::SystemTime;
 
@@ -1119,5 +1165,61 @@ mod tests {
             .new_tree(&mut TestRunner::default())
             .expect("Unable to run valid_transactions_strategy");
         assert_eq!(tree.current().len(), size)
+    }
+
+    #[test]
+    fn test_basic_identity_to_edwards() {
+        let seed = ic_crypto_test_utils_reproducible_rng::reproducible_rng().next_u64();
+        let edw = Arc::new(Ed25519KeyPair::generate(seed));
+        let bi = Arc::<BasicIdentity>::generate(seed);
+
+        assert_eq!(edw.get_curve_type(), bi.get_curve_type());
+
+        assert_eq!(
+            edw.generate_principal_id().unwrap(),
+            bi.generate_principal_id().unwrap()
+        );
+
+        assert_eq!(edw.get_pb_key(), bi.get_pb_key());
+
+        let bytes = b"Hello, World!";
+        assert_eq!(edw.sign(bytes), bi.sign(bytes));
+
+        assert_eq!(edw.hex_encode_pk(), bi.hex_encode_pk());
+
+        assert_eq!(
+            Arc::<Ed25519KeyPair>::der_encode_pk(edw.get_pb_key()).unwrap(),
+            Arc::<BasicIdentity>::der_encode_pk(bi.get_pb_key()).unwrap()
+        );
+
+        assert_eq!(edw.hex_encode_pk(), bi.hex_encode_pk());
+
+        assert_eq!(
+            Arc::<Ed25519KeyPair>::get_principal_id(&edw.hex_encode_pk()).unwrap(),
+            Arc::<BasicIdentity>::get_principal_id(&bi.hex_encode_pk()).unwrap()
+        );
+
+        assert_eq!(
+            edw.generate_principal_id().unwrap(),
+            PrincipalId::new_self_authenticating(
+                &Arc::<Ed25519KeyPair>::der_encode_pk(edw.get_pb_key()).unwrap()
+            )
+        );
+        assert_eq!(
+            bi.generate_principal_id().unwrap(),
+            PrincipalId::new_self_authenticating(
+                &Arc::<Ed25519KeyPair>::der_encode_pk(bi.get_pb_key()).unwrap()
+            )
+        );
+
+        let pk: PublicKey = (&edw).into();
+        assert_eq!(
+            pk.get_der_encoding().unwrap(),
+            Arc::<Ed25519KeyPair>::der_encode_pk(edw.get_pb_key()).unwrap()
+        );
+        assert_eq!(
+            pk.get_principal().unwrap(),
+            edw.generate_principal_id().unwrap().0
+        );
     }
 }

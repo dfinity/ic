@@ -1,22 +1,23 @@
 /* tag::catalog[]
 end::catalog[] */
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
-use crate::util::{agent_with_identity, block_on, random_ed25519_identity, UniversalCanister};
 use ic_agent::export::Principal;
 use ic_agent::{
-    agent::EnvelopeContent,
     identity::{AnonymousIdentity, Secp256k1Identity},
-    Identity, Signature,
+    Identity,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
+use ic_system_test_driver::util::{
+    agent_with_identity, block_on, expiry_time, random_ed25519_identity, sign_query, sign_update,
+    UniversalCanister,
+};
 use ic_types::messages::{
     Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery,
 };
 use ic_universal_canister::wasm;
 use rand::{CryptoRng, Rng};
 use slog::{debug, info};
-use std::time::{Duration, SystemTime};
 
 pub fn request_signature_test(env: TestEnv) {
     let logger = env.logger();
@@ -449,37 +450,4 @@ async fn test_request_with_valid_signature_but_wrong_sender_fails<
         .unwrap();
 
     assert_eq!(res.status(), 403);
-}
-
-pub fn sign_query(content: &HttpQueryContent, identity: &impl Identity) -> Signature {
-    let HttpQueryContent::Query { query: content } = content;
-    let msg = EnvelopeContent::Query {
-        ingress_expiry: content.ingress_expiry,
-        sender: Principal::from_slice(&content.sender),
-        canister_id: Principal::from_slice(&content.canister_id),
-        method_name: content.method_name.clone(),
-        arg: content.arg.0.clone(),
-        nonce: None,
-    };
-    identity.sign(&msg).unwrap()
-}
-
-pub fn sign_update(content: &HttpCallContent, identity: &impl Identity) -> Signature {
-    let HttpCallContent::Call { update: content } = content;
-    let msg = EnvelopeContent::Call {
-        ingress_expiry: content.ingress_expiry,
-        sender: Principal::from_slice(&content.sender),
-        canister_id: Principal::from_slice(&content.canister_id),
-        method_name: content.method_name.clone(),
-        arg: content.arg.0.clone(),
-        nonce: content.nonce.clone().map(|blob| blob.0),
-    };
-    identity.sign(&msg).unwrap()
-}
-
-pub fn expiry_time() -> Duration {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        + Duration::from_secs(4 * 60)
 }

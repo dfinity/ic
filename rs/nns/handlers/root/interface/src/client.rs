@@ -8,7 +8,9 @@ use dfn_core::call;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
-    canister_status::{CanisterStatusResult, CanisterStatusType, DefiniteCanisterSettings},
+    canister_status::{
+        CanisterStatusResult, CanisterStatusType, DefiniteCanisterSettings, LogVisibility,
+    },
 };
 use ic_nns_constants::ROOT_CANISTER_ID;
 use std::{
@@ -216,6 +218,8 @@ impl SpyNnsRootCanisterClientReply {
                 memory_allocation: Some(candid::Nat::from(8_u32)),
                 freezing_threshold: Some(candid::Nat::from(9_u32)),
                 reserved_cycles_limit: Some(candid::Nat::from(10_u32)),
+                wasm_memory_limit: Some(candid::Nat::from(11_u32)),
+                log_visibility: Some(LogVisibility::Controllers),
             },
             cycles: candid::Nat::from(42_u32),
             idle_cycles_burned_per_day: Some(candid::Nat::from(43_u32)),

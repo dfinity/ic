@@ -3,21 +3,18 @@ use canister_test::{CanisterInstallMode, Wasm};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
+use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     self, ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
     REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance::{
-    init::TEST_NEURON_1_ID,
-    pb::v1::{
-        manage_neuron, manage_neuron_response, proposal, CreateServiceNervousSystem,
-        ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-        ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, NetworkEconomics,
-        NnsFunction, Proposal, ProposalInfo, Topic,
-    },
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron, manage_neuron_response, proposal, CreateServiceNervousSystem,
+    ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+    ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, NetworkEconomics,
+    NnsFunction, Proposal, ProposalInfo, Topic,
 };
 use ic_nns_test_utils::{
     common::{
@@ -99,7 +96,7 @@ pub fn pocket_ic_for_sns_tests_with_mainnet_versions() -> PocketIc {
 
     // Install the (mainnet) NNS canisters.
     let with_mainnet_nns_canisters = true;
-    install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None);
+    install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]);
 
     // Publish (mainnet) SNS Wasms to SNS-W.
     let with_mainnet_sns_wasms = true;
@@ -116,7 +113,26 @@ pub fn install_canister(
     wasm: Wasm,
     controller: Option<PrincipalId>,
 ) {
-    let controller_principal = controller.map(|c| c.0);
+    install_canister_with_controllers(
+        pocket_ic,
+        name,
+        canister_id,
+        arg,
+        wasm,
+        controller.into_iter().collect(),
+    )
+}
+
+pub fn install_canister_with_controllers(
+    pocket_ic: &PocketIc,
+    name: &str,
+    canister_id: CanisterId,
+    arg: Vec<u8>,
+    wasm: Wasm,
+    controllers: Vec<PrincipalId>,
+) {
+    let controllers = controllers.into_iter().map(|c| c.0).collect::<Vec<_>>();
+    let controller_principal = controllers.first().cloned();
     let memory_allocation = if ALL_NNS_CANISTER_IDS.contains(&&canister_id) {
         let memory_allocation_bytes = ic_nns_constants::memory_allocation_of(canister_id);
         Some(Nat::from(memory_allocation_bytes))
@@ -125,6 +141,7 @@ pub fn install_canister(
     };
     let settings = Some(CanisterSettings {
         memory_allocation,
+        controllers: Some(controllers),
         ..Default::default()
     });
     let canister_id = pocket_ic
@@ -231,6 +248,7 @@ pub fn add_wasms_to_sns_wasm(
 ///    test_user_icp_ledger_initial_balance)` pairs, representing some initial ICP balances.
 /// 3. `custom_initial_registry_mutations` are custom mutations for the inital Registry. These
 ///    should mutations should comply with Registry invariants, otherwise this function will fail.
+/// 4. `maturity_equivalent_icp_e8s` - hotkeys of the 1st NNS (Neurons' Fund-participating) neuron.
 ///
 /// Returns
 /// 1. A list of `controller_principal_id`s of pre-configured NNS neurons.
@@ -239,6 +257,7 @@ pub fn install_nns_canisters(
     initial_balances: Vec<(AccountIdentifier, Tokens)>,
     with_mainnet_nns_canister_versions: bool,
     custom_initial_registry_mutations: Option<Vec<RegistryAtomicMutateRequest>>,
+    neurons_fund_hotkeys: Vec<PrincipalId>,
 ) -> Vec<PrincipalId> {
     let topology = pocket_ic.topology();
 
@@ -254,8 +273,12 @@ pub fn install_nns_canisters(
     } else {
         nns_init_payload_builder.with_initial_invariant_compliant_mutations();
     }
+    let maturity_equivalent_icp_e8s = 1_500_000 * E8;
     nns_init_payload_builder
-        .with_test_neurons_fund_neurons(1_500_000 * E8)
+        .with_test_neurons_fund_neurons_with_hotkeys(
+            neurons_fund_hotkeys,
+            maturity_equivalent_icp_e8s,
+        )
         .with_sns_dedicated_subnets(vec![sns_subnet_id])
         .with_sns_wasm_access_controls(true);
 
@@ -656,6 +679,8 @@ pub mod nns {
                     Encode!(&ListNeurons {
                         neuron_ids: vec![],
                         include_neurons_readable_by_caller: true,
+                        include_empty_neurons_readable_by_caller: None,
+                        include_public_neurons_in_full_neurons: None,
                     })
                     .unwrap(),
                 )
@@ -1977,7 +2002,10 @@ pub mod sns {
 
     pub mod root {
         use super::*;
-        use ic_sns_root::pb::v1::ListSnsCanistersRequest;
+        use ic_sns_root::{
+            pb::v1::ListSnsCanistersRequest, GetSnsCanistersSummaryRequest,
+            GetSnsCanistersSummaryResponse,
+        };
 
         pub fn list_sns_canisters(
             pocket_ic: &PocketIc,
@@ -1996,6 +2024,30 @@ pub mod sns {
                 WasmResult::Reject(s) => panic!("Call to list_sns_canisters failed: {:#?}", s),
             };
             Decode!(&result, ListSnsCanistersResponse).unwrap()
+        }
+
+        pub fn get_sns_canisters_summary(
+            pocket_ic: &PocketIc,
+            sns_root_canister_id: PrincipalId,
+        ) -> GetSnsCanistersSummaryResponse {
+            let result = pocket_ic
+                .update_call(
+                    sns_root_canister_id.into(),
+                    Principal::anonymous(),
+                    "get_sns_canisters_summary",
+                    Encode!(&GetSnsCanistersSummaryRequest {
+                        update_canister_list: Some(false),
+                    })
+                    .unwrap(),
+                )
+                .unwrap();
+            let result = match result {
+                WasmResult::Reply(result) => result,
+                WasmResult::Reject(s) => {
+                    panic!("Call to get_sns_canisters_summary failed: {:#?}", s)
+                }
+            };
+            Decode!(&result, GetSnsCanistersSummaryResponse).unwrap()
         }
     }
 
@@ -2098,8 +2150,11 @@ pub mod sns {
     pub mod swap {
         use super::*;
         use assert_matches::assert_matches;
-        use ic_nns_governance::pb::v1::create_service_nervous_system::SwapParameters;
-        use ic_sns_swap::{pb::v1::BuyerState, swap::principal_to_subaccount};
+        use ic_nns_governance_api::pb::v1::create_service_nervous_system::SwapParameters;
+        use ic_sns_swap::{
+            pb::v1::{BuyerState, GetOpenTicketRequest, GetOpenTicketResponse},
+            swap::principal_to_subaccount,
+        };
         use icp_ledger::DEFAULT_TRANSFER_FEE;
 
         pub fn get_init(pocket_ic: &PocketIc, canister_id: PrincipalId) -> GetInitResponse {
@@ -2213,6 +2268,26 @@ pub mod sns {
                 WasmResult::Reject(s) => panic!("Call to get_buyer_state failed: {:#?}", s),
             };
             Ok(Decode!(&result, GetBuyerStateResponse).unwrap())
+        }
+
+        pub fn get_open_ticket(
+            pocket_ic: &PocketIc,
+            swap_canister_id: PrincipalId,
+            buyer: PrincipalId,
+        ) -> Result<GetOpenTicketResponse, String> {
+            let result = pocket_ic
+                .query_call(
+                    swap_canister_id.into(),
+                    buyer.into(),
+                    "get_open_ticket",
+                    Encode!(&GetOpenTicketRequest {}).unwrap(),
+                )
+                .map_err(|err| err.to_string())?;
+            let result = match result {
+                WasmResult::Reply(result) => result,
+                WasmResult::Reject(s) => panic!("Call to get_open_ticket failed: {:#?}", s),
+            };
+            Ok(Decode!(&result, GetOpenTicketResponse).unwrap())
         }
 
         pub fn error_refund_icp(
@@ -2333,11 +2408,11 @@ pub mod sns {
         /// * `Ok(false)` if auto-finalization is still happening (or swap lifecycle reached a final state
         ///   other than Committed), i.e., one of the following conditions holds:
         ///     1. Any of the top-level fields of this `auto_finalization_status` are unset:
-        ///       `has_auto_finalize_been_attempted`, `is_auto_finalize_enabled`,
+        ///        `has_auto_finalize_been_attempted`, `is_auto_finalize_enabled`,
         ///        or `auto_finalize_swap_response`.
         ///     2. `auto_finalize_swap_response` does not match the expected pattern for a *committed* SNS
         ///        Swap's `auto_finalize_swap_response`. In particular:
-        ///        - After NNS1-3117 `set_dapp_controllers_call_result` must be `Some` and not have any errors, but for now it can take any value
+        ///        - `set_dapp_controllers_call_result` must be `Some`
         ///        - `sweep_sns_result` must be `Some`.
         /// * `Err` if `auto_finalize_swap_response` contains any errors.
         pub fn is_auto_finalization_status_committed_or_err(
@@ -2359,8 +2434,7 @@ pub mod sns {
                     sweep_sns_result: Some(_),
                     claim_neuron_result: Some(_),
                     set_mode_call_result: Some(_),
-                    // TODO(NNS1-3117): set_dapp_controllers_call_result should be required to be Some and not have any errors
-                    set_dapp_controllers_call_result: _,
+                    set_dapp_controllers_call_result: Some(_),
                     settle_community_fund_participation_result: None,
                     error_message: None,
                 }
@@ -2372,7 +2446,7 @@ pub mod sns {
         /// * `Ok(false)` if auto-finalization is still happening (or swap lifecycle reached a final state
         ///   other than Aborted), i.e., one of the following conditions holds:
         ///     1. Any of the top-level fields of this `auto_finalization_status` are unset:
-        ///       `has_auto_finalize_been_attempted`, `is_auto_finalize_enabled`,
+        ///        `has_auto_finalize_been_attempted`, `is_auto_finalize_enabled`,
         ///        or `auto_finalize_swap_response`.
         ///     2. `auto_finalize_swap_response` does not match the expected pattern for an *aborted* SNS
         ///        Swap's `auto_finalize_swap_response`. In particular:

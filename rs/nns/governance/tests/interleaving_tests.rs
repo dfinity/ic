@@ -183,6 +183,7 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
     // channel to terminate the test.
     let finish_tx = tx.clone();
 
+    #[allow(deprecated)]
     let initial_neurons_fund_participation = NeuronsFundParticipation {
         ideal_matched_participation_function: Some(IdealMatchedParticipationFunction {
             serialized_representation: Some(matching_function.serialize()),
@@ -194,8 +195,11 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
                 }),
                 amount_icp_e8s: Some(max_direct_participation_icp_e8s),
                 maturity_equivalent_icp_e8s: Some(nf_neuron_maturity),
-                hotkey_principal: Some(nf_neurons_controller),
+                controller: Some(nf_neurons_controller),
+                hotkeys: Vec::new(),
                 is_capped: Some(false),
+                // TODO(NNS1-3198): Remove this field once it's deprecated
+                hotkey_principal: Some(nf_neurons_controller),
             }],
         }),
         swap_participation_limits: Some(SwapParticipationLimits {
@@ -225,7 +229,6 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
                 )),
                 ..Default::default()
             }),
-            cf_participants: vec![],
             neurons_fund_data: Some(NeuronsFundData {
                 initial_neurons_fund_participation: Some(initial_neurons_fund_participation),
                 final_neurons_fund_participation: None,

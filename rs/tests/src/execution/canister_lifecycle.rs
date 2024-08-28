@@ -28,11 +28,6 @@ AKA:: Testcase 2.4
 
 end::catalog[] */
 
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
-use crate::types::*;
-use crate::util::*;
 use candid::{Decode, Encode};
 use futures::future::join_all;
 use ic_agent::{agent::RejectCode, export::Principal, identity::Identity, AgentError};
@@ -41,11 +36,19 @@ use ic_management_canister_types::{
     EmptyBlob, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
+use ic_system_test_driver::types::*;
+use ic_system_test_driver::util::*;
 use ic_types::{Cycles, PrincipalId};
 use ic_universal_canister::{call_args, management, wasm, CallInterface, UNIVERSAL_CANISTER_WASM};
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::{
-    management_canister::{builders::InstallMode, UpdateCanisterBuilder},
+    management_canister::{
+        builders::{CanisterUpgradeOptions, InstallMode},
+        UpdateCanisterBuilder,
+    },
     ManagementCanister,
 };
 use slog::info;
@@ -96,40 +99,6 @@ pub fn create_canister_via_canister_succeeds(env: TestEnv) {
                     );
                 })
                 .unwrap()
-        }
-    });
-}
-
-pub fn create_canister_with_controller_and_controllers_fails(env: TestEnv) {
-    let logger = env.logger();
-    let node = env.get_first_healthy_node_snapshot();
-    let agent = node.build_default_agent();
-    block_on({
-        async move {
-            let canister_a =
-                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
-                    .await;
-
-            assert_reject(
-                canister_a
-                    .update(
-                        wasm().call(
-                            management::create_canister(
-                                Cycles::from(2_000_000_000_000u64).into_parts(),
-                            )
-                            // Setting both of these should result in an error.
-                            .with_controllers(vec![canister_a.canister_id()])
-                            .with_controller(canister_a.canister_id()),
-                        ),
-                    )
-                    .await
-                    .map(|res| {
-                        Decode!(res.as_slice(), CreateCanisterResult)
-                            .unwrap()
-                            .canister_id
-                    }),
-                RejectCode::CanisterReject,
-            );
         }
     });
 }
@@ -262,45 +231,6 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
                         > cycles_account_manager
                             .ingress_induction_cost_from_bytes(NumBytes::new(bytes.len() as u64), 1)
                             .get()
-            );
-        }
-    });
-}
-
-pub fn update_settings_with_controller_and_controllers_fails(env: TestEnv) {
-    let logger = env.logger();
-    let node = env.get_first_healthy_node_snapshot();
-    let agent = node.build_default_agent();
-    block_on({
-        async move {
-            let canister_a =
-                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
-                    .await;
-
-            let canister_b = canister_a
-                .update(wasm().call(management::create_canister(
-                    Cycles::from(2_000_000_000_000u64).into_parts(),
-                )))
-                .await
-                .map(|res| {
-                    Decode!(res.as_slice(), CreateCanisterResult)
-                        .unwrap()
-                        .canister_id
-                })
-                .unwrap();
-
-            assert_reject(
-                canister_a
-                    .update(
-                        wasm().call(
-                            management::update_settings(canister_b)
-                                // Setting both of these should result in an error.
-                                .with_controllers(vec![canister_a.canister_id()])
-                                .with_controller(canister_a.canister_id()),
-                        ),
-                    )
-                    .await,
-                RejectCode::CanisterReject,
             );
         }
     });
@@ -703,9 +633,10 @@ pub fn managing_a_canister_with_wrong_controller_fails(env: TestEnv) {
             info!(logger, "Asserting that upgrading the canister fails.");
             assert_http_submit_fails(
                 mgr.install_code(&wallet_canister.canister_id(), UNIVERSAL_CANISTER_WASM)
-                    .with_mode(InstallMode::Upgrade {
+                    .with_mode(InstallMode::Upgrade(Some(CanisterUpgradeOptions {
                         skip_pre_upgrade: Some(false),
-                    })
+                        wasm_memory_persistence: None,
+                    })))
                     .call()
                     .await,
                 RejectCode::CanisterError,

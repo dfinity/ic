@@ -1,9 +1,7 @@
 use crate::InternalHttpQueryHandler;
 use ic_base_types::{CanisterId, NumSeconds};
-use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
 use ic_error_types::{ErrorCode, UserError};
-use ic_management_canister_types::{BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, Payload};
 use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
@@ -749,16 +747,16 @@ fn queries_to_frozen_canisters_are_rejected() {
     // to be installed (the canister is created with the provisional
     // create canister api that doesn't require additional cycles).
     //
-    // 80_000_000 cycles are needed as prepayment for max install_code instructions
+    // 80_002_460 cycles are needed as prepayment for max install_code instructions
     //    590_000 cycles are needed for update call execution
     //     41_070 cycles are needed to cover freeze_threshold_cycles
     //                   of the canister history memory usage (134 bytes)
-    let low_cycles = Cycles::new(80_000_631_070);
+    let low_cycles = Cycles::new(80_000_633_630);
     let canister_a = test.universal_canister_with_cycles(low_cycles).unwrap();
     test.update_freezing_threshold(canister_a, freezing_threshold)
         .unwrap();
 
-    let high_cycles = Cycles::new(1_000_000_000_000);
+    let high_cycles = Cycles::new(1_000_000_000_000_000);
     let canister_b = test.universal_canister_with_cycles(high_cycles).unwrap();
     test.update_freezing_threshold(canister_b, freezing_threshold)
         .unwrap();
@@ -1471,208 +1469,6 @@ fn test_incorrect_query_name() {
         err.description(),
         format!("Query method {} not found.", method)
     );
-}
-
-#[test]
-fn test_bitcoin_query_bitcoin_canister_not_set() {
-    let test = ExecutionTestBuilder::new()
-        .with_bitcoin_mainnet_canister_id(None)
-        .with_bitcoin_testnet_canister_id(None)
-        .build();
-
-    for network in [
-        BitcoinNetwork::Mainnet,
-        BitcoinNetwork::mainnet,
-        BitcoinNetwork::Testnet,
-        BitcoinNetwork::testnet,
-        BitcoinNetwork::Regtest,
-        BitcoinNetwork::regtest,
-    ] {
-        let tests = [
-            (
-                "bitcoin_get_balance_query",
-                BitcoinGetBalanceArgs {
-                    network,
-                    address: String::from(""),
-                    min_confirmations: None,
-                }
-                .encode(),
-            ),
-            (
-                "bitcoin_get_utxos_query",
-                BitcoinGetUtxosArgs {
-                    network,
-                    address: String::from(""),
-                    filter: None,
-                }
-                .encode(),
-            ),
-        ];
-
-        for (method, payload) in tests {
-            match test.query(
-                Query {
-                    source: QuerySource::User {
-                        user_id: user_test_id(2),
-                        ingress_expiry: 0,
-                        nonce: None,
-                    },
-                    receiver: CanisterId::ic_00(),
-                    method_name: method.to_string(),
-                    method_payload: payload,
-                },
-                Arc::new(test.state().clone()),
-                vec![],
-            ) {
-                Err(e) => {
-                    if network == BitcoinNetwork::Mainnet || network == BitcoinNetwork::mainnet {
-                        assert_eq!(e.code(), ErrorCode::CanisterNotHostedBySubnet);
-                        assert_eq!(
-                            e.description(),
-                            "Bitcoin mainnet canister is not installed."
-                        );
-                    } else {
-                        assert_eq!(e.code(), ErrorCode::CanisterNotHostedBySubnet);
-                        assert_eq!(
-                            e.description(),
-                            "Bitcoin testnet canister is not installed."
-                        );
-                    }
-                }
-                _ => panic!("Unexpected result."),
-            }
-        }
-    }
-}
-
-fn mock_bitcoin_canister_wat(network: BitcoinNetwork) -> String {
-    format!(
-        r#"(module
-              (import "ic0" "msg_reply" (func $msg_reply))
-              (import "ic0" "msg_reply_data_append"
-                (func $msg_reply_data_append (param i32 i32)))
-
-              (func $ping
-                (call $msg_reply_data_append
-                  (i32.const 0)
-                  (i32.const 19))
-                (call $msg_reply))
-
-              (memory $memory 1)
-              (export "memory" (memory $memory))
-              (data (i32.const 0) "Hello from {}!")
-              (export "canister_update bitcoin_get_balance" (func $ping))
-              (export "canister_update bitcoin_get_utxos" (func $ping))
-              (export "canister_update bitcoin_send_transaction" (func $ping))
-              (export "canister_update bitcoin_get_current_fee_percentiles" (func $ping))
-              (export "canister_query bitcoin_get_balance_query" (func $ping))
-              (export "canister_query bitcoin_get_utxos_query" (func $ping))
-            )"#,
-        network
-    )
-}
-
-fn test_canister_routing(test: ExecutionTest, networks: Vec<BitcoinNetwork>) {
-    for network in networks {
-        let tests = [
-            (
-                "bitcoin_get_balance_query",
-                BitcoinGetBalanceArgs {
-                    network,
-                    address: String::from(""),
-                    min_confirmations: None,
-                }
-                .encode(),
-            ),
-            (
-                "bitcoin_get_utxos_query",
-                BitcoinGetUtxosArgs {
-                    network,
-                    address: String::from(""),
-                    filter: None,
-                }
-                .encode(),
-            ),
-        ];
-        for (method, payload) in tests {
-            match test.query(
-                Query {
-                    source: QuerySource::User {
-                        user_id: user_test_id(2),
-                        ingress_expiry: 0,
-                        nonce: None,
-                    },
-                    receiver: CanisterId::ic_00(),
-                    method_name: method.to_string(),
-                    method_payload: payload,
-                },
-                Arc::new(test.state().clone()),
-                vec![],
-            ) {
-                Ok(WasmResult::Reply(r)) => {
-                    assert_eq!(r, format!("Hello from {}!", network).as_bytes())
-                }
-                _ => panic!("Unexpected result"),
-            };
-        }
-    }
-}
-
-#[test]
-fn bitcoin_test_routing_mainnet_canister_exists() {
-    let mainnet_id = CanisterId::from(0);
-
-    let mut test = ExecutionTestBuilder::new()
-        .with_bitcoin_mainnet_canister_id(Some(mainnet_id))
-        .build();
-
-    assert_eq!(
-        test.canister_from_cycles_and_wat(
-            Cycles::new(1_000_000_000_000u128),
-            mock_bitcoin_canister_wat(BitcoinNetwork::Mainnet),
-        ),
-        Ok(mainnet_id)
-    );
-
-    test_canister_routing(test, vec![BitcoinNetwork::Mainnet, BitcoinNetwork::mainnet]);
-}
-
-#[test]
-fn bitcoin_test_routing_testnet_canister_exists() {
-    let testnet_id = CanisterId::from(0);
-
-    let mut test = ExecutionTestBuilder::new()
-        .with_bitcoin_testnet_canister_id(Some(testnet_id))
-        .build();
-
-    assert_eq!(
-        test.canister_from_cycles_and_wat(
-            Cycles::new(1_000_000_000_000u128),
-            mock_bitcoin_canister_wat(BitcoinNetwork::Testnet),
-        ),
-        Ok(testnet_id)
-    );
-
-    test_canister_routing(test, vec![BitcoinNetwork::Testnet, BitcoinNetwork::testnet]);
-}
-
-#[test]
-fn bitcoin_test_routing_regtest_canister_exists() {
-    let testnet_id = CanisterId::from(0);
-
-    let mut test = ExecutionTestBuilder::new()
-        .with_bitcoin_testnet_canister_id(Some(testnet_id))
-        .build();
-
-    assert_eq!(
-        test.canister_from_cycles_and_wat(
-            Cycles::new(1_000_000_000_000u128),
-            mock_bitcoin_canister_wat(BitcoinNetwork::Regtest),
-        ),
-        Ok(testnet_id)
-    );
-
-    test_canister_routing(test, vec![BitcoinNetwork::Regtest, BitcoinNetwork::regtest]);
 }
 
 #[test]

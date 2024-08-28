@@ -1,23 +1,21 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 
-package(default_visibility = ["//visibility:public"])
-
 DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/async_utils",
     "@crate_index//:anyhow",
     "@crate_index//:axum",
-    "@crate_index//:bytes",
     "@crate_index//:clap_3_2_25",
-    "@crate_index//:futures-util",
     "@crate_index//:http",
     "@crate_index//:itertools",
     "@crate_index//:reqwest",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
-    "@crate_index//:sync_wrapper",
     "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 
@@ -25,5 +23,6 @@ rust_binary(
     name = "systemd-journal-gatewayd-shim",
     srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = ["//rs:release-pkg"],
     deps = DEPENDENCIES,
 )

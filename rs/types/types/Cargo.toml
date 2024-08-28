@@ -8,11 +8,11 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
-bincode = "1.2.1"
+bincode = { workspace = true }
 candid = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../base_types" }
-ic-btc-types-internal = { path = "../../bitcoin/types/internal" }
+ic-btc-replica-types = { path = "../../bitcoin/replica_types" }
 ic-constants = { path = "../../constants" }
 ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
@@ -20,6 +20,8 @@ ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-error-types = { path = "../error_types" }
 ic-management-canister-types = { path = "../management_canister_types" }
 ic-protobuf = { path = "../../protobuf" }
+ic-validate-eq = { path = "../../utils/validate_eq" }
+ic-validate-eq-derive = { path = "../../utils/validate_eq_derive" }
 ic-utils = { path = "../../utils" }
 maplit = "1.0.2"
 once_cell = "1.8"

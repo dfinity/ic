@@ -34,15 +34,18 @@ rust_library(
     ),
     crate_name = "ic_cketh_minter",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:ic-cdk-macros",
         "@crate_index//:strum_macros",
     ],
     version = "0.1.0",
     deps = [
+        # Keep sorted.
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/crypto/ecdsa_secp256k1",
+        "//rs/crypto/secp256k1",
         "//rs/crypto/sha3",
+        "//rs/ethereum/evm-rpc-client",
         "//rs/ethereum/types",
         "//rs/phantom_newtype",
         "//rs/types/management_canister_types",
@@ -92,6 +95,7 @@ rust_test(
         "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
     },
     deps = [
+        # Keep sorted.
         ":minter",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:assert_matches",
@@ -115,6 +119,7 @@ rust_test(
         "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
     },
     deps = [
+        # Keep sorted.
         ":minter",
         "@crate_index//:candid_parser",
         "@crate_index//:maplit",
@@ -132,19 +137,20 @@ rust_test(
     crate_features = features,
     crate_name = "ic_cketh_minter_canister",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:ic-cdk-macros",
     ],
     service_file = "cketh_minter.did",
     deps = [
+        # Keep sorted.
         ":minter",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/crypto/ecdsa_secp256k1",
+        "//rs/crypto/secp256k1",
         "//rs/ethereum/types",
         "//rs/rust_canisters/http_types",
         "@crate_index//:askama",
         "@crate_index//:candid",
-        "@crate_index//:ethabi",
         "@crate_index//:futures",
         "@crate_index//:hex",
         "@crate_index//:ic-canister-log",
@@ -153,7 +159,6 @@ rust_test(
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:num-traits",
         "@crate_index//:serde_bytes",
-        "@crate_index//:serde_json",
         "@crate_index//:time",
     ],
 ) for (target_suffix, features) in [
@@ -168,49 +173,61 @@ rust_binary(
     name = "principal_to_hex",
     srcs = ["bin/principal_to_hex.rs"],
     deps = [
+        # Keep sorted.
         "@crate_index//:candid",
         "@crate_index//:hex",
     ],
 )
 
-rust_ic_test_suite(
-    name = "integration_tests",
-    srcs = glob(["tests/**/*.rs"]),
-    data = [
-        ":cketh_minter_debug.wasm",
-        "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm",
-        "//rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz",
-        "//rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
-        "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz",
-    ],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
-        "CKETH_MINTER_WASM_PATH": "$(rootpath :cketh_minter_debug.wasm)",
-        "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm)",
-        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz)",
-        "INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
-        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz)",
-    },
-    proc_macro_deps = [],
-    deps = [
-        ":minter",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/ethereum/cketh/test_utils",
-        "//rs/ethereum/ledger-suite-orchestrator/test_utils",
-        "//rs/ethereum/types",
-        "//rs/state_machine_tests",
-        "//rs/types/base_types",
-        "@crate_index//:assert_matches",
-        "@crate_index//:candid",
-        "@crate_index//:ethers-core",
-        "@crate_index//:hex",
-        "@crate_index//:num-bigint",
-        "@crate_index//:num-traits",
-        "@crate_index//:serde",
-        "@crate_index//:serde_bytes",
-        "@crate_index//:serde_json",
-    ],
-)
+[
+    rust_ic_test_suite(
+        name = "integration_tests" + name_suffix,
+        srcs = glob(["tests/**/*.rs"]),
+        data = [
+            ":cketh_minter_debug.wasm",
+            "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm",
+            "//rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz",
+            "//rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
+            "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz",
+        ] + extra_data,
+        env = {
+            "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
+            "CKETH_MINTER_WASM_PATH": "$(rootpath :cketh_minter_debug.wasm)",
+            "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm)",
+            "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz)",
+            "INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
+            "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz)",
+        } | extra_env,
+        proc_macro_deps = [],
+        deps = [
+            # Keep sorted.
+            ":minter",
+            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//rs/ethereum/cketh/test_utils",
+            "//rs/ethereum/ledger-suite-orchestrator/test_utils",
+            "//rs/ethereum/types",
+            "//rs/state_machine_tests",
+            "//rs/types/base_types",
+            "@crate_index//:assert_matches",
+            "@crate_index//:candid",
+            "@crate_index//:ethers-core",
+            "@crate_index//:hex",
+            "@crate_index//:num-bigint",
+            "@crate_index//:num-traits",
+            "@crate_index//:serde",
+            "@crate_index//:serde_bytes",
+            "@crate_index//:serde_json",
+        ],
+    )
+    for (name_suffix, extra_data, extra_env) in [
+        ("", [], {}),
+        (
+            "_evm_rpc",
+            ["@evm_rpc.wasm.gz//file"],
+            {"EVM_RPC_CANISTER_WASM_PATH": "$(rootpath @evm_rpc.wasm.gz//file)"},
+        ),
+    ]
+]
 
 closure_js_library(
     name = "principal_to_bytes",
@@ -221,6 +238,7 @@ closure_js_test(
     name = "principal_to_bytes_test",
     srcs = ["tests/principal_to_bytes_test.js"],
     deps = [
+        # Keep sorted.
         ":principal_to_bytes",
         "@com_google_javascript_closure_library//closure/goog/testing:asserts",
         "@com_google_javascript_closure_library//closure/goog/testing:jsunit",

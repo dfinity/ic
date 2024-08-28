@@ -13,9 +13,9 @@ use icp_ledger::{
     AccountIdBlob, AccountIdentifier, ArchiveOptions, ArchivedBlocksRange, Block, CandidBlock,
     CandidOperation, CandidTransaction, FeatureFlags, GetBlocksArgs, GetBlocksRes, GetBlocksResult,
     GetEncodedBlocksResult, InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
-    LedgerCanisterPayload, Operation, QueryBlocksResponse, QueryEncodedBlocksResponse, TimeStamp,
-    UpgradeArgs, DEFAULT_TRANSFER_FEE, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST,
-    MAX_BLOCKS_PER_REQUEST,
+    LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse,
+    QueryEncodedBlocksResponse, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
+    MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -27,7 +27,7 @@ use num_traits::cast::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
 use std::collections::{HashMap, HashSet};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 fn system_time_to_nanos(t: SystemTime) -> u64 {
     t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
@@ -59,6 +59,10 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerCanisterI
         .accounts_overflow_trim_quantity(args.accounts_overflow_trim_quantity)
         .build()
         .unwrap()
+}
+
+fn encode_upgrade_args() -> LedgerCanisterUpgradePayload {
+    LedgerCanisterUpgradePayload(LedgerCanisterPayload::Upgrade(None))
 }
 
 fn query_blocks(
@@ -232,6 +236,14 @@ fn check_transfer_model() {
 }
 
 #[test]
+fn test_ledger_http_request_decoding_quota() {
+    ic_icrc1_ledger_sm_tests::test_ledger_http_request_decoding_quota(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn check_old_init() {
     let env = StateMachine::new();
     let old_init = Encode!(&InitArgs {
@@ -318,7 +330,7 @@ fn check_memo() {
             .unwrap_err()
             .assert_contains(
                 ErrorCode::CanisterCalledTrap,
-                &"Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called \
+                "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called \
                 `ic0.trap` with message: the memo field is too large",
             );
     }
@@ -965,6 +977,69 @@ fn test_block_transformation() {
 }
 
 #[test]
+fn test_approval_upgrade() {
+    let ledger_wasm_mainnet =
+        std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
+    let ledger_wasm_current = ledger_wasm();
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let p3 = PrincipalId::new_user_test_id(3);
+
+    let env = StateMachine::new();
+    let mut initial_balances = HashMap::new();
+    initial_balances.insert(Account::from(p1.0).into(), Tokens::from_e8s(10_000_000));
+
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .icrc1_minting_account(MINTER)
+        .initial_values(initial_balances)
+        .transfer_fee(Tokens::from_e8s(10_000))
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .build()
+        .unwrap();
+    let canister_id = env
+        .install_canister(
+            ledger_wasm_mainnet.clone(),
+            CandidOne(payload).into_bytes().unwrap(),
+            None,
+        )
+        .expect("Unable to install the Ledger canister with the new init");
+
+    let approve_args = default_approve_args(p2.0, 120_000);
+    send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");
+    let mut approve_args = default_approve_args(p3.0, 130_000);
+    let expiration =
+        system_time_to_nanos(env.time()) + Duration::from_secs(5 * 3600).as_nanos() as u64;
+    approve_args.expires_at = Some(expiration);
+    send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");
+
+    let test_upgrade = |ledger_wasm: Vec<u8>| {
+        env.upgrade_canister(
+            canister_id,
+            ledger_wasm,
+            Encode!(&LedgerCanisterPayload::Upgrade(None)).unwrap(),
+        )
+        .unwrap();
+
+        let allowance = get_allowance(&env, canister_id, p1.0, p2.0);
+        assert_eq!(allowance.allowance.0.to_u64().unwrap(), 120_000);
+        assert_eq!(allowance.expires_at, None);
+
+        let allowance = get_allowance(&env, canister_id, p1.0, p3.0);
+        assert_eq!(allowance.allowance.0.to_u64().unwrap(), 130_000);
+        assert_eq!(allowance.expires_at, Some(expiration));
+    };
+
+    // Test if the old serialized approvals are correctly deserialized
+    test_upgrade(ledger_wasm_current.clone());
+    // Test if new approvals serialization also works
+    test_upgrade(ledger_wasm_current);
+    // Test if downgrade works
+    test_upgrade(ledger_wasm_mainnet);
+}
+
+#[test]
 fn test_approve_smoke() {
     ic_icrc1_ledger_sm_tests::test_approve_smoke(ledger_wasm(), encode_init_args);
 }
@@ -1052,7 +1127,6 @@ fn test_feature_flags() {
         canister_id,
         ledger_wasm.clone(),
         Encode!(&LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
-            maximum_number_of_accounts: None,
             icrc1_minting_account: None,
             feature_flags: Some(FeatureFlags { icrc2: false }),
         })))
@@ -1073,7 +1147,6 @@ fn test_feature_flags() {
         canister_id,
         ledger_wasm,
         Encode!(&LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
-            maximum_number_of_accounts: None,
             icrc1_minting_account: None,
             feature_flags: Some(FeatureFlags { icrc2: true }),
         })))
@@ -1330,7 +1403,7 @@ fn test_icrc21_standard() {
 }
 
 mod metrics {
-    use crate::{encode_init_args, ledger_wasm};
+    use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
     use ic_icrc1_ledger_sm_tests::metrics::LedgerSuiteType;
 
     #[test]
@@ -1355,6 +1428,15 @@ mod metrics {
             ledger_wasm(),
             encode_init_args,
             LedgerSuiteType::ICP,
+        );
+    }
+
+    #[test]
+    fn should_set_ledger_upgrade_instructions_consumed_metric() {
+        ic_icrc1_ledger_sm_tests::metrics::assert_ledger_upgrade_instructions_consumed_metric_set(
+            ledger_wasm(),
+            encode_init_args,
+            encode_upgrade_args,
         );
     }
 }

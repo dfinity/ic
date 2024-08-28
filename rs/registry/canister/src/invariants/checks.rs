@@ -154,7 +154,6 @@ mod tests {
     use super::*;
     use ic_base_types::CanisterId;
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
-    use ic_nns_common::registry::encode_or_panic;
     use ic_protobuf::registry::{
         node_operator::v1::NodeOperatorRecord,
         routing_table::v1::{
@@ -172,18 +171,20 @@ mod tests {
     };
     use ic_test_utilities_types::ids::subnet_test_id;
     use maplit::btreemap;
+    use prost::Message;
     use std::collections::BTreeMap;
     use std::convert::TryFrom;
 
     fn empty_mutation() -> Vec<u8> {
-        encode_or_panic(&RegistryAtomicMutateRequest {
+        RegistryAtomicMutateRequest {
             mutations: vec![RegistryMutation {
                 mutation_type: Type::Upsert as i32,
                 key: "_".into(),
                 value: "".into(),
             }],
             preconditions: vec![],
-        })
+        }
+        .encode_to_vec()
     }
 
     #[test]
@@ -246,14 +247,15 @@ mod tests {
     #[should_panic(expected = "No routing table in snapshot")]
     fn routing_table_invariants_do_not_hold() {
         let key = make_node_operator_record_key(*TEST_USER1_PRINCIPAL);
-        let value = encode_or_panic(&NodeOperatorRecord {
+        let value = NodeOperatorRecord {
             node_operator_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             node_allowance: 0,
             node_provider_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             dc_id: "".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
-        });
+        }
+        .encode_to_vec();
         let registry = Registry::new();
         let mutation = vec![insert(key.as_bytes(), value)];
         registry.check_global_state_invariants(&mutation);
@@ -270,7 +272,7 @@ mod tests {
 
         let routing_table = PbRoutingTable::from(routing_table);
         let key1 = make_routing_table_record_key();
-        let value1 = encode_or_panic(&routing_table);
+        let value1 = routing_table.encode_to_vec();
 
         // The canister ID range {0x200:0x2ff} in `canister_migrations` is not hosted by any subnet in trace according to the routing table.
         let canister_migrations = CanisterMigrations::try_from(btreemap! {
@@ -279,7 +281,7 @@ mod tests {
 
         let canister_migrations = PbCanisterMigrations::from(canister_migrations);
         let key2 = make_canister_migrations_record_key();
-        let value2 = encode_or_panic(&canister_migrations);
+        let value2 = canister_migrations.encode_to_vec();
 
         let mutations = vec![
             insert(key1.as_bytes(), value1),
@@ -293,17 +295,18 @@ mod tests {
     #[test]
     fn snapshot_reflects_latest_registry_state() {
         let key1 = make_routing_table_record_key();
-        let value1 = encode_or_panic(&PbRoutingTable { entries: vec![] });
+        let value1 = PbRoutingTable { entries: vec![] }.encode_to_vec();
 
         let key2 = make_node_operator_record_key(*TEST_USER1_PRINCIPAL);
-        let value2 = encode_or_panic(&NodeOperatorRecord {
+        let value2 = NodeOperatorRecord {
             node_operator_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             node_allowance: 0,
             node_provider_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             dc_id: "".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
-        });
+        }
+        .encode_to_vec();
 
         let mutations = vec![
             insert(key1.as_bytes(), &value1),
@@ -323,14 +326,15 @@ mod tests {
     #[test]
     fn snapshot_data_are_updated() {
         let key = make_node_operator_record_key(*TEST_USER1_PRINCIPAL);
-        let value = encode_or_panic(&NodeOperatorRecord {
+        let value = NodeOperatorRecord {
             node_operator_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             node_allowance: 0,
             node_provider_principal_id: (*TEST_USER1_PRINCIPAL).to_vec(),
             dc_id: "".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
-        });
+        }
+        .encode_to_vec();
         let mut mutations = vec![insert(key.as_bytes(), &value)];
 
         let registry = Registry::new();

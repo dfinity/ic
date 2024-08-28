@@ -6,12 +6,12 @@ New compressed Wasm hash: `{{compressed_wasm_hash}}`
 
 Target canister: `{{canister_id}}`
 
-Previous {{canister}} proposal: https://dashboard.internetcomputer.org/proposal/TODO
+Previous {{canister}} proposal: {{Self::previous_upgrade_proposal_url(self)}}
 
 ---
 
 ## Motivation
-THIS MUST BE FILLED OUT
+TODO: THIS MUST BE FILLED OUT
 
 
 ## Upgrade args

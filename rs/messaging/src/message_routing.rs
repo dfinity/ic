@@ -51,12 +51,11 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::thread::sleep;
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
-    time::Instant,
-};
-use std::{
     convert::TryFrom,
     net::{Ipv4Addr, Ipv6Addr},
+    time::Instant,
 };
+use tracing::instrument;
 
 #[cfg(test)]
 mod tests;
@@ -1078,6 +1077,7 @@ impl BatchProcessorImpl {
 }
 
 impl BatchProcessor for BatchProcessorImpl {
+    #[instrument(skip_all)]
     fn process_batch(&self, batch: Batch) {
         let _process_batch_start = Instant::now();
         let since = Instant::now();
@@ -1159,6 +1159,8 @@ impl BatchProcessor for BatchProcessorImpl {
             .blockmaker_metrics_time_series
             .observe(batch.time, &batch.blockmaker_metrics);
 
+        let batch_summary = batch.batch_summary.clone();
+
         let mut state_after_round = self.state_machine.execute_round(
             state,
             network_topology,
@@ -1189,6 +1191,7 @@ impl BatchProcessor for BatchProcessorImpl {
             state_after_round,
             commit_height,
             certification_scope,
+            batch_summary,
         );
         self.observe_phase_duration(PHASE_COMMIT, &phase_since);
 
@@ -1295,6 +1298,7 @@ impl BatchProcessor for FakeBatchProcessorImpl {
             state_after_stream_builder,
             commit_height,
             certification_scope,
+            batch.batch_summary,
         );
     }
 }
@@ -1402,6 +1406,7 @@ impl MessageRoutingImpl {
 }
 
 impl MessageRouting for MessageRoutingImpl {
+    #[instrument(skip_all)]
     fn deliver_batch(&self, batch: Batch) -> Result<(), MessageRoutingError> {
         let batch_number = batch.batch_number;
         let expected_number = self.expected_batch_height();

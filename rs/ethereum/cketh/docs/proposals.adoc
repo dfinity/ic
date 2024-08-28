@@ -13,3 +13,18 @@
 . https://dashboard.internetcomputer.org/proposal/130341[130341]: upgrade the ckETH minter canister
 . https://dashboard.internetcomputer.org/proposal/130342[130342]: upgrade the ckERC20 ledger suite orchestrator
 . https://dashboard.internetcomputer.org/proposal/130395[130395]: upgrade the ckERC20 ledger suite orchestrator to add ckLINK
+. https://dashboard.internetcomputer.org/proposal/130755[130755]: upgrade the ckERC20 ledger suite orchestrator to add ckPEPE
+. https://dashboard.internetcomputer.org/proposal/130806[130806]: upgrade the ckERC20 ledger suite orchestrator to add ckOCT
+. https://dashboard.internetcomputer.org/proposal/130982[130982]: upgrade the ckERC20 ledger suite orchestrator to add ckSHIB
+. https://dashboard.internetcomputer.org/proposal/131053[131053]: upgrade the ckERC20 ledger suite orchestrator to add ckWBTC
+. https://dashboard.internetcomputer.org/proposal/131373[131373]: upgrade the ckERC20 ledger suite orchestrator to upgrade all managed canisters
+. https://dashboard.internetcomputer.org/proposal/131374[131374]: upgrade the ckERC20 ledger suite orchestrator to add ckUSDT
+. https://dashboard.internetcomputer.org/proposal/131388[131388]: upgrade the ckERC20 ledger suite orchestrator to add ckWSTETH
+. https://dashboard.internetcomputer.org/proposal/131484[131484]: upgrade the ckERC20 ledger suite orchestrator to upgrade all managed canisters
+. https://dashboard.internetcomputer.org/proposal/131485[131485]: upgrade the ckETH minter canister
+. https://dashboard.internetcomputer.org/proposal/131664[131664]: upgrade the ckERC20 ledger suite orchestrator to add ckUNI
+. https://dashboard.internetcomputer.org/proposal/131755[131755]: upgrade the ckERC20 ledger suite orchestrator to add ckEURC
+. https://dashboard.internetcomputer.org/proposal/131798[131798], https://dashboard.internetcomputer.org/proposal/131799[131799] and https://dashboard.internetcomputer.org/proposal/131800[131800]: upgrade the ckETH ledger suite (index, ledger and archive, respectively) to add support for the ICRC-21 standard.
+. https://dashboard.internetcomputer.org/proposal/132130[132130]: upgrade the ckERC20 ledger suite orchestrator to add ckXAUT
+. https://dashboard.internetcomputer.org/proposal/132131[132131]: upgrade the ckERC20 ledger suite orchestrator
+. https://dashboard.internetcomputer.org/proposal/132132[132132]: upgrade the ckETH minter canister

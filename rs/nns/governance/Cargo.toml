@@ -41,6 +41,7 @@ ic-base-types = { path = "../../types/base_types" }
 ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
@@ -49,10 +50,14 @@ ic-nervous-system-governance = { path = "../../nervous_system/governance" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
+ic-nervous-system-temporary = { path = "../../nervous_system/temporary" }
 ic-neurons-fund = { path = "../../nervous_system/neurons_fund" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
 ic-nns-gtc-accounts = { path = "../gtc_accounts" }
+ic-nns-governance-api = { path = "./api" }
+ic-nns-governance-init = { path = "./init" }
+ic-nns-handler-root-interface = { path = "../handlers/root/interface" }
 ic-protobuf = { path = "../../protobuf" }
 ic-sns-init = { path = "../../sns/init" }                                                         # This is just for a couple of PB definitions.
 ic-sns-root = { path = "../../sns/root" }                                                         # This is just for a couple of PB definitions.
@@ -60,6 +65,7 @@ ic-sns-swap = { path = "../../sns/swap" }                                       
 ic-sns-wasm = { path = "../sns-wasm" }
 ic-stable-structures = { workspace = true }
 ic-types = { path = "../../types/types" }
+ic-utils = { path = "../../utils" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
@@ -68,6 +74,7 @@ mockall = { workspace = true }
 num-traits = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 pretty_assertions = { workspace = true }
+prometheus-parse = { workspace = true }
 prost = { workspace = true }
 rust_decimal = { version = "1.25" }
 rust_decimal_macros = "1.25"
@@ -94,6 +101,7 @@ assert_matches = { workspace = true }
 build-info-build = { workspace = true }
 
 [dev-dependencies]
+candid_parser = { workspace = true }
 criterion = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
 futures = { workspace = true }

@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:anyhow",
     "@crate_index//:arc-swap",
     "@crate_index//:axum",
@@ -15,13 +16,14 @@ DEPENDENCIES = [
     "@crate_index//:http-body",
     "@crate_index//:http-body-util",
     "@crate_index//:hyper",
-    "@crate_index//:hyper_rustls_0_27_x",
+    "@crate_index//:hyper-rustls",
     "@crate_index//:hyper-util",
     "@crate_index//:hyperlocal-next",
-    "@crate_index//:itertools",
     "@crate_index//:ic-agent",
+    "@crate_index//:ic-http-certification",
+    "@crate_index//:ic-response-verification",
     "@crate_index//:ic-utils",
-    "@crate_index//:jemallocator",
+    "@crate_index//:itertools",
     "@crate_index//:maxminddb",
     "@crate_index//:opentelemetry_0_20_0",
     "@crate_index//:opentelemetry_prometheus_0_13_0",
@@ -33,23 +35,24 @@ DEPENDENCIES = [
     "@crate_index//:rustls-pemfile",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
+    "@crate_index//:thiserror",
+    "@crate_index//:tikv-jemallocator",
+    "@crate_index//:tokio",
     "@crate_index//:tokio-util",
     "@crate_index//:tower",
     "@crate_index//:tower-http",
     "@crate_index//:tracing",
     "@crate_index//:tracing-subscriber",
-    "@crate_index//:tokio",
-    "@crate_index//:ic-response-verification",
-    "@crate_index//:ic-http-certification",
-    "@crate_index//:thiserror",
     "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:httptest",
     "@crate_index//:tokio-test",
 ]

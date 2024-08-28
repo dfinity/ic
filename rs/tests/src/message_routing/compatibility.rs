@@ -7,36 +7,41 @@ Runbook::
 0. Deploy 1 root and 2 app subnets and install NNS canisters onto root,
    all running mainnet version.
 1. Bless current version.
-2. Run XNet test between two app subnets (success criteria same as for SLO test).
-3. Upgrade one app subnet to current version.
-4. Run XNet test again.
-5. Downgrade back to mainnet.
-6. Run XNet test again.
+2. Deploy and start XNet test canisters for long running XNet test
+3. Run XNet test between two app subnets (success criteria same as for SLO test).
+4. Upgrade one app subnet to current version.
+5. Run XNet test again.
+6. Downgrade back to mainnet.
+7. Run XNet test again.
+8. Tear down XNet test canisters for long running XNet test and check success
+   (success conditions for the long running test are more generous, as the main
+    expected signal is that upgrade/downgrade with messages around will succeed
+    and no messages are lost)
 
 Success::
 1. XNet test successfully completes for all version combinations
 
 end::catalog[] */
 
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::pot_dsl::{PotSetupFn, SysTestFn};
-use crate::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    HasDependencies, HasIcDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    IcNodeSnapshot,
-};
 use crate::message_routing::xnet_slo_test;
-use crate::orchestrator::utils::{
-    rw_message::install_nns_and_check_progress,
-    upgrade::{
-        assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
-        UpdateImageType,
-    },
+use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
+use ic_consensus_system_test_utils::upgrade::{
+    assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
+    UpdateImageType,
 };
-use crate::util::block_on;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
+use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    get_ic_os_update_img_test_sha256, get_ic_os_update_img_test_url,
+    read_dependency_from_env_to_string, read_dependency_to_string, HasPublicApiUrl,
+    HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+};
+use ic_system_test_driver::util::{block_on, runtime_from_url, MetricsFetcher};
 use slog::{info, Logger};
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 const DKG_INTERVAL: u64 = 9;
@@ -118,14 +123,34 @@ pub async fn test_async(env: TestEnv) {
         .map(|s| (s.subnet_id, s.clone(), s.nodes().next().unwrap()))
         .collect();
 
-    let xnet_test_config = xnet_slo_test::Config::new(2, 1, Duration::from_secs(30), 10);
+    let app_subnet_runtimes = app_subnets
+        .clone()
+        .into_iter()
+        .map(|(_, _, node)| node)
+        .map(|node| runtime_from_url(node.get_public_url(), node.effective_canister_id()));
 
-    let mainnet_version = env
-        .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
-        .unwrap();
+    let xnet_config = xnet_slo_test::Config::new(2, 1, Duration::from_secs(30), 10);
+    let long_xnet_config = xnet_slo_test::Config::new_with_custom_thresholds(
+        2,
+        1,
+        // Given that we use `deploy_and_start` and `tear_down` directly
+        // the runtime parameter will be ignored for the main test run
+        // and only used when checking the success of the test. We set
+        // it conservatively low so that the success evaluation is more
+        // generous.
+        Duration::from_secs(90),
+        10,
+        0.3,
+        // Given that there are a couple of subnet upgrades happening
+        // while the long running test is running we are generous
+        // with error thresholds.
+        50.0,
+        40,
+    );
 
-    let original_branch_version = env
-        .read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
+    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt").unwrap();
+
+    let original_branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
         .expect("tip-of-branch IC version");
 
     let (upgrade_subnet_id, _, upgrade_node) = app_subnets.first().unwrap();
@@ -133,8 +158,8 @@ pub async fn test_async(env: TestEnv) {
 
     info!(&logger, "Blessing upgrade version.");
 
-    let sha256 = env.get_ic_os_update_img_test_sha256().unwrap();
-    let upgrade_url = env.get_ic_os_update_img_test_url().unwrap();
+    let sha256 = get_ic_os_update_img_test_sha256().unwrap();
+    let upgrade_url = get_ic_os_update_img_test_url().unwrap();
     bless_replica_version(
         &nns_node,
         &original_branch_version,
@@ -147,15 +172,22 @@ pub async fn test_async(env: TestEnv) {
 
     info!(&logger, "Blessed all versions.");
 
+    info!(&logger, "Starting long running XNet load");
+    let runtimes = app_subnet_runtimes.clone().collect::<Vec<_>>();
+    let long_running_canisters =
+        xnet_slo_test::deploy_and_start(env.clone(), &runtimes, &long_xnet_config, &logger).await;
+
     info!(&logger, "Starting XNet test between 2 app subnets.");
 
     xnet_slo_test::test_async_impl(
         env.clone(),
-        app_subnets.clone().into_iter().map(|(_, _, node)| node),
-        xnet_test_config.clone(),
+        app_subnet_runtimes.clone(),
+        xnet_config.clone(),
         &logger,
     )
     .await;
+
+    assert_no_critical_errors(&env, &logger).await;
 
     info!(&logger, "Upgrading 1 app subnet.");
 
@@ -172,11 +204,13 @@ pub async fn test_async(env: TestEnv) {
 
     xnet_slo_test::test_async_impl(
         env.clone(),
-        app_subnets.clone().into_iter().map(|(_, _, node)| node),
-        xnet_test_config.clone(),
+        app_subnet_runtimes.clone(),
+        xnet_config.clone(),
         &logger,
     )
     .await;
+
+    assert_no_critical_errors(&env, &logger).await;
 
     info!(&logger, "Downgrading app subnet back to initial version.");
 
@@ -192,12 +226,22 @@ pub async fn test_async(env: TestEnv) {
     info!(&logger, "Starting XNet test between 2 app subnets.");
 
     xnet_slo_test::test_async_impl(
-        env,
-        app_subnets.clone().into_iter().map(|(_, _, node)| node),
-        xnet_test_config,
+        env.clone(),
+        app_subnet_runtimes,
+        xnet_config.clone(),
         &logger,
     )
     .await;
+
+    info!(&logger, "Tearing down long running canisters.");
+
+    let metrics = xnet_slo_test::tear_down(&long_running_canisters, &logger).await;
+    assert!(
+        xnet_slo_test::check_success(metrics, &long_xnet_config, &logger),
+        "Long running canisters didn't meet success conditions."
+    );
+
+    assert_no_critical_errors(&env, &logger).await;
 }
 
 async fn upgrade_to(
@@ -214,4 +258,34 @@ async fn upgrade_to(
     )
     .await;
     assert_assigned_replica_version(subnet_node, target_version, logger.clone());
+}
+
+async fn assert_no_critical_errors(env: &TestEnv, log: &slog::Logger) {
+    let nodes = env.topology_snapshot().subnets().flat_map(|s| s.nodes());
+    const NUM_RETRIES: u32 = 10;
+    const BACKOFF_TIME_MILLIS: u64 = 500;
+
+    let metrics = MetricsFetcher::new(nodes, vec!["critical_errors".to_string()]);
+    for i in 0..NUM_RETRIES {
+        match metrics.fetch::<u64>().await {
+            Ok(result) => {
+                assert!(!result.is_empty());
+                let filtered_results = result
+                    .iter()
+                    .filter(|(_, v)| v.iter().any(|x| *x > 0))
+                    .collect::<BTreeMap<_, _>>();
+                assert!(
+                    filtered_results.is_empty(),
+                    "Critical error detected: {:?}",
+                    filtered_results
+                );
+                return;
+            }
+            Err(e) => {
+                info!(log, "Could not scrape metrics: {e}, attempt {i}.");
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
+    }
+    panic!("Couldn't obtain metrics after {NUM_RETRIES} attempts.");
 }

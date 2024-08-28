@@ -45,6 +45,7 @@ pub async fn start_rosetta(
     ledger_canister_id: Principal,
     state_directory: Option<PathBuf>,
     enable_rosetta_blocks: bool,
+    persistent_storage: bool,
 ) -> (RosettaClient, RosettaContext) {
     assert!(
         rosetta_bin.exists(),
@@ -68,16 +69,20 @@ pub async fn start_rosetta(
             }
         }
     }
-    let store_location = state_directory.join("data");
     let mut cmd = Command::new(rosetta_bin);
     cmd.arg("--ic-url")
         .arg(ic_url.to_string())
         .arg("--canister-id")
         .arg(ledger_canister_id.to_string())
         .arg("--port-file")
-        .arg(port_file.clone())
-        .arg("--store-location")
-        .arg(store_location.clone());
+        .arg(port_file.clone());
+
+    if persistent_storage {
+        let store_location = state_directory.join("data");
+        cmd.arg("--store-location").arg(store_location);
+    } else {
+        cmd.arg("--store-type").arg("sqlite-in-memory");
+    }
 
     if enable_rosetta_blocks {
         cmd.arg("--enable-rosetta-blocks");

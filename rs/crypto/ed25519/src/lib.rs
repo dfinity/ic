@@ -5,19 +5,25 @@
 
 //! A crate for creating and verifying Ed25519 signatures
 
+use curve25519_dalek::{edwards::CompressedEdwardsY, EdwardsPoint, Scalar};
 use ed25519_dalek::pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey, EncodePublicKey};
-use ed25519_dalek::{verify_batch, Signature, Signer, SigningKey, VerifyingKey};
+use ed25519_dalek::{Digest, Sha512};
+use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 use rand::{CryptoRng, Rng};
+use thiserror::Error;
 use zeroize::ZeroizeOnDrop;
 
 /// An error if a private key cannot be decoded
-#[derive(Clone, Debug)]
+#[derive(Clone, Error, Debug)]
 pub enum PrivateKeyDecodingError {
     /// The outer PEM encoding is invalid
+    #[error("The outer PEM encoding is invalid: {0}")]
     InvalidPemEncoding(String),
     /// The PEM label was not the expected value
+    #[error("The PEM label was not the expected value: {0}")]
     UnexpectedPemLabel(String),
     /// The private key seems invalid in some way; the string contains details
+    #[error("The private key seems invalid in some way: {0}")]
     InvalidKeyEncoding(String),
 }
 
@@ -102,6 +108,27 @@ impl PrivateKey {
         Self { sk }
     }
 
+    /// Generate a key using an input seed
+    ///
+    /// # Warning
+    ///
+    /// For security the seed should be at least 256 bits and
+    /// randomly generated
+    pub fn generate_from_seed(seed: &[u8]) -> Self {
+        let digest: [u8; 32] = {
+            let mut sha2 = Sha512::new();
+            sha2.update(seed);
+            let digest: [u8; 64] = sha2.finalize().into();
+            let mut truncated = [0u8; 32];
+            truncated.copy_from_slice(&digest[..32]);
+            truncated
+        };
+
+        Self {
+            sk: SigningKey::from_bytes(&digest),
+        }
+    }
+
     /// Sign a message and return a signature
     ///
     /// This is the non-prehashed variant of Ed25519
@@ -111,8 +138,7 @@ impl PrivateKey {
 
     /// Return the public key associated with this secret key
     pub fn public_key(&self) -> PublicKey {
-        let pk = self.sk.verifying_key();
-        PublicKey { pk }
+        PublicKey::new(self.sk.verifying_key())
     }
 
     /// Serialize the Ed25519 secret key
@@ -280,20 +306,23 @@ impl PrivateKey {
         chain_code: &[u8; 32],
     ) -> (DerivedPrivateKey, [u8; 32]) {
         let sk_scalar = self.sk.to_scalar();
-        let pt = curve25519_dalek::EdwardsPoint::mul_base(&sk_scalar);
+        let pt = EdwardsPoint::mul_base(&sk_scalar);
 
         let (pt, sum, chain_code) = derivation_path.derive_offset(pt, chain_code);
 
         let derived_scalar = sk_scalar + sum;
 
-        use sha2::Digest;
-
-        // Hash the new derived key and chain code with SHA-256 to derive
-        // the new hash prefix
-        let mut sha2 = sha2::Sha256::new();
-        sha2.update(derived_scalar.to_bytes());
-        sha2.update(chain_code);
-        let derived_hash_prefix = sha2.finalize().into();
+        let derived_hash_prefix = {
+            // Hash the new derived key and chain code with SHA-512 to derive
+            // the new hash prefix
+            let mut sha2 = Sha512::new();
+            sha2.update(derived_scalar.to_bytes());
+            sha2.update(chain_code);
+            let hash: [u8; 64] = sha2.finalize().into();
+            let mut truncated = [0u8; 32];
+            truncated.copy_from_slice(&hash[..32]);
+            truncated
+        };
 
         let dpk = DerivedPrivateKey::new(derived_scalar, derived_hash_prefix, pt);
         (dpk, chain_code)
@@ -312,11 +341,7 @@ pub struct DerivedPrivateKey {
 }
 
 impl DerivedPrivateKey {
-    fn new(
-        scalar: curve25519_dalek::Scalar,
-        hash_prefix: [u8; 32],
-        pk: curve25519_dalek::edwards::EdwardsPoint,
-    ) -> Self {
+    fn new(scalar: Scalar, hash_prefix: [u8; 32], pk: EdwardsPoint) -> Self {
         let esk = ed25519_dalek::hazmat::ExpandedSecretKey {
             scalar,
             hash_prefix,
@@ -331,45 +356,155 @@ impl DerivedPrivateKey {
     ///
     /// This is the non-prehashed variant of Ed25519
     pub fn sign_message(&self, msg: &[u8]) -> [u8; 64] {
-        ed25519_dalek::hazmat::raw_sign::<sha2::Sha512>(&self.esk, msg, &self.vk).to_bytes()
+        ed25519_dalek::hazmat::raw_sign::<Sha512>(&self.esk, msg, &self.vk).to_bytes()
     }
 
     /// Return the public key associated with this private key
     pub fn public_key(&self) -> PublicKey {
-        PublicKey::new_unchecked(self.vk)
+        PublicKey::new(self.vk)
+    }
+
+    /// Derive a private key from this private key using a derivation path
+    ///
+    /// This is the same derivation system used by the Internet Computer when
+    /// deriving subkeys for threshold Ed25519
+    ///
+    /// Note that this function returns a DerivedPrivateKey rather than Self,
+    /// and that DerivedPrivateKey can sign messages but cannot be serialized.
+    /// This is due to the definition of Ed25519 private keys, which is
+    /// incompatible with additive derivation.
+    ///
+    pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (DerivedPrivateKey, [u8; 32]) {
+        let chain_code = [0u8; 32];
+        self.derive_subkey_with_chain_code(derivation_path, &chain_code)
+    }
+
+    /// Derive a private key from this private key using a derivation path
+    /// and chain code
+    ///
+    /// This is the same derivation system used by the Internet Computer when
+    /// deriving subkeys for threshold Ed25519
+    ///
+    /// Note that this function returns a DerivedPrivateKey rather than Self,
+    /// and that DerivedPrivateKey can sign messages but cannot be serialized.
+    /// This is due to the definition of Ed25519 private keys, which is
+    /// incompatible with additive derivation.
+    ///
+    pub fn derive_subkey_with_chain_code(
+        &self,
+        derivation_path: &DerivationPath,
+        chain_code: &[u8; 32],
+    ) -> (DerivedPrivateKey, [u8; 32]) {
+        let sk_scalar = self.esk.scalar;
+        let pt = EdwardsPoint::mul_base(&sk_scalar);
+
+        let (pt, sum, chain_code) = derivation_path.derive_offset(pt, chain_code);
+
+        let derived_scalar = sk_scalar + sum;
+
+        let derived_hash_prefix = {
+            // Hash the new derived key and chain code with SHA-512 to derive
+            // the new hash prefix
+            let mut sha2 = Sha512::new();
+            sha2.update(derived_scalar.to_bytes());
+            sha2.update(chain_code);
+            let hash: [u8; 64] = sha2.finalize().into();
+            let mut truncated = [0u8; 32];
+            truncated.copy_from_slice(&hash[..32]);
+            truncated
+        };
+
+        let dpk = DerivedPrivateKey::new(derived_scalar, derived_hash_prefix, pt);
+        (dpk, chain_code)
     }
 }
 
 /// An invalid key was encountered
-#[derive(Clone, Debug)]
+#[derive(Clone, Error, Debug)]
 pub enum PublicKeyDecodingError {
     /// The outer PEM encoding is invalid
+    #[error("The outer PEM encoding is invalid: {0}")]
     InvalidPemEncoding(String),
     /// The PEM label was not the expected value
+    #[error("The PEM label was not the expected value: {0}")]
     UnexpectedPemLabel(String),
     /// The encoding of the public key is invalid, the string contains details
+    #[error("The encoding of the public key is invalid: {0}")]
     InvalidKeyEncoding(String),
-    /// The public key had a valid encoding, but contains elements of the torsion
-    /// subgroup. This should never happen with a non-malicious peer.
-    KeyNotTorsionFree,
+}
+
+/// An Ed25519 signature (not a public API)
+struct Signature {
+    r: EdwardsPoint,
+    r_bytes: [u8; 32], // potentially non-canonical
+    s: Scalar,
+}
+
+impl Signature {
+    fn from_slice(signature: &[u8]) -> Result<Self, SignatureError> {
+        if signature.len() != 64 {
+            return Err(SignatureError::InvalidLength);
+        }
+
+        let (r, r_bytes) = {
+            let mut r_bytes = [0u8; 32];
+            r_bytes.copy_from_slice(&signature[..32]);
+            let r = CompressedEdwardsY(r_bytes)
+                .decompress()
+                .ok_or(SignatureError::InvalidSignature)?;
+
+            (r, r_bytes)
+        };
+
+        let s = {
+            let mut s_bytes = [0u8; 32];
+            s_bytes.copy_from_slice(&signature[32..]);
+            Option::<Scalar>::from(Scalar::from_canonical_bytes(s_bytes))
+                .ok_or(SignatureError::InvalidSignature)?
+        };
+
+        Ok(Self { r, r_bytes, s })
+    }
+
+    pub fn r_bytes(&self) -> &[u8; 32] {
+        &self.r_bytes
+    }
+
+    pub fn r(&self) -> &EdwardsPoint {
+        &self.r
+    }
+
+    pub fn s(&self) -> &Scalar {
+        &self.s
+    }
 }
 
 /// An Ed25519 public key
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(transparent)]
 pub struct PublicKey {
     pk: VerifyingKey,
+    // TODO(CRP-2412) This struct member can be removed once
+    // https://github.com/dalek-cryptography/curve25519-dalek/issues/624
+    // makes it into a release and replaced with calls to to_edwards
+    // where required
+    edwards: EdwardsPoint,
 }
 
 /// An error that occurs when verifying signatures or batches of signatures
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Error, Debug)]
 pub enum SignatureError {
     /// The signature had an invalid length, and cannot possibly be valid
+    #[error("The signature had an invalid length, and cannot possibly be valid")]
     InvalidLength,
-    /// The batch was invalid (eg due to length mismatch between number of
+    /// The batch was invalid (e.g., due to length mismatch between number of
     /// messages and number of signatures)
+    #[error(
+        "The batch was invalid (e.g., due to length mismatch between number of 
+        messages and number of signatures)"
+    )]
     InvalidBatch,
     /// A signature was invalid
+    #[error("A signature was invalid")]
     InvalidSignature,
 }
 
@@ -379,31 +514,29 @@ impl PublicKey {
 
     /// Internal constructor
     ///
-    /// Does not check the point; assumes this is done previously
-    fn new_unchecked(pk: VerifyingKey) -> Self {
-        Self { pk }
+    /// # Warning
+    ///
+    /// This does not verify that the key is within the prime order
+    /// subgroup, or that the public key is canonical. To check these
+    /// properties, use is_torsion_free and is_canonical
+    fn new(pk: VerifyingKey) -> Self {
+        let edwards = CompressedEdwardsY(pk.to_bytes()).decompress().unwrap();
+
+        Self { pk, edwards }
     }
 
-    /// Internal constructor
-    ///
-    /// Checks the point for validity before returning
-    fn new(pk: VerifyingKey) -> Result<Self, PublicKeyDecodingError> {
-        // TODO(CRP-2412) This can be changed to `pk.to_edwards().is_torsion_free()` once
-        // https://github.com/dalek-cryptography/curve25519-dalek/issues/624
-        // makes it into a release
-        if !curve25519_dalek::edwards::CompressedEdwardsY(pk.to_bytes())
-            .decompress()
-            .unwrap()
-            .is_torsion_free()
-        {
-            return Err(PublicKeyDecodingError::KeyNotTorsionFree);
-        }
-
+    /// Return true if and only if the key is contained within the prime
+    /// order subgroup
+    pub fn is_torsion_free(&self) -> bool {
         // We don't need to call is_weak here since that is subsumed by the
         // test that the point is torsion free - is_weak just checks if the
         // point is within the size-8 cofactor group.
+        self.edwards.is_torsion_free()
+    }
 
-        Ok(Self { pk })
+    /// Return true if and only if the public key uses a canonical encoding
+    pub fn is_canonical(&self) -> bool {
+        self.pk.to_bytes() == self.edwards.compress().0
     }
 
     /// Convert a raw Ed25519 public key (32 bytes) to the DER encoding
@@ -450,6 +583,12 @@ impl PublicKey {
     ///
     /// This is just the 32 byte encoding of the public point,
     /// cooresponding to Self::serialize_raw
+    ///
+    /// # Warning
+    ///
+    /// This does not verify that the key is within the prime order
+    /// subgroup, or that the public key is canonical. To check these
+    /// properties, use is_torsion_free and is_canonical
     pub fn deserialize_raw(bytes: &[u8]) -> Result<Self, PublicKeyDecodingError> {
         let bytes = <[u8; Self::BYTES]>::try_from(bytes).map_err(|_| {
             PublicKeyDecodingError::InvalidKeyEncoding(format!(
@@ -461,7 +600,7 @@ impl PublicKey {
         let pk = VerifyingKey::from_bytes(&bytes)
             .map_err(|e| PublicKeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
 
-        Self::new(pk)
+        Ok(Self::new(pk))
     }
 
     /// Serialize this public key as a DER encoded structure
@@ -491,16 +630,28 @@ impl PublicKey {
     ///
     /// See RFC 8410 for details on the format. This cooresponds to
     /// Self::serialize_rfc8410_der
+    ///
+    /// # Warning
+    ///
+    /// This does not verify that the key is within the prime order
+    /// subgroup, or that the public key is canonical. To check these
+    /// properties, use is_torsion_free and is_canonical
     pub fn deserialize_rfc8410_der(bytes: &[u8]) -> Result<Self, PublicKeyDecodingError> {
         let pk = VerifyingKey::from_public_key_der(bytes)
             .map_err(|e| PublicKeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
-        Self::new(pk)
+        Ok(Self::new(pk))
     }
 
     /// Deserialize the PEM encoded public key
     ///
     /// See RFC 8410 for details on the format. This cooresponds to
     /// Self::serialize_rfc8410_pem
+    ///
+    /// # Warning
+    ///
+    /// This does not verify that the key is within the prime order
+    /// subgroup, or that the public key is canonical. To check these
+    /// properties, use is_torsion_free and is_canonical
     pub fn deserialize_rfc8410_pem(pem: &str) -> Result<Self, PublicKeyDecodingError> {
         let der = pem::parse(pem)
             .map_err(|e| PublicKeyDecodingError::InvalidPemEncoding(format!("{:?}", e)))?;
@@ -511,18 +662,40 @@ impl PublicKey {
         Self::deserialize_rfc8410_der(&der.contents)
     }
 
+    /// Helper function for computing H(R || A || M)
+    fn compute_challenge(sig: &Signature, pk: &Self, msg: &[u8]) -> Scalar {
+        let mut sha512 = Sha512::new();
+        sha512.update(sig.r_bytes());
+        // VerifyingKey::as_bytes returns the original encoding which may be non-canonical;
+        // this is exactly what we need under ZIP215
+        sha512.update(pk.pk.as_bytes());
+        sha512.update(msg);
+        Scalar::from_hash(sha512)
+    }
+
     /// Verify a Ed25519 signature
     ///
     /// Returns Ok if the signature is valid, or Err otherwise
+    ///
+    /// This verification follows ZIP215 validation rules
     pub fn verify_signature(&self, msg: &[u8], signature: &[u8]) -> Result<(), SignatureError> {
-        let signature =
-            Signature::from_slice(signature).map_err(|_| SignatureError::InvalidLength)?;
+        let signature = Signature::from_slice(signature)?;
 
-        // We use the batch verification API also for single signatures to ensure
-        // there is no discrepency between batch and single signature verification;
-        // Ed25519 generally has problems with this; see
-        // https://hdevalence.ca/blog/2020-10-04-its-25519am
-        verify_batch(&[msg], &[signature], &[self.pk]).map_err(|_| SignatureError::InvalidSignature)
+        let k = Self::compute_challenge(&signature, self, msg);
+        let minus_a = -self.edwards;
+        let recomputed_r =
+            EdwardsPoint::vartime_double_scalar_mul_basepoint(&k, &minus_a, signature.s());
+
+        use curve25519_dalek::traits::IsIdentity;
+
+        if (recomputed_r - signature.r())
+            .mul_by_cofactor()
+            .is_identity()
+        {
+            Ok(())
+        } else {
+            Err(SignatureError::InvalidSignature)
+        }
     }
 
     /// Verify a batch of signatures
@@ -532,28 +705,59 @@ impl PublicKey {
     /// Note that this does not indicate which of the signature(s) are invalid;
     /// if batch verification fails you must then test serially to find the
     /// valid signatures (if any).
-    pub fn batch_verify(
+    ///
+    /// This verification follows ZIP215 validation rules
+    pub fn batch_verify<R: CryptoRng + Rng>(
         messages: &[&[u8]],
         signatures: &[&[u8]],
         keys: &[Self],
+        rng: &mut R,
     ) -> Result<(), SignatureError> {
         if messages.len() != signatures.len() || signatures.len() != keys.len() {
             return Err(SignatureError::InvalidBatch);
         }
 
+        use curve25519_dalek::{
+            constants::ED25519_BASEPOINT_POINT, traits::IsIdentity, traits::VartimeMultiscalarMul,
+        };
+        use std::iter::once;
+
         let signatures = signatures
             .iter()
             .map(|s| Signature::from_slice(s))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| SignatureError::InvalidLength)?;
+            .collect::<Result<Vec<_>, _>>()?;
 
-        // We could use std::slice::from_raw_parts to avoid these copies, but
-        // we'd rather avoid unsafe unless strictly necessary.
-        //
-        // unsafe { std::slice::from_raw_parts(keys.as_ptr() as *const VerifyingKey, keys.len()) };
-        let keys = keys.iter().map(|k| k.pk).collect::<Vec<_>>();
+        let n = signatures.len();
 
-        verify_batch(messages, &signatures, &keys).map_err(|_| SignatureError::InvalidSignature)
+        let hrams = (0..n)
+            .map(|i| Self::compute_challenge(&signatures[i], &keys[i], messages[i]))
+            .collect::<Vec<_>>();
+
+        // Select a random Scalar for each signature.
+        let zs: Vec<Scalar> = (0..n).map(|_| Scalar::from(rng.gen::<u128>())).collect();
+
+        let b_coefficient: Scalar = signatures
+            .iter()
+            .zip(zs.iter())
+            .map(|(sig, z)| sig.s() * z)
+            .sum();
+
+        let zhrams = hrams.iter().zip(zs.iter()).map(|(hram, z)| hram * z);
+
+        let r = signatures.iter().map(|sig| *sig.r());
+        let pk = keys.iter().map(|pk| pk.edwards);
+
+        let id = EdwardsPoint::vartime_multiscalar_mul(
+            once(-b_coefficient).chain(zs.iter().cloned()).chain(zhrams),
+            once(ED25519_BASEPOINT_POINT).chain(r).chain(pk),
+        )
+        .mul_by_cofactor();
+
+        if id.is_identity() {
+            Ok(())
+        } else {
+            Err(SignatureError::InvalidSignature)
+        }
     }
 
     /// Derive a public key from this public key using a derivation path
@@ -576,15 +780,12 @@ impl PublicKey {
         chain_code: &[u8; 32],
     ) -> (Self, [u8; 32]) {
         // TODO(CRP-2412) Use VerifyingKey::to_edwards once available
-        let pt = curve25519_dalek::edwards::CompressedEdwardsY(self.pk.to_bytes())
-            .decompress()
-            .unwrap();
+
+        let pt = CompressedEdwardsY(self.pk.to_bytes()).decompress().unwrap();
 
         let (pt, _sum, chain_code) = derivation_path.derive_offset(pt, chain_code);
 
-        let key = Self {
-            pk: VerifyingKey::from(pt),
-        };
+        let key = Self::new(VerifyingKey::from(pt));
 
         (key, chain_code)
     }
@@ -617,6 +818,17 @@ impl DerivationPath {
         Self { path }
     }
 
+    /// Create a path from a canister ID and a user provided path
+    pub fn from_canister_id_and_path(canister_id: &[u8], path: &[Vec<u8>]) -> Self {
+        let mut vpath = Vec::with_capacity(1 + path.len());
+        vpath.push(DerivationIndex(canister_id.to_vec()));
+
+        for n in path {
+            vpath.push(DerivationIndex(n.to_vec()));
+        }
+        Self::new(vpath)
+    }
+
     /// Return the length of this path
     pub fn len(&self) -> usize {
         self.path.len()
@@ -634,22 +846,18 @@ impl DerivationPath {
 
     fn derive_offset(
         &self,
-        mut pt: curve25519_dalek::EdwardsPoint,
+        mut pt: EdwardsPoint,
         chain_code: &[u8; 32],
-    ) -> (
-        curve25519_dalek::EdwardsPoint,
-        curve25519_dalek::Scalar,
-        [u8; 32],
-    ) {
+    ) -> (EdwardsPoint, Scalar, [u8; 32]) {
         let mut chain_code = *chain_code;
-        let mut sum = curve25519_dalek::Scalar::ZERO;
+        let mut sum = Scalar::ZERO;
 
         for idx in self.path() {
             let mut ikm = Vec::with_capacity(PublicKey::BYTES + idx.0.len());
             ikm.extend_from_slice(&pt.compress().0);
             ikm.extend_from_slice(&idx.0);
 
-            let hkdf = hkdf::Hkdf::<sha2::Sha512>::new(Some(&chain_code), &ikm);
+            let hkdf = hkdf::Hkdf::<Sha512>::new(Some(&chain_code), &ikm);
 
             let mut okm = [0u8; 96];
             hkdf.expand(b"Ed25519", &mut okm)
@@ -658,9 +866,9 @@ impl DerivationPath {
             let mut offset = [0u8; 64];
             offset.copy_from_slice(&okm[0..64]);
             offset.reverse(); // dalek uses little endian
-            let offset = curve25519_dalek::Scalar::from_bytes_mod_order_wide(&offset);
+            let offset = Scalar::from_bytes_mod_order_wide(&offset);
 
-            pt += curve25519_dalek::EdwardsPoint::mul_base(&offset);
+            pt += EdwardsPoint::mul_base(&offset);
             sum += offset;
             chain_code.copy_from_slice(&okm[64..]);
         }

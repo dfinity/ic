@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canonical_state/certification_version",
     "//rs/canonical_state/tree_hash",
     "//rs/crypto/tree_hash",
@@ -22,10 +23,12 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:strum_macros",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "//rs/canonical_state/tree_hash/test_utils",
     "//rs/crypto/sha2",
     "//rs/registry/subnet_features",
@@ -33,6 +36,7 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/state",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
+    "//rs/types/management_canister_types",
     "//rs/types/wasm_types",
     "//rs/utils",
     "@crate_index//:assert_matches",

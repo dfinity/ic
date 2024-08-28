@@ -18,7 +18,7 @@ const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
 fn test_setup(
     subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
-    subnet_seq_no: u8,
+    subnet_seed: u8,
     subnet_type: SubnetType,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
 ) -> Arc<StateMachine> {
@@ -26,9 +26,8 @@ fn test_setup(
         StateMachineConfig::new(SubnetConfig::new(subnet_type), HypervisorConfig::default());
     StateMachineBuilder::new()
         .with_config(Some(config))
-        .with_subnet_seq_no(subnet_seq_no)
+        .with_subnet_seed([subnet_seed; 32])
         .with_registry_data_provider(registry_data_provider)
-        .with_multisubnet_ecdsa_key()
         .build_with_subnets(subnets)
 }
 

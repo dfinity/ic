@@ -6,11 +6,12 @@ use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager
 use crate::CanisterQueues;
 use crate::{canister_state::system_state::CyclesUseCase, CheckpointLoadingMetrics};
 use ic_base_types::CanisterId;
-use ic_btc_types_internal::BlockBlob;
+use ic_btc_replica_types::BlockBlob;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types::{MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse};
+use ic_protobuf::state::system_metadata::v1::ThresholdSignatureAgreementsEntry;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::subnet::v1 as pb_subnet,
@@ -46,6 +47,8 @@ use ic_types::{
     },
     CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
 };
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::WasmHash;
 use serde::{Deserialize, Serialize};
 use std::ops::Bound::{Included, Unbounded};
@@ -61,7 +64,7 @@ pub type StreamMap = BTreeMap<SubnetId, Stream>;
 
 /// Replicated system metadata.  Used primarily for inter-canister messaging and
 /// history queries.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, ValidateEq)]
 pub struct SystemMetadata {
     /// History of ingress messages as they traversed through the
     /// system.
@@ -163,6 +166,7 @@ pub struct SystemMetadata {
     /// Responses to `BitcoinGetSuccessors` can be larger than the max inter-canister
     /// response limit. To work around this limitation, large responses are paginated
     /// and are stored here temporarily until they're fetched by the calling canister.
+    #[validate_eq(Ignore)]
     pub bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<BlockBlob>>,
 
     /// Metrics collecting blockmaker stats (block proposed and failures to propose a block)
@@ -414,7 +418,7 @@ pub struct SubnetMetrics {
     pub consumed_cycles_http_outcalls: NominalCycles,
     pub consumed_cycles_ecdsa_outcalls: NominalCycles,
     consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, NominalCycles>,
-    pub ecdsa_signature_agreements: u64,
+    pub threshold_signature_agreements: BTreeMap<MasterPublicKeyId, u64>,
     /// The number of canisters that exist on this subnet.
     pub num_canisters: u64,
     /// The total size of the state taken by canisters on this subnet in bytes.
@@ -483,7 +487,14 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
             ),
             consumed_cycles_http_outcalls: Some((&item.consumed_cycles_http_outcalls).into()),
             consumed_cycles_ecdsa_outcalls: Some((&item.consumed_cycles_ecdsa_outcalls).into()),
-            ecdsa_signature_agreements: Some(item.ecdsa_signature_agreements),
+            threshold_signature_agreements: item
+                .threshold_signature_agreements
+                .iter()
+                .map(|(key_id, &count)| ThresholdSignatureAgreementsEntry {
+                    key_id: Some(key_id.into()),
+                    count,
+                })
+                .collect(),
             consumed_cycles_by_use_case: item
                 .consumed_cycles_by_use_case
                 .clone()
@@ -515,6 +526,16 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                 NominalCycles::try_from(x.cycles.unwrap_or_default()).unwrap_or_default(),
             );
         }
+        let mut threshold_signature_agreements = BTreeMap::new();
+        for x in item.threshold_signature_agreements.into_iter() {
+            threshold_signature_agreements.insert(
+                try_from_option_field(
+                    x.key_id,
+                    "SubnetMetrics::threshold_signature_agreements:key_id",
+                )?,
+                x.count,
+            );
+        }
         Ok(Self {
             consumed_cycles_by_deleted_canisters: try_from_option_field(
                 item.consumed_cycles_by_deleted_canisters,
@@ -530,7 +551,7 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                 "SubnetMetrics::consumed_cycles_ecdsa_outcalls",
             )
             .unwrap_or_else(|_| NominalCycles::from(0_u128)),
-            ecdsa_signature_agreements: item.ecdsa_signature_agreements.unwrap_or_default(),
+            threshold_signature_agreements,
             consumed_cycles_by_use_case,
             num_canisters: try_from_option_field(
                 item.num_canisters,
@@ -1236,11 +1257,13 @@ impl Default for Stream {
 
 impl From<&Stream> for pb_queues::Stream {
     fn from(item: &Stream) -> Self {
-        // TODO: MR-577 Remove `deprecated_reject_signals` once all replicas are updated.
-        let deprecated_reject_signals = item
+        let reject_signals = item
             .reject_signals()
             .iter()
-            .map(|signal| signal.index.get())
+            .map(|signal| pb_queues::RejectSignal {
+                reason: pb_queues::RejectReason::from(signal.reason).into(),
+                index: signal.index.get(),
+            })
             .collect();
         Self {
             messages_begin: item.messages.begin().get(),
@@ -1250,8 +1273,7 @@ impl From<&Stream> for pb_queues::Stream {
                 .map(|(_, req_or_resp)| req_or_resp.into())
                 .collect(),
             signals_end: item.signals_end.get(),
-            deprecated_reject_signals,
-            reject_signals: Vec::new(),
+            reject_signals,
             reverse_stream_flags: Some(pb_queues::StreamFlags {
                 deprecated_responses_only: item.reverse_stream_flags.deprecated_responses_only,
             }),
@@ -1270,42 +1292,18 @@ impl TryFrom<pb_queues::Stream> for Stream {
         let messages_size_bytes = Self::size_bytes(&messages);
 
         let signals_end = item.signals_end.into();
-        // TODO: MR-577 Remove `deprecated_reject_signals` cases once all replicas are updated.
-        let reject_signals = match (
-            item.reject_signals.as_slice(),
-            item.deprecated_reject_signals.as_slice(),
-        ) {
-            // No reject signals.
-            ([], []) => VecDeque::new(),
-
-            // Only contemporary reject signals.
-            (reject_signals, []) => reject_signals
-                .iter()
-                .map(|signal| {
-                    Ok(RejectSignal {
-                        reason: pb_queues::RejectReason::try_from(signal.reason)
-                            .map_err(ProxyDecodeError::DecodeError)?
-                            .try_into()?,
-                        index: signal.index.into(),
-                    })
+        let reject_signals = item
+            .reject_signals
+            .iter()
+            .map(|signal| {
+                Ok(RejectSignal {
+                    reason: pb_queues::RejectReason::try_from(signal.reason)
+                        .map_err(ProxyDecodeError::DecodeError)?
+                        .try_into()?,
+                    index: signal.index.into(),
                 })
-                .collect::<Result<VecDeque<_>, ProxyDecodeError>>()?,
-
-            // Only deprecated reject signals.
-            ([], deprecated_reject_signals) => deprecated_reject_signals
-                .iter()
-                .map(|index| RejectSignal::new(RejectReason::CanisterMigrating, (*index).into()))
-                .collect(),
-
-            // Both contemporary and deprecated reject signals.
-            ([_, ..], [_, ..]) => {
-                return Err(ProxyDecodeError::Other(format!(
-                    "both contemporary and deprecated signals are populated \
-                    got `reject_signals` {:?}, `deprecated_reject_signals` {:?}",
-                    item.reject_signals, item.deprecated_reject_signals,
-                )));
-            }
-        };
+            })
+            .collect::<Result<VecDeque<_>, ProxyDecodeError>>()?;
 
         // Check reject signals are sorted and below `signals_end`.
         let iter = reject_signals.iter().map(|signal| signal.index);
@@ -1349,7 +1347,7 @@ impl Stream {
         }
     }
 
-    /// Creates a new `Stream` with the given `messages` and `signals_end`.
+    /// Creates a new `Stream` with the given `messages`, `signals_end` and `reject_signals`.
     pub fn with_signals(
         messages: StreamIndexedQueue<RequestOrResponse>,
         signals_end: StreamIndex,
@@ -2358,8 +2356,15 @@ pub(crate) mod testing {
         fn modify_streams<F: FnOnce(&mut StreamMap)>(&mut self, f: F) {
             f(&mut self.streams);
 
-            // Recompute stats from scratch.
-            self.responses_size_bytes = Streams::calculate_stats(&self.streams);
+            // Update `responses_size_bytes`, retaining all previous keys with a default
+            // byte size of zero (so that the respective canister's
+            // `transient_stream_responses_size_bytes` is correctly reset to zero).
+            self.responses_size_bytes
+                .values_mut()
+                .for_each(|size| *size = 0);
+            for (canister_id, size_bytes) in Streams::calculate_stats(&self.streams) {
+                self.responses_size_bytes.insert(canister_id, size_bytes);
+            }
         }
     }
 

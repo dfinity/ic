@@ -259,64 +259,76 @@ pub fn verify_sharing(
     // Hash of Instance
     // x = oracle(instance)
     let x = instance.hash_to_scalar();
+    let xpow = Scalar::xpowers(&x, instance.public_keys.len());
 
     let first_move = FirstMoveSharing::from(nizk);
     // Verifier's challenge
     // x' = oracle(x, F, A, Y)
     let x_challenge = sharing_proof_challenge(&x, &first_move);
 
-    // First verification equation
-    // R^x' * F == g_1^z_r
-    let lhs = &instance.combined_randomizer * &x_challenge + &first_move.blinder_g1;
-    let rhs = &instance.g1_gen * &nizk.z_r;
-    if lhs != rhs {
-        return Err(ZkProofSharingError::InvalidProof);
-    }
+    // TODO(CRP-2550): The verification can run in three threads
 
-    // Second verification equation
-    // Verify: product [A_k ^ sum [i^k * x^i | i <- [1..n]] | k <- [0..t-1]]^x' * A
-    // == g_2^z_alpha
-
-    let xpow = Scalar::xpowers(&x, instance.public_keys.len());
-
-    let mut ik = vec![Scalar::one(); instance.public_keys.len()];
-
-    let mut scalars = Vec::with_capacity(instance.public_coefficients.len());
-    for _pc in &instance.public_coefficients {
-        let acc = Scalar::muln_vartime(&ik, &xpow);
-        scalars.push(acc);
-
-        for i in 0..ik.len() {
-            ik[i] *= Scalar::from_u64((i + 1) as u64);
+    // Thread 1
+    {
+        // First verification equation
+        // R^x' * F == g_1^z_r
+        let lhs = &instance.combined_randomizer * &x_challenge + &first_move.blinder_g1;
+        let rhs = &instance.g1_gen * &nizk.z_r;
+        if lhs != rhs {
+            return Err(ZkProofSharingError::InvalidProof);
         }
     }
-    let lhs = G2Projective::muln_affine_vartime(&instance.public_coefficients[..], &scalars[..])
-        * &x_challenge
-        + &nizk.aa;
 
-    let rhs = &instance.g2_gen * &nizk.z_alpha;
+    // Thread 2
+    {
+        // Second verification equation
+        // Verify: product [A_k ^ sum [i^k * x^i | i <- [1..n]] | k <- [0..t-1]]^x' * A
+        // == g_2^z_alpha
 
-    if lhs != rhs {
-        return Err(ZkProofSharingError::InvalidProof);
+        let mut ik = vec![Scalar::one(); instance.public_keys.len()];
+
+        let mut scalars = Vec::with_capacity(instance.public_coefficients.len());
+        for _pc in &instance.public_coefficients {
+            let acc = Scalar::muln_vartime(&ik, &xpow);
+            scalars.push(acc);
+
+            for i in 0..ik.len() {
+                ik[i] *= Scalar::from_u64((i + 1) as u64);
+            }
+        }
+        let lhs =
+            G2Projective::muln_affine_vartime(&instance.public_coefficients[..], &scalars[..])
+                * &x_challenge
+                + &nizk.aa;
+
+        let rhs = &instance.g2_gen * &nizk.z_alpha;
+
+        if lhs != rhs {
+            return Err(ZkProofSharingError::InvalidProof);
+        }
     }
 
-    // Third verification equation
-    // LHS = product [C_i ^ x^i | i <- [1..n]]^x' * Y
-    // RHS = product [y_i ^ x^i | i <- 1..n]^z_r * g_1^z_alpha
+    // Thread 3
+    {
+        // Third verification equation
+        // LHS = product [C_i ^ x^i | i <- [1..n]]^x' * Y
+        // RHS = product [y_i ^ x^i | i <- 1..n]^z_r * g_1^z_alpha
 
-    let cc_mul_xi = G1Projective::muln_affine_vartime(&instance.combined_ciphertexts, &xpow);
-    let lhs = cc_mul_xi * &x_challenge + &nizk.yy;
+        let cc_mul_xi = G1Projective::muln_affine_vartime(&instance.combined_ciphertexts, &xpow);
+        let lhs = cc_mul_xi * &x_challenge + &nizk.yy;
 
-    let pk_mul_xi = G1Projective::muln_affine_vartime(&instance.public_keys, &xpow);
-    let rhs = G1Projective::mul2(
-        &pk_mul_xi,
-        &nizk.z_r,
-        &G1Projective::from(&instance.g1_gen),
-        &nizk.z_alpha,
-    );
+        let pk_mul_xi = G1Projective::muln_affine_vartime(&instance.public_keys, &xpow);
+        let rhs = G1Projective::mul2(
+            &pk_mul_xi,
+            &nizk.z_r,
+            &G1Projective::from(&instance.g1_gen),
+            &nizk.z_alpha,
+        );
 
-    if lhs != rhs {
-        return Err(ZkProofSharingError::InvalidProof);
+        if lhs != rhs {
+            return Err(ZkProofSharingError::InvalidProof);
+        }
     }
+
     Ok(())
 }

@@ -1,12 +1,9 @@
 use std::time::Duration;
 
-use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
+use ic_nns_governance_api::pb::v1::CreateServiceNervousSystem;
 use ic_sns_governance::pb::v1::governance::Mode;
 use ic_sns_swap::pb::v1::{GetDerivedStateResponse, GetLifecycleResponse, Lifecycle};
-use slog::info;
-use tokio::time::sleep;
-
-use crate::{
+use ic_system_test_driver::{
     canister_agent::HasCanisterAgentCapability,
     canister_api::{CallMode, SnsRequestProvider},
     driver::{
@@ -15,6 +12,8 @@ use crate::{
     },
     sns_client::SnsClient,
 };
+use slog::info;
+use tokio::time::sleep;
 
 /// If the swap is committed, waits for the swap to finalize (for up to 2 minutes).
 pub async fn finalize_committed_swap(

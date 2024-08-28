@@ -4,6 +4,7 @@ load("//bazel:defs.bzl", "rust_bench")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//rs/certification/test-utils",
     "//rs/config",
     "//rs/crypto/ed25519",
@@ -13,6 +14,7 @@ DEPENDENCIES = [
     "//rs/interfaces/registry",
     "//rs/monitoring/logger",
     "//rs/orchestrator/registry_replicator",
+    "//rs/protobuf",
     "//rs/registry/client",
     "//rs/registry/fake",
     "//rs/registry/helpers",
@@ -21,10 +23,8 @@ DEPENDENCIES = [
     "//rs/registry/proto_data_provider",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
-    "//rs/protobuf",
     "//rs/types/base_types",
     "//rs/types/types",
-    "//rs/types/management_canister_types",
     "@crate_index//:anyhow",
     "@crate_index//:arc-swap",
     "@crate_index//:async-scoped",
@@ -36,18 +36,15 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:dashmap",
     "@crate_index//:ethnum",
-    "@crate_index//:futures-util",
     "@crate_index//:futures",
+    "@crate_index//:futures-util",
     "@crate_index//:hex",
     "@crate_index//:http_0_2_12",
     "@crate_index//:http_body_0_4_6",
     "@crate_index//:humantime",
     "@crate_index//:hyper_0_14_27",
-    "@crate_index//:hyper-rustls",
-    "@crate_index//:ic-btc-interface",
+    "@crate_index//:hyper_rustls_0_24_2",
     "@crate_index//:instant-acme",
-    "@crate_index//:jemallocator",
-    "@crate_index//:jemalloc-ctl",
     "@crate_index//:lazy_static",
     "@crate_index//:little-loadshedder",
     "@crate_index//:maxminddb",
@@ -61,44 +58,49 @@ DEPENDENCIES = [
     "@crate_index//:rcgen",
     "@crate_index//:regex",
     "@crate_index//:reqwest_0_11_27",
-    "@crate_index//:rustls_0_21_12",
     "@crate_index//:rustls-pemfile",
+    "@crate_index//:rustls_0_21_12",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
     "@crate_index//:serde_regex",
     "@crate_index//:serde_yaml",
+    "@crate_index//:simple_moving_average",
     "@crate_index//:slog",
     "@crate_index//:strum",
     "@crate_index//:thiserror",
-    "@crate_index//:tokio_rustls_0_24_1",
-    "@crate_index//:tokio-util",
+    "@crate_index//:tikv-jemalloc-ctl",
+    "@crate_index//:tikv-jemallocator",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
+    "@crate_index//:tokio_rustls_0_24_1",
     "@crate_index//:tower",
     "@crate_index//:tower_governor",
     "@crate_index//:tower_http_0_4_4",
-    "@crate_index//:tracing-core",
+    "@crate_index//:tracing",
     "@crate_index//:tracing-serde",
     "@crate_index//:tracing-slog",
     "@crate_index//:tracing-subscriber",
-    "@crate_index//:tracing",
     "@crate_index//:url",
     "@crate_index//:x509-parser",
     "@crate_index//:zeroize",
 ]
 
 MACRO_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:async-trait",
 ]
 
 DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:criterion",
     "@crate_index//:tempfile",
     "@crate_index//:wiremock",
 ]
 
 MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
     "@crate_index//:indoc",
 ]
 

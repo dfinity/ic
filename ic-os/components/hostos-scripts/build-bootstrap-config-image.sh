@@ -75,8 +75,8 @@ options may be specified:
     keys for specific user accounts on the machine. The name of the
     key designates the name of the account (so, if there is a file
     "PATH/admin" then it is transferred to "~admin/.ssh/authorized_keys" on
-    the target). The presently recognized accounts are: backup, readonly,
-    admin and root (the latter one for testing purposes only!)
+    the target). The presently recognized accounts are: backup, readonly and
+    admin
 
   --node_operator_private_key path
     Should point to a file containing a Node Provider private key PEM.
@@ -87,18 +87,6 @@ options may be specified:
 
   --backup_puging_interval seconds
     How often the backup purging should be executed.
-
-  --replica_log_debug_overrides overrides
-    A list of fully qualified Rust module paths. For each of the listed
-    modules, at least DEBUG logs will be produced by the node software.
-    Primarily intended for testing.
-
-    The list must be provided as a serialized JSON-array. The value is
-    inserted into the configuration file as is. E.g.:
-      '["ic_consensus::consensus::finalizer",\
-       "ic_consensus::consensus::catchup_package_maker"]'
-
-    Be sure to properly quote the string.
 
   --malicious_behavior malicious_behavior
     A JSON-object that describes the malicious behavior activated on
@@ -138,7 +126,6 @@ function build_ic_bootstrap_tar() {
     local BACKUP_RETENTION_TIME_SECS BACKUP_PURGING_INTERVAL_SECS
     local ELASTICSEARCH_HOSTS ELASTICSEARCH_TAGS
     local ACCOUNTS_SSH_AUTHORIZED_KEYS
-    local REPLICA_LOG_DEBUG_OVERRIDES
     local MALICIOUS_BEHAVIOR
     local QUERY_STATS_EPOCH_LENGTH
     local BITCOIND_ADDR
@@ -201,9 +188,6 @@ function build_ic_bootstrap_tar() {
             --backup_puging_interval)
                 BACKUP_PURGING_INTERVAL_SECS="$2"
                 ;;
-            --replica_log_debug_overrides)
-                REPLICA_LOG_DEBUG_OVERRIDES="$2"
-                ;;
             --malicious_behavior)
                 MALICIOUS_BEHAVIOR="$2"
                 ;;
@@ -259,9 +243,6 @@ EOF
     if [ "${BACKUP_RETENTION_TIME_SECS}" != "" ] || [ "${BACKUP_PURGING_INTERVAL_SECS}" != "" ]; then
         echo "backup_retention_time_secs=${BACKUP_RETENTION_TIME_SECS}" >"${BOOTSTRAP_TMPDIR}/backup.conf"
         echo "backup_puging_interval_secs=${BACKUP_PURGING_INTERVAL_SECS}" >>"${BOOTSTRAP_TMPDIR}/backup.conf"
-    fi
-    if [ "${REPLICA_LOG_DEBUG_OVERRIDES}" != "" ]; then
-        echo "replica_log_debug_overrides=${REPLICA_LOG_DEBUG_OVERRIDES}" >"${BOOTSTRAP_TMPDIR}/log.conf"
     fi
     if [ "${MALICIOUS_BEHAVIOR}" != "" ]; then
         echo "malicious_behavior=${MALICIOUS_BEHAVIOR}" >"${BOOTSTRAP_TMPDIR}/malicious_behavior.conf"

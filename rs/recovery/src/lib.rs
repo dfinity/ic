@@ -15,7 +15,6 @@ use file_sync_helper::{create_dir, download_binary, read_dir};
 use futures::future::join_all;
 use ic_base_types::{CanisterId, NodeId};
 use ic_cup_explorer::get_catchup_content;
-use ic_management_canister_types::MasterPublicKeyId;
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_replay::{
     cmd::{AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, SubCommand},
@@ -24,7 +23,7 @@ use ic_replay::{
 use ic_types::{messages::HttpStatusResponse, Height, ReplicaVersion, SubnetId};
 use registry_helper::RegistryPollingStrategy;
 use serde::{Deserialize, Serialize};
-use slog::{error, info, warn, Logger};
+use slog::{info, warn, Logger};
 use ssh_helper::SshHelper;
 use std::{
     net::IpAddr,
@@ -340,6 +339,7 @@ impl Recovery {
         subnet_id: SubnetId,
         subcmd: Option<ReplaySubCmd>,
         canister_caller_id: Option<CanisterId>,
+        replay_until_height: Option<u64>,
     ) -> impl Step {
         ReplayStep {
             logger: self.logger.clone(),
@@ -348,6 +348,7 @@ impl Recovery {
             config: self.work_dir.join("ic.json5"),
             subcmd,
             canister_caller_id,
+            replay_until_height,
             result: self.work_dir.join(replay_helper::OUTPUT_FILE_NAME),
         }
     }
@@ -360,6 +361,7 @@ impl Recovery {
         upgrade_version: ReplicaVersion,
         upgrade_url: Url,
         sha256: String,
+        replay_until_height: Option<u64>,
     ) -> RecoveryResult<impl Step> {
         let version_record = format!(
             r#"{{ "release_package_sha256_hex": "{}", "release_package_urls": ["{}"] }}"#,
@@ -379,6 +381,7 @@ impl Recovery {
                 ),
             }),
             None,
+            replay_until_height,
         ))
     }
 
@@ -389,6 +392,7 @@ impl Recovery {
         subnet_id: SubnetId,
         new_registry_local_store: PathBuf,
         canister_caller_id: &str,
+        replay_until_height: Option<u64>,
     ) -> RecoveryResult<impl Step> {
         let canister_id = CanisterId::from_str(canister_caller_id).map_err(|e| {
             RecoveryError::invalid_output_error(format!("Failed to parse canister id: {}", e))
@@ -410,6 +414,7 @@ impl Recovery {
                 ),
             }),
             Some(canister_id),
+            replay_until_height,
         ))
     }
 
@@ -578,34 +583,21 @@ impl Recovery {
         state_hash: String,
         replacement_nodes: &[NodeId],
         registry_params: Option<RegistryParams>,
-        ecdsa_subnet_id: Option<SubnetId>,
+        chain_key_subnet_id: Option<SubnetId>,
     ) -> RecoveryResult<impl Step> {
-        let key_ids = ecdsa_subnet_id
+        let chain_key_config = chain_key_subnet_id
             .map(|id| match self.registry_helper.get_chain_key_config(id) {
-                Ok((_registry_version, Some(config))) => config
-                    .key_configs
-                    .iter()
-                    .filter_map(|key_config| match &key_config.key_id {
-                        MasterPublicKeyId::Ecdsa(key_id) => Some(key_id.clone()),
-                        MasterPublicKeyId::Schnorr(key_id) => {
-                            error!(
-                                self.logger,
-                                "Found Schnorr key {}. Schnorr keys are not yet supported", key_id
-                            );
-                            None
-                        }
-                    })
-                    .collect(),
+                Ok((_registry_version, Some(config))) => Some((config, id)),
                 Ok((registry_version, None)) => {
                     info!(
                         self.logger,
-                        "No ECDSA config at registry version {}", registry_version
+                        "No Chain key config at registry version {}", registry_version
                     );
-                    vec![]
+                    None
                 }
                 Err(err) => {
-                    warn!(self.logger, "Failed to get ECDSA config: {}", err);
-                    vec![]
+                    warn!(self.logger, "Failed to get Chain Key config: {}", err);
+                    None
                 }
             })
             .unwrap_or_default();
@@ -618,10 +610,9 @@ impl Recovery {
                     subnet_id,
                     checkpoint_height,
                     state_hash,
-                    key_ids,
+                    chain_key_config,
                     replacement_nodes,
                     registry_params,
-                    ecdsa_subnet_id,
                     SystemTime::now(),
                 ),
         })
@@ -795,7 +786,7 @@ impl Recovery {
             .arg("-zcvf")
             .arg(
                 self.work_dir
-                    .join(format!("{}.tar.gz", IC_REGISTRY_LOCAL_STORE)),
+                    .join(format!("{}.tar.zst", IC_REGISTRY_LOCAL_STORE)),
             )
             .arg(".");
 

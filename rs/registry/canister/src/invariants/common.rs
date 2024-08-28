@@ -1,14 +1,11 @@
-use prost::Message;
 use std::{
     collections::BTreeMap,
     convert::TryFrom,
     error,
     fmt::{Display, Formatter, Result as FmtResult},
 };
-use url::Url;
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
-use ic_nns_common::registry::decode_or_panic;
 use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord, crypto::v1::ChainKeySigningSubnetList,
     hostos_version::v1::HostosVersionRecord, node::v1::NodeRecord, subnet::v1::SubnetListRecord,
@@ -18,6 +15,8 @@ use ic_registry_keys::{
     make_subnet_list_record_key, CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX,
     HOSTOS_VERSION_KEY_PREFIX,
 };
+use prost::Message;
+use url::Url;
 
 /// A representation of the data held by the registry.
 /// It is kept in-memory only, for global consistency checks before mutations
@@ -52,7 +51,7 @@ pub(crate) fn get_value_from_snapshot<T: Message + Default>(
 ) -> Option<T> {
     snapshot
         .get(key.as_bytes())
-        .map(|v| decode_or_panic::<T>(v.clone()))
+        .map(|v| T::decode(v.as_slice()).unwrap())
 }
 
 // Retrieve all records that serve as lists of subnets that can sign with chain keys
@@ -65,11 +64,10 @@ pub(crate) fn get_all_chain_key_signing_subnet_list_records(
         let signing_subnet_list_key = String::from_utf8(key.clone()).unwrap();
         if signing_subnet_list_key.starts_with(CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX) {
             let chain_key_signing_subnet_list_record = match snapshot.get(key) {
-                Some(chain_key_signing_subnet_list_record) => {
-                    decode_or_panic::<ChainKeySigningSubnetList>(
-                        chain_key_signing_subnet_list_record.clone(),
-                    )
-                }
+                Some(chain_key_signing_subnet_list_record) => ChainKeySigningSubnetList::decode(
+                    chain_key_signing_subnet_list_record.as_slice(),
+                )
+                .unwrap(),
                 None => panic!("Cannot fetch ChainKeySigningSubnetList record for an existing key"),
             };
             result.insert(
@@ -91,7 +89,7 @@ pub(crate) fn get_all_hostos_version_records(
         if hostos_version_key.starts_with(HOSTOS_VERSION_KEY_PREFIX) {
             let hostos_version_record = match snapshot.get(key) {
                 Some(hostos_version_record_bytes) => {
-                    decode_or_panic::<HostosVersionRecord>(hostos_version_record_bytes.clone())
+                    HostosVersionRecord::decode(hostos_version_record_bytes.as_slice()).unwrap()
                 }
                 None => panic!("Cannot fetch HostosVersionRecord for an existing key"),
             };
@@ -112,7 +110,9 @@ pub(crate) fn get_node_records_from_snapshot(
         {
             // This is indeed a node record
             let node_record = match snapshot.get(key) {
-                Some(node_record_bytes) => decode_or_panic::<NodeRecord>(node_record_bytes.clone()),
+                Some(node_record_bytes) => {
+                    NodeRecord::decode(node_record_bytes.as_slice()).unwrap()
+                }
                 None => panic!("Cannot fetch node record for an existing key"),
             };
             let node_id = NodeId::from(principal_id);
@@ -132,7 +132,7 @@ pub(crate) fn get_api_boundary_node_records_from_snapshot(
             String::from_utf8(key.clone()).expect("failed to convert UTF-8 byte vector to string");
         if let Some(principal_id) = get_api_boundary_node_record_node_id(&key_str) {
             // This is indeed an api boundary node record
-            let api_boundary_node_record = decode_or_panic::<ApiBoundaryNodeRecord>(value.clone());
+            let api_boundary_node_record = ApiBoundaryNodeRecord::decode(value.as_slice()).unwrap();
             let node_id = NodeId::from(principal_id);
             result.insert(node_id, api_boundary_node_record);
         }
@@ -230,8 +230,7 @@ mod tests {
     use ic_base_types::{NodeId, PrincipalId};
     use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
     use ic_registry_keys::make_api_boundary_node_record_key;
-
-    use crate::mutations::common::encode_or_panic;
+    use prost::Message;
 
     use super::{
         get_api_boundary_node_records_from_snapshot, get_value_from_snapshot, RegistrySnapshot,
@@ -244,7 +243,7 @@ mod tests {
         let record = ApiBoundaryNodeRecord::default();
         snapshot.insert(
             make_api_boundary_node_record_key(node_id).into_bytes(), // correct key
-            encode_or_panic(&record),                                // correct value
+            record.encode_to_vec(),                                  // correct value
         );
 
         let api_bn_records = get_api_boundary_node_records_from_snapshot(&snapshot);
@@ -253,7 +252,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "could not decode byte vector as PB Message")]
+    #[should_panic(expected = "DecodeError")]
     fn test_get_api_boundary_node_records_from_snapshot_with_wrongly_encoded_record() {
         let mut snapshot = RegistrySnapshot::new();
         let node_id: NodeId = PrincipalId::new_node_test_id(0).into();
@@ -266,7 +265,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "could not decode byte vector as PB Message")]
+    #[should_panic(expected = "DecodeError")]
     fn test_get_value_from_snapshot_panics() {
         let mut snapshot = RegistrySnapshot::new();
         let node_id: NodeId = PrincipalId::new_node_test_id(0).into();

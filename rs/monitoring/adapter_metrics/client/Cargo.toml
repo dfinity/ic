@@ -12,7 +12,6 @@ ic-async-utils = { path = "../../../async_utils" }
 prometheus = { workspace = true }
 protobuf = { workspace = true }
 slog = { workspace = true }
-slog-async = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }

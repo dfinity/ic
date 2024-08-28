@@ -20,7 +20,8 @@ type UpgradeArg = record {
     // Hexadecimal encoding of the SHA-1 git commit hash used for this upgrade, e.g.,
     // "51d01d3936498d4010de54505d6433e9ad5cc62b", corresponding to a git revision in the
     // [IC repository](https://github.com/dfinity/ic).
-    // This field is expected to be present, if any of the wasm hashes below is present.
+    // If this field is present, the orchestrator will register all embedded wasms (ledger, index, and archive) in its stable memory,
+    // so that those exact wasms can be used to upgrade managed canisters as specified below.
     git_commit_hash: opt text;
 
    // Hexadecimal encoding of the SHA2-256 ledger compressed wasm hash, e.g.,
@@ -48,21 +49,6 @@ type UpgradeArg = record {
 type AddErc20Arg = record {
    contract: Erc20Contract;
    ledger_init_arg: LedgerInitArg;
-
-    // Hexadecimal encoding of the SHA-1 git commit hash used for this upgrade, e.g.,
-    // "51d01d3936498d4010de54505d6433e9ad5cc62b", corresponding to a git revision in the
-    // [IC repository](https://github.com/dfinity/ic).
-    git_commit_hash: text;
-
-   // Hexadecimal encoding of the SHA2-256 ledger compressed wasm hash, e.g.,
-   // "3148f7a9f1b0ee39262c8abe3b08813480cf78551eee5a60ab1cf38433b5d9b0".
-   // This exact version will be used for the new ledger canister created for this ERC-20 token.
-   ledger_compressed_wasm_hash: text;
-
-   // Hexadecimal encoding of the SHA2-256 index compressed wasm hash, e.g.,
-   // "3a6d39b5e94cdef5203bca62720e75a28cd071ff434d22b9746403ac7ae59614".
-   // This exact version will be used for the new index canister created for this ERC-20 token.
-   index_compressed_wasm_hash: text;
 };
 
 type Erc20Contract = record {
@@ -71,31 +57,13 @@ type Erc20Contract = record {
 };
 
 // ICRC1 ledger initialization argument that will be used when the orchestrator spawns a new ledger canister.
-// The `archive_options` field will be set by the orchestrator.
+// Other fields, such as `archive_options`, needed to initialize a new ledger will be set by the orchestrator.
 type LedgerInitArg = record {
-    minting_account : LedgerAccount;
-    fee_collector_account : opt LedgerAccount;
     transfer_fee : nat;
-    decimals : opt nat8;
-    max_memo_length : opt nat16;
+    decimals : nat8;
     token_symbol : text;
     token_name : text;
     token_logo : text;
-    initial_balances : vec record { LedgerAccount; nat };
-    feature_flags : opt LedgerFeatureFlags;
-    maximum_number_of_accounts : opt nat64;
-    accounts_overflow_trim_quantity : opt nat64;
-};
-
-type LedgerAccount = record {
-    owner : principal;
-    subaccount : opt LedgerSubaccount;
-};
-
-type LedgerSubaccount = blob;
-
-type LedgerFeatureFlags = record {
-    icrc2 : bool;
 };
 
 type ManagedCanisterIds = record {
@@ -157,6 +125,25 @@ type OrchestratorInfo = record {
 
     // ckETH minter canister id.
     minter_id : opt principal;
+
+   // Ledger suite version that will be used to spawn off a new ledger suite (ledger and index canisters) when an ERC-20 token is added.
+   ledger_suite_version: opt LedgerSuiteVersion;
+};
+
+type LedgerSuiteVersion = record {
+   // Hexadecimal encoding of the SHA2-256 ledger compressed wasm hash, e.g.,
+   // "3148f7a9f1b0ee39262c8abe3b08813480cf78551eee5a60ab1cf38433b5d9b0".
+   // This exact version will be used to spawn off a new ledger canister when an ERC-20 token is added.
+   ledger_compressed_wasm_hash: text;
+
+   // Hexadecimal encoding of the SHA2-256 index compressed wasm hash, e.g.,
+   // "3a6d39b5e94cdef5203bca62720e75a28cd071ff434d22b9746403ac7ae59614".
+   // This exact version will be used to spawn off a new index canister when an ERC-20 token is added.
+   index_compressed_wasm_hash: text;
+
+   // Hexadecimal encoding of the SHA2-256 archive compressed wasm hash, e.g.,
+   // "e59ec306ef67d0ec2e8919e8f6366aff31c666346e238d07d52f616bef61ccab".
+   archive_compressed_wasm_hash: text;
 };
 
 type UpdateCyclesManagement = record {
@@ -212,7 +199,7 @@ service : (OrchestratorArg) -> {
    // Return internal orchestrator parameters
    get_orchestrator_info : () -> (OrchestratorInfo) query;
 
-   // Retrieve the status of the minter canister.
+   // Retrieve the status of the canister.
    get_canister_status : () -> (CanisterStatusResponse);
 
 }

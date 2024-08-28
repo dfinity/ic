@@ -3,14 +3,11 @@ use crate::{common::LOG_PREFIX, registry::Registry};
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use serde::Serialize;
-
-use crate::mutations::common::encode_or_panic;
 use ic_protobuf::registry::firewall::v1::FirewallConfig;
 use ic_registry_keys::make_firewall_config_record_key;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
-
 use prost::Message;
+use serde::Serialize;
 
 impl Registry {
     /// Sets the firewall config record in the registry.
@@ -24,7 +21,7 @@ impl Registry {
         let mutations = vec![RegistryMutation {
             mutation_type: registry_mutation::Type::Upsert as i32,
             key: make_firewall_config_record_key().into_bytes(),
-            value: encode_or_panic(&firewall_config),
+            value: firewall_config.encode_to_vec(),
         }];
 
         // Check invariants before applying mutations

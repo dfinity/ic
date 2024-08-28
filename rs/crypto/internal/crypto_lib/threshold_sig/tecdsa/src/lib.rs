@@ -849,6 +849,9 @@ impl From<CanisterThresholdError> for ThresholdEcdsaCombineSigSharesInternalErro
 ///
 /// The signature shares must be verified prior to use, and there must
 /// be at least reconstruction_threshold many of them.
+///
+/// All shares must have been created with respect to the same derivation path,
+/// message, randomness, and transcripts.
 #[allow(clippy::too_many_arguments)]
 pub fn combine_ecdsa_signature_shares(
     derivation_path: &DerivationPath,
@@ -1050,6 +1053,9 @@ impl From<CanisterThresholdError> for ThresholdBip340CombineSigSharesInternalErr
 ///
 /// The signature shares must be verified prior to use, and there must
 /// be at least reconstruction_threshold many of them.
+///
+/// All shares must have been created with respect to the same derivation path,
+/// message, randomness, and transcripts.
 pub fn combine_bip340_signature_shares(
     derivation_path: &DerivationPath,
     message: &[u8],
@@ -1230,6 +1236,9 @@ impl From<CanisterThresholdError> for ThresholdEd25519CombineSigSharesInternalEr
 ///
 /// The signature shares must be verified prior to use, and there must
 /// be at least reconstruction_threshold many of them.
+///
+/// All shares must have been created with respect to the same derivation path,
+/// message, randomness, and transcripts.
 pub fn combine_ed25519_signature_shares(
     derivation_path: &DerivationPath,
     message: &[u8],
@@ -1567,11 +1576,11 @@ impl From<CanisterThresholdError> for ThresholdVerifyOpeningInternalError {
 /// * The dealing has already been publicly verified
 /// # Errors
 /// * `ThresholdVerifyOpeningInternalError::InvalidOpening` if the opening does
-/// not match with the polynomial commitment.
+///   not match with the polynomial commitment.
 /// * `ThresholdVerifyOpeningInternalError::MismatchingType` if the opening
-/// has a type that is inconsistent with the polynomial commitment.
+///   has a type that is inconsistent with the polynomial commitment.
 /// * `ThresholdVerifyOpeningInternalError::InternalError` if there is an
-/// unexpected internal error.
+///   unexpected internal error.
 pub fn verify_dealing_opening(
     verified_dealing: &IDkgDealingInternal,
     opener_index: NodeIndex,

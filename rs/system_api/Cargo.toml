@@ -27,6 +27,7 @@ ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
+itertools = { workspace = true }
 prometheus = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

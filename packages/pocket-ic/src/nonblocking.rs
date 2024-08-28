@@ -1,10 +1,11 @@
 use crate::common::rest::{
-    ApiResponse, BlobCompression, BlobId, CreateHttpGatewayResponse, CreateInstanceResponse,
-    ExtendedSubnetConfigSet, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayInfo, InstanceId,
-    RawAddCycles, RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles,
-    RawEffectivePrincipal, RawMessageId, RawSetStableMemory, RawStableMemory,
-    RawSubmitIngressResult, RawSubnetId, RawTime, RawVerifyCanisterSigArg, RawWasmResult, SubnetId,
-    Topology,
+    ApiResponse, AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest,
+    CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
+    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, InstanceConfig, InstanceId,
+    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
+    RawCanisterResult, RawCycles, RawEffectivePrincipal, RawMessageId, RawMockCanisterHttpResponse,
+    RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime,
+    RawVerifyCanisterSigArg, RawWasmResult, SubnetId, Topology,
 };
 use crate::{CallError, PocketIcBuilder, UserError, WasmResult, DEFAULT_MAX_REQUEST_TIME_MS};
 use candid::{
@@ -20,7 +21,10 @@ use ic_cdk::api::management_canister::main::{
 use reqwest::Url;
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
+use slog::Level;
+use std::fs::File;
 use std::future::Future;
+use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 use tracing::{debug, instrument, warn};
 use tracing_appender::non_blocking::WorkerGuard;
@@ -32,7 +36,7 @@ const POLLING_PERIOD_MS: u64 = 10;
 const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
-const LOCALHOST: &str = "127.0.0.1";
+const LOCALHOST: &str = "localhost";
 
 // The minimum joint size of a canister's WASM
 // and its initial argument blob for which
@@ -58,7 +62,6 @@ pub struct PocketIc {
     // how long a get/post request may retry or poll
     max_request_time_ms: Option<u64>,
     http_gateway: Option<HttpGatewayInfo>,
-    topology: Topology,
     server_url: Url,
     reqwest_client: reqwest::Client,
     _log_guard: Option<WorkerGuard>,
@@ -78,7 +81,15 @@ impl PocketIc {
     /// The server is started if it's not already running.
     pub async fn from_config(config: impl Into<ExtendedSubnetConfigSet>) -> Self {
         let server_url = crate::start_or_reuse_server();
-        Self::from_components(config, server_url, Some(DEFAULT_MAX_REQUEST_TIME_MS)).await
+        Self::from_components(
+            config,
+            server_url,
+            Some(DEFAULT_MAX_REQUEST_TIME_MS),
+            None,
+            false,
+            None,
+        )
+        .await
     }
 
     /// Creates a new PocketIC instance with the specified subnet config and max request duration in milliseconds
@@ -89,7 +100,7 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
     ) -> Self {
         let server_url = crate::start_or_reuse_server();
-        Self::from_components(config, server_url, max_request_time_ms).await
+        Self::from_components(config, server_url, max_request_time_ms, None, false, None).await
     }
 
     /// Creates a new PocketIC instance with the specified subnet config and server url.
@@ -98,24 +109,45 @@ impl PocketIc {
         config: impl Into<ExtendedSubnetConfigSet>,
         server_url: Url,
     ) -> Self {
-        Self::from_components(config, server_url, Some(DEFAULT_MAX_REQUEST_TIME_MS)).await
+        Self::from_components(
+            config,
+            server_url,
+            Some(DEFAULT_MAX_REQUEST_TIME_MS),
+            None,
+            false,
+            None,
+        )
+        .await
     }
 
     pub(crate) async fn from_components(
-        config: impl Into<ExtendedSubnetConfigSet>,
+        subnet_config_set: impl Into<ExtendedSubnetConfigSet>,
         server_url: Url,
         max_request_time_ms: Option<u64>,
+        state_dir: Option<PathBuf>,
+        nonmainnet_features: bool,
+        log_level: Option<Level>,
     ) -> Self {
-        let config = config.into();
-        config.validate().unwrap();
+        let subnet_config_set = subnet_config_set.into();
+        if state_dir.is_none()
+            || File::open(state_dir.clone().unwrap().join("topology.json")).is_err()
+        {
+            subnet_config_set.validate().unwrap();
+        }
+        let instance_config = InstanceConfig {
+            subnet_config_set,
+            state_dir,
+            nonmainnet_features,
+            log_level: log_level.map(|l| l.to_string()),
+        };
 
         let parent_pid = std::os::unix::process::parent_id();
         let log_guard = setup_tracing(parent_pid);
 
         let reqwest_client = reqwest::Client::new();
-        let (instance_id, topology) = match reqwest_client
+        let instance_id = match reqwest_client
             .post(server_url.join("instances").unwrap())
-            .json(&config)
+            .json(&instance_config)
             .send()
             .await
             .expect("Failed to get result")
@@ -123,10 +155,7 @@ impl PocketIc {
             .await
             .expect("Could not parse response for create instance request")
         {
-            CreateInstanceResponse::Created {
-                instance_id,
-                topology,
-            } => (instance_id, topology),
+            CreateInstanceResponse::Created { instance_id, .. } => instance_id,
             CreateInstanceResponse::Error { message } => panic!("{}", message),
         };
         debug!("instance_id={} New instance created.", instance_id);
@@ -135,7 +164,6 @@ impl PocketIc {
             instance_id,
             max_request_time_ms,
             http_gateway: None,
-            topology,
             server_url,
             reqwest_client,
             _log_guard: log_guard,
@@ -144,7 +172,8 @@ impl PocketIc {
 
     /// Returns the topology of the different subnets of this PocketIC instance.
     pub async fn topology(&self) -> Topology {
-        self.topology.clone()
+        let endpoint = "read/topology";
+        self.get(endpoint).await
     }
 
     /// Upload and store a binary blob to the PocketIC server.
@@ -266,7 +295,10 @@ impl PocketIc {
         let now = std::time::SystemTime::now();
         self.set_time(now).await;
         let endpoint = "auto_progress";
-        self.post::<(), _>(endpoint, "").await;
+        let auto_progress_config = AutoProgressConfig {
+            artificial_delay_ms: None,
+        };
+        self.post::<(), _>(endpoint, auto_progress_config).await;
         self.instance_url()
     }
 
@@ -304,17 +336,45 @@ impl PocketIc {
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn make_live(&mut self, listen_at: Option<u16>) -> Url {
         self.auto_progress().await;
-        self.start_http_gateway(listen_at).await
+        self.start_http_gateway(listen_at, None, None).await
     }
 
-    async fn start_http_gateway(&mut self, listen_at: Option<u16>) -> Url {
+    /// Creates an HTTP gateway for this PocketIC instance listening
+    /// on an optionally specified port (defaults to choosing an arbitrary unassigned port)
+    /// and optionally specified domains (default to `localhost`)
+    /// and using an optionally specified TLS certificate (if provided, an HTTPS gateway is created)
+    /// and configures the PocketIC instance to make progress automatically, i.e.,
+    /// periodically update the time of the PocketIC instance to the real time and execute rounds on the subnets.
+    /// Returns the URL at which `/api/v2` requests
+    /// for this instance can be made.
+    #[instrument(skip(self), fields(instance_id=self.instance_id))]
+    pub async fn make_live_with_params(
+        &mut self,
+        listen_at: Option<u16>,
+        domains: Option<Vec<String>>,
+        https_config: Option<HttpsConfig>,
+    ) -> Url {
+        self.auto_progress().await;
+        self.start_http_gateway(listen_at, domains, https_config)
+            .await
+    }
+
+    async fn start_http_gateway(
+        &mut self,
+        port: Option<u16>,
+        domains: Option<Vec<String>>,
+        https_config: Option<HttpsConfig>,
+    ) -> Url {
         if let Some(url) = self.url() {
             return url;
         }
         let endpoint = self.server_url.join("http_gateway").unwrap();
         let http_gateway_config = HttpGatewayConfig {
-            listen_at,
+            ip_addr: None,
+            port,
             forward_to: HttpGatewayBackend::PocketIcInstance(self.instance_id),
+            domains: domains.clone(),
+            https_config: https_config.clone(),
         };
         let res = self
             .reqwest_client
@@ -330,7 +390,22 @@ impl PocketIc {
             CreateHttpGatewayResponse::Created(info) => {
                 let port = info.port;
                 self.http_gateway = Some(info);
-                Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap()
+                let proto = if https_config.is_some() {
+                    "https"
+                } else {
+                    "http"
+                };
+                Url::parse(&format!(
+                    "{}://{}:{}/",
+                    proto,
+                    domains
+                        .unwrap_or_default()
+                        .into_iter()
+                        .next()
+                        .unwrap_or(LOCALHOST.to_string()),
+                    port
+                ))
+                .unwrap()
             }
             CreateHttpGatewayResponse::Error { message } => {
                 panic!("Failed to crate http gateway: {}", message)
@@ -372,7 +447,7 @@ impl PocketIc {
     /// Get the root key of this IC instance. Returns `None` if the IC has no NNS subnet.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn root_key(&self) -> Option<Vec<u8>> {
-        let subnet_id = self.topology.get_nns()?;
+        let subnet_id = self.topology().await.get_nns()?;
         let subnet_id: RawSubnetId = subnet_id.into();
         let endpoint = "read/pub_key";
         let res = self.post::<Vec<u8>, _>(endpoint, subnet_id).await;
@@ -603,11 +678,11 @@ impl PocketIc {
 
     /// Creates a canister with a specific canister ID and optional custom settings.
     /// Returns an error if the canister ID is already in use.
-    /// Panics if the canister ID is not contained in any of the subnets.
+    /// Creates a new subnet if the canister ID is not contained in any of the subnets.
     ///
-    /// The canister ID must be contained in the Bitcoin, Fiduciary, II, SNS or NNS
-    /// subnet range, it is not intended to be used on regular app or system subnets,
-    /// where it can lead to conflicts on which the function panics.
+    /// The canister ID must be an IC mainnet canister ID that does not belong to the NNS or II subnet,
+    /// otherwise the function might panic (for NNS and II canister IDs,
+    /// the PocketIC instance should already be created with those subnets).
     #[instrument(ret, skip(self), fields(instance_id=self.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string(), settings = ?settings, canister_id = %canister_id.to_string()))]
     pub async fn create_canister_with_id(
         &self,
@@ -799,6 +874,46 @@ impl PocketIc {
             wasm_module,
             arg,
             sender,
+        )
+        .await
+    }
+
+    /// Uninstall a canister.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn uninstall_canister(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+    ) -> Result<(), CallError> {
+        call_candid_as::<(CanisterIdRecord,), ()>(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "uninstall_code",
+            (CanisterIdRecord { canister_id },),
+        )
+        .await
+    }
+
+    /// Update canister settings.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn update_canister_settings(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+        settings: CanisterSettings,
+    ) -> Result<(), CallError> {
+        call_candid_as::<_, ()>(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "update_settings",
+            (UpdateSettingsArgument {
+                canister_id,
+                settings,
+            },),
         )
         .await
     }
@@ -1078,6 +1193,36 @@ impl PocketIc {
             )
             .await?;
         self.await_call(message_id).await
+    }
+
+    /// Get the pending canister HTTP outcalls.
+    /// Note that an additional `PocketIc::tick` is necessary after a canister
+    /// executes a message making a canister HTTP outcall for the HTTP outcall
+    /// to be retrievable here.
+    /// Note that, unless a PocketIC instance is in auto progress mode,
+    /// a response to the pending canister HTTP outcalls
+    /// must be produced by the test driver and passed on to the PocketIC instace
+    /// using `PocketIc::mock_canister_http_response`.
+    /// In auto progress mode, the PocketIC server produces a response for every
+    /// pending canister HTTP outcall by actually making an HTTP request
+    /// to the specified URL.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
+    pub async fn get_canister_http(&self) -> Vec<CanisterHttpRequest> {
+        let endpoint = "read/get_canister_http";
+        let res: Vec<RawCanisterHttpRequest> = self.get(endpoint).await;
+        res.into_iter().map(|r| r.into()).collect()
+    }
+
+    /// Mock a response to a pending canister HTTP outcall.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
+    pub async fn mock_canister_http_response(
+        &self,
+        mock_canister_http_response: MockCanisterHttpResponse,
+    ) {
+        let endpoint = "update/mock_canister_http";
+        let raw_mock_canister_http_response: RawMockCanisterHttpResponse =
+            mock_canister_http_response.into();
+        self.post(endpoint, raw_mock_canister_http_response).await
     }
 }
 

@@ -1997,6 +1997,8 @@ fn test_neuron_add_non_grantable_permission_fails() {
 #[test]
 fn test_exceeding_max_principals_for_neuron_fails() {
     local_test_on_sns_subnet(|runtime| async move {
+        let max_number_of_principals_per_neuron = 5;
+
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let additional_user = Sender::from_keypair(&TEST_USER2_KEYPAIR);
         let account_identifier = Account {
@@ -2010,7 +2012,7 @@ fn test_exceeding_max_principals_for_neuron_fails() {
             neuron_grantable_permissions: Some(NeuronPermissionList {
                 permissions: NeuronPermissionType::all(),
             }),
-            max_number_of_principals_per_neuron: Some(1_u64),
+            max_number_of_principals_per_neuron: Some(5_u64),
             // ManagePrincipals will be granted to the claimer automatically
             ..NervousSystemParameters::with_default_values()
         };
@@ -2026,6 +2028,35 @@ fn test_exceeding_max_principals_for_neuron_fails() {
         let neuron = sns_canisters.get_neuron(&neuron_id).await;
         let subaccount = neuron.subaccount().expect("Error creating the subaccount");
 
+        // These calls should succeed
+        for i in 0..(max_number_of_principals_per_neuron - 1) {
+            let add_neuron_permission = AddNeuronPermissions {
+                principal_id: Some(PrincipalId::new_user_test_id(101010 + i)),
+                permissions_to_add: Some(NeuronPermissionList {
+                    permissions: vec![NeuronPermissionType::Vote as i32],
+                }),
+            };
+
+            let manage_neuron_response: ManageNeuronResponse = sns_canisters
+                .governance
+                .update_from_sender(
+                    "manage_neuron",
+                    candid_one,
+                    ManageNeuron {
+                        subaccount: subaccount.to_vec(),
+                        command: Some(Command::AddNeuronPermissions(add_neuron_permission)),
+                    },
+                    &user,
+                )
+                .await
+                .expect("Error calling manage_neuron");
+
+            if let CommandResponse::Error(error) = manage_neuron_response.command.unwrap() {
+                panic!("Adding permission should have succeeded, but encountered {error:?} on iteration {i}");
+            }
+        }
+
+        // This call should fail
         let add_neuron_permission = AddNeuronPermissions {
             principal_id: Some(additional_user.get_principal_id()),
             permissions_to_add: Some(NeuronPermissionList {

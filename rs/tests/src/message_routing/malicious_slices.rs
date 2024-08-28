@@ -21,16 +21,16 @@ Success::
 end::catalog[] */
 
 use super::common::{install_canisters, start_all_canisters};
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::pot_dsl::{PotSetupFn, SysTestFn};
-use crate::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot,
-};
-use crate::util::{block_on, runtime_from_url, MetricsFetcher};
 use canister_test::Runtime;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
+use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot,
+};
+use ic_system_test_driver::util::{block_on, runtime_from_url, MetricsFetcher};
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use slog::info;
 use std::time::Duration;

@@ -5,28 +5,29 @@ load("//bazel:defs.bzl", "rust_ic_test")
 package(default_visibility = ["//visibility:public"])
 
 LIB_DEPS = [
+    # Keep sorted.
     "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/extended_bip32",
+    "//rs/bitcoin/ckbtc/kyt",
     "//rs/crypto/getrandom_for_wasm",
+    "//rs/crypto/secp256k1",
     "//rs/crypto/sha2",
-    "//rs/rust_canisters/canister_log",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/ledger_core",
-    "//rs/bitcoin/ckbtc/kyt",
+    "//rs/rust_canisters/canister_log",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/utils/ensure",
     "@crate_index//:bech32",
-    "@crate_index//:ic0",
+    "@crate_index//:bs58",
+    "@crate_index//:candid",
+    "@crate_index//:ciborium",
+    "@crate_index//:hex",
     "@crate_index//:ic-btc-interface",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
-    "@crate_index//:bs58",
-    "@crate_index//:ciborium",
-    "@crate_index//:candid",
-    "@crate_index//:hex",
-    "@crate_index//:ic-cdk",
+    "@crate_index//:ic0",
     "@crate_index//:lazy_static",
     "@crate_index//:minicbor",
     "@crate_index//:num-traits",
@@ -37,6 +38,7 @@ LIB_DEPS = [
 ]
 
 LIB_PROC_MACRO_DEPS = [
+    # Keep sorted.
     "@crate_index//:async-trait",
     "@crate_index//:ic-cdk-macros",
     "@crate_index//:minicbor-derive",
@@ -67,6 +69,7 @@ alias(
         crate_features = features,
         crate_name = "ic_ckbtc_minter_canister",
         proc_macro_deps = [
+            # Keep sorted.
             "@crate_index//:ic-cdk-macros",
         ],
         rustc_env = {
@@ -74,6 +77,7 @@ alias(
         },
         service_file = ":ckbtc_minter.did",
         deps = [
+            # Keep sorted.
             ":ckbtc_minter_lib",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/crypto/getrandom_for_wasm",
@@ -104,6 +108,7 @@ rust_test(
     name = "ckbtc_minter_lib_unit_tests",
     crate = ":ckbtc_minter_lib",
     deps = [
+        # Keep sorted.
         "@crate_index//:bitcoin",
         "@crate_index//:proptest",
         "@crate_index//:simple_asn1",
@@ -118,6 +123,7 @@ rust_test(
         "CARGO_MANIFEST_DIR": "rs/bitcoin/ckbtc/minter",
     },
     deps = [
+        # Keep sorted.
         "@crate_index//:candid_parser",
     ],
 )
@@ -128,18 +134,20 @@ rust_ic_test(
     srcs = ["tests/tests.rs"],
     data = [
         ":ckbtc_minter_debug.wasm",
-        "//rs/bitcoin/ckbtc/kyt:kyt_canister.wasm",
-        "//rs/bitcoin/mock:bitcoin_canister_mock.wasm",
-        "//rs/rosetta-api/icrc1/ledger:ledger_canister.wasm",
+        "//rs/bitcoin/ckbtc/kyt:kyt_canister",
+        "//rs/bitcoin/kyt:btc_kyt_canister",
+        "//rs/bitcoin/mock:bitcoin_canister_mock",
+        "//rs/rosetta-api/icrc1/ledger:ledger_canister",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/ckbtc/minter",
         "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath :ckbtc_minter_debug.wasm)",
-        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister.wasm)",
-        "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister.wasm)",
-        "IC_BITCOIN_CANISTER_MOCK_WASM_PATH": "$(rootpath //rs/bitcoin/mock:bitcoin_canister_mock.wasm)",
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
+        "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister)",
+        "IC_BITCOIN_CANISTER_MOCK_WASM_PATH": "$(rootpath //rs/bitcoin/mock:bitcoin_canister_mock)",
     },
     deps = [
+        # Keep sorted.
         ":ckbtc_minter_lib",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/bitcoin/ckbtc/kyt",

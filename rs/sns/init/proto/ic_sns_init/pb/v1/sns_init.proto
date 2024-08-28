@@ -213,7 +213,11 @@ message SnsInitPayload {
   optional bool neurons_fund_participation = 40;
 
   // The Neurons' Fund participants of this SNS decentralization swap.
-  optional NeuronsFundParticipants neurons_fund_participants = 35;
+  //
+  // This field is deprecated, as Neurons' Fund participants are now determined at the end of
+  // a successful swap and cannot be specified during SNS initialization.
+  reserved 35;
+  reserved "neurons_fund_participants";
 
   // The token_logo for the SNS project represented as a base64 encoded string.
   optional string token_logo = 36;
@@ -327,8 +331,4 @@ message NeuronDistribution {
 /// A Canister that will be transferred to an SNS.
 message DappCanisters {
   repeated ic_nervous_system.pb.v1.Canister canisters = 1;
-}
-
-message NeuronsFundParticipants {
-  repeated ic_sns_swap.pb.v1.CfParticipant participants  = 1;
 }

@@ -5,7 +5,6 @@ use ic_base_types::{subnet_id_try_from_protobuf, PrincipalId, SubnetId};
 use ic_management_canister_types::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
-use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::registry::TEST_ID;
 use ic_nns_test_utils::{
     itest_helpers::{
@@ -25,6 +24,7 @@ use ic_registry_subnet_features::{
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
 use ic_types::ReplicaVersion;
+use prost::Message;
 use registry_canister::mutations::do_update_subnet::{ChainKeyConfig, KeyConfig};
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder, mutations::do_update_subnet::UpdateSubnetPayload,
@@ -72,22 +72,10 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
             initial_notary_delay_millis: None,
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
-            max_artifact_streams_per_peer: None,
-            max_chunk_wait_ms: None,
-            max_duplicity: None,
-            max_chunk_size: None,
-            receive_check_cache_size: None,
-            pfn_evaluation_period_ms: None,
-            registry_poll_period_ms: None,
-            retransmission_request_ms: None,
-            set_gossip_config_to_default: false,
             start_as_nns: None,
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: None,
-            max_instructions_per_message: Some(6_000_000_000),
-            max_instructions_per_round: Some(8_000_000_000),
-            max_instructions_per_install_code: Some(300_000_000_000),
             features: None,
             ecdsa_config: None,
             ecdsa_key_signing_enable: None,
@@ -98,6 +86,16 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
+            // Deprecated/unused values follow
+            max_artifact_streams_per_peer: None,
+            max_chunk_wait_ms: None,
+            max_duplicity: None,
+            max_chunk_size: None,
+            receive_check_cache_size: None,
+            pfn_evaluation_period_ms: None,
+            registry_poll_period_ms: None,
+            retransmission_request_ms: None,
+            set_gossip_config_to_default: Default::default(),
         };
 
         // The anonymous end-user tries to update a subnet's configuration, bypassing
@@ -159,9 +157,6 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
             halt_at_cup_height: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
@@ -186,7 +181,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_subnet_record_key(subnet_id).as_bytes(),
-                        encode_or_panic(&initial_subnet_record),
+                        initial_subnet_record.encode_to_vec(),
                     )],
                     preconditions: vec![],
                 })
@@ -204,22 +199,10 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             initial_notary_delay_millis: None,
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
-            max_artifact_streams_per_peer: None,
-            max_chunk_wait_ms: None,
-            max_duplicity: None,
-            max_chunk_size: None,
-            receive_check_cache_size: None,
-            pfn_evaluation_period_ms: None,
-            registry_poll_period_ms: None,
-            retransmission_request_ms: None,
-            set_gossip_config_to_default: true,
             start_as_nns: None,
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: None,
-            max_instructions_per_message: Some(6_000_000_000),
-            max_instructions_per_round: Some(8_000_000_000),
-            max_instructions_per_install_code: Some(300_000_000_000),
             features: None,
             ecdsa_config: None,
             ecdsa_key_signing_enable: None,
@@ -230,6 +213,16 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
+            // Deprecated/unused values follow
+            max_artifact_streams_per_peer: None,
+            max_chunk_wait_ms: None,
+            max_duplicity: None,
+            max_chunk_size: None,
+            receive_check_cache_size: None,
+            pfn_evaluation_period_ms: None,
+            registry_poll_period_ms: None,
+            retransmission_request_ms: None,
+            set_gossip_config_to_default: Default::default(),
         };
 
         // The attacker canister tries to update the subnet's configuration, pretending
@@ -276,7 +269,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_subnet_record_key(subnet_id).as_bytes(),
-                        encode_or_panic(&SubnetRecord {
+                        SubnetRecord {
                             membership: vec![],
                             max_ingress_bytes_per_message: 60 * 1024 * 1024,
                             max_ingress_messages_per_block: 1000,
@@ -290,16 +283,14 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                             subnet_type: SubnetType::Application.into(),
                             is_halted: false,
                             halt_at_cup_height: false,
-                            max_instructions_per_message: 5_000_000_000,
-                            max_instructions_per_round: 7_000_000_000,
-                            max_instructions_per_install_code: 200_000_000_000,
                             features: None,
                             max_number_of_canisters: 0,
                             ssh_readonly_access: vec![],
                             ssh_backup_access: vec![],
                             ecdsa_config: None,
                             chain_key_config: None,
-                        }),
+                        }
+                        .encode_to_vec(),
                     )],
                     preconditions: vec![],
                 })
@@ -326,22 +317,10 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             initial_notary_delay_millis: None,
             dkg_interval_length: Some(2),
             dkg_dealings_per_block: Some(1),
-            max_artifact_streams_per_peer: None,
-            max_chunk_wait_ms: None,
-            max_duplicity: None,
-            max_chunk_size: None,
-            receive_check_cache_size: None,
-            pfn_evaluation_period_ms: None,
-            registry_poll_period_ms: None,
-            retransmission_request_ms: None,
-            set_gossip_config_to_default: false,
             start_as_nns: None,
             subnet_type: Some(SubnetType::Application),
             is_halted: Some(true),
             halt_at_cup_height: Some(true),
-            max_instructions_per_message: Some(6_000_000_000),
-            max_instructions_per_round: Some(8_000_000_000),
-            max_instructions_per_install_code: Some(300_000_000_000),
             features: None,
             ecdsa_config: None,
             ecdsa_key_signing_enable: None,
@@ -352,6 +331,16 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
+            // Deprecated/unused values follow
+            max_artifact_streams_per_peer: None,
+            max_chunk_wait_ms: None,
+            max_duplicity: None,
+            max_chunk_size: None,
+            receive_check_cache_size: None,
+            pfn_evaluation_period_ms: None,
+            registry_poll_period_ms: None,
+            retransmission_request_ms: None,
+            set_gossip_config_to_default: Default::default(),
         };
 
         // Attempt to update the subnet's configuration. Since the update happens from
@@ -388,9 +377,6 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                 subnet_type: SubnetType::Application.into(),
                 is_halted: true,
                 halt_at_cup_height: true,
-                max_instructions_per_message: 6_000_000_000,
-                max_instructions_per_round: 8_000_000_000,
-                max_instructions_per_install_code: 300_000_000_000,
                 features: None,
                 max_number_of_canisters: 42,
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
@@ -445,9 +431,6 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly_legacy() {
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
             halt_at_cup_height: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
@@ -466,7 +449,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly_legacy() {
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_subnet_record_key(subnet_id).as_bytes(),
-                        encode_or_panic(&subnet_record),
+                        subnet_record.encode_to_vec(),
                     )],
                     preconditions: vec![],
                 })
@@ -697,9 +680,6 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
             halt_at_cup_height: false,
-            max_instructions_per_message: 5_000_000_000,
-            max_instructions_per_round: 7_000_000_000,
-            max_instructions_per_install_code: 200_000_000_000,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
@@ -718,7 +698,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_subnet_record_key(subnet_id).as_bytes(),
-                        encode_or_panic(&initial_subnet_record),
+                        initial_subnet_record.encode_to_vec(),
                     )],
                     preconditions: vec![],
                 })
@@ -910,22 +890,10 @@ fn empty_update_subnet_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
         initial_notary_delay_millis: None,
         dkg_interval_length: None,
         dkg_dealings_per_block: None,
-        max_artifact_streams_per_peer: None,
-        max_chunk_wait_ms: None,
-        max_duplicity: None,
-        max_chunk_size: None,
-        receive_check_cache_size: None,
-        pfn_evaluation_period_ms: None,
-        registry_poll_period_ms: None,
-        retransmission_request_ms: None,
-        set_gossip_config_to_default: false,
         start_as_nns: None,
         subnet_type: None,
         is_halted: None,
         halt_at_cup_height: None,
-        max_instructions_per_message: None,
-        max_instructions_per_round: None,
-        max_instructions_per_install_code: None,
         features: None,
         max_number_of_canisters: None,
         ssh_readonly_access: None,
@@ -936,5 +904,15 @@ fn empty_update_subnet_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
         chain_key_config: None,
         chain_key_signing_enable: None,
         chain_key_signing_disable: None,
+        // Deprecated/unused values follow
+        max_artifact_streams_per_peer: None,
+        max_chunk_wait_ms: None,
+        max_duplicity: None,
+        max_chunk_size: None,
+        receive_check_cache_size: None,
+        pfn_evaluation_period_ms: None,
+        registry_poll_period_ms: None,
+        retransmission_request_ms: None,
+        set_gossip_config_to_default: Default::default(),
     }
 }

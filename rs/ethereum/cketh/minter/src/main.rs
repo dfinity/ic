@@ -39,7 +39,7 @@ use ic_cketh_minter::withdraw::{
 use ic_cketh_minter::{endpoints, erc20};
 use ic_cketh_minter::{
     state, storage, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
-    SCRAPPING_ETH_LOGS_INTERVAL,
+    SCRAPING_ETH_LOGS_INTERVAL,
 };
 use ic_ethereum_types::Address;
 use std::collections::BTreeSet;
@@ -75,7 +75,7 @@ fn setup_timers() {
     });
     // Start scraping logs immediately after the install, then repeat with the interval.
     ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(scrape_logs()));
-    ic_cdk_timers::set_timer_interval(SCRAPPING_ETH_LOGS_INTERVAL, || ic_cdk::spawn(scrape_logs()));
+    ic_cdk_timers::set_timer_interval(SCRAPING_ETH_LOGS_INTERVAL, || ic_cdk::spawn(scrape_logs()));
     ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, || {
         ic_cdk::spawn(process_retrieve_eth_requests())
     });
@@ -841,6 +841,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "Size of the stable memory allocated by this canister.",
                 )?;
 
+                w.encode_gauge(
+                    "cketh_minter_heap_memory_bytes",
+                    heap_memory_size_bytes() as f64,
+                    "Size of the heap memory allocated by this canister.",
+                )?;
+
                 w.gauge_vec("cycle_balance", "Cycle balance of this canister.")?
                     .value(
                         &[("canister", "cketh-minter")],
@@ -1038,6 +1044,18 @@ fn check_audit_log() {
             .is_equivalent_to(s)
             .expect("replaying the audit log should produce an equivalent state")
     })
+}
+
+/// Returns the amount of heap memory in bytes that has been allocated.
+#[cfg(target_arch = "wasm32")]
+pub fn heap_memory_size_bytes() -> usize {
+    const WASM_PAGE_SIZE_BYTES: usize = 65536;
+    core::arch::wasm32::memory_size(0) * WASM_PAGE_SIZE_BYTES
+}
+
+#[cfg(not(any(target_arch = "wasm32")))]
+pub fn heap_memory_size_bytes() -> usize {
+    0
 }
 
 fn main() {}

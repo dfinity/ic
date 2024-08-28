@@ -18,20 +18,3 @@ fi
 if [ -n "${NODE_NAME:-}" ]; then
     echo "Node: $NODE_NAME"
 fi
-
-if [ "$(uname)" == "Linux" ]; then
-    # TODO: patch runner & runner manifest for cleaner bind mount
-    # Temporary way to bring required directories to workflow container:
-    if [ -e /__w/cache ]; then
-        sudo ln -s /__w/cache /
-    fi
-    if [ -e /__w/ceph-s3-info ]; then
-        sudo ln -s /__w/ceph-s3-info /
-    fi
-    if [ -e /__w/var/tmp ] && [ ! -e /var/tmp ]; then
-        sudo ln -s /__w/var/tmp /var/tmp
-    fi
-    if [ -e /__w/var/sysimage ] && [ ! -e /var/sysimage ]; then
-        sudo ln -s /__w/var/sysimage /var/sysimage
-    fi
-fi

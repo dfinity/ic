@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    # Keep sorted.
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//packages/pocket-ic:pocket-ic",
@@ -15,10 +16,13 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icrc1/rosetta/client:ic-icrc-rosetta-client",
     "//rs/rosetta-api/rosetta_core:rosetta-core",
     "//rs/test_utilities/load_wasm",
+    "@crate_index//:anyhow",
     "@crate_index//:candid",
     "@crate_index//:ic-agent",
+    "@crate_index//:num-traits",
     "@crate_index//:reqwest",
     "@crate_index//:serde",
+    "@crate_index//:serde_json",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:url",
@@ -43,16 +47,18 @@ rust_test_suite(
         "//rs/canister_sandbox:sandbox_launcher",
         "//rs/pocket_ic_server:pocket-ic-server",
         "//rs/replica",
-        "//rs/rosetta-api:ic-rosetta-api",
+        "//rs/rosetta-api:ic-rosetta-api-rosetta-blocks",
         "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
+        "//rs/rosetta-api/test_utils/sender_canister:ic-sender-canister",
     ],
     env = {
         "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "REPLICA_BIN": "$(rootpath //rs/replica)",
-        "ROSETTA_PATH": "$(rootpath //rs/rosetta-api:ic-rosetta-api)",
+        "ROSETTA_PATH": "$(rootpath //rs/rosetta-api:ic-rosetta-api-rosetta-blocks)",
         "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
+        "IC_SENDER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/test_utils/sender_canister:ic-sender-canister)",
     },
     # The test is critical to get resources timely and therefore fails sometimes when run on heavily loaded node.
     # TODO(IDX-2225): reconsider when we will use Remote Execution.
@@ -63,5 +69,6 @@ rust_test_suite(
     tags = ["cpu:3"],
     deps = DEPENDENCIES + [
         ":rosetta-integration-tests-lib",
+        "//rs/rosetta-api/test_utils/sender_canister:ic_sender_canister_lib",
     ],
 )

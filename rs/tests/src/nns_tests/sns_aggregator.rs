@@ -6,23 +6,33 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{
-    canister_agent::CanisterAgent,
-    canister_api::{CallMode, SnsRequestProvider},
-    canister_requests,
-    driver::test_env_api::{retry_async, NnsCanisterWasmStrategy},
-    generic_workload_engine::{
-        engine::Engine,
-        metrics::{LoadTestMetrics, RequestOutcome},
-    },
-    retry_with_msg_async,
-    sns_client::{openchat_create_service_nervous_system_proposal, SnsClient},
-};
 use anyhow::{bail, Context};
 use candid::{Decode, Principal};
 use ic_agent::Agent;
 use ic_registry_subnet_type::SubnetType;
 use ic_sns_swap::pb::v1::{GetStateResponse, Params};
+use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
+use ic_system_test_driver::{
+    canister_agent::CanisterAgent,
+    canister_api::{CallMode, SnsRequestProvider},
+    canister_requests,
+    generic_workload_engine::{
+        engine::Engine,
+        metrics::{LoadTestMetrics, RequestOutcome},
+    },
+    sns_client::{openchat_create_service_nervous_system_proposal, SnsClient},
+};
+use ic_system_test_driver::{
+    driver::{
+        ic::InternetComputer,
+        test_env::{TestEnv, TestEnvAttribute},
+        test_env_api::{
+            get_dependency_path, load_wasm, GetFirstHealthyNodeSnapshot, HasPublicApiUrl,
+            HasTopologySnapshot, IcNodeContainer,
+        },
+    },
+    util::block_on,
+};
 use ic_utils::{
     call::SyncCall,
     interfaces::{http_request::HttpResponse, HttpRequestCanister, ManagementCanister},
@@ -31,20 +41,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use slog::{info, Logger};
 
-use crate::canister_agent::HasCanisterAgentCapability;
-use crate::{
-    driver::{
-        ic::InternetComputer,
-        test_env::{TestEnv, TestEnvAttribute},
-        test_env_api::{
-            GetFirstHealthyNodeSnapshot, HasDependencies, HasPublicApiUrl, HasTopologySnapshot,
-            HasWasm, IcNodeContainer,
-        },
-    },
-    util::block_on,
-};
-
-use super::sns_deployment::{self, install_nns, install_sns, SaleParticipant};
+use super::sns_deployment::{self, install_nns, install_sns, SnsSaleParticipants};
 
 use ic_base_types::PrincipalId;
 
@@ -59,7 +56,7 @@ const AGGREGATOR_CANISTER_VERSION: &str = "v1";
 // by `RESPONSES_COLLECTION_EXTRA_TIMEOUT` is reached).
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1_000);
 
-fn config_for_security_testing(env: &TestEnv, wasm_strategy: NnsCanisterWasmStrategy) {
+fn config_for_security_testing(env: &TestEnv) {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)
@@ -70,9 +67,9 @@ fn config_for_security_testing(env: &TestEnv, wasm_strategy: NnsCanisterWasmStra
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
-    install_nns(env, wasm_strategy, vec![], vec![]);
+    install_nns(env, vec![], vec![]);
     let create_service_nervous_system_proposal = openchat_create_service_nervous_system_proposal();
-    install_sns(env, wasm_strategy, create_service_nervous_system_proposal);
+    install_sns(env, create_service_nervous_system_proposal);
 }
 
 pub fn benchmark_config(env: TestEnv) {
@@ -89,8 +86,7 @@ pub fn benchmark_config_with_aggregator(env: TestEnv) {
 }
 
 pub fn config_fast(env: TestEnv) {
-    let strategy = NnsCanisterWasmStrategy::TakeBuiltFromSources;
-    config_for_security_testing(&env, strategy);
+    config_for_security_testing(&env);
     install_aggregator(&env);
 }
 
@@ -234,8 +230,12 @@ impl AggregatorClient {
     {
         let start_time = Instant::now();
         let attempts = Arc::new(AtomicUsize::new(0));
-        let result =
-            retry_with_msg_async!("http_get_asset", log, timeout, Duration::from_secs(5), {
+        let result = ic_system_test_driver::retry_with_msg_async!(
+            "http_get_asset",
+            log,
+            timeout,
+            Duration::from_secs(5),
+            {
                 let log = log.clone();
                 let attempts = attempts.clone();
                 let canister = canister.clone();
@@ -251,9 +251,10 @@ impl AggregatorClient {
                         extract_sub_asset(asset)
                     }
                 }
-            })
-            .await
-            .map_err(|e| format!("{e:?}"));
+            }
+        )
+        .await
+        .map_err(|e| format!("{e:?}"));
         RequestOutcome::new(
             result,
             "aggregator_sub_asset".to_string(),
@@ -304,11 +305,10 @@ impl AggregatorClient {
                 "Validating aggregator canister's installation via public endpoint {}",
                 app_node.get_public_url().as_str(),
             );
-            let p =
-                env.get_dependency_path("external/sns_aggregator/file/sns_aggregator_dev.wasm.gz");
+            let p = get_dependency_path("external/sns_aggregator/file/sns_aggregator_dev.wasm.gz");
             let p = std::fs::canonicalize(p.clone())
                 .unwrap_or_else(|e| panic!("cannot obtain canonical path from {p:?}: {e:?}"));
-            let canister_bytes = env.load_wasm(p);
+            let canister_bytes = load_wasm(p);
             let canister_id = app_node.with_default_agent({
                 let log = log.clone();
                 move |agent| async move {
@@ -539,7 +539,8 @@ pub fn workload_direct_auth(env: TestEnv, rps: usize, duration: Duration) {
         let participants: Vec<(CanisterAgent, CanisterAgent)> = {
             let nns_node = env.get_first_healthy_nns_node_snapshot();
             let app_node = env.get_first_healthy_application_node_snapshot();
-            Vec::<SaleParticipant>::read_attribute(&env)
+            SnsSaleParticipants::read_attribute(&env)
+                .participants
                 .into_iter()
                 .map(|p| {
                     block_on(async {

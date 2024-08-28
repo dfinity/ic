@@ -20,10 +20,7 @@ const MAX_LOG_MESSAGE_LEN_BYTES: usize = 16 * 1024;
 pub fn no_op_logger() -> ReplicaLogger {
     LogEntryLogger::new(
         slog::Logger::root(slog::Discard, slog::o!()),
-        slog::Level::Critical,
-        vec![],
-        HashMap::new(),
-        vec![],
+        ic_config::logger::Level::Critical,
     )
     .into()
 }
@@ -39,26 +36,22 @@ pub struct LogEntryLogger {
     pub root: slog::Logger,
     // Only logs at `level` or above
     pub level: slog::Level,
-    pub debug_overrides: Vec<String>,
-    pub sampling_rates: HashMap<String, u32>,
-    pub enabled_tags: Vec<String>,
     pub last_log: Mutex<HashMap<String, Instant>>,
 }
 
 impl LogEntryLogger {
-    pub fn new(
-        root: slog::Logger,
-        level: slog::Level,
-        debug_overrides: Vec<String>,
-        sampling_rates: HashMap<String, u32>,
-        enabled_tags: Vec<String>,
-    ) -> Self {
+    pub fn new(root: slog::Logger, level: ic_config::logger::Level) -> Self {
+        let slog_level = match level {
+            ic_config::logger::Level::Critical => slog::Level::Critical,
+            ic_config::logger::Level::Error => slog::Level::Error,
+            ic_config::logger::Level::Warning => slog::Level::Warning,
+            ic_config::logger::Level::Info => slog::Level::Info,
+            ic_config::logger::Level::Debug => slog::Level::Debug,
+            ic_config::logger::Level::Trace => slog::Level::Trace,
+        };
         Self {
             root,
-            level,
-            debug_overrides,
-            sampling_rates,
-            enabled_tags,
+            level: slog_level,
             last_log: Mutex::new(HashMap::new()),
         }
     }
@@ -67,12 +60,12 @@ impl LogEntryLogger {
 impl From<slog::Logger> for LogEntryLogger {
     fn from(root: slog::Logger) -> Self {
         let level = if cfg!(debug_assertions) {
-            slog::Level::Trace
+            ic_config::logger::Level::Trace
         } else {
-            slog::Level::Info
+            ic_config::logger::Level::Info
         };
 
-        Self::new(root, level, vec![], HashMap::new(), vec![])
+        Self::new(root, level)
     }
 }
 
@@ -81,9 +74,6 @@ impl Clone for LogEntryLogger {
         Self {
             root: self.root.new(slog::o!()),
             level: self.level,
-            debug_overrides: self.debug_overrides.clone(),
-            sampling_rates: self.sampling_rates.clone(),
-            enabled_tags: self.enabled_tags.clone(),
             // `last_log` is not cloned because different instances of this
             // logger will log at disjoint module/line pairs, so these
             // instances don't need to share the same mutex, or need to both
@@ -126,27 +116,8 @@ impl Logger<LogEntry> for LogEntryLogger {
         }
     }
 
-    fn is_enabled_at(&self, level: slog::Level, module_path: &'static str) -> bool {
-        if !self.debug_overrides.is_empty()
-            && level == slog::Level::Debug
-            && self.debug_overrides.contains(&module_path.to_string())
-        {
-            true
-        } else {
-            level.is_at_least(self.level)
-        }
-    }
-
-    fn should_sample<T: Into<u32>>(&self, key: String, value: T) -> bool {
-        if let Some(&sample_rate) = self.sampling_rates.get(&key) {
-            sample_rate != 0 && value.into() % sample_rate == 0
-        } else {
-            false
-        }
-    }
-
-    fn is_tag_enabled(&self, tag: String) -> bool {
-        self.enabled_tags.contains(&tag)
+    fn is_enabled_at(&self, level: slog::Level) -> bool {
+        level.is_at_least(self.level)
     }
 
     fn is_n_seconds<T: Into<i32>>(&self, seconds: T, metadata: LogMetadata) -> bool {
@@ -189,54 +160,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_should_sample() {
-        let mut logger = LogEntryLogger::new(
-            slog::Logger::root(slog::Discard, slog::o!()),
-            slog::Level::Critical,
-            vec![],
-            HashMap::new(),
-            vec![],
-        );
-
-        logger.sampling_rates = [
-            ("ten".into(), 10u32),
-            ("one".into(), 1u32),
-            ("zero".into(), 0u32),
-        ]
-        .iter()
-        .cloned()
-        .collect();
-
-        for i in 1u32..10u32 {
-            assert!(!logger.should_sample("ten".to_string(), i));
-            assert!(logger.should_sample("one".to_string(), i));
-            assert!(!logger.should_sample("zero".to_string(), i));
-        }
-
-        assert!(logger.should_sample("ten".to_string(), 10u32));
-    }
-
-    #[test]
-    fn test_is_tag_enabled() {
-        let logger = LogEntryLogger::new(
-            slog::Logger::root(slog::Discard, slog::o!()),
-            slog::Level::Critical,
-            vec![],
-            HashMap::new(),
-            vec!["my_tag".into()],
-        );
-
-        assert!(logger.is_tag_enabled("my_tag".to_string()));
-    }
-
-    #[test]
     fn test_is_seconds() {
         let logger = LogEntryLogger::new(
             slog::Logger::root(slog::Discard, slog::o!()),
-            slog::Level::Critical,
-            vec![],
-            HashMap::new(),
-            vec!["my_tag".into()],
+            ic_config::logger::Level::Critical,
         );
 
         for i in 1u32..10u32 {

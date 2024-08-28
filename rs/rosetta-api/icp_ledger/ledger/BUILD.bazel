@@ -16,6 +16,7 @@ rust_library(
     ],
     crate_name = "ledger_canister",
     proc_macro_deps = [
+        # Keep sorted.
         "@crate_index//:async-trait",
     ],
     rustc_env = {
@@ -23,6 +24,7 @@ rust_library(
     },
     version = "0.9.0",
     deps = [
+        # Keep sorted.
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/constants",
@@ -59,6 +61,7 @@ rust_test(
 )
 
 LEDGER_CANISTER_DEPS = [
+    # Keep sorted.
     ":ledger",
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//packages/icrc-ledger-types:icrc_ledger_types",
@@ -135,6 +138,7 @@ rust_ic_test(
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath :ledger-canister-wasm)",
     },
     deps = [
+        # Keep sorted.
         ":ledger",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/rosetta-api/icp_ledger",

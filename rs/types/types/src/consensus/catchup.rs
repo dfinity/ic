@@ -116,13 +116,9 @@ impl From<&CatchUpContent> for pb::CatchUpContent {
 
 impl TryFrom<pb::CatchUpContent> for CatchUpContent {
     type Error = ProxyDecodeError;
+
     fn try_from(content: pb::CatchUpContent) -> Result<CatchUpContent, Self::Error> {
-        let block = super::Block::try_from(
-            content
-                .block
-                .ok_or_else(|| ProxyDecodeError::MissingField("CatchUpContent::block"))?,
-        )
-        .map_err(ProxyDecodeError::Other)?;
+        let block = try_from_option_field(content.block, "CatchUpContent::block")?;
 
         let random_beacon =
             try_from_option_field(content.random_beacon, "CatchUpContent::random_beacon")?;

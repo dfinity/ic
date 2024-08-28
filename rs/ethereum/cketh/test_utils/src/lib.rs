@@ -4,7 +4,7 @@ use crate::flow::{
 };
 use crate::mock::JsonRpcMethod;
 use assert_matches::assert_matches;
-use candid::{Decode, Encode, Nat, Principal};
+use candid::{CandidType, Decode, Deserialize, Encode, Nat, Principal};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, GetEventsResult};
 use ic_cketh_minter::endpoints::{
@@ -77,18 +77,18 @@ pub const DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS: &str =
     "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0";
 pub const ETH_HELPER_CONTRACT_ADDRESS: &str = "0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1";
 pub const ERC20_HELPER_CONTRACT_ADDRESS: &str = "0xe1788e4834c896f1932188645cc36c54d1b80ac1";
-pub const RECEIVED_ETH_EVENT_TOPIC: &str =
+const RECEIVED_ETH_EVENT_TOPIC: &str =
     "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435";
-pub const RECEIVED_ERC20_EVENT_TOPIC: &str =
+const RECEIVED_ERC20_EVENT_TOPIC: &str =
     "0x4d69d0bd4287b7f66c548f90154dc81bc98f65a1b362775df5ae171a2ccd262b";
 pub const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
-pub const MAX_ETH_LOGS_BLOCK_RANGE: u64 = 799;
 
 pub struct CkEthSetup {
     pub env: Arc<StateMachine>,
     pub caller: PrincipalId,
     pub ledger_id: CanisterId,
     pub minter_id: CanisterId,
+    pub evm_rpc_id: Option<CanisterId>,
 }
 
 impl Default for CkEthSetup {
@@ -132,6 +132,7 @@ impl CkEthSetup {
             caller,
             ledger_id,
             minter_id,
+            evm_rpc_id: None,
         };
 
         assert_eq!(
@@ -139,6 +140,32 @@ impl CkEthSetup {
             Address::from_str(&cketh.minter_address()).unwrap()
         );
         cketh
+    }
+
+    fn new_with_evm_rpc(env: Arc<StateMachine>) -> Self {
+        // install ckETH first to keep the same canisterID and minter Ethereum address.
+        let mut cketh = Self::new(env);
+        let evm_rpc_id = cketh.env.create_canister(None);
+        install_evm_rpc(&cketh.env, evm_rpc_id);
+        cketh.upgrade_minter(UpgradeArg {
+            evm_rpc_id: Some(evm_rpc_id.into()),
+            ..Default::default()
+        });
+        cketh.evm_rpc_id = Some(evm_rpc_id);
+        cketh.env.tick();
+        cketh.env.tick(); //to load tECDSA key and minter's address
+        cketh
+    }
+
+    pub fn default_with_maybe_evm_rpc() -> Self {
+        Self::maybe_evm_rpc(Arc::new(new_state_machine()))
+    }
+
+    pub fn maybe_evm_rpc(env: Arc<StateMachine>) -> Self {
+        match std::env::var("EVM_RPC_CANISTER_WASM_PATH") {
+            Ok(_) => CkEthSetup::new_with_evm_rpc(env),
+            Err(_) => CkEthSetup::new(env),
+        }
     }
 
     pub fn deposit(self, params: DepositParams) -> DepositFlow {
@@ -395,6 +422,10 @@ impl CkEthSetup {
         serde_json::from_slice(&response.body).expect("failed to parse ckbtc minter log")
     }
 
+    pub fn check_events(self) -> MinterEventAssert<Self> {
+        MinterEventAssert::from_fetching_all_events(self)
+    }
+
     pub fn assert_has_unique_events_in_order(self, expected_events: &[EventPayload]) -> Self {
         MinterEventAssert::from_fetching_all_events(self)
             .assert_has_unique_events_in_order(expected_events)
@@ -549,6 +580,73 @@ impl CkEthSetup {
         }
         self
     }
+
+    pub fn max_logs_block_range(&self) -> u64 {
+        if self.evm_rpc_id.is_none() {
+            799
+        } else {
+            500
+        }
+    }
+
+    pub fn received_eth_event_topic(&self) -> serde_json::Value {
+        self.json_topic(RECEIVED_ETH_EVENT_TOPIC.to_string())
+    }
+
+    fn json_topic(&self, topic: String) -> serde_json::Value {
+        if self.evm_rpc_id.is_none() {
+            serde_json::Value::String(topic)
+        } else {
+            // The EVM-RPC canister models topics as `opt vec vec text`, see
+            // https://github.com/internet-computer-protocol/evm-rpc-canister/blob/3cce151d4c1338d83e6741afa354ccf11dff41e8/candid/evm_rpc.did#L69.
+            // This means that a simple topic such as `["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]`
+            // must actually be represented as `[["0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435"]].
+            // The JSON-RPC providers seem to be able to handle both formats.
+            serde_json::Value::Array(vec![serde_json::Value::String(topic)])
+        }
+    }
+
+    fn eth_get_logs_response_size_initial_estimate(&self) -> u64 {
+        const ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE: u64 = 100;
+        ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE + HEADER_SIZE_LIMIT
+    }
+
+    pub fn all_eth_get_logs_response_size_estimates(&self) -> Vec<u64> {
+        if self.evm_rpc_id.is_none() {
+            vec![
+                self.eth_get_logs_response_size_initial_estimate(),
+                2048 + HEADER_SIZE_LIMIT,
+                4096 + HEADER_SIZE_LIMIT,
+                8192 + HEADER_SIZE_LIMIT,
+                16_384 + HEADER_SIZE_LIMIT,
+                32_768 + HEADER_SIZE_LIMIT,
+                65_536 + HEADER_SIZE_LIMIT,
+                131_072 + HEADER_SIZE_LIMIT,
+                262_144 + HEADER_SIZE_LIMIT,
+                524_288 + HEADER_SIZE_LIMIT,
+                1_048_576 + HEADER_SIZE_LIMIT,
+                2_000_000,
+            ]
+        } else {
+            // The EVM RPC canister has a different adjustment mechanism for the response size limit.
+            // In contrast to the ckETH minter, the HEADER_SIZE_LIMIT is not added to the adjusted response size,
+            // which simply consists in doubling the estimate (the result is capped by 2_000_000 - HEADER_SIZE_LIMIT).
+            let initial_estimate = self.eth_get_logs_response_size_initial_estimate();
+            vec![
+                initial_estimate,
+                initial_estimate << 1,
+                initial_estimate << 2,
+                initial_estimate << 3,
+                initial_estimate << 4,
+                initial_estimate << 5,
+                initial_estimate << 6,
+                initial_estimate << 7,
+                initial_estimate << 8,
+                initial_estimate << 9,
+                2_000_000 - HEADER_SIZE_LIMIT,
+            ]
+        }
+    }
 }
 
 pub fn format_ethereum_address_to_eip_55(address: &str) -> String {
@@ -557,6 +655,7 @@ pub fn format_ethereum_address_to_eip_55(address: &str) -> String {
 
 fn new_state_machine() -> StateMachine {
     StateMachineBuilder::new()
+        .with_master_ecdsa_public_key()
         .with_default_canister_range()
         .build()
 }
@@ -583,6 +682,14 @@ fn minter_wasm() -> Vec<u8> {
     )
 }
 
+fn evm_rpc_wasm() -> Vec<u8> {
+    load_wasm(
+        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
+        "evm_rpc_canister",
+        &[],
+    )
+}
+
 fn install_minter(env: &StateMachine, ledger_id: CanisterId, minter_id: CanisterId) -> CanisterId {
     let args = MinterInitArgs {
         ecdsa_key_name: "master_ecdsa_public_key".parse().unwrap(),
@@ -598,6 +705,20 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId, minter_id: Canister
     env.install_existing_canister(minter_id, minter_wasm(), Encode!(&minter_arg).unwrap())
         .unwrap();
     minter_id
+}
+
+fn install_evm_rpc(env: &StateMachine, evm_rpc_id: CanisterId) {
+    let args = EvmRpcInitArgs {
+        nodes_in_subnet: 28,
+    };
+    env.install_existing_canister(evm_rpc_id, evm_rpc_wasm(), Encode!(&args).unwrap())
+        .unwrap();
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct EvmRpcInitArgs {
+    #[serde(rename = "nodesInSubnet")]
+    pub nodes_in_subnet: u32,
 }
 
 fn assert_reply(result: WasmResult) -> Vec<u8> {

@@ -294,6 +294,8 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             tip.index
         );
 
+        let tip_index = tip.index;
+
         self.sync_range_of_blocks(
             Range {
                 start: next_block_index,
@@ -305,6 +307,8 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             &mut blockchain,
         )
         .await?;
+
+        blockchain.make_rosetta_blocks_if_enabled(tip_index)?;
 
         info!(
             "You are all caught up to block {}",

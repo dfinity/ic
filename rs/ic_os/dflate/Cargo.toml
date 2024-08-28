@@ -9,4 +9,4 @@ edition = "2021"
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 libc = { workspace = true }
-tar = "0.4.40"
+tar = { workspace = true }

@@ -2,7 +2,7 @@ use crate::{archive::ArchiveCanisterWasm, blockchain::Blockchain, range_utils, r
 use ic_base_types::CanisterId;
 use ic_canister_log::{log, Sink};
 use ic_ledger_core::approvals::{
-    Approvals, ApproveError, InsufficientAllowance, PrunableApprovals,
+    AllowanceTable, AllowancesData, ApproveError, InsufficientAllowance,
 };
 use ic_ledger_core::tokens::Zero;
 use serde::{Deserialize, Serialize};
@@ -10,6 +10,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::ops::Range;
 use std::time::Duration;
 
+use crate::archive::{ArchivingGuardError, FailedToArchiveBlocks, LedgerArchivingGuard};
 use ic_ledger_core::balances::{BalanceError, Balances, BalancesStore, InspectableBalancesStore};
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, FeeCollector};
 use ic_ledger_core::timestamp::TimeStamp;
@@ -62,16 +63,16 @@ impl<Tokens> From<ApproveError<Tokens>> for TxApplyError<Tokens> {
 
 pub trait LedgerContext {
     type AccountId: std::hash::Hash + Ord + Eq + Clone;
-    type Approvals: Approvals<AccountId = Self::AccountId, Tokens = Self::Tokens>
-        + PrunableApprovals;
     type BalancesStore: BalancesStore<AccountId = Self::AccountId, Tokens = Self::Tokens> + Default;
+    type AllowancesData: AllowancesData<AccountId = Self::AccountId, Tokens = Self::Tokens>
+        + Default;
     type Tokens: TokensType;
 
     fn balances(&self) -> &Balances<Self::BalancesStore>;
     fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore>;
 
-    fn approvals(&self) -> &Self::Approvals;
-    fn approvals_mut(&mut self) -> &mut Self::Approvals;
+    fn approvals(&self) -> &AllowanceTable<Self::AllowancesData>;
+    fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData>;
 
     fn fee_collector(&self) -> Option<&FeeCollector<Self::AccountId>>;
 }
@@ -512,16 +513,13 @@ where
 /// NOTE: only one archiving task can run at each point in time.
 /// If archiving is already in process, this function returns immediately.
 pub async fn archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone, max_message_size: u64) {
-    use crate::archive::{
-        send_blocks_to_archive, ArchivingGuard, ArchivingGuardError, FailedToArchiveBlocks,
-    };
-    use std::sync::Arc;
+    use crate::archive::{send_blocks_to_archive, ArchivingGuardError};
 
     let archive_arc = LA::with_ledger(|ledger| ledger.blockchain().archive.clone());
 
     // NOTE: this guard will prevent another logical thread to start the archiving process.
-    let _archiving_guard = match ArchivingGuard::new(Arc::clone(&archive_arc)) {
-        Ok(guard) => guard,
+    let (archiving_guard, blocks_to_archive) = match blocks_to_archive::<LA>(&sink) {
+        Ok((guard, blocks)) => (guard, blocks),
         Err(ArchivingGuardError::NoArchive) => {
             return; // Archiving not enabled
         }
@@ -530,20 +528,11 @@ pub async fn archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone, max_messa
         }
     };
 
-    let blocks_to_archive = LA::with_ledger(|ledger| {
-        let archive_guard = ledger.blockchain().archive.read().unwrap();
-        let archive = archive_guard.as_ref().unwrap();
-        ledger
-            .blockchain()
-            .get_blocks_for_archiving(archive.trigger_threshold, archive.num_blocks_to_archive)
-    });
-
     if blocks_to_archive.is_empty() {
         return;
     }
 
     let num_blocks = blocks_to_archive.len();
-    log!(sink, "[ledger] archiving {} blocks", num_blocks);
 
     let result = send_blocks_to_archive(
         sink.clone(),
@@ -553,6 +542,38 @@ pub async fn archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone, max_messa
     )
     .await;
 
+    remove_archived_blocks::<LA>(archiving_guard, num_blocks, &sink, result)
+}
+
+pub fn blocks_to_archive<LA: LedgerAccess>(
+    sink: &impl Sink,
+) -> Result<(LedgerArchivingGuard<LA>, VecDeque<EncodedBlock>), ArchivingGuardError> {
+    // NOTE: this guard will prevent another logical thread to start the archiving process.
+    let archiving_guard = LedgerArchivingGuard::new()?;
+
+    let blocks_to_archive = LA::with_ledger(|ledger| {
+        let archive_guard = ledger.blockchain().archive.read().unwrap();
+        let archive = archive_guard.as_ref().unwrap();
+        ledger
+            .blockchain()
+            .get_blocks_for_archiving(archive.trigger_threshold, archive.num_blocks_to_archive)
+    });
+    if !blocks_to_archive.is_empty() {
+        log!(
+            sink,
+            "[ledger] archiving {} blocks",
+            blocks_to_archive.len()
+        );
+    }
+    Ok((archiving_guard, blocks_to_archive))
+}
+
+pub fn remove_archived_blocks<LA: LedgerAccess>(
+    _archiving_guard: LedgerArchivingGuard<LA>,
+    expected_num_blocks: usize,
+    sink: &impl Sink,
+    result: Result<usize, (usize, FailedToArchiveBlocks)>,
+) {
     LA::with_ledger_mut(|ledger| match result {
         Ok(num_sent_blocks) => ledger
             .blockchain_mut()
@@ -565,7 +586,7 @@ pub async fn archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone, max_messa
                 sink,
                 "[ledger] archived only {} out of {} blocks; error: {}",
                 num_sent_blocks,
-                num_blocks,
+                expected_num_blocks,
                 err
             );
         }

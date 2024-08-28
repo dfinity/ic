@@ -26,8 +26,8 @@ mod proptests;
 use crate::consensus::{
     block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker,
     dkg_key_manager::DkgKeyManager, finalizer::Finalizer, metrics::ConsensusMetrics,
-    notary::Notary, payload_builder::PayloadBuilderImpl, priority::get_priority_function,
-    purger::Purger, random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
+    notary::Notary, payload_builder::PayloadBuilderImpl, priority::new_bouncer, purger::Purger,
+    random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
     share_aggregator::ShareAggregator, validator::Validator,
 };
 use ic_consensus_utils::{
@@ -38,10 +38,10 @@ use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
     dkg::DkgPool,
-    ecdsa::EcdsaPool,
+    idkg::IDkgPool,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
-    p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
+    p2p::consensus::{Bouncer, BouncerFactory, ChangeSetProducer},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
@@ -52,9 +52,8 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    artifact::{ConsensusMessageId, PriorityFn},
-    artifact_kind::ConsensusArtifact,
-    consensus::ConsensusMessageHashable,
+    artifact::ConsensusMessageId,
+    consensus::{ConsensusMessage, ConsensusMessageHashable},
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
     replica_version::ReplicaVersion,
@@ -147,7 +146,7 @@ impl ConsensusImpl {
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
         query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
-        ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
+        idkg_pool: Arc<RwLock<dyn IDkgPool>>,
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
         message_routing: Arc<dyn MessageRouting>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -232,7 +231,7 @@ impl ConsensusImpl {
                 crypto.clone(),
                 payload_builder.clone(),
                 dkg_pool.clone(),
-                ecdsa_pool.clone(),
+                idkg_pool.clone(),
                 state_manager.clone(),
                 stable_registry_version_age,
                 metrics_registry.clone(),
@@ -375,23 +374,23 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
     /// There are two decisions that [ConsensusImpl] makes:
     ///
     /// 1. It must return immediately if one of the subcomponent returns a
-    /// non-empty [ChangeSet]. It is important that a [ChangeSet] is fully
-    /// applied to the pool or timer before another subcomponent uses
-    /// them, because each subcomponent expects to see full state in order to
-    /// make correct decisions on what to do next.
+    ///    non-empty [ChangeSet]. It is important that a [ChangeSet] is fully
+    ///    applied to the pool or timer before another subcomponent uses
+    ///    them, because each subcomponent expects to see full state in order to
+    ///    make correct decisions on what to do next.
     ///
     /// 2. The order in which subcomponents are called also matters. At the
-    /// moment it is important to call finalizer first, because otherwise
-    /// we'll just keep producing notarized blocks indefinitely without
-    /// finalizing anything, due to the above decision of having to return
-    /// early.
-    /// Additionally, we call the purger after every function that may increment
-    /// the finalized or CUP height (currently aggregation & validation), as
-    /// these heights determine which artifacts we can purge. This reduces the
-    /// number of excess artifacts, which allows us to maintain a stricter bound
-    /// on the memory consumption of our advertised validated pool.
-    /// The order of the rest subcomponents decides whom is given
-    /// a priority, but it should not affect liveness or correctness.
+    ///    moment it is important to call finalizer first, because otherwise
+    ///    we'll just keep producing notarized blocks indefinitely without
+    ///    finalizing anything, due to the above decision of having to return
+    ///    early.
+    ///    Additionally, we call the purger after every function that may increment
+    ///    the finalized or CUP height (currently aggregation & validation), as
+    ///    these heights determine which artifacts we can purge. This reduces the
+    ///    number of excess artifacts, which allows us to maintain a stricter bound
+    ///    on the memory consumption of our advertised validated pool.
+    ///    The order of the rest subcomponents decides whom is given
+    ///    a priority, but it should not affect liveness or correctness.
     fn on_state_change(&self, pool: &T) -> ChangeSet {
         let pool_reader = PoolReader::new(pool);
         trace!(self.log, "on_state_change");
@@ -589,12 +588,10 @@ impl ConsensusGossipImpl {
     }
 }
 
-impl<Pool: ConsensusPool> PriorityFnAndFilterProducer<ConsensusArtifact, Pool>
-    for ConsensusGossipImpl
-{
-    /// Return a priority function that matches the given consensus pool.
-    fn get_priority_function(&self, pool: &Pool) -> PriorityFn<ConsensusMessageId, ()> {
-        get_priority_function(pool, self.message_routing.expected_batch_height())
+impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessage, Pool> for ConsensusGossipImpl {
+    /// Return a bouncer function that matches the given consensus pool.
+    fn new_bouncer(&self, pool: &Pool) -> Bouncer<ConsensusMessageId> {
+        new_bouncer(pool, self.message_routing.expected_batch_height())
     }
 }
 
@@ -612,7 +609,7 @@ pub fn setup(
     canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
     query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
-    ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
+    idkg_pool: Arc<RwLock<dyn IDkgPool>>,
     dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
     message_routing: Arc<dyn MessageRouting>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -645,7 +642,7 @@ pub fn setup(
             canister_http_payload_builder,
             query_stats_payload_builder,
             dkg_pool,
-            ecdsa_pool,
+            idkg_pool,
             dkg_key_manager,
             message_routing.clone(),
             state_manager,
@@ -702,7 +699,7 @@ mod tests {
             replica_config,
             state_manager,
             dkg_pool,
-            ecdsa_pool,
+            idkg_pool,
             ..
         } = dependencies_with_subnet_params(pool_config, subnet_id, vec![(1, record)]);
         state_manager
@@ -731,7 +728,7 @@ mod tests {
             Arc::new(FakeCanisterHttpPayloadBuilder::new()),
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             dkg_pool,
-            ecdsa_pool,
+            idkg_pool,
             Arc::new(Mutex::new(DkgKeyManager::new(
                 metrics_registry.clone(),
                 crypto,
