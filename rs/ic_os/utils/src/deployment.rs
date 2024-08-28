@@ -79,6 +79,31 @@ mod test {
     use once_cell::sync::Lazy;
     use serde_json::{json, Value};
 
+    const DEPLOYMENT_STR: &str = r#"{
+      "deployment": {
+        "name": "mainnet"
+      },
+      "logging": {
+        "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
+      },
+      "nns": {
+        "url": "https://dfinity.org/"
+      },
+      "resources": {
+        "memory": "490",
+        "cpu_mode": "kvm"
+      }
+    }"#;
+    
+        static DEPLOYMENT_STRUCT: Lazy<DeploymentJson> = Lazy::new(|| {
+            DeploymentJson {
+                deployment: Deployment { name: "mainnet".to_string() },
+                logging: Logging { hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string() },
+                nns: Nns { url: vec![Url::parse("https://dfinity.org").unwrap()] },
+                resources: Resources { memory: 490, cpu_mode: Some("kvm".to_string()) },
+            }
+        });
+
     const DEPLOYMENT_STR_NO_CPU_MODE: &str = r#"{
   "deployment": {
     "name": "mainnet"
@@ -187,6 +212,10 @@ mod test {
 
     #[test]
     fn read_deployment() {
+        let parsed_deployment: DeploymentJson = { serde_json::from_str(DEPLOYMENT_STR).unwrap() };
+
+        assert_eq!(*DEPLOYMENT_STRUCT, parsed_deployment);
+
         let parsed_deployment: DeploymentJson = { serde_json::from_str(DEPLOYMENT_STR_NO_CPU_MODE).unwrap() };
 
         assert_eq!(*DEPLOYMENT_STRUCT_NO_CPU_MODE, parsed_deployment);
