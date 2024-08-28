@@ -63,15 +63,15 @@ MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
-# Allows temporarily disabling TLA checks from the command line; 
+# Allows temporarily disabling TLA checks from the command line;
 # just pass `--define tla_disabled=true` to your Bazel command
 # See feature_flags.bzl for how to disable TLA checks permanently
 # (in the CI)
 config_setting(
     name = "tla_disabled",
     values = {
-        "define": "tla_disabled=true"
-    }
+        "define": "tla_disabled=true",
+    },
 )
 
 cargo_build_script(
@@ -101,8 +101,9 @@ rust_library(
     crate_name = "ic_nervous_system_common",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = DEPENDENCIES + [":build_script"] + 
-        ["@crate_index//:tokio"],
+    deps = DEPENDENCIES + [":build_script"] + [
+        "@crate_index//:tokio",
+    ],
 )
 
 rust_test(
