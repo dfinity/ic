@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import atexit
 import functools
 import os
-import shutil
 import site
 import sys
 import time
@@ -12,7 +10,6 @@ from dataclasses import dataclass
 from ipaddress import IPv6Address
 from multiprocessing import Pool
 from pathlib import Path
-from tempfile import mkdtemp
 from typing import Any, List, Optional
 
 import fabric
@@ -576,8 +573,9 @@ def main():
         assert_ssh_connectivity(file_share_endpoint, args.file_share_ssh_key)
 
         if args.inject_image_ipv6_prefix:
-            tmpdir = mkdtemp()
-            atexit.register(lambda: shutil.rmtree(tmpdir))
+            tmpdir = os.getenv("ICOS_TMPDIR")
+            if not tmpdir:
+                raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
             modified_image_path = inject_config_into_image(
                 Path(args.inject_configuration_tool),
                 Path(tmpdir),
