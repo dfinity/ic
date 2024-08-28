@@ -573,7 +573,7 @@ pub struct SandboxSafeSystemState {
     reserved_balance_limit: Option<Cycles>,
     call_context_balance: Option<Cycles>,
     call_context_deadline: Option<CoarseTime>,
-    pub(super) cycles_account_manager: CyclesAccountManager,
+    cycles_account_manager: CyclesAccountManager,
     // None indicates that we are in a context where the canister cannot
     // register callbacks (e.g. running the `start` method when installing a
     // canister.)
