@@ -9456,6 +9456,7 @@ dependencies = [
  "ic-base-types",
  "ic-nervous-system-clients",
  "ic-nns-constants",
+ "ic-sns-governance",
  "ic-sns-wasm",
  "serde",
  "tempfile",
