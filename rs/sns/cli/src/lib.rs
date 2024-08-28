@@ -6,6 +6,7 @@ use crate::{
 use anyhow::{anyhow, bail, Context, Result};
 use candid::{CandidType, Decode, Encode, IDLArgs};
 use clap::Parser;
+use ic_agent::Agent;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
@@ -39,6 +40,7 @@ pub mod neuron_id_to_candid_subaccount;
 pub mod prepare_canisters;
 pub mod propose;
 pub mod unit_helpers;
+mod utils;
 
 #[cfg(test)]
 mod tests;
@@ -76,6 +78,12 @@ pub enum SubCommand {
     Propose(ProposeArgs),
     /// Converts a Neuron ID to a blob for use in ManageNeuron.
     NeuronIdToCandidSubaccount(NeuronIdToCandidSubaccountArgs),
+}
+
+impl CliArgs {
+    pub fn agent(&self) -> Result<Agent> {
+        crate::utils::get_mainnet_agent()
+    }
 }
 
 /// The arguments used to configure a SNS testflight deployment

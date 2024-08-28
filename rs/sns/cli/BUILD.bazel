@@ -19,6 +19,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:clap",
     "@crate_index//:hex",
+    "@crate_index//:ic-agent",
     "@crate_index//:itertools",
     "@crate_index//:json-patch",
     "@crate_index//:pretty_assertions",
@@ -27,6 +28,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:serde_yaml",
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
+    "@crate_index//:tokio",
 ]
 
 # Each target declared in this file may choose either these (release-ready)

@@ -16,6 +16,8 @@ fn main() -> Result<()> {
         }
     };
 
+    let agent = args.agent()?;
+
     match args.sub_command {
         SubCommand::DeployTestflight(args) => deploy_testflight(args),
         SubCommand::AddSnsWasmForTests(args) => add_sns_wasm_for_tests(args),
