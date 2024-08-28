@@ -79,7 +79,7 @@ mod test {
     use once_cell::sync::Lazy;
     use serde_json::{json, Value};
 
-    const DEPLOYMENT_STR: &str = r#"{
+    const DEPLOYMENT_STR_NO_CPU_MODE: &str = r#"{
   "deployment": {
     "name": "mainnet"
   },
@@ -94,7 +94,7 @@ mod test {
   }
 }"#;
 
-    static DEPLOYMENT_VALUE: Lazy<Value> = Lazy::new(|| {
+    static DEPLOYMENT_VALUE_NO_CPU_MODE: Lazy<Value> = Lazy::new(|| {
         json!({
               "deployment": {
                 "name": "mainnet"
@@ -112,7 +112,7 @@ mod test {
         )
     });
 
-    static DEPLOYMENT_STRUCT: Lazy<DeploymentJson> = Lazy::new(|| {
+    static DEPLOYMENT_STRUCT_NO_CPU_MODE: Lazy<DeploymentJson> = Lazy::new(|| {
         DeploymentJson {
             deployment: Deployment { name: "mainnet".to_string() },
             logging: Logging { hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string() },
@@ -121,7 +121,7 @@ mod test {
         }
     });
 
-    const CPU_DEPLOYMENT_STR: &str = r#"{
+    const QEMU_CPU_DEPLOYMENT_STR: &str = r#"{
   "deployment": {
     "name": "mainnet"
   },
@@ -133,11 +133,11 @@ mod test {
   },
   "resources": {
     "memory": "490",
-    "cpu": "qemu"
+    "cpu_mode": "qemu"
   }
 }"#;
 
-    static CPU_DEPLOYMENT_STRUCT: Lazy<DeploymentJson> = Lazy::new(|| {
+    static QEMU_CPU_DEPLOYMENT_STRUCT: Lazy<DeploymentJson> = Lazy::new(|| {
         DeploymentJson {
             deployment: Deployment { name: "mainnet".to_string() },
             logging: Logging { hosts: "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443".to_string() },
@@ -187,14 +187,14 @@ mod test {
 
     #[test]
     fn read_deployment() {
-        let parsed_deployment: DeploymentJson = { serde_json::from_str(DEPLOYMENT_STR).unwrap() };
+        let parsed_deployment: DeploymentJson = { serde_json::from_str(DEPLOYMENT_STR_NO_CPU_MODE).unwrap() };
 
-        assert_eq!(*DEPLOYMENT_STRUCT, parsed_deployment);
+        assert_eq!(*DEPLOYMENT_STRUCT_NO_CPU_MODE, parsed_deployment);
 
         let parsed_cpu_deployment: DeploymentJson =
-            { serde_json::from_str(CPU_DEPLOYMENT_STR).unwrap() };
+            { serde_json::from_str(QEMU_CPU_DEPLOYMENT_STR).unwrap() };
 
-        assert_eq!(*CPU_DEPLOYMENT_STRUCT, parsed_cpu_deployment);
+        assert_eq!(*QEMU_CPU_DEPLOYMENT_STRUCT, parsed_cpu_deployment);
 
         let parsed_multi_url_deployment: DeploymentJson =
             { serde_json::from_str(MULTI_URL_STR).unwrap() };
@@ -214,22 +214,22 @@ mod test {
         // DeserializeOwned is used by serde_json::from_reader, which is the
         // main entrypoint of this code, in practice.
         let parsed_deployment: DeploymentJson =
-            { serde_json::from_value(DEPLOYMENT_VALUE.clone()).unwrap() };
+            { serde_json::from_value(DEPLOYMENT_VALUE_NO_CPU_MODE.clone()).unwrap() };
 
-        assert_eq!(*DEPLOYMENT_STRUCT, parsed_deployment);
+        assert_eq!(*DEPLOYMENT_STRUCT_NO_CPU_MODE, parsed_deployment);
     }
 
     #[test]
     fn write_deployment() {
         let written_deployment =
-            serde_json::to_string_pretty::<DeploymentJson>(&DEPLOYMENT_STRUCT).unwrap();
+            serde_json::to_string_pretty::<DeploymentJson>(&DEPLOYMENT_STRUCT_NO_CPU_MODE).unwrap();
 
-        assert_eq!(DEPLOYMENT_STR, written_deployment);
+        assert_eq!(DEPLOYMENT_STR_NO_CPU_MODE, written_deployment);
 
         let written_cpu_deployment =
-            serde_json::to_string_pretty::<DeploymentJson>(&CPU_DEPLOYMENT_STRUCT).unwrap();
+            serde_json::to_string_pretty::<DeploymentJson>(&QEMU_CPU_DEPLOYMENT_STRUCT).unwrap();
 
-        assert_eq!(CPU_DEPLOYMENT_STR, written_cpu_deployment);
+        assert_eq!(QEMU_CPU_DEPLOYMENT_STR, written_cpu_deployment);
 
         let written_multi_url_deployment =
             serde_json::to_string_pretty::<DeploymentJson>(&MULTI_URL_STRUCT).unwrap();
