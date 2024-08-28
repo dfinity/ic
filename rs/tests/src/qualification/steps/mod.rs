@@ -1,18 +1,4 @@
-use std::str::FromStr;
-use std::{collections::BTreeMap, sync::Arc};
-
-use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_registry::RegistryValue;
-use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
-use ic_protobuf::registry::subnet::v1::SubnetRecord;
-use ic_registry_client_helpers::node::NodeRecord;
-use ic_registry_client_helpers::node::NodeRegistry;
-use ic_registry_keys::NODE_RECORD_KEY_PREFIX;
-use ic_registry_keys::SUBNET_RECORD_KEY_PREFIX;
-use ic_registry_local_registry::LocalRegistry;
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_types::RegistryVersion;
-use ic_types::{NodeId, PrincipalId};
 use slog::{error, info};
 use tokio::runtime::Handle;
 
@@ -21,7 +7,7 @@ pub mod retire_blessed_version;
 pub mod update_subnet_type;
 
 pub trait Step: Sync + Send {
-    fn execute(&self, env: TestEnv, rt: Handle, registry: RegistryWrapper) -> anyhow::Result<()>;
+    fn execute(&self, env: TestEnv, rt: Handle) -> anyhow::Result<()>;
 
     fn max_retries(&self) -> usize;
 
@@ -33,13 +19,10 @@ pub trait Step: Sync + Send {
         let logger = env.logger();
         info!(logger, "Running step: {}", self.name());
 
-        let wrapper = RegistryWrapper::new(env.get_registry()?);
-        rt.block_on(wrapper.sync_with_nns())?;
-
         let mut max_retries = self.max_retries();
         loop {
             max_retries -= 1;
-            match self.execute(env.clone(), rt.clone(), wrapper.clone()) {
+            match self.execute(env.clone(), rt.clone()) {
                 Ok(_) => break,
                 Err(e) => {
                     let formatted = format!("Step `{}` failed with error: {:?}", self.name(), e);
@@ -59,119 +42,5 @@ pub trait Step: Sync + Send {
             self.max_retries() - max_retries
         );
         Ok(())
-    }
-}
-
-trait RegistryEntry: RegistryValue {
-    const KEY_PREFIX: &'static str;
-}
-
-impl RegistryEntry for BlessedReplicaVersions {
-    const KEY_PREFIX: &'static str = "blessed_replica_versions";
-}
-
-impl RegistryEntry for SubnetRecord {
-    const KEY_PREFIX: &'static str = SUBNET_RECORD_KEY_PREFIX;
-}
-
-impl RegistryEntry for NodeRecord {
-    const KEY_PREFIX: &'static str = NODE_RECORD_KEY_PREFIX;
-}
-
-#[derive(Clone)]
-pub struct RegistryWrapper {
-    inner: Arc<LocalRegistry>,
-}
-
-impl RegistryWrapper {
-    fn new(registry: Arc<LocalRegistry>) -> Self {
-        Self { inner: registry }
-    }
-
-    async fn sync_with_nns(&self) -> anyhow::Result<()> {
-        self.inner
-            .sync_with_nns()
-            .await
-            .map_err(anyhow::Error::from)
-    }
-
-    async fn sync_with_local_store(&self) -> anyhow::Result<()> {
-        self.inner
-            .sync_with_local_store()
-            .await
-            .map_err(anyhow::Error::from)
-    }
-
-    fn get_blessed_versins(&self) -> anyhow::Result<Vec<String>> {
-        Ok(self
-            .get_family_entries::<BlessedReplicaVersions>()?
-            .first_entry()
-            .ok_or(anyhow::anyhow!("No blessed replica versions found"))?
-            .get()
-            .to_owned()
-            .blessed_version_ids)
-    }
-
-    fn get_subnet_id_from_node_id(
-        &self,
-        principal: &String,
-    ) -> anyhow::Result<Option<PrincipalId>> {
-        Ok(self
-            .inner
-            .get_subnet_id_from_node_id(
-                NodeId::new(PrincipalId::from_str(principal)?),
-                self.get_latest_version(),
-            )?
-            .map(|s| s.get()))
-    }
-
-    fn get_latest_version(&self) -> RegistryVersion {
-        self.inner.get_latest_version()
-    }
-
-    fn get_family_entries<T: RegistryEntry + Default>(
-        &self,
-    ) -> anyhow::Result<BTreeMap<String, T>> {
-        let family = self.get_family_entries_versioned::<T>()?;
-        Ok(family.into_iter().map(|(k, (_, v))| (k, v)).collect())
-    }
-
-    fn get_family_entries_versioned<T: RegistryEntry + Default>(
-        &self,
-    ) -> anyhow::Result<BTreeMap<String, (u64, T)>> {
-        self.get_family_entries_of_version(self.get_latest_version())
-    }
-
-    fn get_family_entries_of_version<T: RegistryEntry + Default>(
-        &self,
-        version: RegistryVersion,
-    ) -> anyhow::Result<BTreeMap<String, (u64, T)>> {
-        let prefix_length = T::KEY_PREFIX.len();
-        Ok(self
-            .inner
-            .get_key_family(T::KEY_PREFIX, version)?
-            .iter()
-            .filter_map(|key| {
-                let r = self
-                    .inner
-                    .get_versioned_value(key, version)
-                    .unwrap_or_else(|_| {
-                        panic!(
-                            "Failed to get entry {} for type {}",
-                            key,
-                            std::any::type_name::<T>()
-                        )
-                    });
-                r.as_ref().map(|v| {
-                    (
-                        key[prefix_length..].to_string(),
-                        (
-                            r.version.get(),
-                            T::decode(v.as_slice()).expect("Invalid registry value"),
-                        ),
-                    )
-                })
-            })
-            .collect())
     }
 }

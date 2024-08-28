@@ -2,7 +2,7 @@ use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
 use ic_system_test_driver::{
-    driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl},
+    driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot},
     nns::{
         get_governance_canister, submit_update_elected_replica_versions_proposal,
         vote_execute_proposal_assert_executed,
@@ -24,9 +24,8 @@ impl Step for RetireBlessedVersions {
         &self,
         env: ic_system_test_driver::driver::test_env::TestEnv,
         rt: tokio::runtime::Handle,
-        registry: super::RegistryWrapper,
     ) -> anyhow::Result<()> {
-        let blessed_versions = registry.get_blessed_versins()?;
+        let blessed_versions = env.topology_snapshot().blessed_replica_versions()?;
 
         let versions_to_unelect = self
             .versions

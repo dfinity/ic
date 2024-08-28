@@ -7,7 +7,7 @@ use ic_system_test_driver::driver::test_env_api::{
 use slog::info;
 use tokio::runtime::Handle;
 
-use super::{RegistryWrapper, Step};
+use super::Step;
 
 #[derive(Clone)]
 pub struct EnsureBlessedVersion {
@@ -19,9 +19,8 @@ impl Step for EnsureBlessedVersion {
         &self,
         env: ic_system_test_driver::driver::test_env::TestEnv,
         rt: Handle,
-        registry: RegistryWrapper,
     ) -> anyhow::Result<()> {
-        let blessed_versions = registry.get_blessed_versins()?;
+        let blessed_versions = env.topology_snapshot().blessed_replica_versions()?;
         if blessed_versions.contains(&self.version) {
             info!(env.logger(), "Version `{}` already blessed", self.version);
             return Ok(());
@@ -38,7 +37,7 @@ impl Step for EnsureBlessedVersion {
         ));
 
         // This call updates the local registry
-        rt.block_on(
+        let new_snapshot = rt.block_on(
             env.topology_snapshot()
                 .block_for_newer_registry_version_within_duration(
                     Duration::from_secs(10 * 60),
@@ -46,8 +45,7 @@ impl Step for EnsureBlessedVersion {
                 ),
         )?;
 
-        rt.block_on(registry.sync_with_local_store())?;
-        let blessed_versions = registry.get_blessed_versins()?;
+        let blessed_versions = new_snapshot.blessed_replica_versions()?;
 
         match blessed_versions.contains(&self.version) {
             true => Ok(()),

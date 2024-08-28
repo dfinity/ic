@@ -5,7 +5,10 @@ use ic_system_test_driver::driver::{
 };
 use ic_tests::qualification::{
     defs::QualificationExecutor,
-    steps::{ensure_blessed_version::EnsureBlessedVersion, update_subnet_type::UpdateSubnetType},
+    steps::{
+        ensure_blessed_version::EnsureBlessedVersion,
+        retire_blessed_version::RetireBlessedVersions, update_subnet_type::UpdateSubnetType,
+    },
     ConfigurableSubnet, ConfigurableUnassignedNodes, IcConfig, SubnetSimple,
 };
 use std::time::Duration;
@@ -94,6 +97,25 @@ pub fn main() -> anyhow::Result<()> {
                         Box::new(UpdateSubnetType {
                             subnet_type: SubnetType::System,
                             version: to_version.clone(),
+                        }),
+                        // Retire the initial versions because
+                        // it used a disk-img
+                        Box::new(RetireBlessedVersions {
+                            versions: vec![initial_version.clone()],
+                        }),
+                        // Re-bless the initial version with
+                        // update-imgs
+                        Box::new(EnsureBlessedVersion {
+                            version: initial_version.clone(),
+                        }),
+                        // Downgrade to the inital version
+                        Box::new(UpdateSubnetType {
+                            subnet_type: SubnetType::Application,
+                            version: initial_version.clone(),
+                        }),
+                        Box::new(UpdateSubnetType {
+                            subnet_type: SubnetType::System,
+                            version: initial_version.clone(),
                         }),
                     ],
                 );
