@@ -12,6 +12,7 @@ use std::{
     fmt,
     hash::{Hash, Hasher},
 };
+use strum_macros::EnumIter;
 
 /// The type representing principals as described in the [interface
 /// spec](https://internetcomputer.org/docs/current/references/ic-interface-spec#principal).
@@ -164,15 +165,38 @@ impl std::str::FromStr for PrincipalId {
     }
 }
 
-/// Some principal ids have special classes (system-generated,
-/// self-authenticating, derived), see <https://internetcomputer.org/docs/current/references/ic-interface-spec#id-classes>
-///
-/// The following functions allow creating and testing for the special forms.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
+pub enum Class {
+    Opaque = 1,
+    SelfAuthenticating = 2,
+    Derived = 3,
+    Anonymous = 4,
+}
+
+impl TryFrom<u8> for Class {
+    type Error = String;
+
+    fn try_from(src: u8) -> Result<Class, String> {
+        match src {
+            1 => Ok(Class::Opaque),
+            2 => Ok(Class::SelfAuthenticating),
+            3 => Ok(Class::Derived),
+            4 => Ok(Class::Anonymous),
+            garbage => Err(format!("{} is not a valid Class.", garbage)),
+        }
+    }
+}
+
 impl PrincipalId {
-    const TYPE_OPAQUE: u8 = 0x01;
-    const TYPE_SELF_AUTH: u8 = 0x02;
-    const TYPE_DERIVED: u8 = 0x03;
-    const TYPE_ANONYMOUS: u8 = 0x04;
+    /// Some principal ids have special classes (system-generated,
+    /// self-authenticating, derived), see <https://internetcomputer.org/docs/current/references/ic-interface-spec#id-classes>
+    pub fn class(&self) -> Result<Class, String> {
+        let last = self
+            .as_slice()
+            .last()
+            .ok_or_else(|| "Empty PrincipalId.".to_string())?;
+        Class::try_from(*last)
+    }
 
     /// Opaque ids are usually used for system-internal ids (maybe system
     /// canisters, maybe test ids). Instead of using this directly, consider
@@ -180,7 +204,7 @@ impl PrincipalId {
     /// one can easily check here that all such ids are disjoint.
     pub(crate) fn new_opaque(blob: &[u8]) -> Self {
         let mut bytes = blob.to_vec();
-        bytes.push(Self::TYPE_OPAQUE);
+        bytes.push(Class::Opaque as u8);
         PrincipalId(Principal::try_from_slice(&bytes[..]).expect("Input blob too long."))
     }
 
@@ -192,7 +216,7 @@ impl PrincipalId {
         mut blob: [u8; Self::MAX_LENGTH_IN_BYTES],
         len: usize,
     ) -> Self {
-        blob[len] = Self::TYPE_OPAQUE;
+        blob[len] = Class::Opaque as u8;
         PrincipalId::new(len + 1, blob)
     }
 
@@ -271,7 +295,7 @@ impl PrincipalId {
     pub fn new_self_authenticating(pubkey: &[u8]) -> Self {
         let mut id: [u8; 29] = [0; 29];
         id[..28].copy_from_slice(&Sha224::hash(pubkey));
-        id[28] = Self::TYPE_SELF_AUTH;
+        id[28] = Class::SelfAuthenticating as u8;
         // id has fixed length of 29, safe to unwrap here
         PrincipalId(Principal::try_from_slice(&id).unwrap())
     }
@@ -281,7 +305,7 @@ impl PrincipalId {
         blob.insert(0, blob.len() as u8);
         blob.extend(seed);
         let mut bytes = Sha224::hash(&blob[..]).to_vec();
-        bytes.push(Self::TYPE_DERIVED);
+        bytes.push(Class::Derived as u8);
         PrincipalId::try_from(&bytes[..]).unwrap()
     }
 
@@ -294,7 +318,7 @@ impl PrincipalId {
         if blob.len() != Self::HASH_LEN_IN_BYTES + 1 {
             return false;
         }
-        if blob.last() != Some(&Self::TYPE_SELF_AUTH) {
+        if self.class() != Ok(Class::SelfAuthenticating) {
             return false;
         }
         if Sha224::hash(pubkey) != blob[0..Self::HASH_LEN_IN_BYTES] {
@@ -308,7 +332,7 @@ impl PrincipalId {
         if blob.len() != Self::HASH_LEN_IN_BYTES + 1 {
             return false;
         }
-        if blob.last() != Some(&Self::TYPE_SELF_AUTH) {
+        if self.class() != Ok(Class::SelfAuthenticating) {
             return false;
         }
         true
@@ -319,7 +343,7 @@ impl PrincipalId {
     }
 
     pub fn is_anonymous(&self) -> bool {
-        self.as_slice() == [Self::TYPE_ANONYMOUS]
+        self.as_slice() == [Class::Anonymous as u8]
     }
 }
 
@@ -338,7 +362,7 @@ impl<'a> Arbitrary<'a> for PrincipalId {
                 // non-anonymous principal cannot have type ANONYMOUS
                 // adapt by changing the last byte.
                 let last = result.last_mut().unwrap();
-                if *last == Self::TYPE_ANONYMOUS {
+                if self.class() == Ok(Class::Anonymous) {
                     *last = u8::MAX
                 }
                 PrincipalId::try_from(&result[..]).unwrap()
@@ -455,6 +479,7 @@ mod tests {
     use proptest::collection::vec as pvec;
     use proptest::prelude::*;
     use std::str::FromStr;
+    use strum::IntoEnumIterator;
 
     fn arb_principal_id() -> BoxedStrategy<PrincipalId> {
         prop_oneof![
@@ -694,5 +719,26 @@ mod tests {
             hash_id_slice(&[4, 0, 0, 0, 0, 0, 0, 0, 253, 1]),
             7553483959829495483
         );
+    }
+
+    #[test]
+    fn test_class_round_trip() {
+        let mut count = 0;
+        for class in Class::iter() {
+            assert_eq!(Class::try_from(class as u8), Ok(class));
+            count += 1;
+        }
+        // This is to make sure the above loop actually does something interesting.
+        assert_eq!(count, 4);
+
+        assert!(Class::try_from(42).is_err());
+    }
+
+    #[test]
+    fn test_class() {
+        assert_eq!(PrincipalId::new_opaque(&[42][..]).class(), Ok(Class::Opaque));
+        assert_eq!(PrincipalId::new_self_authenticating(&[42][..]).class(), Ok(Class::SelfAuthenticating));
+        assert_eq!(PrincipalId::new_derived(&PrincipalId::new_user_test_id(42), &[42][..]).class(), Ok(Class::Derived));
+        assert_eq!(PrincipalId::new_anonymous().class(), Ok(Class::Anonymous));
     }
 }

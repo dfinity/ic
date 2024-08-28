@@ -9,7 +9,7 @@ filegroup(
     srcs = glob(["proto/**"]),
 )
 
-COMMON_DEPS = [
+DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/sha2",
     "//rs/phantom_newtype",
@@ -20,6 +20,27 @@ COMMON_DEPS = [
     "@crate_index//:comparable",
     "@crate_index//:prost",
     "@crate_index//:serde",
+    "@crate_index//:strum",
+] + select({
+    "//bazel:fuzzing_code_enabled": ["@crate_index//:arbitrary"],
+    "//conditions:default": [],
+})
+
+PROC_MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:strum_macros",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:assert_matches",
+    "@crate_index//:proptest",
+    "@crate_index//:serde_cbor",
+]
+
+PROC_MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:proptest-derive",
 ]
 
 rust_library(
@@ -37,25 +58,15 @@ rust_library(
         "//conditions:default": [],
     }),
     version = "0.9.0",
-    deps = COMMON_DEPS + select({
-        "//bazel:fuzzing_code_enabled": ["@crate_index//:arbitrary"],
-        "//conditions:default": [],
-    }),
+    proc_macro_deps = PROC_MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
 )
 
 rust_test(
     name = "base_types_test",
     crate = ":base_types",
-    proc_macro_deps = [
-        # Keep sorted.
-        "@crate_index//:proptest-derive",
-    ],
-    deps = [
-        # Keep sorted.
-        "@crate_index//:assert_matches",
-        "@crate_index//:proptest",
-        "@crate_index//:serde_cbor",
-    ],
+    proc_macro_deps = PROC_MACRO_DEPENDENCIES + PROC_MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 generated_files_check(

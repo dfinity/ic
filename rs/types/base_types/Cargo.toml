@@ -17,6 +17,8 @@ ic-protobuf = { path = "../../protobuf" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prost = { workspace = true }
 serde = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

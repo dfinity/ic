@@ -14,8 +14,8 @@ mod principal_id;
 pub use canister_id::{CanisterId, CanisterIdError, CanisterIdError as CanisterIdBlobParseError};
 use ic_protobuf::state::canister_state_bits::v1::SnapshotId as pbSnapshot;
 pub use principal_id::{
-    PrincipalId, PrincipalIdError, PrincipalIdError as PrincipalIdBlobParseError,
-    PrincipalIdError as PrincipalIdParseError,
+    Class as PrincipalIdClass, PrincipalId, PrincipalIdError, PrincipalIdError as
+    PrincipalIdBlobParseError, PrincipalIdError as PrincipalIdParseError,
 };
 
 pub struct RegistryVersionTag {}
