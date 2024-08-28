@@ -1314,7 +1314,7 @@ impl PoolRefillTask {
                 match query_result {
                     Ok(slice) => {
                         let logger = log.clone();
-                        let fut = tokio::task::spawn_blocking(move || {
+                        let res = tokio::task::spawn_blocking(move || {
                             if witness_begin != msg_begin {
                                 // Pulled a stream suffix, append to pooled slice.
                                 pool.lock()
@@ -1326,8 +1326,9 @@ impl PoolRefillTask {
                                     .unwrap()
                                     .put(subnet_id, slice, registry_version, log)
                             }
-                        });
-                        match fut.await {
+                        })
+                        .await;
+                        match res {
                             Ok(res) => {
                                 let status = match res {
                                     Ok(()) => STATUS_SUCCESS,
