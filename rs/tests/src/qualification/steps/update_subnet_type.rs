@@ -1,13 +1,17 @@
-use std::{str::FromStr, time::Duration};
+use std::str::FromStr;
 
-use ic_consensus_system_test_utils::upgrade::deploy_guestos_to_all_subnet_nodes;
+use futures::future::join_all;
+use ic_consensus_system_test_utils::upgrade::{
+    assert_assigned_replica_version, deploy_guestos_to_all_subnet_nodes,
+};
 use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType};
-use ic_registry_client_helpers::node::NodeRecord;
-use ic_system_test_driver::driver::test_env_api::GetFirstHealthyNodeSnapshot;
+use ic_system_test_driver::driver::test_env_api::{
+    GetFirstHealthyNodeSnapshot, HasTopologySnapshot, IcNodeContainer, TopologySnapshot,
+};
 use ic_types::PrincipalId;
-use reqwest::Client;
+use itertools::Itertools;
 use slog::{info, Logger};
-use tokio::{runtime::Handle, try_join};
+use tokio::runtime::Handle;
 
 use super::Step;
 
@@ -49,6 +53,8 @@ impl Step for UpdateSubnetType {
                 &ic_types::ReplicaVersion::try_from(self.version.clone())?,
                 PrincipalId::from_str(&key)?.into(),
             ));
+            let new_topology =
+                rt.block_on(env.topology_snapshot().block_for_newer_registry_version())?;
             rt.block_on(registry.sync_with_nns())?;
 
             let (curr_subnet_id, current_subnet) = registry
@@ -77,24 +83,15 @@ impl Step for UpdateSubnetType {
                 ));
             }
 
-            let nodes = registry
-                .get_family_entries::<NodeRecord>()?
-                .into_iter()
-                .filter_map(|(principal, node)| {
-                    let subnet_id = registry
-                        .get_subnet_id_from_node_id(&principal)
-                        .unwrap_or_else(|_| {
-                            panic!("Failed to find subnet id from node id {}", principal)
-                        });
-
-                    match subnet_id {
-                        Some(subnet_id) if subnet_id.eq(&curr_subnet_id) => Some(node),
-                        _ => None,
-                    }
-                })
-                .collect();
-
-            rt.block_on(self.wait_for_upgrade(&nodes, env.logger(), curr_subnet_id))?
+            // Will panic if not upgraded
+            let handle = rt.clone();
+            rt.block_on(assert_version_on_all_nodes(
+                new_topology,
+                curr_subnet_id,
+                env.logger(),
+                self.version.clone(),
+                handle,
+            ));
         }
 
         Ok(())
@@ -105,64 +102,27 @@ impl Step for UpdateSubnetType {
     }
 }
 
-impl UpdateSubnetType {
-    fn max_retries_upgrade(&self) -> usize {
-        100
-    }
-    fn backoff(&self) -> Duration {
-        Duration::from_secs(15)
-    }
-    fn timeout(&self) -> Duration {
-        Duration::from_secs(30)
-    }
+async fn assert_version_on_all_nodes(
+    snapshot: TopologySnapshot,
+    subnet_id: PrincipalId,
+    logger: Logger,
+    version: String,
+    rt: Handle,
+) {
+    let threads = snapshot
+        .subnets()
+        .into_iter()
+        .filter(|subnet| subnet.subnet_id.get().eq(&subnet_id))
+        .flat_map(|subnet| {
+            subnet.nodes().into_iter().map(|node| {
+                let logger_clone = logger.clone();
+                let version_clone = version.clone();
+                rt.spawn_blocking(move || {
+                    assert_assigned_replica_version(&node, &version_clone, logger_clone)
+                })
+            })
+        })
+        .collect_vec();
 
-    async fn wait_for_upgrade(
-        &self,
-        nodes: &Vec<NodeRecord>,
-        logger: Logger,
-        subnet: PrincipalId,
-    ) -> anyhow::Result<()> {
-        let client = Client::builder().timeout(self.timeout()).build()?;
-
-        for i in 0..self.max_retries_upgrade() {
-            tokio::time::sleep(self.backoff()).await;
-            info!(
-                logger,
-                "Iter {}: checking if version {} is on subnet {}", i, self.version, subnet
-            );
-
-            match try_join!(nodes.iter().map(|node| async { poll_node_metrics_for_new_version(
-                &self.version,
-                &node
-                    .http
-                    .ok_or(anyhow::anyhow!(
-                        "Failed to get connection details about the nodes in subnet {}",
-                        subnet
-                    ))?
-                    .ip_addr
-            ).await } )) {
-                Ok(_) => {
-                    info!(
-                        logger,
-                        "Iter {}: found version {} on all nodes in subnet {}", i, self.version, subnet
-                    );
-                    break;
-                },
-                Err(e) => info!(
-                    logger,
-                    "Iter {}: didn't find version {} on all nodes in subnet {}, received error: {:?}",
-                    i,
-                    self.version,
-                    subnet,
-                    e
-                ),
-            }
-        }
-
-        Ok(())
-    }
-}
-
-async fn poll_node_metrics_for_new_version(version: &str, ip: &str) -> anyhow::Result<()> {
-    Ok(())
+    join_all(threads.into_iter().map(|t| async { t.await })).await;
 }
