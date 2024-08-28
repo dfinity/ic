@@ -954,8 +954,10 @@ fn validate_export_section(
         }
 
         if sum_exported_function_name_lengths > max_sum_exported_function_name_lengths {
-            let err = format!("The sum of `<name>` lengths in exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds {}.", max_sum_exported_function_name_lengths);
-            return Err(WasmValidationError::UserInvalidExportSection(err));
+            return Err(WasmValidationError::ExportedNamesTooLong {
+                total_length: sum_exported_function_name_lengths,
+                allowed: max_sum_exported_function_name_lengths,
+            });
         }
     }
     Ok(())

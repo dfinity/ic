@@ -457,9 +457,10 @@ fn can_validate_too_large_sum_exported_function_name_lengths() {
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Err(WasmValidationError::UserInvalidExportSection(
-            "The sum of `<name>` lengths in exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds 20000.".to_string()
-        ))
+        Err(WasmValidationError::ExportedNamesTooLong {
+            total_length: 20001,
+            allowed: 20000
+        })
     );
 }
 

@@ -68,6 +68,8 @@ pub enum WasmValidationError {
     DuplicateExport { name: String },
     /// There are too many exports defined in the module.
     TooManyExports { defined: usize, allowed: usize },
+    /// The total length of exported function names is too large.
+    ExportedNamesTooLong { total_length: usize, allowed: usize },
     /// Module contains an invalid data section
     InvalidDataSection(String),
     /// Module contains an invalid custom section
@@ -125,11 +127,28 @@ impl std::fmt::Display for WasmValidationError {
                 write!(
                     f,
                     "Duplicate function '{name}' exported multiple times \
-                        with different call types: update, query, or composite_query."
+                    with different call types: update, query, or composite_query."
                 )
             }
             Self::TooManyExports { defined, allowed } => {
-                write!(f, "The number of exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` is {defined} which exceeds {allowed}.")
+                write!(
+                    f,
+                    "The number of exported functions called \
+                    `canister_update <name>`, `canister_query <name>`, or \
+                    `canister_composite_query <name>` is {defined} which exceeds {allowed}."
+                )
+            }
+            Self::ExportedNamesTooLong {
+                total_length,
+                allowed,
+            } => {
+                write!(
+                    f,
+                    "The sum of `<name>` lengths in exported \
+                    functions called `canister_update <name>`, `canister_query <name>`, \
+                    or `canister_composite_query <name>` is {total_length} which exceeds \
+                    the allowed limit of {allowed}."
+                )
             }
             Self::InvalidDataSection(err) => {
                 write!(f, "Wasm module has an invalid data section. {err}")
@@ -216,6 +235,10 @@ impl AsErrorHelp for WasmValidationError {
             WasmValidationError::TooManyExports { .. } => ErrorHelp::UserError {
                 suggestion: "Try combining multiple endpoints into a single endpoint.".to_string(),
                 doc_link: doc_ref("wasm-module-exports-too-many-methods"),
+            },
+            WasmValidationError::ExportedNamesTooLong { .. } => ErrorHelp::UserError {
+                suggestion: "Try using shorter method names.".to_string(),
+                doc_link: doc_ref("wasm-module-sum-of-exported-name-lengths-too-large"),
             },
             WasmValidationError::UserInvalidExportSection(_) => ErrorHelp::UserError {
                 suggestion: "".to_string(),
