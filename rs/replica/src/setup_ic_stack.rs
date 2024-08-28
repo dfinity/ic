@@ -31,11 +31,14 @@ use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     consensus::{CatchUpPackage, HasHeight},
     messages::SignedIngress,
-    Height, NodeId, SubnetId,
+    Height, NodeId, PrincipalId, SubnetId,
 };
 use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
-use std::sync::{Arc, RwLock};
+use std::{
+    collections::HashSet,
+    sync::{Arc, RwLock},
+};
 use tokio::sync::{
     mpsc::{channel, UnboundedSender},
     watch,
@@ -45,9 +48,18 @@ use tokio::sync::{
 /// the message id and height of messages that complete execution.
 const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 
-/// If enable traffic to `api/v3/call` will be routed to the v3 call handler.
-/// Otherwise requests will be routed to the v2 call handler.
-const ENABLE_V3_CALL_HANDLER: bool = false;
+/// The subnets that can serve synchronous responses to update calls received
+/// on the `/api/v3/.../call`` endpoint.
+const WHITELISTED_SUBNETS_FOR_SYNCHRONOUS_CALL_V3: HashSet<SubnetId> = {
+    const WHITE_LISTED_SUBNETS: [str; 1] =
+        ["snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae"];
+
+    HashSet::from_iter(
+        WHITE_LISTED_SUBNETS
+            .iter()
+            .map(|s| SubnetId::from(PrincipalId::try_from(*s).expect("Subnet ID is valid."))),
+    )
+};
 
 /// Create the consensus pool directory (if none exists)
 fn create_consensus_pool_dir(config: &Config) {
@@ -328,6 +340,8 @@ pub fn construct_ic_stack(
         max_certified_height_tx,
     );
     // ---------- PUBLIC ENDPOINT DEPS FOLLOW ----------
+    let enable_synchronous_v3_handler =
+        WHITELISTED_SUBNETS_FOR_SYNCHRONOUS_CALL_V3.contains(&subnet_id);
     ic_http_endpoints_public::start_server(
         rt_handle_http.clone(),
         metrics_registry,
@@ -353,7 +367,7 @@ pub fn construct_ic_stack(
         tracing_handle,
         max_certified_height_rx,
         finalized_ingress_height_rx,
-        ENABLE_V3_CALL_HANDLER,
+        enable_synchronous_v3_handler,
     );
 
     Ok((
