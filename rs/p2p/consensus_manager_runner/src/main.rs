@@ -539,6 +539,15 @@ fn start_cm(
         cert: CertificateDer::from(cert.cert_der()),
         private: PrivateKeyDer::try_from(cert.key_pair().serialize_for_rustls()).unwrap(),
     };
+    let downloader = ic_artifact_downloader::FetchArtifact::new(
+        log.clone(),
+        rt_handle.clone(),
+        Arc::new(RwLock::new(test_consensus.clone())),
+        Arc::new(test_consensus.clone()),
+        metrics.clone(),
+    );
+
+    new_p2p_consensus.add_client(ap_rx, cb_tx, downloader);
     let quic_transport = Arc::new(ic_quic_transport::QuicTransport::start(
         &log,
         &metrics,
@@ -550,14 +559,6 @@ fn start_cm(
         create_udp_socket(&rt_handle, transport_addr),
         new_p2p_consensus.router(),
     ));
-    let downloader = ic_artifact_downloader::FetchArtifact::new(
-        log.clone(),
-        rt_handle.clone(),
-        Arc::new(RwLock::new(test_consensus.clone())),
-        Arc::new(test_consensus.clone()),
-        metrics.clone(),
-    );
-    new_p2p_consensus.add_client(ap_rx, cb_tx, downloader);
     new_p2p_consensus.run(quic_transport, watcher);
 
     let _ = tx
@@ -827,7 +828,7 @@ impl ClientCertVerifier for NoClientAuth {
         &self.root_hint_subjects
     }
     fn supported_verify_schemes(&self) -> Vec<tokio_rustls::rustls::SignatureScheme> {
-        vec![]
+        vec![SignatureScheme::ED25519]
     }
     fn verify_client_cert(
         &self,
@@ -880,7 +881,7 @@ impl ServerCertVerifier for NoServerAuth {
         Ok(HandshakeSignatureValid::assertion())
     }
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        vec![]
+        vec![SignatureScheme::ED25519]
     }
     fn verify_server_cert(
         &self,

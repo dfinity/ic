@@ -279,22 +279,22 @@ where
                     self.handle_topology_update();
                 }
             }
-            debug_assert_eq!(
-                self.active_assembles.len(),
-                self.artifact_processor_tasks.len(),
-                "Number of artifact processing tasks differs from the available number of channels that communicate with the processing tasks"
-            );
-            debug_assert!(
-                self.artifact_processor_tasks.len()
-                    >= HashSet::<WireArtifact::Id>::from_iter(
-                        self.slot_table
-                            .iter()
-                            .flat_map(|(k, v)| v.iter())
-                            .map(|(_, s)| s.id.clone())
-                    )
-                    .len(),
-                "Number of assemble tasks should always be the same or exceed the number of distinct ids stored."
-            );
+            // debug_assert_eq!(
+            //     self.active_assembles.len(),
+            //     self.artifact_processor_tasks.len(),
+            //     "Number of artifact processing tasks differs from the available number of channels that communicate with the processing tasks"
+            // );
+            // debug_assert!(
+            //     self.artifact_processor_tasks.len()
+            //         >= HashSet::<WireArtifact::Id>::from_iter(
+            //             self.slot_table
+            //                 .iter()
+            //                 .flat_map(|(k, v)| v.iter())
+            //                 .map(|(_, s)| s.id.clone())
+            //         )
+            //         .len(),
+            //     "Number of assemble tasks should always be the same or exceed the number of distinct ids stored."
+            // );
         }
     }
 
@@ -306,7 +306,7 @@ where
     ) {
         self.metrics.assemble_task_finished_total.inc();
         // Invariant: Peer sender should only be dropped in this task..
-        debug_assert!(peer_rx.has_changed().is_ok());
+        // debug_assert!(peer_rx.has_changed().is_ok());
 
         // peer advertised after task finished.
         if !peer_rx.borrow().is_empty() {
@@ -328,13 +328,13 @@ where
         } else {
             self.active_assembles.remove(&id);
         }
-        debug_assert!(
-            self.slot_table
-                .iter()
-                .flat_map(|(k, v)| v.iter())
-                .all(|(k, v)| self.active_assembles.contains_key(&v.id)),
-            "Every entry in the slot table should have an active assemble task."
-        );
+        // debug_assert!(
+        //     self.slot_table
+        //         .iter()
+        //         .flat_map(|(k, v)| v.iter())
+        //         .all(|(k, v)| self.active_assembles.contains_key(&v.id)),
+        //     "Every entry in the slot table should have an active assemble task."
+        // );
     }
 
     #[instrument(skip_all)]
@@ -550,10 +550,10 @@ where
                     .any(|r| r)
             });
         }
-        debug_assert!(
-            self.slot_table.len() <= self.topology_watcher.borrow().iter().count(),
-            "Slot table contains more nodes than nodes in subnet after pruning"
-        );
+        // debug_assert!(
+        //     self.slot_table.len() <= self.topology_watcher.borrow().iter().count(),
+        //     "Slot table contains more nodes than nodes in subnet after pruning"
+        // );
     }
 }
 

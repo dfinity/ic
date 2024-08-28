@@ -35,7 +35,7 @@ def send_to_peers(data):
         try:
             # Make a request to each peer with the corresponding data
             with urllib.request.urlopen(f"http://{instance}:9090/setrate", data=data) as response:
-                print(f"Sent data to {instance}: {alue.decode('utf-8')}")
+                print(f"Sent data to {instance}")
         except Exception as e:
             print(f"Error sending data to {instance}: {e}")
 

@@ -61,9 +61,9 @@ sh_binary(
     name = "aws",
     srcs = ["aws.sh"],
     data = [
-        "//rs/p2p/consensus_manager:consensus_manager_runner",
+        "//rs/p2p/consensus_manager_runner:consensus_manager_runner",
     ],
     env = {
-        "RUNNER_BIN": "$(location //rs/p2p/consensus_manager:consensus_manager_runner)",
+        "RUNNER_BIN": "$(location //rs/p2p/consensus_manager_runner:consensus_manager_runner)",
     },
 )
