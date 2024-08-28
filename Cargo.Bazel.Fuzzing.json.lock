@@ -1,5 +1,5 @@
 {
-  "checksum": "a1f76f7855d49a42801141166bc4ea0999089a707d9a8f91d950eda29c5b4023",
+  "checksum": "33f8efba3251eda9de8a8675bbc6218266d8fa7c888118386880d8bca50b6671",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18677,6 +18677,10 @@
               "target": "time"
             },
             {
+              "id": "tla_instrumentation 0.1.0",
+              "target": "tla_instrumentation"
+            },
+            {
               "id": "tokio 1.39.3",
               "target": "tokio"
             },
@@ -18939,6 +18943,10 @@
             {
               "id": "test-strategy 0.3.1",
               "target": "test_strategy"
+            },
+            {
+              "id": "tla_instrumentation_proc_macros 0.1.0",
+              "target": "tla_instrumentation_proc_macros"
             }
           ],
           "selects": {}
@@ -33112,6 +33120,62 @@
         },
         "edition": "2018",
         "version": "0.12.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "itertools 0.13.0": {
+      "name": "itertools",
+      "version": "0.13.0",
+      "package_url": "https://github.com/rust-itertools/itertools",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/itertools/0.13.0/download",
+          "sha256": "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "itertools",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "itertools",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "use_alloc",
+            "use_std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "either 1.9.0",
+              "target": "either"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.13.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -65000,6 +65064,131 @@
       ],
       "license_file": "LICENSE-APACHE.md"
     },
+    "tla_instrumentation 0.1.0": {
+      "name": "tla_instrumentation",
+      "version": "0.1.0",
+      "package_url": null,
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/oggy-dfin/tla-instrumentation.git",
+          "commitish": {
+            "Rev": "67939aae6e35f71564d5f12590bbff8716619451"
+          },
+          "strip_prefix": "tla_instrumentation"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tla_instrumentation",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tla_instrumentation",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.6",
+              "target": "candid"
+            },
+            {
+              "id": "itertools 0.13.0",
+              "target": "itertools"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            },
+            {
+              "id": "sha2 0.10.8",
+              "target": "sha2"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "tla_instrumentation_proc_macros 0.1.0",
+              "target": "tla_instrumentation_proc_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.1.0"
+      },
+      "license": null,
+      "license_ids": [],
+      "license_file": null
+    },
+    "tla_instrumentation_proc_macros 0.1.0": {
+      "name": "tla_instrumentation_proc_macros",
+      "version": "0.1.0",
+      "package_url": null,
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/oggy-dfin/tla-instrumentation.git",
+          "commitish": {
+            "Rev": "67939aae6e35f71564d5f12590bbff8716619451"
+          },
+          "strip_prefix": "tla_instrumentation_proc_macros"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "tla_instrumentation_proc_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tla_instrumentation_proc_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.85",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.0"
+      },
+      "license": null,
+      "license_ids": [],
+      "license_file": null
+    },
     "tls_codec 0.4.1": {
       "name": "tls_codec",
       "version": "0.4.1",
@@ -78392,6 +78581,8 @@
     "tikv-jemalloc-ctl 0.5.4",
     "tikv-jemallocator 0.5.4",
     "time 0.3.36",
+    "tla_instrumentation 0.1.0",
+    "tla_instrumentation_proc_macros 0.1.0",
     "tokio 1.39.3",
     "tokio-io-timeout 1.2.0",
     "tokio-metrics 0.3.1",
