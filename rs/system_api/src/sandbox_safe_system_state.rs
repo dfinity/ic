@@ -543,6 +543,8 @@ impl SystemStateChanges {
     }
 }
 
+/// Determines if a precise amount of cycles is requested
+/// or if the provided number is only a limit.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CyclesAmountType {
     /// Use exactly this many cycles or fail.
