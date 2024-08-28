@@ -1,0 +1,19 @@
+[package]
+name = "ic-nervous-system-agent"
+version = "0.0.1"
+edition = "2021"
+
+[lib]
+name = "ic_nervous_system_agent"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+ic-agent = { workspace = true }
+ic-nervous-system-clients = { path = "../clients" }
+ic-nns-constants = { path = "../../nns/constants" }
+ic-sns-wasm = { path = "../../nns/sns-wasm" }
+serde = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }

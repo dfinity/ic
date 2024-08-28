@@ -1505,7 +1505,6 @@ pub(super) fn validate_wasm_binary<'a>(
         config.max_sum_exported_function_name_lengths,
     )?;
     validate_data_section(&module)?;
-    let num_tables = module.tables.len();
     validate_global_section(&module, config.max_globals)?;
     validate_function_section(&module, config.max_functions)?;
     let (largest_function_instruction_count, max_complexity) = validate_code_section(&module)?;
@@ -1513,7 +1512,6 @@ pub(super) fn validate_wasm_binary<'a>(
     Ok((
         WasmValidationDetails {
             imports_details,
-            num_tables,
             wasm_metadata,
             largest_function_instruction_count,
             max_complexity,

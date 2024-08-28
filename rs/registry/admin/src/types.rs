@@ -3,10 +3,9 @@
 use crate::helpers::get_subnet_ids;
 use async_trait::async_trait;
 use candid::CandidType;
-use ic_canister_client::Agent;
-use ic_canister_client::Sender;
+use ic_canister_client::{Agent, Sender};
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance::pb::v1::proposal::Action;
+use ic_nns_governance_api::pb::v1::ProposalActionRequest;
 use ic_protobuf::registry::{
     node::v1::IPv4InterfaceConfig,
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
@@ -19,10 +18,10 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{PrincipalId, SubnetId};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 use std::{
     convert::{From, TryFrom, TryInto},
     net::{Ipv4Addr, Ipv6Addr},
+    str::FromStr,
 };
 use strum_macros::EnumString;
 
@@ -264,5 +263,5 @@ pub trait ProposalPayload<T: CandidType> {
 
 #[async_trait]
 pub trait ProposalAction {
-    async fn action(&self) -> Action;
+    async fn action(&self) -> ProposalActionRequest;
 }

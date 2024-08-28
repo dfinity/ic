@@ -4,7 +4,7 @@ use crate::utils::do_copy;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_config::flag_status::FlagStatus;
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types::{LogVisibility, LogVisibilityV2};
+use ic_management_canister_types::LogVisibilityV2;
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -170,10 +170,11 @@ pub struct CanisterStateBits {
     pub canister_history: CanisterHistory,
     pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
     pub total_query_stats: TotalQueryStats,
-    pub log_visibility: LogVisibility,
+    pub log_visibility: LogVisibilityV2,
     pub canister_log: CanisterLog,
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
+    pub snapshots_memory_usage: NumBytes,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
@@ -388,6 +389,13 @@ impl TipHandler {
             if path.extension() == Some(OsStr::new("pbuf")) {
                 // Do not copy protobufs.
                 CopyInstruction::Skip
+            } else if path == cp.unverified_checkpoint_marker() {
+                // With LSMT enabled, the unverified checkpoint marker should already be removed at this point.
+                debug_assert_eq!(lsmt_storage, FlagStatus::Disabled);
+                // With LSMT disabled, the unverified checkpoint marker is still present in the checkpoint at this point.
+                // We should not copy it back to the tip because it will be created later when promoting the tip as the next checkpoint.
+                // When we go for asynchronous checkpointing in the future, we should revisit this as the marker file will have a different lifespan.
+                CopyInstruction::Skip
             } else if path.extension() == Some(OsStr::new("bin"))
                 && lsmt_storage == FlagStatus::Disabled
                 && !path.starts_with(cp.root.join(SNAPSHOTS_DIR))
@@ -514,7 +522,7 @@ impl StateLayout {
         thread_pool: &mut Option<scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
         for height in self.checkpoint_heights()? {
-            let path = self.checkpoint(height)?.raw_path().to_path_buf();
+            let path = self.checkpoint_verified(height)?.raw_path().to_path_buf();
             sync_and_mark_files_readonly(&self.log, &path, &self.metrics, thread_pool.as_mut())
                 .map_err(|err| LayoutError::IoError {
                     path,
@@ -666,7 +674,7 @@ impl StateLayout {
             message: "Could not sync checkpoints".to_string(),
             io_err: err,
         })?;
-        self.checkpoint(height)
+        self.checkpoint_in_verification(height)
     }
 
     pub fn clone_checkpoint(&self, from: Height, to: Height) -> Result<(), LayoutError> {
@@ -687,9 +695,9 @@ impl StateLayout {
         Ok(())
     }
 
-    /// Returns the layout of the checkpoint with the given height (if
-    /// there is one).
-    pub fn checkpoint(&self, height: Height) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+    /// Returns the layout of the checkpoint with the given height.
+    /// If the checkpoint is not found, an error is returned.
+    fn checkpoint(&self, height: Height) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
         let cp_name = Self::checkpoint_name(height);
         let path = self.checkpoints().join(cp_name);
         if !path.exists() {
@@ -721,17 +729,42 @@ impl StateLayout {
         CheckpointLayout::new(path, height, self.clone())
     }
 
-    /// Returns the untracked `CheckpointLayout` for the given height (if there is one).
-    pub fn checkpoint_untracked(
+    /// Returns the layout of a verified checkpoint with the given height.
+    /// If the checkpoint is not found or is not verified, an error is returned.
+    pub fn checkpoint_verified(
         &self,
         height: Height,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+        let cp = self.checkpoint(height)?;
+        if !cp.is_checkpoint_verified() {
+            return Err(LayoutError::CheckpointUnverified(height));
+        };
+        Ok(cp)
+    }
+
+    /// Returns the layout of a checkpoint with the given height that is in the verification process.
+    /// If the checkpoint is not found, an error is returned.
+    ///
+    /// Note that the unverified marker file may already be removed from the checkpoint by another verification process.
+    /// This method does not require that the marker file exists.
+    pub fn checkpoint_in_verification(
+        &self,
+        height: Height,
+    ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+        self.checkpoint(height)
+    }
+
+    /// Returns if a checkpoint with the given height is verified or not.
+    /// If the checkpoint is not found, an error is returned.
+    pub fn checkpoint_verification_status(&self, height: Height) -> Result<bool, LayoutError> {
         let cp_name = Self::checkpoint_name(height);
         let path = self.checkpoints().join(cp_name);
         if !path.exists() {
             return Err(LayoutError::NotFound(height));
         }
-        CheckpointLayout::new_untracked(path, height)
+        // An untracked checkpoint layout is acceptable for temporary use here, as it’s only needed briefly to verify the existence of the marker.
+        let cp = CheckpointLayout::<ReadOnly>::new_untracked(path, height)?;
+        Ok(cp.is_checkpoint_verified())
     }
 
     fn increment_checkpoint_ref_counter(&self, height: Height) {
@@ -779,14 +812,24 @@ impl StateLayout {
         }
     }
 
-    /// Returns a sorted list of `Height`s for which a checkpoint is available.
+    /// Returns a sorted list of `Height`s for which a checkpoint is available and verified.
     pub fn checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
+        let checkpoint_heights = self
+            .unfiltered_checkpoint_heights()?
+            .into_iter()
+            .filter(|h| self.checkpoint_verification_status(*h).unwrap_or(false))
+            .collect();
+
+        Ok(checkpoint_heights)
+    }
+
+    /// Returns a sorted list of `Height`s for which a checkpoint is available, regardless of verification status.
+    pub fn unfiltered_checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
         let names = dir_file_names(&self.checkpoints()).map_err(|err| LayoutError::IoError {
             path: self.checkpoints(),
             message: format!("Failed to get all checkpoints (err kind: {:?})", err.kind()),
             io_err: err,
         })?;
-
         parse_and_sort_checkpoint_heights(&names[..])
     }
 
@@ -902,7 +945,7 @@ impl StateLayout {
                 if heights.is_empty() {
                     error!(
                         self.log,
-                        "Trying to remove non-existing checkpoint {}. The CheckpoinLayout was invalid",
+                        "Trying to remove non-existing checkpoint {}. The CheckpointLayout was invalid",
                         height,
                     );
                     self.metrics
@@ -1494,6 +1537,67 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
 
     pub fn raw_path(&self) -> &Path {
         &self.root
+    }
+
+    /// Returns if the checkpoint is marked as unverified or not.
+    pub fn is_checkpoint_verified(&self) -> bool {
+        !self.unverified_checkpoint_marker().exists()
+    }
+}
+
+impl<P> CheckpointLayout<P>
+where
+    P: WritePolicy,
+{
+    /// Creates the unverified checkpoint marker.
+    /// If the marker already exists, this function does nothing and returns `Ok(())`.
+    ///
+    /// Only the checkpoint layout with write policy can create the unverified checkpoint marker,
+    /// e.g. state sync scratchpad and tip.
+    pub fn create_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
+        let marker = self.unverified_checkpoint_marker();
+        if marker.exists() {
+            return Ok(());
+        }
+        open_for_write(&marker)?;
+        sync_path(&self.root).map_err(|err| LayoutError::IoError {
+            path: self.root.clone(),
+            message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
+            io_err: err,
+        })
+    }
+}
+
+impl CheckpointLayout<ReadOnly> {
+    /// Removes the unverified checkpoint marker.
+    /// If the marker does not exist, this function does nothing and returns `Ok(())`.
+    ///
+    /// A readonly checkpoint typically prevents modification to the files in the checkpoint.
+    /// However, the removal of the unverified checkpoint marker is allowed as
+    /// the marker is not part the checkpoint conceptually.
+    pub fn remove_unverified_checkpoint_marker(&self) -> Result<(), LayoutError> {
+        let marker = self.unverified_checkpoint_marker();
+        if !marker.exists() {
+            return Ok(());
+        }
+        match std::fs::remove_file(&marker) {
+            Err(err) if err.kind() != std::io::ErrorKind::NotFound => {
+                return Err(LayoutError::IoError {
+                    path: marker.to_path_buf(),
+                    message: "failed to remove file from disk".to_string(),
+                    io_err: err,
+                });
+            }
+            _ => {}
+        }
+
+        // Sync the directory to make sure the marker is removed from disk.
+        // This is strict prerequisite for the manifest computation.
+        sync_path(&self.root).map_err(|err| LayoutError::IoError {
+            path: self.root.clone(),
+            message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
+            io_err: err,
+        })
     }
 }
 
@@ -2164,12 +2268,8 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             canister_history: Some((&item.canister_history).into()),
             wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
             total_query_stats: Some((&item.total_query_stats).into()),
-            log_visibility: pb_canister_state_bits::LogVisibility::from(&item.log_visibility)
+            log_visibility_v2: pb_canister_state_bits::LogVisibilityV2::from(&item.log_visibility)
                 .into(),
-            log_visibility_v2: pb_canister_state_bits::LogVisibilityV2::from(
-                &LogVisibilityV2::from(item.log_visibility),
-            )
-            .into(),
             canister_log_records: item
                 .canister_log
                 .records()
@@ -2179,6 +2279,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             next_canister_log_record_idx: item.canister_log.next_idx(),
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
             next_snapshot_id: item.next_snapshot_id,
+            snapshots_memory_usage: item.snapshots_memory_usage.get(),
         }
     }
 }
@@ -2249,33 +2350,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             );
         }
 
-        // TODO(EXC-1670): remove after migration to `pb_canister_state_bits::LogVisibilityV2`.
-        // First try to decode `log_visibility_v2` and if it fails, fallback to `log_visibility`.
-        // This should populate `allowed_viewers` correctly with the list of principals.
-        let log_visibility: LogVisibility = match try_from_option_field::<
-            pb_canister_state_bits::LogVisibilityV2,
-            LogVisibilityV2,
-            _,
-        >(
-            value.log_visibility_v2,
-            "CanisterStateBits::log_visibility_v2",
-        ) {
-            Ok(log_visibility_v2) => LogVisibility::from(log_visibility_v2),
-            Err(_) => {
-                let pb_log_visibility = pb_canister_state_bits::LogVisibility::try_from(
-                    value.log_visibility,
-                )
-                .map_err(|_| ProxyDecodeError::ValueOutOfRange {
-                    typ: "LogVisibility",
-                    err: format!(
-                        "Unexpected value of log visibility: {}",
-                        value.log_visibility
-                    ),
-                })?;
-                LogVisibility::from(pb_log_visibility)
-            }
-        };
-
         Ok(Self {
             controllers,
             last_full_execution_round: value.last_full_execution_round.into(),
@@ -2342,7 +2416,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::total_query_stats",
             )
             .unwrap_or_default(),
-            log_visibility,
+            log_visibility: try_from_option_field(
+                value.log_visibility_v2,
+                "CanisterStateBits::log_visibility_v2",
+            )
+            .unwrap_or_default(),
             canister_log: CanisterLog::new(
                 value.next_canister_log_record_idx,
                 value
@@ -2353,6 +2431,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             ),
             wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
             next_snapshot_id: value.next_snapshot_id,
+            snapshots_memory_usage: NumBytes::from(value.snapshots_memory_usage),
         })
     }
 }

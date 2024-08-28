@@ -36,7 +36,7 @@ rust_library(
         "//rs/orchestrator/image_upgrader",
         "//rs/orchestrator/registry_replicator",
         "//rs/protobuf",
-        "//rs/registry/canister",
+        "//rs/registry/canister/api",
         "//rs/registry/helpers",
         "//rs/registry/keys",
         "//rs/registry/local_store",

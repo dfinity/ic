@@ -50,6 +50,7 @@ ic-nervous-system-governance = { path = "../../nervous_system/governance" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
+ic-nervous-system-temporary = { path = "../../nervous_system/temporary" }
 ic-neurons-fund = { path = "../../nervous_system/neurons_fund" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
@@ -103,6 +104,7 @@ assert_matches = { workspace = true }
 build-info-build = { workspace = true }
 
 [dev-dependencies]
+candid_parser = { workspace = true }
 criterion = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
 futures = { workspace = true }

@@ -511,7 +511,7 @@ impl RosettaApiClient {
         .unwrap()
         .pending_proposals
         .into_iter()
-        .map(|p| p.proposal.unwrap().into())
+        .map(|p| p.proposal.unwrap())
         .collect();
         Ok(pending_proposals)
     }

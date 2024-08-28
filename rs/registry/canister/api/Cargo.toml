@@ -1,0 +1,13 @@
+[package]
+name = "ic-registry-canister-api"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-base-types = { path = "../../../types/base_types" }
+candid = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }

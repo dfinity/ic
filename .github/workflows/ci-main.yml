@@ -3,14 +3,13 @@ on:
   merge_group:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-  schedule: # Todo: switch to push on master and remove schedule once we have more macos runners
-    - cron: "0 * * * *"
+  push:
+    branches:
+      - master
+      - 'dev-gh-*'
   pull_request:
   # Used as reusable workflow within release-testing workflow
   workflow_call:
-  push:
-    branches:
-      - 'dev-gh-*'
 # runs for the same workflow are cancelled on PRs but not on master
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
@@ -83,10 +82,21 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bazel-targets
-          retention-days: 1
+          retention-days: 14
           if-no-files-found: error
           path: |
             bazel-targets
+      - name: Upload bazel-bep
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
   bazel-build-all-config-check:
     runs-on:
       labels: dind-large
@@ -117,32 +127,28 @@ jobs:
           # TODO: disabling until the following issue is resolved
           # https://github.com/dfinity/ic/actions/runs/9699415138/job/26768332602
           RUN_ON_DIFF_ONLY: false
-  bazel-test-darwin-x86-64:
-    name: Bazel Test Darwin x86-64
+      - name: Upload bazel-bep
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
+  bazel-test-macos-intel:
+    name: Bazel Test macOS Intel
     timeout-minutes: 120
     runs-on:
       labels: macOS
-    if: ${{ github.event_name != 'merge_group' }}
+    if: ${{ github.ref_protected }} # Bazel test darwin are still required for building artifacts for the releases, therefore run on protected branches
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Filter Relevant Files
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        id: filter
-        if: ${{ github.event_name == 'pull_request' }}
-        with:
-          filters: |
-            bazel-test-darwin-x86-64:
-              - '.github/workflows/ci-main.yml'
-              - '.bazelrc'
-              - '.bazelversion'
-              - '**/*.bazel'
-              - '**/*.bzl'
-              - '**/*.lock'
-              - '**/*.rs'
-              - '**/*.toml'
       - name: Set PATH
         run: |
           echo "/usr/local/bin" >> $GITHUB_PATH
@@ -153,15 +159,25 @@ jobs:
         run: ./gitlab-ci/src/ci-scripts/before-script.sh
       - name: Run Bazel Test Darwin x86-64
         id: bazel-test-darwin-x86-64
-        if: steps.filter.outputs.bazel-test-darwin-x86-64 == 'true' || github.event_name == 'schedule'
         uses: ./.github/actions/bazel-test-all/
         with:
           BAZEL_CI_CONFIG: "--config=ci --config macos_ci"
           BAZEL_COMMAND: test
-          BAZEL_EXTRA_ARGS: ${{ github.event_name == 'schedule' && '--test_tag_filters=test_macos,test_macos_master' || '--test_tag_filters=test_macos' }}
+          BAZEL_EXTRA_ARGS: '--test_tag_filters=test_macos'
           BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output/${ROOT_PIPELINE_ID}"
           BAZEL_TARGETS: "//rs/... //publish/binaries/..."
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
+      - name: Upload bazel-bep
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
       - name: Purge Bazel Output
         if: always()
         shell: bash
@@ -192,6 +208,17 @@ jobs:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
           BAZEL_EXTRA_ARGS: "--keep_going --config=fuzzing --build_tag_filters=libfuzzer"
+      - name: Upload bazel-bep
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
   bazel-build-fuzzers-afl:
     name: Bazel Build Fuzzers AFL
     runs-on:
@@ -217,6 +244,17 @@ jobs:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
           BAZEL_EXTRA_ARGS: "--keep_going --config=afl"
+      - name: Upload bazel-bep
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.job }}-bep
+          retention-days: 14
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            bazel-bep.pb
+            profile.json
   python-ci-tests:
     name: Python CI Tests
     runs-on:

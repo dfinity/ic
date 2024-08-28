@@ -774,68 +774,6 @@ impl UninstallCodeArgs {
 
 impl Payload<'_> for UninstallCodeArgs {}
 
-// TODO(EXC-1670): remove after migration to `LogVisibilityV2`.
-/// Log visibility for a canister.
-/// ```text
-/// variant {
-///    controllers;
-///    public;
-/// }
-/// ```
-#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq, EnumIter)]
-pub enum LogVisibility {
-    #[default]
-    #[serde(rename = "controllers")]
-    Controllers = 1,
-    #[serde(rename = "public")]
-    Public = 2,
-}
-
-// Ensure forward compatibility with the new `LogVisibilityV2`.
-// First read the old `LogVisibility`, if it fails (e.g., for `LogVisibilityV2::AllowedViewers`),
-// try to read the new `LogVisibilityV2`.
-impl Payload<'_> for LogVisibility {
-    fn decode(blob: &'_ [u8]) -> Result<Self, UserError> {
-        let result =
-            match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error) {
-                Ok(log_visibility) => log_visibility,
-                // Try to decode as LogVisibilityV2 and convert to LogVisibility
-                Err(_) => Self::from(LogVisibilityV2::decode(blob)?),
-            };
-        Ok(result)
-    }
-}
-
-impl From<LogVisibilityV2> for LogVisibility {
-    fn from(item: LogVisibilityV2) -> Self {
-        match item {
-            LogVisibilityV2::Controllers => Self::Controllers,
-            LogVisibilityV2::Public => Self::Public,
-            // Fall back to the default value.
-            LogVisibilityV2::AllowedViewers(_) => Self::default(),
-        }
-    }
-}
-
-impl From<&LogVisibility> for pb_canister_state_bits::LogVisibility {
-    fn from(item: &LogVisibility) -> Self {
-        match item {
-            LogVisibility::Controllers => pb_canister_state_bits::LogVisibility::Controllers,
-            LogVisibility::Public => pb_canister_state_bits::LogVisibility::Public,
-        }
-    }
-}
-
-impl From<pb_canister_state_bits::LogVisibility> for LogVisibility {
-    fn from(item: pb_canister_state_bits::LogVisibility) -> Self {
-        match item {
-            pb_canister_state_bits::LogVisibility::Unspecified => Self::default(),
-            pb_canister_state_bits::LogVisibility::Controllers => Self::Controllers,
-            pb_canister_state_bits::LogVisibility::Public => Self::Public,
-        }
-    }
-}
-
 /// Maximum number of allowed log viewers (specified in the interface spec).
 const MAX_ALLOWED_LOG_VIEWERS_COUNT: usize = 10;
 
@@ -861,29 +799,7 @@ pub enum LogVisibilityV2 {
     AllowedViewers(BoundedAllowedViewers),
 }
 
-// Ensure backward compatibility with the old `LogVisibility`.
-// `LogVisibilityV2` extends `LogVisibility` with an additional variant, `AllowedViewers`.
-// When decoding, if `AllowedViewers` is encountered, it is changed to a default value
-// to maintain compatibility with the old `LogVisibility`.
-impl Payload<'_> for LogVisibilityV2 {
-    fn decode(blob: &'_ [u8]) -> Result<Self, UserError> {
-        match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error) {
-            // Fall back to the default value.
-            Ok(Self::AllowedViewers(_)) => Ok(Self::default()),
-            Ok(log_visibility_v2) => Ok(log_visibility_v2),
-            Err(err) => Err(err),
-        }
-    }
-}
-
-impl From<LogVisibility> for LogVisibilityV2 {
-    fn from(item: LogVisibility) -> Self {
-        match item {
-            LogVisibility::Controllers => Self::Controllers,
-            LogVisibility::Public => Self::Public,
-        }
-    }
-}
+impl Payload<'_> for LogVisibilityV2 {}
 
 impl From<&LogVisibilityV2> for pb_canister_state_bits::LogVisibilityV2 {
     fn from(item: &LogVisibilityV2) -> Self {
@@ -925,7 +841,7 @@ impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
             pb::log_visibility_v2::LogVisibilityV2::Controllers(_) => Ok(Self::Controllers),
             pb::log_visibility_v2::LogVisibilityV2::Public(_) => Ok(Self::Public),
             pb::log_visibility_v2::LogVisibilityV2::AllowedViewers(data) => {
-                let data = data
+                let principals = data
                     .principals
                     .iter()
                     .map(|p| {
@@ -937,70 +853,9 @@ impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
                         })
                     })
                     .collect::<Result<Vec<PrincipalId>, _>>()?;
-                Ok(Self::AllowedViewers(BoundedAllowedViewers::new(data)))
+                Ok(Self::AllowedViewers(BoundedAllowedViewers::new(principals)))
             }
         }
-    }
-}
-
-#[test]
-fn test_log_visibility_v2_serialization_roundtrip() {
-    // Test `LogVisibilityV2` canidid serialization/deserialization.
-    for (initial, expected) in [
-        (LogVisibilityV2::Controllers, LogVisibilityV2::Controllers),
-        (LogVisibilityV2::Public, LogVisibilityV2::Public),
-        (
-            LogVisibilityV2::AllowedViewers(Default::default()),
-            LogVisibilityV2::default(),
-        ),
-    ] {
-        let encoded = LogVisibilityV2::encode(&initial);
-        let decoded = LogVisibilityV2::decode(&encoded).unwrap();
-        assert_eq!(decoded, expected);
-    }
-}
-
-#[test]
-fn test_log_visibility_v2_default_canidid_backward_compatibility() {
-    // Test `LogVisibilityV2` is backward compatible with `LogVisibility`
-    // via default canidid serialization.
-    for (initial, expected) in [
-        (LogVisibility::Controllers, LogVisibilityV2::Controllers),
-        (LogVisibility::Public, LogVisibilityV2::Public),
-    ] {
-        let encoded = Encode!(&initial).unwrap();
-        let decoded = Decode!(&encoded, LogVisibilityV2).unwrap();
-        assert_eq!(decoded, expected);
-    }
-}
-
-#[test]
-fn test_log_visibility_v2_backward_compatibility() {
-    // Test `LogVisibilityV2` is backward compatible with `LogVisibility`.
-    for (initial, expected) in [
-        (LogVisibility::Controllers, LogVisibilityV2::Controllers),
-        (LogVisibility::Public, LogVisibilityV2::Public),
-    ] {
-        let encoded = LogVisibility::encode(&initial);
-        let decoded = LogVisibilityV2::decode(&encoded).unwrap();
-        assert_eq!(decoded, expected);
-    }
-}
-
-#[test]
-fn test_log_visibility_v2_forward_compatibility() {
-    // Test `LogVisibilityV2` is forward compatible with `LogVisibility`.
-    for (initial, expected) in [
-        (LogVisibilityV2::Controllers, LogVisibility::Controllers),
-        (LogVisibilityV2::Public, LogVisibility::Public),
-        (
-            LogVisibilityV2::AllowedViewers(Default::default()),
-            LogVisibility::default(),
-        ),
-    ] {
-        let encoded = LogVisibilityV2::encode(&initial);
-        let decoded = LogVisibility::decode(&encoded).unwrap();
-        assert_eq!(decoded, expected);
     }
 }
 
@@ -1022,7 +877,7 @@ pub struct DefiniteCanisterSettingsArgs {
     memory_allocation: candid::Nat,
     freezing_threshold: candid::Nat,
     reserved_cycles_limit: candid::Nat,
-    log_visibility: LogVisibility,
+    log_visibility: LogVisibilityV2,
     wasm_memory_limit: candid::Nat,
 }
 
@@ -1034,7 +889,7 @@ impl DefiniteCanisterSettingsArgs {
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
         reserved_cycles_limit: Option<u128>,
-        log_visibility: LogVisibility,
+        log_visibility: LogVisibilityV2,
         wasm_memory_limit: Option<u64>,
     ) -> Self {
         let memory_allocation = candid::Nat::from(memory_allocation.unwrap_or(0));
@@ -1060,8 +915,12 @@ impl DefiniteCanisterSettingsArgs {
         self.reserved_cycles_limit.clone()
     }
 
-    pub fn log_visibility(&self) -> &LogVisibility {
+    pub fn log_visibility(&self) -> &LogVisibilityV2 {
         &self.log_visibility
+    }
+
+    pub fn wasm_memory_limit(&self) -> candid::Nat {
+        self.wasm_memory_limit.clone()
     }
 }
 
@@ -1178,7 +1037,7 @@ impl CanisterStatusResultV2 {
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
         reserved_cycles_limit: Option<u128>,
-        log_visibility: LogVisibility,
+        log_visibility: LogVisibilityV2,
         idle_cycles_burned_per_day: u128,
         reserved_cycles: u128,
         query_num_calls: u128,
@@ -1862,7 +1721,7 @@ pub struct CanisterSettingsArgs {
     pub memory_allocation: Option<candid::Nat>,
     pub freezing_threshold: Option<candid::Nat>,
     pub reserved_cycles_limit: Option<candid::Nat>,
-    pub log_visibility: Option<LogVisibility>,
+    pub log_visibility: Option<LogVisibilityV2>,
     pub wasm_memory_limit: Option<candid::Nat>,
     pub wasm_memory_threshold: Option<candid::Nat>,
 }
@@ -1893,7 +1752,7 @@ pub struct CanisterSettingsArgsBuilder {
     memory_allocation: Option<candid::Nat>,
     freezing_threshold: Option<candid::Nat>,
     reserved_cycles_limit: Option<candid::Nat>,
-    log_visibility: Option<LogVisibility>,
+    log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<candid::Nat>,
     wasm_memory_threshold: Option<candid::Nat>,
 }
@@ -1976,7 +1835,7 @@ impl CanisterSettingsArgsBuilder {
     }
 
     /// Sets the log visibility.
-    pub fn with_log_visibility(self, log_visibility: LogVisibility) -> Self {
+    pub fn with_log_visibility(self, log_visibility: LogVisibilityV2) -> Self {
         Self {
             log_visibility: Some(log_visibility),
             ..self

@@ -20,6 +20,8 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/dfn_core",
     "@crate_index//:futures",
+    "@crate_index//:ic-wasm",
+    "@crate_index//:libflate",
     "@crate_index//:prometheus-parse",
 ]
 

@@ -1,8 +1,8 @@
 use ic_base_types::NumSeconds;
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
 use ic_management_canister_types::{
-    CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibility, MasterPublicKeyId, SchnorrAlgorithm,
-    SchnorrKeyId,
+    CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId,
+    SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
@@ -13,7 +13,7 @@ use ic_replicated_state::{
             CustomSection, CustomSectionType, NextScheduledMethod, WasmBinary, WasmMetadata,
         },
         system_state::CyclesUseCase,
-        testing::new_canister_queues_for_test,
+        testing::new_canister_output_queues_for_test,
     },
     metadata_state::subnet_call_context_manager::{
         BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
@@ -57,6 +57,16 @@ pub use history::MockIngressHistory;
 const WASM_PAGE_SIZE_BYTES: usize = 65536;
 const DEFAULT_FREEZE_THRESHOLD: NumSeconds = NumSeconds::new(1 << 30);
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
+
+/// Valid, but minimal wasm code.
+const EMPTY_WASM: &[u8] = &[
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x00, 0x08, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x02,
+    0x01, 0x00,
+];
+
+pub fn empty_wasm() -> Arc<WasmBinary> {
+    WasmBinary::new(CanisterModule::new(EMPTY_WASM.to_vec()))
+}
 
 pub struct ReplicatedStateBuilder {
     canisters: Vec<CanisterState>,
@@ -211,7 +221,7 @@ pub struct CanisterStateBuilder {
     inputs: Vec<RequestOrResponse>,
     time_of_last_allocation_charge: Time,
     certified_data: Vec<u8>,
-    log_visibility: LogVisibility,
+    log_visibility: LogVisibilityV2,
 }
 
 impl CanisterStateBuilder {
@@ -300,7 +310,7 @@ impl CanisterStateBuilder {
         self
     }
 
-    pub fn with_log_visibility(mut self, log_visibility: LogVisibility) -> Self {
+    pub fn with_log_visibility(mut self, log_visibility: LogVisibilityV2) -> Self {
         self.log_visibility = log_visibility;
         self
     }
@@ -417,7 +427,7 @@ impl Default for CanisterStateBuilder {
             inputs: Vec::default(),
             time_of_last_allocation_charge: UNIX_EPOCH,
             certified_data: vec![],
-            log_visibility: LogVisibility::default(),
+            log_visibility: Default::default(),
         }
     }
 }
@@ -575,6 +585,11 @@ impl ExecutionStateBuilder {
 
     pub fn with_wasm_metadata(mut self, metadata: WasmMetadata) -> Self {
         self.execution_state.metadata = metadata;
+        self
+    }
+
+    pub fn with_wasm_binary(mut self, wasm_binary: Arc<WasmBinary>) -> Self {
+        self.execution_state.wasm_binary = wasm_binary;
         self
     }
 
@@ -774,6 +789,25 @@ pub fn new_canister_state(
     CanisterState::new(system_state, None, scheduler_state)
 }
 
+pub fn new_canister_state_with_execution(
+    canister_id: CanisterId,
+    controller: PrincipalId,
+    initial_cycles: Cycles,
+    freeze_threshold: NumSeconds,
+) -> CanisterState {
+    let scheduler_state = SchedulerState::default();
+    let system_state = SystemState::new_running_for_testing(
+        canister_id,
+        controller,
+        initial_cycles,
+        freeze_threshold,
+    );
+    let execution_state = ExecutionStateBuilder::default()
+        .with_wasm_binary(empty_wasm())
+        .build();
+    CanisterState::new(system_state, Some(execution_state), scheduler_state)
+}
+
 /// Helper function to register a callback.
 pub fn register_callback(
     canister_state: &mut CanisterState,
@@ -897,9 +931,7 @@ prop_compose! {
             max_size,
             min_signal_count,
             max_signal_count,
-            // TODO: MR-590 Include all `RejectReason` variants once
-            // the canonical representation supports them.
-            vec![RejectReason::CanisterMigrating],
+            RejectReason::iter().collect(),
         )
     ) -> Stream {
         stream
@@ -1064,7 +1096,7 @@ prop_compose! {
 ///
 /// Returns the generated `ReplicatedState`; the requests grouped by canister,
 /// in expected iteration order; and the total number of requests.
-fn new_replicated_state_for_test(
+fn new_replicated_state_with_output_queues(
     own_subnet_id: SubnetId,
     mut output_requests: Vec<Vec<Request>>,
     num_receivers: usize,
@@ -1077,8 +1109,11 @@ fn new_replicated_state_for_test(
     let mut requests = VecDeque::new();
 
     let subnet_queues = if let Some(reqs) = output_requests.pop() {
-        let (queues, raw_requests) =
-            new_canister_queues_for_test(reqs, CanisterId::from(own_subnet_id), num_receivers);
+        let (queues, raw_requests) = new_canister_output_queues_for_test(
+            reqs,
+            CanisterId::from(own_subnet_id),
+            num_receivers,
+        );
         total_requests += raw_requests.len();
         requests.push_back(raw_requests);
         Some(queues)
@@ -1094,8 +1129,11 @@ fn new_replicated_state_for_test(
             let mut canister = CanisterStateBuilder::new()
                 .with_canister_id(canister_id)
                 .build();
-            let (queues, raw_requests) =
-                new_canister_queues_for_test(reqs, canister_test_id(i as u64), num_receivers);
+            let (queues, raw_requests) = new_canister_output_queues_for_test(
+                reqs,
+                canister_test_id(i as u64),
+                num_receivers,
+            );
             canister.system_state.put_queues(queues);
             total_requests += raw_requests.len();
             requests.push_back(raw_requests);
@@ -1126,7 +1164,7 @@ fn new_replicated_state_for_test(
 }
 
 prop_compose! {
-     pub fn arb_replicated_state_with_queues(
+     pub fn arb_replicated_state_with_output_queues(
         own_subnet_id: SubnetId,
         max_canisters: usize,
         max_requests_per_canister: usize,
@@ -1139,7 +1177,7 @@ prop_compose! {
         use rand::{Rng, SeedableRng};
         use rand_chacha::ChaChaRng;
 
-        let (mut replicated_state, mut raw_requests, total_requests) = new_replicated_state_for_test(own_subnet_id, request_queues, num_receivers);
+        let (mut replicated_state, mut raw_requests, total_requests) = new_replicated_state_with_output_queues(own_subnet_id, request_queues, num_receivers);
 
         // We pseudorandomly rotate the queues to match the rotation applied by the iterator.
         // Note that subnet queues are always at the front which is why we need to pop them
