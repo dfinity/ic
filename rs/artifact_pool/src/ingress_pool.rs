@@ -69,6 +69,9 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
         }
     }
 
+    /// Adds the `artifact` to the pool.
+    /// Note: the function doesn't check if the pool's limits are already exceeded, it's the
+    /// caller's responsibility to check the limits before calling `insert`.
     fn insert(&mut self, message_id: IngressMessageId, artifact: T) {
         let _timer = self
             .metrics
@@ -718,6 +721,50 @@ mod tests {
     }
 
     #[test]
+    fn test_exceeds_threshold_msgcount_via_changeset() {
+        with_test_replica_logger(|log| {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|mut pool_config| {
+                pool_config.ingress_pool_max_count = 2;
+                let metrics_registry = MetricsRegistry::new();
+                let mut ingress_pool =
+                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
+                let ingress_messages = [
+                    fake_ingress_message(0),
+                    fake_ingress_message(1),
+                    fake_ingress_message(2),
+                    fake_ingress_message(3),
+                ];
+
+                for ingress_message in &ingress_messages {
+                    ingress_pool.insert(UnvalidatedArtifact {
+                        message: ingress_message.clone(),
+                        peer_id: node_test_id(0),
+                        timestamp: UNIX_EPOCH,
+                    });
+                }
+                // ingress messages are inserted into the unvalidated section.
+                assert_eq!(ingress_pool.validated().size(), 0);
+                assert_eq!(ingress_pool.unvalidated().size(), 4);
+
+                let changeset = ingress_messages
+                    .iter()
+                    .map(|ingress_message| {
+                        ChangeAction::MoveToValidated(IngressMessageId::from(ingress_message))
+                    })
+                    .collect();
+
+                ingress_pool.apply_changes(changeset);
+
+                // only the first three ingress messages are inserted into the validated section of
+                // the pool, the fourth one is ignored because we have already exceeded the pool's
+                // limits.
+                assert_eq!(ingress_pool.validated().size(), 3);
+                assert_eq!(ingress_pool.unvalidated().size(), 1);
+            })
+        })
+    }
+
+    #[test]
     fn test_exceeds_threshold_bytes() {
         with_test_replica_logger(|log| {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|mut pool_config| {
@@ -758,7 +805,7 @@ mod tests {
 
                 assert!(!ingress_pool.exceeds_threshold());
 
-                let ingress_msg = SignedIngressBuilder::new().nonce(2).build();
+                let ingress_msg = fake_ingress_message(2);
                 ingress_pool.insert(UnvalidatedArtifact {
                     message: ingress_msg,
                     peer_id: node_test_id(100),
@@ -784,10 +831,7 @@ mod tests {
         receive_time: Time,
         expiry_time: Time,
     ) {
-        let ingress_msg = SignedIngressBuilder::new()
-            .nonce(nonce)
-            .expiry_time(expiry_time)
-            .build();
+        let ingress_msg = fake_ingress_message_with_expiration(nonce, expiry_time);
 
         let message_id = IngressMessageId::from(&ingress_msg);
         ingress_pool.validated.insert(
@@ -797,5 +841,16 @@ mod tests {
                 timestamp: receive_time,
             },
         );
+    }
+
+    fn fake_ingress_message(nonce: u64) -> SignedIngress {
+        fake_ingress_message_with_expiration(nonce, ic_types::time::expiry_time_from_now())
+    }
+
+    fn fake_ingress_message_with_expiration(nonce: u64, expiry_time: Time) -> SignedIngress {
+        SignedIngressBuilder::new()
+            .nonce(nonce)
+            .expiry_time(expiry_time)
+            .build()
     }
 }
