@@ -7,7 +7,6 @@ use candid::{CandidType, Decode, Encode, Nat};
 use canister_test::Wasm;
 use cycles_minting_canister::{
     IcpXdrConversionRateCertifiedResponse, SetAuthorizedSubnetworkListArgs,
-    CYCLES_LEDGER_CANISTER_ID,
 };
 use dfn_candid::candid_one;
 use dfn_http::types::{HttpRequest, HttpResponse};
@@ -28,12 +27,12 @@ use ic_nervous_system_common::{
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
-    canister_id_to_nns_canister_name, memory_allocation_of, CYCLES_MINTING_CANISTER_ID,
-    GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET,
-    IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID,
-    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, ROOT_CANISTER_INDEX_IN_NNS_SUBNET,
-    SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET, SUBNET_RENTAL_CANISTER_ID,
-    SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
+    canister_id_to_nns_canister_name, memory_allocation_of, CYCLES_LEDGER_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
+    GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
+    LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    ROOT_CANISTER_INDEX_IN_NNS_SUBNET, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
+    SUBNET_RENTAL_CANISTER_ID, SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_governance_api::pb::v1::{
     self as nns_governance_pb,
@@ -2066,13 +2065,13 @@ pub fn setup_cycles_ledger(state_machine: &StateMachine) {
 
     state_machine.reroute_canister_range(
         std::ops::RangeInclusive::<CanisterId>::new(
-            CYCLES_LEDGER_CANISTER_ID.try_into().unwrap(),
-            CYCLES_LEDGER_CANISTER_ID.try_into().unwrap(),
+            CYCLES_LEDGER_CANISTER_ID,
+            CYCLES_LEDGER_CANISTER_ID,
         ),
         state_machine.get_subnet_id(),
     );
     state_machine.create_canister_with_cycles(
-        Some(CYCLES_LEDGER_CANISTER_ID),
+        Some(CYCLES_LEDGER_CANISTER_ID.get()),
         Cycles::zero(),
         None,
     );
@@ -2086,11 +2085,7 @@ pub fn setup_cycles_ledger(state_machine: &StateMachine) {
     }))
     .unwrap();
     state_machine
-        .install_existing_canister(
-            CYCLES_LEDGER_CANISTER_ID.try_into().unwrap(),
-            cycles_ledger_wasm,
-            arg,
-        )
+        .install_existing_canister(CYCLES_LEDGER_CANISTER_ID, cycles_ledger_wasm, arg)
         .expect("Installing cycles ledger failed");
 }
 
