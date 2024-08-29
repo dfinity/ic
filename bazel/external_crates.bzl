@@ -1459,7 +1459,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "warp": crate.spec(
                 version = "^0.3.7",
-                features = [ "tls" ],
+                features = ["tls"],
             ),
             "wasm-bindgen": crate.spec(
                 version = "^0.2",
