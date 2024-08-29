@@ -1,5 +1,5 @@
 {
-  "checksum": "6bfded5bc0a90fbad1682c1ec6d7f705ba6b37b5dcadf897bf69725896303129",
+  "checksum": "f12d3c90a6e6a5adc43dff85106309aefcb263a6ef9f7995c1ee22d2bb524f9b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -29600,7 +29600,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/http-gateway",
           "commitish": {
-            "Rev": "a1f63eb17b0a89f7fadcab67b3a0afe1720ef9b3"
+            "Rev": "3be26b5a2c71bf56e05b910951c1935a1ac550c4"
           },
           "strip_prefix": "packages/ic-http-gateway"
         }
