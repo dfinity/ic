@@ -25,7 +25,7 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: ./ci/scripts/before-script.sh
       - name: Load Service Account Key to file
         env:
           FUZZING_GCP_SERVICE_KEY: ${{ secrets.FUZZING_GCP_SERVICE_KEY }}

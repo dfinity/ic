@@ -40,7 +40,7 @@ anchors:
     name: Before script
     id: before-script
     shell: bash
-    run: ./gitlab-ci/src/ci-scripts/before-script.sh
+    run: ./ci/scripts/before-script.sh
     env:
       DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
 
@@ -92,7 +92,7 @@ jobs:
         id: rust-benchmarks
         shell: bash
         run: |
-          ./gitlab-ci/src/ci-scripts/rust-benchmarks.sh
+          ./ci/scripts/rust-benchmarks.sh
         env:
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           BAZEL_COMMAND: "run"

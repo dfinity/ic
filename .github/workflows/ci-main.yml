@@ -52,7 +52,7 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: ./ci/scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Set BAZEL_EXTRA_ARGS_RULES
@@ -115,7 +115,7 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: ./ci/scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run bazel build --config=check //rs/...
@@ -161,7 +161,7 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: ./ci/scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Test Darwin x86-64
@@ -209,7 +209,7 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: ./ci/scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Build Fuzzers
@@ -249,7 +249,7 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: ./ci/scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Build Fuzzers AFL
@@ -317,7 +317,7 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: ./ci/scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Build IC
@@ -330,7 +330,7 @@ jobs:
           mkdir -p "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts"
           ln -s "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts" /__w/$REPO_NAME/$REPO_NAME/artifacts
           buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
-              "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-ic.sh
+              "$CI_PROJECT_DIR"/ci/scripts/build-ic.sh
           rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"
         env:
           RUN_ON_DIFF_ONLY: "true"
@@ -390,7 +390,7 @@ jobs:
         run: |
           set -eExuo pipefail
           sudo apt update && sudo apt install -y curl
-          "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-determinism.sh
+          "$CI_PROJECT_DIR"/ci/scripts/build-determinism.sh
         env:
           TARGET: ${{ matrix.TARGET }}
           PATH0: ${{ matrix.PATH0 }}
@@ -432,7 +432,7 @@ jobs:
         run: |
           set -eExuo pipefail
           buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
-              "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/rust-lint.sh
+              "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
   cargo-build-release-linux:
     name: Cargo Build Release Linux
     runs-on:

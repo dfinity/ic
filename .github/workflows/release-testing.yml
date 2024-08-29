@@ -47,7 +47,7 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: ./ci/scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel System Test Nightly
@@ -89,7 +89,7 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: ./ci/scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel System Test Staging
@@ -130,7 +130,7 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: ./ci/scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Test All
@@ -179,7 +179,7 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: ./ci/scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Setup python deps

@@ -60,14 +60,14 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: ./ci/scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Rust Benchmarks
         id: rust-benchmarks
         shell: bash
         run: |
-          ./gitlab-ci/src/ci-scripts/rust-benchmarks.sh
+          ./ci/scripts/rust-benchmarks.sh
         env:
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           BAZEL_COMMAND: "run"
@@ -91,7 +91,7 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: ./ci/scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Launch Bare Metal
@@ -130,7 +130,7 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: ./ci/scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run FI Tests Nightly
@@ -172,7 +172,7 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: ./ci/scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run NNS Tests Nightly
@@ -214,7 +214,7 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: ./ci/scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Set Benchmark Targets
@@ -273,7 +273,7 @@ jobs:
       - name: Before script
         id: before-script
         shell: bash
-        run: ./gitlab-ci/src/ci-scripts/before-script.sh
+        run: ./ci/scripts/before-script.sh
         env:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Setup environment deps
