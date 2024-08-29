@@ -3435,7 +3435,7 @@ async fn test_claim_swap_neuron_skips_correct_claim_statuses() {
     assert_eq!(sns_governance_client.get_calls_snapshot().len(), 0);
 }
 
-/// Assert that the NeuronParameters are correctly created from SnsNeuronRecipes. This
+/// Assert that the NeuronRecipes are correctly created from SnsNeuronRecipes. This
 /// is an ugly test that doesn't make use of a lot of variables, but given other tests
 /// of claim_swap_neurons, this is more of a regression test. If something unexpected changes
 /// in the NeuronParameter creation, this will fail loudly.
@@ -3507,9 +3507,7 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_recipes() {
         }
     );
 
-    #[allow(deprecated)] // TODO(NNS1-3198): Remove this once neuron_parameters is removed
     let expected = SnsGovernanceClientCall::ClaimSwapNeurons(ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![],
         neuron_recipes: Some(NeuronRecipes {
             neuron_recipes: vec![
                 NeuronRecipe {
@@ -3546,6 +3544,7 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_recipes() {
                 },
             ],
         }),
+        ..Default::default()
     });
     assert_eq!(sns_governance_client.get_calls_snapshot(), vec![expected])
 }
@@ -3558,15 +3557,15 @@ async fn test_claim_swap_neurons_batches_claims() {
 
     // This test will create a set number of NeuronRecipes to trigger batching.
     let desired_batch_count = 10;
-    let neuron_parameters_per_batch = CLAIM_SWAP_NEURONS_BATCH_SIZE;
+    let neuron_recipes_per_batch = CLAIM_SWAP_NEURONS_BATCH_SIZE;
 
     // We want the test to handle non-divisible batch counts. Therefore create N-1 full batches,
     // and final a half full batch
-    let neuron_recipe_count = ((desired_batch_count - 1) * neuron_parameters_per_batch)
-        + (neuron_parameters_per_batch / 2);
+    let neuron_recipe_count =
+        ((desired_batch_count - 1) * neuron_recipes_per_batch) + (neuron_recipes_per_batch / 2);
 
     // Create the Swap state with the correct number of neuron recipes that will
-    // result in the correct number of NeuronParameters to reach the desired batch count
+    // result in the correct number of NeuronRecipes to reach the desired batch count
     let mut swap = SwapBuilder::new()
         .with_sns_governance_canister_id(SNS_GOVERNANCE_CANISTER_ID)
         .with_lifecycle(Committed)
@@ -3619,14 +3618,14 @@ async fn test_claim_swap_neurons_handles_canister_call_error_during_batch() {
     // Step 1: Prepare the world
 
     // This test will create a set number of NeuronRecipes to trigger batching.
-    let neuron_parameters_per_batch = CLAIM_SWAP_NEURONS_BATCH_SIZE;
+    let neuron_recipes_per_batch = CLAIM_SWAP_NEURONS_BATCH_SIZE;
 
     // The test requires 3 batches. The first call will succeed, the second one will fail, and the
     // 3rd one will not be attempted.
-    let neuron_recipe_count = neuron_parameters_per_batch * 3;
+    let neuron_recipe_count = neuron_recipes_per_batch * 3;
 
     // Create the Swap state with the correct number of neuron recipes that will
-    // result in the correct number of NeuronParameters to reach the desired batch count
+    // result in the correct number of NeuronRecipes to reach the desired batch count
     let mut swap = Swap {
         lifecycle: Committed as i32,
         init: Some(init()),
@@ -3655,7 +3654,7 @@ async fn test_claim_swap_neurons_handles_canister_call_error_during_batch() {
     assert_eq!(
         sweep_result,
         SweepResult {
-            success: neuron_parameters_per_batch as u32, // The first batch should have succeeded
+            success: neuron_recipes_per_batch as u32, // The first batch should have succeeded
             skipped: 0,
             failure: 0,
             invalid: 0,
@@ -3668,13 +3667,13 @@ async fn test_claim_swap_neurons_handles_canister_call_error_during_batch() {
     assert_eq!(replies_snapshot.len(), 2);
 
     // Assert that the successful batch had their journal updated
-    for recipe in &swap.neuron_recipes[0..neuron_parameters_per_batch] {
+    for recipe in &swap.neuron_recipes[0..neuron_recipes_per_batch] {
         assert_eq!(recipe.claimed_status, Some(ClaimedStatus::Success as i32));
     }
 
     // Assert that the two unsuccessful batch did not have their journal updated and can therefore
     // be retried
-    for recipe in &swap.neuron_recipes[neuron_parameters_per_batch..swap.neuron_recipes.len()] {
+    for recipe in &swap.neuron_recipes[neuron_recipes_per_batch..swap.neuron_recipes.len()] {
         assert_eq!(recipe.claimed_status, Some(ClaimedStatus::Pending as i32));
     }
 }
@@ -3686,12 +3685,12 @@ async fn test_claim_swap_neurons_handles_inconsistent_response() {
     // Step 1: Prepare the world
 
     // This test will create a set number of NeuronRecipes to trigger batching.
-    let neuron_parameters_per_batch = CLAIM_SWAP_NEURONS_BATCH_SIZE;
+    let neuron_recipes_per_batch = CLAIM_SWAP_NEURONS_BATCH_SIZE;
     // The test requires 1 batch, and will pop one of the SwapNeurons from the response
-    let neuron_recipe_count = neuron_parameters_per_batch;
+    let neuron_recipe_count = neuron_recipes_per_batch;
 
     // Create the Swap state with the correct number of neuron recipes that will
-    // result in the correct number of NeuronParameters to reach the desired batch count
+    // result in the correct number of NeuronRecipes to reach the desired batch count
     let mut swap = Swap {
         lifecycle: Committed as i32,
         init: Some(init()),
@@ -3725,7 +3724,7 @@ async fn test_claim_swap_neurons_handles_inconsistent_response() {
     assert_eq!(
         sweep_result,
         SweepResult {
-            success: (neuron_parameters_per_batch - 1) as u32, // All but the last of the batch should result in success
+            success: (neuron_recipes_per_batch - 1) as u32, // All but the last of the batch should result in success
             skipped: 0,
             failure: 0,
             invalid: 0,

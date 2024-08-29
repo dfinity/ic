@@ -48,6 +48,7 @@ trait InMemoryLedgerState {
         from: &Self::AccountId,
         spender: &Option<Self::AccountId>,
         amount: &Self::Tokens,
+        index: usize,
     );
     fn process_mint(&mut self, to: &Self::AccountId, amount: &Self::Tokens);
     fn process_transfer(
@@ -65,10 +66,11 @@ pub struct InMemoryLedger<K, AccountId, Tokens>
 where
     K: Ord,
 {
-    pub balances: HashMap<AccountId, Tokens>,
-    pub allowances: HashMap<K, Allowance<Tokens>>,
-    pub total_supply: Tokens,
-    pub fee_collector: Option<AccountId>,
+    balances: HashMap<AccountId, Tokens>,
+    allowances: HashMap<K, Allowance<Tokens>>,
+    total_supply: Tokens,
+    fee_collector: Option<AccountId>,
+    burns_without_spender: Option<BurnsWithoutSpender<AccountId>>,
 }
 
 impl<K, AccountId, Tokens> InMemoryLedgerState for InMemoryLedger<K, AccountId, Tokens>
@@ -100,7 +102,19 @@ where
         from: &Self::AccountId,
         spender: &Option<Self::AccountId>,
         amount: &Self::Tokens,
+        index: usize,
     ) {
+        let spender: &Option<Self::AccountId> = &spender.clone().or_else(|| {
+            if let Some(burns_without_spender) = &self.burns_without_spender {
+                if burns_without_spender.burn_indexes.contains(&index) {
+                    Some(burns_without_spender.minter.clone())
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        });
         self.decrease_balance(from, amount);
         self.decrease_total_supply(amount);
         if let Some(spender) = spender {
@@ -161,6 +175,7 @@ where
             allowances: HashMap::new(),
             total_supply: Tokens::zero(),
             fee_collector: None,
+            burns_without_spender: None,
         }
     }
 }
@@ -321,9 +336,13 @@ where
 impl InMemoryLedger<ApprovalKey, Account, Tokens> {
     fn new_from_icrc1_ledger_blocks(
         blocks: &[ic_icrc1::Block<Tokens>],
+        burns_without_spender: Option<BurnsWithoutSpender<Account>>,
     ) -> InMemoryLedger<ApprovalKey, Account, Tokens> {
-        let mut state = InMemoryLedger::default();
-        for block in blocks {
+        let mut state = InMemoryLedger {
+            burns_without_spender,
+            ..Default::default()
+        };
+        for (index, block) in blocks.iter().enumerate() {
             if let Some(fee_collector) = block.fee_collector {
                 state.fee_collector = Some(fee_collector);
             }
@@ -342,7 +361,7 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
                     from,
                     spender,
                     amount,
-                } => state.process_burn(from, spender, amount),
+                } => state.process_burn(from, spender, amount, index),
                 Operation::Approve {
                     from,
                     spender,
@@ -369,11 +388,22 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
     }
 }
 
-pub fn verify_ledger_state(env: &StateMachine, ledger_id: CanisterId) {
+#[derive(Clone, Debug)]
+pub struct BurnsWithoutSpender<AccountId> {
+    pub minter: AccountId,
+    pub burn_indexes: Vec<usize>,
+}
+
+pub fn verify_ledger_state(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    burns_without_spender: Option<BurnsWithoutSpender<Account>>,
+) {
     println!("verifying state of ledger {}", ledger_id);
     let blocks = get_all_ledger_and_archive_blocks(env, ledger_id);
     println!("retrieved all ledger and archive blocks");
-    let expected_ledger_state = InMemoryLedger::new_from_icrc1_ledger_blocks(&blocks);
+    let expected_ledger_state =
+        InMemoryLedger::new_from_icrc1_ledger_blocks(&blocks, burns_without_spender);
     println!("recreated expected ledger state");
     let actual_num_approvals = parse_metric(env, ledger_id, "ledger_num_approvals");
     let actual_num_balances = parse_metric(env, ledger_id, "ledger_balance_store_entries");
