@@ -1316,11 +1316,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "tla-instrumentation": crate.spec(
                 git = "https://github.com/oggy-dfin/tla-instrumentation.git",
-                rev = "67939aae6e35f71564d5f12590bbff8716619451",
+                rev = "9498c4a5bca5fc20b5ef7353d6b9f80136178195",
                 package = "tla_instrumentation",
             ),
             "tla-instrumentation-proc-macros": crate.spec(
                 git = "https://github.com/oggy-dfin/tla-instrumentation.git",
+                rev = "9498c4a5bca5fc20b5ef7353d6b9f80136178195",
                 rev = "67939aae6e35f71564d5f12590bbff8716619451",
                 package = "tla_instrumentation_proc_macros",
             ),
